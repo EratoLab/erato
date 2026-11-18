@@ -26,6 +26,8 @@ struct Set {
     tags: Tags,
     scenarios: Vec<Scenario>,
     servers: BTreeMap<String, Value>,
+    #[serde(default)]
+    spoken_vocabularies: Value,
     history: BTreeMap<String, Vec<Step>>,
     calls: Vec<Call>,
 }
@@ -68,8 +70,11 @@ struct Call {
     arguments: Value,
 }
 
-fn runtime_config(servers: &BTreeMap<String, Value>) -> McpRuntimeConfig {
-    let mut config = McpRuntimeConfig::default();
+fn runtime_config(servers: &BTreeMap<String, Value>, vocabularies: &Value) -> McpRuntimeConfig {
+    let mut config = McpRuntimeConfig {
+        spoken_vocabularies: serde_json::from_value(vocabularies.clone()).unwrap_or_default(),
+        ..McpRuntimeConfig::default()
+    };
     for (id, server) in servers {
         let mut server = server.clone();
         server["transport_type"] = json!("streamable_http");
@@ -112,7 +117,7 @@ fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::To
 
 fn generated() -> Value {
     let set: Set = serde_json::from_str(INPUT).unwrap();
-    let config = runtime_config(&set.servers);
+    let config = runtime_config(&set.servers, &set.spoken_vocabularies);
     let calls: Vec<Value> = set
         .calls
         .iter()
@@ -183,5 +188,83 @@ fn the_spoken_card_set_matches_its_labels() {
     assert!(
         stored == text,
         "{OUTPUT_PATH} is out of date; regenerate it with SPOKEN_CARD_SET_WRITE=1"
+    );
+}
+
+/// A coded value is named by its own table's word: a case's priority 1 is
+/// High (not an activity's Normal), and a join that filters two tables on
+/// the same code names each by its table.
+#[test]
+fn spoken_choices_follow_the_table_of_the_value() {
+    let generated = generated();
+    let names = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]["spoken_names"]
+            .clone()
+    };
+    let case = names("update-14-case-priority");
+    assert_eq!(case["de"]["choices"]["prioritycode"]["1"], "Hoch");
+    assert_eq!(case["en"]["choices"]["prioritycode"]["1"], "High");
+    let join = names("read-15-sql-join-two-states");
+    assert_eq!(
+        join["de"]["choices"]["opportunity.statecode"]["1"],
+        "Gewonnen"
+    );
+    assert_eq!(join["de"]["choices"]["account.statecode"]["1"], "Inaktiv");
+    assert!(join["de"]["choices"].get("statecode").is_none());
+}
+
+/// A value inside a nested object of the record, such as an account created
+/// with an opportunity or a case written through a task, has that object's
+/// fields and codes: it is marked nested and gives the call's table no entry.
+#[test]
+fn a_nested_effect_is_never_named_from_the_outer_table() {
+    let generated = generated();
+    let label = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]
+            .clone()
+    };
+    let nested = |label: &Value, path: &str| {
+        label["change"]["effects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|effect| effect["path"] == path)
+            .unwrap_or_else(|| panic!("{path}"))["nested"]
+            == true
+    };
+    let create = label("create-15-nested-account");
+    assert!(nested(&create, "/item/parentaccountid/name"));
+    assert!(nested(&create, "/item/parentaccountid/statecode"));
+    // The opportunity's name is its title; the account's name and state 1
+    // (Inactive, never the opportunity's Won) get no entry.
+    assert!(create.get("spoken_names").is_none());
+    // Microsoft's deep insert through a collection: one opportunity created
+    // with the account, its state 1 (Won) never the account's Inactive.
+    let account = label("create-16-account-with-opportunity");
+    assert!(nested(
+        &account,
+        "/item/opportunity_customer_accounts/0/statecode"
+    ));
+    assert!(account.get("spoken_names").is_none());
+    let update = label("update-15-task-nested-case");
+    assert!(!nested(&update, "/item/prioritycode"));
+    assert!(nested(
+        &update,
+        "/item/regardingobjectid_incident_task/prioritycode"
+    ));
+    // The task's priority 1 is Normal; the case's 1 (High) gets no entry.
+    assert_eq!(
+        update["spoken_names"]["de"]["choices"]["prioritycode"],
+        json!({ "1": "Normal" })
     );
 }

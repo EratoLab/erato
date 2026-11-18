@@ -14699,6 +14699,10 @@
             "type": "string",
             "description": "A readable name, display-cleaned."
           },
+          "nested": {
+            "type": "boolean",
+            "description": "The value sits in an object inside the record, such as a record\ncreated with it: its name and codes belong to that object, so spoken\nnames never apply to it."
+          },
           "new_name": {
             "type": "boolean",
             "description": "A name the call gives a record nobody read in this chat (see\n`record_unread`): a card reads it as a new value, never as the name of\nthe record being changed."
@@ -14938,6 +14942,16 @@
           },
           "source": {
             "$ref": "#/components/schemas/ToolCallLabelSource"
+          },
+          "spoken_names": {
+            "type": "object",
+            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text` (as `table.column` when the condition names one of\nseveral tables; a coded value of an unnamed table has none), a read's\ntable. No card reads it.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolCallSpokenNames"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "warnings": {
             "type": "array",
@@ -15338,6 +15352,47 @@
           }
         }
       },
+      "ToolCallSpokenNames": {
+        "type": "object",
+        "description": "One language's words for the names a call uses. A name without an entry\nis not here and is spoken as the card shows it.",
+        "properties": {
+          "choices": {
+            "type": "object",
+            "description": "By field, then by value.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tables": {
+            "type": "object",
+            "description": "What the records of a table are called, in the plural.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ToolCallStatus": {
         "type": "string",
         "enum": [
@@ -15375,6 +15430,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "nested": {
+            "type": "boolean",
+            "description": "See [`ToolCallEffect::nested`]."
           },
           "path": {
             "type": "string"

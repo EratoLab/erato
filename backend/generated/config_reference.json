@@ -4275,6 +4275,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers.<server-id>.glossary.vocabularies.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers.<server-id>.http_headers.<key>": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
@@ -4848,6 +4854,24 @@
   "speech_providers.replacement_providers.[].old": {
     "default_value_security": "unknown",
     "introduced_in": "0.8.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "spoken_vocabularies.<key>.<key>.field_names.<key>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "spoken_vocabularies.<key>.<key>.table_names.<key>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
     "security_relevance": "unknown",
     "stability": "unstable"
   },

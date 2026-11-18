@@ -4727,6 +4727,21 @@ What each value of the choice field means, keyed by the value as the tool writes
 
 **Type:** table of `string`
 
+##### `mcp_servers.<server-id>.glossary.vocabularies`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.glossary.vocabularies.[] */}
+
+Names of [`spoken_vocabularies`](#spoken_vocabularies) whose words the voice uses for this server's fields, choice values and tables when it reads an approval card aloud, in the listener's language. The voice only: the card keeps the names above. For each name, the first vocabulary in the list with an entry wins, an entry for the call's table before a plain one; a name without an entry, and a field or value the names above cover, is spoken as the card shows it. A name that no source defines is ignored with a warning at startup, so the server works before the content package that defines it is applied.
+
+**Type:** list of `string`
+
+**Default value:** `[]`
+
+```toml
+[mcp_servers.dynamics.glossary]
+vocabularies = ["contoso", "dataverse"]
+```
+
 ### MCP tool annotation defaults and overrides
 
 Tool annotations can be configured globally, per server, or per exact tool. All settings come from `erato.toml` sources. The backend resolves each hint independently in this order (highest priority first):
@@ -5441,6 +5456,34 @@ How long the model may take before the answer is "unclear", in milliseconds. **D
 Replaces the model's built-in instruction, for example from subscription content. Unset or blank, the built-in one applies. The answer is checked against the closed lists whatever the instruction says.
 
 **Type:** `string`
+
+### `spoken_vocabularies`
+
+{/* erato_toml_config_key: spoken_vocabularies */}
+{/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.field_names.<key> */}
+{/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value> */}
+{/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.table_names.<key> */}
+
+What people call a kind of server's machine names, by vocabulary name and language tag, for approval cards read aloud. A server uses a vocabulary through [`glossary.vocabularies`](#mcp_serversserver-idglossaryvocabularies). They are named so that a content package can ship the words for a kind of server, such as the standard fields of Dataverse, without knowing a deployment's server ids.
+
+- `field_names`: the spoken name of a field, keyed by its exact name.
+- `choice_labels`: what each value of a choice field is called, keyed by the field and then by the value as the tool writes it.
+- `table_names`: what the records of a table are called, in the plural, keyed by the table's exact name. A read of one table says them instead of the kind ("Verkaufschancen auflisten").
+
+A key `table.field` holds only for calls on that table and wins over the plain `field`; use it for codes that mean different things per table, such as a status. The table is the one the call names in an argument such as `tablename`. Where the operator's own [glossary](#mcp_serversserver-idglossary) names a field or a value, the voice says the glossary's word, as the card shows it. A value inside a nested object of the record, such as an account created together with an opportunity, has that object's fields and codes: it is said as the card shows it. In a read of several tables, a condition's word is taken only from an entry for its own table; a coded value whose table the statement does not name is said as the code. Entries are checked at startup: an entry that is blank, longer than 128 bytes as a key or 64 characters as a name, or holds hidden characters, an entry of the wrong shape (a text where a table belongs, or anything but a text where a name belongs), a language that is not a lowercase tag, and a language with more than 5000 entries are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too, since a content package may be newer than the backend.
+
+```toml
+[spoken_vocabularies.dataverse.de.field_names]
+estimatedclosedate = "Voraussichtliches Abschlussdatum"
+"task.scheduledend" = "Fälligkeitsdatum"
+
+[spoken_vocabularies.dataverse.de.choice_labels."opportunity.statecode"]
+"0" = "Offen"
+"1" = "Gewonnen"
+
+[spoken_vocabularies.dataverse.de.table_names]
+opportunity = "Verkaufschancen"
+```
 
 ### `approval_change_requests`
 

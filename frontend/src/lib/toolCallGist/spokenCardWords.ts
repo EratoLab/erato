@@ -1476,7 +1476,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const readThing = (facts: SpokenReadFacts): string => {
     const { kind, names } = facts;
-    if (facts.shape !== "items") return readThings(kind);
+    if (facts.shape !== "items") return facts.things ?? readThings(kind);
     if (facts.count > 1) {
       if (names.length === facts.count) return namedThings(kind, list(names));
       return names.length > 0

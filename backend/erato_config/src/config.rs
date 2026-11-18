@@ -15,6 +15,7 @@ use std::ops::Deref;
 use utoipa::ToSchema;
 
 use crate::config_facet_attrs as erato_config;
+pub use crate::spoken::{SpokenNamesConfig, SpokenVocabulariesConfig};
 use crate::startup_log;
 
 /// Name reserved for the synthetic client-action tool exposed by the backend.
@@ -440,6 +441,11 @@ pub struct McpRuntimeConfig {
     pub mcp_servers_global: McpServersGlobalConfig,
     #[serde(default)]
     pub mcp_server_permissions: McpServerPermissionsConfig,
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_vocabularies"
+    )]
+    pub spoken_vocabularies: SpokenVocabulariesConfig,
 }
 
 impl McpRuntimeConfig {
@@ -462,12 +468,17 @@ impl McpRuntimeConfig {
             mcp_servers: config.mcp_servers.clone(),
             mcp_servers_global: config.mcp_servers_global.clone(),
             mcp_server_permissions: config.mcp_server_permissions.clone(),
+            spoken_vocabularies: config.spoken_vocabularies.clone(),
         }
     }
 
     pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
-        let config: Self = runtime_sources(sources)?.try_deserialize()?;
+        let schema = runtime_sources(sources)?;
+        warn_misshaped_spoken_entries(&schema);
+        let mut config: Self = schema.try_deserialize()?;
         validate_mcp_server_ids(&config.mcp_servers)?;
+        warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
+        warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
         config.mcp_server_permissions.validate()?;
         config.mcp_servers_global.validate()?;
         Ok(config)
@@ -481,6 +492,31 @@ impl McpRuntimeConfig {
         config
             .mcp_server_permissions
             .clone_from(&self.mcp_server_permissions);
+        config
+            .spoken_vocabularies
+            .clone_from(&self.spoken_vocabularies);
+    }
+}
+
+fn warn_dropped_spoken_entries(vocabularies: &mut SpokenVocabulariesConfig) {
+    for dropped in crate::spoken::drop_unusable_spoken_entries(vocabularies) {
+        tracing::warn!("Spoken vocabulary entry dropped: {dropped}.");
+    }
+}
+
+/// A server that names a vocabulary nobody defines speaks its names as
+/// before; the package that defines it may not be applied.
+fn warn_missing_vocabularies(
+    servers: &HashMap<String, McpServerConfig>,
+    vocabularies: &SpokenVocabulariesConfig,
+) {
+    let used = servers
+        .iter()
+        .map(|(id, server)| (id.as_str(), server.glossary.vocabularies.as_slice()));
+    for missing in crate::spoken::missing_vocabularies(used, vocabularies) {
+        tracing::warn!(
+            "Spoken vocabulary {missing} is not defined; that server's names are spoken as on its card."
+        );
     }
 }
 
@@ -956,6 +992,16 @@ pub struct AppConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub turn_instructions: TurnInstructionsConfig,
+
+    /// Words people say for a kind of server's machine names, by vocabulary
+    /// name and language tag, for approval cards read aloud. A server uses a
+    /// vocabulary through `glossary.vocabularies`.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_vocabularies"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub spoken_vocabularies: SpokenVocabulariesConfig,
 
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
@@ -1490,6 +1536,8 @@ impl AppConfig {
     pub fn new_for_app(config_file_paths: Option<Vec<String>>) -> Result<Self, ConfigError> {
         let schema = Self::config_schema(config_file_paths, true)?;
         warn_unknown_turn_instruction_keys(&schema);
+        warn_unknown_spoken_keys(&schema);
+        warn_misshaped_spoken_entries(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1507,6 +1555,8 @@ impl AppConfig {
         let schema =
             Self::config_schema_builder_for_resolved_paths(&config_files_to_load)?.build()?;
         warn_unknown_turn_instruction_keys(&schema);
+        warn_unknown_spoken_keys(&schema);
+        warn_misshaped_spoken_entries(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -1681,6 +1731,9 @@ impl AppConfig {
         if let Err(e) = config.validate_approval_voice_commands() {
             panic!("Invalid approval voice commands configuration: {}", e);
         }
+
+        warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
+        warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
 
         if let Err(e) = config.validate_approval_change_requests() {
             panic!("Invalid approval change requests configuration: {}", e);
@@ -4580,6 +4633,14 @@ pub struct McpGlossaryConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub choice_labels: HashMap<String, HashMap<String, String>>,
+    /// Names of `[spoken_vocabularies]` whose words the voice uses for this
+    /// server's fields, choice values and tables, in the listener's language.
+    /// Voice only: the card keeps the names above. The first vocabulary with
+    /// an entry wins; a name without one is spoken as the card shows it. A
+    /// field or value the names above cover is spoken with their word.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub vocabularies: Vec<String>,
 }
 
 /// Entries one server's glossary holds, field names and choice labels alike.
@@ -8646,6 +8707,20 @@ fn unknown_turn_instruction_keys(schema: &Config) -> Vec<String> {
     }
     unknown.sort();
     unknown
+}
+
+fn warn_unknown_spoken_keys(schema: &Config) {
+    for key in crate::spoken::unknown_spoken_keys(schema) {
+        tracing::warn!(
+            "Config key `{key}` is not known to this Erato version and is ignored. It may come from a newer content package."
+        );
+    }
+}
+
+fn warn_misshaped_spoken_entries(schema: &Config) {
+    for dropped in crate::spoken::misshaped_spoken_entries(schema) {
+        tracing::warn!("Spoken vocabulary entry dropped: {dropped}.");
+    }
 }
 
 fn warn_unknown_turn_instruction_keys(schema: &Config) {

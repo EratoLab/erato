@@ -56,7 +56,10 @@ const OPTIONS = {
 const callOf = (id: string): SetCall => {
   const call = calls.find((entry) => entry.id === id);
   if (!call) throw new Error(`no call ${id}`);
-  return JSON.parse(JSON.stringify(call)) as SetCall;
+  const copy = JSON.parse(JSON.stringify(call)) as SetCall;
+  delete (copy.display.label as unknown as Record<string, unknown>)
+    .spoken_names;
+  return copy;
 };
 
 const approvalOf = (call: SetCall): SpokenApproval =>

@@ -59,10 +59,16 @@ const inLanguage = <T>(language: string, compose: () => T): T => {
   }
 };
 
+// The set's labels carry the spoken vocabulary; these tests are about the
+// dictation, with the card's own names. `spokenNames.test.ts` covers the
+// vocabulary.
 const callOf = (id: string): SetCall => {
   const call = calls.find((entry) => entry.id === id);
   if (!call) throw new Error(`no call ${id}`);
-  return JSON.parse(JSON.stringify(call)) as SetCall;
+  const copy = JSON.parse(JSON.stringify(call)) as SetCall;
+  delete (copy.display.label as unknown as Record<string, unknown>)
+    .spoken_names;
+  return copy;
 };
 
 /** The call with its long text set to `text`, in the label and the input. */

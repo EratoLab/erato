@@ -2865,6 +2865,7 @@ fn option_sets_go_once_a_call_may_have_changed_them() {
                 source: ToolCallLabelSource::Rules,
                 change: None,
                 read: None,
+                spoken_names: Default::default(),
             });
         }
         write

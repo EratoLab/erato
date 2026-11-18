@@ -5067,6 +5067,12 @@ export type ToolCallEffect = {
    */
   name: string;
   /**
+   * The value sits in an object inside the record, such as a record
+   * created with it: its name and codes belong to that object, so spoken
+   * names never apply to it.
+   */
+  nested?: boolean;
+  /**
    * A name the call gives a record nobody read in this chat (see
    * `record_unread`): a card reads it as a new value, never as the name of
    * the record being changed.
@@ -5239,6 +5245,18 @@ export type ToolCallLabel = {
   object_kind: ToolCallObjectKind;
   read?: ToolCallRead;
   source: ToolCallLabelSource;
+  /**
+   * What people call this call's fields, coded values and tables, by
+   * language tag, from the server's spoken vocabularies, for words spoken
+   * aloud. Keyed by the names as this label carries them: an effect's
+   * `raw_name` and its values' `text`, a read condition's `column` and its
+   * values' `text` (as `table.column` when the condition names one of
+   * several tables; a coded value of an unnamed table has none), a read's
+   * table. No card reads it.
+   */
+  spoken_names?: {
+    [key: string]: ToolCallSpokenNames;
+  };
   warnings?: ToolCallLabelWarning[];
 };
 
@@ -5524,6 +5542,30 @@ export type ToolCallRecipients = {
   unchecked?: number;
 };
 
+/**
+ * One language's words for the names a call uses. A name without an entry
+ * is not here and is spoken as the card shows it.
+ */
+export type ToolCallSpokenNames = {
+  /**
+   * By field, then by value.
+   */
+  choices?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  fields?: {
+    [key: string]: string;
+  };
+  /**
+   * What the records of a table are called, in the plural.
+   */
+  tables?: {
+    [key: string]: string;
+  };
+};
+
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
 /**
@@ -5542,6 +5584,10 @@ export type ToolCallTextChange = {
    */
   lines: number;
   name: string;
+  /**
+   * See [`ToolCallEffect::nested`].
+   */
+  nested?: boolean;
   path: string;
   raw_name: string;
   /**

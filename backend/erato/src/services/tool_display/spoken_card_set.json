@@ -216,6 +216,30 @@
       ]
     },
     {
+      "id": "create-15-nested-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-15-nested-account"
+      ]
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-16-account-with-opportunity"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -322,6 +346,30 @@
       ],
       "calls": [
         "update-09-task-status-codes"
+      ]
+    },
+    {
+      "id": "update-14-case-priority",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-14-case-priority"
+      ]
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-15-task-nested-case"
       ]
     },
     {
@@ -684,6 +732,18 @@
       ]
     },
     {
+      "id": "read-15-sql-join-two-states",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-15-sql-join-two-states"
+      ]
+    },
+    {
       "id": "read-09-sql-record-nobody-read",
       "kind": [
         "read"
@@ -868,7 +928,11 @@
             "2": "Medium",
             "3": "High"
           }
-        }
+        },
+        "vocabularies": [
+          "customer",
+          "dataverse"
+        ]
       }
     },
     "notion": {
@@ -1357,6 +1421,46 @@
       }
     },
     {
+      "id": "create-15-nested-account",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 6",
+          "parentaccountid": {
+            "name": "Neue Firma",
+            "statecode": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "account",
+        "item": {
+          "name": "Neue Firma",
+          "opportunity_customer_accounts": [
+            {
+              "name": "Linie 7",
+              "statecode": 1
+            }
+          ]
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "server": "dynamics",
       "tool": "update_record",
@@ -1512,6 +1616,42 @@
         "item": {
           "statecode": 1,
           "statuscode": 5
+        }
+      }
+    },
+    {
+      "id": "update-14-case-priority",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "incident",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
+        "item": {
+          "prioritycode": 1
+        }
+      }
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a015",
+        "item": {
+          "prioritycode": 1,
+          "regardingobjectid_incident_task": {
+            "title": "Linie 6 steht",
+            "prioritycode": 1
+          }
         }
       }
     },
@@ -1995,6 +2135,18 @@
       }
     },
     {
+      "id": "read-15-sql-join-two-states",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT o.name FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE o.statecode = 1 AND a.statecode = 1"
+      }
+    },
+    {
       "id": "read-09-sql-record-nobody-read",
       "server": "dynamics",
       "tool": "read_query",
@@ -2159,5 +2311,381 @@
         }
       }
     }
-  ]
+  ],
+  "spoken_vocabularies": {
+    "customer": {
+      "de": {
+        "field_names": {
+          "risklevel": "Risikostufe"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Niedrig",
+            "2": "Mittel",
+            "3": "Hoch"
+          }
+        }
+      },
+      "en": {
+        "field_names": {
+          "risklevel": "Risk level"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Low",
+            "2": "Medium",
+            "3": "High"
+          }
+        }
+      }
+    },
+    "dataverse": {
+      "de": {
+        "field_names": {
+          "subject": "Betreff",
+          "description": "Beschreibung",
+          "name": "Name",
+          "firstname": "Vorname",
+          "lastname": "Nachname",
+          "fullname": "Name",
+          "jobtitle": "Position",
+          "emailaddress1": "E-Mail",
+          "telephone1": "Telefon",
+          "mobilephone": "Mobiltelefon",
+          "phonenumber": "Telefonnummer",
+          "websiteurl": "Website",
+          "address1_city": "Ort",
+          "address1_postalcode": "Postleitzahl",
+          "address1_line1": "Straße",
+          "address1_country": "Land",
+          "parentcustomerid": "Firma",
+          "parentcontactid": "Kontakt",
+          "parentaccountid": "Übergeordnete Firma",
+          "customerid": "Kunde",
+          "ownerid": "Besitzer",
+          "regardingobjectid": "Bezug",
+          "objectid": "Bezug",
+          "notetext": "Notiz",
+          "statecode": "Status",
+          "statuscode": "Statusgrund",
+          "prioritycode": "Priorität",
+          "percentcomplete": "Prozent abgeschlossen",
+          "scheduledstart": "Beginn",
+          "scheduledend": "Ende",
+          "task.scheduledend": "Fälligkeitsdatum",
+          "task.scheduledstart": "Startdatum",
+          "phonecall.scheduledend": "Fälligkeitsdatum",
+          "email.scheduledend": "Fälligkeitsdatum",
+          "letter.scheduledend": "Fälligkeitsdatum",
+          "fax.scheduledend": "Fälligkeitsdatum",
+          "actualdurationminutes": "Dauer in Minuten",
+          "scheduleddurationminutes": "Geplante Dauer in Minuten",
+          "location": "Ort",
+          "category": "Kategorie",
+          "subcategory": "Unterkategorie",
+          "estimatedclosedate": "Voraussichtliches Abschlussdatum",
+          "actualclosedate": "Tatsächliches Abschlussdatum",
+          "closeprobability": "Wahrscheinlichkeit",
+          "estimatedvalue": "Geschätzter Umsatz",
+          "actualvalue": "Tatsächlicher Umsatz",
+          "budgetamount": "Budget",
+          "budgetstatus": "Budgetstatus",
+          "purchasetimeframe": "Kaufzeitrahmen",
+          "purchaseprocess": "Kaufprozess",
+          "currentsituation": "Aktuelle Situation",
+          "customerneed": "Kundenbedarf",
+          "proposedsolution": "Vorgeschlagene Lösung",
+          "qualificationcomments": "Qualifizierungskommentare",
+          "quotecomments": "Angebotskommentare",
+          "stepname": "Phase",
+          "industrycode": "Branche",
+          "numberofemployees": "Anzahl der Mitarbeiter",
+          "revenue": "Jahresumsatz",
+          "createdon": "Erstellt am",
+          "modifiedon": "Geändert am"
+        },
+        "choice_labels": {
+          "opportunity.statecode": {
+            "0": "Offen",
+            "1": "Gewonnen",
+            "2": "Verloren"
+          },
+          "account.statecode": {
+            "0": "Aktiv",
+            "1": "Inaktiv"
+          },
+          "contact.statecode": {
+            "0": "Aktiv",
+            "1": "Inaktiv"
+          },
+          "lead.statecode": {
+            "0": "Offen",
+            "1": "Qualifiziert",
+            "2": "Disqualifiziert"
+          },
+          "task.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "phonecall.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "email.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "appointment.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen",
+            "3": "Geplant"
+          },
+          "task.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "email.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "appointment.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "phonecall.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "letter.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "fax.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "incident.prioritycode": {
+            "1": "Hoch",
+            "2": "Normal",
+            "3": "Niedrig"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Sofort",
+            "1": "Dieses Quartal",
+            "2": "Nächstes Quartal",
+            "3": "Dieses Jahr",
+            "4": "Unbekannt"
+          },
+          "lead.purchasetimeframe": {
+            "0": "Sofort",
+            "1": "Dieses Quartal",
+            "2": "Nächstes Quartal",
+            "3": "Dieses Jahr",
+            "4": "Unbekannt"
+          }
+        },
+        "table_names": {
+          "opportunity": "Verkaufschancen",
+          "account": "Firmen",
+          "contact": "Kontakte",
+          "lead": "Leads",
+          "task": "Aufgaben",
+          "appointment": "Termine",
+          "phonecall": "Telefonanrufe",
+          "email": "E-Mails",
+          "annotation": "Notizen",
+          "activitypointer": "Aktivitäten",
+          "incident": "Fälle",
+          "quote": "Angebote",
+          "salesorder": "Aufträge",
+          "invoice": "Rechnungen",
+          "product": "Produkte",
+          "systemuser": "Benutzer"
+        }
+      },
+      "en": {
+        "field_names": {
+          "subject": "Subject",
+          "description": "Description",
+          "name": "Name",
+          "firstname": "First name",
+          "lastname": "Last name",
+          "fullname": "Name",
+          "jobtitle": "Job title",
+          "emailaddress1": "Email",
+          "telephone1": "Phone",
+          "mobilephone": "Mobile phone",
+          "phonenumber": "Phone number",
+          "websiteurl": "Website",
+          "address1_city": "City",
+          "address1_postalcode": "Postal code",
+          "address1_line1": "Street",
+          "address1_country": "Country",
+          "parentcustomerid": "Company",
+          "parentcontactid": "Contact",
+          "parentaccountid": "Parent account",
+          "customerid": "Customer",
+          "ownerid": "Owner",
+          "regardingobjectid": "Regarding",
+          "objectid": "Regarding",
+          "notetext": "Note",
+          "statecode": "Status",
+          "statuscode": "Status reason",
+          "prioritycode": "Priority",
+          "percentcomplete": "Percent complete",
+          "scheduledstart": "Start",
+          "scheduledend": "End",
+          "task.scheduledend": "Due date",
+          "task.scheduledstart": "Start date",
+          "phonecall.scheduledend": "Due date",
+          "email.scheduledend": "Due date",
+          "letter.scheduledend": "Due date",
+          "fax.scheduledend": "Due date",
+          "actualdurationminutes": "Duration in minutes",
+          "scheduleddurationminutes": "Planned duration in minutes",
+          "location": "Location",
+          "category": "Category",
+          "subcategory": "Subcategory",
+          "estimatedclosedate": "Estimated close date",
+          "actualclosedate": "Actual close date",
+          "closeprobability": "Probability",
+          "estimatedvalue": "Estimated revenue",
+          "actualvalue": "Actual revenue",
+          "budgetamount": "Budget",
+          "budgetstatus": "Budget status",
+          "purchasetimeframe": "Purchase timeframe",
+          "purchaseprocess": "Purchase process",
+          "currentsituation": "Current situation",
+          "customerneed": "Customer need",
+          "proposedsolution": "Proposed solution",
+          "qualificationcomments": "Qualification comments",
+          "quotecomments": "Quote comments",
+          "stepname": "Pipeline phase",
+          "industrycode": "Industry",
+          "numberofemployees": "Number of employees",
+          "revenue": "Annual revenue",
+          "createdon": "Created on",
+          "modifiedon": "Modified on"
+        },
+        "choice_labels": {
+          "opportunity.statecode": {
+            "0": "Open",
+            "1": "Won",
+            "2": "Lost"
+          },
+          "account.statecode": {
+            "0": "Active",
+            "1": "Inactive"
+          },
+          "contact.statecode": {
+            "0": "Active",
+            "1": "Inactive"
+          },
+          "lead.statecode": {
+            "0": "Open",
+            "1": "Qualified",
+            "2": "Disqualified"
+          },
+          "task.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "phonecall.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "email.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "appointment.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled",
+            "3": "Scheduled"
+          },
+          "task.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "email.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "appointment.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "phonecall.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "letter.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "fax.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "incident.prioritycode": {
+            "1": "High",
+            "2": "Normal",
+            "3": "Low"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Immediate",
+            "1": "This quarter",
+            "2": "Next quarter",
+            "3": "This year",
+            "4": "Unknown"
+          },
+          "lead.purchasetimeframe": {
+            "0": "Immediate",
+            "1": "This quarter",
+            "2": "Next quarter",
+            "3": "This year",
+            "4": "Unknown"
+          }
+        },
+        "table_names": {
+          "opportunity": "opportunities",
+          "account": "accounts",
+          "contact": "contacts",
+          "lead": "leads",
+          "task": "tasks",
+          "appointment": "appointments",
+          "phonecall": "phone calls",
+          "email": "emails",
+          "annotation": "notes",
+          "activitypointer": "activities",
+          "incident": "cases",
+          "quote": "quotes",
+          "salesorder": "orders",
+          "invoice": "invoices",
+          "product": "products",
+          "systemuser": "users"
+        }
+      }
+    }
+  }
 }
