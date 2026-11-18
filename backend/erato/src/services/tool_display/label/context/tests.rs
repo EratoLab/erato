@@ -1858,7 +1858,7 @@ fn a_dataverse_style_chat_names_what_its_reads_read() {
         });
         assert_eq!(got, read.expect, "{}", read.case);
     }
-    assert_eq!(checked, 6);
+    assert_eq!(checked, 7);
 }
 
 #[test]

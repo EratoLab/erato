@@ -17,6 +17,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import { componentRegistry } from "@/config/componentRegistry";
+import {
+  dropChange,
+  noteChangeSending,
+  noteChangeSent,
+  useApprovalChanges,
+} from "@/hooks/audio/approvalChanges";
+import { useApprovalListening } from "@/hooks/audio/approvalListening";
+import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -126,6 +134,12 @@ vi.mock("@/hooks/ui", () => ({
 vi.mock("@/hooks/audio/useAudioDictationRecorder", () => ({
   useAudioDictationRecorder: (...args: unknown[]) =>
     mockUseAudioDictationRecorder(...args),
+}));
+
+const mockHeardApprovalWords = vi.fn();
+vi.mock("@/hooks/audio/approvalListening", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/audio/approvalListening")>()),
+  heardApprovalWords: (...args: unknown[]) => mockHeardApprovalWords(...args),
 }));
 
 vi.mock("@/hooks/audio/useAudioTranscriptionRecorder", () => ({
@@ -8696,6 +8710,57 @@ describe("ChatInput", () => {
       expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
     });
 
+    it("keeps the microphone closed while a change asked for by voice waits for its answer", async () => {
+      const toggleDictation = vi.fn();
+      const voiced = (listening: boolean) => {
+        conversational(toggleDictation, listening);
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          voiceCommandsEnabled: false,
+          maxRecordingDurationSeconds: 1200,
+        });
+      };
+      useSpeechPlayback.setState({ enabled: true, playing: false });
+      useApprovalChanges.setState({ records: {} });
+      voiced(false);
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      voiced(true);
+      rerender(ui(true));
+
+      showCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      voiced(false);
+      rerender(ui(true));
+
+      // The card was withdrawn for a change; its answer is still to come.
+      act(() => {
+        noteChangeSending({
+          messageId: "message-1",
+          approvalId: "call-1",
+          approval: { type: "pointer" },
+          heard: [],
+          words: "nimm den 22.",
+        });
+        noteChangeSent("call-1");
+      });
+      decideCard();
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(toggleDictation).toHaveBeenCalledTimes(2);
+
+      act(() => dropChange("call-1"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+    });
+
     it("closes a listening microphone when a card appears", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation, true);
@@ -8754,6 +8819,164 @@ describe("ChatInput", () => {
       expect(requestSubmitSpy).not.toHaveBeenCalled();
       expect(onSendMessage).not.toHaveBeenCalled();
       requestSubmitSpy.mockRestore();
+    });
+
+    describe("listening for a spoken card", () => {
+      const KEY = "message-1:stop-1";
+
+      const withVoice = (
+        toggleDictation: () => void,
+        listening: boolean,
+        voiceCommandsEnabled = true,
+        dictationError: string | null = null,
+      ) => {
+        conversational(toggleDictation, listening);
+        if (dictationError) {
+          mockUseAudioDictationRecorder.mockReturnValue({
+            isDictating: false,
+            isDictationStarting: false,
+            isDictationCompleting: false,
+            isCapturingAudio: false,
+            dictationError,
+            setDictationError: vi.fn(),
+            dictationBars: [2, 2, 2, 2, 2],
+            toggleDictation,
+          });
+        }
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          voiceCommandsEnabled,
+          maxRecordingDurationSeconds: 1200,
+        });
+      };
+
+      beforeEach(() => {
+        mockHeardApprovalWords.mockReset();
+        useSpeechPlayback.setState({ enabled: true, playing: false });
+        useApprovalListening.setState({ pending: null, quiet: null });
+        // The voice has said the card and is silent.
+        useApprovalSpeech.setState({
+          key: KEY,
+          available: {
+            key: KEY,
+            messageId: "message-1",
+            pieces: [],
+            language: "en",
+          },
+          speaking: false,
+          failed: false,
+          closed: false,
+        });
+      });
+
+      it("opens once the voice is silent; what it hears goes to the card, never into a message", async () => {
+        const onSendMessage = vi.fn();
+        const requestSubmitSpy = vi.spyOn(
+          HTMLFormElement.prototype,
+          "requestSubmit",
+        );
+        const toggleDictation = vi.fn();
+        withVoice(toggleDictation, false);
+        showCard();
+        const ui = await composer(onSendMessage);
+        const { rerender } = render(ui(true));
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+
+        withVoice(toggleDictation, true);
+        rerender(ui(true));
+        const dictationOptions =
+          mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+        await act(async () => {
+          dictationOptions.onTranscriptChunk({
+            chunkIndex: 0,
+            transcript: "ja",
+          });
+          dictationOptions.onVadAutoStop();
+        });
+        withVoice(toggleDictation, false);
+        rerender(ui(true));
+
+        await waitFor(() =>
+          expect(mockHeardApprovalWords).toHaveBeenCalledWith(KEY, "ja"),
+        );
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(requestSubmitSpy).not.toHaveBeenCalled();
+        expect(onSendMessage).not.toHaveBeenCalled();
+        rerender(ui(false));
+        expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+          "",
+        );
+        requestSubmitSpy.mockRestore();
+      });
+
+      it("closes when the voice speaks again", async () => {
+        const toggleDictation = vi.fn();
+        withVoice(toggleDictation, false);
+        showCard();
+        const ui = await composer();
+        const { rerender } = render(ui(true));
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+        withVoice(toggleDictation, true);
+        rerender(ui(true));
+
+        act(() => useApprovalSpeech.setState({ speaking: true }));
+        rerender(ui(true));
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+        expect(mockHeardApprovalWords).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        null,
+        "Dictation stopped automatically after the configured maximum duration.",
+      ])(
+        "review 1: after the card's recording ends (error: %s), the conversation listens again once the card is decided",
+        async (error) => {
+          const toggleDictation = vi.fn();
+          withVoice(toggleDictation, false);
+          const ui = await composer();
+          const { rerender } = render(ui(false));
+          // Normal listening, then a card closes the microphone.
+          fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+          withVoice(toggleDictation, true);
+          rerender(ui(true));
+          showCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+          // The card's voice is silent: the microphone listens for the card,
+          // and that recording ends, with or without an error.
+          withVoice(toggleDictation, false);
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+          withVoice(toggleDictation, true);
+          rerender(ui(true));
+          withVoice(toggleDictation, false, true, error);
+          rerender(ui(true));
+          expect(toggleDictation).toHaveBeenCalledTimes(3);
+
+          // Decided on screen, the answer played: listening again.
+          act(() => useApprovalSpeech.setState({ closed: true }));
+          decideCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(4));
+        },
+      );
+
+      it("keeps the microphone closed over the card with voice commands off", async () => {
+        const toggleDictation = vi.fn();
+        withVoice(toggleDictation, false, false);
+        showCard();
+        const ui = await composer();
+        render(ui(true));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(toggleDictation).not.toHaveBeenCalled();
+      });
     });
   });
 });

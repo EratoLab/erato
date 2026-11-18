@@ -8,6 +8,9 @@ import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
 
+import { effectDisplayName } from "./cardLayout";
+import { changeLayout } from "./change";
+import { changeNoteLabel } from "./changeLabels";
 import data from "./fixtures/spokenCards/calls.json";
 import expectedPieces from "./fixtures/spokenCards/expected.json";
 import { toolCallCardOf } from "./gist";
@@ -18,6 +21,7 @@ import {
   sameSpokenKind,
   spokenApprovalFor,
   spokenApprovalPieces,
+  spokenUtteranceSentences,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
@@ -179,15 +183,15 @@ describe("spoken approval card", () => {
       },
       {
         role: "detail",
+        text: "Regardingobjectid: Line 4 Retrofit.",
+        mustSay: false,
+      },
+      {
+        role: "detail",
         text: "Scheduled end: 15. Januar 2030.",
         mustSay: false,
       },
       { role: "detail", text: "Priority code: 2.", mustSay: false },
-      {
-        role: "detail",
-        text: "Regardingobjectid: Line 4 Retrofit.",
-        mustSay: false,
-      },
       {
         role: "text",
         text: "Description: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
@@ -200,7 +204,7 @@ describe("spoken approval card", () => {
       },
     ]);
     expect(spoken("create-01-task-long-description", "en")).toBe(
-      "I'd like to create a task in Dynamics 365: Technisches Layout abstimmen. Scheduled end: 15 January 2030. Priority code: 2. Regardingobjectid: Line 4 Retrofit. Description: a text of about 70 words, shown on screen. Please confirm on screen.",
+      "I'd like to create a task in Dynamics 365: Technisches Layout abstimmen. Regardingobjectid: Line 4 Retrofit. Scheduled end: 15 January 2030. Priority code: 2. Description: a text of about 70 words, shown on screen. Please confirm on screen.",
     );
   });
 
@@ -212,13 +216,14 @@ describe("spoken approval card", () => {
     expect(create.find((piece) => piece.role === "more")?.text).toBe(
       "Dazu kommen fünf weitere Felder, sie stehen auf dem Bildschirm.",
     );
-    // A date before a number before a linked record before free text.
+    // The card's first three: a named linked record first, then in the
+    // call's order.
     expect(
       create.filter((p) => p.role === "detail").map((p) => p.text),
     ).toEqual([
+      "Regardingobjectid: Ersatzteil-Rahmenvertrag.",
       "Scheduled end: 22. Januar 2030.",
       "Priority code: 2.",
-      "Percentcomplete: 0 Prozent.",
     ]);
     expect(spoken("update-06-many-fields")).toContain(
       "Dazu kommen vier weitere Felder",
@@ -354,11 +359,11 @@ describe("spoken approval card", () => {
   });
 
   it("gives a call without a verb the tool's title and the server", () => {
-    expect(spoken("read-02-query")).toBe(
-      "Ich möchte in Dynamics 365 das Werkzeug read query verwenden. Bitte auf dem Bildschirm bestätigen.",
+    expect(spoken("read-12-sql-select-into")).toBe(
+      "Ich möchte in Dynamics 365 das Tool read query verwenden. Bitte auf dem Bildschirm bestätigen.",
     );
-    expect(spoken("read-01-search", "en")).toBe(
-      "I'd like to use the tool search in Dynamics 365. Please confirm on screen.",
+    expect(spoken("read-12-sql-select-into", "en")).toBe(
+      "I'd like to use the tool read query in Dynamics 365. Please confirm on screen.",
     );
   });
 
@@ -393,8 +398,8 @@ describe("spoken approval card", () => {
     ]);
     expect(second.map((piece) => piece.text)).toEqual([
       "Die zweite: eine Aufgabe, Angebot nachfassen.",
-      "Scheduled end: 20. Januar 2030.",
       "Regardingobjectid: Line 4 Retrofit.",
+      "Scheduled end: 20. Januar 2030.",
       "Bitte auf dem Bildschirm bestätigen.",
     ]);
     expect(third[0].text).toBe("Die dritte: eine Aufgabe, Schulung planen.");
@@ -428,8 +433,13 @@ describe("spoken approval card", () => {
 });
 
 describe("findings of the review of 2026-11-17", () => {
-  const words = (language: string, now = NOW) =>
-    spokenWordsFor(language, { now, timeZone: ZONE });
+  const previous = i18n.locale;
+  afterEach(() => i18n.activate(previous));
+  // The sentences come from the catalog of the language shown.
+  const words = (language: string, now = NOW) => {
+    i18n.activate(language);
+    return spokenWordsFor(language, { now, timeZone: ZONE });
+  };
   const facts = { action: "update" } as SpokenFacts;
   const set = (field: string, written: string, language = "de") =>
     words(language).detail(
@@ -555,6 +565,273 @@ describe("findings of the review of 2026-11-17", () => {
     } finally {
       i18n.load("fr", frMessages as unknown as Messages);
       i18n.activate(previous);
+    }
+  });
+});
+
+describe("findings of the review of the base (2026-11-17)", () => {
+  /** A copy of a call of the set whose change description `edit` adjusts. */
+  const edited = (
+    id: string,
+    edit: (change: {
+      effects: Record<string, unknown>[];
+      counts: Record<string, number>;
+    }) => void,
+  ): SetCall => {
+    const call = JSON.parse(JSON.stringify(callOf(id))) as SetCall;
+    edit((call.display.label as { change: Parameters<typeof edit>[0] }).change);
+    return call;
+  };
+  const say = (call: SetCall, language = "de") =>
+    inLanguage(language, () =>
+      spokenApprovalPieces(approvalOf(call), {
+        language,
+        now: NOW,
+        timeZone: ZONE,
+      }),
+    ).map((piece) => piece.text);
+  const detail = (
+    language: string,
+    entry: Parameters<ReturnType<typeof spokenWordsFor>["detail"]>[0],
+    action = "update",
+  ) =>
+    inLanguage(language, () =>
+      spokenWordsFor(language, { now: NOW, timeZone: ZONE }).detail(entry, {
+        action,
+      } as SpokenFacts),
+    );
+
+  it("1.4: a list is said with its entries, and the tool's word is hedged", () => {
+    expect(pieces("create-14-list-entries").map((p) => p.text)).toContain(
+      "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
+    );
+    expect(spoken("create-14-list-entries", "en")).toContain(
+      "Tags: Retrofit, Linie 4, Service and one more.",
+    );
+    expect(spoken("update-13-list-only-adds")).toContain(
+      "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+    );
+    expect(spoken("update-13-list-only-adds", "en")).toContain(
+      "Retrofit and Service will be added to Labels, the tool says.",
+    );
+    const removed = {
+      type: "list_removed" as const,
+      field: "Tags",
+      values: [
+        { kind: "text" as const, text: "Alt" },
+        { kind: "text" as const, text: "Veraltet" },
+      ],
+      omitted: 0,
+      loss: true as const,
+    };
+    expect(detail("de", removed)).toBe(
+      "Aus Tags werden laut Tool Alt und Veraltet entfernt.",
+    );
+    expect(detail("en", removed)).toBe(
+      "Alt and Veraltet will be removed from Tags, the tool says.",
+    );
+  });
+
+  it("1.5: an unread record as the old or the new value reads as a sentence", () => {
+    const unread = { kind: "unread" as const };
+    const anna = { kind: "text" as const, text: "Anna" };
+    expect(
+      detail("de", {
+        type: "changed",
+        field: "Owner",
+        from: unread,
+        to: anna,
+        loss: false,
+      }),
+    ).toBe(
+      "Owner: von einem Datensatz, den ich in diesem Chat nicht gelesen habe, auf Anna.",
+    );
+    expect(
+      detail("de", { type: "set", field: "Owner", value: unread, loss: false }),
+    ).toBe(
+      "Owner wird auf einen Datensatz, den ich in diesem Chat nicht gelesen habe, gesetzt.",
+    );
+    expect(
+      detail("en", {
+        type: "changed",
+        field: "Owner",
+        from: unread,
+        to: anna,
+        loss: false,
+      }),
+    ).toBe("Owner: from a record I haven't read in this chat to Anna.");
+    expect(
+      inLanguage("de", () =>
+        spokenWordsFor("de", { now: NOW }).consequence(["restore_unknown"], {
+          count: 1,
+          kind: "other",
+          statement: "sql",
+        } as SpokenFacts),
+      ),
+    ).toBe("Ob sich das wiederherstellen lässt, ist nicht bekannt.");
+  });
+
+  it("1.6: the German voice calls a tool a Tool, as the card does", () => {
+    for (const call of calls)
+      expect(spoken(call.id), call.id).not.toMatch(/Werkzeug/);
+    expect(spoken("read-12-sql-select-into")).toContain(
+      "das Tool read query verwenden",
+    );
+  });
+
+  it("1.8: the name a call typed beside an ID stays the first detail", () => {
+    const call = edited("delete-07-file-permanent", (change) => {
+      change.effects.unshift(
+        ...["Mode", "Notify", "Role"].map((name) => ({
+          path: `/${name.toLowerCase()}`,
+          name,
+          raw_name: name.toLowerCase(),
+          effect: "set",
+          values: [{ text: "ja" }],
+        })),
+      );
+      change.counts.set += 3;
+    });
+    expect(say(call).slice(0, 3)).toEqual([
+      "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+      "File name laut Aufruf: Angebot Linie 4 v3.docx.",
+      "Mode: ja.",
+    ]);
+  });
+
+  it("1.2: values the label could not keep are counted with the rest", () => {
+    const call = edited("update-06-many-fields", (change) => {
+      change.counts.set += 5;
+    });
+    expect(spoken("update-06-many-fields")).toContain(
+      "Dazu kommen vier weitere Felder",
+    );
+    expect(say(call)).toContain(
+      "Dazu kommen neun weitere Felder, sie stehen auf dem Bildschirm.",
+    );
+  });
+});
+
+describe("one ranking with the card", () => {
+  /** The card's first view, in order: losses, unreadable values, then the values. */
+  const cardFields = (call: SetCall, lossesCounted = false): string[] => {
+    const card = toolCallCardOf(
+      call.display.label as ToolCallLabel | undefined,
+      call.input,
+    );
+    const change = card.kind === "gist" ? card.gist.change : undefined;
+    if (!change || change.batch) return [];
+    const layout = changeLayout(change);
+    return [
+      // Many losses are said as one counted piece.
+      ...(lossesCounted
+        ? []
+        : [...layout.emptied, ...layout.lists, ...layout.removedFromLists]),
+      ...layout.unreadable,
+      ...layout.firstRows,
+      ...layout.collapsed,
+    ]
+      .filter((effect) => effect.effect !== "unchanged")
+      .map((effect) => {
+        const name = effectDisplayName(effect);
+        const suffix = ` (${effect.rawName})`;
+        return name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+      });
+  };
+  const fieldsOf = (said: SpokenPiece[], roles: SpokenPiece["role"][]) =>
+    said.flatMap((piece) =>
+      roles.includes(piece.role)
+        ? (piece.values ?? []).flatMap((source) =>
+            source.slot === "field" && source.value.kind === "text"
+              ? [source.value.text]
+              : [],
+          )
+        : [],
+    );
+
+  it("says the card's first details, in the card's order", () => {
+    for (const call of calls) {
+      const said = inLanguage("de", () =>
+        spokenApprovalPieces(approvalOf(call), {
+          language: "de",
+          now: NOW,
+          timeZone: ZONE,
+        }),
+      );
+      const card = cardFields(
+        call,
+        said.some(
+          (piece) =>
+            piece.role === "detail" &&
+            piece.values?.every((source) => source.slot === "count"),
+        ),
+      );
+      if (card.length === 0) continue;
+      const details = fieldsOf(said, ["detail"]);
+      // What the voice leaves out before its last detail is only what it
+      // says another way: a long text, or the field that names the item.
+      const elsewhere = new Set(fieldsOf(said, ["text"]));
+      const lastSaid = card.indexOf(details.at(-1) ?? "");
+      const skipped = card
+        .slice(0, Math.max(lastSaid, 0))
+        .filter((field) => !details.includes(field) && !elsewhere.has(field));
+      expect(
+        skipped.length,
+        `${call.id}: ${skipped.join(", ")}`,
+      ).toBeLessThanOrEqual(1);
+      const positions = details.map((field) => card.indexOf(field));
+      expect(
+        positions.every((at) => at >= 0),
+        call.id,
+      ).toBe(true);
+      expect(
+        positions.every(
+          (at, index) => index === 0 || at > positions[index - 1],
+        ),
+        `${call.id}: ${details.join(", ")} / ${card.join(", ")}`,
+      ).toBe(true);
+    }
+    expect(
+      pieces("create-02-appointment")
+        .filter((piece) => piece.role === "detail")
+        .map((piece) => piece.text),
+    ).toEqual([
+      "Regardingobjectid: Line 4 Retrofit.",
+      "Location: Werk Augsburg.",
+      "Scheduled start: 20. Januar 2030 um 10:30 Uhr.",
+    ]);
+  });
+
+  it("always says a value the card shows as unreadable, never counts it", () => {
+    expect(pieces("upsert-01-company").map((piece) => piece.text)).toEqual([
+      "Ich möchte in CRM den Datensatz Muster Maschinenbau AG anlegen oder aktualisieren.",
+      "Company: Der Wert steht auf dem Bildschirm.",
+      "Bitte auf dem Bildschirm bestätigen.",
+    ]);
+  });
+
+  it("hedges a list where the card cannot tell whether it is replaced", () => {
+    const list = pieces("update-12-list-replace-unknown");
+    expect(list[1]).toEqual({
+      role: "detail",
+      text: "Die Liste Tags bekommt Retrofit und Linie 4. Ob das die Liste ersetzt oder ergänzt, ist nicht bekannt.",
+      mustSay: true,
+    });
+    expect(spoken("update-12-list-replace-unknown", "en")).toContain(
+      "The list Tags gets Retrofit and Linie 4. Whether that replaces the list or adds to it is not known.",
+    );
+  });
+
+  it("says that a tool marks a call destructive in the card's own words", () => {
+    for (const language of ["de", "en"]) {
+      inLanguage(language, () => {
+        expect(
+          spokenWordsFor(language, { now: NOW }).consequence(["destructive"], {
+            count: 1,
+            kind: "other",
+          } as SpokenFacts),
+        ).toBe(changeNoteLabel("marked_destructive"));
+      });
     }
   });
 });
@@ -775,6 +1052,126 @@ describe.runIf(Boolean(process.env.SPOKEN_CARD_RENDER))("rendered set", () => {
     writeFileSync(
       process.env.SPOKEN_CARD_RENDER as string,
       `${lines.join("\n")}\n`,
+    );
+  });
+});
+
+describe("what the voice says besides the pieces", () => {
+  const card = () =>
+    inLanguage("de", () =>
+      spokenApprovalPieces(approvalOf(callOf("update-08-long-text")), {
+        language: "de",
+        now: NOW,
+      }),
+    );
+  const say = (
+    language: string,
+    utterance: Parameters<typeof spokenUtteranceSentences>[0],
+    pieces = card(),
+  ) =>
+    inLanguage(language, () =>
+      spokenUtteranceSentences(utterance, pieces, { language, now: NOW }),
+    );
+
+  it("counts the rest and says when nothing is left, in German and English", () => {
+    expect(say("de", { type: "count", count: 1 })).toEqual([
+      "Noch eine Sache:",
+    ]);
+    expect(say("de", { type: "count", count: 3 })).toEqual([
+      "Noch drei Dinge:",
+    ]);
+    expect(say("en", { type: "count", count: 1 })).toEqual(["One more thing:"]);
+    expect(say("en", { type: "count", count: 2 })).toEqual([
+      "Two more things:",
+    ]);
+    expect(say("de", { type: "nothing_left" })).toEqual(["Das war alles."]);
+    expect(say("en", { type: "nothing_left" })).toEqual([
+      "That was everything.",
+    ]);
+  });
+
+  it("says what is done on screen for now, and what it did not understand", () => {
+    expect(
+      say("de", {
+        type: "notice",
+        notice: { kind: "decide_on_screen", decision: "approve" },
+      }),
+    ).toEqual(["Zustimmen geht im Moment nur auf dem Bildschirm."]);
+    expect(
+      say("en", {
+        type: "notice",
+        notice: { kind: "decide_on_screen", decision: "reject" },
+      }),
+    ).toEqual(["For now, declining is done on screen."]);
+    expect(
+      say("de", {
+        type: "notice",
+        notice: { kind: "change_on_screen", reason: "card" },
+      }),
+    ).toEqual([
+      "Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.",
+    ]);
+    expect(
+      say("de", {
+        type: "notice",
+        notice: { kind: "unclear", hasText: true },
+      })[0],
+    ).toContain("Text vorlesen");
+    expect(
+      say("en", {
+        type: "notice",
+        notice: { kind: "unclear", hasText: false },
+      })[0],
+    ).not.toContain("read the text");
+    for (const kind of [
+      "new_request_on_screen",
+      "no_text",
+      "unavailable",
+    ] as const)
+      for (const language of ["de", "en"])
+        expect(
+          say(language, { type: "notice", notice: { kind } })[0].length,
+        ).toBeGreaterThan(10);
+  });
+
+  it("reads a long text after its field, in passages the voice takes", () => {
+    const pieces = card();
+    const index = pieces.findIndex((piece) => piece.readOut);
+    const read = say("de", { type: "text", index }, pieces);
+    expect(read[0]).toMatch(/^[^:]+: /);
+    expect(read.join(" ")).toContain(
+      pieces[index].readOut?.text.split(" ").slice(0, 5).join(" ") ?? "-",
+    );
+    for (const passage of read) expect(passage.length).toBeLessThan(301 + 40);
+  });
+
+  it("points to the screen for a text longer than one request, or held only in part", () => {
+    const pieces = card();
+    const index = pieces.findIndex((piece) => piece.readOut);
+    const long = pieces.map((piece, at) =>
+      at === index
+        ? {
+            ...piece,
+            readOut: {
+              text: "Ein ziemlich langer Satz über die Linie vier. ".repeat(80),
+              cut: false,
+            },
+          }
+        : piece,
+    );
+    const read = say("de", { type: "text", index }, long);
+    expect(read.at(-1)).toBe("Der Rest des Textes steht auf dem Bildschirm.");
+    expect(read.length).toBeLessThan(17);
+    expect(read.join("").length).toBeLessThan(2001);
+    for (const passage of read) expect(passage.length).toBeLessThan(401);
+
+    const held = pieces.map((piece, at) =>
+      at === index
+        ? { ...piece, readOut: { text: "Nur der Anfang.", cut: true } }
+        : piece,
+    );
+    expect(say("en", { type: "text", index }, held).at(-1)).toBe(
+      "The rest of the text is on screen.",
     );
   });
 });

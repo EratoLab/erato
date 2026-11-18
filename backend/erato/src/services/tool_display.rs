@@ -242,7 +242,20 @@ fn labelled_display(
             }
             Some((read, filtered))
         })
-        .map(|(read, filtered)| label::read_description(read, filtered));
+        .map(|(read, filtered)| label::read_description(read, filtered))
+        .or_else(|| {
+            label::guarded_read(|| {
+                let glossary = config
+                    .mcp_servers
+                    .get(server_id)
+                    .map(|server| &server.glossary);
+                let mut read = label::sql_read(tool, arguments, consent, shown, glossary)?;
+                if let Some(server) = &scope {
+                    context.resolve_query(&mut read, server);
+                }
+                Some(read)
+            })
+        });
         label
     })
     .or_else(|| {

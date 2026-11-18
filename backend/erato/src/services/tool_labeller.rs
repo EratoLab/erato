@@ -679,6 +679,7 @@ mod tests {
             display: Some(display(ToolCallLabelSource::Rules)),
             input: json!({"status": "Rejected"}),
             child,
+            replaces_approval_id: None,
         };
         ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
             tool_call_id: call_id.into(),

@@ -16,7 +16,7 @@ use super::rules;
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
-    ToolCallLabelItem, ToolCallStatus, ToolUse,
+    ToolCallLabelItem, ToolCallRead, ToolCallStatus, ToolUse,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::prompt_composition::replay_policy;
@@ -504,6 +504,31 @@ impl ToolResultContext {
         }
     }
 
+    /// Names the records the values of a read's SQL statement identify, as
+    /// [`Self::resolve`] does for a label: the values sit inside the
+    /// statement, so they are looked up by their text.
+    pub fn resolve_query(&self, read: &mut ToolCallRead, server: &str) {
+        let mut budget = MAX_RESOLVED_BYTES;
+        let item_values = read
+            .item
+            .iter_mut()
+            .flat_map(|item| item.id.iter_mut())
+            .flat_map(|slot| slot.values.iter_mut());
+        let condition_values = read
+            .query
+            .iter_mut()
+            .flat_map(|query| query.conditions.iter_mut())
+            .flat_map(|condition| condition.values.iter_mut());
+        for value in item_values.chain(condition_values) {
+            value.resolved = text_key(&value.text)
+                .and_then(|key| self.record(server, key)?.name.clone())
+                .and_then(|name| {
+                    budget = budget.checked_sub(name.len())?;
+                    Some(name)
+                });
+        }
+    }
+
     /// The one record an item's `id` names, if a result reported it.
     pub(super) fn record_of_item(
         &self,
@@ -639,9 +664,10 @@ impl ToolResultContext {
         }
     }
 
-    /// A call Erato itself turned down (the user denied it, a gate refused it,
-    /// the budget ran out) never reached its server. Erato writes exactly
-    /// `{status: "rejected", error: <text>}`, never with `allowed_by`. A call
+    /// A call Erato itself turned down (the user denied it or asked for it to
+    /// change, a gate refused it, the budget ran out) never reached its
+    /// server. Erato writes exactly `{status: "rejected", error: <text>}`, or
+    /// a change request's result, never with `allowed_by`. A call
     /// that ran may get the same shape from its server: with `allowed_by` or
     /// an approval it counts as ran. Earlier turns replay without their
     /// decision parts, so there a card-approved call stays ambiguous and
@@ -655,9 +681,12 @@ impl ToolResultContext {
                 .as_ref()
                 .and_then(Value::as_object)
                 .is_some_and(|output| {
-                    output.len() == 2
+                    (output.len() == 2
                         && output.get("status").and_then(Value::as_str) == Some("rejected")
-                        && output.get("error").is_some_and(Value::is_string)
+                        && output.get("error").is_some_and(Value::is_string))
+                        || crate::services::approval_change_requests::is_change_request_output(
+                            output,
+                        )
                 })
     }
 

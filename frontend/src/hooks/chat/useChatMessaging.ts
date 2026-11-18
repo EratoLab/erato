@@ -2752,13 +2752,18 @@ export function useChatMessaging(
       const settled: SettledApproval[] = nothingToDecide
         ? []
         : items && items.length > 0
-          ? items.map((item) => ({
-              item,
-              decision:
-                itemDecisions?.find(
-                  (answer) => answer.approvalId === item.approval_id,
-                )?.decision ?? decision,
-            }))
+          ? items.map((item) => {
+              const answer = itemDecisions?.find(
+                (entry) => entry.approvalId === item.approval_id,
+              );
+              return {
+                item,
+                decision: answer?.decision ?? decision,
+                ...(answer?.changeRequest
+                  ? { changeRequest: answer.changeRequest }
+                  : {}),
+              };
+            })
           : [
               {
                 item: {

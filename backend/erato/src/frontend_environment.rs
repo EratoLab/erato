@@ -656,6 +656,10 @@ fn build_frontend_environment(
         ),
     );
     env.additional_environment.insert(
+        "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
+        Value::Bool(config.approval_voice_commands.enabled),
+    );
+    env.additional_environment.insert(
         "READ_ALOUD_ENABLED".to_string(),
         Value::Bool(config.read_aloud_speech_provider().is_some()),
     );
@@ -1414,6 +1418,25 @@ mod tests {
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS),
                 Some(&Value::Number(silence_ms.into()))
+            );
+        }
+    }
+
+    #[test]
+    fn approval_voice_commands_switch_reaches_web_and_office_addin() {
+        let mut config = AppConfig::default();
+        for (enabled, kind) in [
+            (false, FrontendKind::Web),
+            (true, FrontendKind::Web),
+            (true, FrontendKind::OfficeAddin),
+        ] {
+            config.approval_voice_commands.enabled = enabled;
+            let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get("APPROVAL_VOICE_COMMANDS_ENABLED"),
+                Some(&Value::Bool(enabled))
             );
         }
     }

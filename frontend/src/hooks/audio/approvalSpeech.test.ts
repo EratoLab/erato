@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlayedPiece } from "./approvalSpeech";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type { SSEOptions } from "@/utils/sse/sseClient";
 
@@ -53,7 +52,7 @@ const piece = (
   role: SpokenPiece["role"],
   text: string,
   mustSay = false,
-): SpokenPiece => ({ role, text, mustSay });
+): SpokenPiece => ({ id: text, role, text, mustSay });
 
 const CARD = [
   piece("what", "Ich möchte den Datensatz Line 4 Retrofit ändern."),
@@ -116,46 +115,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("nextPiece", () => {
-  const played = (
-    states: PlayedPiece["state"][],
-    mustSay: boolean[] = [],
-  ): PlayedPiece[] =>
-    states.map((state, index) => ({
-      ...CARD[index],
-      mustSay: mustSay[index] ?? CARD[index].mustSay,
-      state,
-    }));
-
-  it("goes on with the next piece not yet said", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    expect(
-      nextPiece(
-        played(["pending", "pending", "pending", "pending"]),
-        null,
-        new Set(),
-      ),
-    ).toBe(0);
-    expect(
-      nextPiece(played(["heard", "heard", "pending", "pending"]), 1, new Set()),
-    ).toBe(2);
-    expect(
-      nextPiece(played(["heard", "heard", "heard", "heard"]), 3, new Set()),
-    ).toBeNull();
-  });
-
-  it("says a loss that was cut short again before the request, once", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    const pieces = played(["heard", "cut", "heard", "pending"]);
-    expect(nextPiece(pieces, 2, new Set())).toBe(1);
-    expect(nextPiece(pieces, 1, new Set([1]))).toBe(3);
-    // Content that was skipped is not said again.
-    expect(
-      nextPiece(played(["heard", "heard", "cut", "pending"]), 2, new Set()),
-    ).toBe(3);
-  });
-});
-
 describe("speaking an approval card", () => {
   it("asks for the pieces of the card's message and plays them one after another", async () => {
     const { connection, states, useApprovalSpeech } = await speak();
@@ -183,7 +142,6 @@ describe("speaking an approval card", () => {
     playOut();
     expect(states()).toEqual(["heard", "heard", "heard", "heard"]);
     expect(useApprovalSpeech.getState().speaking).toBe(false);
-    expect(connection.close).toHaveBeenCalled();
   });
 
   it("skips the piece being said and goes on with the rest", async () => {
@@ -205,18 +163,77 @@ describe("speaking an approval card", () => {
     expect(states()).toEqual(["heard", "heard", "heard", "playing"]);
   });
 
-  it("stops at once and decides nothing", async () => {
-    const { connection, states, stopApprovalSpeech, useApprovalSpeech } =
-      await speak();
+  it("stops at once and decides nothing; the card's audio keeps loading", async () => {
+    const {
+      connection,
+      states,
+      stopApprovalSpeech,
+      steerApprovalCard,
+      useApprovalSpeech,
+    } = await speak();
     audio(connection, 0);
     stopApprovalSpeech();
     expect(states()).toEqual(["cut", "pending", "pending", "pending"]);
     expect(useApprovalSpeech.getState().speaking).toBe(false);
-    expect(connection.close).toHaveBeenCalled();
-    // Audio that still arrives is not played.
+    expect(useApprovalSpeech.getState().closed).toBe(false);
+    expect(connection.close).not.toHaveBeenCalled();
+    // Audio that still arrives is not played, but kept: "go on" plays it.
     const before = sources.length;
     audio(connection, 1);
     expect(sources).toHaveLength(before);
+    steerApprovalCard("message-1:stop-1", { type: "skip" });
+    expect(states()).toEqual(["cut", "playing", "pending", "pending"]);
+    expect(sources).toHaveLength(before + 1);
+  });
+
+  it("review 2: a break in the card's audio after a stop says nothing; going on asks again", async () => {
+    const {
+      connection,
+      states,
+      stopApprovalSpeech,
+      steerApprovalCard,
+      useApprovalSpeech,
+    } = await speak();
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    audio(connection, 0);
+    stopApprovalSpeech();
+    connection.options.onError?.(new Error("network"));
+    // No fallback, no notice, the card still waits and can be steered.
+    expect(connections).toHaveLength(1);
+    expect(connection.close).toHaveBeenCalled();
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().failed).toBe(false);
+    expect(useSpeechPlayback.getState().failed).toBe(false);
+
+    // "weiter": the pieces that did not load are asked for again.
+    steerApprovalCard("message-1:stop-1", { type: "skip" });
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string)).toEqual({
+      pieces: CARD.slice(1).map((entry) => entry.text),
+    });
+    expect(states()).toEqual(["cut", "playing", "pending", "pending"]);
+    const before = sources.length;
+    audio(connections[1], 0);
+    expect(sources).toHaveLength(before + 1);
+
+    // A break while a piece that did not load plays fails, as before.
+    playOut();
+    expect(states()).toEqual(["cut", "heard", "playing", "pending"]);
+    connections[1].options.onClose?.();
+    expect(useApprovalSpeech.getState().failed).toBe(true);
+  });
+
+  it("review 2: a break while a loaded piece plays goes on; a later piece is asked for again", async () => {
+    const { connection, states, useApprovalSpeech } = await speak();
+    audio(connection, 0);
+    connection.options.onClose?.();
+    expect(useApprovalSpeech.getState().failed).toBe(false);
+    expect(states()[0]).toBe("playing");
+    playOut();
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string).pieces).toEqual(
+      CARD.slice(1).map((entry) => entry.text),
+    );
   });
 
   it("1.6: a card that cannot be spoken falls back, then says so, and stays to be asked for", async () => {
@@ -249,6 +266,20 @@ describe("speaking an approval card", () => {
     ).toHaveLength(CARD.length);
   });
 
+  it("4.1: forgetting one approval keeps another card of the same message speaking", async () => {
+    const { forgetApprovalCards, useApprovalSpeech } = await speak();
+    // An earlier card of the same message goes away, say the one a change
+    // replaced: the card being spoken keeps its voice.
+    forgetApprovalCards(["message-1:stop-0"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(true);
+    expect(useApprovalSpeech.getState().available?.key).toBe(
+      "message-1:stop-1",
+    );
+    forgetApprovalCards(["message-1:stop-1"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().available).toBeNull();
+  });
+
   it("ends when conversational mode stops reading back", async () => {
     const { useApprovalSpeech } = await speak();
     const { useSpeechPlayback } = await import("./speechPlayback");
@@ -277,5 +308,45 @@ describe("speaking an approval card", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("says what came of a change without offering a card to listen to", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: true, enabled: true });
+    module.announceApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "en",
+    );
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    expect(connections[0].url).toMatch(/message-1\/approval-speech$/);
+    expect(
+      (
+        JSON.parse(connections[0].options.body as string) as {
+          pieces: string[];
+        }
+      ).pieces,
+    ).toEqual([
+      "No new card came, and nothing was run. Just say how to go on.",
+    ]);
+    expect(module.useApprovalSpeech.getState().available).toBeNull();
+    expect(module.useApprovalSpeech.getState().speaking).toBe(true);
+    audio(connections[0], 0);
+    playOut();
+    expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("says nothing of a change once audio mode was left", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: false, enabled: true });
+    module.announceApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "en",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(connections).toHaveLength(0);
   });
 });

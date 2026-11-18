@@ -89,6 +89,8 @@ export type ToolDecision =
       neverAllow: boolean;
       /** Ended because the user no longer allows the tool, not on a card. */
       withdrawn: boolean;
+      /** Not run because the user asked for the call to be different. */
+      changeRequested?: boolean;
     };
 
 /**

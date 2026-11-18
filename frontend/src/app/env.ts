@@ -90,6 +90,7 @@ export type Env = {
   audioConversationalEnabled: boolean;
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
+  approvalVoiceCommandsEnabled?: boolean;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   maxUploadSizeBytes: number;
@@ -185,6 +186,7 @@ declare global {
     AUDIO_CONVERSATIONAL_ENABLED?: boolean;
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
+    APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
@@ -658,6 +660,10 @@ export const env = (): Env => {
       import.meta.env.VITE_READ_ALOUD_ENABLED !== undefined
         ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
         : (window.READ_ALOUD_ENABLED ?? false),
+    approvalVoiceCommandsEnabled:
+      import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
+        ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
+        : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     maxUploadSizeBytes,

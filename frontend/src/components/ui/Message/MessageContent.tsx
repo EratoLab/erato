@@ -960,6 +960,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       status: "denied",
       neverAllow: part.never_allow === true,
       withdrawn: reason === "withdrawn",
+      changeRequested: reason === "change_requested",
     };
   }
   return undefined;

@@ -3345,7 +3345,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5754,6 +5754,10 @@
             "type": "string",
             "example": "call_abc123"
           },
+          "change_request": {
+            "type": "string",
+            "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },
@@ -5827,6 +5831,13 @@
           },
           "input": {
             "$ref": "#/components/schemas/Value"
+          },
+          "replaces_approval_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The item of an earlier stop on the same message this one replaces: the\nuser asked for that call to be changed and this is the model's\ncorrected call of the same tool on the same server."
           },
           "tool_call_id": {
             "type": "string"
@@ -7097,6 +7108,24 @@
           "requesting_message_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "CardChangedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers to a decision that names no\napproval while the open card is the corrected call of a change request.\n\nA client that sends no `approval_id` may still show the card it replaced,\non another tab or device, so its answer cannot be meant for this one. The\nclient reloads the message and shows the card named here.",
+        "required": [
+          "code",
+          "approval_id"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "The approval that is open now."
+          },
+          "code": {
+            "type": "string",
+            "description": "Always `card_changed`."
           }
         }
       },
@@ -8737,6 +8766,13 @@
               "null"
             ]
           },
+          "change_request": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's words when `reason` is `change_requested`."
+          },
           "child_chat_id": {
             "type": [
               "string",
@@ -8753,7 +8789,7 @@
               "string",
               "null"
             ],
-            "description": "Why the call was rejected when the user did not decide it directly.\nThe only value is `withdrawn`."
+            "description": "Why the call was rejected when the user did not simply deny it:\n`withdrawn` when the user took the question back, `change_requested`\nwhen they asked for the call to be different."
           },
           "rejected_at": {
             "type": "string"
@@ -14237,7 +14273,8 @@
           "approve_always",
           "reject_always",
           "withdraw",
-          "approve_context"
+          "approve_context",
+          "request_change"
         ]
       },
       "ToolApprovalKind": {
@@ -15112,11 +15149,102 @@
           "object_kind": {
             "$ref": "#/components/schemas/ToolCallObjectKind"
           },
+          "query": {
+            "$ref": "#/components/schemas/ToolCallReadQuery",
+            "description": "What a call's one SQL statement reads, when parsing it shows it is\ncertainly a single plain read; then `item.id` holds the record a\ncondition on the table's own key names."
+          },
           "warnings": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ToolCallLabelWarning"
             }
+          }
+        }
+      },
+      "ToolCallReadCondition": {
+        "type": "object",
+        "required": [
+          "column",
+          "operator"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/ToolCallReadOperator"
+          },
+          "table": {
+            "type": "string",
+            "description": "The table the column belongs to, when the statement reads several\nand names it."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelValue"
+            },
+            "description": "The values it compares with, read as label values: a machine ID is\nnamed only by `resolved`. `between` has two."
+          },
+          "values_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallReadOperator": {
+        "type": "string",
+        "enum": [
+          "equals",
+          "not_equals",
+          "less",
+          "at_most",
+          "greater",
+          "at_least",
+          "contains",
+          "starts_with",
+          "ends_with",
+          "is_empty",
+          "is_not_empty",
+          "in",
+          "not_in",
+          "between",
+          "other"
+        ]
+      },
+      "ToolCallReadQuery": {
+        "type": "object",
+        "description": "The parts of a plain SQL read the voice says: the tables, the conditions\nsimple enough to say, and a limit. Names are as the statement wrote them,\ndisplay-cleaned.",
+        "properties": {
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallReadCondition"
+            },
+            "description": "Conditions joined by AND that compare one column with values, in the\nstatement's order."
+          },
+          "conditions_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Conditions it applies beyond `conditions`: past the cap, or not a\nsimple comparison.",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The most rows it returns, from TOP, LIMIT or FETCH.",
+            "minimum": 0
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tables_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

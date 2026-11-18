@@ -1,6 +1,9 @@
 /* eslint-disable lingui/no-unlocalized-strings -- effect, note and piece names from the API and this module; the spoken words are in spokenCardWords */
+import { effectDisplayName } from "./cardLayout";
+import { addsOnToolsWord, changeLayout, listReplaceIsUnknown } from "./change";
 import { toolCallCardOf } from "./gist";
 import { spokenWordsFor } from "./spokenCardWords";
+import { spokenReadFactsOf, spokenReadPieces } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
 import type {
@@ -10,6 +13,7 @@ import type {
   GistChange,
 } from "./change";
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
+import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
 import type { EarValue } from "./spokenValues";
 import type {
   ToolCallLabel,
@@ -65,6 +69,11 @@ export interface SpokenSource {
 }
 
 export interface SpokenPiece {
+  /**
+   * Stable within a card and between a card and the one that replaces it:
+   * the role, and for a detail or a text the field it is about.
+   */
+  id: string;
   role: SpokenPieceRole;
   text: string;
   /** A loss or a consequence: said even when the listener skips ahead. */
@@ -73,7 +82,18 @@ export interface SpokenPiece {
   pauseBeforeMs?: number;
   /** The values the text says, in the order it says them. */
   values?: SpokenSource[];
+  /** The long text a piece only names, for reading it out on request. */
+  readOut?: SpokenReadOut;
 }
+
+export interface SpokenReadOut {
+  text: string;
+  /** The card holds only the start of the text. */
+  cut: boolean;
+}
+
+/** A piece as it is composed, before the card gives it its id. */
+export type ComposedPiece = Omit<SpokenPiece, "id">;
 
 /** Details read before the rest is counted. */
 export const MAX_SPOKEN_DETAILS = 3;
@@ -128,9 +148,40 @@ export type SpokenDetail =
       loss: false;
     }
   | { type: "emptied"; field: string; loss: true }
-  | { type: "list_replaced"; field: string; values: EarValue[]; loss: true }
-  | { type: "list_removed"; field: string; values: EarValue[]; loss: true }
-  | { type: "list_added"; field: string; values: EarValue[]; loss: false }
+  | {
+      type: "list_replaced";
+      field: string;
+      values: EarValue[];
+      /** Entries the label could not keep. */
+      omitted: number;
+      /** The card cannot tell whether the list is replaced or added to. */
+      unknown: boolean;
+      loss: true;
+    }
+  /** Entries the tool says it removes: its word, as the card says. */
+  | {
+      type: "list_removed";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: true;
+    }
+  /** Entries the tool says it adds: its word, as the card says. */
+  | {
+      type: "list_added";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: false;
+    }
+  /** A list a call sets, with every entry. */
+  | {
+      type: "list_set";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: false;
+    }
   | { type: "unreadable"; field: string; loss: false }
   /** A name a field of the call gives an item the card names only by its ID. */
   | { type: "named"; field: string; value: EarValue; loss: false }
@@ -142,6 +193,8 @@ export interface SpokenText {
   words: number;
   /** The text itself when it is short enough to read. */
   read?: string;
+  /** The whole text as the card holds it, read out only on request. */
+  full?: SpokenReadOut;
 }
 
 export type SpokenConsequence =
@@ -233,13 +286,25 @@ export interface SpokenWords {
   request(): string;
   /** A call the card has no verb for: the tool's title and its server. */
   generic(toolTitle: string, server?: string): string;
+  /** Before the rest of the card: how many pieces follow. */
+  rest(count: number): string;
+  /** The rest was asked for and everything was heard. */
+  nothingLeft(): string;
+  /** The first passage of a long text read out, after its field. */
+  readText(field: string, passage: string): string;
+  /** After a long text read only in part. */
+  textCut(): string;
+  notice(notice: SpokenNotice): string;
 }
 
 const words = (text: string): number =>
   text.split(/\s+/).filter((word) => word.length > 0).length;
 
 /** A glossary name carries the raw name in brackets for the eye only. */
-const fieldName = (effect: { name: string; rawName: string }): string => {
+export const fieldName = (effect: {
+  name: string;
+  rawName: string;
+}): string => {
   const suffix = ` (${effect.rawName})`;
   const name = effect.name.endsWith(suffix)
     ? effect.name.slice(0, -suffix.length)
@@ -250,13 +315,9 @@ const fieldName = (effect: { name: string; rawName: string }): string => {
   );
 };
 
-/** A link shows the linked record's name, so its field drops a last "ID". */
-const linkFieldName = (effect: ChangeEffect): string => {
-  const name = fieldName(effect);
-  if (!effect.link) return name;
-  const match = /^(.*\S)\s+id$/i.exec(name);
-  return match ? match[1] : name;
-};
+/** A field as its row on the card names it. */
+export const effectField = (effect: ChangeEffect): string =>
+  fieldName({ name: effectDisplayName(effect), rawName: effect.rawName });
 
 /** Field names that say a value is a share of a hundred. */
 const PERCENT_FIELD = /percent|probability|prozent|wahrscheinlichkeit/i;
@@ -283,19 +344,6 @@ const sayable = (value: EarValue): EarValue =>
 const isLong = (value: EarValue): boolean =>
   value.kind === "text" && words(value.text) > MAX_READ_WORDS;
 
-/** Dates first, then numbers and choices, then short text, then linked records. */
-const setRank = (detail: SpokenDetail, effect: ChangeEffect): number => {
-  if (detail.type !== "set") return 4;
-  const kind = detail.value.kind;
-  if (kind === "date" || kind === "datetime") return 0;
-  if (kind === "number" || kind === "bool" || effect.values[0]?.meaning)
-    return 1;
-  if (effect.link) return 3;
-  return 2;
-};
-
-const LOSS_EFFECTS = new Set(["emptied", "list_replaced", "list_removed"]);
-
 const DATE_KINDS = new Set(["date", "datetime"]);
 
 /** The name a nameless item gets from a field that names it, as a card shows it. */
@@ -317,21 +365,30 @@ interface Detailed {
  */
 type FieldNaming = "names_new_item" | "beside_id" | "none";
 
+/**
+ * The details in the order the card's first view shows them, from the
+ * card's own layout: what is lost, then what cannot be read, then the values
+ * as the card ranks them. Losses and unreadable values are always said, as
+ * the card always shows them; of the values, the card's first ones are said
+ * up to three details in all, and the rest are counted.
+ */
 const detailsOf = (
   change: GistChange,
   action: GistAction,
   naming: FieldNaming,
   timeZone?: string,
+  whole = false,
 ): Detailed => {
   const ear = (value: ChangeValue, field: string) =>
     sayable(valueOf(value, field, timeZone));
-  const ranked: { detail: SpokenDetail; rank: number; order: number }[] = [];
+  const layout = changeLayout(change);
+  const replaceUnknown = listReplaceIsUnknown(change);
   const texts: SpokenText[] = [];
   let named: string | undefined;
   let typedName = false;
-  change.effects.forEach((effect, order) => {
-    const field = linkFieldName(effect);
-    if (effect.effect === "unchanged") return;
+  const detailOf = (effect: ChangeEffect): SpokenDetail | undefined => {
+    const field = effectField(effect);
+    const entries = () => effect.values.map((value) => ear(value, field));
     const first = effect.values[0] as ChangeValue | undefined;
     const namesItem =
       effect.effect === "set" &&
@@ -340,106 +397,137 @@ const detailsOf = (
       NAME_FIELD.test(effect.rawName);
     if (naming === "names_new_item" && named === undefined && namesItem) {
       named = shorten(first.text);
-      return;
+      return undefined;
     }
     if (naming === "beside_id" && !typedName && namesItem) {
       typedName = true;
-      ranked.push({
-        detail: {
-          type: "named",
-          field,
-          value: { kind: "text", text: shorten(first.text) },
-          loss: false,
-        },
-        rank: -1.5,
-        order,
-      });
-      return;
+      return {
+        type: "named",
+        field,
+        value: { kind: "text", text: shorten(first.text) },
+        loss: false,
+      };
     }
-    let detail: SpokenDetail;
     switch (effect.effect) {
+      case "unchanged":
+        return undefined;
       case "emptied":
-        detail = { type: "emptied", field, loss: true };
-        break;
+        return { type: "emptied", field, loss: true };
       case "list_replaced":
-        detail = {
+        return {
           type: "list_replaced",
           field,
-          values: effect.values.map((value) => ear(value, field)),
+          values: entries(),
+          omitted: effect.omitted,
+          unknown: replaceUnknown,
           loss: true,
         };
-        break;
       case "list_removed":
-        detail = {
+        return {
           type: "list_removed",
           field,
-          values: effect.removed.map((value) => ear(value, field)),
+          values: entries(),
+          omitted: effect.omitted,
           loss: true,
         };
-        break;
-      case "list_added":
-        detail = {
-          type: "list_added",
-          field,
-          values: effect.added.map((value) => ear(value, field)),
-          loss: false,
-        };
-        break;
       case "unreadable":
-        detail = { type: "unreadable", field, loss: false };
-        break;
+        return { type: "unreadable", field, loss: false };
       default: {
-        if (!first) return;
+        if (!first) return undefined;
+        // A list is said with its entries; what the tool only says it adds,
+        // on its word, as the card marks it.
+        if (addsOnToolsWord(change, effect)) {
+          return {
+            type: "list_added",
+            field,
+            values: entries(),
+            omitted: effect.omitted,
+            loss: false,
+          };
+        }
+        if (
+          effect.effect === "set" &&
+          (effect.list || effect.values.length > 1)
+        ) {
+          return {
+            type: "list_set",
+            field,
+            values: entries(),
+            omitted: effect.omitted,
+            loss: false,
+          };
+        }
         const to = ear(first, field);
         if (isLong(to)) {
           texts.push({
             field,
             words: to.kind === "text" ? words(to.text) : 0,
+            ...(to.kind === "text"
+              ? { full: { text: first.text, cut: first.truncated } }
+              : {}),
           });
-          return;
+          return undefined;
         }
-        detail =
-          effect.effect === "changed" && effect.old
-            ? {
-                type: "changed",
-                field,
-                from: ear(effect.old, field),
-                to,
-                loss: false,
-              }
-            : { type: "set", field, value: to, loss: false };
+        return effect.effect === "changed" && effect.old
+          ? {
+              type: "changed",
+              field,
+              from: ear(effect.old, field),
+              to,
+              loss: false,
+            }
+          : { type: "set", field, value: to, loss: false };
       }
     }
-    const rank = LOSS_EFFECTS.has(effect.effect)
-      ? -2
-      : detail.type === "changed"
-        ? -1
-        : setRank(detail, effect);
-    ranked.push({ detail, rank, order });
-  });
-  ranked.sort((a, b) => a.rank - b.rank || a.order - b.order);
-  const losses = ranked.filter(({ detail }) => detail.loss);
+  };
+  const of = (effects: readonly ChangeEffect[]) =>
+    effects.flatMap((effect) => detailOf(effect) ?? []);
+  const losses = of([
+    ...layout.emptied,
+    ...layout.lists,
+    ...layout.removedFromLists,
+  ]);
+  const unreadable = of(layout.unreadable);
+  const values = of([...layout.firstRows, ...layout.collapsed]);
+  // The name the call typed beside an ID is the listener's only hint which
+  // item is meant: it comes first, the one exception to the card's order.
+  const typed = values.filter((detail) => detail.type === "named");
+  const others = values.filter((detail) => detail.type !== "named");
   let details: SpokenDetail[];
   let omitted: number;
-  if (losses.length > MAX_LISTED_LOSSES) {
-    const rest = ranked.filter(({ detail }) => !detail.loss);
-    const listed = rest.slice(0, MAX_SPOKEN_DETAILS - 1);
+  if (whole) {
+    details = [...typed, ...losses, ...unreadable, ...others];
+    omitted = 0;
+  } else if (losses.length > MAX_LISTED_LOSSES) {
+    const rest = [...typed, ...unreadable, ...others];
+    const listed = rest.slice(
+      0,
+      Math.max(MAX_SPOKEN_DETAILS - 1, typed.length + unreadable.length),
+    );
     details = [
       {
         type: "losses",
-        emptied: losses.filter(({ detail }) => detail.type === "emptied")
-          .length,
-        lists: losses.filter(({ detail }) => detail.type !== "emptied").length,
+        emptied: losses.filter((detail) => detail.type === "emptied").length,
+        lists: losses.filter((detail) => detail.type !== "emptied").length,
         loss: true,
       },
-      ...listed.map(({ detail }) => detail),
+      ...listed,
     ];
     omitted = rest.length - listed.length;
   } else {
-    const kept = Math.max(MAX_SPOKEN_DETAILS, losses.length);
-    details = ranked.slice(0, kept).map(({ detail }) => detail);
-    omitted = ranked.length - details.length;
+    const ordered = [...typed, ...losses, ...unreadable, ...others];
+    details = ordered.slice(
+      0,
+      Math.max(
+        MAX_SPOKEN_DETAILS,
+        typed.length + losses.length + unreadable.length,
+      ),
+    );
+    omitted = ordered.length - details.length;
   }
+  // Values the label could not keep are on the card too, in its technical
+  // details, and counted with the rest.
+  omitted += layout.beyondCap;
   for (const text of change.texts) {
     const field = fieldName(text);
     // A truncated text is counted by its length; a whole one by its words.
@@ -448,7 +536,11 @@ const detailsOf = (
       : words(text.text);
     texts.push(
       count > MAX_READ_WORDS || text.truncated
-        ? { field, words: count }
+        ? {
+            field,
+            words: count,
+            full: { text: text.text, cut: text.truncated },
+          }
         : {
             field,
             words: count,
@@ -456,12 +548,13 @@ const detailsOf = (
           },
     );
   }
-  const spokenTexts = texts.slice(0, MAX_SPOKEN_TEXTS);
+  const spokenTexts = whole ? texts : texts.slice(0, MAX_SPOKEN_TEXTS);
+  const all = [...losses, ...unreadable, ...values];
   const reschedule =
     action === "update" &&
-    ranked.length > 0 &&
-    ranked.every(
-      ({ detail }) =>
+    all.length > 0 &&
+    all.every(
+      (detail) =>
         (detail.type === "changed" && DATE_KINDS.has(detail.to.kind)) ||
         (detail.type === "set" && DATE_KINDS.has(detail.value.kind)),
     );
@@ -475,7 +568,7 @@ const detailsOf = (
 };
 
 /** What a person calls a recipient written as an address: its name part. */
-const recipientName = (written: string): string => {
+export const recipientName = (written: string): string => {
   const named = /^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/.exec(written);
   if (named) return named[1].trim();
   const at = written.indexOf("@");
@@ -546,11 +639,16 @@ const spokenNames = (values: GistValue[]): string[] =>
 /** Verbs whose item is new, so the call's title is what it is called. */
 const CREATING_ACTIONS: readonly GistAction[] = ["create", "send", "upload"];
 
-/** The facts a gist card holds, read the way the voice needs them. */
+/**
+ * The facts a gist card holds, read the way the voice needs them. `whole`
+ * keeps every detail and text instead of the few a card says, for comparing
+ * two cards.
+ */
 export const spokenFactsOf = (
   gist: Gist,
   server?: string,
   timeZone?: string,
+  whole = false,
 ): SpokenFacts => {
   const lead = gist.items[0];
   const change = gist.change;
@@ -574,8 +672,9 @@ export const spokenFactsOf = (
             ? "names_new_item"
             : "beside_id",
         timeZone,
+        whole,
       )
-    : fieldDetailsOf(gist, timeZone);
+    : fieldDetailsOf(gist, timeZone, whole);
   const where = spokenNames(lead.where);
   return {
     action: gist.action,
@@ -611,6 +710,8 @@ const batchLosses = (change: GistChange): SpokenDetail[] =>
               type: "list_replaced",
               field: fieldName(field),
               values: [],
+              omitted: 0,
+              unknown: false,
               loss: true,
             },
           ]
@@ -618,7 +719,11 @@ const batchLosses = (change: GistChange): SpokenDetail[] =>
   );
 
 /** A label stored before change descriptions: its fields as the card lists them. */
-const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
+const fieldDetailsOf = (
+  gist: Gist,
+  timeZone?: string,
+  whole = false,
+): Detailed => {
   const lead = gist.items[0];
   const details: SpokenDetail[] = [];
   const texts: SpokenText[] = [];
@@ -627,7 +732,11 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     if (!(entry as (typeof field.values)[number] | undefined)) continue;
     const to = earOf(entry.value, field.name, timeZone);
     if (isLong(to)) {
-      texts.push({ field: field.name, words: words(entry.value.text) });
+      texts.push({
+        field: field.name,
+        words: words(entry.value.text),
+        full: { text: entry.value.text, cut: entry.value.truncated },
+      });
       continue;
     }
     details.push(
@@ -646,13 +755,17 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     const count = words(after.text);
     texts.push(
       count > MAX_READ_WORDS || after.truncated
-        ? { field: "", words: count }
+        ? {
+            field: "",
+            words: count,
+            full: { text: after.text, cut: after.truncated },
+          }
         : { field: "", words: count, read: after.text },
     );
   }
   return {
-    details: details.slice(0, MAX_SPOKEN_DETAILS),
-    omitted: Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
+    details: whole ? details : details.slice(0, MAX_SPOKEN_DETAILS),
+    omitted: whole ? 0 : Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
     texts,
     reschedule: false,
   };
@@ -681,7 +794,7 @@ const number = (slot: SpokenSlot, value: number): SpokenSource => ({
   value: { kind: "number", value, percent: false },
 });
 
-const whatValues = (facts: SpokenFacts): SpokenSource[] => [
+export const whatValues = (facts: SpokenFacts): SpokenSource[] => [
   ...(facts.server ? [text("server", facts.server)] : []),
   ...(facts.count > 1 ? [number("count", facts.count)] : []),
   ...(facts.statement ? [text("statement", facts.statement)] : []),
@@ -697,7 +810,7 @@ const whatValues = (facts: SpokenFacts): SpokenSource[] => [
     : []),
 ];
 
-const detailValues = (detail: SpokenDetail): SpokenSource[] => {
+export const detailValues = (detail: SpokenDetail): SpokenSource[] => {
   if (detail.type === "losses") {
     return [number("count", detail.emptied), number("count", detail.lists)];
   }
@@ -714,6 +827,7 @@ const detailValues = (detail: SpokenDetail): SpokenSource[] => {
     case "list_replaced":
     case "list_removed":
     case "list_added":
+    case "list_set":
       return [
         field,
         ...detail.values.map((value) => ({ slot: "value" as const, value })),
@@ -741,7 +855,7 @@ const DROPPABLE: readonly SpokenPieceRole[] = ["text", "more", "detail"];
  * details and texts left to the screen from the last one on. Losses, the
  * consequence and the request always stay.
  */
-const fitted = (pieces: SpokenPiece[], cut: string): SpokenPiece[] => {
+const fitted = (pieces: ComposedPiece[], cut: string): ComposedPiece[] => {
   let card = pieces.map((piece) => {
     const text = piece.text.replaceAll(SPOKEN_CUT, cut);
     return {
@@ -775,27 +889,63 @@ const fitted = (pieces: SpokenPiece[], cut: string): SpokenPiece[] => {
   return card;
 };
 
+/** The field a detail or a text piece is about, as the card shows it. */
+export const spokenPieceField = (piece: ComposedPiece): string | undefined => {
+  const field = piece.values?.find((source) => source.slot === "field")?.value;
+  return field?.kind === "text" && field.text.length > 0
+    ? field.text
+    : undefined;
+};
+
+/** Ids the voice command endpoint takes: unique, at most 64 characters. */
+const MAX_ID_CHARS = 60;
+
+const withIds = (pieces: readonly ComposedPiece[]): SpokenPiece[] => {
+  const seen = new Map<string, number>();
+  return pieces.map((piece) => {
+    const field = spokenPieceField(piece);
+    const base = Array.from(field ? `${piece.role}:${field}` : piece.role)
+      .slice(0, MAX_ID_CHARS)
+      .join("");
+    const occurrence = (seen.get(base) ?? 0) + 1;
+    seen.set(base, occurrence);
+    return {
+      id: occurrence === 1 ? base : `${base}#${occurrence}`,
+      ...piece,
+    };
+  });
+};
+
 /** The pieces for one approval in the language given. */
 export const spokenApprovalPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
 ): SpokenPiece[] =>
-  fitted(
-    composedPieces(approval, options),
-    spokenWordsFor(options.language, options).cut(),
+  withIds(
+    fitted(
+      composedPieces(approval, options),
+      spokenWordsFor(options.language, options).cut(),
+    ),
   );
+
+/** Composed pieces as the endpoint takes them, with their ids. */
+export const spokenPiecesOf = (
+  pieces: ComposedPiece[],
+  options: SpokenOptions,
+): SpokenPiece[] =>
+  withIds(fitted(pieces, spokenWordsFor(options.language, options).cut()));
 
 const composedPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
-): SpokenPiece[] => {
+): ComposedPiece[] => {
   const words = spokenWordsFor(options.language, options);
-  const pointer: SpokenPiece[] = [
+  const pointer: ComposedPiece[] = [
     { role: "pointer", text: words.pointer(), mustSay: false, values: [] },
   ];
   if (!words.full || approval.type === "pointer") return pointer;
   const { position } = options;
-  const pieces: SpokenPiece[] = [];
+  const pieces: ComposedPiece[] = [];
   if (position?.index === 0 && position.total > 1) {
     pieces.push({
       role: "count",
@@ -804,12 +954,21 @@ const composedPieces = (
       values: [number("count", position.total)],
     });
   }
-  const request: SpokenPiece = {
+  const request: ComposedPiece = {
     role: "request",
     text: words.request(),
     mustSay: false,
     values: [],
   };
+  const read = spokenReadFactsOf(
+    approval.label,
+    approval.server,
+    options.timeZone,
+  );
+  if (read) {
+    pieces.push(...spokenReadPieces(read, words.read, position), request);
+    return pieces;
+  }
   const card = toolCallCardOf(approval.label, approval.input);
   if (card.kind !== "gist") {
     pieces.push({
@@ -881,6 +1040,9 @@ const composedPieces = (
           ? number("words", spokenText.words)
           : text("text", spokenText.read),
       ],
+      ...(spokenText.read === undefined && spokenText.full
+        ? { readOut: spokenText.full }
+        : {}),
     });
   }
   if (facts.consequences.length > 0) {
@@ -949,4 +1111,92 @@ export const sameSpokenKind = (
     left.gist.kind === right.gist.kind &&
     a.server === b.server
   );
+};
+
+/** A passage of a long text read out; short, so stopping it is quick. */
+const MAX_PASSAGE_CHARS = 300;
+
+/** `text` in passages that end at a sentence, or at a word when one is too long. */
+const passagesOf = (text: string): string[] => {
+  const sentences = text
+    .trim()
+    .split(/(?<=[.!?…])\s+/)
+    .flatMap((sentence) =>
+      sentence.length <= MAX_PASSAGE_CHARS
+        ? [sentence]
+        : sentence.split(/\s+/).reduce<string[]>((parts, word) => {
+            const last = parts.at(-1);
+            if (
+              last !== undefined &&
+              `${last} ${word}`.length <= MAX_PASSAGE_CHARS
+            )
+              parts[parts.length - 1] = `${last} ${word}`;
+            else parts.push(word.slice(0, MAX_PASSAGE_CHARS));
+            return parts;
+          }, []),
+    );
+  return sentences.reduce<string[]>((passages, sentence) => {
+    const last = passages.at(-1);
+    if (last !== undefined && `${last} ${sentence}`.length <= MAX_PASSAGE_CHARS)
+      passages[passages.length - 1] = `${last} ${sentence}`;
+    else passages.push(sentence);
+    return passages;
+  }, []);
+};
+
+/**
+ * A long text read out on request: its field, then the text in passages, as
+ * much as one request to the voice takes; a text the card holds only in part,
+ * or that is longer than that, ends by pointing to the screen.
+ */
+const readOutSentences = (piece: SpokenPiece, words: SpokenWords): string[] => {
+  if (!piece.readOut) return [];
+  const field = spokenPieceField(piece) ?? "";
+  const ending = words.textCut();
+  const budget = MAX_CARD_CHARS - ending.length;
+  const said: string[] = [];
+  let used = 0;
+  let cut = piece.readOut.cut;
+  for (const passage of passagesOf(piece.readOut.text)) {
+    const sentence =
+      said.length === 0 && field.length > 0
+        ? words.readText(field, passage)
+        : passage;
+    if (
+      sentence.length > MAX_PIECE_CHARS ||
+      used + sentence.length > budget ||
+      said.length === MAX_PIECES - 1
+    ) {
+      cut = true;
+      break;
+    }
+    said.push(sentence);
+    used += sentence.length;
+  }
+  return cut ? [...said, ending] : said;
+};
+
+/**
+ * What the voice says for an utterance that is not one of the card's
+ * pieces: how much is left, that nothing is, a long text, or a notice. Each
+ * entry is one sentence for the voice endpoint, within its limits.
+ */
+export const spokenUtteranceSentences = (
+  utterance: SpokenUtterance,
+  pieces: readonly SpokenPiece[],
+  options: Pick<SpokenOptions, "language" | "now" | "timeZone">,
+): string[] => {
+  const words = spokenWordsFor(options.language, options);
+  switch (utterance.type) {
+    case "piece":
+      return [pieces[utterance.index].text];
+    case "count":
+      return [words.rest(utterance.count)];
+    case "nothing_left":
+      return [words.nothingLeft()];
+    case "text":
+      return readOutSentences(pieces[utterance.index], words);
+    case "notice":
+      return [words.notice(utterance.notice)];
+  }
 };
