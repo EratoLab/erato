@@ -71,14 +71,15 @@ describe("PowerPoint read support", () => {
   });
 
   it.each([
-    ["PC", true, true, true],
-    ["Mac", true, true, false],
-    ["OfficeOnline", true, true, false],
-    ["iOS", true, false, false],
-    ["PC", false, false, false],
+    ["PC", "1.10", true, true, true],
+    ["PC", "1.5", true, true, false],
+    ["Mac", "1.10", true, true, false],
+    ["OfficeOnline", "1.10", true, true, false],
+    ["iOS", "1.10", true, false, false],
+    ["PC", "1.10", false, false, false],
   ])(
-    "reads the whole file on %s only where the compressed file set is reported (%s), taking it as current only on Windows",
-    (platform, compressedFile, expected, current) => {
+    "reads the whole file on %s at %s only where the compressed file set is reported (%s); only the measured host (Windows, full tier) takes it as current",
+    (platform, set, compressedFile, expected, current) => {
       const office = (
         globalThis as unknown as {
           Office: { context: Record<string, unknown> };
@@ -89,7 +90,7 @@ describe("PowerPoint read support", () => {
         isSetSupported: (name: string, version?: string) =>
           name === "CompressedFile"
             ? compressedFile
-            : requirementsUpTo("1.10")(name, version),
+            : requirementsUpTo(set)(name, version),
       };
       office.context.document = { getFileAsync: () => {} };
       office.context.diagnostics = { platform };
@@ -97,6 +98,7 @@ describe("PowerPoint read support", () => {
         expect(currentPowerPointReadSupport()).toMatchObject({
           presentationFile: expected,
           fileIsCurrent: current,
+          exportKeepsNotes: platform === "PC" && set === "1.10",
         });
       } finally {
         for (const key of Object.keys(office.context))

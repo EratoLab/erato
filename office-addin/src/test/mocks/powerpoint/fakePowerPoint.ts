@@ -42,8 +42,14 @@ export interface FakeSlide {
 
 export interface FakeDeck {
   slides: FakeSlide[];
-  /** In the order the user selected them, which getSelectedSlides keeps (PowerPoint for Windows). */
+  /**
+   * getSelectedSlides lists the active slide first (Microsoft's reference), then the others in
+   * this order. Measured on Windows: a script that went to slide 4 and selected 4, 6, 2 got back
+   * 4, 6, 2, so the others are not in deck order. A selection made by clicking is not measured.
+   */
   selectedSlideIds?: string[];
+  /** The slide on screen; defaults to the first of `selectedSlideIds`. */
+  activeSlideId?: string;
   selectedShapeIds?: string[];
   selectedText?: string;
   /** getSelectedSlides fails its batch, as in a view that has no slide selection. */
@@ -434,7 +440,13 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
         slides: presentation(),
         getSelectedSlides: () => {
           if (deck.selectionFails) fail("no selection in this view");
-          const selected = (deck.selectedSlideIds ?? []).flatMap((id) =>
+          const ids = deck.selectedSlideIds ?? [];
+          const active = deck.activeSlideId ?? ids[0];
+          const ordered = [
+            ...ids.filter((id) => id === active),
+            ...ids.filter((id) => id !== active),
+          ];
+          const selected = ordered.flatMap((id) =>
             deck.slides.filter((slide) => slide.id === id),
           );
           return collection(state, selected.map(slideProxy));

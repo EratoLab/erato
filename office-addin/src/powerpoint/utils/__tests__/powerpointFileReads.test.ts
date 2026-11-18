@@ -43,6 +43,8 @@ import type { ClientToolExecutionResult } from "@erato/frontend/library";
 
 const FULL = powerpointReadSupport(requirementsUpTo("1.10"), { fileApi: true });
 const BASIC = powerpointReadSupport(requirementsUpTo("1.5"), { fileApi: true });
+const on = (platform: string, set = "1.10") =>
+  powerpointReadSupport(requirementsUpTo(set), { fileApi: true, platform });
 const LIMITS = { ...POWERPOINT_FILE_LIMITS };
 
 let host: FakePowerPointHost | null = null;
@@ -267,12 +269,39 @@ describe("full tier: the one-slide export", () => {
     expect(host.fileOpens).toBe(0);
   });
 
-  it("says a slide has no notes when its export names no notes page", async () => {
+  it("says a slide has no notes when its export names no notes page on Windows, where that was measured", async () => {
     host = installFakePowerPoint(deck());
-    const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_2 }));
+    const result = ok(
+      await readPowerPointSlide(on("PC"), { slideId: SLIDE_2 }),
+    );
     expect(result.slide.notes).toBe("");
     expect(result.slide.unread).toBeUndefined();
     expect(result.slide.fileContent).toBeUndefined();
+  });
+
+  it.each(["Mac", "OfficeOnline"])(
+    "does not state 'no notes' from an export without a notes page on %s, which is not measured",
+    async (platform) => {
+      host = installFakePowerPoint(deck());
+      const result = ok(
+        await readPowerPointSlide(on(platform), { slideId: SLIDE_2 }),
+      );
+      expect(result.slide.notes).toBeUndefined();
+      expect(result.slide.unread).toEqual([
+        expect.stringMatching(
+          /^speaker notes: PowerPoint's slide export holds none; .* not verified yet/,
+        ),
+      ]);
+    },
+  );
+
+  it("takes an export's notes page as the notes on every platform", async () => {
+    host = installFakePowerPoint(deck());
+    const result = ok(
+      await readPowerPointSlide(on("Mac"), { slideId: SLIDE_1 }),
+    );
+    expect(result.slide.notes).toBeTruthy();
+    expect(result.slide.unread).toBeUndefined();
   });
 
   it("says a slide has no notes when the whole file names none", async () => {
@@ -680,26 +709,62 @@ describe("where file content comes from", () => {
     expect(result.fileContent).toBeUndefined();
   });
 
-  it("does not label the whole file where it includes unsaved edits", async () => {
-    const current = powerpointReadSupport(requirementsUpTo("1.5"), {
-      fileApi: true,
-      fileIsCurrent: true,
-    });
+  it("does not label the whole file on Microsoft 365 for Windows, where it was measured to include unsaved edits", async () => {
     host = installFakePowerPoint(
-      deck({ selectedSlideIds: [SLIDE_1], selectedShapeIds: ["6"] }),
+      deck({
+        slideExports: { [SLIDE_1]: "fail" },
+        selectedSlideIds: [SLIDE_1],
+        selectedShapeIds: ["4"],
+      }),
     );
-    const slide = ok(await readPowerPointSlide(current, { slideId: SLIDE_1 }));
+    const slide = ok(await readPowerPointSlide(on("PC"), { slideId: SLIDE_1 }));
     expect(slide.slide.fileContent).toBeUndefined();
-    expect(slide.slide.notes).toBeDefined();
-    const selection = ok(await readPowerPointSelection(current));
+    expect(slide.slide.notes).toBeTruthy();
+    const selection = ok(await readPowerPointSelection(on("PC")));
+    expect(
+      (selection.selectedShapes as PowerPointShapeOut[])[0].chart,
+    ).toBeDefined();
     expect(selection.fileContent).toBeUndefined();
   });
 
-  it("does not ask to save first where the file includes unsaved edits", async () => {
-    const current = powerpointReadSupport(requirementsUpTo("1.5"), {
-      fileApi: true,
-      fileIsCurrent: true,
-    });
+  it.each([
+    ["PC", "1.5"],
+    ["Mac", "1.10"],
+    ["OfficeOnline", "1.10"],
+  ])(
+    "keeps the label and the save request on %s at PowerPointApi %s, which are not measured",
+    async (platform, set) => {
+      const support = on(platform, set);
+      host = installFakePowerPoint(
+        deck({ slideExports: { [SLIDE_1]: "fail" } }),
+      );
+      const slide = ok(
+        await readPowerPointSlide(support, { slideId: SLIDE_1 }),
+      );
+      expect(slide.slide.fileContent).toBe(SAVED_FILE_NOTE);
+      removeFakePowerPoint();
+      const edited = liveSlide1.map((shape) =>
+        shape.id === "2" ? { ...shape, text: "Not saved yet" } : shape,
+      );
+      host = installFakePowerPoint(
+        deck({
+          slides: [
+            { id: SLIDE_1, shapes: edited },
+            { id: SLIDE_2, shapes: liveSlide2 },
+          ],
+          slideExports: { [SLIDE_1]: "fail" },
+        }),
+      );
+      const mismatch = ok(
+        await readPowerPointSlide(support, { slideId: SLIDE_1 }),
+      );
+      expect(mismatch.slide.unread?.join(" ")).toMatch(
+        /try again after saving/,
+      );
+    },
+  );
+
+  it("on Windows names both causes of a mismatch and does not ask to save", async () => {
     const edited = liveSlide1.map((shape) =>
       shape.id === "2" ? { ...shape, text: "Changed during the read" } : shape,
     );
@@ -709,13 +774,17 @@ describe("where file content comes from", () => {
           { id: SLIDE_1, shapes: edited },
           { id: SLIDE_2, shapes: liveSlide2 },
         ],
+        slideExports: { [SLIDE_1]: "fail" },
         selectedSlideIds: [SLIDE_1],
         selectedShapeIds: ["4"],
       }),
     );
-    const result = ok(await readPowerPointSelection(current));
+    const result = ok(await readPowerPointSelection(on("PC")));
     const [chart] = result.selectedShapes as PowerPointShapeOut[];
-    expect(chart.unread?.[0]).toMatch(/\(it changed during the read\)$/);
+    expect(chart.unread?.[0]).toMatch(
+      /\(the slide changed during the read, or it holds content this reader cannot compare\)$/,
+    );
+    expect(chart.unread?.[0]).not.toMatch(/saving/);
   });
 
   it("labels a selection filled from the whole file", async () => {

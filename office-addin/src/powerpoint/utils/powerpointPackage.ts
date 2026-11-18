@@ -78,7 +78,10 @@ export interface PptxSlide {
   hidden: boolean;
   /** The notes page's body text; "" when the slide has no notes. */
   notes: string;
-  /** The slide names a notes page. Without one, "" may mean the file left the notes out. */
+  /**
+   * The slide names a notes page. Without one, a whole file means the slide has no notes; a
+   * one-slide export means that only where exports are known to keep notes (`exportKeepsNotes`).
+   */
   hasNotesPage: boolean;
   /** Shape tree members this reader does not model, so their ids are unknown. */
   unmodeled: number;

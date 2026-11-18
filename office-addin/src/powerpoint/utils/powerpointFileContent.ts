@@ -60,14 +60,21 @@ export interface PowerPointSlideRef {
 export type FileRoute = "export" | "file";
 
 export type FileSlideOutcome =
-  | { ok: true; slide: PptxSlide; route: FileRoute; current: boolean }
+  | {
+      ok: true;
+      slide: PptxSlide;
+      route: FileRoute;
+      current: boolean;
+      /** False for an export without a notes page where `exportKeepsNotes` is not measured. */
+      notesKnown: boolean;
+    }
   | { ok: false; reason: string };
 
 const MISMATCH = {
   export:
-    "PowerPoint's slide export does not match the slide on screen (it changed during the read)",
+    "PowerPoint's slide export does not match the slide on screen (the slide changed during the read, or it holds content this reader cannot compare)",
   currentFile:
-    "the presentation file PowerPoint handed over does not match the slide on screen (it changed during the read)",
+    "the presentation file PowerPoint handed over does not match the slide on screen (the slide changed during the read, or it holds content this reader cannot compare)",
   savedFile:
     "the presentation file PowerPoint handed over does not match the slide on screen (changes not saved yet, or made during the read); try again after saving",
 };
@@ -110,7 +117,13 @@ export async function readFileSlide(
         return { missing, slide: await readPptxSlide(zip, list[0].part) };
       });
       if (read.slide)
-        return { ok: true, slide: read.slide, route: "export", current: true };
+        return {
+          ok: true,
+          slide: read.slide,
+          route: "export",
+          current: true,
+          notesKnown: read.slide.hasNotesPage || support.exportKeepsNotes,
+        };
       exportProblem = `the slide export left out ${read.missing.join(", ")}`;
     } catch (error) {
       exportProblem = powerpointFileFailure(error);
@@ -149,7 +162,13 @@ export async function readFileSlide(
         throw new FileMismatchError();
       return readPptxSlide(zip, entry.part);
     });
-    return { ok: true, slide, route: "file", current: support.fileIsCurrent };
+    return {
+      ok: true,
+      slide,
+      route: "file",
+      current: support.fileIsCurrent,
+      notesKnown: true,
+    };
   } catch (error) {
     return {
       ok: false,
@@ -417,13 +436,18 @@ export function slideFileFields(outcome: FileSlideOutcome, firstPage: boolean) {
         `speaker notes and whether the slide is hidden: ${outcome.reason}`,
       ],
     };
-  const { slide, current } = outcome;
-  // PowerPoint for Windows writes a notes page only for slides with notes, in exports as in the file.
+  const { slide, current, notesKnown } = outcome;
   return {
     hidden: slide.hidden,
     ...(!firstPage
       ? { notesOnFirstPage: true }
-      : { notes: capTextBytes(slide.notes, MAX_NOTES_BYTES) }),
+      : notesKnown
+        ? { notes: capTextBytes(slide.notes, MAX_NOTES_BYTES) }
+        : {
+            unread: [
+              "speaker notes: PowerPoint's slide export holds none; whether the export keeps notes on this platform is not verified yet, so the slide may still have some",
+            ],
+          }),
     ...(current ? {} : { fileContent: SAVED_FILE_NOTE }),
   };
 }

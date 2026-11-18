@@ -15,9 +15,10 @@ import type { FakeDeck } from "../../../test/mocks/powerpoint/fakePowerPoint";
 import type { PowerPointShapeOut } from "../powerpointShapeRead";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 
-// Built and saved by PowerPoint for Windows 16.0.20527 through COM (word-manual-tests/
-// powerpoint-reads/build-test-deck.ps1). The live side below is what Office.js reported for the
-// same deck in that PowerPoint, so ids, texts and control characters are PowerPoint's own.
+// Built and saved by PowerPoint for Windows 16.0.20527 with build-powerpoint-saved-six-slides.ps1
+// next to the deck (German Windows, so COM wrote the percent format as "#,#00%"). The live side
+// below is what Office.js reported for the same deck in that PowerPoint, so ids, texts and control
+// characters are PowerPoint's own.
 const FILE = new Uint8Array(
   readFileSync(
     `${process.cwd()}/src/test/fixtures/powerpoint/PowerPoint_Saved_Six_Slides.pptx`,
@@ -144,10 +145,15 @@ const LIVE: FakeDeck["slides"] = [
   },
 ];
 
-const BASIC = powerpointReadSupport(requirementsUpTo("1.5"), { fileApi: true });
-const BASIC_ON_WINDOWS = powerpointReadSupport(requirementsUpTo("1.5"), {
+// Office LTSC 2024 on Windows: the whole file is the only route, and it is not measured there.
+const BASIC = powerpointReadSupport(requirementsUpTo("1.5"), {
   fileApi: true,
-  fileIsCurrent: true,
+  platform: "PC",
+});
+// The measured host; without slide exports in the fake, reads fall back to the whole file.
+const FULL_ON_WINDOWS = powerpointReadSupport(requirementsUpTo("1.10"), {
+  fileApi: true,
+  platform: "PC",
 });
 
 afterEach(() => removeFakePowerPoint());
@@ -231,8 +237,8 @@ describe("a deck PowerPoint saved itself, read from the whole file", () => {
     expect(byId(shapes, "4").text).toBe("Drop\nMonthly report\nManual exports");
   });
 
-  it("does not label the content as saved on Windows, where the file includes unsaved edits", async () => {
-    const { slide } = await read("256#3231780476", BASIC_ON_WINDOWS);
+  it("does not label the content as saved on Microsoft 365 for Windows, where the file includes unsaved edits", async () => {
+    const { slide } = await read("256#3231780476", FULL_ON_WINDOWS);
     expect(slide.fileContent).toBeUndefined();
     expect(slide.notes).toBe("Open with the numbers.\nThen ask for questions.");
   });

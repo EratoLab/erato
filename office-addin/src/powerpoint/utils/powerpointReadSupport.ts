@@ -37,10 +37,17 @@ export interface PowerPointReadSupport {
   /** Office.context.document.getFileAsync, the whole file (Common API, every host). */
   presentationFile: boolean;
   /**
-   * The whole file includes edits not saved yet. Measured on PowerPoint for Windows (16.0.20527,
-   * 2026-11-17); Mac and the web are not measured, so their file content stays labelled as saved.
+   * The whole file includes edits not saved yet. Measured only on Microsoft 365 for Windows at
+   * PowerPointApi 1.10 (16.0.20527, 2026-11-17), so only that host gets it. Office LTSC 2024 and
+   * older Microsoft 365 builds on Windows (basic tier), Mac and the web keep the "last saved" label
+   * and the save request until they are measured on a real host.
    */
   fileIsCurrent: boolean;
+  /**
+   * A one-slide export without a notes page means the slide has no notes. Measured on the same
+   * host as `fileIsCurrent`; elsewhere a missing notes page in an export is reported as unverified.
+   */
+  exportKeepsNotes: boolean;
   /** placeholderFormat.type and containedType: title, body, subtitle… */
   placeholderRole: boolean;
   /** shape.getTable().values. */
@@ -74,10 +81,7 @@ const has = (
 
 export function powerpointReadSupport(
   isSetSupported: PowerPointRequirementCheck,
-  {
-    fileApi = false,
-    fileIsCurrent = false,
-  }: { fileApi?: boolean; fileIsCurrent?: boolean } = {},
+  { fileApi = false, platform }: { fileApi?: boolean; platform?: string } = {},
 ): PowerPointReadSupport {
   const supported = new Set(
     POWERPOINT_API_VERSIONS.filter((version) => has(isSetSupported, version)),
@@ -92,6 +96,7 @@ export function powerpointReadSupport(
     supported.has("1.5") &&
     supported.has("1.8") &&
     supported.has("1.10");
+  const measuredHost = full && platform === "PC";
   return {
     tier: full ? "full" : slides ? "basic" : "none",
     highestVersion,
@@ -99,7 +104,8 @@ export function powerpointReadSupport(
     selection: slides && supported.has("1.5"),
     slideExport: full,
     presentationFile: slides && fileApi,
-    fileIsCurrent: slides && fileApi && fileIsCurrent,
+    fileIsCurrent: measuredHost && fileApi,
+    exportKeepsNotes: measuredHost,
     placeholderRole: full,
     tables: full,
     groups: full,
@@ -123,7 +129,7 @@ export function currentPowerPointReadSupport(): PowerPointReadSupport {
       isSetSupported("CompressedFile", "1.1") &&
       // iPad slices the file at 64 KB at most; the reader asks for 4 MB slices.
       String(diagnostics?.platform) !== "iOS",
-    fileIsCurrent: String(diagnostics?.platform) === "PC",
+    platform: String(diagnostics?.platform),
   });
 }
 
