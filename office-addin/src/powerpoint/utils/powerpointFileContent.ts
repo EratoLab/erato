@@ -54,20 +54,36 @@ export interface PowerPointSlideRef {
 
 /**
  * "export": `slide.exportAsBase64()`, which PowerPoint builds from the open slide when asked, like
- * every other Office.js read, so it is taken as current. "file": `getFileAsync`, which may hand
- * over the last saved state; what it adds is labelled as such until a native check settles it.
+ * every other Office.js read, so it is taken as current. "file": `getFileAsync`, current where
+ * `fileIsCurrent` says so; elsewhere it may be the last saved state and is labelled as such.
  */
 export type FileRoute = "export" | "file";
 
 export type FileSlideOutcome =
-  | { ok: true; slide: PptxSlide; route: FileRoute }
+  | {
+      ok: true;
+      slide: PptxSlide;
+      route: FileRoute;
+      current: boolean;
+      /** False for an export without a notes page where `exportKeepsNotes` is not measured. */
+      notesKnown: boolean;
+    }
   | { ok: false; reason: string };
 
-const MISMATCH: Record<FileRoute, string> = {
+const MISMATCH = {
   export:
-    "PowerPoint's slide export does not match the slide on screen (it changed during the read)",
-  file: "the presentation file PowerPoint handed over does not match the slide on screen (changes not saved yet, or made during the read); try again after saving",
+    "PowerPoint's slide export does not match the slide on screen (the slide changed during the read, or it holds content this reader cannot compare)",
+  currentFile:
+    "the presentation file PowerPoint handed over does not match the slide on screen (the slide changed during the read, or it holds content this reader cannot compare)",
+  savedFile:
+    "the presentation file PowerPoint handed over does not match the slide on screen (changes not saved yet, or made during the read); try again after saving",
 };
+const mismatchReason = (route: FileRoute, current: boolean) =>
+  route === "export"
+    ? MISMATCH.export
+    : current
+      ? MISMATCH.currentFile
+      : MISMATCH.savedFile;
 const UNMODELED =
   "the slide holds a kind of shape this reader cannot match to the file";
 
@@ -100,7 +116,14 @@ export async function readFileSlide(
         if (missing.length > 0) return { missing, slide: null };
         return { missing, slide: await readPptxSlide(zip, list[0].part) };
       });
-      if (read.slide) return { ok: true, slide: read.slide, route: "export" };
+      if (read.slide)
+        return {
+          ok: true,
+          slide: read.slide,
+          route: "export",
+          current: true,
+          notesKnown: read.slide.hasNotesPage || support.exportKeepsNotes,
+        };
       exportProblem = `the slide export left out ${read.missing.join(", ")}`;
     } catch (error) {
       exportProblem = powerpointFileFailure(error);
@@ -139,13 +162,19 @@ export async function readFileSlide(
         throw new FileMismatchError();
       return readPptxSlide(zip, entry.part);
     });
-    return { ok: true, slide, route: "file" };
+    return {
+      ok: true,
+      slide,
+      route: "file",
+      current: support.fileIsCurrent,
+      notesKnown: true,
+    };
   } catch (error) {
     return {
       ok: false,
       reason: both(
         error instanceof FileMismatchError
-          ? MISMATCH.file
+          ? mismatchReason("file", support.fileIsCurrent)
           : powerpointFileFailure(error),
       ),
     };
@@ -182,6 +211,7 @@ export function fileMismatch(
   live: readonly PowerPointShapeOut[],
   file: PptxSlide,
   route: FileRoute,
+  current: boolean,
 ): string | null {
   const { byId, duplicates } = pptxShapesById(file.shapes);
   let missing = false;
@@ -202,7 +232,9 @@ export function fileMismatch(
   };
   if (live.every(matches)) return null;
   // A shape the reader cannot model is not evidence of unsaved changes.
-  return missing && file.unmodeled > 0 ? UNMODELED : MISMATCH[route];
+  return missing && file.unmodeled > 0
+    ? UNMODELED
+    : mismatchReason(route, current);
 }
 
 function dropNote(out: PowerPointShapeOut, note: string): boolean {
@@ -404,20 +436,19 @@ export function slideFileFields(outcome: FileSlideOutcome, firstPage: boolean) {
         `speaker notes and whether the slide is hidden: ${outcome.reason}`,
       ],
     };
-  const { slide, route } = outcome;
-  const notesUnconfirmed = route === "export" && !slide.hasNotesPage;
+  const { slide, current, notesKnown } = outcome;
   return {
     hidden: slide.hidden,
     ...(!firstPage
       ? { notesOnFirstPage: true }
-      : notesUnconfirmed
-        ? {
+      : notesKnown
+        ? { notes: capTextBytes(slide.notes, MAX_NOTES_BYTES) }
+        : {
             unread: [
-              "speaker notes: PowerPoint's slide export holds none; whether the export keeps notes is not verified yet, so the slide may still have some",
+              "speaker notes: PowerPoint's slide export holds none; whether the export keeps notes on this platform is not verified yet, so the slide may still have some",
             ],
-          }
-        : { notes: capTextBytes(slide.notes, MAX_NOTES_BYTES) }),
-    ...(route === "file" ? { fileContent: SAVED_FILE_NOTE } : {}),
+          }),
+    ...(current ? {} : { fileContent: SAVED_FILE_NOTE }),
   };
 }
 
@@ -435,7 +466,12 @@ export async function withFileContent(
 ): Promise<FileSlideOutcome> {
   let outcome = await readFileSlide(support, ref, deadline);
   if (outcome.ok) {
-    const mismatch = fileMismatch(check, outcome.slide, outcome.route);
+    const mismatch = fileMismatch(
+      check,
+      outcome.slide,
+      outcome.route,
+      outcome.current,
+    );
     if (mismatch) outcome = { ok: false, reason: mismatch };
   }
   if (outcome.ok) applyFileSlide(target, outcome.slide, support);
