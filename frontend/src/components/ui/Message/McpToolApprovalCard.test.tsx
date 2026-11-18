@@ -10,6 +10,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useApprovalListening } from "@/hooks/audio/approvalListening";
+import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import {
   registerClientToolExecutor,
   resetClientToolRegistryForTests,
@@ -387,6 +389,38 @@ describe("McpToolApprovalCard", () => {
         }),
       ),
     );
+  });
+
+  it("ERMAIN-1230: a decision tapped while the card is spoken ends listening for it, and a failure brings it back", async () => {
+    const key = "message-1:tool-call-1";
+    useApprovalSpeech.setState({ key });
+    useApprovalListening.setState({ quiet: null });
+    let fail!: (error: Error) => void;
+    const continueToolApproval = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject;
+        }),
+    );
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={approvalRequest}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(useApprovalListening.getState().quiet).toBe(key);
+    await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
+    await act(async () => fail(new Error("offline")));
+    await waitFor(() =>
+      expect(useApprovalListening.getState().quiet).toBeNull(),
+    );
+    useApprovalSpeech.setState({ key: null });
   });
 
   it("keeps long multiline arguments complete alongside a shortened description", async () => {

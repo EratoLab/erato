@@ -571,6 +571,16 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         (VoiceMeaning::Approve, "go ahead"),
         (VoiceMeaning::Reject, "nein, lass es"),
         (VoiceMeaning::Reject, "mach das nicht"),
+        // Voice loop test 2026-11-18: a final "so" or "then" closes these.
+        (VoiceMeaning::Approve, "ja passt, mach das so"),
+        (VoiceMeaning::Approve, "mach das so"),
+        (VoiceMeaning::Approve, "das passt so"),
+        (VoiceMeaning::Approve, "ja, genau so"),
+        (VoiceMeaning::Approve, "go ahead then"),
+        (VoiceMeaning::Approve, "in Ordnung, mach"),
+        (VoiceMeaning::Approve, "von mir aus"),
+        (VoiceMeaning::Reject, "das will ich nicht"),
+        (VoiceMeaning::Reject, "bitte nicht ausführen"),
     ] {
         assert!(
             rules::Words::of(words).could_be_plain_decision(meaning, &pieces),
@@ -590,9 +600,106 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         "uh, yes, so",
         "ja, nicht so",
         "Jaguar, mach",
+        "ja, aber dann",
+        "ja, und dann",
+        "ja und so",
+        "ja so",
+        "mach das aus",
+        "von mir aus nicht",
     ] {
         assert!(
             !rules::Words::of(words).could_be_plain_decision(VoiceMeaning::Approve, &pieces),
+            "{words}"
+        );
+    }
+}
+
+#[test]
+fn refusals_are_refusals_only_by_their_no() {
+    let (pieces, _) = card();
+    for words in ["ich will das", "ausführen", "will ich"] {
+        assert!(
+            !rules::Words::of(words).could_be_plain_decision(VoiceMeaning::Reject, &pieces),
+            "{words}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_yes_before_the_card_asked_is_noise_whichever_stage_heard_it() {
+    let set = sentence_set();
+    let card = |name: &str| set.cards[name].clone();
+    let (de, asked, en) = (card("de"), card("de-asked"), card("en-asked"));
+    let answer = |words: &'static str, card: Card, meaning: VoiceMeaning| async move {
+        let model = ScriptedModel::answering(meaning.wire_name(), None);
+        let config = provider();
+        classify(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+            },
+            Some(VoiceModel {
+                client: &model,
+                config: &config,
+                prompt: DEFAULT_PROMPT,
+                timeout: Duration::from_millis(200),
+            }),
+        )
+        .await
+        .command
+        .meaning
+    };
+
+    // Agreements that end in "so" or "then" are understood.
+    for words in [
+        "Ja passt, mach das so.",
+        "das passt so",
+        "ja, mach das bitte so",
+    ] {
+        assert_eq!(
+            answer(words, asked.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Approve,
+            "{words}"
+        );
+        assert_eq!(
+            answer(words, de.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Noise,
+            "{words}"
+        );
+    }
+    assert_eq!(
+        answer("go ahead then", en.clone(), VoiceMeaning::Approve).await,
+        VoiceMeaning::Approve
+    );
+    assert_eq!(
+        answer("use record 43 instead", en, VoiceMeaning::Change).await,
+        VoiceMeaning::Change
+    );
+    // A model's yes outside the lists is still listening before the card
+    // asked, and a no too.
+    assert_eq!(
+        answer("na gut, meinetwegen", de.clone(), VoiceMeaning::Approve).await,
+        VoiceMeaning::Noise
+    );
+    // An unfinished yes is never a yes. After the card asked it is not
+    // understood; before, it is listening, unless it may ask for something.
+    for words in ["ja, aber dann …", "ja, aber dann", "ja, und dann"] {
+        assert_eq!(
+            answer(words, asked.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Unclear,
+            "{words}"
+        );
+    }
+    for (words, before) in [
+        ("ja, aber dann …", VoiceMeaning::Unclear),
+        ("ja, aber dann", VoiceMeaning::Unclear),
+        ("ja, und dann", VoiceMeaning::Noise),
+    ] {
+        assert_eq!(
+            answer(words, de.clone(), VoiceMeaning::Approve).await,
+            before,
             "{words}"
         );
     }

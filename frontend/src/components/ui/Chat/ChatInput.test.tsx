@@ -8827,6 +8827,51 @@ describe("ChatInput", () => {
       await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
     });
 
+    it("ERMAIN-1234: switched on while a card waits, it stays closed while a change asked for by voice waits for its answer", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation);
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        speechEnabled: true,
+        voiceCommandsEnabled: false,
+        maxRecordingDurationSeconds: 1200,
+      });
+      useSpeechPlayback.setState({ enabled: true, playing: false });
+      useApprovalChanges.setState({ records: {} });
+      showCard();
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+      // Audio mode left during the card and switched on again.
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(toggleDictation).not.toHaveBeenCalled();
+
+      act(() => {
+        noteChangeSending({
+          messageId: "message-1",
+          approvalId: "call-1",
+          approval: { type: "pointer" },
+          heard: [],
+          words: "Setz den Status auf offen",
+        });
+        noteChangeSent("call-1");
+      });
+      decideCard();
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(toggleDictation).not.toHaveBeenCalled();
+
+      // The answer was said: now the conversation listens.
+      act(() => dropChange("call-1"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+    });
+
     it("closes a listening microphone when a card appears", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation, true);

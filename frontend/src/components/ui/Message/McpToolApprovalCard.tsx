@@ -11,7 +11,14 @@ import {
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
-import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import {
+  listenAgainForApprovalCard,
+  quietApprovalListening,
+} from "@/hooks/audio/approvalListening";
+import {
+  stopApprovalSpeech,
+  useApprovalSpeech,
+} from "@/hooks/audio/approvalSpeech";
 import { userTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
@@ -404,6 +411,10 @@ export const McpToolApprovalCard = ({
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
   ): Promise<VoiceChangeOutcome> => {
+    // The decision is on its way: the card stops listening before its voice
+    // stops, or the microphone would open in the moment before it closes.
+    const { key: spokenKey } = useApprovalSpeech.getState();
+    if (spokenKey !== null) quietApprovalListening(spokenKey);
     stopApprovalSpeech();
     const answers: DecidedApproval[] =
       itemDecisions ??
@@ -460,6 +471,8 @@ export const McpToolApprovalCard = ({
       }
       return "sent";
     } catch (cause) {
+      // The card still waits: it listens again.
+      if (spokenKey !== null) listenAgainForApprovalCard(spokenKey);
       // A task that waited stopped on a question meanwhile, and the answers
       // given so far did not cover it. They are kept, and the refetched row
       // asks only the new question.

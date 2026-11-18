@@ -110,6 +110,8 @@ let cardRun = 0;
 let playRun = 0;
 let speaking: SpeakableCard | null = null;
 let fellBack = false;
+/** What plays is a notice about a card that is gone, not a card. */
+let announcing = false;
 let closeStream: (() => void) | undefined;
 let buffers: Buffered[] = [];
 let said: SpokenPiece[] = [];
@@ -236,6 +238,30 @@ const openSpeech = (
       },
     },
   );
+};
+
+/**
+ * A piece's audio far too short for its words was cut on the way (seen once:
+ * 0.4 s for a sentence of 73 characters): it is not counted as heard. Speech
+ * takes 60 to 90 ms a character; a third of the lowest is the floor.
+ */
+const MIN_MS_PER_CHARACTER = 20;
+/** Short words ("Okay.") may be said faster than that. */
+const MIN_CHARACTERS_CHECKED = 12;
+
+export const audioTooShort = (
+  text: string,
+  chunks: readonly { audio: string; sampleRate: number }[],
+) => {
+  const characters = Array.from(text.trim()).length;
+  if (characters < MIN_CHARACTERS_CHECKED) return false;
+  const ms = chunks.reduce(
+    (sum, chunk) =>
+      sum +
+      ((globalThis.atob(chunk.audio).length / 2) * 1000) / chunk.sampleRate,
+    0,
+  );
+  return ms < characters * MIN_MS_PER_CHARACTER;
 };
 
 const pushChunk = (buffer: Buffered | undefined, chunk: AudioDelta) => {
@@ -370,6 +396,11 @@ function settle() {
     feed();
     return;
   }
+  const piece = currentPiece();
+  if (piece !== null && audioTooShort(said[piece].text, buffer.chunks)) {
+    fail();
+    return;
+  }
   apply({ type: "finished" });
 }
 
@@ -387,7 +418,9 @@ function fail() {
   if (!card) return;
   started.delete(card.key);
   // Audio mode was left or read-back turned off: nothing is said or shown.
-  if (!approvalSpeechAllowed()) return;
+  // A notice that could not be said is left out: the answer it follows was
+  // read, and the composer shows no error for it.
+  if (!approvalSpeechAllowed() || announcing) return;
   if (!fellBack && flow.failed === "fallback" && card.fallback) {
     fellBack = true;
     play_(card, card.fallback);
@@ -467,6 +500,7 @@ export function announceApprovalNotice(
     [{ id: key, role: "pointer", text, mustSay: false }],
     false,
   );
+  announcing = true;
 }
 
 /** Keeps a waiting card ready to be said on request, without saying it. */
@@ -500,6 +534,7 @@ export function forgetApprovalCards(keys: readonly string[]) {
 function play_(card: SpeakableCard, pieces: SpokenPiece[], offer = true) {
   const { key } = card;
   finish();
+  announcing = false;
   speaking = card;
   const current = cardRun;
   buffers = pieces.map(emptyBuffer);

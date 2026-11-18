@@ -521,14 +521,16 @@ class MockAudioContext {
 }
 
 let sequence = 0;
-const audio = (connection: Connection, index: number) => {
+/** Twelve seconds of silence: enough for any sentence to count as said. */
+const SPEECH = globalThis.btoa("\0".repeat(2 * 8000 * 12));
+const audio = (connection: Connection, index: number, speech = SPEECH) => {
   connection.options.onMessage?.({
     type: "audio_delta",
     data: JSON.stringify({
       message_type: "audio_delta",
       sequence: sequence++,
-      audio: "AQIDBA==",
-      sample_rate: 24000,
+      audio: speech,
+      sample_rate: 8000,
       piece: index,
     }),
   });

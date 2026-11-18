@@ -481,3 +481,70 @@ async fn a_sentence_before_the_call_keeps_the_stop_and_its_own_recording(pool: P
     assert_ne!(paths[0], paths[1], "each recording has a path of its own");
     speech.abort();
 }
+
+/// ERMAIN-1233: a change request the model answers in words leaves no card
+/// waiting, yet the voice must still say that nothing was run.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_change_request_answered_without_a_card_can_still_be_spoken_about(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| speak_with(config, &speech_url),
+    )
+    .await;
+    let chat_id = cancel_in_new_chat(
+        &state,
+        &llm,
+        user_id,
+        "Angebot nachfassen",
+        "call_cancel",
+        "Welche Erinnerung meinst du?",
+    )
+    .await;
+    send(&server, chat_id, "Lösch Angebot nachfassen", true).await;
+    let (message_id, request) = parked(&state, chat_id).await;
+
+    let changed = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{
+                "approval_id": request["approvals"][0]["approval_id"],
+                "decision": "request_change",
+                "change_request": "nimm die andere",
+            }],
+        }))
+        .await;
+    changed.assert_status_ok();
+
+    let sentence = json!([
+        "Es kam keine neue Karte, ausgeführt wurde nichts. Einfach sagen, wie es weitergehen soll."
+    ]);
+    speak_card(&server, TEST_JWT_TOKEN, message_id, sentence.clone())
+        .await
+        .assert_status_ok();
+    // Speaking is all it allows: no voice command for a card that is gone.
+    server
+        .post(&format!(
+            "/api/v1beta/me/messages/{message_id}/approval-voice-command"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"transcript": "ja", "pieces": []}))
+        .await
+        .assert_status_not_ok();
+    // Still only the owner.
+    let stranger = JwtTokenBuilder::new()
+        .subject("spoken-approvals-stranger")
+        .email("stranger@example.com")
+        .name("stranger")
+        .build();
+    speak_card(&server, &stranger, message_id, sentence)
+        .await
+        .assert_status_not_found();
+    speech.abort();
+}

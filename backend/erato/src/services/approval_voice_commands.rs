@@ -336,6 +336,20 @@ fn guarded(
     source: VoiceCommandSource,
 ) -> VoiceCommand {
     let words = rules::Words::of(input.transcript);
+    // Before the card asked, a yes or no is listening, whichever stage heard
+    // it and however it ends; only words that may ask for something about
+    // the call ("ja, aber dann …") are left unclear.
+    if meaning.is_decision()
+        && !request_heard(input.pieces)
+        && !words.may_ask_for_change(input.pieces)
+        && !words.breaks_off()
+    {
+        return VoiceCommand {
+            meaning: VoiceMeaning::Noise,
+            piece_id: None,
+            source,
+        };
+    }
     let refused = (meaning.is_decision() && !words.could_be_plain_decision(meaning, input.pieces))
         || (meaning == VoiceMeaning::Change && words.breaks_off())
         || (meaning == VoiceMeaning::NewRequest && words.could_be_change(input.pieces));

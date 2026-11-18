@@ -20,6 +20,28 @@ pub(crate) async fn check_waiting_approval_of_user(
     me_user: &MeProfile,
     message_id: &Uuid,
 ) -> Result<(), StatusCode> {
+    check_approval_of_user(app_state, policy, me_user, message_id, false).await
+}
+
+/// Like [`check_waiting_approval_of_user`], and also `Ok` once a change
+/// request on the message was answered without a new card: the voice then
+/// says that nothing was run. Only for speaking, never for acting on a card.
+pub(crate) async fn check_spoken_approval_of_user(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message_id: &Uuid,
+) -> Result<(), StatusCode> {
+    check_approval_of_user(app_state, policy, me_user, message_id, true).await
+}
+
+async fn check_approval_of_user(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message_id: &Uuid,
+    after_change_request: bool,
+) -> Result<(), StatusCode> {
     policy
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;
@@ -44,7 +66,11 @@ pub(crate) async fn check_waiting_approval_of_user(
     }
     let parsed =
         MessageSchema::validate(&message.raw_message).map_err(log_internal_server_error)?;
-    if parked_approval_state(&parsed.content).is_none_or(|state| state.decidable().is_empty()) {
+    let waiting =
+        parked_approval_state(&parsed.content).is_some_and(|state| !state.decidable().is_empty());
+    let change_answered = after_change_request
+        && crate::services::approval_change_requests::answered_without_card(&parsed.content);
+    if !waiting && !change_answered {
         return Err(StatusCode::CONFLICT);
     }
     Ok(())

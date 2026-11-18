@@ -1,4 +1,4 @@
-use super::approval_access::check_waiting_approval_of_user;
+use super::approval_access::check_spoken_approval_of_user;
 use super::me_profile_middleware::{MeProfile, normalize_supported_language};
 use crate::config::SpeechProviderConfig;
 use crate::models::message::{ContentPart, MessageRole, MessageSchema, get_message_by_id};
@@ -242,7 +242,9 @@ pub struct ApprovalSpeechRequest {
 /// The client composes the sentences from the card it shows; this only speaks
 /// them, with the voice and cleaning of conversational mode's replies, piece
 /// by piece. It answers only for a message of the user's own chat whose stop
-/// still has a decision open, and stores nothing.
+/// still has a decision open, or whose last change request was answered
+/// without a new card (so the voice can say that nothing was run), and
+/// stores nothing.
 #[utoipa::path(
     post,
     path = "/me/messages/{message_id}/approval-speech",
@@ -252,7 +254,7 @@ pub struct ApprovalSpeechRequest {
         (status = OK, content_type = "text/event-stream", body = ReadAloudStreamEvent),
         (status = BAD_REQUEST, description = "No pieces, or a piece with nothing to say"),
         (status = NOT_FOUND, description = "Conversational speech is off, or the message does not exist or is not in a chat of the user"),
-        (status = CONFLICT, description = "The message has no approval waiting for a decision"),
+        (status = CONFLICT, description = "The message has no approval waiting for a decision, and no change request answered without a new card"),
         (status = PAYLOAD_TOO_LARGE, description = "More than 16 pieces, a piece over 400 characters, or more than 2000 characters in all")
     ),
     security(("bearer_auth" = []))
@@ -289,7 +291,7 @@ pub async fn speak_approval(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
+    check_spoken_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     speech_response(provider_config, &pieces, &language, true, message_id)
 }

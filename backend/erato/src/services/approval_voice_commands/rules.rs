@@ -253,6 +253,9 @@ const REJECT: &[&str] = &[
     "ich lehne ab",
     "vergiss es",
     "vergiss das",
+    "das will ich nicht",
+    "will ich nicht",
+    "nicht ausfuehren",
     "no",
     "nope",
     "nah",
@@ -472,7 +475,7 @@ const CORRECTIONS: &[&str] = &[
 const DANGLING: &[&str] = &[
     "den", "die", "der", "das", "dem", "des", "ein", "eine", "einen", "the", "a", "an", "to", "on",
     "at", "auf", "am", "zum", "zur", "mit", "ohne", "statt", "und", "and", "aber", "but", "for",
-    "fuer", "von", "of", "in", "im", "bis", "ab", "lieber", "rather", "instead", "without",
+    "fuer", "von", "of", "in", "im", "bis", "ab", "lieber", "rather", "without",
 ];
 /// Besides "the rest" and "what else", the only words a request for the
 /// rest may have.
@@ -578,7 +581,12 @@ const ONWARD_WORDS: &[&str] = &[
     "machen",
     "weiter",
 ];
+/// Agreements whose words agree only together: "von mir aus", unlike "aus".
+const AGREEMENT_PHRASES: &[&[&str]] = &[&["von", "mir", "aus"]];
+
 /// A sentence ending in one of these goes on; it is not a finished decision.
+/// A final "so" or "then" after what it qualifies closes it: see
+/// [`Words::ends_open`].
 const CONTINUATIONS: &[&str] = &[
     "so", "also", "und", "and", "aber", "but", "dann", "then", "well", "weil", "because", "wenn",
     "if", "ich", "i", "naja",
@@ -1064,6 +1072,10 @@ static LISTS: LazyLock<Lists> = LazyLock::new(|| Lists {
             "bitte",
             "please",
             "ab",
+            // "das will ich nicht" refuses by its "nicht": "ich will das"
+            // and "ausführen" alone agree.
+            "will",
+            "ausfuehren",
         ],
     ),
 });
@@ -1362,23 +1374,93 @@ impl Words {
         } else {
             (&lists.refusal, &lists.refusing)
         };
+        // An acknowledgement on its own ("in Ordnung, mach") and an agreement
+        // whose words agree only together ("von mir aus") are not words the
+        // decision must be checked for.
+        let (words, phrase_agrees) = self.decision_words(meaning);
         !self.question
             && !self.any_asks()
             && !self.broken_off
             && !self.takes_back
-            && !self
-                .all()
-                .last()
-                .is_some_and(|last| CONTINUATIONS.contains(&last))
+            && !self.ends_open()
             && !(meaning == VoiceMeaning::Approve && self.has_any(NEGATIONS))
-            && self.all().all(|word| allowed.contains(word))
-            && self.all().any(|word| carrying.contains(word))
+            && words.iter().all(|word| allowed.contains(*word))
+            && (phrase_agrees || words.iter().any(|word| carrying.contains(*word)))
             && self.count() > 0
             && self.count() <= 6
             && !self.has_any(CONDITIONS)
             && !self.has_number()
             && !self.has_change_marker()
             && !self.names_a_field(pieces)
+    }
+
+    /// Whether the sentence goes on after its last word: "ja, und dann", "yes,
+    /// but". A final "so" or "then" closes it after what it qualifies ("mach
+    /// das so", "passt so", "go ahead then"), not after a yes, a joining word
+    /// or a condition ("uh, yes, so", "ja, und so").
+    pub(super) fn ends_open(&self) -> bool {
+        let words: Vec<&str> = self.all().collect();
+        let Some((last, before)) = words.split_last() else {
+            return false;
+        };
+        if !CONTINUATIONS.contains(last) {
+            return false;
+        }
+        if !matches!(*last, "so" | "then") {
+            return true;
+        }
+        before.last().is_none_or(|previous| {
+            CONTINUATIONS.contains(previous)
+                || CONDITIONS.contains(previous)
+                || YES_PARTICLES.contains(previous)
+        })
+    }
+
+    /// The words a decision is checked for: without segments that are only
+    /// an acknowledgement, and without an approval's agreement phrases; and
+    /// whether such a phrase agreed.
+    fn decision_words(&self, meaning: VoiceMeaning) -> (Vec<&str>, bool) {
+        let lists = &*LISTS;
+        let mut words = Vec::new();
+        let mut agreed = false;
+        for segment in &self.segments {
+            if lists.noise_phrases.contains(&segment.join(" ")) && segment.len() > 1 {
+                continue;
+            }
+            let mut at = 0;
+            while at < segment.len() {
+                let phrase = (meaning == VoiceMeaning::Approve)
+                    .then(|| {
+                        AGREEMENT_PHRASES.iter().find(|phrase| {
+                            segment[at..].len() >= phrase.len()
+                                && segment[at..at + phrase.len()]
+                                    .iter()
+                                    .zip(phrase.iter())
+                                    .all(|(word, part)| word == part)
+                        })
+                    })
+                    .flatten();
+                if let Some(phrase) = phrase {
+                    agreed = true;
+                    at += phrase.len();
+                } else {
+                    words.push(segment[at].as_str());
+                    at += 1;
+                }
+            }
+        }
+        (words, agreed)
+    }
+
+    /// Whether the words may ask for something about the call rather than
+    /// decide it: another value, a part, a condition. A plain no does not.
+    pub(super) fn may_ask_for_change(&self, pieces: &[CardPiece]) -> bool {
+        self.has_change_marker()
+            || self.has_number()
+            || self.has_any(CONDITIONS)
+            || self.has_any(DATE_WORDS)
+            || self.has_any(CORRECTIONS)
+            || self.names_a_field(pieces)
     }
 
     /// Whether the words could be about this card's call rather than
@@ -1523,7 +1605,11 @@ fn classify_segment(segment: &[String], input: &VoiceCommandInput<'_>) -> Segmen
 
 fn exact(joined: &str, input: &VoiceCommandInput<'_>) -> Option<Segment> {
     let lists = &*LISTS;
-    if lists.approve.contains(joined) {
+    if lists.approve.contains(joined)
+        || AGREEMENT_PHRASES
+            .iter()
+            .any(|phrase| phrase.join(" ") == joined)
+    {
         Some(Segment::Decision(VoiceMeaning::Approve))
     } else if lists.reject.contains(joined) {
         Some(Segment::Decision(VoiceMeaning::Reject))

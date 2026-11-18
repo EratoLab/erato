@@ -69,14 +69,16 @@ const CARD = [
 ];
 
 let sequence = 0;
-const audio = (connection: Connection, index: number) => {
+/** Twelve seconds of silence: enough for any sentence to count as said. */
+const SPEECH = globalThis.btoa("\0".repeat(2 * 8000 * 12));
+const audio = (connection: Connection, index: number, speech = SPEECH) => {
   connection.options.onMessage?.({
     type: "audio_delta",
     data: JSON.stringify({
       message_type: "audio_delta",
       sequence: sequence++,
-      audio: "AQIDBA==",
-      sample_rate: 24000,
+      audio: speech,
+      sample_rate: 8000,
       piece: index,
     }),
   });
@@ -149,6 +151,30 @@ describe("speaking an approval card", () => {
     playOut();
     expect(states()).toEqual(["heard", "heard", "heard", "heard"]);
     expect(useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("report 4.6: a sentence whose audio is far too short for its words is not heard", async () => {
+    const { connection, states, approvalSpoken } = await speak();
+    // 0.4 s for a sentence of 48 characters: cut on the way.
+    audio(connection, 0, globalThis.btoa("\0".repeat(2 * 8000 * 0.4)));
+    expect(states()[0]).toBe("playing");
+    playOut();
+    // Not counted as said: nothing was heard, so the voice points to the
+    // screen instead, and the card can be read again.
+    expect(approvalSpoken("message-1:stop-1")).toBe(false);
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string)).toEqual({
+      pieces: ["Auf dem Bildschirm wartet eine Entscheidung."],
+    });
+  });
+
+  it("counts a short sentence said quickly as heard", async () => {
+    const { connection, states } = await speak([
+      piece("request", "Okay so."),
+    ]);
+    audio(connection, 0, globalThis.btoa("\0".repeat(2 * 8000 * 0.3)));
+    playOut();
+    expect(states()).toEqual(["heard"]);
   });
 
   it("skips the piece being said and goes on with the rest", async () => {
@@ -342,6 +368,25 @@ describe("speaking an approval card", () => {
     audio(connections[0], 0);
     playOut();
     expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("ERMAIN-1233: a notice that cannot be said shows no audio error", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({
+      conversational: true,
+      enabled: true,
+      failed: false,
+    });
+    module.announceApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "de",
+    );
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    connections[0].options.onError?.(new Error("409"));
+    expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useSpeechPlayback.getState().failed).toBe(false);
   });
 
   it("says nothing of a change once audio mode was left", async () => {

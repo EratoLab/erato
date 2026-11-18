@@ -6526,7 +6526,9 @@ export type SpeakApprovalVariables = {
  * The client composes the sentences from the card it shows; this only speaks
  * them, with the voice and cleaning of conversational mode's replies, piece
  * by piece. It answers only for a message of the user's own chat whose stop
- * still has a decision open, and stores nothing.
+ * still has a decision open, or whose last change request was answered
+ * without a new card (so the voice can say that nothing was run), and
+ * stores nothing.
  */
 export const fetchSpeakApproval = (
   variables: SpeakApprovalVariables,
@@ -6550,7 +6552,9 @@ export const fetchSpeakApproval = (
  * The client composes the sentences from the card it shows; this only speaks
  * them, with the voice and cleaning of conversational mode's replies, piece
  * by piece. It answers only for a message of the user's own chat whose stop
- * still has a decision open, and stores nothing.
+ * still has a decision open, or whose last change request was answered
+ * without a new card (so the voice can say that nothing was run), and
+ * stores nothing.
  */
 export const useSpeakApproval = (
   options?: Omit<
