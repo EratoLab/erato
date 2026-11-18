@@ -36,6 +36,7 @@ import {
   noteDictatedTranscript,
   settleDictation,
 } from "@/hooks/audio/dictatedTurns";
+import { hesitationMatcher } from "@/hooks/audio/hesitations";
 import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
@@ -587,10 +588,15 @@ export const ChatInput = ({
     cardMinSpeechMs,
     voiceStartBufferMs,
     voiceStartMaxWaitMs,
+    hesitationWords,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
+  const isHesitationOnly = useMemo(
+    () => hesitationMatcher(hesitationWords),
+    [hesitationWords],
+  );
   useEffect(() => {
     configureVoiceStart({
       bufferMs: voiceStartBufferMs,
@@ -882,6 +888,7 @@ export const ChatInput = ({
     onVadAutoStop: handleConversationVadAutoStop,
     endOfTurnSilenceMs,
     minSpeechMs,
+    isHesitationOnly,
     voiceSpeaking: overVoiceSpeaking,
     overVoiceMinSpeechMs: talkOverVoiceMinSpeechMs,
     onSpeechOverVoice: handleSpeechOverVoice,
@@ -1038,6 +1045,8 @@ export const ChatInput = ({
           cardMinSpeechMs,
           DEFAULT_CARD_MIN_SPEECH_MS,
         ),
+        // The card's own rules answer a lone "äh" as listening.
+        keepHesitations: true,
       });
     },
     [
@@ -3847,7 +3856,6 @@ export const ChatInput = ({
                       {t({ id: "chat.audio_stop", message: "Stop playback" })}
                     </Button>
                   )}
-                  {decisionWaiting && <ApprovalHeardStatus />}
                   {cardSpeaking && (
                     <Button
                       type="button"
@@ -3894,6 +3902,8 @@ export const ChatInput = ({
                       })}
                     </span>
                   )}
+                  {/* After the buttons, so they do not move as it grows. */}
+                  {decisionWaiting && <ApprovalHeardStatus />}
                 </>
               )}
               {isAudioMode && (

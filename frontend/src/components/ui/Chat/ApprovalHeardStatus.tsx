@@ -66,8 +66,9 @@ export function ApprovalHeardStatus() {
   return (
     <span
       role="status"
-      className="text-sm text-theme-fg-secondary"
+      className="max-w-64 truncate text-sm text-theme-fg-secondary"
       data-testid="chat-input-audio-card-heard"
+      title={words ?? undefined}
     >
       {words === null
         ? t({ id: "chat.audio.card_heard", message: "Heard …" })

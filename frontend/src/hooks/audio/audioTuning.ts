@@ -146,10 +146,11 @@ export type OnsetTuning = typeof ONSET_TUNING;
 
 /**
  * Speech the voice detector must count before a conversational turn can end.
- * It counts only frames it is fairly sure of: the vowel of "Stopp" (96 to
- * 288 ms on synthetic German voices), not its consonants. Coughs and clicks
- * score nothing; "mhm" and "äh" score 350 to 450 ms, so the minimum never
- * kept those out, only short words. A bare "Ja" (about 350 ms) is heard.
+ * It counts only frames it is fairly sure of: on synthetic voices the vowel
+ * of "Stopp" (96 to 288 ms), "Ja" 290 to 380 ms, "Äh" and "um" 260 to
+ * 350 ms; generated coughs and clicks scored nothing (real ones were not
+ * measured). "Ja" and "Äh" overlap, so no minimum separates them: a turn of
+ * hesitation sounds only is held back by its words instead (`hesitations.ts`).
  */
 export const DEFAULT_MIN_SPEECH_MS = 250;
 
@@ -197,3 +198,12 @@ export const SILENT_FRAME_PROBABILITY = 0.25;
 
 /** The transcription connection is tried once more after this, the audio kept. */
 export const SESSION_RETRY_DELAY_MS = 1_000;
+
+/**
+ * After a sound the detector rejected, the audio kept stops this long before
+ * the end of the silence that ended it, so none of the sound stays.
+ */
+export const MISFIRE_MARGIN_MS = 100;
+
+/** How long a turn's words may take to come back before it simply ends. */
+export const HESITATION_CHECK_TIMEOUT_MS = 10_000;

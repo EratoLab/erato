@@ -113,6 +113,12 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     chunks: (PcmChunk & { buffer: AudioBuffer })[];
   } | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Nothing has played since the queue was created or stopped: the next
+   * audio starts a voice. A voice that only ran dry in the middle goes on at
+   * once, as it would without the buffer.
+   */
+  let fresh = true;
 
   const schedule = (
     context: AudioContext,
@@ -142,6 +148,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     const held = waiting;
     waiting = null;
     if (!held) return;
+    fresh = false;
     for (const chunk of held.chunks) schedule(held.context, chunk);
   };
 
@@ -149,6 +156,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     clearTimeout(waitTimer);
     waitTimer = undefined;
     waiting = null;
+    fresh = true;
     for (const source of sources.keys()) {
       // A stopped source still fires `ended`; it must not report the queue
       // as drained to whatever started playing in the meantime.
@@ -179,8 +187,8 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
       for (let i = 0; i < samples.length; i++)
         samples[i] = view.getInt16(i * 2, true) / 32768;
       const chunk = { audio, sampleRate, buffer };
-      // Playing on: the next chunk follows directly.
-      if (sources.size > 0 && !waiting) {
+      // Playing on, or running dry in the middle: the chunk plays at once.
+      if (!waiting && (sources.size > 0 || !fresh)) {
         schedule(context, chunk);
         return true;
       }

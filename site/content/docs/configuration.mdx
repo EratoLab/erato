@@ -3023,7 +3023,7 @@ All subkeys share the same structure and meaning as [`audio_dictation`](#audio_d
 
 The silence, in milliseconds, after which conversational audio mode takes the speaker's turn as finished and sends it. Classic dictation does not use it.
 
-**Type:** `integer`, from `500` to `5000`; other values stop the server at startup.
+**Type:** `integer`, from `500` to `5000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `1800`
 
@@ -3035,7 +3035,7 @@ A shorter wait makes replies start sooner on every turn, but cuts off more peopl
 
 The same silence while a spoken approval card waits and listens for what the user says to it ("weiter", "stopp", "nimm den 22."). It is shorter than `end_of_turn_silence_ms` because those are a few words: the user hears the answer sooner. A pause cut short there costs at most an answer that the card did not understand, never a decision.
 
-**Type:** `integer`, from `500` to `5000`; other values stop the server at startup.
+**Type:** `integer`, from `500` to `5000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `1000`
 
@@ -3043,9 +3043,9 @@ The same silence while a spoken approval card waits and listens for what the use
 
 {/* erato_toml_config_key: audio_conversational.min_speech_ms */}
 
-How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: "Ja" counts about 350 ms, "Stopp" 100 to 300 ms, while coughs and clicks count nothing. A lower value hears shorter answers; a higher one ignores more short sounds such as "mhm".
+How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: on synthetic voices "Ja" counted 290 to 380 ms, "Äh" and "um" 260 to 350 ms, "Stopp" 100 to 300 ms, while generated coughs and clicks counted nothing (real coughs were not measured). Because "Ja" and "Äh" overlap, no minimum separates them: a turn of hesitation sounds only is held back by `hesitation_words` instead. A lower value hears shorter answers; a higher one drops more short sounds.
 
-**Type:** `integer`, from `32` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `32` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `250`
 
@@ -3055,7 +3055,7 @@ How much speech, in milliseconds, the voice detector must count before a convers
 
 The same while a waiting approval card listens. Its commands are the shortest words there are ("Stopp", "Ja", "weiter", "stop", "yes", "next"), and its rules answer a lone "mhm" or "okay" as listening noise, so the default is two detector frames.
 
-**Type:** `integer`, from `32` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `32` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `64`
 
@@ -3065,7 +3065,7 @@ The same while a waiting approval card listens. Its commands are the shortest wo
 
 How much audio, in milliseconds, a voice that starts from silence waits for before it plays: a reply, an approval card, or a message read aloud. Speech providers often send the first syllable, then pause; played at once, that syllable stands alone before a gap. `0` plays at once. A complete short sentence always plays at once.
 
-**Type:** `integer`, from `0` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `0` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `400`
 
@@ -3075,9 +3075,22 @@ How much audio, in milliseconds, a voice that starts from silence waits for befo
 
 The longest, in milliseconds, such a voice waits for that audio; what has come by then plays. It bounds how much later the first sound can come.
 
-**Type:** `integer`, from `0` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `0` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `350`
+
+#### `audio_conversational.hesitation_words`
+
+{/* erato_toml_config_key: audio_conversational.hesitation_words */}
+{/* erato_toml_config_key: audio_conversational.hesitation_words.[] */}
+
+Words that are only hesitation sounds. When the words of a conversational turn are all of these ("Äh.", "Ähm …", "um"), the turn does not end: nothing is sent, and the microphone keeps listening, so the question the speaker goes on to ask arrives whole and without the hesitation. Case, punctuation and drawn-out letters are ignored ("Ähhm…" counts as "ähm"). A turn with any other word ("Äh, wie spät ist es?", "Ja.") is sent as usual. It does not apply to what is said to a waiting approval card, whose own rules treat hesitations as listening.
+
+The default is a small German and English base. To extend it, list the base and your own words; a configuration package can supply the list for a language it tunes.
+
+**Type:** list of strings
+
+**Default:** `["äh", "ähm", "aeh", "aehm", "öh", "öhm", "eh", "ehm", "hm", "mhm", "mh", "uh", "uhm", "um", "er", "erm"]`
 
 #### `audio_conversational.talk_over_voice`
 
@@ -3097,7 +3110,7 @@ A recording that starts while the voice plays asks the browser for echo cancella
 
 How long, in milliseconds, speech over the voice must last before the voice stops. A shorter value reacts sooner, but stops the voice for more coughs, short "mhm"s and the voice's own echo; a longer one may miss a short "stop".
 
-**Type:** `integer`, from `200` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `200` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `500`
 
@@ -3124,6 +3137,7 @@ min_speech_ms = 250
 card_min_speech_ms = 64
 voice_start_buffer_ms = 400
 voice_start_max_wait_ms = 350
+hesitation_words = ["äh", "ähm", "aeh", "aehm", "öh", "öhm", "eh", "ehm", "hm", "mhm", "mh", "uh", "uhm", "um", "er", "erm"]
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```

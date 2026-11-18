@@ -13,6 +13,7 @@ class MockContext {
   currentTime = 0;
   destination = {};
   started: { at: number; duration: number }[] = [];
+  sources: { onended: (() => void) | null }[] = [];
   createBuffer(_channels: number, length: number, rate: number) {
     return {
       duration: length / rate,
@@ -36,6 +37,7 @@ class MockContext {
       start: (at: number) =>
         this.started.push({ at, duration: source.buffer?.duration ?? 0 }),
     };
+    this.sources.push(source);
     return source;
   }
 }
@@ -137,6 +139,25 @@ describe("starting a voice from silence", () => {
     const third = context();
     createPcmQueue(vi.fn()).enqueue(third, pcm(START_BUFFER_MS), RATE);
     expect((third as unknown as MockContext).started).toHaveLength(1);
+  });
+
+  it("F3: a voice that runs dry in the middle goes on at once, and a stop starts afresh", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    const started = (ctx as unknown as MockContext).started;
+    queue.enqueue(ctx, pcm(START_BUFFER_MS), RATE);
+    expect(started).toHaveLength(1);
+    // The queue runs dry; the stream goes on at its own pace.
+    (ctx as unknown as MockContext).sources[0].onended?.();
+    expect(queue.active).toBe(false);
+    queue.enqueue(ctx, pcm(60), RATE);
+    expect(started).toHaveLength(2);
+
+    queue.stop();
+    queue.enqueue(ctx, pcm(60), RATE);
+    expect(started).toHaveLength(2);
+    vi.advanceTimersByTime(START_WAIT_MS);
+    expect(started).toHaveLength(3);
   });
 
   it("keeps waiting audio when paused, to be said again", () => {

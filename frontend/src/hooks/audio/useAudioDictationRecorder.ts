@@ -43,6 +43,8 @@ import {
   BEFORE_SPEECH_KEPT_MS,
   DEFAULT_MIN_SPEECH_MS,
   CUT_AT_PAUSE_AFTER_MS,
+  HESITATION_CHECK_TIMEOUT_MS,
+  MISFIRE_MARGIN_MS,
   PAUSE_FRAMES,
   PRE_SPEECH_SILENCE_PRIMER_MS,
   resolveMinSpeechMs,
@@ -123,6 +125,17 @@ type SpeechGate = {
   trimmed: boolean;
   /** Frames in a row the detector heard as silence. */
   quietFrames: number;
+  /** Source samples handed to the detector, and judged by it so far. */
+  fed: number;
+  judged: number;
+  /** The detector still loads, or catches up on what was said meanwhile. */
+  catchingUp: boolean;
+  /** The turn ended in the audio the detector caught up on. */
+  endedWhileCatchingUp: boolean;
+  /** The turn's words are being checked for hesitation sounds only. */
+  checking: boolean;
+  /** The turn seemed over again while it was checked. */
+  recheck?: boolean;
   waiter?: () => void;
 };
 
@@ -132,6 +145,11 @@ export type DictationTurn = {
   endOfTurnSilenceMs?: number;
   /** Speech the detector must count before this turn can end. */
   minSpeechMs?: number;
+  /**
+   * A turn of hesitation sounds only ends like any other. For a card, whose
+   * own rules answer "mhm" as listening.
+   */
+  keepHesitations?: boolean;
 };
 
 type LiveAudioDictationSession = {
@@ -142,6 +160,19 @@ type LiveAudioDictationSession = {
   sentPcmBytes: number;
   /** Audio time sent so far: where the next piece starts. */
   sentMs: number;
+  /** Each piece's words as they came back; `null` for a piece that failed. */
+  transcripts: Map<number, string | null>;
+  /** Called whenever a piece's words come back. */
+  onTranscript: Set<() => void>;
+  /**
+   * Words held back from the caller until the turn is over, so a turn of
+   * hesitations can be dropped; `null` when they go out at once.
+   */
+  held: AudioDictationTranscriptChunk[] | null;
+  /** Pieces whose words were only hesitations: they go out empty. */
+  blanked: Set<number>;
+  /** The index of the session's first piece. */
+  firstChunkIndex: number;
   pendingSourceSamples: number[];
   sourceSampleRate: number;
 };
@@ -174,8 +205,13 @@ type UseAudioDictationRecorderOptions = {
   overVoiceMinSpeechMs?: number;
   /** The user talks over the voice; the caller makes it yield. */
   onSpeechOverVoice?: () => void;
-  /** Speech may be starting over the voice: lower it, or restore it. */
+  /** Speech over the voice may be starting: lower it, or restore it. */
   onVoiceLowered?: (lowered: boolean) => void;
+  /**
+   * Whether a conversational turn's words are only hesitation sounds. Such a
+   * turn does not end: nothing is sent, and the recording listens on.
+   */
+  isHesitationOnly?: (words: string) => boolean;
 };
 
 /**
@@ -238,6 +274,7 @@ export function useAudioDictationRecorder({
   overVoiceMinSpeechMs,
   onSpeechOverVoice,
   onVoiceLowered,
+  isHesitationOnly,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -296,6 +333,9 @@ export function useAudioDictationRecorder({
   const gateRef = useRef<SpeechGate | null>(null);
   /** The turn ended while its connection was still opening: finish once open. */
   const finishWhenOpenRef = useRef(false);
+  const isHesitationOnlyRef = useRef(isHesitationOnly);
+  /** The current turn may not end on hesitation sounds alone. */
+  const checkHesitationsRef = useRef(false);
   /**
    * Per-session AbortController. Created at the start of every
    * dictation; aborted on user-stop-during-starting, on error, and on
@@ -313,6 +353,8 @@ export function useAudioDictationRecorder({
    * handshake.
    */
   const preSessionSamplesRef = useRef<number[]>([]);
+  /** Samples dropped from the front of the pre-session buffer this recording. */
+  const preDroppedRef = useRef(0);
   /**
    * AudioContext persists across dictation sessions. Each session creates
    * fresh source / analyser / worklet nodes (so leftover per-session
@@ -411,6 +453,10 @@ export function useAudioDictationRecorder({
   useEffect(() => {
     onVadAutoStopRef.current = onVadAutoStop;
   }, [onVadAutoStop]);
+
+  useEffect(() => {
+    isHesitationOnlyRef.current = isHesitationOnly;
+  }, [isHesitationOnly]);
 
   useEffect(() => {
     overVoiceMinSpeechMsRef.current =
@@ -580,28 +626,6 @@ export function useAudioDictationRecorder({
         Math.floor((session.sourceSampleRate * session.chunkDurationMs) / 1000),
       );
 
-      // A conversational turn is cut in a pause, never inside a word.
-      const gate = gateRef.current;
-      if (gate && !flushFinalChunk) {
-        const pending = session.pendingSourceSamples.length;
-        const longEnough =
-          pending >=
-          Math.floor((session.sourceSampleRate * CUT_AT_PAUSE_AFTER_MS) / 1000);
-        if (
-          longEnough &&
-          gate.quietFrames >= PAUSE_FRAMES &&
-          pending <= sourceSamplesPerChunk
-        ) {
-          sendLivePcmChunk(
-            resampleMonoFloat32ToPcm16(
-              new Float32Array(session.pendingSourceSamples.splice(0)),
-              session.sourceSampleRate,
-            ),
-          );
-          return;
-        }
-      }
-
       while (
         session.pendingSourceSamples.length >= sourceSamplesPerChunk ||
         (flushFinalChunk && session.pendingSourceSamples.length > 0)
@@ -741,24 +765,46 @@ export function useAudioDictationRecorder({
         once: true,
       });
 
+      const words = {
+        transcripts: new Map<number, string | null>(),
+        onTranscript: new Set<() => void>(),
+      };
+      const deliver = (chunk: AudioDictationTranscriptChunk) => {
+        const held = liveSessionRef.current?.held;
+        if (held) held.push(chunk);
+        else onTranscriptChunkRef.current(chunk);
+      };
       socket.addEventListener("message", (event) => {
         if (typeof event.data !== "string") {
           return;
         }
 
-        if (!isLive()) return;
+        if (!isLive()) {
+          // During the handshake: a refusal is not tried again.
+          try {
+            const frame = JSON.parse(event.data) as AudioDictationSocketFrame;
+            if (frame.type === "error") refusedSockets.add(socket);
+          } catch {
+            // Not a frame this hook reads.
+          }
+          return;
+        }
         try {
           const frame = JSON.parse(event.data) as AudioDictationSocketFrame;
           if (frame.type === "chunk_transcribed") {
-            onTranscriptChunkRef.current({
+            words.transcripts.set(frame.chunk_index, frame.transcript ?? "");
+            words.onTranscript.forEach((listener) => listener());
+            deliver({
               chunkIndex: frame.chunk_index,
               transcript: frame.transcript ?? "",
             });
           }
           if (frame.type === "chunk_failed") {
+            words.transcripts.set(frame.chunk_index, null);
+            words.onTranscript.forEach((listener) => listener());
             // Resolve the index with an empty transcript so the ordered append
             // in the consumer is not held back by the lost passage.
-            onTranscriptChunkRef.current({
+            deliver({
               chunkIndex: frame.chunk_index,
               transcript: "",
             });
@@ -818,9 +864,17 @@ export function useAudioDictationRecorder({
           sendQueue: Promise.resolve(),
           sentPcmBytes: 0,
           sentMs: 0,
+          ...words,
+          held: null,
+          blanked: new Set(),
+          firstChunkIndex: sessionFrame.next_chunk_index ?? 0,
           pendingSourceSamples: [],
           sourceSampleRate,
         };
+      } catch (error) {
+        if (refusedSockets.has(socket) && error instanceof Error)
+          refusedErrors.add(error);
+        throw error;
       } finally {
         signal.removeEventListener("abort", handleAbortDuringStartup);
         if (pendingSocketRef.current === socket)
@@ -840,13 +894,63 @@ export function useAudioDictationRecorder({
       try {
         return await startLiveDictationSession(sourceSampleRate, signal);
       } catch (error) {
-        if (isAbort(error) || signal.aborted) throw error;
+        // Classic dictation reports at once, as before; a refusal would only
+        // be refused again.
+        if (
+          isAbort(error) ||
+          signal.aborted ||
+          mode !== "conversational" ||
+          (error instanceof Error && refusedErrors.has(error))
+        )
+          throw error;
         logger.log("[AUDIO_DICT] session failed, trying once more", error);
         await abortableDelay(SESSION_RETRY_DELAY_MS, signal);
         return startLiveDictationSession(sourceSampleRate, signal);
       }
     },
-    [startLiveDictationSession],
+    [mode, startLiveDictationSession],
+  );
+
+  /**
+   * A conversational turn is cut in a pause, never inside a word: only what
+   * the detector has already judged goes into the piece, so the start of the
+   * next word stays for the next one.
+   */
+  const cutAtPause = useCallback(
+    (gate: SpeechGate) => {
+      const session = liveSessionRef.current;
+      if (!session || gate.quietFrames < PAUSE_FRAMES) return;
+      const pending = session.pendingSourceSamples.length;
+      const unjudged = Math.max(0, gate.fed - gate.judged);
+      const cut = pending - unjudged;
+      const atLeast = Math.floor(
+        (session.sourceSampleRate * CUT_AT_PAUSE_AFTER_MS) / 1000,
+      );
+      if (cut < atLeast) return;
+      sendLivePcmChunk(
+        resampleMonoFloat32ToPcm16(
+          new Float32Array(session.pendingSourceSamples.splice(0, cut)),
+          session.sourceSampleRate,
+        ),
+      );
+    },
+    [sendLivePcmChunk],
+  );
+
+  /** Hands the words held back to the caller, those of hesitations empty. */
+  const releaseHeldTranscripts = useCallback(
+    (session: LiveAudioDictationSession) => {
+      const held = session.held;
+      if (!held) return;
+      session.held = null;
+      for (const chunk of held)
+        onTranscriptChunkRef.current(
+          session.blanked.has(chunk.chunkIndex)
+            ? { chunkIndex: chunk.chunkIndex, transcript: "" }
+            : chunk,
+        );
+    },
+    [],
   );
 
   const completeDictation = useCallback(async () => {
@@ -886,11 +990,12 @@ export function useAudioDictationRecorder({
     } finally {
       if (liveSessionRef.current === session) liveSessionRef.current = null;
       closeQuietly(session?.socket);
+      if (session) releaseHeldTranscripts(session);
       if (isMounted()) {
         dispatchSession({ type: "complete" });
       }
     }
-  }, [closeQuietly, flushLiveAudioSamples, isMounted]);
+  }, [closeQuietly, flushLiveAudioSamples, isMounted, releaseHeldTranscripts]);
 
   const stopDictation = useCallback(() => {
     // Active dictation: liveSessionRef is set the instant the session
@@ -978,6 +1083,11 @@ export function useAudioDictationRecorder({
 
       startInFlightRef.current = true;
       gateRef.current = null;
+      preDroppedRef.current = 0;
+      checkHesitationsRef.current =
+        vadAutoStopEnabled &&
+        isHesitationOnlyRef.current !== undefined &&
+        !turn?.keepHesitations;
       dispatchSession({ type: "start" });
       const sessionAbort = new AbortController();
       sessionAbortRef.current = sessionAbort;
@@ -1141,12 +1251,14 @@ export function useAudioDictationRecorder({
           });
           processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
             const input = event.data;
-            const vadFrame = vadEngineRef.current
-              ? new Float32Array(input)
-              : null;
+            const gate = gateRef.current;
+            const detector = gate?.catchingUp ? null : vadEngineRef.current;
+            const vadFrame = detector ? new Float32Array(input) : null;
             onsetController.acceptFrame(input);
             const session = liveSessionRef.current;
-            if (session) {
+            // Into the session only while speech is heard; otherwise the
+            // audio waits, and only its last moments are kept.
+            if (session && (!gate || gate.heard)) {
               for (let index = 0; index < input.length; index += 1) {
                 session.pendingSourceSamples.push(input[index]);
               }
@@ -1156,28 +1268,36 @@ export function useAudioDictationRecorder({
               for (let index = 0; index < input.length; index += 1) {
                 preBuffer.push(input[index]);
               }
+              const drop = (keep: number) => {
+                const dropped = preBuffer.length - keep;
+                preBuffer.splice(0, dropped);
+                preDroppedRef.current += dropped;
+              };
               // Trimmed in batches: only the last moments over the voice count.
               if (
                 holdRef.current?.released === null &&
                 preBuffer.length > 2 * heldSampleCount
               ) {
-                preBuffer.splice(0, preBuffer.length - heldSampleCount);
+                drop(heldSampleCount);
               }
-              // Before anyone speaks, only the moments before speech are kept.
-              const gate = gateRef.current;
+              // Before anyone speaks, only the moments before speech are
+              // kept, and only once the detector has heard what is dropped:
+              // while it loads, everything is kept for it (ERMAIN-334).
               if (
                 gate &&
+                detector &&
                 holdRef.current?.released !== null &&
                 !gate.heard &&
                 !gate.speaking &&
                 preBuffer.length > 2 * beforeSpeechSampleCount
               ) {
-                preBuffer.splice(0, preBuffer.length - beforeSpeechSampleCount);
+                drop(beforeSpeechSampleCount);
                 gate.trimmed = true;
               }
             }
-            if (vadFrame && vadEngineRef.current) {
-              void vadEngineRef.current
+            if (vadFrame && detector) {
+              if (gate) gate.fed += vadFrame.length;
+              void detector
                 .acceptFrame({
                   samples: vadFrame,
                   sampleRate: audioContext.sampleRate,
@@ -1245,8 +1365,74 @@ export function useAudioDictationRecorder({
               realStarted: false,
               trimmed: false,
               quietFrames: 0,
+              fed: 0,
+              judged: 0,
+              catchingUp: true,
+              endedWhileCatchingUp: false,
+              checking: false,
             };
             gateRef.current = gate;
+            // After a misfire, keep less than the silence that ended it, or
+            // the rejected sound itself would stay.
+            const keptAfterMisfire = Math.min(
+              beforeSpeechSampleCount,
+              Math.floor(
+                (audioContext.sampleRate *
+                  Math.max(0, tuning.redemptionMs - MISFIRE_MARGIN_MS)) /
+                  1000,
+              ),
+            );
+            const endTurn = () => {
+              vadAutoStopTriggeredRef.current = true;
+              onVadAutoStopRef.current?.();
+              stopDictation();
+            };
+            /**
+             * The turn seems over: its words decide. Hesitation sounds only,
+             * or nothing, end no turn: the recording listens on, and what
+             * they were is not passed on.
+             */
+            const checkTurn = async () => {
+              const session = liveSessionRef.current;
+              if (!session) {
+                endTurn();
+                return;
+              }
+              gate.checking = true;
+              gate.recheck = false;
+              // What follows waits for speech again: the pause is not sent.
+              gate.heard = false;
+              flushLiveAudioSamples(true);
+              await session.sendQueue;
+              const last = session.nextChunkIndex - 1;
+              const words = await waitForWords(
+                session,
+                last,
+                HESITATION_CHECK_TIMEOUT_MS,
+              );
+              gate.checking = false;
+              if (liveSessionRef.current !== session) return;
+              const nothingSaid =
+                words !== null &&
+                (words.trim() === "" ||
+                  isHesitationOnlyRef.current?.(words) === true);
+              if (nothingSaid)
+                for (
+                  let index = session.firstChunkIndex;
+                  index <= last;
+                  index++
+                )
+                  session.blanked.add(index);
+              // Read anew: the detector may have changed it during the wait.
+              const now = currentGate(gate);
+              if (now.recheck) {
+                void checkTurn();
+                return;
+              }
+              // The person went on, or only hesitated: the turn goes on.
+              if (nothingSaid || now.heard) return;
+              endTurn();
+            };
             const unsubscribeVad = vadEngine.subscribe((event) => {
               if (event.type === "error") {
                 stopVadEngine();
@@ -1254,10 +1440,15 @@ export function useAudioDictationRecorder({
               }
               const waiting = holdRef.current?.released === null;
               if (event.type === "frame") {
+                gate.judged += Math.round(
+                  (event.frame.samples.length * audioContext.sampleRate) /
+                    event.frame.sampleRate,
+                );
                 gate.quietFrames =
                   event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
                     ? gate.quietFrames + 1
                     : 0;
+                if (gate.heard) cutAtPause(gate);
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
@@ -1291,7 +1482,17 @@ export function useAudioDictationRecorder({
                 event.type === "speech_start" ||
                 event.type === "speech_real_start"
               ) {
-                if (event.type === "speech_real_start") openSpeechGate(gate);
+                if (event.type === "speech_real_start") {
+                  openSpeechGate(gate);
+                  // Speech again within a recording: from shortly before it.
+                  const session = liveSessionRef.current;
+                  if (session) {
+                    for (const sample of preSessionSamplesRef.current)
+                      session.pendingSourceSamples.push(sample);
+                    preSessionSamplesRef.current = [];
+                    preDroppedRef.current = 0;
+                  }
+                }
                 if (isMounted()) {
                   setIsVadSpeechActive(true);
                 }
@@ -1302,11 +1503,10 @@ export function useAudioDictationRecorder({
                 // next one. Only the moments before speech stay.
                 if (!gate.heard) {
                   const preBuffer = preSessionSamplesRef.current;
-                  if (preBuffer.length > beforeSpeechSampleCount) {
-                    preBuffer.splice(
-                      0,
-                      preBuffer.length - beforeSpeechSampleCount,
-                    );
+                  if (preBuffer.length > keptAfterMisfire) {
+                    const dropped = preBuffer.length - keptAfterMisfire;
+                    preBuffer.splice(0, dropped);
+                    preDroppedRef.current += dropped;
                     gate.trimmed = true;
                   }
                 }
@@ -1323,9 +1523,21 @@ export function useAudioDictationRecorder({
                 return;
               }
               openSpeechGate(gate);
-              vadAutoStopTriggeredRef.current = true;
-              onVadAutoStopRef.current?.();
-              stopDictation();
+              // Heard in the audio from while the detector loaded: the turn
+              // ends once the recording is under way.
+              if (gate.catchingUp) {
+                gate.endedWhileCatchingUp = true;
+                return;
+              }
+              if (gate.checking) {
+                gate.recheck = true;
+                return;
+              }
+              if (checkHesitationsRef.current) {
+                void checkTurn();
+                return;
+              }
+              endTurn();
             });
             vadEngineUnsubscribeRef.current = unsubscribeVad;
             const vadStartPromise = vadEngineStartQueueRef.current
@@ -1338,6 +1550,23 @@ export function useAudioDictationRecorder({
             try {
               await vadStartPromise;
               if (audioProcessorRef.current === processor) {
+                // What was said while the model loaded is heard first, in
+                // order, before the detector takes the live audio.
+                let position = preDroppedRef.current;
+                while (audioProcessorRef.current === processor) {
+                  const buffer = preSessionSamplesRef.current;
+                  const from = Math.max(0, position - preDroppedRef.current);
+                  if (from >= buffer.length) break;
+                  const backlog = new Float32Array(buffer.slice(from));
+                  position = preDroppedRef.current + buffer.length;
+                  gate.fed += backlog.length;
+                  await vadEngine.acceptFrame({
+                    samples: backlog,
+                    sampleRate: audioContext.sampleRate,
+                    timestampMs: Date.now(),
+                  });
+                }
+                gate.catchingUp = false;
                 vadEngineRef.current = vadEngine;
                 if (isMounted()) {
                   setIsVadListening(true);
@@ -1396,6 +1625,7 @@ export function useAudioDictationRecorder({
             // Only what the user says from now on is theirs; what was heard
             // over the voice, and any speech the detector saw in it, is not.
             preSessionSamplesRef.current = [...primerSamples];
+            preDroppedRef.current = 0;
             vadEngineRef.current?.reset?.();
             if (gate) {
               gate.speaking = false;
@@ -1433,6 +1663,11 @@ export function useAudioDictationRecorder({
           armRecordingLimit();
           dispatchSession({ type: "session_ready" });
           setDictationError(null);
+          if (gate.endedWhileCatchingUp && !vadAutoStopTriggeredRef.current) {
+            vadAutoStopTriggeredRef.current = true;
+            onVadAutoStopRef.current?.();
+            stopDictation();
+          }
           await waitForSpeech(gate, sessionAbort.signal);
         }
 
@@ -1462,7 +1697,9 @@ export function useAudioDictationRecorder({
             liveSession.pendingSourceSamples.push(preBuffer[index]);
           }
           preSessionSamplesRef.current = [];
+          preDroppedRef.current = 0;
         }
+        liveSession.held = checkHesitationsRef.current ? [] : null;
         liveSessionRef.current = liveSession;
         if (finishWhenOpenRef.current) {
           finishWhenOpenRef.current = false;
@@ -1511,6 +1748,7 @@ export function useAudioDictationRecorder({
       clearRecordingDurationTimer,
       closeQuietly,
       completeDictation,
+      cutAtPause,
       enabled,
       endOfTurnSilenceMs,
       ensureAudioContextReady,
@@ -1603,6 +1841,42 @@ export function useAudioDictationRecorder({
     cancelDictation,
   };
 }
+
+/** Sockets the server refused with an `error` frame while starting. */
+const refusedSockets = new WeakSet<WebSocket>();
+/** The startup errors those refusals became: not tried again. */
+const refusedErrors = new WeakSet<Error>();
+
+/**
+ * The words of the session's pieces up to `last`, once all came back;
+ * `null` when one failed or they took longer than `ms`.
+ */
+function waitForWords(
+  session: LiveAudioDictationSession,
+  last: number,
+  ms: number,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const finish = (words: string | null) => {
+      clearTimeout(timer);
+      session.onTranscript.delete(check);
+      resolve(words);
+    };
+    const check = () => {
+      const pieces: (string | null | undefined)[] = [];
+      for (let index = session.firstChunkIndex; index <= last; index++)
+        pieces.push(session.transcripts.get(index));
+      if (pieces.some((piece) => piece === undefined)) return;
+      finish(pieces.some((piece) => piece === null) ? null : pieces.join(" "));
+    };
+    const timer = setTimeout(() => finish(null), ms);
+    session.onTranscript.add(check);
+    check();
+  });
+}
+
+/** The gate as it is now, not as it was before an `await`. */
+const currentGate = (gate: SpeechGate): SpeechGate => gate;
 
 /** Speech was heard: the recording transcribes from here on. */
 function openSpeechGate(gate: SpeechGate) {

@@ -95,6 +95,8 @@ interface AudioConversationalFeatureConfig {
   voiceStartBufferMs?: number;
   /** The longest it waits for it; 350 when omitted. */
   voiceStartMaxWaitMs?: number;
+  /** Words that end no conversational turn on their own; a base when omitted. */
+  hesitationWords?: string[];
   /** The user can speak over the voice, and the voice yields. */
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
@@ -501,6 +503,7 @@ function createFeatureConfig(
       cardMinSpeechMs: environment.audioConversationalCardMinSpeechMs,
       voiceStartBufferMs: environment.audioConversationalVoiceStartBufferMs,
       voiceStartMaxWaitMs: environment.audioConversationalVoiceStartMaxWaitMs,
+      hesitationWords: environment.audioConversationalHesitationWords,
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,

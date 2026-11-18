@@ -104,6 +104,8 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS: &str =
     "AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS: &str =
     "AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATION_WORDS: &str =
+    "AUDIO_CONVERSATIONAL_HESITATION_WORDS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
@@ -682,6 +684,17 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS.to_string(),
         Value::Number(config.audio_conversational.voice_start_max_wait_ms.into()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATION_WORDS.to_string(),
+        Value::Array(
+            config
+                .audio_conversational
+                .hesitation_words
+                .iter()
+                .map(|word| Value::String(word.clone()))
+                .collect(),
+        ),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE.to_string(),
@@ -1496,8 +1509,15 @@ mod tests {
         config.audio_conversational.card_min_speech_ms = 96;
         config.audio_conversational.voice_start_buffer_ms = 0;
         config.audio_conversational.voice_start_max_wait_ms = 500;
+        config.audio_conversational.hesitation_words = vec!["euh".into()];
         for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
             let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATION_WORDS),
+                Some(&serde_json::json!(["euh"]))
+            );
             for (key, value) in [
                 (FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS, 300),
                 (FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS, 96),

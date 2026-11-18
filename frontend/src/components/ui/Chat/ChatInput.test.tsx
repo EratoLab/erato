@@ -8969,6 +8969,7 @@ describe("ChatInput", () => {
         expect(toggleDictation).toHaveBeenCalledWith({
           endOfTurnSilenceMs: 1000,
           minSpeechMs: 64,
+          keepHesitations: true,
         });
 
         withVoice(toggleDictation, true);

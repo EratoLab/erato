@@ -123,6 +123,15 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
     delete window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS;
   });
 
+  it("reads the hesitation words, from the backend or a comma-separated Vite override", () => {
+    expect(env().audioConversationalHesitationWords).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_HESITATION_WORDS = ["äh", "euh"];
+    expect(env().audioConversationalHesitationWords).toEqual(["äh", "euh"]);
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_HESITATION_WORDS", "um, uh");
+    expect(env().audioConversationalHesitationWords).toEqual(["um", "uh"]);
+    delete window.AUDIO_CONVERSATIONAL_HESITATION_WORDS;
+  });
+
   it("reads the card's own silence beside it", () => {
     expect(env().audioConversationalCardEndOfTurnSilenceMs).toBeUndefined();
     window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS = 900;
