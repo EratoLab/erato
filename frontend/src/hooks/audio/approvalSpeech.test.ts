@@ -169,9 +169,7 @@ describe("speaking an approval card", () => {
   });
 
   it("counts a short sentence said quickly as heard", async () => {
-    const { connection, states } = await speak([
-      piece("request", "Okay so."),
-    ]);
+    const { connection, states } = await speak([piece("request", "Okay so.")]);
     audio(connection, 0, globalThis.btoa("\0".repeat(2 * 8000 * 0.3)));
     playOut();
     expect(states()).toEqual(["heard"]);
@@ -401,9 +399,14 @@ describe("speaking an approval card", () => {
     expect(prepared).not.toBeNull();
     await vi.waitFor(() => expect(connections).toHaveLength(1));
     expect(
-      (JSON.parse(connections[0].options.body as string) as { pieces: string[] })
-        .pieces,
-    ).toEqual(["No new card came, and nothing was run. Just say how to go on."]);
+      (
+        JSON.parse(connections[0].options.body as string) as {
+          pieces: string[];
+        }
+      ).pieces,
+    ).toEqual([
+      "No new card came, and nothing was run. Just say how to go on.",
+    ]);
     // Loaded while the card still waited.
     audio(connections[0], 0);
     expect(sources).toHaveLength(0);

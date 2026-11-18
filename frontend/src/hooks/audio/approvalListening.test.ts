@@ -898,9 +898,7 @@ describe("listening against the endpoint", () => {
       await vi.waitFor(() => expect(connections).toHaveLength(3));
       // What is said if no new card comes is asked for first, while the
       // card still waits.
-      expect(sentences(connections[1]).join(" ")).toMatch(
-        /keine neue Karte/,
-      );
+      expect(sentences(connections[1]).join(" ")).toMatch(/keine neue Karte/);
       expect(sentences(connections[2])).toEqual([
         "In Ordnung, ich ändere das.",
       ]);

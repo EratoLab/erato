@@ -438,7 +438,6 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
 export const quietApprovalListening = (key: string) =>
   useApprovalListening.setState({ quiet: key });
 
-
 // Saying a card again, by the control or by a new card, listens again.
 useApprovalSpeech.subscribe((state, previous) => {
   if (state.speaking && !previous.speaking)
