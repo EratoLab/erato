@@ -20289,7 +20289,6 @@ pub async fn client_tool_result(
                             me_user.access_token.as_deref(),
                             payload.get("result").cloned(),
                             &request.file_upload_ids,
-                            super::file_resolution::ResultDelivery::Live,
                         )
                         .await
                 {
@@ -20478,7 +20477,6 @@ pub async fn client_tool_result(
                 me_user.access_token.as_deref(),
                 payload.get("result").cloned(),
                 &request.file_upload_ids,
-                super::file_resolution::ResultDelivery::Live,
             )
             .await
         {
@@ -20537,7 +20535,6 @@ pub async fn client_tool_result(
             me_user.access_token.as_deref(),
             payload.get("result").cloned(),
             &request.file_upload_ids,
-            super::file_resolution::ResultDelivery::Live,
         )
         .await
     {
@@ -25204,7 +25201,6 @@ async fn stored_result_files(
         me_user.access_token.as_deref(),
         validated.output.get("result").cloned(),
         &validated.file_ids,
-        super::file_resolution::ResultDelivery::Stored,
     )
     .await
     .map(

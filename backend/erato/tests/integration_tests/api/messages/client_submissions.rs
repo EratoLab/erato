@@ -1921,7 +1921,7 @@ async fn client_tool_picture_reaches_the_model_after_its_result(pool: Pool<Postg
     assert!(result_text.contains("PICTURE_SUBJECT"), "{result_text}");
     assert!(result_text.contains("picture.png"), "{result_text}");
     assert!(
-        result_text.contains("It follows this tool result as image input"),
+        result_text.contains(crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE),
         "{result_text}"
     );
     assert!(!result_text.contains("text only"), "{result_text}");

@@ -399,12 +399,13 @@ Decided open questions:
   pointer part per file follows the tool part, as on the live path. A file the
   user cannot read (missing or foreign) becomes an entry with
   `unavailableReason` and is neither linked nor pointed at. An image file's
-  entry carries a `contentNotice` instead of text. On live receipt it says
-  that the image follows the tool result as image input, which holds for the
-  waiting turn's next request. At the continuation it says that the image is
-  saved but may not be shown: there the image replays inside the stored
-  assistant message, and only the Ollama adapter sends an image from an
-  assistant message. At the
+  entry carries a `contentNotice` instead of text, the same on every path:
+  when the image is shown, it follows the tool result as image input; if no
+  image follows, it is not in view. A waiting turn that goes straight on to
+  its next request shows it there, as user content. A turn that pauses first
+  (an approval card, the tool-call limit prompt), the continuation and later
+  turns replay it inside the stored assistant message, where only the Ollama
+  adapter sends an image; the other adapters leave it out. At the
   continuation the files are read before `begin_continuation`'s transaction,
   once a read of the row outside it finds the row `ready`; the transaction
   locks the chat and the row and writes the wrapper and links the files only

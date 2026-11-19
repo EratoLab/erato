@@ -1658,11 +1658,9 @@ async fn test_client_tool_picture_is_announced_after_the_text_limit(pool: Pool<P
     assert_eq!(result["files"][0]["truncated"], true);
     let picture = &result["files"][1];
     assert!(picture.get("unavailableReason").is_none(), "{picture}");
-    assert!(
-        picture["contentNotice"]
-            .as_str()
-            .unwrap()
-            .starts_with("This file is an image. It follows this tool result as image input."),
+    assert_eq!(
+        picture["contentNotice"],
+        crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE,
         "{picture}"
     );
 }

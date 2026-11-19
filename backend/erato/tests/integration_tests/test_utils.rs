@@ -69,11 +69,14 @@ pub fn create_temp_config_file(content: &str) -> NamedTempFile {
     temp_file
 }
 
-/// Read a fixture from `tests/integration_tests/test_files`.
+/// What a client tool result says about an image file, on every delivery path.
+pub const CLIENT_TOOL_IMAGE_NOTICE: &str = "This file is an image. When it is shown to you, it follows this tool result as image input. If no image follows, it is not in view.";
+
 /// A 1x1 PNG, small enough for a recorded provider request to hold whole.
 pub const TINY_PNG_BASE64: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
 
+/// Read a fixture from `tests/integration_tests/test_files`.
 pub fn read_integration_test_file_bytes(filename: &str) -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/integration_tests/test_files")

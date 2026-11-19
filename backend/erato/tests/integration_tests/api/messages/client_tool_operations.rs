@@ -1641,7 +1641,7 @@ fn last_request_has_an_image(setup: &Setup) -> bool {
 }
 
 // The continuation replays the picture inside the stored assistant message,
-// where the OpenAI adapter sends no image, so the result must not promise it.
+// where the OpenAI adapter sends no image; the notice must still hold.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_claimed_result_with_a_picture_does_not_promise_it_to_the_model(pool: Pool<Postgres>) {
     let setup = setup_with_pictures(pool, 10).await;
@@ -1674,10 +1674,9 @@ async fn a_claimed_result_with_a_picture_does_not_promise_it_to_the_model(pool: 
     assert_eq!(seen.len(), 1);
     let file = &seen[0]["result"]["files"][0];
     assert_eq!(file["filename"], "picture.png");
-    assert!(
-        file["contentNotice"].as_str().unwrap().starts_with(
-            "This file is an image. It is saved with the conversation, but it may not be shown"
-        ),
+    assert_eq!(
+        file["contentNotice"],
+        crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE,
         "{file}"
     );
     assert!(last_request_names_the_picture(&setup));
@@ -1699,11 +1698,9 @@ async fn a_live_picture_on_a_durable_tool_follows_its_result(pool: Pool<Postgres
     answer.assert_status_ok();
     let file = &last_tool_results(&setup.recorder)[0]["result"]["files"][0];
     assert_eq!(file["filename"], "picture.png");
-    assert!(
-        file["contentNotice"]
-            .as_str()
-            .unwrap()
-            .starts_with("This file is an image. It follows this tool result as image input."),
+    assert_eq!(
+        file["contentNotice"],
+        crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE,
         "{file}"
     );
     assert!(last_request_names_the_picture(&setup));
