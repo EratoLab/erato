@@ -162,6 +162,7 @@ default-features = false
 features = ["backtrace", "contexts", "panic", "reqwest", "rustls"]
 
 [dev-dependencies]
+opendal = { version = "0.59.5", features = ["services-memory"] }
 sea-orm = { version = "2.0.0-rc.40", default-features = false, features = ["proxy"] }
 test-log = "0.2.14"
 ctor = "0.2.9"

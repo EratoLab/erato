@@ -18,6 +18,7 @@ pub mod cards;
 pub mod citations;
 pub mod connector;
 mod controls;
+mod files;
 pub mod graph;
 mod handler;
 pub mod host;
@@ -91,6 +92,7 @@ pub struct TeamsBot {
     inbound: InboundAuth,
     connector: Connector,
     user_tokens: UserTokenClient,
+    graph_base: String,
     /// Graph identity and groups per Entra object ID, to spare two Graph
     /// calls on every message.
     identities: moka::future::Cache<String, (GraphIdentity, Vec<String>)>,
@@ -128,6 +130,10 @@ pub struct SetupStatus {
 }
 
 impl TeamsBot {
+    fn graph<'a>(&'a self, token: &'a str) -> graph::Graph<'a> {
+        graph::Graph::with_base(self.connector.http(), token, &self.graph_base)
+    }
+
     /// The bot runtime, or `None` when the bot is disabled.
     pub fn from_config(
         app: &MsOfficeTeamsAppConfig,
@@ -160,6 +166,7 @@ impl TeamsBot {
             .transpose()?;
         let http = reqwest::Client::builder().timeout(HTTP_TIMEOUT).build()?;
         Ok(Some(Arc::new(Self {
+            graph_base: graph::GRAPH.into(),
             settings: TeamsBotSettings {
                 tenant_id: tenant_id.clone(),
                 app_name: app.manifest.short_name.clone(),
@@ -261,6 +268,7 @@ impl TeamsBot {
     /// A bot whose token service and Connector are local test servers.
     pub(crate) fn for_test(base: &str, streaming: bool) -> Self {
         Self {
+            graph_base: base.into(),
             settings: TeamsBotSettings {
                 tenant_id: "tenant".into(),
                 app_name: "Erato".into(),

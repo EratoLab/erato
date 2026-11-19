@@ -445,6 +445,7 @@ fn citation_fixture() -> (String, Vec<FileSource>) {
     (
         format!("Result from [Report](erato-file://{id}#page=2)."),
         vec![FileSource {
+            generated: false,
             id: id.into(),
             name: "Report.pdf".into(),
         }],
