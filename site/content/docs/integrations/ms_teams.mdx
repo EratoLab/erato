@@ -380,6 +380,16 @@ time_zone = "Europe/Berlin"
 | `pilot_users`             | list     | `[]`                                   | Email addresses that get tips; empty means everyone                                          |
 | `max_per_run`             | integer  | `200`                                  | Tips scheduled per hourly run                                                                |
 
+## Generated files and images
+
+After the answer, the bot posts each generated file in the same conversation. Small PNG, JPEG and single-frame GIF images appear inline. Documents and images over 1 MB or 1024 × 1024 pixels get a download action with the original filename. Source citations still open the authenticated Erato preview.
+
+Azure Blob and S3 objects stay private. Erato requests signed HTTPS read URLs valid for 24 hours. Anyone holding a URL can read the object until the signature or the signing credentials expire. SharePoint supplies its own expiry through delegated Microsoft Graph access.
+
+Teams and recipients outside the deployment network must be able to reach the storage endpoint without an Erato session. If the source storage is private-network-only, set `integrations.ms_office.teams.bot.delivery_storage_provider_id` to a configured Azure Blob or S3 provider with an externally reachable HTTPS endpoint. With multiple storage providers, set the top-level `default_file_storage_provider` to the provider that should continue to receive normal uploads. Give Erato read and write access to the delivery provider. It copies authorized outputs to `teams-delivery/<file-id>` before signing. Configure object lifecycle rules for these copies according to your retention policy.
+
+To verify a staging deployment, generate a PNG and a PDF in Teams from outside the cluster. Check that the image renders and the PDF downloads with the original filename in a browser without Erato cookies. Repeat the request to the same signed URL after expiry and verify that storage denies it.
+
 ## Configuration Options
 
 | Option                  | Type    | Default                            | Description                                                                                          |
@@ -393,6 +403,7 @@ time_zone = "Europe/Berlin"
 | `sso_enabled`           | boolean | `true`                             | Teams single sign-on; `false` keeps an existing bot without SSO and its manifest unchanged          |
 | `sso_app_id`            | string  | add-in `msal_client_id`            | App ID for silent sign-in, rendered into `webApplicationInfo.id`                                     |
 | `sso_resource`          | string  | `api://<host>/botid-<app_id>`      | Token exchange URL for silent sign-in; `<host>` is where the Teams package is downloaded from       |
+| `delivery_storage_provider_id` | string | source provider | Private storage provider used for externally reachable generated files |
 | `public_base_url`       | string  |                                    | Address users open Erato at, for links in bot messages; an internal host is fine                     |
 | `messaging_endpoint`    | string  | setup page address                 | Public URL Azure Bot Service posts messages to, shown on the setup page and passed to its helper    |
 | `assistant_id`          | string  |                                    | Assistant that new Teams chats are bound to                                                          |

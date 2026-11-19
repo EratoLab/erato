@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
     extract::State,
     response::sse::{Event, Sse},
-    routing::post,
+    routing::{get, post},
 };
 use futures::StreamExt;
 use sea_orm::EntityTrait;
@@ -33,6 +33,18 @@ async fn harness(pool: sqlx::PgPool) -> Harness {
     let outgoing = Arc::new(Mutex::new(Vec::<Value>::new()));
     let routes = Router::new()
         .route(
+            "/api/usertoken/GetToken",
+            get(|| async { Json(json!({"token":"graph-token"})) }),
+        )
+        .route(
+            "/me",
+            get(|| async { Json(json!({"id":"4a1b3c5d-0000-4000-8000-00000000cafe"})) }),
+        )
+        .route(
+            "/me/getMemberGroups",
+            post(|| async { Json(json!({"value":[]})) }),
+        )
+        .route(
             "/v1/chat/completions",
             post(|| async {
                 // The model cannot finish naturally: only cancellation can settle
@@ -54,6 +66,14 @@ async fn harness(pool: sqlx::PgPool) -> Harness {
         .route(
             "/v3/conversations/{conversation}/activities/{activity}",
             post(connector_reply).put(connector_reply),
+        )
+        .route(
+            "/v3/conversations/resource-test/activities",
+            post(resource_reply),
+        )
+        .route(
+            "/v3/conversations/resource-test/activities/{activity}",
+            post(resource_reply).put(resource_reply),
         )
         .with_state(outgoing.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -102,6 +122,9 @@ async fn harness(pool: sqlx::PgPool) -> Harness {
         "id":"4a1b3c5d-0000-4000-8000-00000000cafe", "displayName":"Teams User"
     }))
     .unwrap();
+    crate::models::user::record_entra_object_id(&state.db, &user, &identity.id)
+        .await
+        .unwrap();
     let session = host
         .session(
             &user,
@@ -200,7 +223,7 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
             &bot,
             &host,
             &target,
-            session.user_id(),
+            &session,
             updates,
             stream_for(&bot, &target, ConversationKind::Personal),
             Some(request.clone()),
@@ -336,7 +359,7 @@ async fn a_reminder_is_confirmed_when_its_turn_fails(pool: sqlx::PgPool) {
         &bot,
         &host,
         &target,
-        session.user_id(),
+        &session,
         updates,
         stream_for(&bot, &target, ConversationKind::Personal),
         None,
@@ -438,4 +461,226 @@ async fn stop_command_finds_the_running_request_behind_a_newer_failure(pool: sql
     .await
     .expect("the stopped generation ends");
     harness.server.abort();
+}
+
+async fn resource_reply(
+    State(outgoing): State<Arc<Mutex<Vec<Value>>>>,
+    Json(body): Json<Value>,
+) -> (StatusCode, Json<Value>) {
+    let reject = body["attachments"][0]["name"] == "reject.png";
+    outgoing.lock().unwrap().push(body);
+    if reject {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":{"code":"BadAttachment"}})),
+        )
+    } else {
+        (StatusCode::OK, Json(json!({"id":"resource-reply"})))
+    }
+}
+
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn file_only_completion_sends_authorized_resources_after_text(pool: sqlx::PgPool) {
+    use crate::{db::entity::messages, services::file_storage::FileStorage};
+    use sea_orm::ActiveValue::Set;
+    let mut h = harness(pool).await;
+    let state = &mut h.host.app_state;
+    state
+        .file_storage_providers
+        .insert("source".into(), FileStorage::in_memory_azblob());
+    state
+        .file_storage_providers
+        .insert("delivery".into(), FileStorage::in_memory_azblob());
+    state.default_file_storage_provider = Some("source".into());
+    state
+        .config
+        .integrations
+        .ms_office
+        .teams
+        .bot
+        .delivery_storage_provider_id = Some("delivery".into());
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgb8(2, 1)
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    let bytes = png.into_inner();
+    let mut parts = Vec::new();
+    let mut ids = Vec::new();
+    for (name, kind, data) in [
+        ("plot.png", "image_file_pointer", bytes.clone()),
+        ("reject.png", "image_file_pointer", bytes.clone()),
+        ("report.pdf", "text_file_pointer", b"%PDF-1.7".to_vec()),
+        ("report.pdf", "text_file_pointer", b"%PDF-1.6".to_vec()),
+    ] {
+        let id = h
+            .host
+            .store_file(&h.session, h.chat_id, name, None, data)
+            .await
+            .unwrap();
+        ids.push(id);
+        parts.push(json!({"content_type":kind, "file_upload_id":id}));
+    }
+    parts.push(parts[0].clone());
+    // This file passes the user's file-read policy but belongs to another chat.
+    let foreign_conversation = h
+        .host
+        .upsert_conversation(
+            "other",
+            ConversationKind::Personal,
+            h.session.user_id(),
+            &h.base,
+            "29:user",
+        )
+        .await
+        .unwrap();
+    let (foreign_chat, _) = h
+        .host
+        .ensure_chat(&h.session, &foreign_conversation, None)
+        .await
+        .unwrap();
+    let unknown = h
+        .host
+        .store_file(
+            &h.session,
+            foreign_chat,
+            "foreign.pdf",
+            None,
+            b"private".to_vec(),
+        )
+        .await
+        .unwrap();
+    parts.push(json!({"content_type":"text_file_pointer","file_upload_id":unknown}));
+    let message_id = Uuid::new_v4();
+    Messages::insert(messages::ActiveModel {
+        id: Set(message_id),
+        chat_id: Set(h.chat_id),
+        raw_message: Set(json!({"role":"assistant","content":parts})),
+        ..Default::default()
+    })
+    .exec(&h.state.db)
+    .await
+    .unwrap();
+    let mut bot = TeamsBot::for_test(&h.base, true);
+    bot.settings.public_base_url = Some("https://erato.example".into());
+    let mut target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &h.base,
+        conversation_id: "resource-test",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    for kind in [
+        Some(ConversationKind::Personal),
+        Some(ConversationKind::Channel),
+        None,
+    ] {
+        if kind.is_none() {
+            deliver_proactive(&bot, &h.host, h.chat_id, message_id)
+                .await
+                .unwrap();
+        } else if let Some(kind) = kind {
+            target.reply_to_id = (!kind.is_personal()).then_some("question");
+            let completion = h
+                .host
+                .completion_for_message(h.chat_id, message_id)
+                .await
+                .unwrap()
+                .unwrap();
+            let (tx, rx) = mpsc::channel(1);
+            tx.send(GenerationUpdate::Completed(completion))
+                .await
+                .unwrap();
+            drop(tx);
+            render_generation(
+                &bot,
+                &h.host,
+                &target,
+                &h.session,
+                rx,
+                stream_for(&bot, &target, kind),
+                None,
+            )
+            .await
+            .unwrap();
+        }
+        let activities = std::mem::take(&mut *h.outgoing.lock().unwrap());
+        let answer = activities
+            .iter()
+            .position(|a| {
+                a["text"]
+                    .as_str()
+                    .is_some_and(|s| s.contains("Generated files"))
+            })
+            .unwrap();
+        let resources: Vec<_> = activities[answer + 1..]
+            .iter()
+            .filter_map(|a| a["attachments"].get(0))
+            .collect();
+        let images: Vec<_> = resources
+            .iter()
+            .filter(|a| a["contentType"] == "image/png")
+            .collect();
+        assert_eq!(images.len(), 2);
+        let plot = images.iter().find(|a| a["name"] == "plot.png").unwrap();
+        let preview = url::Url::parse(plot["contentUrl"].as_str().unwrap()).unwrap();
+        assert!(
+            preview
+                .path()
+                .ends_with(&format!("teams-delivery/{}", ids[0]))
+        );
+        assert!(
+            preview
+                .query_pairs()
+                .any(|(k, v)| k == "rsct" && v == "image/png")
+        );
+        let mut download_paths = std::collections::HashSet::new();
+        for action in resources
+            .iter()
+            .filter_map(|a| a["content"]["actions"].get(0))
+            .filter(|a| a["title"] == "Download report.pdf")
+        {
+            let url = url::Url::parse(action["url"].as_str().unwrap()).unwrap();
+            assert!(
+                url.query_pairs()
+                    .any(|(k, v)| k == "rscd" && v.contains("report.pdf"))
+            );
+            let expiry = url
+                .query_pairs()
+                .find(|(k, _)| k == "se")
+                .unwrap()
+                .1
+                .parse::<chrono::DateTime<Utc>>()
+                .unwrap();
+            assert!((86390..=86400).contains(&(expiry - Utc::now()).num_seconds()));
+            download_paths.insert(url.path().to_owned());
+        }
+        assert_eq!(download_paths.len(), 2);
+        if kind.is_some() {
+            assert!(resources.iter().any(|a| a["content"]["actions"][0]["url"]
+                == format!("https://erato.example/api/v1beta/files/{}/preview", ids[1])));
+        }
+        assert!(
+            !serde_json::to_string(&activities)
+                .unwrap()
+                .contains(&unknown.to_string())
+        );
+    }
+    let copied = &h.host.app_state.file_storage_providers["delivery"];
+    assert_eq!(
+        copied
+            .read_file_to_bytes(&format!("teams-delivery/{}", ids[0]))
+            .await
+            .unwrap(),
+        bytes
+    );
+    assert!(
+        copied
+            .stat_object(&format!("teams-delivery/{unknown}"))
+            .await
+            .is_err()
+    );
+    h.server.abort();
 }
