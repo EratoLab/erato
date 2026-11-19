@@ -376,6 +376,47 @@ describe("WordChatInput prepared send", () => {
       expect(host.capture).not.toHaveBeenCalled();
     });
 
+    const runStep = () => {
+      let step: ReturnType<AddinRerunPreparer>;
+      act(() => {
+        step = rerun.current!(request("word_document_authoring"));
+      });
+      let result!: Promise<Prepared>;
+      act(() => {
+        result = (step as AddinSendPreparation).run(
+          new AbortController().signal,
+        );
+      });
+      return result;
+    };
+    const NOT_RUN =
+      "Erato did not get the document from Word, so it did not run your request again. Keep Word open and try again.";
+
+    it("does not run again when Word cannot hand the document over, and says so", async () => {
+      host.capture.mockRejectedValue(new Error("GeneralException"));
+      renderRerun();
+
+      expect(await settle(runStep())).toBeNull();
+      expect(noticeTexts()).toEqual([NOT_RUN]);
+      expect(staged).toEqual([]);
+    });
+
+    it("does not run again on Send without document, which would reuse the earlier document", async () => {
+      vi.useFakeTimers();
+      host.capture.mockReturnValue(neverSettles());
+      host.preview = { ...host.readyPreview, reading: true };
+      renderRerun();
+      const result = runStep();
+      await advance(WORD_SEND_SKIP_OFFER_MS);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send without document" }),
+      );
+
+      expect(await settle(result)).toBeNull();
+      expect(noticeTexts()).toEqual([NOT_RUN]);
+    });
+
     it("takes no rerun while a send is still being prepared", () => {
       host.capture.mockReturnValue(neverSettles());
       renderRerun();

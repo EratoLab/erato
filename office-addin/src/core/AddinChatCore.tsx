@@ -295,10 +295,14 @@ function useAddinChatController({
     () => ({ onOpenOrigin: openChatById }),
     [openChatById],
   );
-  const { header: chatHeader, composerLocked } = useChatHeader(
+  const { header: chatHeader, composerLocked: runLocked } = useChatHeader(
     chat.currentChatId,
     runHeaderOptions,
   );
+  // A regenerate or edit whose host step is still reading holds the composer like a send does.
+  const [rerunning, setRerunning] = useState(false);
+  const rerunningRef = useRef(false);
+  const composerLocked = runLocked || rerunning;
   const openDelegatedRun = useCallback<
     NonNullable<DelegatedRunsSectionProps["onOpenRun"]>
   >((run) => openChatById(run.id), [openChatById]);
@@ -403,26 +407,41 @@ function useAddinChatController({
     [assistantId, chat, snapshotDraft],
   );
   const cancelEdit = useCallback(() => setEditingMessageId(null), []);
-  /** Runs `start` after the host's rerun step, with the action facet it prepared. */
+  /** Runs `start` after the host's rerun step, with the action facet it prepared; false when the
+   * request was refused. A dropped step runs nothing. */
   const rerun = useCallback(
     (
       request: AddinRerunRequest | undefined,
       before: () => void,
       start: (actionFacet?: ActionFacetRequest) => void,
-    ) => {
+    ): boolean => {
+      if (rerunningRef.current) return false;
       const prepare = request && rerunPreparationRef.current?.(request);
-      if (prepare === "busy") return;
+      if (prepare === "busy") return false;
       // The host's own callback first: the rerun step stages what it captures after it.
       before();
       if (!prepare) {
         start();
-        return;
+        return true;
       }
+      rerunningRef.current = true;
+      setRerunning(true);
+      const settle = () => {
+        rerunningRef.current = false;
+        setRerunning(false);
+      };
       void prepare.run(new AbortController().signal).then(
-        (prepared) =>
-          prepared ? start(prepared.actionFacet) : prepare.onAbandoned?.(),
-        () => prepare.onAbandoned?.(),
+        (prepared) => {
+          settle();
+          if (prepared) start(prepared.actionFacet);
+          else prepare.onAbandoned?.();
+        },
+        () => {
+          settle();
+          prepare.onAbandoned?.();
+        },
       );
+      return true;
     },
     [],
   );
@@ -445,22 +464,24 @@ function useAddinChatController({
   const handleEditSubmit = useCallback(
     (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
       if (chat.isPendingResponse) return;
-      chatInputControlsRef.current?.clearQueuedMessage();
-      setEditingMessageId(null);
+      // The editor stays open until the edit goes out, so a dropped one keeps its text.
       rerun(
         rerunRequest(messageId, {
           message: newContent,
           inputFileIds: replaceInputFileIds,
         }),
         () => hostCallbacksRef.current.beforeEdit?.(messageId),
-        (actionFacet) =>
+        (actionFacet) => {
+          chatInputControlsRef.current?.clearQueuedMessage();
+          setEditingMessageId(null);
           void chat.editMessage(
             messageId,
             newContent,
             replaceInputFileIds,
             activeSelectedFacetIds,
             actionFacet,
-          ),
+          );
+        },
       );
     },
     [activeSelectedFacetIds, chat, rerun, rerunRequest],
@@ -497,6 +518,7 @@ function useAddinChatController({
   );
   const handleRegenerate = useCallback(
     (assistantMessageId: string) => {
+      if (chat.isPendingResponse) return;
       rerun(
         rerunRequest(chat.messages[assistantMessageId]?.previous_message_id),
         () => hostCallbacksRef.current.beforeRegenerate?.(assistantMessageId),

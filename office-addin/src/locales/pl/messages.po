@@ -7006,6 +7006,11 @@ msgstr "Odczytywanie zaznaczenia…"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordComposerNotice.ts
+msgid "officeAddin.word.send.rerunNotIncluded"
+msgstr "Erato nie otrzymał dokumentu z programu Word, więc nie wykonał ponownie zapytania. Nie zamykaj programu Word i spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.stillReading"
 msgstr "Word nadal przekazuje dokument."
 

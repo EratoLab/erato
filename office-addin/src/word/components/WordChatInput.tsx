@@ -664,14 +664,19 @@ export function WordChatInput({
       setCaptureNotice(null);
       setDismissedNotices(NO_DISMISSED_NOTICES);
 
-      // Nothing advertised means no comment API call at all.
-      const commentsDue = wordCommentsDue({
-        advertised: commentAdvertised,
-        withoutComments,
-        selectionDue: passageDue,
-        documentIncluded: chipEnabled,
-      });
-      const spentGestures = wordCommentGestureStore.sent();
+      // Nothing advertised means no comment API call at all. A rerun takes the document alone: the
+      // caret's comments and the next message's comment choices are not the earlier message's.
+      const commentsDue =
+        !documentOnly &&
+        wordCommentsDue({
+          advertised: commentAdvertised,
+          withoutComments,
+          selectionDue: passageDue,
+          documentIncluded: chipEnabled,
+        });
+      const spentGestures = documentOnly
+        ? null
+        : wordCommentGestureStore.sent();
       if (!chipEnabled && !passageDue && !commentsDue) {
         stagePendingCapture(null);
         send(undefined, null);
@@ -863,11 +868,17 @@ export function WordChatInput({
         stagePendingCapture(null);
         return { actionFacet: undefined, hostContextIdentity: null };
       };
-      /** The document did not go after all; the comments go as they would without it. */
+      /** The document did not go after all; the comments go as they would without it. A rerun
+       * without a fresh document does not run: the server would reuse the earlier one. */
       const withoutDocument = (
         signal: AbortSignal,
         withheld = false,
       ): ReturnType<AddinSendPreparation["run"]> => {
+        if (documentOnly) {
+          clearReadSession();
+          setCaptureNotice("rerun-not-included");
+          return Promise.resolve(null);
+        }
         if (
           !withheld &&
           wordCommentsDue({
@@ -1032,6 +1043,8 @@ export function WordChatInput({
                 : {}),
             }),
           );
+          if (!actionFacet && documentOnly)
+            return await withoutDocument(signal);
           if (actionFacet) markSent(build);
           else clearReadSession();
           const staged = actionFacet
@@ -1186,7 +1199,7 @@ export function WordChatInput({
           }
         },
         onAbandoned: () => {
-          wordCommentGestureStore.unspend(spentGestures);
+          if (spentGestures) wordCommentGestureStore.unspend(spentGestures);
           decideCommentsRef.current?.({ kind: "abort" });
           clearReadSession();
           clearCommentSession();

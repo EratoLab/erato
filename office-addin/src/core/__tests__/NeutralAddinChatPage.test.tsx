@@ -1058,12 +1058,13 @@ describe("AddinChatCore reruns", () => {
   };
 
   const messaging = spies.useChatMessaging.getMockImplementation()!;
-  const renderCore = () => {
+  const renderCore = (extra: Record<string, unknown> = {}) => {
     spies.useChatMessaging.mockImplementation(() => ({
       ...messaging(),
       messages,
       editMessage,
       regenerateMessage,
+      ...extra,
     }));
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -1148,6 +1149,72 @@ describe("AddinChatCore reruns", () => {
 
     expect(beforeRegenerate).not.toHaveBeenCalled();
     expect(regenerateMessage).not.toHaveBeenCalled();
+  });
+
+  it("holds the composer while the host's step reads, and takes no second rerun meanwhile", async () => {
+    const controller = renderCore();
+    let finish!: (value: { actionFacet: typeof DOCUMENT_FACET }) => void;
+    const pending = new Promise<{ actionFacet: typeof DOCUMENT_FACET }>(
+      (resolve) => {
+        finish = resolve;
+      },
+    );
+    const preparer = vi.fn(() => ({
+      run: () =>
+        pending.then((prepared) => ({
+          ...prepared,
+          hostContextIdentity: "doc-1",
+        })),
+    }));
+    controller.rerunPreparationRef.current = preparer;
+
+    act(() => spies.regenerate.current!("a1"));
+    expect(spies.controller.current!.composerLocked).toBe(true);
+    act(() => spies.regenerate.current!("a1"));
+    expect(preparer).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish({ actionFacet: DOCUMENT_FACET }));
+    expect(spies.controller.current!.composerLocked).toBe(false);
+    expect(regenerateMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes no regenerate while a reply is still coming in", () => {
+    const controller = renderCore({ isPendingResponse: true });
+    const preparer = vi.fn(() => step({ actionFacet: DOCUMENT_FACET }));
+    controller.rerunPreparationRef.current = preparer;
+
+    act(() => spies.regenerate.current!("a1"));
+
+    expect(preparer).not.toHaveBeenCalled();
+    expect(regenerateMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps an edit open when the host's step is dropped, and closes it once the edit goes out", async () => {
+    const controller = renderCore();
+    act(() => controller.setEditingMessageId("u1"));
+    controller.rerunPreparationRef.current = () => step(null);
+
+    await act(async () =>
+      spies.controller.current!.messageEditValue.submitEdit(
+        "u1",
+        "Shorter",
+        [],
+      ),
+    );
+    expect(spies.controller.current!.editingMessageId).toBe("u1");
+    expect(editMessage).not.toHaveBeenCalled();
+
+    controller.rerunPreparationRef.current = () =>
+      step({ actionFacet: DOCUMENT_FACET });
+    await act(async () =>
+      spies.controller.current!.messageEditValue.submitEdit(
+        "u1",
+        "Shorter",
+        [],
+      ),
+    );
+    expect(spies.controller.current!.editingMessageId).toBeNull();
+    expect(editMessage).toHaveBeenCalledTimes(1);
   });
 
   it("runs the host's step on the edited text and files", async () => {
