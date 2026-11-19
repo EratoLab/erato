@@ -36,6 +36,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         server_name: None,
         label: None,
         read_only: false,
+        closed_world: false,
     }
 }
 
@@ -295,6 +296,8 @@ fn labelled_display(
         // lost wins over it.
         read_only: shown_as_read_only(tool)
             && !label::rules::sounds_like_a_loss(&tool.name, arguments),
+        closed_world: !crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
+            .open_world_hint,
         ..tool_display_metadata(tool)
     }
 }
@@ -360,6 +363,7 @@ fn own_tool_display(
         server_name: None,
         label: Some(label),
         read_only: false,
+        closed_world: false,
     })
 }
 
@@ -632,6 +636,57 @@ mod tests {
             let (flag, json) = shown(hint, destructive);
             assert!(!flag, "{hint:?} {destructive:?}");
             assert!(json.get("read_only").is_none());
+        }
+    }
+
+    #[test]
+    fn a_call_is_closed_world_only_when_its_annotations_say_so() {
+        let shown = |annotations: Option<ToolAnnotations>| {
+            let mut tool = Tool::new("tool", "", JsonObject::new());
+            tool.annotations = annotations;
+            let display = mcp_tool_call_display(
+                &McpRuntimeConfig::default(),
+                "server",
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            );
+            (
+                display.closed_world,
+                serde_json::to_value(&display).unwrap(),
+            )
+        };
+        let (flag, json) = shown(Some(ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            Some(false),
+            Some(true),
+            Some(false),
+        )));
+        assert!(flag);
+        assert_eq!(json["closed_world"], true);
+        // Open, unknown and absent all count as open.
+        for annotations in [
+            Some(ToolAnnotations::from_raw(
+                None,
+                None,
+                None,
+                None,
+                Some(true),
+            )),
+            Some(ToolAnnotations::from_raw(
+                None,
+                Some(true),
+                None,
+                None,
+                None,
+            )),
+            None,
+        ] {
+            let (flag, json) = shown(annotations.clone());
+            assert!(!flag, "{annotations:?}");
+            assert!(json.get("closed_world").is_none());
         }
     }
 
@@ -1262,6 +1317,7 @@ mod tests {
             server_name: Some("Dynamics 365".into()),
             label: Some(resolved),
             read_only: false,
+            closed_world: false,
         };
         assert_eq!(
             child_approval_display(&child),

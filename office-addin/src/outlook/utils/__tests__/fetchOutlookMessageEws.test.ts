@@ -53,6 +53,7 @@ interface MockResponse {
   statusText?: string;
   /** The XML text body the production code parses via DOMParser. */
   xml?: string;
+  contentType?: string;
 }
 
 /**
@@ -68,6 +69,9 @@ function installFetchMock(
       ok: response.ok,
       status: response.status ?? 200,
       statusText: response.statusText ?? "OK",
+      headers: new Headers(
+        response.contentType ? { "content-type": response.contentType } : {},
+      ),
       text: () => Promise.resolve(response.xml ?? soap("")),
     } as Response;
   });
@@ -277,6 +281,52 @@ describe("fetchOutlookMessageBytesViaEws", () => {
         ],
     );
     expect(sentTokens).toEqual(["Bearer token-1", "Bearer token-2"]);
+  });
+
+  it("renews a lapsed Erato session and sends once more when the proxy answers with its sign-in page", async () => {
+    vi.mocked(tryRecoverAuth).mockResolvedValueOnce(true);
+    let calls = 0;
+    const fetchMock = installFetchMock(() =>
+      ++calls === 1
+        ? {
+            ok: false,
+            status: 403,
+            statusText: "Forbidden",
+            contentType: "text/html; charset=utf-8",
+            xml: "<html>sign in</html>",
+          }
+        : {
+            ok: true,
+            xml: getItemMimeResponse({
+              subject: "Recovered",
+              mimeBase64: btoa("x"),
+            }),
+          },
+    );
+
+    const result = await fetchOutlookMessageBytesViaEws(EWS_ID);
+
+    expect(result.subject).toBe("Recovered");
+    expect(tryRecoverAuth).toHaveBeenCalledWith("ews-signed-out");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces the sign-in page as EwsProxySessionExpiredError when the session cannot be renewed", async () => {
+    vi.mocked(tryRecoverAuth).mockResolvedValueOnce(false);
+    const fetchMock = installFetchMock(() => ({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      contentType: "text/html; charset=utf-8",
+      xml: "<html>sign in</html>",
+    }));
+
+    const error = await fetchOutlookMessageBytesViaEws(EWS_ID).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(EwsProxySessionExpiredError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a dead oauth2-proxy session as EwsProxySessionExpiredError after exactly one token refresh (persistent 401)", async () => {

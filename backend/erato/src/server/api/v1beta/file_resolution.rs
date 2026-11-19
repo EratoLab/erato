@@ -64,6 +64,13 @@ pub(crate) async fn attach_client_tool_files(
     Ok(parts)
 }
 
+/// What a client tool result says about an image file. A waiting turn's next
+/// request carries the image after the result; a turn that pauses first, a
+/// continuation and later turns replay it inside the assistant's message,
+/// which only the Ollama adapter sends. So the text states only what holds
+/// on every path.
+const RESULT_IMAGE_NOTICE: &str = "This file is an image. When it is shown to you, it follows this tool result as image input. If no image follows, it is not in view.";
+
 /// Client tools return file references, never base64 in the model's JSON.
 /// Reuse normal parsing/cache and enforce file policy before any storage read.
 pub(crate) async fn resolve_client_tool_files(
@@ -102,7 +109,8 @@ pub(crate) async fn resolve_client_tool_files(
         };
         authorized_file_ids.push(*id);
         let mut entry = serde_json::json!({ "fileId": id, "filename": file.filename });
-        if remaining_chars == 0 {
+        // The limit bounds text; an image has none.
+        if remaining_chars == 0 && !crate::models::message::is_image_file(&file.filename) {
             entry["unavailableReason"] = "Attachment text limit reached.".into();
         } else if let Some(reason) = file_upload::get_audio_transcription_blocking_reason(&file) {
             entry["unavailableReason"] = reason.into();
@@ -131,7 +139,7 @@ pub(crate) async fn resolve_client_tool_files(
                         entry["truncated"] = truncated.into();
                     }
                     FileContent::Image { .. } => {
-                        entry["unavailableReason"] = "Image bytes are available as a file, but this tool returns text only. Attach the image to a message for image understanding.".into();
+                        entry["contentNotice"] = RESULT_IMAGE_NOTICE.into();
                     }
                     FileContent::ReferenceOnly => {
                         entry["fileReference"] = format!("erato-file://{id}").into();

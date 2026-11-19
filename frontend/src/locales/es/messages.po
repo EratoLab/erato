@@ -10200,6 +10200,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {No se pudo archivar: {kind} {title} en {where}} titled {No se pudo archivar: {kind} {title}} placed {No se pudo archivar: {kind} en {where}} other {No se pudo archivar: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} en {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} en {server}: # fila} other {{title} en {server}: # filas}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -11011,6 +11021,26 @@ msgstr "Pensando…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "La vista interactiva de {toolName} pide guardar este archivo en tu dispositivo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Guardar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "¿Guardar {fileName}?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "No se pudo mostrar la vista interactiva."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx

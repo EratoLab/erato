@@ -27,6 +27,7 @@ import {
   useMemo,
 } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
 import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 import {
@@ -887,16 +888,20 @@ export function useChatMessaging(
     // does, because a dropped connection resumes and the result still lands.
     abortClientToolCalls(effectiveChatId);
 
-    void fetch("/api/v1beta/me/messages/abortstream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify({
-        chat_id: effectiveChatId,
-      }),
-    }).catch((error: unknown) => {
+    void fetchWithAuthRecovery(
+      () =>
+        fetch("/api/v1beta/me/messages/abortstream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            chat_id: effectiveChatId,
+          }),
+        }),
+      "abort-stream",
+    ).catch((error: unknown) => {
       logger.error("Failed to request message cancellation", error);
     });
   }, [

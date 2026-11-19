@@ -5683,6 +5683,12 @@ export type ToolCallValueMeaningSource =
  * select a tool, evaluate policy or execute a call.
  */
 export type ToolDisplayMetadata = {
+  /**
+   * Whether the tool says it reaches nothing outside its server
+   * (`openWorldHint: false`) by the annotations the approval policy read
+   * for this call. Unknown counts as open. Set on MCP calls only.
+   */
+  closed_world?: boolean;
   description?: string | null | undefined;
   description_truncated: boolean;
   label?: ToolCallLabel;
@@ -5708,6 +5714,11 @@ export type ToolResultDetails = {
   failure?: ToolCallFailure;
   links?: ToolResultLink[];
   view?: ToolResultView;
+  /**
+   * Set instead of `view` when the tool declares a view and its server
+   * enables `mcp_apps`, but the view was refused or could not be read.
+   */
+  view_unavailable?: boolean;
 };
 
 /**
@@ -5735,9 +5746,15 @@ export type ToolResultLink = {
  * Where the web app gets a call's view: `GET
  * /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
  * HTML and its `_meta.ui`. The view is shown with the call's `input`, its
- * `output` and `structured_content`.
+ * `output`, `structured_content` and `meta`.
  */
 export type ToolResultView = {
+  /**
+   * The result's `_meta` as the server returned it, which the view gets
+   * unchanged with the result. Kept only here, for the view, like
+   * `structured_content`: the model never reads it.
+   */
+  meta?: Record<string, any>;
   server_id: string;
   /**
    * The call's `structuredContent`, which a view takes its data from. Kept

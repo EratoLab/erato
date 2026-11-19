@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
 import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 import { McpAppView } from "@/components/ui/ToolCall/McpAppView";
+import { McpAppViewFiles } from "@/components/ui/ToolCall/McpAppViewFiles";
 import {
   Trace,
   durationFromTraceParts,
@@ -906,6 +907,24 @@ const extractReferencedEratoFileIds = (text: string): Set<string> => {
 };
 
 /**
+ * The files a tool call returned: its stored output names each one with an
+ * `erato-file://` link where the server's result carried the bytes.
+ */
+const eratoFileIdsIn = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const fileId = getEratoFileIdFromUrl(value);
+    return fileId ? [fileId] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(eratoFileIdsIn);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(eratoFileIdsIn);
+  }
+  return [];
+};
+
+/**
  * Every id a decision part can be found by. The generated schema loses the type
  * of the optional ones, so they are read through a narrowing accessor.
  */
@@ -961,6 +980,9 @@ interface MarkdownMessageContextValue {
   onImageClick?: (image: UiImagePart) => void;
   imageAdvisory: string | null;
   generatedImageFileIds: ReadonlySet<string>;
+  filesById: Record<string, FileUploadItem>;
+  /** The images of calls whose view shows, which show as file chips. */
+  chippedFileIds: ReadonlySet<string>;
 }
 
 // The markdown overrides live at module level so React keeps their elements
@@ -972,8 +994,33 @@ const MarkdownMessageContext = React.createContext<MarkdownMessageContextValue>(
     resolveEratoFileLink: () => null,
     imageAdvisory: null,
     generatedImageFileIds: new Set(),
+    filesById: {},
+    chippedFileIds: new Set(),
   },
 );
+
+/**
+ * Whether a Markdown element holds an image that shows as a file chip, as an
+ * answer's image of a file the call's view already shows does.
+ */
+const holdsChippedImage = (
+  node: unknown,
+  chippedFileIds: ReadonlySet<string>,
+): boolean =>
+  chippedFileIds.size > 0 &&
+  ((node as { children?: unknown[] } | undefined)?.children ?? []).some(
+    (child) => {
+      const { tagName, properties } = child as {
+        tagName?: string;
+        properties?: { src?: unknown };
+      };
+      const fileId =
+        typeof properties?.src === "string"
+          ? getEratoFileIdFromUrl(properties.src)
+          : null;
+      return tagName === "img" && !!fileId && chippedFileIds.has(fileId);
+    },
+  );
 
 type MarkdownElementProps<Tag extends React.ElementType> =
   React.ComponentPropsWithoutRef<Tag> & { node?: unknown };
@@ -1061,7 +1108,21 @@ function MarkdownImage({
     onImageClick,
     imageAdvisory,
     generatedImageFileIds,
+    filesById,
+    chippedFileIds,
   } = React.useContext(MarkdownMessageContext);
+  const fileId = src ? getEratoFileIdFromUrl(src) : null;
+  if (fileId && chippedFileIds.has(fileId)) {
+    // The call's view already shows what the image holds: the same chip as
+    // under the view instead of a second full image.
+    return (
+      <McpAppViewFiles
+        fileIds={[fileId]}
+        filesById={filesById}
+        onFilePreview={onFileLinkPreview}
+      />
+    );
+  }
   const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
   const isEratoFileImageUrl =
     // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -1209,10 +1270,20 @@ function MarkdownListItem({
 
 function MarkdownParagraph({
   children,
-  node: _node,
+  node,
   ...props
 }: MarkdownElementProps<"p">) {
-  const { isStreaming } = React.useContext(MarkdownMessageContext);
+  const { isStreaming, chippedFileIds } = React.useContext(
+    MarkdownMessageContext,
+  );
+  // A file chip is a block, which a paragraph cannot hold.
+  if (holdsChippedImage(node, chippedFileIds)) {
+    return (
+      <div className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
+        {children}
+      </div>
+    );
+  }
   // A streamed paragraph holding only an unfinished emphasis or code marker.
   if (
     isStreaming &&
@@ -1676,6 +1747,46 @@ export const MessageContent = memo(function MessageContent({
     [generatedImageFileIdsKey],
   );
 
+  // Calls whose view shows: their images, which the stored output names as
+  // links, show as chips under the view instead of as full images. Their
+  // other files stay in the message's attachments.
+  const [shownViews, setShownViews] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const markViewShown = React.useCallback((toolCallId: string) => {
+    setShownViews((shown) =>
+      shown.has(toolCallId) ? shown : new Set(shown).add(toolCallId),
+    );
+  }, []);
+  const viewFileIds = React.useMemo(() => {
+    const byCall = new Map<string, string[]>();
+    content.forEach((part) => {
+      if (
+        part.content_type === "tool_use" &&
+        part.tool_call_id &&
+        part.result_details?.view
+      ) {
+        byCall.set(part.tool_call_id, [
+          ...new Set(
+            eratoFileIdsIn(part.output).filter((fileId) =>
+              generatedImageFileIds.has(fileId),
+            ),
+          ),
+        ]);
+      }
+    });
+    return byCall;
+  }, [content, generatedImageFileIds]);
+  const chippedFileIds = React.useMemo(
+    () =>
+      new Set(
+        [...shownViews].flatMap(
+          (toolCallId) => viewFileIds.get(toolCallId) ?? [],
+        ),
+      ),
+    [shownViews, viewFileIds],
+  );
+
   const textReferencedEratoFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
 
@@ -1758,6 +1869,8 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     }),
     [
       messageId,
@@ -1768,6 +1881,8 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     ],
   );
 
@@ -2007,15 +2122,38 @@ export const MessageContent = memo(function MessageContent({
                   />
                 ) : null;
               })}
-              {cluster.parts.map((tracePart, partIndex) =>
-                tracePart.content_type === "tool_use" &&
-                tracePart.result_details?.view ? (
-                  <McpAppView
-                    key={`mcp-app-${tracePart.tool_call_id ?? partIndex}`}
-                    part={tracePart}
-                  />
-                ) : null,
-              )}
+              {cluster.parts.map((tracePart, partIndex) => {
+                if (
+                  tracePart.content_type !== "tool_use" ||
+                  (!tracePart.result_details?.view &&
+                    !tracePart.result_details?.view_unavailable)
+                ) {
+                  return null;
+                }
+                const toolCallId = tracePart.tool_call_id;
+                return (
+                  <React.Fragment key={`mcp-app-${toolCallId ?? partIndex}`}>
+                    <McpAppView
+                      part={tracePart}
+                      withFiles={eratoFileIdsIn(tracePart.output).length > 0}
+                      onShown={
+                        toolCallId
+                          ? () => {
+                              markViewShown(toolCallId);
+                            }
+                          : undefined
+                      }
+                    />
+                    {toolCallId && shownViews.has(toolCallId) && (
+                      <McpAppViewFiles
+                        fileIds={viewFileIds.get(toolCallId) ?? []}
+                        filesById={filesById}
+                        onFilePreview={onFileLinkPreview}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </React.Fragment>
           );
         }
@@ -2132,7 +2270,8 @@ export const MessageContent = memo(function MessageContent({
         if (image) {
           if (
             part.content_type === "image_file_pointer" &&
-            textReferencedEratoFileIds.has(part.file_upload_id)
+            (textReferencedEratoFileIds.has(part.file_upload_id) ||
+              chippedFileIds.has(part.file_upload_id))
           ) {
             return null;
           }

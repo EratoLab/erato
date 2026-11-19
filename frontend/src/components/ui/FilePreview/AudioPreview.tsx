@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useEffect, useState } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { FilePreviewLoading } from "@/components/ui/FileUpload/FilePreviewLoading";
 
@@ -60,7 +61,10 @@ export const AudioPreview: React.FC<AudioPreviewProps> = ({
 
     const load = async () => {
       try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetchWithAuthRecovery(
+          () => fetch(url, { signal: controller.signal }),
+          "file-preview",
+        );
         if (!response.ok) {
           throw new Error(`Audio preview fetch failed: ${response.status}`);
         }

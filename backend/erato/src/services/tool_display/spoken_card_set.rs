@@ -103,6 +103,7 @@ fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::To
                     server_name: Some(config.mcp_server_display_name(server)),
                     label: None,
                     read_only: false,
+                    closed_world: false,
                 }),
                 input: Some(step.input.clone()),
                 output: Some(step.output.clone()),

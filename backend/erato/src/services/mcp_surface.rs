@@ -5,6 +5,7 @@
 //! so the model never sees it.
 use crate::config::McpSurfaceConfig;
 use crate::ms_teams_bot::{TEAMS_BOT_PLATFORM, TEAMS_PLATFORM};
+use crate::services::mcp_apps::VIEW_MIME_TYPE;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -14,6 +15,10 @@ use std::collections::HashMap;
 pub const SURFACE_HINT_KEY: &str = "chat.erato/surface";
 
 const SVG_THEN_PNG: &[&str] = &["image/svg+xml", "image/png"];
+
+/// The surfaces whose app shows a tool's interactive view (MCP Apps): the
+/// web app. The add-ins, the Teams tab and the Teams bot show none.
+const VIEW_SURFACES: &[&str] = &["web"];
 
 /// What each surface accepts unless `mcp_servers_global.surfaces` names it,
 /// keyed by its `X-Erato-Platform` value.
@@ -58,6 +63,18 @@ impl SurfaceHint {
             surface: platform.to_string(),
             accept,
         })
+    }
+
+    /// The hint for a server with MCP Apps on: on a surface whose app shows
+    /// views, the list starts with the view's MIME type, whatever the
+    /// surface's list holds, so the server can return its view alone. A
+    /// configured list never holds it: it takes no parameters. Other
+    /// surfaces keep their list.
+    pub fn with_views(mut self) -> Self {
+        if VIEW_SURFACES.contains(&self.surface.as_str()) {
+            self.accept.insert(0, VIEW_MIME_TYPE.to_string());
+        }
+        self
     }
 
     /// The hint as the server reads it.
@@ -145,6 +162,45 @@ mod tests {
         );
         // Other surfaces keep their built-in lists.
         assert!(SurfaceHint::resolve("outlook", &configured).is_some());
+    }
+
+    #[test]
+    fn with_views_the_web_app_takes_the_view_first_and_other_surfaces_are_unchanged() {
+        assert_eq!(
+            SurfaceHint::resolve("web", &HashMap::new())
+                .unwrap()
+                .with_views()
+                .to_value(),
+            json!({"surface": "web",
+                "accept": ["text/html;profile=mcp-app", "image/svg+xml", "image/png"]}),
+        );
+        // Whatever the configured list holds, an empty one too.
+        assert_eq!(
+            SurfaceHint::resolve("web", &configured(&[("web", &["image/png"])]))
+                .unwrap()
+                .with_views()
+                .to_value(),
+            json!({"surface": "web", "accept": ["text/html;profile=mcp-app", "image/png"]}),
+        );
+        assert_eq!(
+            SurfaceHint::resolve("web", &configured(&[("web", &[])]))
+                .unwrap()
+                .with_views()
+                .to_value(),
+            json!({"surface": "web", "accept": ["text/html;profile=mcp-app"]}),
+        );
+        for surface in [
+            "outlook",
+            "word",
+            "excel",
+            "powerpoint",
+            "addin-neutral",
+            "teams",
+            "teams-bot",
+        ] {
+            let hint = SurfaceHint::resolve(surface, &HashMap::new()).unwrap();
+            assert_eq!(hint.clone().with_views(), hint, "{surface}");
+        }
     }
 
     #[test]

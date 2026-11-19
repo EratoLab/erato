@@ -144,7 +144,8 @@ const parkOnBothPairedTasks = async (page: Page): Promise<Locator> => {
   );
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
-  await expect(item).toContainText(GATED_TOOL);
+  // The card names the call by the tool's title; the item keeps its name.
+  await expect(item).toHaveAttribute("data-tool-name", GATED_TOOL);
   // The child chat the item covers, matched as an id rather than as "not
   // empty": an attribute that had been dropped altogether would satisfy the
   // latter.
