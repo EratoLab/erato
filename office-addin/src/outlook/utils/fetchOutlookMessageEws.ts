@@ -369,8 +369,12 @@ async function ewsFetch(
   ) {
     throwIfAborted(signal);
     const { tryRecoverAuth } = await import("@erato/frontend/library");
-    if (await tryRecoverAuth("ews-signed-out"))
-      response = await request(await tokenSource.get());
+    if (!(await tryRecoverAuth("ews-signed-out")))
+      throw new EwsProxySessionExpiredError(
+        "EWS proxy answered with its sign-in page: the oauth2-proxy session " +
+          "has expired — sign-in required",
+      );
+    response = await request(await tokenSource.get());
   }
   if (response.status === 401) {
     throwIfAborted(signal);

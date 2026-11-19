@@ -311,6 +311,24 @@ describe("fetchOutlookMessageBytesViaEws", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("surfaces the sign-in page as EwsProxySessionExpiredError when the session cannot be renewed", async () => {
+    vi.mocked(tryRecoverAuth).mockResolvedValueOnce(false);
+    const fetchMock = installFetchMock(() => ({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      contentType: "text/html; charset=utf-8",
+      xml: "<html>sign in</html>",
+    }));
+
+    const error = await fetchOutlookMessageBytesViaEws(EWS_ID).catch(
+      (thrown: unknown) => thrown,
+    );
+
+    expect(error).toBeInstanceOf(EwsProxySessionExpiredError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("surfaces a dead oauth2-proxy session as EwsProxySessionExpiredError after exactly one token refresh (persistent 401)", async () => {
     const mailbox = Office.context.mailbox as unknown as MailboxMock;
     // The EWS proxy 401s persistently AND the /oauth2/auth probe 401s too:

@@ -46,6 +46,37 @@ const response = (status: number, contentType?: string) =>
     headers: contentType ? { "content-type": contentType } : {},
   });
 
+describe("tryRecoverAuth after a renewal", () => {
+  afterEach(() => {
+    setAuthRecoveryHandler(null);
+    vi.useRealTimers();
+  });
+
+  it("replays without another recovery for 30 s after one renewed the session", async () => {
+    vi.useFakeTimers();
+    const recover = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(recover);
+
+    await expect(tryRecoverAuth("first")).resolves.toBe(true);
+    await expect(tryRecoverAuth("second")).resolves.toBe(true);
+    expect(recover).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(30_000);
+    await expect(tryRecoverAuth("third")).resolves.toBe(true);
+    expect(recover).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries again at once after a recovery that failed", async () => {
+    const recover = vi.fn().mockResolvedValue(false);
+    setAuthRecoveryHandler(recover);
+
+    await tryRecoverAuth("first");
+    await tryRecoverAuth("second");
+
+    expect(recover).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("isSignedOutResponse", () => {
   it("reads a 401 and the proxy's 403 sign-in page as signed out", () => {
     expect(isSignedOutResponse(response(401))).toBe(true);

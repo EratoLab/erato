@@ -18,10 +18,16 @@
 export type AuthRecoveryHandler = (reason: string) => Promise<boolean>;
 
 let handler: AuthRecoveryHandler | null = null;
+/** After a recovery renewed the session, signed-out answers within this span are replayed without
+ * another: a 403 page that outlives a fresh renewal (an authorization page, a WAF, a dropped cookie)
+ * would otherwise cost every request a forced token refresh. */
+const RECOVERED_REPLAY_MS = 30_000;
+let recoveredAt = Number.NEGATIVE_INFINITY;
 
 /** Register (or clear, with `null`) the recovery handler. Add-in shell only. */
 export function setAuthRecoveryHandler(next: AuthRecoveryHandler | null) {
   handler = next;
+  recoveredAt = Number.NEGATIVE_INFINITY;
 }
 
 /**
@@ -34,8 +40,11 @@ export async function tryRecoverAuth(reason: string): Promise<boolean> {
   if (!handler) {
     return false;
   }
+  if (Date.now() - recoveredAt < RECOVERED_REPLAY_MS) return true;
   try {
-    return await handler(reason);
+    const recovered = await handler(reason);
+    if (recovered) recoveredAt = Date.now();
+    return recovered;
   } catch {
     return false;
   }
