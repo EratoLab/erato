@@ -1078,7 +1078,10 @@ fn the_model_hears_that_the_voice_asked_which_text() {
     };
     let said = |question| {
         let request = model::build_request(DEFAULT_PROMPT, &input(question));
-        format!("{:?}", request.messages.last().map(|message| &message.content))
+        format!(
+            "{:?}",
+            request.messages.last().map(|message| &message.content)
+        )
     };
     assert!(said(Some(VoiceQuestion::WhichText)).contains("THE VOICE JUST ASKED"));
     assert!(!said(None).contains("THE VOICE JUST ASKED"));
