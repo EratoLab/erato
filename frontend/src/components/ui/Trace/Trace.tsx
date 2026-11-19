@@ -185,9 +185,6 @@ const ColdLoadTrace = ({
   waitingCall,
 }: ColdLoadTraceProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  // Rendered from the first open on: a closed trace would otherwise parse all
-  // of its thinking when a chat loads and when a stream ends.
-  const [hasOpened, setHasOpened] = useState(false);
 
   return (
     <div className="my-2 min-w-0">
@@ -195,25 +192,20 @@ const ColdLoadTrace = ({
         durationMs={durationMs}
         hasError={hasError}
         isOpen={isOpen}
-        onToggle={() => {
-          setHasOpened(true);
-          setIsOpen((prev) => !prev);
-        }}
+        onToggle={() => setIsOpen((prev) => !prev)}
       />
       <TraceCollapse isOpen={isOpen} instantWhenTall>
-        {hasOpened ? (
-          <TraceTimeline
-            logicalSteps={logicalSteps}
-            isTraceActive={false}
-            hasLaterContent={hasLaterContent}
-            renderMarkdown={renderMarkdown}
-            showDoneMarker
-            showThinkingPlaceholder={false}
-            maskReasoningText={maskReasoningText}
-            toolDecisions={toolDecisions}
-            waitingCall={waitingCall}
-          />
-        ) : null}
+        <TraceTimeline
+          logicalSteps={logicalSteps}
+          isTraceActive={false}
+          hasLaterContent={hasLaterContent}
+          renderMarkdown={renderMarkdown}
+          showDoneMarker
+          showThinkingPlaceholder={false}
+          maskReasoningText={maskReasoningText}
+          toolDecisions={toolDecisions}
+          waitingCall={waitingCall}
+        />
       </TraceCollapse>
     </div>
   );

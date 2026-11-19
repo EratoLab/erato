@@ -91,7 +91,7 @@ const renderTrace = (
     maskReasoningText: overrides.maskReasoningText ?? false,
   });
 
-  const result = render(
+  return render(
     <QueryClientProvider client={new QueryClient()}>
       <I18nProvider i18n={i18n}>
         <Trace
@@ -106,12 +106,6 @@ const renderTrace = (
       </I18nProvider>
     </QueryClientProvider>,
   );
-  // A finished trace renders its timeline from its first open on.
-  const header = screen.queryByTestId("trace-cluster-header");
-  if (header) {
-    fireEvent.click(header);
-  }
-  return result;
 };
 
 describe("Trace — a call the writer never finished", () => {
@@ -575,30 +569,5 @@ describe("Trace — long thinking", () => {
     expect(
       screen.queryByTestId("trace-step-live-window"),
     ).not.toBeInTheDocument();
-  });
-
-  it("renders a finished trace's thinking only once it is opened", () => {
-    const renderMarkdown = vi.fn((text: string) => <span>{text}</span>);
-    mockUseTraceFeature.mockReturnValue({ maskReasoningText: false });
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <I18nProvider i18n={i18n}>
-          <Trace
-            parts={
-              [reasoningPart("**Plan**\n\nRead the file first.")] as Parameters<
-                typeof Trace
-              >[0]["parts"]
-            }
-            isStreaming={false}
-            hasLaterContent
-            renderMarkdown={renderMarkdown}
-          />
-        </I18nProvider>
-      </QueryClientProvider>,
-    );
-    expect(renderMarkdown).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId("trace-cluster-header"));
-    expect(screen.getByText("Read the file first.")).toBeInTheDocument();
   });
 });

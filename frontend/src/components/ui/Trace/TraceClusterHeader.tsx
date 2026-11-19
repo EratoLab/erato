@@ -53,7 +53,6 @@ export const TraceClusterHeader = ({
   return (
     <button
       type="button"
-      data-testid="trace-cluster-header"
       aria-expanded={isOpen}
       onClick={onToggle}
       className={clsx(

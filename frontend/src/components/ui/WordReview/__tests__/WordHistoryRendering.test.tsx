@@ -86,16 +86,10 @@ function chatTree(
 const renderChat = (...args: Parameters<typeof chatTree>) =>
   render(chatTree(...args));
 
-const toolNames = () => {
-  // A finished trace renders its timeline from its first open on.
+const toolNames = () =>
   screen
-    .queryAllByTestId("trace-cluster-header")
-    .filter((header) => header.getAttribute("aria-expanded") === "false")
-    .forEach((header) => fireEvent.click(header));
-  return screen
     .queryAllByTestId("tool-call-item")
     .map((item) => item.getAttribute("data-tool-name"));
-};
 
 const wordConversation = (
   assistantContent: ContentPart[],
