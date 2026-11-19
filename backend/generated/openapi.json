@@ -6053,6 +6053,10 @@
             },
             "description": "The spoken card's pieces in the order they are said, at most 16."
           },
+          "question": {
+            "$ref": "#/components/schemas/ApprovalVoiceQuestion",
+            "description": "What the voice just asked, when the words may answer it."
+          },
           "transcript": {
             "type": "string",
             "description": "What the user said, as transcribed. At most 300 characters."
@@ -6082,6 +6086,13 @@
           "reject",
           "noise",
           "unclear"
+        ]
+      },
+      "ApprovalVoiceQuestion": {
+        "type": "string",
+        "description": "What the voice just asked about the card, when the user's words may\nanswer it.",
+        "enum": [
+          "which_text"
         ]
       },
       "ArchiveAllChatsResponse": {

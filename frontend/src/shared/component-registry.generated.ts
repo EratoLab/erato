@@ -509,6 +509,7 @@ export { ToolCallInput } from "@/components/ui/ToolCall/ToolCallInput";
 export type { ToolCallInputProps } from "@/components/ui/ToolCall/ToolCallInput";
 export { ToolCallOutput } from "@/components/ui/ToolCall/ToolCallOutput";
 export type { ToolCallOutputProps } from "@/components/ui/ToolCall/ToolCallOutput";
+export { liveReasoningTail } from "@/components/ui/Trace/hooks/liveReasoningTail";
 export { parseReasoningSegments } from "@/components/ui/Trace/hooks/useReasoningSegments";
 export { useReasoningSegments } from "@/components/ui/Trace/hooks/useReasoningSegments";
 export type { ReasoningSegment } from "@/components/ui/Trace/hooks/useReasoningSegments";

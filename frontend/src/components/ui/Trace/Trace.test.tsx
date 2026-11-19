@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -493,5 +493,81 @@ describe("tool budget approvals", () => {
       { kind: "passthrough", part: text, index: 3 },
       { kind: "trace", parts: [reasoningPart("More")], startIndex: 4 },
     ]);
+  });
+});
+
+describe("Trace — long thinking", () => {
+  const renderStreaming = (
+    parts: ContentPart[],
+    renderMarkdown: (text: string) => ReactElement,
+  ) => {
+    mockUseTraceFeature.mockReturnValue({ maskReasoningText: false });
+    const ui = (nextParts: ContentPart[], hasLaterContent = false) => (
+      <QueryClientProvider client={new QueryClient()}>
+        <I18nProvider i18n={i18n}>
+          <Trace
+            parts={nextParts as Parameters<typeof Trace>[0]["parts"]}
+            isStreaming
+            hasLaterContent={hasLaterContent}
+            renderMarkdown={renderMarkdown}
+          />
+        </I18nProvider>
+      </QueryClientProvider>
+    );
+    const result = render(ui(parts));
+    return {
+      update: (nextParts: ContentPart[], hasLaterContent = false) =>
+        result.rerender(ui(nextParts, hasLaterContent)),
+    };
+  };
+
+  it("does not render a finished section again for the next chunk", () => {
+    const renderMarkdown = vi.fn((text: string) => <span>{text}</span>);
+    const finished = "**Plan**\n\nRead the file first.\n\n**Check**\n\n";
+    const { update } = renderStreaming(
+      [reasoningPart(`${finished}The totals`)],
+      renderMarkdown,
+    );
+    update([reasoningPart(`${finished}The totals match`)]);
+    update([reasoningPart(`${finished}The totals match the table.`)]);
+
+    const finishedRenders = renderMarkdown.mock.calls.filter(
+      ([text]) => text === "Read the file first.",
+    );
+    expect(finishedRenders).toHaveLength(1);
+  });
+
+  it("keeps the section being written open when a chunk ends on bold text", () => {
+    const { update } = renderStreaming(
+      [reasoningPart("I checked the table.")],
+      (text) => <span>{text}</span>,
+    );
+    update([reasoningPart("I checked the table. This is **important**")]);
+    update([
+      reasoningPart(
+        "I checked the table. This is **important** for the answer.",
+      ),
+    ]);
+
+    const steps = screen.getAllByRole("button", { expanded: true });
+    expect(steps).toHaveLength(1);
+    expect(screen.queryByRole("button", { expanded: false })).toBeNull();
+  });
+
+  it("shows the live section in a window, and keeps it through the fold", () => {
+    const { update } = renderStreaming(
+      [reasoningPart("Thinking about the totals.")],
+      (text) => <span>{text}</span>,
+    );
+    expect(screen.getByTestId("trace-step-live-window")).toBeInTheDocument();
+
+    update([reasoningPart("Thinking about the totals. Done thinking.")], true);
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+    expect(screen.getByTestId("trace-step-live-window")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(
+      screen.queryByTestId("trace-step-live-window"),
+    ).not.toBeInTheDocument();
   });
 });

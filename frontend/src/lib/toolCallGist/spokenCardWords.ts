@@ -68,6 +68,11 @@ const leavesOutYear = (value: CalendarDay, today: CalendarDay): boolean => {
   return days >= 0 && days <= YEAR_LEFT_OUT_DAYS;
 };
 
+const yearsDiffer = (from: EarValue, to: EarValue): boolean =>
+  (from.kind === "date" || from.kind === "datetime") &&
+  (to.kind === "date" || to.kind === "datetime") &&
+  from.year !== to.year;
+
 /** How a corrected card is introduced, by what is said after it. */
 export type DifferenceIntro =
   /** Only what differs from the withdrawn card follows. */
@@ -79,12 +84,19 @@ export type DifferenceIntro =
   /** The withdrawn card was hardly heard; the new one is said in full. */
   | "reread";
 
+/**
+ * Whether the user's words asked for a difference: they did, they did not,
+ * or they may have but the product cannot tell (a number said in words it
+ * cannot read). The last is said without either claim.
+ */
+export type Asked = "asked" | "unasked" | "unsure";
+
 /** The sentences that compare a corrected card with the one it replaces. */
 export interface DifferenceWords {
   /** `what`, the new card's own first sentence, after its introduction. */
   intro(kind: DifferenceIntro, what: string): string;
   /** A difference, marked when the user did not ask for it. */
-  differs(asked: boolean, sentence: string): string;
+  differs(asked: Asked, sentence: string): string;
   /** A field the withdrawn card had and the new one leaves out. */
   dropped(field: string): string;
   /** The new title of something being created. */
@@ -103,7 +115,7 @@ export interface DifferenceWords {
   /** A field that is different, where its value cannot be said. */
   field(field: string): string;
   /** Differences past the ones said, counted; marked like them. */
-  more(count: number, asked: boolean): string;
+  more(count: number, asked: Asked): string;
   /** After the differences: everything else stays. */
   rest(): string;
   /** After the differences: the call differs in more than was said. */
@@ -218,7 +230,8 @@ const endSentence = (text: string): string =>
   /[.!?…:]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 
 /** Entries of a list said before the rest are counted. */
-const MAX_LISTED_ENTRIES = 3;
+/** List entries said one by one; more are counted. */
+export const MAX_LISTED_ENTRIES = 3;
 
 const roundWords = (count: number): number =>
   count < 20
@@ -840,10 +853,13 @@ const consequenceSentence = (
         id: "spokenCard.consequence.nothingChanges",
         message: "Nothing seems to change.",
       });
+    // The card's own sentences for the same fact, naming who marked it.
     case "destructive":
-      // The card's own sentence for the same fact.
       // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
       return changeNoteLabel("marked_destructive");
+    case "destructive_by_organisation":
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+      return changeNoteLabel("operator_marked_destructive");
   }
 };
 
@@ -858,16 +874,15 @@ const differenceIntro = (kind: DifferenceIntro, what: string): string =>
     }),
   });
 
-const differenceEntry = (asked: boolean, sentence: string): string => {
-  const shape = asked ? "asked" : "unasked";
-  return t({
+const differenceEntry = (asked: Asked, sentence: string): string =>
+  t({
     id: "spokenCard.difference.entry",
-    message: select(shape, {
+    message: select(asked, {
       asked: `Changed: ${sentence}`,
+      unsure: `Also changed: ${sentence}`,
       other: `Also changed, without being asked: ${sentence}`,
     }),
   });
-};
 
 const differenceDropped = (field: string): string =>
   t({
@@ -922,7 +937,7 @@ const differenceField = (field: string): string =>
   });
 
 const differenceMore = (
-  shape: "asked" | "unasked",
+  shape: Asked,
   count: number,
   countWord: string,
 ): string =>
@@ -932,6 +947,10 @@ const differenceMore = (
       asked: plural(count, {
         one: "And one more field changed as asked; it's on screen.",
         other: `And ${countWord} more fields changed as asked; they're on screen.`,
+      }),
+      unsure: plural(count, {
+        one: "And one more field changed; it's on screen.",
+        other: `And ${countWord} more fields changed; they're on screen.`,
       }),
       other: plural(count, {
         one: "And one more field changed without being asked; it's on screen.",
@@ -989,7 +1008,7 @@ const textCutSentence = (): string =>
     message: "The rest of the text is on screen.",
   });
 
-const noticeSentence = (notice: SpokenNotice): string => {
+const noticeSentence = (notice: SpokenNotice, locale: string): string => {
   switch (notice.kind) {
     case "decide_on_screen": {
       const { decision } = notice;
@@ -1065,6 +1084,24 @@ const noticeSentence = (notice: SpokenNotice): string => {
         id: "spokenCard.notice.noText",
         message: "This card has no long text.",
       });
+    case "which_text": {
+      // Field names only: the vocabulary knows no gender for an article.
+      const named = notice.fields.every((field) => field.length > 0);
+      const texts = named
+        ? new Intl.ListFormat(locale, { type: "disjunction" }).format(
+            notice.fields,
+          )
+        : "";
+
+      const shape = named ? "named" : "unnamed";
+      return t({
+        id: "spokenCard.notice.whichText",
+        message: select(shape, {
+          named: `Which text: ${texts}?`,
+          other: "Which text? The texts are on screen.",
+        }),
+      });
+    }
     case "unavailable":
       return t({
         id: "spokenCard.notice.unavailable",
@@ -1282,12 +1319,14 @@ const words = (
     code.numbers[value] ?? new Intl.NumberFormat(code.locale).format(value);
   const list = (items: readonly string[]): string =>
     new Intl.ListFormat(code.locale, { type: "conjunction" }).format(items);
-  const date = (value: CalendarDay): string =>
+  const date = (value: CalendarDay, withYear = false): string =>
     plainSpaces(
       new Intl.DateTimeFormat(code.locale, {
         day: "numeric",
         month: "long",
-        ...(leavesOutYear(value, today) ? {} : { year: "numeric" }),
+        ...(!withYear && leavesOutYear(value, today)
+          ? {}
+          : { year: "numeric" }),
         timeZone: "UTC",
       }).format(Date.UTC(value.year, value.month - 1, value.day)),
     );
@@ -1307,15 +1346,16 @@ const words = (
     ear: EarValue,
     role: "from" | "to" | "plain" = "plain",
     unit = true,
+    withYear = false,
   ): string => {
     switch (ear.kind) {
       case "date":
-        return valueInRole(role, "date", date(ear));
+        return valueInRole(role, "date", date(ear, withYear));
       case "datetime":
         return valueInRole(
           role,
           "date",
-          dateTimeValue(date(ear), time(ear.hour, ear.minute)),
+          dateTimeValue(date(ear, withYear), time(ear.hour, ear.minute)),
         );
       case "number": {
         const number = new Intl.NumberFormat(code.locale, {
@@ -1453,12 +1493,16 @@ const words = (
           : endSentence(fieldValue(entry.field, entries));
       }
       case "changed": {
+        // Old and new in different years both say their year: "from 16
+        // January to 15 December" would hide which way the date moved.
+        const years = yearsDiffer(entry.from, entry.to);
         const from = value(
           entry.from,
           "from",
           !bothPercent(entry.from, entry.to),
+          years,
         );
-        const to = value(entry.to, "to");
+        const to = value(entry.to, "to", true, years);
         const own = variant("changed", entry.sentences?.changed);
         return own === undefined
           ? endSentence(detailChanged(entry.field, from, to))
@@ -1738,7 +1782,7 @@ const words = (
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
     dictatedReadLead: dictatedReadLeadSentence,
-    notice: noticeSentence,
+    notice: (notice) => noticeSentence(notice, code.locale),
     difference: {
       intro: differenceIntro,
       differs: differenceEntry,
@@ -1753,8 +1797,7 @@ const words = (
       statement: differenceStatement,
       rows: (rows) => differenceRows(rows, capitalised(count(rows))),
       field: differenceField,
-      more: (more, asked) =>
-        differenceMore(asked ? "asked" : "unasked", more, count(more)),
+      more: (more, asked) => differenceMore(asked, more, count(more)),
       rest: differenceRest,
       elsewhere: differenceElsewhere,
       unreadable: differenceUnreadable,

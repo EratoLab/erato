@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
+import numberWords from "./fixtures/spokenNumberWords.json";
 import { toolCallCardOf } from "./gist";
 import { spokenApprovalFor, spokenApprovalPieces } from "./spokenCard";
 import { spokenDifference } from "./spokenCardDifference";
@@ -11,6 +12,7 @@ import { spokenCardFlow, spokenCardStep } from "./spokenCardFlow";
 
 import type { SpokenApproval, SpokenPiece } from "./spokenCard";
 import type { WithdrawnCard } from "./spokenCardDifference";
+import type { NumberWords } from "./spokenNumbers";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -92,9 +94,23 @@ const withdrawn = (
   heard: readonly string[] = piecesOf(call).map((piece) => piece.id),
 ): WithdrawnCard => ({ approval: approvalOf(call), heard, words });
 
-const difference = (previous: WithdrawnCard, next: SetCall, language = "en") =>
+/** A test table in place of a deployment's number words, which ship in a package. */
+const NUMBER_WORDS = numberWords as unknown as Partial<
+  Record<string, NumberWords>
+>;
+
+const difference = (
+  previous: WithdrawnCard,
+  next: SetCall,
+  language = "en",
+  words: "table" | "none" = "table",
+) =>
   inLanguage(language, () =>
-    spokenDifference(previous, approvalOf(next), { language, ...OPTIONS }),
+    spokenDifference(previous, approvalOf(next), {
+      language,
+      ...OPTIONS,
+      ...(words === "table" ? { numberWords: NUMBER_WORDS[language] } : {}),
+    }),
   );
 
 const textsOf = (pieces: readonly SpokenPiece[]) =>
@@ -1435,5 +1451,353 @@ describe("a read replaced by a read", () => {
     expect(
       difference(withdrawn(before, "x"), callOf("read-02-query")).intro,
     ).toBe("same");
+  });
+});
+
+// ERMAIN-1239: what the user named is compared as a value, however they said it.
+
+describe("a value the user said in words", () => {
+  const changedTo = (base: string, field: string, text: string) => {
+    const after = callOf(base);
+    setField(field, text)(after);
+    return after;
+  };
+  const markOf = (text: string): "asked" | "unasked" | "unsure" =>
+    /^(Changed|Geändert): /.test(text)
+      ? "asked"
+      : /^(Also changed, without being asked|Außerdem ungefragt geändert): /.test(
+            text,
+          )
+        ? "unasked"
+        : "unsure";
+  const saidFor = (
+    language: string,
+    words: string,
+    base: string,
+    field: string,
+    text: string,
+    table: "table" | "none" = "table",
+  ) => {
+    const texts = textsOf(
+      difference(
+        withdrawn(callOf(base), words),
+        changedTo(base, field, text),
+        language,
+        table,
+      ).pieces,
+    );
+    const changed = texts.filter((said) =>
+      /^(Changed|Also changed(, without being asked)?|Geändert|Außerdem( ungefragt)? geändert): /.test(
+        said,
+      ),
+    );
+    expect(changed).toHaveLength(1);
+    return changed[0];
+  };
+
+  beforeAll(() => {
+    i18n.load({ de: deMessages as unknown as Messages });
+  });
+
+  const DATE = "update-01-date-and-probability";
+  const AMOUNT = "create-08-opportunity-amounts";
+
+  it.each([
+    // The staging report's sentences.
+    [
+      "de",
+      "Nicht auf den Fünfzehnten, nimm den Zweiundzwanzigsten.",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "asked",
+    ],
+    [
+      "de",
+      "Macht die Wahrscheinlichkeit doch lieber 65 Prozent.",
+      DATE,
+      "closeprobability",
+      "65",
+      "asked",
+    ],
+    // Spoken and written forms of the same value.
+    [
+      "de",
+      "nimm den zweiundzwanzigsten",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "asked",
+    ],
+    ["de", "nimm den 22.", DATE, "estimatedclosedate", "2030-12-22", "asked"],
+    [
+      "de",
+      "nimm den 22sten Dezember",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "asked",
+    ],
+    ["de", "lieber siebzig Prozent", DATE, "closeprobability", "70", "asked"],
+    [
+      "de",
+      "nimm dreihunderteinundvierzigtausend",
+      AMOUNT,
+      "estimatedvalue",
+      "341000",
+      "asked",
+    ],
+    ["de", "nimm 341.000", AMOUNT, "estimatedvalue", "341000", "asked"],
+    ["de", "nimm 341 Tausend", AMOUNT, "estimatedvalue", "341000", "asked"],
+    [
+      "en",
+      "make it the twenty-second",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "asked",
+    ],
+    ["en", "rather seventy percent", DATE, "closeprobability", "70", "asked"],
+    [
+      "en",
+      "three hundred forty-one thousand",
+      AMOUNT,
+      "estimatedvalue",
+      "341000",
+      "asked",
+    ],
+    // Near misses: a number said that is not the changed value.
+    [
+      "de",
+      "nimm den einundzwanzigsten",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    ["de", "lieber sechzig Prozent", DATE, "closeprobability", "70", "unasked"],
+    [
+      "de",
+      "nimm dreihundertvierzigtausend",
+      AMOUNT,
+      "estimatedvalue",
+      "341000",
+      "unasked",
+    ],
+    [
+      "en",
+      "make it the twenty-first",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    ["en", "sixty percent", DATE, "closeprobability", "70", "unasked"],
+    // A month, a year or an hour alone names no date.
+    [
+      "de",
+      "nimm lieber Dezember",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    [
+      "de",
+      "lieber zweitausenddreißig",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    [
+      "en",
+      "rather in December",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    [
+      "en",
+      "twenty thirty",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    [
+      "de",
+      "den zweiundzwanzigsten Januar",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-22",
+      "unasked",
+    ],
+    // Review B1: everyday words never make a coincidental change asked.
+    [
+      "de",
+      "Achte bitte darauf, dass alles stimmt.",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-08",
+      "unsure",
+    ],
+    ["de", "Gib acht, dass es passt.", DATE, "closeprobability", "8", "unsure"],
+    [
+      "de",
+      "Als Erstes: bitte netter formulieren.",
+      DATE,
+      "closeprobability",
+      "1",
+      "unsure",
+    ],
+    [
+      "de",
+      "Nimm die zweite Variante.",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-02",
+      "unsure",
+    ],
+    ["de", "Noch eins: bitte netter.", DATE, "closeprobability", "1", "unsure"],
+    ["en", "Take a third of that.", DATE, "closeprobability", "3", "unsure"],
+    [
+      "de",
+      "nimm den achtundzwanzigsten",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-28",
+      "asked",
+    ],
+    [
+      "en",
+      "make it the twenty-third",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-23",
+      "asked",
+    ],
+    // An article alone may be a number: neither claim.
+    [
+      "de",
+      "nimm einen anderen Tag",
+      DATE,
+      "estimatedclosedate",
+      "2030-12-01",
+      "unsure",
+    ],
+  ] as const)("%s: %s", (language, words, base, field, text, mark) => {
+    expect(markOf(saidFor(language, words, base, field, text))).toBe(mark);
+  });
+
+  it("an hour alone names no date", () => {
+    expect(
+      markOf(
+        saidFor(
+          "de",
+          "um zehn Uhr dreißig",
+          "create-02-appointment",
+          "scheduledstart",
+          "2030-01-22T10:30:00",
+        ),
+      ),
+    ).toBe("unasked");
+  });
+
+  it("says the report's change as asked for", () => {
+    expect(
+      saidFor(
+        "de",
+        "Nicht auf den Fünfzehnten, nimm den Zweiundzwanzigsten.",
+        DATE,
+        "estimatedclosedate",
+        "2030-12-22",
+      ),
+    ).toBe(
+      "Geändert: Estimated close date: vom 1. Dezember 2026 auf den 22. Dezember 2030.",
+    );
+  });
+
+  describe("without number words for the language", () => {
+    it("digits work as before", () => {
+      expect(
+        markOf(
+          saidFor(
+            "de",
+            "nimm den 22.",
+            DATE,
+            "estimatedclosedate",
+            "2030-12-22",
+            "none",
+          ),
+        ),
+      ).toBe("asked");
+      expect(
+        markOf(
+          saidFor(
+            "en",
+            "rather 70 percent",
+            DATE,
+            "closeprobability",
+            "70",
+            "none",
+          ),
+        ),
+      ).toBe("asked");
+    });
+
+    it("a number or date not named in digits is said as changed, never as unasked", () => {
+      expect(
+        saidFor(
+          "de",
+          "Nicht auf den Fünfzehnten, nimm den Zweiundzwanzigsten.",
+          DATE,
+          "estimatedclosedate",
+          "2030-12-22",
+          "none",
+        ),
+      ).toMatch(/^Außerdem geändert: /);
+      expect(
+        saidFor(
+          "en",
+          "make it the twenty-second",
+          DATE,
+          "estimatedclosedate",
+          "2030-12-22",
+          "none",
+        ),
+      ).toMatch(/^Also changed: /);
+    });
+
+    it("another month said still names nothing", () => {
+      expect(
+        markOf(
+          saidFor(
+            "de",
+            "nimm den 22. Januar",
+            DATE,
+            "estimatedclosedate",
+            "2030-12-22",
+            "none",
+          ),
+        ),
+      ).toBe("unasked");
+    });
+
+    it("a text value is told as before", () => {
+      expect(
+        markOf(
+          saidFor(
+            "en",
+            "rather 70 percent",
+            "create-02-appointment",
+            "location",
+            "Werk Bremen",
+            "none",
+          ),
+        ),
+      ).toBe("unasked");
+    });
   });
 });

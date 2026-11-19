@@ -17,7 +17,8 @@ use utoipa::ToSchema;
 use crate::config_facet_attrs as erato_config;
 pub use crate::spoken::{
     ApprovalSpeechAmount, ApprovalSpeechConfig, ApprovalSpeechWording, MAX_SHORT_DETAILS,
-    SpokenNamesConfig, SpokenVocabulariesConfig,
+    SpokenNamesConfig, SpokenNumberWordsByLanguage, SpokenNumberWordsConfig,
+    SpokenVocabulariesConfig,
 };
 use crate::startup_log;
 
@@ -1019,6 +1020,19 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub spoken_vocabularies: SpokenVocabulariesConfig,
 
+    /// Number words by language tag, so that a number or date a person says
+    /// in words counts as named when the voice tells a corrected approval
+    /// card's changes. Language data, usually from a content package; without
+    /// it only digits are read, and a change the words may name is said as
+    /// changed, never as unasked.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_number_words"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_number_words: SpokenNumberWordsByLanguage,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -1555,6 +1569,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_number_words(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1575,6 +1590,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_number_words(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -1754,6 +1770,9 @@ impl AppConfig {
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
         for dropped in config.approval_speech.drop_unusable() {
             tracing::warn!("Approval speech setting dropped: {dropped}.");
+        }
+        for dropped in crate::spoken::drop_unusable_number_words(&mut config.spoken_number_words) {
+            tracing::warn!("Spoken number word dropped: {dropped}.");
         }
         for line in crate::spoken::sentences_in_use(
             &config.spoken_vocabularies,
@@ -8976,6 +8995,12 @@ fn warn_misshaped_approval_speech(schema: &Config) {
     }
 }
 
+fn warn_misshaped_number_words(schema: &Config) {
+    for dropped in crate::spoken::misshaped_number_words(schema) {
+        tracing::warn!("Spoken number word dropped: {dropped}.");
+    }
+}
+
 fn warn_misshaped_spoken_entries(schema: &Config) {
     for dropped in crate::spoken::misshaped_spoken_entries(schema) {
         tracing::warn!("Spoken vocabulary entry dropped: {dropped}.");
@@ -9633,6 +9658,10 @@ pub struct TeamsBotConfig {
     // downloaded from.
     #[serde(default)]
     pub sso_resource: Option<String>,
+    // Storage provider for externally reachable private copies of generated Teams files.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub delivery_storage_provider_id: Option<String>,
     // Address users open Erato at, used for links in bot messages (chat links,
     // citations). An internal host is fine: users open these links in their own
     // browser. Unrelated to `messaging_endpoint`.
@@ -9681,6 +9710,7 @@ impl Default for TeamsBotConfig {
             sso_enabled: true,
             sso_app_id: None,
             sso_resource: None,
+            delivery_storage_provider_id: None,
             public_base_url: None,
             messaging_endpoint: None,
             assistant_id: None,

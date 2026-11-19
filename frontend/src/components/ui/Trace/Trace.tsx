@@ -194,7 +194,7 @@ const ColdLoadTrace = ({
         isOpen={isOpen}
         onToggle={() => setIsOpen((prev) => !prev)}
       />
-      <TraceCollapse isOpen={isOpen}>
+      <TraceCollapse isOpen={isOpen} instantWhenTall>
         <TraceTimeline
           logicalSteps={logicalSteps}
           isTraceActive={false}
