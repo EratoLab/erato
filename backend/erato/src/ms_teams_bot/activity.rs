@@ -247,6 +247,13 @@ impl Activity {
 
     /// Files the user attached, in the order Teams listed them.
     pub fn incoming_files(&self) -> Vec<IncomingFile> {
+        self.indexed_files()
+            .into_iter()
+            .map(|(_, file)| file)
+            .collect()
+    }
+
+    pub(super) fn indexed_files(&self) -> Vec<(usize, IncomingFile)> {
         let mut files = Vec::new();
         for (index, attachment) in self.attachments.iter().enumerate() {
             let name = attachment
@@ -260,17 +267,29 @@ impl Activity {
                     .and_then(|content| content.get("downloadUrl"))
                     .and_then(Value::as_str);
                 if let Some(download_url) = download_url {
-                    files.push(IncomingFile::Download {
-                        name: name.unwrap_or_else(|| format!("file-{}", index + 1)),
-                        download_url: download_url.to_string(),
-                    });
+                    super::probe::classify(index, "download_info");
+                    files.push((
+                        index,
+                        IncomingFile::Download {
+                            name: name.unwrap_or_else(|| format!("file-{}", index + 1)),
+                            download_url: download_url.to_string(),
+                        },
+                    ));
+                } else {
+                    super::probe::classify(index, "missing_download_url");
                 }
             } else if attachment.content_type == "reference" {
                 if let Some(url) = attachment.content_url.as_deref() {
-                    files.push(IncomingFile::Reference {
-                        name: name.unwrap_or_else(|| format!("file-{}", index + 1)),
-                        url: url.to_string(),
-                    });
+                    super::probe::classify(index, "reference");
+                    files.push((
+                        index,
+                        IncomingFile::Reference {
+                            name: name.unwrap_or_else(|| format!("file-{}", index + 1)),
+                            url: url.to_string(),
+                        },
+                    ));
+                } else {
+                    super::probe::classify(index, "missing_content_url");
                 }
             } else if attachment.content_type.starts_with("image/")
                 && let Some(content_url) = attachment.content_url.as_deref()
@@ -282,10 +301,18 @@ impl Activity {
                     .next()
                     .unwrap_or("png")
                     .to_string();
-                files.push(IncomingFile::InlineImage {
-                    name: name.unwrap_or_else(|| format!("image-{}.{extension}", index + 1)),
-                    content_url: content_url.to_string(),
-                });
+                super::probe::classify(index, "inline_image");
+                files.push((
+                    index,
+                    IncomingFile::InlineImage {
+                        name: name.unwrap_or_else(|| format!("image-{}.{extension}", index + 1)),
+                        content_url: content_url.to_string(),
+                    },
+                ));
+            } else if attachment.content_type.starts_with("image/") {
+                super::probe::classify(index, "missing_content_url");
+            } else {
+                super::probe::classify(index, "unsupported");
             }
         }
         files

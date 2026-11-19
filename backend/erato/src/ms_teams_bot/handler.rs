@@ -14,6 +14,7 @@ use super::host::{
     TeamsRequest,
 };
 use super::nudge;
+use super::probe;
 use super::reminders;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
@@ -61,11 +62,13 @@ pub(super) async fn on_message(bot: Arc<TeamsBot>, host: Host, activity: Activit
 async fn handle_message(bot: Arc<TeamsBot>, host: Host, activity: Activity, allow_sign_in: bool) {
     let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
+        probe::decision("missing_reply_target");
         return;
     };
     if let Err(error) =
         process_message(&bot, &host, &activity, &target, sender, allow_sign_in).await
     {
+        probe::decision("handler_error");
         tracing::error!(error = %error, "Teams message handling failed");
         let _ = target.send_text(Msg::SomethingWentWrong.text(lang)).await;
     }
@@ -111,6 +114,7 @@ async fn process_message(
     let kind = activity.conversation_kind();
     let lang = target.lang;
     if let Some(submit) = activity.value.as_ref().and_then(ApprovalSubmit::from_value) {
+        probe::decision("approval");
         return on_approval(bot, host, activity, target, sender, submit, allow_sign_in).await;
     }
     if let Some(submit) = activity
@@ -118,6 +122,7 @@ async fn process_message(
         .as_ref()
         .and_then(controls::Submit::from_value)
     {
+        probe::decision("control");
         return on_control(bot, host, activity, target, sender, submit, allow_sign_in).await;
     }
     if let Some(submit) = activity
@@ -125,6 +130,7 @@ async fn process_message(
         .as_ref()
         .and_then(nudge::DeliverySubmit::from_value)
     {
+        probe::decision("delivery_action");
         return on_delivery_action(bot, host, activity, target, sender, submit).await;
     }
     if let Some(submit) = activity
@@ -132,6 +138,7 @@ async fn process_message(
         .as_ref()
         .and_then(reminders::CardSubmit::from_value)
     {
+        probe::decision("reminder_card");
         return match (submit.on_list(), submit.keeps()) {
             (false, true) => on_reminder_keep(bot, host, activity, target, sender, submit).await,
             (false, false) => on_reminder_cancel(bot, host, activity, target, sender, submit).await,
@@ -141,8 +148,9 @@ async fn process_message(
     }
 
     let text = activity.text_without_bot_mention();
-    let files = activity.incoming_files();
+    let files = activity.indexed_files();
     if text.is_empty() && files.is_empty() {
+        probe::decision("empty_message");
         if kind.is_personal() {
             let app = &bot.settings.app_name;
             target
@@ -155,6 +163,7 @@ async fn process_message(
     // An unsubscribe must not depend on Graph consent: the activity is
     // verified at the route, and the sender is known by Entra object id.
     if let Some(command) = nudge::reminders_command(&text) {
+        probe::decision("reminder_command");
         let Some(user) = known_user(bot, activity, target, sender).await? else {
             return Ok(());
         };
@@ -171,6 +180,7 @@ async fn process_message(
     }
 
     let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
+        probe::decision("authentication");
         return Ok(());
     };
     let (conversation_id, service_url, from_id) = routing(activity)?;
@@ -185,12 +195,14 @@ async fn process_message(
         .await?;
 
     if is_new_chat_command(&text) {
+        probe::decision("new_chat");
         host.set_current_chat(&row, None).await?;
         target.send_text(Msg::NewChatStarted.text(lang)).await?;
         return Ok(());
     }
 
     if text.eq_ignore_ascii_case("/stop") {
+        probe::decision("stop");
         let active = match row.current_chat_id {
             Some(chat_id) => {
                 host.active_request(&user.session, conversation_id, chat_id)
@@ -217,12 +229,14 @@ async fn process_message(
         .ensure_chat(&user.session, &row, bot.settings.assistant_id)
         .await?;
     let Some(source_id) = activity.id.as_deref() else {
+        probe::decision("missing_activity_id");
         return target.send_text(Msg::MessageNotIdentified.text(lang)).await;
     };
     let Some(request) = host
         .remember_request(&user.session, conversation_id, source_id, chat_id)
         .await?
     else {
+        probe::decision("duplicate");
         return Ok(());
     };
 
@@ -230,11 +244,11 @@ async fn process_message(
     stream.preparing(Msg::Preparing.text(lang)).await;
     let prepared = async {
         let mut file_ids = Vec::new();
-        for file in files {
+        for (ordinal, file) in files {
             match stream
                 .during(
                     Msg::ReadingAttachments.text(lang),
-                    intake_file(bot, host, &user, chat_id, &file),
+                    probe::FILE.scope(ordinal, intake_file(bot, host, &user, chat_id, &file)),
                 )
                 .await
             {
@@ -270,6 +284,7 @@ async fn process_message(
         } else {
             text
         };
+        probe::event!(stage = "submit", uploads = file_ids.len());
         Ok::<_, Report>(
             stream
                 .during(
@@ -392,11 +407,14 @@ fn approval_error_text(error: StartError, lang: Lang) -> String {
 
 /// An edit is only a proposal. It never starts a generation or repeats tools.
 pub(super) async fn on_message_edit(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
+    probe::decision("edit");
     let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
+        probe::decision("missing_reply_target");
         return;
     };
     if let Err(error) = offer_edited_question(&bot, &host, &activity, &target, sender).await {
+        probe::decision("edit_error");
         tracing::warn!(%error, "Teams edited question could not be offered");
     }
 }
@@ -413,9 +431,11 @@ async fn offer_edited_question(
         activity.timestamp,
         activity.conversation_id(),
     ) else {
+        probe::decision("missing_edit_metadata");
         return Ok(());
     };
     let Some(user) = authenticate(bot, host, activity, target, sender, false).await? else {
+        probe::decision("authentication");
         return Ok(());
     };
     let app = [("app", bot.settings.app_name.as_str())];
@@ -423,6 +443,7 @@ async fn offer_edited_question(
         .request_for_activity(&user.session, conversation, source_id)
         .await?
     else {
+        probe::decision("missing_original");
         return if activity.conversation_kind().is_personal() {
             target
                 .send_text(&Msg::EditSavedResend.fill(target.lang, &app))
@@ -432,12 +453,14 @@ async fn offer_edited_question(
         };
     };
     if !host.request_is_current(&user.session, &request).await? {
+        probe::decision("superseded");
         return target
             .send_text(&Msg::EditSavedNotLatest.fill(target.lang, &app))
             .await;
     }
     let text = activity.text_without_bot_mention();
     if text.trim().is_empty() {
+        probe::decision("empty_edit");
         return Ok(());
     }
     if let Some(updated) = host.propose_edit(request.id, &text, edited_at).await? {
@@ -1459,25 +1482,46 @@ async fn intake_file(
     let max_bytes = host.max_upload_bytes();
     match file {
         IncomingFile::Download { name, download_url } => {
-            let bytes = bot.connector.download(download_url, max_bytes).await?;
-            host.store_file(&user.session, chat_id, name, None, bytes)
-                .await
+            let bytes = probe::result(
+                "download",
+                bot.connector.download(download_url, max_bytes).await,
+            )?;
+            probe::result(
+                "store_file",
+                host.store_file(&user.session, chat_id, name, None, bytes)
+                    .await,
+            )
         }
         IncomingFile::InlineImage { name, content_url } => {
-            let bytes = bot.connector.download(content_url, max_bytes).await?;
-            host.store_file(&user.session, chat_id, name, None, bytes)
-                .await
+            let bytes = probe::result(
+                "download",
+                bot.connector.download(content_url, max_bytes).await,
+            )?;
+            probe::result(
+                "store_file",
+                host.store_file(&user.session, chat_id, name, None, bytes)
+                    .await,
+            )
         }
         IncomingFile::Reference { name, url } => {
             let graph = bot.graph(&user.graph_token);
             if host.sharepoint_enabled() {
-                let item = graph.resolve_shared_item(url).await?;
-                host.link_sharepoint_file(&user.session, chat_id, item)
-                    .await
+                let item = probe::result("graph_resolve", graph.resolve_shared_item(url).await)?;
+                probe::result(
+                    "link_sharepoint_file",
+                    host.link_sharepoint_file(&user.session, chat_id, item)
+                        .await,
+                )
             } else {
-                let bytes = graph.download_shared_item(url, max_bytes).await?;
-                host.store_file(&user.session, chat_id, name, None, bytes)
-                    .await
+                let bytes = probe::result(
+                    "graph_download",
+                    graph.download_shared_item(url, max_bytes).await,
+                )?;
+                probe::result(
+                    "store_file",
+                    host.store_file(&user.session, chat_id, name, None, bytes)
+                        .await,
+                )
             }
         }
     }
