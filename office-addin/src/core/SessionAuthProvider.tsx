@@ -16,8 +16,9 @@ import {
   type BootstrapToken,
 } from "./auth/AuthSource";
 import {
-  OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS,
   Oauth2ProxySessionRedeemError,
+  oauth2ProxySessionRenewAt,
+  readStoredOauth2ProxySessionEndsAt,
   readStoredOauth2ProxySessionRedeemedAt,
   redeemOauth2ProxySession,
   shouldRefreshOauth2ProxySession,
@@ -39,6 +40,8 @@ type Oauth2ProxySessionStatus =
 interface Oauth2ProxySessionState {
   status: Oauth2ProxySessionStatus;
   lastRedeemedAt: number | null;
+  /** When the proxy ends the session (the redeemed token's expiry); null when unknown. */
+  endsAt: number | null;
   error: string | null;
 }
 
@@ -86,6 +89,7 @@ interface SessionRedeemContextValue {
     status: "refreshing",
   ) => Promise<number>;
   lastRedeemedAtRef: React.MutableRefObject<number | null>;
+  endsAtRef: React.MutableRefObject<number | null>;
 }
 
 const SessionRedeemContext = createContext<SessionRedeemContextValue | null>(
@@ -105,6 +109,8 @@ function createInitialOauth2ProxySessionState(): Oauth2ProxySessionState {
   return {
     status: lastRedeemedAt === null ? "idle" : "ready",
     lastRedeemedAt,
+    endsAt:
+      lastRedeemedAt === null ? null : readStoredOauth2ProxySessionEndsAt(),
     error: null,
   };
 }
@@ -189,6 +195,7 @@ export function SessionAuthProvider({
   // Number of consecutive failed timed refreshes; drives the backoff delay.
   const [refreshFailureCount, setRefreshFailureCount] = useState(0);
   const lastRedeemedAtRef = useRef(oauth2ProxySession.lastRedeemedAt);
+  const endsAtRef = useRef(oauth2ProxySession.endsAt);
   const redeemInFlightRef = useRef<Promise<number> | null>(null);
   // Dedupes the whole acquire+redeem recovery unit so N concurrent 401s trigger
   // a single recovery (the redeem half is additionally deduped by the ref above).
@@ -196,7 +203,8 @@ export function SessionAuthProvider({
 
   useEffect(() => {
     lastRedeemedAtRef.current = oauth2ProxySession.lastRedeemedAt;
-  }, [oauth2ProxySession.lastRedeemedAt]);
+    endsAtRef.current = oauth2ProxySession.endsAt;
+  }, [oauth2ProxySession.lastRedeemedAt, oauth2ProxySession.endsAt]);
 
   const redeemSessionForToken = useCallback(
     async (
@@ -226,20 +234,22 @@ export function SessionAuthProvider({
 
       const redeemPromise = (async () => {
         setOauth2ProxySession((previous) => ({
+          ...previous,
           status,
-          lastRedeemedAt: previous.lastRedeemedAt,
           error: null,
         }));
 
         try {
-          const { redeemedAt } = await redeemOauth2ProxySession({
+          const { redeemedAt, endsAt } = await redeemOauth2ProxySession({
             idToken: token.idToken,
             accessToken: token.accessToken,
           });
           lastRedeemedAtRef.current = redeemedAt;
+          endsAtRef.current = endsAt;
           setOauth2ProxySession({
             status: "ready",
             lastRedeemedAt: redeemedAt,
+            endsAt,
             error: null,
           });
           setError(null);
@@ -249,8 +259,8 @@ export function SessionAuthProvider({
         } catch (redeemError) {
           const message = formatAuthenticationError(redeemError);
           setOauth2ProxySession((previous) => ({
+            ...previous,
             status: "error",
-            lastRedeemedAt: previous.lastRedeemedAt,
             error: message,
           }));
           setError(message);
@@ -406,8 +416,8 @@ export function SessionAuthProvider({
       } catch (refreshError) {
         const message = formatAuthenticationError(refreshError);
         setOauth2ProxySession((previous) => ({
+          ...previous,
           status: "error",
-          lastRedeemedAt: previous.lastRedeemedAt,
           error: message,
         }));
         setError(message);
@@ -441,8 +451,8 @@ export function SessionAuthProvider({
         } catch (recoverError) {
           const message = formatAuthenticationError(recoverError);
           setOauth2ProxySession((previous) => ({
+            ...previous,
             status: "error",
-            lastRedeemedAt: previous.lastRedeemedAt,
             error: message,
           }));
           setError(message);
@@ -504,10 +514,12 @@ export function SessionAuthProvider({
         OAUTH2_PROXY_REFRESH_RETRY_MAX_MS,
       );
     } else {
-      const sessionAgeMs = Date.now() - oauth2ProxySession.lastRedeemedAt;
       refreshDelayMs = Math.max(
         1_000,
-        OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS - sessionAgeMs,
+        oauth2ProxySessionRenewAt(
+          oauth2ProxySession.lastRedeemedAt,
+          oauth2ProxySession.endsAt,
+        ) - Date.now(),
       );
     }
 
@@ -526,6 +538,7 @@ export function SessionAuthProvider({
   }, [
     isBootstrapAcquired,
     isSourceInitialized,
+    oauth2ProxySession.endsAt,
     oauth2ProxySession.lastRedeemedAt,
     oauth2ProxySession.status,
     refreshFailureCount,
@@ -539,7 +552,11 @@ export function SessionAuthProvider({
       if (
         !isSourceInitialized ||
         !isBootstrapAcquired ||
-        !shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)
+        !shouldRefreshOauth2ProxySession(
+          lastRedeemedAtRef.current,
+          Date.now(),
+          endsAtRef.current,
+        )
       ) {
         return;
       }
@@ -634,7 +651,7 @@ export function SessionAuthProvider({
       }}
     >
       <SessionRedeemContext.Provider
-        value={{ redeemSessionForToken, lastRedeemedAtRef }}
+        value={{ redeemSessionForToken, lastRedeemedAtRef, endsAtRef }}
       >
         {children}
       </SessionRedeemContext.Provider>

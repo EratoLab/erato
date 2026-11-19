@@ -8,7 +8,7 @@
  */
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
-import { tryRecoverAuth } from "@/auth/authRecovery";
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { FrontendRequestError, sanitizeHeaders } from "@/utils/errorReport";
 
 import { createLogger } from "../debugLogger";
@@ -278,14 +278,13 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         credentials: "same-origin",
       });
 
-      response = await fetch(url, buildInit());
-      // Connect-time 401 (the proxy rejected the request before it reached the
-      // backend/stream): recover the session and reopen ONCE. Safe to replay —
-      // a pre-stream 401 means nothing was processed. No-op for the web app,
-      // which registers no recovery handler (see @/auth/authRecovery).
-      if (response.status === 401 && (await tryRecoverAuth("sse-401"))) {
-        response = await fetch(url, buildInit());
-      }
+      // Turned away as signed out at connect time (the proxy rejected the request before it reached
+      // the backend/stream): recover the session and reopen ONCE. Safe to replay — nothing was
+      // processed. No-op for the web app, which registers no recovery handler.
+      response = await fetchWithAuthRecovery(
+        () => fetch(url, buildInit()),
+        "sse-signed-out",
+      );
 
       if (!response.ok) {
         // Read the body so the caller can surface the validation reason

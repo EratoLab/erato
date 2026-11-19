@@ -1,4 +1,4 @@
-import { fetchGetFile } from "@erato/frontend/library";
+import { fetchGetFile, fetchWithAuthRecovery } from "@erato/frontend/library";
 import { wordImageDimensions } from "@erato/frontend/word-review";
 
 import type {
@@ -117,11 +117,15 @@ export async function captureWordImageAssets(
         (!sameOrigin && url.protocol !== "https:")
       )
         throw new AssetFailure("unavailable");
-      const response = await fetch(url.href, {
-        signal: controller.signal,
-        credentials: sameOrigin ? "same-origin" : "omit",
-        redirect: "error",
-      });
+      const download = () =>
+        fetch(url.href, {
+          signal: controller.signal,
+          credentials: sameOrigin ? "same-origin" : "omit",
+          redirect: "error",
+        });
+      const response = sameOrigin
+        ? await fetchWithAuthRecovery(download, "word-image-asset")
+        : await download();
       if (!response.ok) throw new AssetFailure("unavailable");
       const declared = response.headers
         .get("content-type")

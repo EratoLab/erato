@@ -17,9 +17,19 @@ export const OAUTH2_PROXY_AUTH_PATH = "/oauth2/auth";
 export const OAUTH2_PROXY_SIGN_IN_PATH = "/oauth2/sign_in";
 
 export const OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS = 20 * 60 * 1000;
+/** A session is renewed this long before it ends. A silent MSAL acquire hands out the cached token
+ * until its last 5 minutes (tokenRenewalOffsetSeconds), so a renewal inside them gets a fresh one. */
+export const OAUTH2_PROXY_SESSION_RENEW_BEFORE_END_MS = 4 * 60 * 1000;
+/** A session redeemed from a token already in its last minutes is renewed this long after it ends,
+ * when the host has to mint a fresh token. */
+export const OAUTH2_PROXY_SESSION_RENEW_AFTER_END_MS = 2_000;
+/** Timed renewals never come closer than this, whatever token the host hands out. */
+export const OAUTH2_PROXY_SESSION_MIN_RENEW_INTERVAL_MS = 30_000;
 
 const OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY =
   "erato.officeAddin.oauth2ProxySessionRedeemedAt";
+const OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY =
+  "erato.officeAddin.oauth2ProxySessionEndsAt";
 
 export interface RedeemOauth2ProxySessionInput {
   idToken: string;
@@ -30,6 +40,8 @@ export interface RedeemOauth2ProxySessionInput {
 
 export interface RedeemOauth2ProxySessionResult {
   redeemedAt: number;
+  /** When the proxy ends the session; null when the tokens carry no expiry. */
+  endsAt: number | null;
 }
 
 export class Oauth2ProxySessionRedeemError extends Error {
@@ -50,21 +62,66 @@ export class Oauth2ProxySessionRedeemError extends Error {
   }
 }
 
-export function shouldRefreshOauth2ProxySession(
-  lastRedeemedAt: number | null,
-  now = Date.now(),
-): boolean {
-  return (
-    lastRedeemedAt === null ||
-    now - lastRedeemedAt >= OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS
+function jwtExpiresAt(token: string | undefined): number | null {
+  const payload = token?.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(
+      atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")),
+    ) as { exp?: unknown };
+    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** When oauth2-proxy ends a session redeemed from these tokens: at the access token's expiry, and at
+ * the ID token's only without one (Erato's fork, CreateSessionFromExternalToken). */
+export function oauth2ProxySessionEndsAt(token: {
+  idToken: string;
+  accessToken?: string;
+}): number | null {
+  return token.accessToken
+    ? jwtExpiresAt(token.accessToken)
+    : jwtExpiresAt(token.idToken);
+}
+
+/** When a session redeemed at `redeemedAt` is renewed: after the fixed interval, or before it ends
+ * if that comes first. One redeemed from a token already in its last minutes is renewed just after
+ * it ends, rather than over and over with the same cached token. */
+export function oauth2ProxySessionRenewAt(
+  redeemedAt: number,
+  endsAt: number | null,
+): number {
+  const timed = redeemedAt + OAUTH2_PROXY_SESSION_REFRESH_AFTER_MS;
+  if (endsAt === null) return timed;
+  const beforeEnd = endsAt - OAUTH2_PROXY_SESSION_RENEW_BEFORE_END_MS;
+  return Math.max(
+    redeemedAt + OAUTH2_PROXY_SESSION_MIN_RENEW_INTERVAL_MS,
+    Math.min(
+      timed,
+      beforeEnd > redeemedAt
+        ? beforeEnd
+        : endsAt + OAUTH2_PROXY_SESSION_RENEW_AFTER_END_MS,
+    ),
   );
 }
 
-export function readStoredOauth2ProxySessionRedeemedAt(): number | null {
+export function shouldRefreshOauth2ProxySession(
+  lastRedeemedAt: number | null,
+  now = Date.now(),
+  endsAt: number | null = null,
+): boolean {
+  return (
+    lastRedeemedAt === null ||
+    now >= oauth2ProxySessionRenewAt(lastRedeemedAt, endsAt)
+  );
+}
+
+function readStoredNumber(key: string): number | null {
   try {
-    const raw = window.localStorage.getItem(
-      OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY,
-    );
+    const raw = window.localStorage.getItem(key);
     if (!raw) {
       return null;
     }
@@ -75,12 +132,27 @@ export function readStoredOauth2ProxySessionRedeemedAt(): number | null {
   }
 }
 
-function storeOauth2ProxySessionRedeemedAt(redeemedAt: number) {
+export function readStoredOauth2ProxySessionRedeemedAt(): number | null {
+  return readStoredNumber(OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY);
+}
+
+export function readStoredOauth2ProxySessionEndsAt(): number | null {
+  return readStoredNumber(OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY);
+}
+
+function storeOauth2ProxySession(redeemedAt: number, endsAt: number | null) {
   try {
     window.localStorage.setItem(
       OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY,
       String(redeemedAt),
     );
+    if (endsAt === null)
+      window.localStorage.removeItem(OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY);
+    else
+      window.localStorage.setItem(
+        OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY,
+        String(endsAt),
+      );
   } catch {
     // Best effort only. The in-memory state remains authoritative.
   }
@@ -141,8 +213,9 @@ export async function redeemOauth2ProxySession({
   }
 
   const redeemedAt = now();
-  storeOauth2ProxySessionRedeemedAt(redeemedAt);
-  return { redeemedAt };
+  const endsAt = oauth2ProxySessionEndsAt(input);
+  storeOauth2ProxySession(redeemedAt, endsAt);
+  return { redeemedAt, endsAt };
 }
 
 export interface CheckOauth2ProxySessionInput {

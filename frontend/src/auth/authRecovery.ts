@@ -40,3 +40,31 @@ export async function tryRecoverAuth(reason: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * The proxy turned the request away for want of a session: a 401, or the 403 sign-in page
+ * oauth2-proxy serves to a request that does not ask for JSON (no `api_routes` in a deployment).
+ * The backend's own 403s carry JSON or no body, never an HTML page.
+ */
+export function isSignedOutResponse(response: Response): boolean {
+  return (
+    response.status === 401 ||
+    (response.status === 403 &&
+      (response.headers.get("content-type") ?? "").includes("text/html"))
+  );
+}
+
+/**
+ * Sends a request, and once the proxy turns it away as signed out, recovers the session and sends
+ * it again. Safe for any request: a signed-out answer never reached the backend. `send` must build
+ * the request afresh, so the resend carries the renewed session's headers.
+ */
+export async function fetchWithAuthRecovery(
+  send: () => Promise<Response>,
+  reason: string,
+): Promise<Response> {
+  const response = await send();
+  if (!isSignedOutResponse(response) || !(await tryRecoverAuth(reason)))
+    return response;
+  return send();
+}

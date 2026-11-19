@@ -115,6 +115,7 @@ vi.mock("../../core/SessionAuthProvider", () => ({
   useSessionRedeem: () => ({
     redeemSessionForToken: vi.fn(),
     lastRedeemedAtRef: { current: Number.MAX_SAFE_INTEGER },
+    endsAtRef: { current: null },
   }),
 }));
 
