@@ -157,6 +157,24 @@ function stubFetchSequence(factories: Array<() => Response>) {
   return fetcher;
 }
 
+const MINUTE = 60_000;
+/** A JWT-shaped token with only an exp claim. */
+const jwt = (expMs: number) =>
+  `h.${btoa(JSON.stringify({ exp: Math.floor(expMs / 1000) }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")}.s`;
+/** Timers a renewal arms are only set once React commits, so long spans advance in steps. */
+async function advanceInSteps(ms: number) {
+  for (let left = ms; left > 0; left -= 5_000)
+    await advance(Math.min(5_000, left));
+}
+const redeemedBody = (fetcher: Mock, call: number) =>
+  JSON.parse((fetcher.mock.calls[call][1] as RequestInit).body as string) as {
+    id_token: string;
+    access_token: string;
+  };
+
 // Advances fake timers and flushes the awaited microtasks the auth flow chains
 // (MSAL acquisition, the redeem fetch, and the resulting state updates).
 async function advance(ms: number) {
@@ -413,6 +431,83 @@ describe("OutlookAuthProvider", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("a session that ends before the 20-minute timer", () => {
+    // 2026-11-19 10:05:51 UTC on Word for Mac: the timed renewal redeemed Office's cached token, an
+    // expired ID token with an access token 7.4 minutes from its end, so the proxy session ended at
+    // 10:13:17 and every request was refused until the next renewal at 10:25:55.
+    const renew = async (
+      handOut: (
+        request: { forceRefresh?: boolean },
+        cachedEndsAt: number,
+      ) => "cached" | "fresh",
+    ) => {
+      vi.useFakeTimers({ now: new Date("2026-11-19T10:05:51Z") });
+      const t0 = Date.now();
+      const tokens = {
+        cached: {
+          idToken: jwt(t0 - MINUTE),
+          accessToken: jwt(t0 + 7.4 * MINUTE),
+        },
+        fresh: {
+          idToken: jwt(t0 + 70 * MINUTE),
+          accessToken: jwt(t0 + 75 * MINUTE),
+        },
+      };
+      const pca = createPcaMock();
+      vi.mocked(pca.acquireTokenSilent).mockImplementation(async (request) => ({
+        ...authenticationResult,
+        ...tokens[handOut(request, t0 + 7.4 * MINUTE)],
+      }));
+      vi.mocked(createNestablePublicClientApplication).mockResolvedValue(pca);
+      const fetcher = stubFetchSequence([
+        () => new Response("{}", { status: 202 }),
+      ]);
+      render(
+        <OutlookAuthProvider>
+          <AuthProbe />
+        </OutlookAuthProvider>,
+      );
+      await advance(0);
+      expect(redeemedBody(fetcher, 0).access_token).toBe(
+        tokens.cached.accessToken,
+      );
+      return { t0, tokens, fetcher };
+    };
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("renews with the fresh token Office hands out in the cached one's last minutes", async () => {
+      // MSAL hands out its cached token until under 5 minutes are left (tokenRenewalOffsetSeconds).
+      const { tokens, fetcher } = await renew((_request, cachedEndsAt) =>
+        cachedEndsAt - Date.now() < 5 * MINUTE ? "fresh" : "cached",
+      );
+
+      await advanceInSteps(7 * MINUTE);
+
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(redeemedBody(fetcher, 1).access_token).toBe(
+        tokens.fresh.accessToken,
+      );
+    });
+
+    it("renews once just after the end when Office keeps its cached token until then", async () => {
+      const { tokens, fetcher } = await renew((_request, cachedEndsAt) =>
+        Date.now() >= cachedEndsAt ? "fresh" : "cached",
+      );
+
+      await advanceInSteps(7.4 * MINUTE + 5_000);
+
+      expect(fetcher).toHaveBeenCalledTimes(3);
+      expect(redeemedBody(fetcher, 2).access_token).toBe(
+        tokens.fresh.accessToken,
+      );
+      await advanceInSteps(15 * MINUTE);
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    });
   });
 
   it("recovers on the backoff timer after a transient refresh failure", async () => {

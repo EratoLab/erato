@@ -292,6 +292,51 @@ describe("v1betaApiFetch 401 auth recovery", () => {
     expect(result).toEqual({ recovered: true });
   });
 
+  it("recovers on the proxy's 403 sign-in page and replays the request once", async () => {
+    const handler = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(handler);
+    const signInPage = {
+      ok: false,
+      status: 403,
+      headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+      json: vi.fn().mockRejectedValue(new SyntaxError("not JSON")),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(signInPage)
+      .mockResolvedValueOnce(okJson());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await v1betaApiFetch({
+      url: "/api/v1beta/token_usage/estimate",
+      method: "post",
+      body: { chat_id: "chat-1" },
+    });
+
+    expect(handler).toHaveBeenCalledWith("rest-403");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ recovered: true });
+  });
+
+  it("does not recover on the backend's own 403", async () => {
+    const handler = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(handler);
+    const forbidden = {
+      ok: false,
+      status: 403,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: vi.fn().mockResolvedValue({ error: "forbidden" }),
+    };
+    const fetchMock = vi.fn().mockResolvedValue(forbidden);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      v1betaApiFetch({ url: "/api/v1beta/me/budget", method: "get" }),
+    ).rejects.toBeDefined();
+    expect(handler).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not replay when no recovery handler is registered (web app)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(unauthorized());
     vi.stubGlobal("fetch", fetchMock);

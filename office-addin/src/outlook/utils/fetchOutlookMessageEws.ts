@@ -361,6 +361,21 @@ async function ewsFetch(
     });
 
   let response = await request(await tokenSource.get());
+  // The proxy's 403 sign-in page: the Erato session lapsed, not the Exchange token. Renew it and
+  // send once more; the 401 contract below stays for the token.
+  if (
+    response.status === 403 &&
+    (response.headers.get("content-type") ?? "").includes("text/html")
+  ) {
+    throwIfAborted(signal);
+    const { tryRecoverAuth } = await import("@erato/frontend/library");
+    if (!(await tryRecoverAuth("ews-signed-out")))
+      throw new EwsProxySessionExpiredError(
+        "EWS proxy answered with its sign-in page: the oauth2-proxy session " +
+          "has expired — sign-in required",
+      );
+    response = await request(await tokenSource.get());
+  }
   if (response.status === 401) {
     throwIfAborted(signal);
     response = await request(await tokenSource.refresh());

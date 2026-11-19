@@ -733,6 +733,8 @@ export {
 } from "@/utils/adapters/messageAdapter";
 export { getIdToken, setIdToken } from "@/auth/tokenStore";
 export {
+  fetchWithAuthRecovery,
+  isSignedOutResponse,
   setAuthRecoveryHandler,
   tryRecoverAuth,
   type AuthRecoveryHandler,
