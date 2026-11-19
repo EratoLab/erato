@@ -148,6 +148,17 @@ fn is_legacy_version(version: &Value) -> bool {
     )
 }
 
+/// `result` without a `cacheScope` other than `public` or `private`, which
+/// then counts as absent, so private, instead of making the result unreadable.
+fn without_unknown_cache_scope(mut result: Value) -> Value {
+    if !matches!(result["cacheScope"].as_str(), Some("public" | "private"))
+        && let Some(object) = result.as_object_mut()
+    {
+        object.remove("cacheScope");
+    }
+    result
+}
+
 #[derive(Debug, Clone)]
 struct Snapshot {
     tools: Vec<Tool>,
@@ -383,13 +394,7 @@ impl HttpRequest {
                 }
                 result => result?,
             };
-            let mut result = result;
-            if !matches!(result["cacheScope"].as_str(), Some("public" | "private"))
-                && let Some(object) = result.as_object_mut()
-            {
-                object.remove("cacheScope");
-            }
-            let page: ListToolsResult = serde_json::from_value(result)
+            let page: ListToolsResult = serde_json::from_value(without_unknown_cache_scope(result))
                 .map_err(|e| RequestError::protocol(format!("Invalid tool list: {e}")))?;
             expires = expires.min(
                 Instant::now()
@@ -459,7 +464,7 @@ impl HttpRequest {
         let result = self
             .rpc("resources/read", json!({"uri": uri}), None)
             .await?;
-        serde_json::from_value(result)
+        serde_json::from_value(without_unknown_cache_scope(result))
             .map_err(|error| RequestError::protocol(format!("Invalid resource: {error}")).into())
     }
 

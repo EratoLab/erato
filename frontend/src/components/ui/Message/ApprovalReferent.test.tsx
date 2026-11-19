@@ -118,7 +118,7 @@ describe("ApprovalReferent", () => {
     expect(onDecide).toHaveBeenCalledWith("approve");
   });
 
-  it("falls back the same way when the generic card's argument view fails", () => {
+  it("keeps the raw input in the details when the generic card's argument view fails there", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     broken.argumentView = true;
     const { onDecide } = renderItem({
@@ -126,12 +126,14 @@ describe("ApprovalReferent", () => {
       label: { ...display.label!, source: "generic", items: [] },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+    expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(onDecide).toHaveBeenCalledWith("reject");
   });
 
-  it("describes a call with no verb above its arguments, without claiming a loss", () => {
+  it("describes a call with no verb in one sentence above what it changes, its arguments in the details, without claiming a loss", () => {
     renderItem({
       ...display,
       label: {
@@ -162,11 +164,18 @@ describe("ApprovalReferent", () => {
           : never,
       },
     });
+    expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+      /^Create folder in Records$/,
+    );
     expect(
       screen.getByTestId("tool-call-change-outside-badge"),
     ).toHaveTextContent("outside your organisation");
-    expect(screen.getByTestId("tool-argument-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-argument-view")).toBeNull();
     expect(screen.queryByTestId("tool-call-change-emptied")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+    expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+      "Hiring",
+    );
   });
 
   it("tries the label again once a new one arrives", () => {

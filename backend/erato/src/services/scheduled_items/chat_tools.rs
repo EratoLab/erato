@@ -151,6 +151,7 @@ pub async fn approval_display(
             server_name: None,
             label: None,
             read_only: false,
+            closed_world: false,
         },
         arguments: run_with,
     }))

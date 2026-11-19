@@ -534,8 +534,7 @@ fn mcp_result_details(
         .collect();
     (!links.is_empty()).then_some(ToolResultDetails {
         links,
-        failure: None,
-        view: None,
+        ..ToolResultDetails::default()
     })
 }
 
@@ -921,8 +920,7 @@ mod tests {
                 name: Some("row-1".into()),
                 title: Some("Synthetic row".into()),
             }],
-            failure: None,
-            view: None,
+            ..ToolResultDetails::default()
         }
     }
 

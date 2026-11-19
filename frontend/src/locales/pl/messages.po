@@ -10200,6 +10200,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Nie udało się zarchiwizować: {kind} {title} w {where}} titled {Nie udało się zarchiwizować: {kind} {title}} placed {Nie udało się zarchiwizować: {kind} w {where}} other {Nie udało się zarchiwizować: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} w {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} w {server}: # wiersz} few {{title} w {server}: # wiersze} many {{title} w {server}: # wierszy} other {{title} w {server}: # wiersza}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -11011,6 +11021,26 @@ msgstr "Myślę…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "Widok interaktywny narzędzia {toolName} prosi o zapisanie tego pliku na Twoim urządzeniu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Zapisz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "Zapisać {fileName}?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "Nie udało się wyświetlić widoku interaktywnego."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx

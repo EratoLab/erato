@@ -4646,7 +4646,10 @@ pub struct McpServerConfig {
     /// `mcp_servers_global.surfaces`. A call carries the hint only when its
     /// surface has an accept list: calls from an unknown surface and from
     /// delegated tasks carry none, and a request without the
-    /// `X-Erato-Platform` header counts as `web`. The hint travels in the
+    /// `X-Erato-Platform` header counts as `web`. With `mcp_apps` enabled
+    /// too, the web app's list starts with `text/html;profile=mcp-app`,
+    /// whatever its configured list holds: the web app shows the tool's
+    /// view, so the server can return the view alone. The hint travels in the
     /// call's MCP metadata, never as a tool argument, so the model never sees
     /// it. Off by default: other servers receive nothing.
     #[serde(default)]

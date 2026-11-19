@@ -10200,6 +10200,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Could not archive {kind} {title} in {where}} titled {Could not archive {kind} {title}} placed {Could not archive {kind} in {where}} other {Could not archive {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} in {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} in {server}: # row} other {{title} in {server}: # rows}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -11011,6 +11021,26 @@ msgstr "Thinking…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr "Approved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "The interactive view of {toolName} asks to save this file on your device."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Save"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "Save {fileName}?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "The interactive view could not be shown."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx

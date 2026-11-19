@@ -175,9 +175,12 @@ impl McpServers {
     }
 
     /// A call's details with the view its tool declares (`view_uri`, see
-    /// `mcp_apps::view_uri`) and the result's `structuredContent` for it, when
-    /// the server enables MCP Apps and the view is accepted; otherwise
-    /// `details` as they are.
+    /// `mcp_apps::view_uri`) and the result's `structuredContent` and `_meta`
+    /// (`result_meta`) for it, when the server enables MCP Apps and the view
+    /// is accepted, or marked `view_unavailable` when it is not; `details` as
+    /// they are when the tool declares no view or the server does not enable
+    /// MCP Apps.
+    #[allow(clippy::too_many_arguments)]
     pub async fn with_app_view(
         &self,
         chat_id: Uuid,
@@ -186,21 +189,28 @@ impl McpServers {
         auth_context: &McpRequestAuthContext<'_>,
         details: Option<ToolResultDetails>,
         structured_content: Option<&serde_json::Value>,
+        result_meta: Option<&rmcp::model::MetaObject>,
     ) -> Option<ToolResultDetails> {
         let Some(uri) = view_uri else {
             return details;
         };
-        let Some(mut view) = self
+        if !self.session_manager.mcp_apps_enabled(server_id).await {
+            return details;
+        }
+        let mut details = details.unwrap_or_default();
+        match self
             .session_manager
             .app_view_for_call(chat_id, server_id, uri, auth_context)
             .await
-        else {
-            return details;
-        };
-        view.structured_content =
-            crate::services::mcp_apps::structured_content_for_view(structured_content);
-        let mut details = details.unwrap_or_default();
-        details.view = Some(view);
+        {
+            Some(mut view) => {
+                view.structured_content =
+                    crate::services::mcp_apps::structured_content_for_view(structured_content);
+                view.meta = crate::services::mcp_apps::result_meta_for_view(result_meta);
+                details.view = Some(Box::new(view));
+            }
+            None => details.view_unavailable = true,
+        }
         Some(details)
     }
 
