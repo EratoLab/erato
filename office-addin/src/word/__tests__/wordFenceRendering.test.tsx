@@ -7,7 +7,7 @@ import {
   ThemeProvider,
 } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SHARED_ADDIN_FEATURE_CONFIG } from "../../core/SharedAddinShell";
@@ -19,6 +19,12 @@ import type {
   HostArtifact,
   Message,
 } from "@erato/frontend/library";
+
+/** A finished trace renders its timeline from its first open on. */
+const openTraces = () =>
+  screen
+    .queryAllByTestId("trace-cluster-header")
+    .forEach((header) => fireEvent.click(header));
 
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   const { chatHooksFrom } = await import("../../test/helpers/eratoLibraryMock");
@@ -270,6 +276,7 @@ describe("Word chats inside the Word host", () => {
     expect(
       container.querySelectorAll("pre.message-content-code-block"),
     ).toHaveLength(1);
+    openTraces();
     expect(
       container.querySelector('[data-tool-name="submit_document_plan"]'),
     ).not.toBeNull();
@@ -280,6 +287,7 @@ describe("Word chats inside the Word host", () => {
 
     expect(await screen.findByTestId("word-history-edits")).toBeTruthy();
     expect(await screen.findByTestId("word-history-not-accepted")).toBeTruthy();
+    openTraces();
     expect(
       container.querySelector('[data-tool-name="submit_document_plan"]'),
     ).not.toBeNull();
