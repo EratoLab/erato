@@ -326,6 +326,7 @@ pub async fn messages_route(
     }
     bot.activity_received.store(true, Ordering::Relaxed);
 
+    probe::capture_marked_html(&activity);
     let probe_token = (matches!(activity.kind.as_str(), "message" | "messageUpdate")
         && std::env::var("ERATO_TEAMS_ATTACHMENT_PROBE").as_deref() == Ok("1"))
     .then(|| {

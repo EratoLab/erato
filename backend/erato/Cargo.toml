@@ -67,6 +67,7 @@ hmac = "0.13.0"
 jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
 regorus = "0.5.0"
 sha2 = "0.11.0"
+tempfile = "3.14.0"
 
 # Dependencies: Async runtime
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "signal"] }
@@ -167,7 +168,6 @@ sea-orm = { version = "2.0.0-rc.40", default-features = false, features = ["prox
 test-log = "0.2.14"
 ctor = "0.2.9"
 axum-test = { version = "17.0.0", features = ["ws"] }
-tempfile = "3.14.0"
 mocktail = { git = "https://github.com/EratoLab/mocktail.git", rev = "4a99543bcfe0511db6eea524a037a670b96a6faf" }
 insta = "1.47.2"
 mock-mcp-server = { path = "../mock-mcp-server" }

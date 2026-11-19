@@ -1,10 +1,74 @@
 //! Temporary ERMAIN-1253 staging probe. Only fixed labels and shape data cross
 //! the logging boundary. Task-local scope follows one accepted activity.
-use super::activity::TEAMS_FILE_DOWNLOAD_INFO;
+use super::activity::{Activity, TEAMS_FILE_DOWNLOAD_INFO};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use regex::Regex;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
+use std::path::Path;
 use std::sync::LazyLock;
 use uuid::Uuid;
+
+/// One accepted personal-chat message, explicitly marked by the sender.
+pub(super) fn capture_marked_html(activity: &Activity) {
+    let Ok(config) = std::env::var("ERATO_TEAMS_HTML_CAPTURE") else {
+        return;
+    };
+    let mut parts = config.split('|');
+    let (Some(chat), Some(marker), Some(end), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return;
+    };
+    let Ok(end) = end.parse::<i64>() else { return };
+    if chrono::Utc::now().timestamp() >= end {
+        return;
+    }
+    let Some(html) = marked_html(activity, chat, marker) else {
+        return;
+    };
+    let path = Path::new("/tmp/erato-teams-html-capture.json");
+    match save_html(path, &html) {
+        Ok(()) => {
+            tracing::warn!("Marked Teams HTML capture ready");
+            tokio::spawn(async move {
+                let seconds = end.saturating_sub(chrono::Utc::now().timestamp()).max(0) as u64;
+                tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
+                let _ = tokio::fs::remove_file(path).await;
+            });
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(_) => tracing::warn!("Marked Teams HTML capture could not be saved"),
+    }
+}
+
+fn marked_html<'a>(activity: &'a Activity, chat: &str, marker: &str) -> Option<Vec<&'a str>> {
+    if activity.kind != "message"
+        || activity.conversation.as_ref()?.conversation_type.as_deref() != Some("personal")
+        || URL_SAFE_NO_PAD.encode(Sha256::digest(activity.conversation_id()?.as_bytes())) != chat
+        || Uuid::parse_str(marker).is_err()
+        || !activity.text.as_deref()?.contains(marker)
+    {
+        return None;
+    }
+    Some(
+        activity
+            .attachments
+            .iter()
+            .filter(|a| a.content_type.eq_ignore_ascii_case("text/html"))
+            .filter_map(|a| a.content.as_ref()?.as_str())
+            .collect(),
+    )
+}
+
+// The private file becomes visible only after every string has been written.
+// JSON preserves the exact string boundaries, whitespace and HTML entities.
+fn save_html(path: &Path, html: &[&str]) -> std::io::Result<()> {
+    let mut tmp = tempfile::NamedTempFile::new_in(path.parent().expect("capture directory"))?;
+    serde_json::to_writer(tmp.as_file_mut(), html)?;
+    tmp.persist_noclobber(path)?;
+    Ok(())
+}
 
 tokio::task_local! { pub(super) static TOKEN: Uuid; }
 tokio::task_local! { pub(super) static FILE: usize; }
@@ -193,6 +257,33 @@ mod tests {
     use crate::ms_teams_bot::activity::Activity;
     use serde_json::json;
     use std::io::{Read, Seek};
+
+    #[test]
+    fn marked_html_is_scoped_exact_and_write_once() {
+        let marker = Uuid::new_v4().to_string();
+        let chat = URL_SAFE_NO_PAD.encode(Sha256::digest(b"test-chat"));
+        let body = " <p data-id=\"YWJj\">&amp;&#65;\r\nλ</p> ";
+        let mut activity: Activity = serde_json::from_value(json!({
+            "type":"message", "conversation":{"id":"test-chat","conversationType":"personal"},
+            "text":marker, "attachments":[{"contentType":"text/html","content":body},
+                {"contentType":"reference","contentUrl":"https://unrelated.test/"},
+                {"contentType":"text/html","content":""}]
+        }))
+        .unwrap();
+        assert!(marked_html(&activity, "another-chat", &marker).is_none());
+        assert!(marked_html(&activity, &chat, &Uuid::new_v4().to_string()).is_none());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("capture.json");
+        save_html(&path, &marked_html(&activity, &chat, &marker).unwrap()).unwrap();
+        assert_eq!(
+            save_html(&path, &["replacement"]).unwrap_err().kind(),
+            std::io::ErrorKind::AlreadyExists
+        );
+        let captured: Vec<String> = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(captured, [body, ""]);
+        activity.kind = "messageUpdate".into();
+        assert!(marked_html(&activity, &chat, &marker).is_none());
+    }
 
     #[test]
     fn serialized_probe_covers_picker_shapes_without_logging_content() {
