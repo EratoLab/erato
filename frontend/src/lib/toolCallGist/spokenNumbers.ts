@@ -1,11 +1,14 @@
 /**
  * Numbers a person said in words, read through a per-language table the
  * deployment supplies (`[spoken_number_words.<language>]`). The table holds
- * the language: which words are numbers, which multiply, which join, which
- * are ordinals and how those end. This module only combines them, the same
- * way for every language: a compound written as one word
- * ("zweiundzwanzigsten") or as several ("twenty-second", "three hundred and
- * five"). Without a table no word is read as a number; digits always are.
+ * the words: which are numbers, which multiply, which join, which are
+ * ordinals and how those end, and which may be something else. This module
+ * combines them by one structure, the one German and English share: units
+ * before the tens with a joiner ("zweiundzwanzig") or after them
+ * ("twenty-two"), then hundreds, then thousands and up, written as one word
+ * or several. A language built otherwise (French "quatre-vingt-dix", 4 × 20
+ * + 10) needs this structure extended before its data can work. Without a
+ * table no word is read as a number; digits always are.
  */
 
 /** One language's number words, as the backend passes them on. */
@@ -21,8 +24,13 @@ export interface NumberWords {
   multipliers?: Record<string, number>;
   /** Words that join the parts of one number: "und", "and". */
   joiners?: string[];
-  /** Ordinals, as the stem before an ending: "zwanzigst", "first". */
+  /** Ordinals, as the stem before an ending: "zwanzigst", "third". */
   ordinals?: Record<string, number>;
+  /**
+   * Ordinal stems that may be another word ("acht" in "achte darauf",
+   * "erst" in "als Erstes"): inside a compound an ordinal, alone only maybe.
+   */
+  ambiguous_ordinals?: Record<string, number>;
   /** What may follow an ordinal stem; `""` lets it stand alone. */
   ordinal_endings?: string[];
 }
@@ -33,12 +41,17 @@ export interface NumbersSaid {
   maybe: ReadonlySet<number>;
 }
 
-type Kind = "number" | "ambiguous" | "multiplier" | "joiner" | "ordinal";
+type Kind = "number" | "multiplier" | "joiner" | "ordinal";
 
 interface Part {
   kind: Kind;
   value: number;
+  /** Alone it may be another word. */
+  ambiguous: boolean;
 }
+
+/** Longer words are no number words; it also bounds splitting a compound. */
+const MAX_WORD_CHARS = 64;
 
 interface Lexicon {
   parts: Map<string, Part[]>;
@@ -54,21 +67,26 @@ const usable = (value: unknown): value is number =>
 
 const lexiconOf = (table: NumberWords): Lexicon => {
   const parts = new Map<string, Part[]>();
-  const put = (kind: Kind, entries: Record<string, number> | undefined) => {
+  const put = (
+    kind: Kind,
+    entries: Record<string, number> | undefined,
+    ambiguous = false,
+  ) => {
     for (const [word, value] of Object.entries(entries ?? {}))
       if (usable(value) && fold(word).length > 0)
         parts.set(fold(word), [
           ...(parts.get(fold(word)) ?? []),
-          { kind, value },
+          { kind, value, ambiguous },
         ]);
   };
   put("number", table.numbers);
-  put("ambiguous", table.ambiguous);
+  put("number", table.ambiguous, true);
   put("multiplier", table.multipliers);
   put("ordinal", table.ordinals);
+  put("ordinal", table.ambiguous_ordinals, true);
   for (const word of table.joiners ?? [])
     if (fold(word).length > 0)
-      parts.set(fold(word), [{ kind: "joiner", value: 0 }]);
+      parts.set(fold(word), [{ kind: "joiner", value: 0, ambiguous: false }]);
   const endings = [...new Set((table.ordinal_endings ?? []).map(fold))].sort(
     (a, b) => b.length - a.length,
   );
@@ -151,7 +169,7 @@ class Builder {
     }
     this.joined = false;
     this.count++;
-    if (part.kind !== "ambiguous") this.ambiguousOnly = false;
+    if (!part.ambiguous) this.ambiguousOnly = false;
     return true;
   }
 
@@ -201,6 +219,7 @@ const split = (
 
 /** A word as the number parts it is made of, or `undefined` for any other word. */
 const partsOf = (word: string, lexicon: Lexicon): Part[] | undefined => {
+  if (Array.from(word).length > MAX_WORD_CHARS) return undefined;
   const joiner = lexicon.parts
     .get(word)
     ?.find((part) => part.kind === "joiner");
@@ -222,6 +241,24 @@ const partsOf = (word: string, lexicon: Lexicon): Part[] | undefined => {
 const DIGITS = /^(\d+)(\p{L}*)$/u;
 
 /**
+ * `table` when it holds what reading needs: numbers, ordinals and their
+ * endings. A table that lacks any of them would read a day said in words as
+ * not said, so it counts as no table.
+ */
+export const readableNumberWords = (
+  table: NumberWords | undefined,
+): NumberWords | undefined => {
+  const some = (entries: Record<string, number> | undefined) =>
+    Object.keys(entries ?? {}).length > 0;
+  return table &&
+    some(table.numbers) &&
+    (some(table.ordinals) || some(table.ambiguous_ordinals)) &&
+    (table.ordinal_endings?.length ?? 0) > 0
+    ? table
+    : undefined;
+};
+
+/**
  * The numbers in `tokens` (lower case, split at anything but letters and
  * digits). Digits are read in any language, also with letters after them
  * ("22nd"). Words are read through `table`: parts next to each other make
@@ -235,7 +272,8 @@ export const numbersSaid = (
 ): NumbersSaid => {
   const sure = new Set<number>();
   const maybe = new Set<number>();
-  const lexicon = table ? lexiconOf(table) : undefined;
+  const readable = readableNumberWords(table);
+  const lexicon = readable ? lexiconOf(readable) : undefined;
 
   let run: { builder: Builder; split: boolean; values: number[] } | null = null;
   const close = () => {
@@ -252,9 +290,14 @@ export const numbersSaid = (
       run ??= { builder: new Builder(), split: false, values: [] };
       if (run.builder.add(part)) continue;
       if (part.kind === "joiner" || run.builder.joined) {
-        // Joined parts that make no one number are two numbers ("zwei und drei").
+        // Joined parts that make no one number ("zwei und drei", French
+        // "vingt et un") are only maybe the numbers they make.
+        run.split = true;
         close();
-        if (part.kind !== "joiner") addParts([part]);
+        if (part.kind !== "joiner") {
+          addParts([part]);
+          run.split = true;
+        }
         continue;
       }
       const value = run.builder.settled();

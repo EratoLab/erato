@@ -79,10 +79,11 @@ interface ApprovalListeningState {
    */
   askedWhichText: string | null;
   /**
-   * The card the user told to stop. It keeps listening for commands, but
-   * says nothing to words it cannot use (noise, words it did not
-   * understand, another request): the user may be talking to someone else.
-   * Ends when the voice speaks about the card again.
+   * The card the user told to stop. It keeps listening, but acts only on
+   * words that resume the card ("weiter", "nochmal", "was noch", "lies …
+   * vor"); to anything else, a yes, a no or a change included, it says
+   * nothing and sends nothing: the user may be talking to someone else.
+   * Ends when the voice says something of the card again.
    */
   stopped: string | null;
 }
@@ -208,12 +209,19 @@ export const stepForMeaning = (
       return { event: { type: "stop" }, listen: true, stops: true };
     case "approve":
     case "reject":
-      return listen({
-        type: "notice",
-        notice: { kind: "decide_on_screen", decision: meaning },
-      });
+      return listen(
+        context.stopped
+          ? null
+          : {
+              type: "notice",
+              notice: { kind: "decide_on_screen", decision: meaning },
+            },
+      );
     case "change":
-      return { event: null, listen: false, change: true };
+      // After a stop, words that sound like a change may be for someone else.
+      return context.stopped
+        ? listen(null)
+        : { event: null, listen: false, change: true };
     case "new_request":
       // After a stop, words to someone else are let be.
       return listen(
@@ -532,8 +540,11 @@ export const quietApprovalListening = (key: string) =>
   useApprovalListening.setState({ quiet: key });
 
 // Saying a card again, by the control or by a new card, listens again; a
-// stop is over once the voice speaks again.
+// stop is over once the voice says something of the card, not a notice.
 useApprovalSpeech.subscribe((state, previous) => {
-  if (state.speaking && !previous.speaking)
-    useApprovalListening.setState({ quiet: null, stopped: null });
+  if (!state.speaking || previous.speaking) return;
+  const notice = spokenApprovalCardNow()?.flow.playing?.type === "notice";
+  useApprovalListening.setState(
+    notice ? { quiet: null } : { quiet: null, stopped: null },
+  );
 });

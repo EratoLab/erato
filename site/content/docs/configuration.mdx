@@ -5642,27 +5642,53 @@ opportunity = "Verkaufschancen"
 {/* erato_toml_config_key: spoken_number_words.<key>.multipliers.<key> */}
 {/* erato_toml_config_key: spoken_number_words.<key>.joiners.[] */}
 {/* erato_toml_config_key: spoken_number_words.<key>.ordinals.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<key>.ambiguous_ordinals.<key> */}
 {/* erato_toml_config_key: spoken_number_words.<key>.ordinal_endings.[] */}
 
-Number words by language tag, so that a number or date a person says in words counts as named. After a [change request](#approval_change_requests) by voice, the corrected card is read as its differences, and a difference the person's words do not name is called "changed without being asked". The words are compared with the card's values as values: "den zweiundzwanzigsten" names the 22nd, "sixty percent" names 60, "dreihunderteinundvierzigtausend" or "341 Tausend" names 341000, whatever format the server writes the value in. This is language data and usually comes from a content package; the web app combines the words the same way for every language.
+Number words by language tag, so that a number or date a person says in words counts as named. After a [change request](#approval_change_requests) by voice, the corrected card is read as its differences, and each difference is marked by whether the person's words name it. The words are compared with the card's values as values: "den zweiundzwanzigsten" names the 22nd, "sixty percent" names 60, "dreihunderteinundvierzigtausend" or "341 Tausend" names 341000, whatever format the server writes the value in. This is language data and usually comes from a content package. The table of the user's language setting is used, as for everything else in a spoken turn.
 
 - `numbers`: words that are a number alone and inside a compound (`zwei = 2`, `zwanzig = 20`).
-- `ambiguous`: words that may be a number or another word (`ein`, `one`, `second`). Inside a compound they are a number; alone they only maybe name a value, and the voice then says the difference as "also changed", without either claim.
+- `ambiguous`: words that may be a number or another word (`ein`, `eins`, `acht`, `one`). Inside a compound they are a number; alone they only maybe name a value.
 - `multipliers`: words that multiply what comes before them (`hundert = 100`, `thousand = 1000`), at least 10.
 - `joiners`: words that join the parts of one number (`und` in "zweiundzwanzig", `and` in "three hundred and five").
-- `ordinals`: ordinals as the stem before an ending (`zwanzigst = 20`, `first = 1`).
+- `ordinals`: ordinals as the stem before an ending (`zwanzigst = 20`, `third = 3`).
+- `ambiguous_ordinals`: ordinal stems that may be another word (`acht` in "achte darauf", `erst` in "als Erstes", `zweit` in "die zweite Variante"). Inside a compound ("achtundzwanzigsten") they are an ordinal; alone only maybe.
 - `ordinal_endings`: what may follow an ordinal stem (`e`, `en`, `er`, `es`, `em` in German); `""` lets a stem stand alone, as in English.
 
-Without number words for the listener's language only digits are read. A changed number or date the words do not name in digits is then said as "also changed", never as changed without being asked, since the person may have said it in words. A month, a year or an hour alone never names a date. Entries are checked at startup: a value that is not a whole number from 0 to 10^12, a word that is blank, longer than 64 bytes, holds a space or hidden characters, an entry of the wrong shape, a language that is not a lowercase tag, and a language with more than 2000 words are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too.
+**Which number structures the data can express.** The web app combines the words by the structure German and English share: units before the tens with a joiner ("zweiundzwanzig") or after them ("twenty-two"), teens as words of their own, then hundreds, then thousands and up, written as one word or as several, and ordinals as a stem with an ending. A language built otherwise needs this structure extended in the web app before its data can work: French "quatre-vingt-dix" (4 × 20 + 10) or "soixante-dix" (60 + 10), for example. With such a table today, those parts fall apart; parts joined by a joiner that make no one number ("vingt et un") are only maybe meant, so they never mark a change as asked.
+
+**How a difference is marked.**
+
+- *Asked for* ("Geändert: …" / "Changed: …"): the words name the field, or name the new value. A number names a number value or the day of a date wherever it is said; the date's weekday names it too. A month said with the day must be the date's own month. A month, or a year said as a number, alone names no date. A number does not know which field it was said for: "um acht Uhr" names a date on the 8th, and "zwei Wochen später" names a probability changed to 2.
+- *Not asked for* ("Außerdem ungefragt geändert: …" / "Also changed, without being asked: …"): the words name nothing of it, and every number in them was read.
+- *Neither* ("Außerdem geändert: …" / "Also changed: …"): the words may name it but cannot be read for sure. That is the case when a number word that may be something else stands alone, when parts next to each other make no one number ("twenty twenty-six"), and **whenever there is no usable table for the user's language**: then every changed number, every changed date and every text value with digits that the words do not name in digits is said this way, also when the request held no number at all. Only a date whose month differs from a month the words name stays "without being asked".
+
+A table that lacks `numbers`, ordinals (`ordinals` or `ambiguous_ordinals`) or `ordinal_endings` would read a day said in words as not said: it is ignored with a warning, and that language reads digits only. Decimals said in words ("sechzig Komma fünf") are not read; digits are. Fractions ("halb", "Viertel", "half") and "Dutzend"/"dozen" are not numbers. A word longer than 64 characters is never read as a number.
+
+Entries are checked at startup: a value that is not a whole number from 0 to 10^12, a word that is blank, longer than 64 bytes, holds a space or hidden characters, an entry of the wrong shape, a language that is not a lowercase tag, an incomplete language as above, and a language with more than 2000 words are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too.
 
 ```toml
 [spoken_number_words.de]
-numbers = { zwei = 2, zwanzig = 20 }
-ambiguous = { ein = 1 }
-multipliers = { hundert = 100, tausend = 1000 }
 joiners = ["und"]
-ordinals = { zwanzigst = 20 }
 ordinal_endings = ["e", "en", "er", "es", "em"]
+
+[spoken_number_words.de.numbers]
+zwei = 2
+zwanzig = 20
+
+[spoken_number_words.de.ambiguous]
+ein = 1
+acht = 8
+
+[spoken_number_words.de.multipliers]
+hundert = 100
+tausend = 1000
+
+[spoken_number_words.de.ordinals]
+zwanzigst = 20
+
+[spoken_number_words.de.ambiguous_ordinals]
+acht = 8
 ```
 
 ### `approval_change_requests`

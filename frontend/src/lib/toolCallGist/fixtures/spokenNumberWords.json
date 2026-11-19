@@ -3,14 +3,12 @@
   "de": {
     "numbers": {
       "null": 0,
-      "eins": 1,
       "zwei": 2,
       "drei": 3,
       "vier": 4,
       "fünf": 5,
       "sechs": 6,
       "sieben": 7,
-      "acht": 8,
       "neun": 9,
       "zehn": 10,
       "elf": 11,
@@ -36,7 +34,9 @@
       "eine": 1,
       "einen": 1,
       "einem": 1,
-      "einer": 1
+      "einer": 1,
+      "eins": 1,
+      "acht": 8
     },
     "multipliers": {
       "hundert": 100,
@@ -46,14 +46,10 @@
     },
     "joiners": ["und"],
     "ordinals": {
-      "erst": 1,
-      "zweit": 2,
-      "dritt": 3,
       "viert": 4,
       "fünft": 5,
       "sechst": 6,
       "siebt": 7,
-      "acht": 8,
       "neunt": 9,
       "zehnt": 10,
       "elft": 11,
@@ -70,7 +66,13 @@
       "hundertst": 100,
       "tausendst": 1000
     },
-    "ordinal_endings": ["e", "en", "er", "es", "em"]
+    "ordinal_endings": ["e", "en", "er", "es", "em"],
+    "ambiguous_ordinals": {
+      "erst": 1,
+      "zweit": 2,
+      "dritt": 3,
+      "acht": 8
+    }
   },
   "en": {
     "numbers": {
@@ -113,8 +115,6 @@
     },
     "joiners": ["and"],
     "ordinals": {
-      "first": 1,
-      "third": 3,
       "fourth": 4,
       "fifth": 5,
       "sixth": 6,
@@ -128,6 +128,10 @@
       "thirtieth": 30,
       "hundredth": 100
     },
-    "ordinal_endings": [""]
+    "ordinal_endings": [""],
+    "ambiguous_ordinals": {
+      "third": 3,
+      "first": 1
+    }
   }
 }

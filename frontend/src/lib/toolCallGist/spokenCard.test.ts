@@ -853,14 +853,19 @@ describe("one ranking with the card", () => {
       const call = JSON.parse(JSON.stringify(callOf(id))) as SetCall;
       const change = (call.display.label as { change: Record<string, unknown> })
         .change;
-      change.notes = notes;
+      change.notes = [
+        ...((change.notes as string[] | undefined) ?? []),
+        ...notes,
+      ];
       edit(change);
-      return (language: string) =>
+      return (language: string, amount: "full" | "short" = "full") =>
         inLanguage(language, () =>
           spokenApprovalPieces(approvalOf(call), {
             language,
             now: NOW,
             timeZone: ZONE,
+            amount,
+            shortDetails: 1,
           }),
         ).map((piece) => piece.text);
     };
@@ -888,10 +893,44 @@ describe("one ranking with the card", () => {
           expect(texts).not.toContain(ORGANISATION[language]);
           expect(texts).not.toContain(TOOL[language]);
         }
-        const created = marked("create-08-opportunity-amounts", [
+        const created = marked("create-10-account", [
           "operator_marked_destructive",
         ])(language);
         expect(created).not.toContain(ORGANISATION[language]);
+      },
+    );
+
+    it.each(["de", "en"] as const)(
+      "%s: where the voice says only part of the write, the mark stays",
+      (language) => {
+        for (const id of [
+          // "Dazu kommen vier weitere Felder …"
+          "update-06-many-fields",
+          "create-08-opportunity-amounts",
+          // Five pages, some named.
+          "create-11-batch-rows",
+          // Whether the list is replaced is not known.
+          "update-12-list-replace-unknown",
+          // "Dabei werden 15 Felder geleert."
+          "update-11-fifteen-emptied",
+          // A record nobody read in the chat.
+          "update-05-record-nobody-read",
+        ])
+          expect(
+            marked(id, ["operator_marked_destructive"])(language),
+            id,
+          ).toContain(ORGANISATION[language]);
+      },
+    );
+
+    it.each(["de", "en"] as const)(
+      "%s: a short reading that holds a detail back says the mark",
+      (language) => {
+        const update = marked("update-01-date-and-probability", [
+          "operator_marked_destructive",
+        ]);
+        expect(update(language, "short")).toContain(ORGANISATION[language]);
+        expect(update(language, "full")).not.toContain(ORGANISATION[language]);
       },
     );
 

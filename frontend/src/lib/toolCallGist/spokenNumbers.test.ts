@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import words from "./fixtures/spokenNumberWords.json";
-import { numbersSaid } from "./spokenNumbers";
+import { numbersSaid, readableNumberWords } from "./spokenNumbers";
 
 import type { NumberWords } from "./spokenNumbers";
 
@@ -26,10 +26,9 @@ describe("numbers said in words, read through a test table", () => {
   it.each([
     ["de", "Nimm den zweiundzwanzigsten", [22]],
     ["de", "Nicht auf den Fünfzehnten, nimm den Zweiundzwanzigsten.", [15, 22]],
-    ["de", "am ersten", [1]],
-    ["de", "der dritte", [3]],
-    ["de", "den achten", [8]],
-    ["de", "acht Prozent", [8]],
+    ["de", "einunddreißigsten", [31]],
+    ["de", "den vierten", [4]],
+    ["de", "achtundzwanzigsten", [28]],
     ["de", "einunddreißigsten", [31]],
     ["de", "zweiundzwanzig", [22]],
     ["de", "zwei und zwanzig", [22]],
@@ -41,10 +40,9 @@ describe("numbers said in words, read through a test table", () => {
     ["de", "341 Tausend", [341, 341_000]],
     ["de", "den 22.", [22]],
     ["de", "den 22sten", [22]],
-    ["de", "zwei und drei", [2, 3]],
     ["en", "make it the twenty-second", [22]],
     ["en", "January twentieth", [20]],
-    ["en", "the first", [1]],
+    ["en", "twenty-third", [23]],
     ["en", "sixty percent", [60]],
     ["en", "three hundred and five", [305]],
     ["en", "three hundred forty-one thousand", [341_000]],
@@ -59,6 +57,54 @@ describe("numbers said in words, read through a test table", () => {
     expect(read("take the other one", "en")).toEqual({ sure: [], maybe: [1] });
     expect(read("einundzwanzig", "de").sure).toEqual([21]);
     expect(read("twenty one", "en").sure).toEqual([21]);
+  });
+
+  it.each([
+    ["de", "Achte bitte darauf, dass alles stimmt.", 8],
+    ["de", "Bitte achten Sie darauf.", 8],
+    ["de", "Gib acht.", 8],
+    ["de", "Als Erstes: der Termin.", 1],
+    ["de", "zum ersten Mal", 1],
+    ["de", "Nimm die zweite Variante.", 2],
+    ["de", "der dritte Punkt", 3],
+    ["de", "Noch eins: …", 1],
+    ["de", "am achten", 8],
+    ["de", "acht Prozent", 8],
+    ["en", "Take a third of that.", 3],
+    ["en", "first of all", 1],
+  ] as const)(
+    "%s: an everyday word the table marks ambiguous is only maybe a number: %s",
+    (language, text, number) => {
+      expect(read(text, language)).toEqual({ sure: [], maybe: [number] });
+    },
+  );
+
+  it("joined parts that make no one number are only maybe meant", () => {
+    expect(read("zwei und drei", "de")).toEqual({ sure: [], maybe: [2, 3] });
+  });
+
+  it("a very long word is no number, and reading it stays quick", () => {
+    const started = Date.now();
+    expect(read("dreizehn".repeat(30), "de")).toEqual({ sure: [], maybe: [] });
+    expect(read("dreizehn".repeat(7), "de").maybe).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(500);
+  });
+
+  it("a table without numbers, ordinals or their endings counts as none", () => {
+    for (const missing of ["numbers", "ordinals", "ordinal_endings"] as const) {
+      const { [missing]: _, ...rest } = TEST_NUMBER_WORDS.de;
+      const table =
+        missing === "ordinals" ? { ...rest, ambiguous_ordinals: {} } : rest;
+      expect(readableNumberWords(table), missing).toBeUndefined();
+      expect(
+        [...numbersSaid(tokens("zweiundzwanzigsten"), table).sure],
+        missing,
+      ).toEqual([]);
+    }
+    expect(readableNumberWords({})).toBeUndefined();
+    expect(readableNumberWords(TEST_NUMBER_WORDS.de)).toBe(
+      TEST_NUMBER_WORDS.de,
+    );
   });
 
   it("numbers next to each other that make no one number are only maybe meant", () => {

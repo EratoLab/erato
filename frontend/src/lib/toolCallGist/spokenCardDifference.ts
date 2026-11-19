@@ -15,7 +15,7 @@ import {
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { spokenFieldName, spokenNamesFor } from "./spokenNames";
-import { numbersSaid } from "./spokenNumbers";
+import { numbersSaid, readableNumberWords } from "./spokenNumbers";
 import { spokenReadFactsOf } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
@@ -873,7 +873,7 @@ const heardOf = (
   return {
     tokens,
     numbers: numbersSaid(tokens, numberWords),
-    wordsUnread: numberWords === undefined,
+    wordsUnread: readableNumberWords(numberWords) === undefined,
   };
 };
 
@@ -891,8 +891,9 @@ const best = (namings: readonly Naming[]): Naming =>
 /**
  * Whether the user's words name a value, compared as a value: a number by
  * its value, however it was said. A date needs its day, and a month said
- * with it must be its own; its weekday names it too. A month, a year or an
- * hour alone names nothing.
+ * with it must be its own; its weekday names it too. A month alone names
+ * nothing. A number is not tied to the field it was said for: "um 8 Uhr"
+ * names a date on the 8th.
  */
 const names = (heard: Heard, value: EarValue): Naming => {
   const said = heard.tokens;

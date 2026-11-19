@@ -428,10 +428,16 @@ pub struct SpokenNumberWordsConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub joiners: Vec<String>,
     /// Ordinals as the stem before an ending: `zwanzigst = 20`,
-    /// `first = 1`.
+    /// `third = 3`.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub ordinals: HashMap<String, u64>,
+    /// Ordinal stems that may be another word (`acht` in "achte darauf",
+    /// `erst` in "als Erstes"): inside a compound an ordinal, alone only
+    /// maybe, like `ambiguous`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub ambiguous_ordinals: HashMap<String, u64>,
     /// What may follow an ordinal stem (`en` in "zwanzigsten"); `""` lets a
     /// stem stand alone, as in English.
     #[serde(default)]
@@ -448,6 +454,7 @@ const NUMBER_WORDS_SETTINGS: &[&str] = &[
     "multipliers",
     "joiners",
     "ordinals",
+    "ambiguous_ordinals",
     "ordinal_endings",
 ];
 /// Words one language holds; far more than any language's number words.
@@ -514,6 +521,7 @@ fn shaped_number_words(written: Written) -> (SpokenNumberWordsByLanguage, Vec<St
         let ambiguous = numbers("ambiguous", &mut dropped);
         let multipliers = numbers("multipliers", &mut dropped);
         let ordinals = numbers("ordinals", &mut dropped);
+        let ambiguous_ordinals = numbers("ambiguous_ordinals", &mut dropped);
         let mut list = |setting: &str, dropped: &mut Vec<String>| {
             settings
                 .remove(setting)
@@ -530,6 +538,7 @@ fn shaped_number_words(written: Written) -> (SpokenNumberWordsByLanguage, Vec<St
                 multipliers,
                 joiners,
                 ordinals,
+                ambiguous_ordinals,
                 ordinal_endings,
             },
         );
@@ -561,6 +570,7 @@ impl SpokenNumberWordsConfig {
             + self.ambiguous.len()
             + self.multipliers.len()
             + self.ordinals.len()
+            + self.ambiguous_ordinals.len()
             + self.joiners.len()
             + self.ordinal_endings.len()
     }
@@ -585,6 +595,7 @@ impl SpokenNumberWordsConfig {
             ("ambiguous", &mut self.ambiguous),
             ("multipliers", &mut self.multipliers),
             ("ordinals", &mut self.ordinals),
+            ("ambiguous_ordinals", &mut self.ambiguous_ordinals),
         ] {
             entries.retain(|word, _| {
                 let keep = word_ok(word);
@@ -641,7 +652,28 @@ pub fn drop_unusable_number_words(languages: &mut SpokenNumberWordsByLanguage) -
             ));
             return false;
         }
-        dropped.extend(words.drop_unusable(&format!("spoken_number_words.{language}")));
+        let place = format!("spoken_number_words.{language}");
+        dropped.extend(words.drop_unusable(&place));
+        // Without numbers, ordinals or their endings a day said in words
+        // would read as not said: such a table counts as none.
+        let missing: Vec<&str> = [
+            ("numbers", words.numbers.is_empty()),
+            (
+                "ordinals",
+                words.ordinals.is_empty() && words.ambiguous_ordinals.is_empty(),
+            ),
+            ("ordinal_endings", words.ordinal_endings.is_empty()),
+        ]
+        .into_iter()
+        .filter_map(|(what, empty)| empty.then_some(what))
+        .collect();
+        if !missing.is_empty() {
+            dropped.push(format!(
+                "{place} has no {}; it is ignored and only digits are read in this language",
+                missing.join(", ")
+            ));
+            return false;
+        }
         true
     });
     dropped.sort();
@@ -1283,11 +1315,14 @@ mod tests {
             multipliers = { tausend = 1000 }
             joiners = ["und"]
             ordinals = { zwanzigst = 20 }
+            ambiguous_ordinals = { acht = 8, "zwölft" = 12 }
             ordinal_endings = ["e", "en"]
             [spoken_number_words.en]
             ordinal_endings = [""]
         "#,
         );
+        assert_eq!(loaded["de"].ambiguous_ordinals["acht"], 8);
+        assert_eq!(loaded["de"].ambiguous_ordinals["zwölft"], 12);
         let de = &loaded["de"];
         assert_eq!(de.numbers["zwanzig"], 20);
         assert_eq!(de.ambiguous["ein"], 1);
@@ -1340,9 +1375,16 @@ mod tests {
             numbers = { zwei = 2, "zwei drei" = 23, "" = 0 }
             multipliers = { tausend = 1000, eins = 1 }
             joiners = ["und", " "]
+            ordinals = { zweit = 2 }
             ordinal_endings = ["", "en", "sehr lange endung"]
             [spoken_number_words.DE]
             numbers = { zwei = 2 }
+            [spoken_number_words.en]
+            numbers = { "two words" = 2 }
+            ordinals = { second = 2 }
+            ordinal_endings = [""]
+            [spoken_number_words.fr]
+            numbers = { deux = 2 }
         "#,
         );
         let dropped = drop_unusable_number_words(&mut loaded);
@@ -1354,9 +1396,14 @@ mod tests {
                 "spoken_number_words.de.numbers: '' is ignored",
                 "spoken_number_words.de.numbers: 'zwei drei' is ignored",
                 "spoken_number_words.de.ordinal_endings: 'sehr lange endung' is ignored",
+                "spoken_number_words.en has no numbers; it is ignored and only digits are read in this language",
+                "spoken_number_words.en.numbers: 'two words' is ignored",
+                "spoken_number_words.fr has no ordinals, ordinal_endings; it is ignored and only digits are read in this language",
                 "spoken_number_words: 'DE' is not a lowercase language tag such as `de` and is ignored",
             ]
         );
+        assert!(!loaded.contains_key("en"));
+        assert!(!loaded.contains_key("fr"));
         let de = &loaded["de"];
         assert_eq!(de.numbers.len(), 1);
         assert_eq!(de.multipliers.len(), 1);

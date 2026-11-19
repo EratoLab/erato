@@ -273,6 +273,11 @@ export interface SpokenFacts {
   detailsOmitted: number;
   texts: SpokenText[];
   consequences: SpokenConsequence[];
+  /**
+   * A destructive mark left out because the card says each value: said
+   * after all when a short reading holds a detail back.
+   */
+  markIfHeld?: SpokenConsequence;
 }
 
 /** Where a card sits in a stop with several approvals. */
@@ -727,30 +732,43 @@ const consequencesOf = (
   }
   if (action === "delete" && unique.length === 0) return ["restore_unknown"];
   if (action === "delete" || unique.length > 0) return unique;
-  // Who marked it, as the screen says: the organisation's mark wins.
-  const marked = notes.includes("operator_marked_destructive")
+  const marked = destructiveMark(notes);
+  return marked ? [marked] : [];
+};
+
+/** Who marked the tool destructive, as the screen says: the organisation's mark wins. */
+const destructiveMark = (
+  notes: GistChange["notes"],
+): SpokenConsequence | undefined =>
+  notes.includes("operator_marked_destructive")
     ? "destructive_by_organisation"
     : notes.includes("marked_destructive")
       ? "destructive"
       : undefined;
-  return marked && !saysAllItDoes(change, action) ? [marked] : [];
-};
 
 /**
- * A create or update whose card says every value it writes: its voice says
- * what changes, from what to what, so a destructive mark adds nothing the
- * listener needs before deciding. Anything the voice cannot say keeps it.
+ * A create or update whose voice says each value it writes in a piece of
+ * its own, from what to what: a destructive mark then adds nothing the
+ * listener needs before deciding. A card that counts, summarises or holds
+ * back anything keeps it.
  */
-const saysAllItDoes = (
+const saysEachValue = (
   change: GistChange | undefined,
   action: GistAction,
+  detailed: Detailed,
 ): boolean =>
   (action === "create" || action === "update") &&
   change !== undefined &&
   change.complete &&
+  change.batch === undefined &&
   change.opaque.length === 0 &&
   change.opaqueOmitted === 0 &&
-  !change.effects.some((effect) => effect.effect === "unreadable");
+  change.textsOmitted === 0 &&
+  !change.recordUnread &&
+  !change.notes.includes("list_replace_unknown") &&
+  !change.effects.some((effect) => effect.effect === "unreadable") &&
+  detailed.omitted === 0 &&
+  !detailed.details.some((detail) => detail.type === "losses");
 
 /** Spoken names: names and short IDs a person can say, never a machine ID. */
 const spokenNames = (values: GistValue[]): string[] =>
@@ -823,8 +841,28 @@ export const spokenFactsOf = (
     details: batch ? batchLosses(change) : detailed.details,
     detailsOmitted: batch ? 0 : detailed.omitted,
     texts: detailed.texts,
-    consequences: consequencesOf(change, gist.action),
+    ...withDestructiveMark(
+      consequencesOf(change, gist.action),
+      saysEachValue(change, gist.action, detailed),
+    ),
   };
+};
+
+/**
+ * The consequences to say. A destructive mark alone, on a card that says
+ * each value, is kept aside: said only if a short reading holds something
+ * back.
+ */
+const withDestructiveMark = (
+  consequences: SpokenConsequence[],
+  saysEach: boolean,
+): Pick<SpokenFacts, "consequences" | "markIfHeld"> => {
+  const [only] = consequences;
+  return saysEach &&
+    consequences.length === 1 &&
+    (only === "destructive" || only === "destructive_by_organisation")
+    ? { consequences: [], markIfHeld: only }
+    : { consequences };
 };
 
 /**
@@ -1230,12 +1268,16 @@ const composedPieces = (
       ...(spokenText.cardField ? { idField: spokenText.cardField } : {}),
     });
   }
-  if (facts.consequences.length > 0) {
+  const consequences =
+    facts.markIfHeld && pieces.some((piece) => piece.held !== undefined)
+      ? [facts.markIfHeld]
+      : facts.consequences;
+  if (consequences.length > 0) {
     pieces.push({
       role: "consequence",
-      text: words.consequence(facts.consequences, facts),
+      text: words.consequence(consequences, facts),
       mustSay: true,
-      values: facts.consequences.map((consequence) =>
+      values: consequences.map((consequence) =>
         text("consequence", consequence),
       ),
     });

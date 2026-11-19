@@ -4935,6 +4935,12 @@
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
+  "spoken_number_words.<key>.ambiguous_ordinals.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "spoken_number_words.<key>.joiners.[]": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
