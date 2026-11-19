@@ -5634,6 +5634,37 @@ estimatedclosedate = "Voraussichtliches Abschlussdatum"
 opportunity = "Verkaufschancen"
 ```
 
+### `spoken_number_words`
+
+{/* erato_toml_config_key: spoken_number_words */}
+{/* erato_toml_config_key: spoken_number_words.<key>.numbers.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<key>.ambiguous.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<key>.multipliers.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<key>.joiners.[] */}
+{/* erato_toml_config_key: spoken_number_words.<key>.ordinals.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<key>.ordinal_endings.[] */}
+
+Number words by language tag, so that a number or date a person says in words counts as named. After a [change request](#approval_change_requests) by voice, the corrected card is read as its differences, and a difference the person's words do not name is called "changed without being asked". The words are compared with the card's values as values: "den zweiundzwanzigsten" names the 22nd, "sixty percent" names 60, "dreihunderteinundvierzigtausend" or "341 Tausend" names 341000, whatever format the server writes the value in. This is language data and usually comes from a content package; the web app combines the words the same way for every language.
+
+- `numbers`: words that are a number alone and inside a compound (`zwei = 2`, `zwanzig = 20`).
+- `ambiguous`: words that may be a number or another word (`ein`, `one`, `second`). Inside a compound they are a number; alone they only maybe name a value, and the voice then says the difference as "also changed", without either claim.
+- `multipliers`: words that multiply what comes before them (`hundert = 100`, `thousand = 1000`), at least 10.
+- `joiners`: words that join the parts of one number (`und` in "zweiundzwanzig", `and` in "three hundred and five").
+- `ordinals`: ordinals as the stem before an ending (`zwanzigst = 20`, `first = 1`).
+- `ordinal_endings`: what may follow an ordinal stem (`e`, `en`, `er`, `es`, `em` in German); `""` lets a stem stand alone, as in English.
+
+Without number words for the listener's language only digits are read. A changed number or date the words do not name in digits is then said as "also changed", never as changed without being asked, since the person may have said it in words. A month, a year or an hour alone never names a date. Entries are checked at startup: a value that is not a whole number from 0 to 10^12, a word that is blank, longer than 64 bytes, holds a space or hidden characters, an entry of the wrong shape, a language that is not a lowercase tag, and a language with more than 2000 words are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too.
+
+```toml
+[spoken_number_words.de]
+numbers = { zwei = 2, zwanzig = 20 }
+ambiguous = { ein = 1 }
+multipliers = { hundert = 100, tausend = 1000 }
+joiners = ["und"]
+ordinals = { zwanzigst = 20 }
+ordinal_endings = ["e", "en", "er", "es", "em"]
+```
+
 ### `approval_change_requests`
 
 {/* erato_toml_config_key: approval_change_requests */}

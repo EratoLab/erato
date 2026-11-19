@@ -85,8 +85,14 @@ pub(super) fn build_request(prompt: &str, input: &VoiceCommandInput<'_>) -> Chat
         }
         card.push('\n');
     }
+    let asked = match input.question {
+        Some(super::VoiceQuestion::WhichText) => {
+            "THE VOICE JUST ASKED: which of the card's texts to read. Words that name one text's field answer it: read_text with that piece.\n"
+        }
+        None => "",
+    };
     let text = format!(
-        "LANGUAGE: {}\nCARD PIECES:\n{}USER SAID: {}",
+        "LANGUAGE: {}\nCARD PIECES:\n{}{asked}USER SAID: {}",
         input.language,
         card,
         serde_json::to_string(input.transcript.trim()).unwrap_or_default(),

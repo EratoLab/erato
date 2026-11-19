@@ -59,6 +59,7 @@ impl SentenceSet {
             language: &sentence.language,
             pieces: &card.pieces,
             current_piece_id: Some(&card.current_piece_id),
+            question: None,
         }
     }
 }
@@ -247,6 +248,7 @@ async fn ask(client: &ScriptedModel, transcript: &str) -> Classified {
         language: "de",
         pieces: &pieces,
         current_piece_id: Some(&current),
+        question: None,
     };
     classify(
         &input,
@@ -290,6 +292,7 @@ async fn without_a_model_words_the_rules_do_not_match_are_unclear() {
         language: "de",
         pieces: &pieces,
         current_piece_id: Some(&current),
+        question: None,
     };
     let classified = classify(&input, None).await;
     assert_eq!(classified.command.meaning, VoiceMeaning::Unclear);
@@ -449,6 +452,7 @@ async fn the_review_cases_hold() {
             language: "de",
             pieces: &card.pieces,
             current_piece_id: Some(&card.current_piece_id),
+            question: None,
         })
         .map(|classified| classified.command.meaning)
     };
@@ -461,6 +465,7 @@ async fn the_review_cases_hold() {
                 language: "de",
                 pieces: &card.pieces,
                 current_piece_id: Some(&card.current_piece_id),
+                question: None,
             },
             &VoiceModel {
                 client: &model,
@@ -631,6 +636,7 @@ async fn only_a_clear_no_is_a_refusal() {
                 language: "de",
                 pieces: &card.pieces,
                 current_piece_id: Some(&card.current_piece_id),
+                question: None,
             },
             Some(VoiceModel {
                 client: &model,
@@ -716,6 +722,7 @@ fn not_like_that_asks_for_a_change() {
             language: "de",
             pieces: &card.pieces,
             current_piece_id: Some(&card.current_piece_id),
+            question: None,
         })
         .map(|classified| classified.command.meaning);
         assert!(
@@ -738,6 +745,7 @@ fn not_like_that_is_a_change_only_on_its_own() {
             language: "de",
             pieces: &card.pieces,
             current_piece_id: Some(&card.current_piece_id),
+            question: None,
         })
         .map(|classified| classified.command.meaning)
     };
@@ -796,6 +804,7 @@ async fn a_yes_before_the_card_asked_is_noise_whichever_stage_heard_it() {
                 language: "de",
                 pieces: &card.pieces,
                 current_piece_id: Some(&card.current_piece_id),
+                question: None,
             },
             Some(VoiceModel {
                 client: &model,
@@ -889,6 +898,7 @@ fn the_model_sees_roles_fields_and_words_and_answers_from_closed_lists() {
         language: "de",
         pieces: &pieces,
         current_piece_id: Some("p6"),
+        question: None,
     };
     let request = model::build_request(DEFAULT_PROMPT, &input);
     let text = request
@@ -941,6 +951,7 @@ fn checked(
         language: "de",
         pieces,
         current_piece_id: current,
+        question: None,
     })
 }
 
@@ -975,4 +986,100 @@ fn requests_keep_their_limits() {
         })
         .collect();
     assert_eq!(checked("weiter", &many, None), Err(InputProblem::TooLarge));
+}
+
+/// ERMAIN-1241: with several texts on a card the voice asks which one;
+/// naming a text's field answers it, and a read without a name stays open.
+#[test]
+fn naming_a_text_answers_which_text() {
+    let pieces = vec![
+        CardPiece {
+            id: "what".into(),
+            role: CardPieceRole::What,
+            field: None,
+            state: CardPieceState::Heard,
+        },
+        CardPiece {
+            id: "text:summary".into(),
+            role: CardPieceRole::Text,
+            field: Some("Zusammenfassung".into()),
+            state: CardPieceState::Heard,
+        },
+        CardPiece {
+            id: "text:need".into(),
+            role: CardPieceRole::Text,
+            field: Some("Kundenbedarf".into()),
+            state: CardPieceState::Heard,
+        },
+        CardPiece {
+            id: "request".into(),
+            role: CardPieceRole::Request,
+            field: None,
+            state: CardPieceState::Heard,
+        },
+    ];
+    let rules = |words: &str, language: &str, question: Option<VoiceQuestion>| {
+        classify_by_rules(&VoiceCommandInput {
+            transcript: words,
+            language,
+            pieces: &pieces,
+            current_piece_id: Some("request"),
+            question,
+        })
+        .map(|classified| (classified.command.meaning, classified.command.piece_id))
+    };
+    let asked = Some(VoiceQuestion::WhichText);
+    let read = |id: &str| Some((VoiceMeaning::ReadText, Some(id.to_string())));
+    for (words, language, id) in [
+        ("die Zusammenfassung", "de", "text:summary"),
+        ("Zusammenfassung.", "de", "text:summary"),
+        ("den Kundenbedarf bitte", "de", "text:need"),
+        ("lies die Zusammenfassung vor", "de", "text:summary"),
+        ("the Kundenbedarf", "en", "text:need"),
+    ] {
+        assert_eq!(rules(words, language, asked), read(id), "{words}");
+    }
+    // Already named before any question.
+    assert_eq!(
+        rules("lies die Zusammenfassung vor", "de", None),
+        read("text:summary")
+    );
+    // Not named: no text is picked, so the voice can ask.
+    assert_eq!(
+        rules("lies den Text vor", "de", None),
+        Some((VoiceMeaning::ReadText, None))
+    );
+    // A field named without the question is not taken as a read by the rules.
+    assert_ne!(
+        rules("die Zusammenfassung", "de", None),
+        read("text:summary")
+    );
+    // "Nicht die Zusammenfassung" answers nothing.
+    assert_ne!(
+        rules("nicht die Zusammenfassung", "de", asked),
+        read("text:summary")
+    );
+}
+
+#[test]
+fn the_model_hears_that_the_voice_asked_which_text() {
+    let pieces = vec![CardPiece {
+        id: "text:summary".into(),
+        role: CardPieceRole::Text,
+        field: Some("Summary".into()),
+        state: CardPieceState::Heard,
+    }];
+    let input = |question| VoiceCommandInput {
+        transcript: "the first one",
+        language: "en",
+        pieces: &pieces,
+        current_piece_id: None,
+        question,
+    };
+    let said = |question| {
+        let request = model::build_request(DEFAULT_PROMPT, &input(question));
+        format!("{:?}", request.messages.last().map(|message| &message.content))
+    };
+    assert!(said(Some(VoiceQuestion::WhichText)).contains("THE VOICE JUST ASKED"));
+    assert!(!said(None).contains("THE VOICE JUST ASKED"));
 }

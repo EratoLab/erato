@@ -24,6 +24,7 @@ import type { Gist, GistAction, GistKind, GistValue } from "./gist";
 import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
 import type { DictationRelation, UserTurn } from "./spokenDictation";
 import type { SpokenNames } from "./spokenNames";
+import type { NumberWords } from "./spokenNumbers";
 import type { SentenceSet } from "./spokenSentences";
 import type { EarValue } from "./spokenValues";
 import type {
@@ -240,7 +241,10 @@ export type SpokenConsequence =
   | "rows_unknown"
   | "instruction_unknown"
   | "nothing_changes"
-  | "destructive";
+  /** The tool's own annotation marks it destructive. */
+  | "destructive"
+  /** The organisation marked the tool destructive, as the screen says. */
+  | "destructive_by_organisation";
 
 export interface SpokenRecipients {
   names: string[];
@@ -310,6 +314,11 @@ export interface SpokenOptions {
   wording?: "precise" | "natural";
   /** The deployment's sentence variants for this language. */
   sentences?: SentenceSet;
+  /**
+   * The deployment's number words for this language, to tell a value the
+   * user said in words. Without them only digits are read.
+   */
+  numberWords?: NumberWords;
   /** Dates in the current year are said without it. */
   now: Date;
   /** The zone times with an offset are said in. */
@@ -717,15 +726,31 @@ const consequencesOf = (
     return unique.filter((consequence) => consequence !== "restore_unknown");
   }
   if (action === "delete" && unique.length === 0) return ["restore_unknown"];
-  const destructive = notes.some(
-    (note) =>
-      note === "marked_destructive" || note === "operator_marked_destructive",
-  );
-  if (destructive && action !== "delete" && unique.length === 0) {
-    return ["destructive"];
-  }
-  return unique;
+  if (action === "delete" || unique.length > 0) return unique;
+  // Who marked it, as the screen says: the organisation's mark wins.
+  const marked = notes.includes("operator_marked_destructive")
+    ? "destructive_by_organisation"
+    : notes.includes("marked_destructive")
+      ? "destructive"
+      : undefined;
+  return marked && !saysAllItDoes(change, action) ? [marked] : [];
 };
+
+/**
+ * A create or update whose card says every value it writes: its voice says
+ * what changes, from what to what, so a destructive mark adds nothing the
+ * listener needs before deciding. Anything the voice cannot say keeps it.
+ */
+const saysAllItDoes = (
+  change: GistChange | undefined,
+  action: GistAction,
+): boolean =>
+  (action === "create" || action === "update") &&
+  change !== undefined &&
+  change.complete &&
+  change.opaque.length === 0 &&
+  change.opaqueOmitted === 0 &&
+  !change.effects.some((effect) => effect.effect === "unreadable");
 
 /** Spoken names: names and short IDs a person can say, never a machine ID. */
 const spokenNames = (values: GistValue[]): string[] =>

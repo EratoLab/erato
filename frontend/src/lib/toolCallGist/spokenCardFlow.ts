@@ -57,6 +57,8 @@ export type SpokenNotice =
   | { kind: "new_request_on_screen" }
   | { kind: "unclear"; hasText: boolean }
   | { kind: "no_text" }
+  /** The card has several long texts and the words named none: which one. */
+  | { kind: "which_text"; fields: string[] }
   | { kind: "unavailable" };
 
 export type SpokenCardEvent =
@@ -150,10 +152,18 @@ export const spokenCardFlow = (
   };
 };
 
-/** Whether a piece names a long text instead of reading it. */
+/**
+ * Whether a piece names a long text that can be read out on request: one
+ * said by its length, and the user's dictation, said by how it relates.
+ */
 export const namesLongText = (piece: SpokenPiece): boolean =>
   piece.role === "text" &&
-  (piece.values?.some((source) => source.slot === "words") ?? false);
+  (piece.readOut !== undefined ||
+    (piece.values?.some((source) => source.slot === "words") ?? false));
+
+/** The pieces whose long text can be read out, in the card's order. */
+export const longTexts = (pieces: readonly SpokenPiece[]): number[] =>
+  pieces.flatMap((piece, index) => (namesLongText(piece) ? [index] : []));
 
 const requestOf = (pieces: readonly SpokenPiece[]): number =>
   pieces.findIndex((piece) => piece.role === "request");
@@ -320,8 +330,9 @@ const longTextTarget = (
   }
   const playing = pieceOf(flow.playing);
   if (playing !== null && namesLongText(pieces[playing])) return playing;
-  const first = pieces.findIndex(namesLongText);
-  return first === -1 ? undefined : first;
+  // Never a guess by order: with several texts, the listener asks which.
+  const texts = longTexts(pieces);
+  return texts.length === 1 ? texts[0] : undefined;
 };
 
 /** What the listener interrupted is not skipped: it follows from its start. */
@@ -424,6 +435,10 @@ const step = (
       const target =
         event.index ?? pieceOf(flow.playing) ?? flow.lastRead ?? flow.last;
       if (target === null || !(target in pieces)) return flow;
+      // Again, at the request to decide, is the card's content: the whole
+      // card from its start, not the request alone.
+      if (target === requestOf(pieces))
+        return step(pieces, flow, { type: "start" });
       // Again, right after a text was read out, is the text.
       if (target === flow.lastRead && flow.playing === null)
         return step(pieces, flow, { type: "read", index: target });

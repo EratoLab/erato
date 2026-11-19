@@ -263,7 +263,7 @@ describe("spoken approval card", () => {
 
   it("says old and new values for the ear, coded values by their label", () => {
     expect(spoken("update-01-date-and-probability")).toBe(
-      "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern. Estimated close date: vom 1. Dezember auf den 15. Januar 2030. Probability: von 10 auf 60 Prozent. Bitte auf dem Bildschirm bestätigen.",
+      "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern. Estimated close date: vom 1. Dezember 2026 auf den 15. Januar 2030. Probability: von 10 auf 60 Prozent. Bitte auf dem Bildschirm bestätigen.",
     );
     expect(spoken("update-02-coded-value")).toContain(
       "Risk level: von Low auf High.",
@@ -504,7 +504,7 @@ describe("findings of the review of 2026-11-17", () => {
     expect(set("Amount", "185000")).toBe("Amount: 185.000.");
   });
 
-  it("1.5: the year is left out only for the coming eleven months", () => {
+  it("1.5: the year is left out only for the coming eleven months, and said on both sides of a change across years", () => {
     const late = new Date("2026-12-30T10:00:00Z");
     const change = (from: string, to: string, language = "de") =>
       words(language, late).detail(
@@ -520,8 +520,15 @@ describe("findings of the review of 2026-11-17", () => {
     expect(change("2026-12-01", "2026-01-15")).toBe(
       "Estimated close date: vom 1. Dezember 2026 auf den 15. Januar 2026.",
     );
+    // Staging test 2026-11-19: across New Year, both dates say their year.
     expect(change("2026-12-31", "2027-01-15")).toBe(
-      "Estimated close date: vom 31. Dezember auf den 15. Januar.",
+      "Estimated close date: vom 31. Dezember 2026 auf den 15. Januar 2027.",
+    );
+    expect(change("2027-01-16", "2026-12-31", "en")).toBe(
+      "Estimated close date: from 16 January 2027 to 31 December 2026.",
+    );
+    expect(change("2027-01-16", "2027-01-20")).toBe(
+      "Estimated close date: vom 16. Januar auf den 20. Januar.",
     );
     expect(change("2027-11-01", "2027-12-15", "en")).toBe(
       "Estimated close date: from 1 November to 15 December 2027.",
@@ -834,6 +841,98 @@ describe("one ranking with the card", () => {
     expect(spoken("update-12-list-replace-unknown", "en")).toContain(
       "The list Tags gets Retrofit and Linie 4. Whether that replaces the list or adds to it is not known.",
     );
+  });
+
+  describe("ERMAIN-1240: a destructive mark is said by who made it, where it adds something", () => {
+    /** `id` with its notes and completeness set as the backend would. */
+    const marked = (
+      id: string,
+      notes: string[],
+      edit: (change: Record<string, unknown>) => void = () => {},
+    ) => {
+      const call = JSON.parse(JSON.stringify(callOf(id))) as SetCall;
+      const change = (call.display.label as { change: Record<string, unknown> })
+        .change;
+      change.notes = notes;
+      edit(change);
+      return (language: string) =>
+        inLanguage(language, () =>
+          spokenApprovalPieces(approvalOf(call), {
+            language,
+            now: NOW,
+            timeZone: ZONE,
+          }),
+        ).map((piece) => piece.text);
+    };
+    const ORGANISATION = {
+      de: "Ihre Organisation hat dieses Tool als destruktiv gekennzeichnet.",
+      en: "Your organisation has marked this tool as destructive.",
+    };
+    const TOOL = {
+      de: "Das Tool kennzeichnet dies als destruktiv.",
+      en: "The tool marks this as destructive.",
+    };
+
+    it.each(["de", "en"] as const)(
+      "%s: an update the voice says in full does not add the mark",
+      (language) => {
+        for (const notes of [
+          ["operator_marked_destructive"],
+          ["marked_destructive"],
+          ["marked_destructive", "operator_marked_destructive"],
+        ]) {
+          const texts = marked(
+            "update-01-date-and-probability",
+            notes,
+          )(language);
+          expect(texts).not.toContain(ORGANISATION[language]);
+          expect(texts).not.toContain(TOOL[language]);
+        }
+        const created = marked("create-08-opportunity-amounts", [
+          "operator_marked_destructive",
+        ])(language);
+        expect(created).not.toContain(ORGANISATION[language]);
+      },
+    );
+
+    it.each(["de", "en"] as const)(
+      "%s: where the voice cannot say everything, it says who marked the tool",
+      (language) => {
+        const incomplete = (change: Record<string, unknown>) => {
+          change.complete = false;
+        };
+        expect(
+          marked(
+            "update-01-date-and-probability",
+            ["operator_marked_destructive", "marked_destructive"],
+            incomplete,
+          )(language),
+        ).toContain(ORGANISATION[language]);
+        expect(
+          marked(
+            "update-01-date-and-probability",
+            ["marked_destructive"],
+            incomplete,
+          )(language),
+        ).toContain(TOOL[language]);
+        const unreadable = marked(
+          "update-01-date-and-probability",
+          ["operator_marked_destructive"],
+          (change) => {
+            (change.effects as Record<string, unknown>[])[0].effect =
+              "unreadable";
+          },
+        )(language);
+        expect(unreadable).toContain(ORGANISATION[language]);
+        expect(unreadable).not.toContain(TOOL[language]);
+      },
+    );
+
+    it("a call that is no create or update keeps the mark, by who made it", () => {
+      expect(
+        marked("send-02-slack-message", ["operator_marked_destructive"])("de"),
+      ).toContain(ORGANISATION.de);
+    });
   });
 
   it("says that a tool marks a call destructive in the card's own words", () => {
