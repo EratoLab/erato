@@ -112,6 +112,8 @@ export function resumeSpeechPlayback() {
       return;
     }
   }
+  // Already there: it goes on at once.
+  queue.flush();
   if (chunks.length > 0) useSpeechPlayback.setState({ playing: true });
 }
 export function beginSpeechResponse(streamKey?: string) {

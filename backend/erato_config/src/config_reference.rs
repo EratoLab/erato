@@ -208,6 +208,33 @@ mod tests {
     }
 
     #[test]
+    fn unreviewed_metadata_inherits_independently() {
+        let generated = generate_config_reference().unwrap();
+        for (key, stability, relevance, default_security) in [
+            (
+                "server.encryption_key",
+                "unreviewed",
+                "unreviewed",
+                "unreviewed",
+            ),
+            ("desktop_sidecar.strict_mode", "alpha", "high", "unreviewed"),
+            (
+                "frontend.keep_tools_dropdown_open",
+                "beta",
+                "none",
+                "unknown_none",
+            ),
+        ] {
+            assert_eq!(generated[key]["stability"], stability, "{key}");
+            assert_eq!(generated[key]["security_relevance"], relevance, "{key}");
+            assert_eq!(
+                generated[key]["default_value_security"], default_security,
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
     fn custom_token_exchange_metadata_is_hidden_and_unstable() {
         let generated = generate_config_reference().unwrap();
         let prefix = "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange";

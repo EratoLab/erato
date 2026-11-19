@@ -66,12 +66,49 @@ interface ApprovalListeningState {
    * again, by the control that reads it, listens again.
    */
   quiet: string | null;
+  /**
+   * What the user just said to a card, shown from the end of their words
+   * until the card listens again: first only that something was heard, then
+   * the words, then what they were understood as.
+   */
+  heard: HeardWords | null;
+}
+
+export interface HeardWords {
+  key: string;
+  words: string | null;
+  meaning: ApprovalVoiceMeaning | null;
 }
 
 export const useApprovalListening = create<ApprovalListeningState>(() => ({
   pending: null,
   quiet: null,
+  heard: null,
 }));
+
+/** The user's words to the card under `key` ended; they are being transcribed. */
+export const noteApprovalWordsEnded = (key: string) =>
+  useApprovalListening.setState({
+    heard: { key, words: null, meaning: null },
+  });
+
+/** The card under `key` listens again: what was heard before is no longer shown. */
+export const clearApprovalWordsHeard = (key: string) => {
+  if (useApprovalListening.getState().heard?.key === key)
+    useApprovalListening.setState({ heard: null });
+};
+
+const noteHeard = (key: string, heard: Partial<HeardWords>) => {
+  const current = useApprovalListening.getState().heard;
+  useApprovalListening.setState({
+    heard: {
+      key,
+      words: current?.key === key ? current.words : null,
+      meaning: current?.key === key ? current.meaning : null,
+      ...heard,
+    },
+  });
+};
 
 /** What a meaning does to the card, and whether the card listens after it. */
 export interface MeaningStep {
@@ -288,6 +325,7 @@ export async function heardApprovalWords(
   const overVoice = takeTalkedOver(key, flow);
   const current = currentPiece(flow);
   useApprovalListening.setState({ pending: key });
+  noteHeard(key, { words, meaning: null });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), VOICE_COMMAND_TIMEOUT_MS);
   let step: MeaningStep;
@@ -305,6 +343,7 @@ export async function heardApprovalWords(
       abort.signal,
     );
     const pieceId = (answer as { piece_id?: string | null }).piece_id;
+    noteHeard(key, { meaning: answer.meaning });
     step = stepForMeaning(answer.meaning, pieceId, pieces);
   } catch (error) {
     // 409: the card was decided meanwhile; it says nothing more.

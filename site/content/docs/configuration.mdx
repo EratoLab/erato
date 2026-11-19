@@ -37,15 +37,15 @@ key first appeared:
 
 | Stability | Meaning |
 | --- | --- |
+| `unreviewed` | Awaiting an initial stability review. |
 | `stable` | Suitable for general adoption. |
 | `alpha` | Available to eager testers; may be rough around the edges. |
 | `beta` | Available to eager testers; expected to be ready for stabilization in the next release. |
 | `unstable` | Not ready for adoption. May be intended only for development and never stabilized. |
 | `deprecated` | Should no longer be adopted; follow the replacement guidance where provided. |
 
-Stability labels are initially conservative: existing deprecated keys remain
-`deprecated`, and other keys start as `unstable` pending review. These labels
-communicate maturity; they do not change which configuration values are accepted.
+Stability starts as `unreviewed` and can be set for a section or an individual
+key. Keys with deprecation metadata are labeled `deprecated`.
 
 **Introduced in** identifies the first release containing the key in the generated
 configuration reference. Keys that predate that reference use **0.6.0**, the first
@@ -57,6 +57,13 @@ Both metadata properties can be declared on a parent section. Children inherit
 each property independently unless they specify their own value. Labels beside
 individual keys show the resolved values; a section may contain keys with
 different stability levels or introduction versions.
+
+The generated JSON reference also includes `security_relevance` (security
+review priority) and `default_value_security` (how secure the default is).
+Each inherits independently and starts as `unreviewed` until it receives an
+initial review. `unknown` can record that an initial review took place and more
+work is needed to classify the attribute. When `security_relevance` is `none`,
+the reference reports `default_value_security` as `unknown_none`.
 
 ## Common config options
 
@@ -3023,11 +3030,84 @@ All subkeys share the same structure and meaning as [`audio_dictation`](#audio_d
 
 The silence, in milliseconds, after which conversational audio mode takes the speaker's turn as finished and sends it. Classic dictation does not use it.
 
-**Type:** `integer`, from `500` to `5000`; other values stop the server at startup.
+**Type:** `integer`, from `500` to `5000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `1800`
 
 A shorter wait makes replies start sooner on every turn, but cuts off more people who pause to think. On 400 public German turns (LiveKit's end-of-turn benchmark), the share of turns sent while the speaker was only pausing was 1.2 % at 1800, 2.2 % at 1500, 3.0 % at 1200 and 6.0 % at 1000. Those turns are phone bookings; work requests with more thinking pauses will do somewhat worse.
+
+#### `audio_conversational.card_end_of_turn_silence_ms`
+
+{/* erato_toml_config_key: audio_conversational.card_end_of_turn_silence_ms */}
+
+The same silence while a spoken approval card waits and listens for what the user says to it ("weiter", "stopp", "nimm den 22."). It is shorter than `end_of_turn_silence_ms` because those are a few words: the user hears the answer sooner. A pause cut short there costs at most an answer that the card did not understand, never a decision.
+
+**Type:** `integer`, from `500` to `5000`; other values are replaced by the default, with a warning at startup.
+
+**Default:** `1000`
+
+#### `audio_conversational.min_speech_ms`
+
+{/* erato_toml_config_key: audio_conversational.min_speech_ms */}
+
+How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: on synthetic voices "Ja" counted 290 to 380 ms, "Äh" and "um" 260 to 350 ms, "Stopp" 100 to 300 ms, while generated coughs and clicks counted nothing (real coughs were not measured). Because "Ja" and "Äh" overlap, no minimum separates them: a turn of hesitation sounds only is held back by its words instead (`hesitation_words`). A lower value hears shorter answers; a higher one drops more short sounds.
+
+**Type:** `integer`, from `32` to `2000`; other values are replaced by the default, with a warning at startup.
+
+**Default:** `250`
+
+#### `audio_conversational.card_min_speech_ms`
+
+{/* erato_toml_config_key: audio_conversational.card_min_speech_ms */}
+
+The same while a waiting approval card listens. Its commands are the shortest words there are ("Stopp", "Ja", "weiter", "stop", "yes", "next"), and its rules answer a lone "mhm" or "okay" as listening noise, so the default is two detector frames.
+
+**Type:** `integer`, from `32` to `2000`; other values are replaced by the default, with a warning at startup.
+
+**Default:** `64`
+
+#### `audio_conversational.voice_start_buffer_ms`
+
+{/* erato_toml_config_key: audio_conversational.voice_start_buffer_ms */}
+
+How much audio, in milliseconds, a voice that starts from silence waits for before it plays: a reply, an approval card, or a message read aloud. Speech providers often send the first syllable, then pause; played at once, that syllable stands alone before a gap. `0` plays at once. A complete short sentence always plays at once.
+
+**Type:** `integer`, from `0` to `2000`; other values are replaced by the default, with a warning at startup.
+
+**Default:** `400`
+
+#### `audio_conversational.voice_start_max_wait_ms`
+
+{/* erato_toml_config_key: audio_conversational.voice_start_max_wait_ms */}
+
+The longest, in milliseconds, such a voice waits for that audio; what has come by then plays. It bounds how much later the first sound can come.
+
+**Type:** `integer`, from `0` to `2000`; other values are replaced by the default, with a warning at startup.
+
+**Default:** `350`
+
+#### `audio_conversational.hesitation_words`
+
+{/* erato_toml_config_key: audio_conversational.hesitation_words */}
+{/* erato_toml_config_key: audio_conversational.hesitation_words.[] */}
+
+Hesitation sounds to add to the built-in base. When the words of a conversational turn are all hesitation sounds ("Äh.", "Ähm …", "um"), the turn does not end: nothing is sent, the composer says that a hesitation was heard and the microphone keeps listening, so the question the speaker goes on to ask arrives whole and without the hesitation. Case, punctuation and drawn-out letters are ignored ("Ähhm…" counts as "ähm"). A turn with any other word, a number included ("Äh, 42.", "Ja.", "Mhm."), is sent as usual. It does not apply to what is said to a waiting approval card, whose own rules treat hesitations as listening.
+
+The built-in base is German and English: `äh`, `ähm`, `aeh`, `aehm`, `öh`, `öhm`, `eh`, `ehm`, `hm`, `mh`, `uh`, `uhm`, `um`, `erm`. "Mhm" is a yes and "er" a German word, so neither is in it. The list here is added to the base, so a later change of the base still reaches a deployment that adds its own words; a configuration package for another language (French "euh", for example) adds them here. Each entry must be one word of letters; an entry like "äh ja" or "42" is dropped with a warning at startup, since it would hold back real answers.
+
+**Type:** list of strings
+
+**Default:** `[]` (the base alone)
+
+#### `audio_conversational.hesitation_words_replace_base`
+
+{/* erato_toml_config_key: audio_conversational.hesitation_words_replace_base */}
+
+Whether `hesitation_words` replaces the built-in base instead of adding to it. Use it only to remove a word of the base. With `true` and an empty list, no turn is held back as a hesitation: every turn with words is sent, as before the setting existed.
+
+**Type:** `boolean`
+
+**Default:** `false`
 
 #### `audio_conversational.talk_over_voice`
 
@@ -3047,7 +3127,7 @@ A recording that starts while the voice plays asks the browser for echo cancella
 
 How long, in milliseconds, speech over the voice must last before the voice stops. A shorter value reacts sooner, but stops the voice for more coughs, short "mhm"s and the voice's own echo; a longer one may miss a short "stop".
 
-**Type:** `integer`, from `200` to `2000`; other values stop the server at startup.
+**Type:** `integer`, from `200` to `2000`; other values are replaced by the default, with a warning at startup.
 
 **Default:** `500`
 
@@ -3069,6 +3149,13 @@ fixed_output_token_budget = 500
 min_output_tokens = 32
 max_output_tokens = 2048
 end_of_turn_silence_ms = 1800
+card_end_of_turn_silence_ms = 1000
+min_speech_ms = 250
+card_min_speech_ms = 64
+voice_start_buffer_ms = 400
+voice_start_max_wait_ms = 350
+hesitation_words = []
+hesitation_words_replace_base = false
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```

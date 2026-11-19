@@ -40,10 +40,11 @@ if std::env::args().any(|arg| arg == "--check") {
 ```
 
 The reference is a flat JSON object keyed by dotted config paths. Each entry
-requires `stability` (`stable`, `alpha`, `beta`, `unstable`, or `deprecated`) and
-`introduced_in` (a semantic version or `unreleased`). Generation rejects missing
-or invalid metadata, including on hidden keys and deprecated aliases. Documents
-are sorted, pretty-printed, and end with a newline. `check_config_reference`
+requires `stability` (`unreviewed`, `stable`, `alpha`, `beta`, `unstable`, or
+`deprecated`) and `introduced_in` (a semantic version or `unreleased`).
+Generation rejects missing or invalid metadata, including on hidden keys and
+deprecated aliases. Documents are sorted, pretty-printed, and end with a newline.
+`check_config_reference`
 validates both documents and compares them byte for byte; always generate the
 expected document from the current shape to detect missing or stale keys.
 `validate_config_reference` validates an already parsed JSON reference without
@@ -55,8 +56,8 @@ Use `#[facet(erato_config_schema::ATTRIBUTE(...))]` with:
 
 - `stability(level = "stable")`: set the stability of a field and its descendants.
 - `introduced_in(version = "1.0.0")`: set the first release containing a field.
-- `security_relevance(level = "unknown")`: set the security review priority.
-- `default_value_security(level = "unknown")`: classify the security of the default.
+- `security_relevance(level = "unreviewed")`: set the security review priority.
+- `default_value_security(level = "unreviewed")`: classify the security of the default.
 - `deprecated(note = "Use new_key", replacement_key = "new_key",
   planned_removal_version = "2.0.0")`: deprecate a key. Only `note` is required;
   a replacement must exist in the generated reference.
@@ -72,12 +73,17 @@ whole path segments; the most specific matching scope wins. Conflicting values
 with equal specificity are errors. Deprecated aliases are traversed independently
 so they can have different introduction dates from canonical keys.
 
+Use `unreviewed` for stability or either security attribute awaiting an initial
+review. Declare it on the root type to track which attributes still need review
+throughout the reference.
+
 ## Security review metadata
 
 Every generated entry includes `security_relevance` and `default_value_security`,
-including hidden fields and deprecated aliases. Omitted security attributes
-default to `unknown`; they do not assert that a setting is secure. The reference
-validator rejects missing or invalid classifications in JSON documents.
+including hidden fields and deprecated aliases. If a consuming project supplies
+no declaration or inherited value, the generator emits `unknown` for the
+omitted security attribute. The reference validator rejects missing or invalid
+classifications in JSON documents.
 
 `security_relevance` describes audit priority rather than whether a particular
 configuration is secure:
@@ -87,7 +93,9 @@ configuration is secure:
 - `low`: review last during a security audit.
 - `none`: no known related attack paths; considered secure independently of the
   chosen value, such as a purely visual UI variant.
-- `unknown`: security relevance has not yet been evaluated.
+- `unreviewed`: security relevance is awaiting an initial review.
+- `unknown`: can record an initial review that needs further work to determine
+  the security relevance.
 
 `default_value_security` describes the chosen default:
 
@@ -96,7 +104,9 @@ configuration is secure:
   explaining the tradeoff and any instance-specific mitigation.
 - `more_secure`: the default is the more secure option. Related settings still
   need review according to their security relevance.
-- `unknown`: the default has not yet been evaluated.
+- `unreviewed`: the default's security is awaiting an initial review.
+- `unknown`: can record an initial review that needs further work to classify
+  the default.
 - `unknown_none`: generated only when the effective `security_relevance` is
   `none`; the default cannot be classified as more or less secure. This value
   cannot be declared in a source attribute.

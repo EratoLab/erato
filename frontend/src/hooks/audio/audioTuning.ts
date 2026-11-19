@@ -143,3 +143,67 @@ export const ONSET_TUNING = {
 } as const;
 
 export type OnsetTuning = typeof ONSET_TUNING;
+
+/**
+ * Speech the voice detector must count before a conversational turn can end.
+ * It counts only frames it is fairly sure of: on synthetic voices the vowel
+ * of "Stopp" (96 to 288 ms), "Ja" 290 to 380 ms, "Äh" and "um" 260 to
+ * 350 ms; generated coughs and clicks scored nothing (real ones were not
+ * measured). "Ja" and "Äh" overlap, so no minimum separates them: a turn of
+ * hesitation sounds only is held back by its words instead (`hesitations.ts`).
+ */
+export const DEFAULT_MIN_SPEECH_MS = 250;
+
+/**
+ * The same while an approval card listens: its commands are the shortest
+ * words there are, and the card's rules answer "mhm" and "okay" as noise.
+ * Two detector frames.
+ */
+export const DEFAULT_CARD_MIN_SPEECH_MS = 64;
+
+/** Same range the backend accepts for both; anything else falls back. */
+const MIN_SPEECH_RANGE_MS = [32, 2000] as const;
+
+export function resolveMinSpeechMs(
+  value: number | undefined,
+  fallback: number,
+): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= MIN_SPEECH_RANGE_MS[0] &&
+    value <= MIN_SPEECH_RANGE_MS[1]
+    ? value
+    : fallback;
+}
+
+/**
+ * Audio kept from before the detector is sure someone speaks; nothing older
+ * is ever sent for transcription. Covers the detector's lead-in, as the
+ * pre-speech pad of the server-side calibration does.
+ */
+export const BEFORE_SPEECH_KEPT_MS = 800;
+
+/**
+ * From this much audio in one piece on, a conversational turn is cut for
+ * transcription at the next pause, so that no word is split. Only a speaker
+ * who never pauses is cut at the server's piece length.
+ */
+export const CUT_AT_PAUSE_AFTER_MS = 20_000;
+
+/** Frames the detector must hear as silence for a pause to count (about 64 ms). */
+export const PAUSE_FRAMES = 2;
+
+/** Below this the detector hears no speech in a frame (Silero v5 default). */
+export const SILENT_FRAME_PROBABILITY = 0.25;
+
+/** The transcription connection is tried once more after this, the audio kept. */
+export const SESSION_RETRY_DELAY_MS = 1_000;
+
+/**
+ * After a sound the detector rejected, the audio kept stops this long before
+ * the end of the silence that ended it, so none of the sound stays.
+ */
+export const MISFIRE_MARGIN_MS = 100;
+
+/** How long a turn's words may take to come back before it simply ends. */
+export const HESITATION_CHECK_TIMEOUT_MS = 10_000;

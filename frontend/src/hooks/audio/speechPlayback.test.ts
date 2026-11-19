@@ -6,9 +6,11 @@ class MockAudioContext {
   currentTime = 1;
   destination = {};
   resume = vi.fn(async () => {});
+  // Each test chunk stands for half a second of speech: enough to start a
+  // voice from silence at once (the start buffer is 400 ms).
   createBuffer(_channels: number, length: number, rate: number) {
     return {
-      duration: length / rate,
+      duration: Math.max(length / rate, 0.5),
       getChannelData: () => new Float32Array(length),
     };
   }

@@ -93,7 +93,9 @@ def validate_released_reference(repo: Path) -> None:
         if not isinstance(version, str) or version == "unreleased":
             raise ValueError(f"Config key {key!r} has no released introduced_in version")
         version_key(version)
-        if metadata.get("stability") not in {"stable", "alpha", "beta", "unstable", "deprecated"}:
+        if metadata.get("stability") not in {
+            "unreviewed", "stable", "alpha", "beta", "unstable", "deprecated",
+        }:
             raise ValueError(f"Config key {key!r} has invalid stability")
 
 

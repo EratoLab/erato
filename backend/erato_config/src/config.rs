@@ -762,9 +762,9 @@ fn validate_prompt_injection_filter_config(
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
-#[facet(erato_config::stability(level = "unstable"))]
-#[facet(erato_config::security_relevance(level = "unknown"))]
-#[facet(erato_config::default_value_security(level = "unknown"))]
+#[facet(erato_config::stability(level = "unreviewed"))]
+#[facet(erato_config::security_relevance(level = "unreviewed"))]
+#[facet(erato_config::default_value_security(level = "unreviewed"))]
 pub struct AppConfig {
     // A opaque marker to signify the environment. This may be forwarded to diagnostic/observability tools to signify the environment,
     // but is never parsed/interpreted by the application to trigger environment-specific behavior.
@@ -2518,11 +2518,11 @@ impl AppConfig {
             "audio_conversational",
             &config.audio_conversational.transcription,
         );
-        if let Err(message) = config.audio_conversational.validate_end_of_turn_silence() {
-            panic!("{message}");
+        for warning in config.audio_conversational.fall_back_out_of_range() {
+            tracing::warn!("{warning}");
         }
-        if let Err(message) = config.audio_conversational.validate_talk_over_voice() {
-            panic!("{message}");
+        for warning in config.audio_conversational.drop_unusable_hesitation_words() {
+            tracing::warn!("{warning}");
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -3425,54 +3425,119 @@ mod audio_config_tests {
         assert_eq!(conversational.talk_over_voice_min_speech_ms, 500);
     }
 
-    #[test]
-    fn conversational_talk_over_voice_is_read_and_range_checked() {
-        let load = |toml: &str| {
-            config::Config::builder()
-                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
-                .build()
-                .unwrap()
-                .try_deserialize::<AudioConversationalConfig>()
-                .unwrap()
-        };
-        let settings = load("talk_over_voice = true\ntalk_over_voice_min_speech_ms = 700");
-        assert!(settings.talk_over_voice);
-        assert_eq!(settings.talk_over_voice_min_speech_ms, 700);
-        assert!(settings.validate_talk_over_voice().is_ok());
-
-        for allowed in [200, 2000] {
-            let settings = load(&format!("talk_over_voice_min_speech_ms = {allowed}"));
-            assert!(settings.validate_talk_over_voice().is_ok());
-        }
-        for rejected in [0, 199, 2001, 10000] {
-            let settings = load(&format!("talk_over_voice_min_speech_ms = {rejected}"));
-            let error = settings.validate_talk_over_voice().unwrap_err();
-            assert!(error.contains("200 to 2000 milliseconds"), "{error}");
-        }
+    fn load_conversational(toml: &str) -> AudioConversationalConfig {
+        config::Config::builder()
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+            .build()
+            .unwrap()
+            .try_deserialize::<AudioConversationalConfig>()
+            .unwrap()
     }
 
     #[test]
-    fn conversational_end_of_turn_silence_is_read_and_range_checked() {
-        let load = |toml: &str| {
-            config::Config::builder()
-                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
-                .build()
-                .unwrap()
-                .try_deserialize::<AudioConversationalConfig>()
-                .unwrap()
-        };
-        let settings = load("enabled = true\nend_of_turn_silence_ms = 1200");
-        assert_eq!(settings.end_of_turn_silence_ms, 1200);
-        assert!(settings.validate_end_of_turn_silence().is_ok());
+    fn conversational_timings_have_defaults_and_are_read() {
+        let mut settings = load_conversational("enabled = true");
+        assert_eq!(
+            (
+                settings.end_of_turn_silence_ms,
+                settings.card_end_of_turn_silence_ms,
+                settings.min_speech_ms,
+                settings.card_min_speech_ms,
+                settings.voice_start_buffer_ms,
+                settings.voice_start_max_wait_ms,
+                settings.talk_over_voice_min_speech_ms,
+            ),
+            (1800, 1000, 250, 64, 400, 350, 500)
+        );
+        assert!(settings.fall_back_out_of_range().is_empty());
+        let words = settings.effective_hesitation_words();
+        assert!(words.contains(&"äh".to_string()));
+        assert!(words.contains(&"um".to_string()));
+        assert!(!words.contains(&"mhm".to_string()));
+        assert!(!words.contains(&"er".to_string()));
 
-        for allowed in [500, 5000] {
-            let settings = load(&format!("end_of_turn_silence_ms = {allowed}"));
-            assert!(settings.validate_end_of_turn_silence().is_ok());
+        let mut settings = load_conversational(
+            "talk_over_voice = true\ntalk_over_voice_min_speech_ms = 700\n\
+             end_of_turn_silence_ms = 1200\ncard_end_of_turn_silence_ms = 700\n\
+             card_min_speech_ms = 96\nvoice_start_buffer_ms = 0\n\
+             hesitation_words = [\"äh\", \"euh\"]",
+        );
+        assert!(settings.fall_back_out_of_range().is_empty());
+        assert!(settings.talk_over_voice);
+        assert_eq!(settings.talk_over_voice_min_speech_ms, 700);
+        assert_eq!(settings.end_of_turn_silence_ms, 1200);
+        assert_eq!(settings.card_end_of_turn_silence_ms, 700);
+        assert_eq!(settings.card_min_speech_ms, 96);
+        assert_eq!(settings.voice_start_buffer_ms, 0);
+        // Additions keep the base: a base update still reaches them.
+        let words = settings.effective_hesitation_words();
+        assert!(words.contains(&"euh".to_string()));
+        assert!(words.contains(&"ähm".to_string()));
+        assert_eq!(words.iter().filter(|word| *word == "äh").count(), 1);
+    }
+
+    #[test]
+    fn hesitation_words_add_or_replace_and_odd_entries_are_dropped() {
+        let mut settings =
+            load_conversational("hesitation_words = [\"euh\", \"äh ja\", \"42\", \" \", \"Bah\"]");
+        let warnings = settings.drop_unusable_hesitation_words();
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert!(warnings[0].contains("äh ja"), "{warnings:?}");
+        assert_eq!(settings.hesitation_words, ["euh", "bah"]);
+        assert!(
+            !settings
+                .effective_hesitation_words()
+                .contains(&"ja".to_string())
+        );
+
+        let mut settings = load_conversational(
+            "hesitation_words = [\"euh\"]\nhesitation_words_replace_base = true",
+        );
+        assert!(settings.drop_unusable_hesitation_words().is_empty());
+        assert_eq!(settings.effective_hesitation_words(), ["euh"]);
+
+        // Replacing with nothing holds no turn back.
+        let settings = load_conversational("hesitation_words_replace_base = true");
+        assert!(settings.effective_hesitation_words().is_empty());
+    }
+
+    #[test]
+    fn a_timing_out_of_range_warns_and_falls_back_to_its_default() {
+        for (key, rejected, default) in [
+            ("end_of_turn_silence_ms", 499, 1800),
+            ("end_of_turn_silence_ms", 30000, 1800),
+            ("card_end_of_turn_silence_ms", 5001, 1000),
+            ("min_speech_ms", 31, 250),
+            ("card_min_speech_ms", 2001, 64),
+            ("voice_start_buffer_ms", 2001, 400),
+            ("voice_start_max_wait_ms", 5000, 350),
+            ("talk_over_voice_min_speech_ms", 199, 500),
+        ] {
+            let mut settings = load_conversational(&format!("{key} = {rejected}"));
+            let warnings = settings.fall_back_out_of_range();
+            assert_eq!(warnings.len(), 1, "{key}");
+            assert!(warnings[0].contains(key), "{}", warnings[0]);
+            let value = match key {
+                "end_of_turn_silence_ms" => settings.end_of_turn_silence_ms,
+                "card_end_of_turn_silence_ms" => settings.card_end_of_turn_silence_ms,
+                "min_speech_ms" => settings.min_speech_ms,
+                "card_min_speech_ms" => settings.card_min_speech_ms,
+                "voice_start_buffer_ms" => settings.voice_start_buffer_ms,
+                "voice_start_max_wait_ms" => settings.voice_start_max_wait_ms,
+                _ => settings.talk_over_voice_min_speech_ms,
+            };
+            assert_eq!(value, default, "{key}");
         }
-        for rejected in [0, 20, 499, 5001, 30000] {
-            let settings = load(&format!("end_of_turn_silence_ms = {rejected}"));
-            let error = settings.validate_end_of_turn_silence().unwrap_err();
-            assert!(error.contains("500 to 5000 milliseconds"), "{error}");
+        for (key, allowed) in [
+            ("end_of_turn_silence_ms", 500),
+            ("end_of_turn_silence_ms", 5000),
+            ("talk_over_voice_min_speech_ms", 200),
+            ("talk_over_voice_min_speech_ms", 2000),
+            ("min_speech_ms", 32),
+            ("voice_start_max_wait_ms", 0),
+        ] {
+            let mut settings = load_conversational(&format!("{key} = {allowed}"));
+            assert!(settings.fall_back_out_of_range().is_empty(), "{key}");
         }
     }
 
@@ -8603,6 +8668,51 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_end_of_turn_silence_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub end_of_turn_silence_ms: u32,
+    /// Silence in milliseconds that ends what the user says to a waiting
+    /// approval card. Shorter than a conversation's, because card commands
+    /// are a few words. Defaults to `1000`; allowed from `500` to `5000`.
+    #[serde(default = "default_card_end_of_turn_silence_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub card_end_of_turn_silence_ms: u32,
+    /// Speech, in milliseconds, the voice detector must count before a
+    /// conversational turn can end. It counts only what it is fairly sure is
+    /// speech, often just the vowels: a short word is far shorter than it
+    /// sounds. Defaults to `250`; allowed from `32` to `2000`.
+    #[serde(default = "default_min_speech_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub min_speech_ms: u32,
+    /// The same while a waiting approval card listens, whose commands are the
+    /// shortest words there are ("Stopp", "Ja"). Defaults to `64`; allowed
+    /// from `32` to `2000`.
+    #[serde(default = "default_card_min_speech_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub card_min_speech_ms: u32,
+    /// Audio, in milliseconds, a voice starting from silence waits for before
+    /// it plays, so its first syllable does not stand alone before the speech
+    /// provider's first pause. `0` plays at once. Defaults to `400`; allowed
+    /// from `0` to `2000`. Also used when a message is read aloud.
+    #[serde(default = "default_voice_start_buffer_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub voice_start_buffer_ms: u32,
+    /// The longest such a voice waits, in milliseconds; what has come by
+    /// then plays. Defaults to `350`; allowed from `0` to `2000`.
+    #[serde(default = "default_voice_start_max_wait_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub voice_start_max_wait_ms: u32,
+    /// Hesitation sounds added to the built-in German and English base. A
+    /// conversational turn whose words are all hesitation sounds does not
+    /// end: nothing is sent, and the microphone listens on for what the
+    /// speaker goes on to say. Each entry is one word of letters; others are
+    /// dropped with a warning. Defaults to none.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub hesitation_words: Vec<String>,
+    /// Whether `hesitation_words` replaces the built-in base instead of
+    /// adding to it. With an empty list, no turn is held back as a
+    /// hesitation. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub hesitation_words_replace_base: bool,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -8621,6 +8731,36 @@ fn default_end_of_turn_silence_ms() -> u32 {
     1800
 }
 
+fn default_card_end_of_turn_silence_ms() -> u32 {
+    1000
+}
+
+pub const MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 32..=2000;
+
+fn default_min_speech_ms() -> u32 {
+    250
+}
+
+fn default_card_min_speech_ms() -> u32 {
+    64
+}
+
+pub const VOICE_START_MS_RANGE: std::ops::RangeInclusive<u32> = 0..=2000;
+
+fn default_voice_start_buffer_ms() -> u32 {
+    400
+}
+
+fn default_voice_start_max_wait_ms() -> u32 {
+    350
+}
+
+/// The hesitation sounds held back without any setting, German and English.
+/// "mhm" (a yes) and "er" (a German word) are answers, not hesitations.
+pub const HESITATION_BASE: &[&str] = &[
+    "äh", "ähm", "aeh", "aehm", "öh", "öhm", "eh", "ehm", "hm", "mh", "uh", "uhm", "um", "erm",
+];
+
 pub const TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=2000;
 
 fn default_talk_over_voice_min_speech_ms() -> u32 {
@@ -8633,6 +8773,13 @@ impl Default for AudioConversationalConfig {
             transcription: AudioTranscriptionConfig::default(),
             speech_provider: None,
             end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
+            card_end_of_turn_silence_ms: default_card_end_of_turn_silence_ms(),
+            min_speech_ms: default_min_speech_ms(),
+            card_min_speech_ms: default_card_min_speech_ms(),
+            voice_start_buffer_ms: default_voice_start_buffer_ms(),
+            voice_start_max_wait_ms: default_voice_start_max_wait_ms(),
+            hesitation_words: Vec::new(),
+            hesitation_words_replace_base: false,
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
         }
@@ -8640,28 +8787,104 @@ impl Default for AudioConversationalConfig {
 }
 
 impl AudioConversationalConfig {
-    pub fn validate_end_of_turn_silence(&self) -> Result<(), String> {
-        let value = self.end_of_turn_silence_ms;
-        if END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
-            return Ok(());
+    /// The hesitation sounds in use: the base and the additions, or only the
+    /// list when it replaces the base.
+    pub fn effective_hesitation_words(&self) -> Vec<String> {
+        let base: &[&str] = if self.hesitation_words_replace_base {
+            &[]
+        } else {
+            HESITATION_BASE
+        };
+        let base = base.iter().map(|word| word.to_string());
+        let mut words: Vec<String> = Vec::new();
+        for word in base.chain(self.hesitation_words.iter().cloned()) {
+            if !words.contains(&word) {
+                words.push(word);
+            }
         }
-        Err(format!(
-            "Invalid `audio_conversational.end_of_turn_silence_ms`: {value} is outside {} to {} milliseconds.",
-            END_OF_TURN_SILENCE_MS_RANGE.start(),
-            END_OF_TURN_SILENCE_MS_RANGE.end()
-        ))
+        words
     }
 
-    pub fn validate_talk_over_voice(&self) -> Result<(), String> {
-        let value = self.talk_over_voice_min_speech_ms;
-        if TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.contains(&value) {
-            return Ok(());
+    /// Drops hesitation entries that are not one word of letters, saying so:
+    /// "äh ja" would hold back every "Ja.", and "42" every number.
+    pub fn drop_unusable_hesitation_words(&mut self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        self.hesitation_words.retain(|word| {
+            let usable = !word.trim().is_empty() && word.trim().chars().all(char::is_alphabetic);
+            if !usable {
+                warnings.push(format!(
+                    "`audio_conversational.hesitation_words` entry {word:?} dropped: it must be one word of letters."
+                ));
+            }
+            usable
+        });
+        for word in &mut self.hesitation_words {
+            *word = word.trim().to_lowercase();
         }
-        Err(format!(
-            "Invalid `audio_conversational.talk_over_voice_min_speech_ms`: {value} is outside {} to {} milliseconds.",
-            TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.start(),
-            TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.end()
-        ))
+        warnings
+    }
+
+    /// Puts every timing setting outside its range back to its default and
+    /// says so: a typo in a tuning value never stops the server.
+    pub fn fall_back_out_of_range(&mut self) -> Vec<String> {
+        let defaults = Self::default();
+        let mut warnings = Vec::new();
+        let mut check = |key: &str,
+                         value: &mut u32,
+                         default: u32,
+                         range: &std::ops::RangeInclusive<u32>| {
+            if !range.contains(value) {
+                warnings.push(format!(
+                    "`audio_conversational.{key}` = {value} is outside {} to {} milliseconds; using the default {default}.",
+                    range.start(),
+                    range.end()
+                ));
+                *value = default;
+            }
+        };
+        check(
+            "end_of_turn_silence_ms",
+            &mut self.end_of_turn_silence_ms,
+            defaults.end_of_turn_silence_ms,
+            &END_OF_TURN_SILENCE_MS_RANGE,
+        );
+        check(
+            "card_end_of_turn_silence_ms",
+            &mut self.card_end_of_turn_silence_ms,
+            defaults.card_end_of_turn_silence_ms,
+            &END_OF_TURN_SILENCE_MS_RANGE,
+        );
+        check(
+            "min_speech_ms",
+            &mut self.min_speech_ms,
+            defaults.min_speech_ms,
+            &MIN_SPEECH_MS_RANGE,
+        );
+        check(
+            "card_min_speech_ms",
+            &mut self.card_min_speech_ms,
+            defaults.card_min_speech_ms,
+            &MIN_SPEECH_MS_RANGE,
+        );
+        check(
+            "voice_start_buffer_ms",
+            &mut self.voice_start_buffer_ms,
+            defaults.voice_start_buffer_ms,
+            &VOICE_START_MS_RANGE,
+        );
+        check(
+            "voice_start_max_wait_ms",
+            &mut self.voice_start_max_wait_ms,
+            defaults.voice_start_max_wait_ms,
+            &VOICE_START_MS_RANGE,
+        );
+        check(
+            "talk_over_voice_min_speech_ms",
+            &mut self.talk_over_voice_min_speech_ms,
+            defaults.talk_over_voice_min_speech_ms,
+            &TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE,
+        );
+        warnings
     }
 }
 

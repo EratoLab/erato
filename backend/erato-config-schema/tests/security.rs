@@ -158,11 +158,20 @@ fn invalid_source_attributes_report_the_property_and_key() {
 
 #[test]
 fn reference_validation_checks_security_values_and_derived_value_consistency() {
-    for relevance in ["high", "medium", "low", "none", "unknown", "invalid"] {
+    for relevance in [
+        "high",
+        "medium",
+        "low",
+        "none",
+        "unknown",
+        "unreviewed",
+        "invalid",
+    ] {
         for default_security in [
             "less_secure",
             "more_secure",
             "unknown",
+            "unreviewed",
             "unknown_none",
             "invalid",
         ] {

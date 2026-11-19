@@ -117,6 +117,7 @@ export function startReadAloud(messageId: string) {
               streamDone = true;
               // Audio that is still queued plays out; the queue ends the
               // playback when its last chunk has ended.
+              queue.flush();
               if (!queue.active) stopReadAloud();
             } else if (event.type === "error") {
               fail(messageId);
