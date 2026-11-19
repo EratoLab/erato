@@ -11,7 +11,6 @@ import {
   checkOauth2ProxySession,
   oauth2ProxySessionEndsAt,
   oauth2ProxySessionRenewAt,
-  readStoredOauth2ProxySessionEndsAt,
   readStoredOauth2ProxySessionRedeemedAt,
   redeemOauth2ProxySession,
   shouldRefreshOauth2ProxySession,
@@ -259,7 +258,7 @@ describe("oauth2ProxySessionEndsAt", () => {
     ).toBeNull();
   });
 
-  it("is stored with the redeem", async () => {
+  it("comes back with the redeem", async () => {
     window.localStorage.clear();
     const fetcher = vi.fn(async () => new Response("{}", { status: 202 }));
     await expect(
@@ -269,7 +268,6 @@ describe("oauth2ProxySessionEndsAt", () => {
         now: () => now,
       }),
     ).resolves.toEqual({ redeemedAt: now, endsAt: now + 50 * MINUTE });
-    expect(readStoredOauth2ProxySessionEndsAt()).toBe(now + 50 * MINUTE);
   });
 });
 

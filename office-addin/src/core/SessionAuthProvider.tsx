@@ -18,7 +18,6 @@ import {
 import {
   Oauth2ProxySessionRedeemError,
   oauth2ProxySessionRenewAt,
-  readStoredOauth2ProxySessionEndsAt,
   readStoredOauth2ProxySessionRedeemedAt,
   redeemOauth2ProxySession,
   shouldRefreshOauth2ProxySession,
@@ -109,8 +108,8 @@ function createInitialOauth2ProxySessionState(): Oauth2ProxySessionState {
   return {
     status: lastRedeemedAt === null ? "idle" : "ready",
     lastRedeemedAt,
-    endsAt:
-      lastRedeemedAt === null ? null : readStoredOauth2ProxySessionEndsAt(),
+    // Known once this pane redeems; it always does at start.
+    endsAt: null,
     error: null,
   };
 }

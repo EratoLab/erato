@@ -28,8 +28,6 @@ export const OAUTH2_PROXY_SESSION_MIN_RENEW_INTERVAL_MS = 30_000;
 
 const OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY =
   "erato.officeAddin.oauth2ProxySessionRedeemedAt";
-const OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY =
-  "erato.officeAddin.oauth2ProxySessionEndsAt";
 
 export interface RedeemOauth2ProxySessionInput {
   idToken: string;
@@ -119,9 +117,11 @@ export function shouldRefreshOauth2ProxySession(
   );
 }
 
-function readStoredNumber(key: string): number | null {
+export function readStoredOauth2ProxySessionRedeemedAt(): number | null {
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(
+      OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY,
+    );
     if (!raw) {
       return null;
     }
@@ -132,27 +132,12 @@ function readStoredNumber(key: string): number | null {
   }
 }
 
-export function readStoredOauth2ProxySessionRedeemedAt(): number | null {
-  return readStoredNumber(OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY);
-}
-
-export function readStoredOauth2ProxySessionEndsAt(): number | null {
-  return readStoredNumber(OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY);
-}
-
-function storeOauth2ProxySession(redeemedAt: number, endsAt: number | null) {
+function storeOauth2ProxySessionRedeemedAt(redeemedAt: number) {
   try {
     window.localStorage.setItem(
       OAUTH2_PROXY_SESSION_REDEEMED_AT_STORAGE_KEY,
       String(redeemedAt),
     );
-    if (endsAt === null)
-      window.localStorage.removeItem(OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY);
-    else
-      window.localStorage.setItem(
-        OAUTH2_PROXY_SESSION_ENDS_AT_STORAGE_KEY,
-        String(endsAt),
-      );
   } catch {
     // Best effort only. The in-memory state remains authoritative.
   }
@@ -214,7 +199,7 @@ export async function redeemOauth2ProxySession({
 
   const redeemedAt = now();
   const endsAt = oauth2ProxySessionEndsAt(input);
-  storeOauth2ProxySession(redeemedAt, endsAt);
+  storeOauth2ProxySessionRedeemedAt(redeemedAt);
   return { redeemedAt, endsAt };
 }
 
