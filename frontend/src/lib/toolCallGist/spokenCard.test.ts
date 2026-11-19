@@ -858,7 +858,11 @@ describe("one ranking with the card", () => {
         ...notes,
       ];
       edit(change);
-      return (language: string, amount: "full" | "short" = "full") =>
+      return (
+        language: string,
+        amount: "full" | "short" = "full",
+        wording: "precise" | "natural" = "precise",
+      ) =>
         inLanguage(language, () =>
           spokenApprovalPieces(approvalOf(call), {
             language,
@@ -866,6 +870,7 @@ describe("one ranking with the card", () => {
             timeZone: ZONE,
             amount,
             shortDetails: 1,
+            wording,
           }),
         ).map((piece) => piece.text);
     };
@@ -920,6 +925,57 @@ describe("one ranking with the card", () => {
             marked(id, ["operator_marked_destructive"])(language),
             id,
           ).toContain(ORGANISATION[language]);
+      },
+    );
+
+    it.each(["de", "en"] as const)(
+      "%s: where the voice summarises a value instead of saying it, the mark stays",
+      (language) => {
+        for (const id of [
+          // A long text said only by its length.
+          "update-08-long-text",
+          "create-01-task-long-description",
+          "create-09-note-very-long",
+          // A cut title.
+          "create-13-long-title",
+          // List entries counted.
+          "create-14-list-entries",
+          // Recipients counted, and a text by its length.
+          "create-04-email-two-contacts",
+          // A referenced record nobody read.
+          "create-06-task-unread-regarding",
+          // The record named only by "its ID is on screen".
+          "update-13-list-only-adds",
+        ]) {
+          const card = marked(id, ["operator_marked_destructive"]);
+          for (const amount of ["full", "short"] as const)
+            for (const wording of ["precise", "natural"] as const)
+              expect(
+                card(language, amount, wording),
+                `${id} ${amount} ${wording}`,
+              ).toContain(ORGANISATION[language]);
+        }
+      },
+    );
+
+    it.each(["de", "en"] as const)(
+      "%s: where the voice says each value in full, the mark is not added, in either wording",
+      (language) => {
+        for (const id of [
+          "update-01-date-and-probability",
+          "update-02-coded-value",
+          "update-10-contact-two-fields",
+          "create-10-account",
+        ])
+          for (const wording of ["precise", "natural"] as const)
+            expect(
+              marked(id, ["operator_marked_destructive"])(
+                language,
+                "full",
+                wording,
+              ),
+              `${id} ${wording}`,
+            ).not.toContain(ORGANISATION[language]);
       },
     );
 

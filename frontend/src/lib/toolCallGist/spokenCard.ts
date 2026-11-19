@@ -2,7 +2,7 @@
 import { effectDisplayName } from "./cardLayout";
 import { addsOnToolsWord, changeLayout, listReplaceIsUnknown } from "./change";
 import { toolCallCardOf } from "./gist";
-import { spokenWordsFor } from "./spokenCardWords";
+import { MAX_LISTED_ENTRIES, spokenWordsFor } from "./spokenCardWords";
 import { dictationOf } from "./spokenDictation";
 import { holder } from "./spokenHold";
 import {
@@ -765,6 +765,7 @@ const saysEachValue = (
   change.opaqueOmitted === 0 &&
   change.textsOmitted === 0 &&
   !change.recordUnread &&
+  !change.hiddenCharacters &&
   !change.notes.includes("list_replace_unknown") &&
   !change.effects.some((effect) => effect.effect === "unreadable") &&
   detailed.omitted === 0 &&
@@ -822,7 +823,7 @@ export const spokenFactsOf = (
       )
     : fieldDetailsOf(gist, timeZone, whole);
   const where = spokenNames(lead.where);
-  return {
+  const facts: Omit<SpokenFacts, "consequences" | "markIfHeld"> = {
     action: gist.action,
     kind: gist.kind,
     count,
@@ -841,12 +842,59 @@ export const spokenFactsOf = (
     details: batch ? batchLosses(change) : detailed.details,
     detailsOmitted: batch ? 0 : detailed.omitted,
     texts: detailed.texts,
+  };
+  return {
+    ...facts,
     ...withDestructiveMark(
       consequencesOf(change, gist.action),
-      saysEachValue(change, gist.action, detailed),
+      saysEachValue(change, gist.action, detailed) &&
+        saysInFull(facts, lead, change),
     ),
   };
 };
+
+/** Whether the voice says a value as it is, not cut, counted or unnamed. */
+const earSaysAll = (value: EarValue): boolean =>
+  value.kind !== "unread" &&
+  value.kind !== "id" &&
+  (value.kind !== "text" || shorten(value.text) === value.text);
+
+/**
+ * Whether the voice says everything the composed card holds in full: every
+ * text read, no value or title cut, no list entry or recipient counted, no
+ * record or value named only by an ID nobody read.
+ */
+const saysInFull = (
+  facts: Omit<SpokenFacts, "consequences" | "markIfHeld">,
+  lead: Gist["items"][number],
+  change: GistChange | undefined,
+): boolean =>
+  !facts.unread &&
+  lead.hiddenIdPaths.length === 0 &&
+  // An existing item with no name is said as the one whose ID is on screen.
+  (CREATING_ACTIONS.includes(facts.action) ||
+    facts.count !== 1 ||
+    facts.names.length > 0) &&
+  lead.names.every(
+    (name) => !name.truncated && shorten(name.text) === name.text,
+  ) &&
+  (facts.recipients === undefined ||
+    facts.recipients.names.length >= facts.recipients.total) &&
+  facts.texts.every((spoken) => spoken.read !== undefined) &&
+  facts.details.every((detail) =>
+    "values" in detail
+      ? detail.omitted === 0 &&
+        detail.values.length <= MAX_LISTED_ENTRIES &&
+        detail.values.every(earSaysAll)
+      : detailValues(detail)
+          .filter((source) => source.slot !== "field")
+          .every((source) => earSaysAll(source.value)),
+  ) &&
+  !(change?.effects ?? []).some((effect) =>
+    [...effect.values, ...effect.added, ...effect.removed, effect.old].some(
+      (value) => value?.truncated === true,
+    ),
+  );
 
 /**
  * The consequences to say. A destructive mark alone, on a card that says

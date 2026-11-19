@@ -230,7 +230,8 @@ const endSentence = (text: string): string =>
   /[.!?…:]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 
 /** Entries of a list said before the rest are counted. */
-const MAX_LISTED_ENTRIES = 3;
+/** List entries said one by one; more are counted. */
+export const MAX_LISTED_ENTRIES = 3;
 
 const roundWords = (count: number): number =>
   count < 20
