@@ -489,6 +489,7 @@ export type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConv
 export { JsonDisplay } from "@/components/ui/ToolCall/JsonDisplay";
 export type { JsonDisplayProps } from "@/components/ui/ToolCall/JsonDisplay";
 export { McpAppView } from "@/components/ui/ToolCall/McpAppView";
+export { VIEW_START_TIMEOUT_MS } from "@/components/ui/ToolCall/McpAppView";
 export type { McpAppViewProps } from "@/components/ui/ToolCall/McpAppView";
 export { McpAppViewFiles } from "@/components/ui/ToolCall/McpAppViewFiles";
 export type { McpAppViewFilesProps } from "@/components/ui/ToolCall/McpAppViewFiles";
