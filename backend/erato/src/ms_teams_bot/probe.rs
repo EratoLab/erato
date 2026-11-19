@@ -221,6 +221,15 @@ mod tests {
             TOKEN.sync_scope(correlation, || {
                 for (body, count) in [
                     (raw, 3),
+                    // Observed when selecting a DOCX from Recent Cloud File in a personal chat.
+                    // The caption and entity below are synthetic.
+                    (json!({
+                        "type": "message",
+                        "conversation": {"conversationType": "personal"},
+                        "text": "Document test",
+                        "attachments": [{"contentType":"text/html","content":"<p>Document test</p>"}],
+                        "entities": [{"type":"clientInfo"}]
+                    }), 0),
                     (json!({"type":"messageUpdate", "attachments":[]}), 0),
                     (json!({"type":"message","text":url}), 0),
                 ] {
@@ -252,6 +261,11 @@ mod tests {
                 .count(),
             2
         );
+        assert!(
+            events
+                .iter()
+                .any(|e| e["source"] == "html" && e["placeholder"] == false && e["absent"] == true)
+        );
         let reasons: Vec<_> = events
             .iter()
             .filter(|e| e["stage"] == "classifier")
@@ -266,6 +280,7 @@ mod tests {
                 "missing_content_url",
                 "missing_download_url",
                 "missing_content_url",
+                "unsupported",
                 "unsupported",
                 "unsupported"
             ]
