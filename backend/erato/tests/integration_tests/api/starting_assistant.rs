@@ -114,6 +114,7 @@ async fn install_policy_with_ids(
                 expires_at: None,
                 provenance: None,
                 approval_speech: None,
+                wait_lines: None,
             },
         );
     }

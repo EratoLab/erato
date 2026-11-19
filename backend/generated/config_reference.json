@@ -575,6 +575,108 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "audio_conversational.wait_lines.amount": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.first_after_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.long_after_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.max_per_turn": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.min_gap_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.phrases.<key>.long.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.phrases.<key>.opener.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.phrases.<key>.opener_short.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.phrases.<key>.still.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.still_after_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.still_quiet_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.taper_after_turns": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.tool_after_ms": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.tools.<key>.items": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.tools.<key>.list": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.tools.<key>.search": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.wait_lines.user_choice": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "audio_dictation.chat_provider_id": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",

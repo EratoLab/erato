@@ -391,3 +391,142 @@ async fn read_aloud_rejects_a_message_that_is_still_generating(pool: Pool<Postgr
     app.abort();
     speech.server.abort();
 }
+
+/// The read aloud voice made the conversational voice too, so that wait lines
+/// have a voice to be said in.
+fn enable_conversational_voice(app_config: &mut AppConfig, speech_url: &str) {
+    enable_read_aloud(app_config, speech_url);
+    app_config.audio_conversational.transcription.enabled = true;
+    app_config.audio_conversational.speech_provider = Some("voice".into());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(None).await;
+    let speech = mock_speech(usize::MAX).await;
+    let app_state = test_app_state(app_config.clone(), pool.clone()).await;
+    let server = create_test_server(app_state);
+    // Without a conversational voice there is nothing to say lines with.
+    server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_not_found();
+
+    enable_conversational_voice(&mut app_config, &speech.url);
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state);
+    let first: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(first["amount"], "normal");
+    assert_eq!(first["source"], "deployment");
+    let lines = first["lines"].as_array().unwrap();
+    assert!(!lines.is_empty(), "{first}");
+    assert!(lines.iter().all(|line| line["audio"] == "AQIDBA=="));
+    assert!(lines.iter().any(|line| line["slot"] == "opener"));
+    // A line in two slots ("One moment.") is synthesised once.
+    let texts: std::collections::HashSet<&str> = lines
+        .iter()
+        .filter_map(|line| line["text"].as_str())
+        .collect();
+    let said = speech.requests.load(Ordering::SeqCst);
+    assert_eq!(said, texts.len());
+
+    // Asked again with the same voice: nothing is synthesised again.
+    let again: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(again["voice"], first["voice"]);
+    assert_eq!(again["lines"], first["lines"]);
+    assert_eq!(speech.requests.load(Ordering::SeqCst), said);
+
+    // The user's own amount applies, since the deployment lets them choose.
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_wait_lines_amount": "off" }))
+        .await
+        .assert_status_ok();
+    let off: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(off["amount"], "off");
+    assert_eq!(off["source"], "user");
+    assert_eq!(off["lines"], json!([]));
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_wait_lines_amount": "chatty" }))
+        .await
+        .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    speech.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn progress_speech_speaks_only_while_the_users_answer_is_generated(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(Some(MockLlmConfig {
+        chunks: vec!["Slow. ".to_string(); 20],
+        delay_ms: 150,
+        ..Default::default()
+    }))
+    .await;
+    let speech = mock_speech(usize::MAX).await;
+    enable_conversational_voice(&mut app_config, &speech.url);
+    let app_state = test_app_state(app_config, pool).await;
+    let (base_url, app) = serve(app_state).await;
+    let client = reqwest::Client::new();
+    let progress = |message_id: &str, text: &str| {
+        client
+            .post(format!(
+                "{base_url}/api/v1beta/me/messages/{message_id}/progress-speech"
+            ))
+            .bearer_auth(TEST_JWT_TOKEN)
+            .json(&json!({ "text": text }))
+            .send()
+    };
+
+    let mut generation = client
+        .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Please answer slowly" }))
+        .send()
+        .await
+        .unwrap();
+    let body = read_until(&mut generation, "\"message_type\":\"text_delta\"").await;
+    let message_id = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+        .find(|json| json["message_type"] == "assistant_message_started")
+        .and_then(|json| json["message_id"].as_str().map(str::to_string))
+        .expect("assistant_message_started event");
+
+    let said = progress(&message_id, "Looking at the opportunities.")
+        .await
+        .unwrap();
+    assert_eq!(said.status(), 200);
+    assert!(said.text().await.unwrap().contains("event: done"));
+    assert_eq!(progress(&message_id, " ").await.unwrap().status(), 400);
+    let long = "word ".repeat(40);
+    assert_eq!(progress(&message_id, &long).await.unwrap().status(), 400);
+
+    read_until(&mut generation, "assistant_message_completed").await;
+    while generation.chunk().await.unwrap().is_some() {}
+    // Once the answer is there, the voice says no free text about it.
+    assert_eq!(
+        progress(&message_id, "Looking at the opportunities.")
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    app.abort();
+    speech.server.abort();
+}

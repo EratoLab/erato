@@ -62,7 +62,7 @@ impl ReadAloudStreamEvent {
 ///
 /// The speakers live in the response body: when the client disconnects the
 /// body is dropped, and the provider request with it.
-fn speech_response(
+pub(super) fn speech_response(
     config: &SpeechProviderConfig,
     pieces: &[String],
     language: &SpeechLanguage,
@@ -133,7 +133,7 @@ fn speech_response(
 }
 
 /// The language the user reads the app in, which speech is prepared for.
-fn speech_language(me_user: &MeProfile) -> SpeechLanguage {
+pub(super) fn speech_language(me_user: &MeProfile) -> SpeechLanguage {
     SpeechLanguage::new(
         normalize_supported_language(me_user.preference_language.as_deref())
             .unwrap_or(&me_user.preferred_language),

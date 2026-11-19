@@ -3783,6 +3783,64 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/progress-speech": {
+      "post": {
+        "tags": [
+          "wait_lines"
+        ],
+        "summary": "Says one line about a running tool call of the caller's own answer.",
+        "description": "Answers only while that answer is still being generated, and only for a\nshort sentence: the voice never says free text at any other time.",
+        "operationId": "progress_speech",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message being generated",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgressSpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The line is empty, too long or holds control characters"
+          },
+          "404": {
+            "description": "No voice, or the message is not in the caller's own chat"
+          },
+          "409": {
+            "description": "The answer is no longer being generated"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/{message_id}/speech": {
       "post": {
         "tags": [
@@ -4677,6 +4735,38 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/wait-lines": {
+      "get": {
+        "tags": [
+          "wait_lines"
+        ],
+        "summary": "What the voice says while the caller waits, and the audio of its fixed\nlines in the caller's language.",
+        "operationId": "wait_lines",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitLinesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Conversational audio mode has no voice"
           }
         },
         "security": [
@@ -12462,6 +12552,18 @@
           }
         }
       },
+      "ProgressSpeechRequest": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The line, composed by the client from the tool call's label."
+          }
+        }
+      },
       "PromptOptimizerRequest": {
         "type": "object",
         "description": "Request to optimize a prompt using the configured prompt optimizer.",
@@ -16158,6 +16260,13 @@
             "type": "string",
             "description": "The client's IANA time zone (the browser's\n`Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it\nwhen it differs from the profile's `preference_time_zone`; anything\nthat is not an IANA zone name is rejected with 422.",
             "example": "Europe/Berlin"
+          },
+          "preference_wait_lines_amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the voice says while the user waits: `normal`, `long_only` or\n`off`, like the amount."
           }
         }
       },
@@ -16287,6 +16396,10 @@
             "type": "string",
             "description": "The IANA time zone the user's client last reported (web app or\nTeams). Local times the user enters, such as a reminder's date and\ntime, are resolved in it."
           },
+          "preference_wait_lines_amount": {
+            "$ref": "#/components/schemas/WaitLinesAmount",
+            "description": "What the voice says while the user waits, as the user chose; absent\nfollows the organisation."
+          },
           "preferred_language": {
             "type": "string",
             "description": "The user's preferred language.\n\nThe final determined language is intersected with our supported languages, to determine the final language.\n\nWill be a BCP 47 language tag (e.g. \"en\" or \"en-US\").\n\nThis is derived in the following order (highest priority first):\n- `i18n.language.language_detection_priority`\n- Default language from `i18n.language.default_language`\n- \"en\""
@@ -16362,7 +16475,188 @@
           "denied"
         ]
       },
-      "Value": {}
+      "Value": {},
+      "WaitLineAudio": {
+        "type": "object",
+        "description": "One fixed line, ready to play.",
+        "required": [
+          "slot",
+          "text",
+          "audio",
+          "sample_rate"
+        ],
+        "properties": {
+          "audio": {
+            "type": "string",
+            "description": "Base64 of signed 16-bit little-endian mono PCM."
+          },
+          "sample_rate": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "slot": {
+            "$ref": "#/components/schemas/WaitLineSlot"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitLineSlot": {
+        "type": "string",
+        "description": "The slots of a language's lines.",
+        "enum": [
+          "opener",
+          "opener_short",
+          "still",
+          "long"
+        ]
+      },
+      "WaitLineToolTemplates": {
+        "type": "object",
+        "description": "Templates for a running tool call's line. `search` holds `{search}`;\n`items` and `list` hold `{table}`. Absent ones say nothing.",
+        "properties": {
+          "items": {
+            "type": "string"
+          },
+          "list": {
+            "type": "string"
+          },
+          "search": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitLinesAmount": {
+        "type": "string",
+        "description": "How much the voice says while the user waits.",
+        "enum": [
+          "normal",
+          "long_only",
+          "off"
+        ]
+      },
+      "WaitLinesResponse": {
+        "type": "object",
+        "required": [
+          "amount",
+          "source",
+          "user_choice",
+          "language",
+          "voice",
+          "timing",
+          "lines",
+          "tools"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/WaitLinesAmount"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language the lines are in: the language the voice speaks to the\ncaller."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitLineAudio"
+            },
+            "description": "Empty when the amount is `off`, in a language without lines, or when\nthe voice could not say them."
+          },
+          "source": {
+            "$ref": "#/components/schemas/WaitLinesSource",
+            "description": "Where the last value that applied came from."
+          },
+          "timing": {
+            "$ref": "#/components/schemas/WaitLinesTiming"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/WaitLineToolTemplates"
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own amount."
+          },
+          "voice": {
+            "type": "string",
+            "description": "Changes whenever the voice that says the lines changes: a client\nkeeps lines only as long as this stays the same."
+          }
+        }
+      },
+      "WaitLinesSource": {
+        "type": "string",
+        "description": "Where the caller's amount comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "WaitLinesTiming": {
+        "type": "object",
+        "description": "When lines are due, in milliseconds from the end of the user's speech\nunless said otherwise.",
+        "required": [
+          "first_after_ms",
+          "tool_after_ms",
+          "still_after_ms",
+          "still_quiet_ms",
+          "long_after_ms",
+          "min_gap_ms",
+          "max_per_turn",
+          "taper_after_turns"
+        ],
+        "properties": {
+          "first_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "long_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_per_turn": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "min_gap_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "From the end of one line to the start of the next.",
+            "minimum": 0
+          },
+          "still_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "still_quiet_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Silence before the \"still on it\" line, from the end of the last line.",
+            "minimum": 0
+          },
+          "taper_after_turns": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Turns with an opener before the opener comes from the short set; `0`\nnever shortens.",
+            "minimum": 0
+          },
+          "tool_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "From the start of a tool call.",
+            "minimum": 0
+          }
+        }
+      }
     }
   }
 }

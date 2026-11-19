@@ -1,0 +1,580 @@
+//! What the voice says while the user waits for an answer in conversational
+//! audio mode: short lines in the answer's own voice, on timers, and a line
+//! naming what a running tool call reads. The wording is data; a built-in
+//! German and English set works without any.
+
+use std::collections::HashMap;
+
+use erato_memory::HeapSize;
+use facet::Facet;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+use crate::config::has_hidden_chars;
+use crate::config_facet_attrs as erato_config;
+use crate::spoken::is_language_tag;
+
+/// How much the voice says while the user waits.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet, HeapSize, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum WaitLinesAmount {
+    /// An opener after a few seconds, a line per slow tool call, and lines
+    /// for long waits.
+    #[default]
+    Normal,
+    /// No opener: only tool call lines and the lines for long waits.
+    LongOnly,
+    /// Nothing is said; the screen shows the wait.
+    Off,
+}
+
+/// `[audio_conversational.wait_lines]`. Times count from the end of the
+/// user's speech unless said otherwise.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
+#[serde(default)]
+pub struct WaitLinesConfig {
+    /// `normal`, `long_only` or `off`. Defaults to `normal`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub amount: WaitLinesAmount,
+    /// When the opener ("Einen Moment.") is due, and never before the
+    /// transcript is back. Defaults to `3000`; allowed from `1500` to `10000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub first_after_ms: u32,
+    /// How long a tool call runs before its line is due. Defaults to `1500`;
+    /// allowed from `0` to `10000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub tool_after_ms: u32,
+    /// When the "still on it" line is due. Defaults to `12000`; allowed from
+    /// `5000` to `60000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub still_after_ms: u32,
+    /// The "still on it" line waits until nothing was said for this long, so
+    /// it is skipped while tool lines keep coming. Defaults to `8000`;
+    /// allowed from `2000` to `30000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub still_quiet_ms: u32,
+    /// When the "this takes longer" line is due. Defaults to `22000`;
+    /// allowed from `10000` to `120000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub long_after_ms: u32,
+    /// From the end of one line to the start of the next. Defaults to
+    /// `4000`; allowed from `1000` to `15000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub min_gap_ms: u32,
+    /// Lines in one turn at most. Defaults to `3`; allowed from `0` to `5`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_per_turn: u32,
+    /// After this many turns with an opener, the opener comes from the short
+    /// set. `0` never shortens. Defaults to `3`; allowed up to `50`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub taper_after_turns: u32,
+    /// Whether a user may choose their own amount, unless a supervisor's
+    /// audience setting says otherwise. Defaults to `true`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub user_choice: bool,
+    /// Lines per language tag, replacing the built-in ones slot by slot. An
+    /// empty list silences its slot.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub phrases: HashMap<String, WaitLinePhrasesConfig>,
+    /// Tool call line templates per language tag, replacing the built-in
+    /// ones template by template. `search` holds `{search}`; `items` and
+    /// `list` hold `{table}`. An empty string silences its template.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub tools: HashMap<String, WaitLineToolsConfig>,
+}
+
+/// The lines of one language, by slot. Each one set replaces its built-in
+/// slot; the variants are picked at random, never the one said last.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
+#[serde(default)]
+pub struct WaitLinePhrasesConfig {
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub opener: Option<Vec<String>>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub opener_short: Option<Vec<String>>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub still: Option<Vec<String>>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub long: Option<Vec<String>>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
+#[serde(default)]
+pub struct WaitLineToolsConfig {
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub search: Option<String>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub items: Option<String>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub list: Option<String>,
+}
+
+pub const FIRST_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 1500..=10_000;
+pub const TOOL_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 0..=10_000;
+pub const STILL_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 5000..=60_000;
+pub const STILL_QUIET_MS_RANGE: std::ops::RangeInclusive<u32> = 2000..=30_000;
+pub const LONG_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 10_000..=120_000;
+pub const MIN_GAP_MS_RANGE: std::ops::RangeInclusive<u32> = 1000..=15_000;
+pub const MAX_PER_TURN_RANGE: std::ops::RangeInclusive<u32> = 0..=5;
+pub const TAPER_AFTER_TURNS_RANGE: std::ops::RangeInclusive<u32> = 0..=50;
+
+/// A line longer than this is not a short line.
+pub const MAX_LINE_CHARS: usize = 120;
+/// Variants one slot keeps.
+pub const MAX_VARIANTS: usize = 8;
+
+impl Default for WaitLinesConfig {
+    fn default() -> Self {
+        Self {
+            amount: WaitLinesAmount::Normal,
+            first_after_ms: 3000,
+            tool_after_ms: 1500,
+            still_after_ms: 12_000,
+            still_quiet_ms: 8000,
+            long_after_ms: 22_000,
+            min_gap_ms: 4000,
+            max_per_turn: 3,
+            taper_after_turns: 3,
+            user_choice: true,
+            phrases: HashMap::new(),
+            tools: HashMap::new(),
+        }
+    }
+}
+
+/// The slots of a language's lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitLineSlot {
+    Opener,
+    OpenerShort,
+    Still,
+    Long,
+}
+
+impl WaitLineSlot {
+    pub const ALL: [Self; 4] = [Self::Opener, Self::OpenerShort, Self::Still, Self::Long];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Opener => "opener",
+            Self::OpenerShort => "opener_short",
+            Self::Still => "still",
+            Self::Long => "long",
+        }
+    }
+}
+
+/// The lines and tool templates that apply in one language.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WaitLineSet {
+    pub lines: Vec<(WaitLineSlot, String)>,
+    pub search: Option<String>,
+    pub items: Option<String>,
+    pub list: Option<String>,
+}
+
+struct BuiltIn {
+    opener: &'static [&'static str],
+    opener_short: &'static [&'static str],
+    still: &'static [&'static str],
+    long: &'static [&'static str],
+    search: &'static str,
+    items: &'static str,
+    list: &'static str,
+}
+
+// No address form (du/Sie), no question, no time promise, no hesitation
+// sound: a line says only that the wait is real, never what was found.
+const GERMAN: BuiltIn = BuiltIn {
+    opener: &[
+        "Einen Moment.",
+        "Alles klar, einen Moment.",
+        "Moment, ich kümmere mich darum.",
+    ],
+    opener_short: &["Moment.", "Okay, Moment."],
+    still: &["Ich bin noch dran.", "Ich bin noch dabei."],
+    long: &["Das dauert gerade länger. Die Antwort kommt auch in den Chat."],
+    search: "Ich suche nach {search}.",
+    items: "Ich sehe mir {table} an.",
+    list: "Ich sehe mir die {table} an.",
+};
+
+const ENGLISH: BuiltIn = BuiltIn {
+    opener: &["One moment.", "Okay, one moment.", "Sure, I'm on it."],
+    opener_short: &["One moment.", "Okay."],
+    still: &["Still on it.", "I'm still working on it."],
+    long: &["This is taking a while. The answer will also be in the chat."],
+    search: "Searching for {search}.",
+    items: "Looking at {table}.",
+    list: "Looking at the {table}.",
+};
+
+fn built_in(language: &str) -> Option<&'static BuiltIn> {
+    match language {
+        "de" => Some(&GERMAN),
+        "en" => Some(&ENGLISH),
+        _ => None,
+    }
+}
+
+/// Why `line` cannot be said as a wait line, or `None` when it can.
+pub fn line_problem(line: &str) -> Option<&'static str> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return Some("it is blank");
+    }
+    if trimmed.chars().count() > MAX_LINE_CHARS {
+        return Some("it is longer than 120 characters");
+    }
+    if trimmed.chars().any(char::is_control) || has_hidden_chars(trimmed) {
+        return Some("it holds control or hidden characters");
+    }
+    // A question invites an answer the closed microphone would not hear.
+    if trimmed.ends_with(['?', '？', '¿']) {
+        return Some("it asks a question");
+    }
+    if trimmed.contains(['{', '}']) {
+        return Some("it holds a brace; only tool templates have slots");
+    }
+    None
+}
+
+/// Why `template` cannot be a tool line with `slot`, or `None`.
+pub fn template_problem(template: &str, slot: &str) -> Option<&'static str> {
+    let trimmed = template.trim();
+    if trimmed.chars().count() > MAX_LINE_CHARS {
+        return Some("it is longer than 120 characters");
+    }
+    if trimmed.chars().any(char::is_control) || has_hidden_chars(trimmed) {
+        return Some("it holds control or hidden characters");
+    }
+    if trimmed.ends_with(['?', '？', '¿']) {
+        return Some("it asks a question");
+    }
+    let marker = format!("{{{slot}}}");
+    if trimmed.matches(&marker).count() != 1 {
+        return Some("it must hold its slot exactly once");
+    }
+    if trimmed.replacen(&marker, "", 1).contains(['{', '}']) {
+        return Some("it holds a brace that is not its slot");
+    }
+    None
+}
+
+impl WaitLinesConfig {
+    /// Sets each value outside its range back to its default and names it.
+    pub fn fall_back_out_of_range(&mut self) -> Vec<String> {
+        let defaults = Self::default();
+        let mut warnings = Vec::new();
+        let mut check = |key: &str,
+                         value: &mut u32,
+                         default: u32,
+                         range: &std::ops::RangeInclusive<u32>| {
+            if !range.contains(value) {
+                warnings.push(format!(
+                        "`audio_conversational.wait_lines.{key}` = {value} is outside {} to {}; using the default {default}.",
+                        range.start(),
+                        range.end()
+                    ));
+                *value = default;
+            }
+        };
+        check(
+            "first_after_ms",
+            &mut self.first_after_ms,
+            defaults.first_after_ms,
+            &FIRST_AFTER_MS_RANGE,
+        );
+        check(
+            "tool_after_ms",
+            &mut self.tool_after_ms,
+            defaults.tool_after_ms,
+            &TOOL_AFTER_MS_RANGE,
+        );
+        check(
+            "still_after_ms",
+            &mut self.still_after_ms,
+            defaults.still_after_ms,
+            &STILL_AFTER_MS_RANGE,
+        );
+        check(
+            "still_quiet_ms",
+            &mut self.still_quiet_ms,
+            defaults.still_quiet_ms,
+            &STILL_QUIET_MS_RANGE,
+        );
+        check(
+            "long_after_ms",
+            &mut self.long_after_ms,
+            defaults.long_after_ms,
+            &LONG_AFTER_MS_RANGE,
+        );
+        check(
+            "min_gap_ms",
+            &mut self.min_gap_ms,
+            defaults.min_gap_ms,
+            &MIN_GAP_MS_RANGE,
+        );
+        check(
+            "max_per_turn",
+            &mut self.max_per_turn,
+            defaults.max_per_turn,
+            &MAX_PER_TURN_RANGE,
+        );
+        check(
+            "taper_after_turns",
+            &mut self.taper_after_turns,
+            defaults.taper_after_turns,
+            &TAPER_AFTER_TURNS_RANGE,
+        );
+        warnings
+    }
+
+    /// Removes lines and templates that cannot be said, so that one bad
+    /// entry of a content package never stops a deployment, and names each.
+    pub fn drop_unusable(&mut self) -> Vec<String> {
+        let mut dropped = Vec::new();
+        let place = "audio_conversational.wait_lines";
+        self.phrases.retain(|language, _| {
+            let keep = is_language_tag(language);
+            if !keep {
+                dropped.push(format!(
+                    "{place}.phrases.{language}: not a lowercase language tag such as `de`"
+                ));
+            }
+            keep
+        });
+        for (language, phrases) in &mut self.phrases {
+            for slot in WaitLineSlot::ALL {
+                let Some(lines) = phrases.slot_mut(slot) else {
+                    continue;
+                };
+                lines.retain(|line| match line_problem(line) {
+                    Some(problem) => {
+                        dropped.push(format!(
+                            "{place}.phrases.{language}.{}: '{line}' is ignored: {problem}",
+                            slot.name()
+                        ));
+                        false
+                    }
+                    None => true,
+                });
+                if lines.len() > MAX_VARIANTS {
+                    dropped.push(format!(
+                        "{place}.phrases.{language}.{}: only the first {MAX_VARIANTS} variants are kept",
+                        slot.name()
+                    ));
+                    lines.truncate(MAX_VARIANTS);
+                }
+            }
+        }
+        self.tools.retain(|language, _| {
+            let keep = is_language_tag(language);
+            if !keep {
+                dropped.push(format!(
+                    "{place}.tools.{language}: not a lowercase language tag such as `de`"
+                ));
+            }
+            keep
+        });
+        for (language, tools) in &mut self.tools {
+            for (name, slot, template) in [
+                ("search", "search", &mut tools.search),
+                ("items", "table", &mut tools.items),
+                ("list", "table", &mut tools.list),
+            ] {
+                let Some(text) = template.as_deref() else {
+                    continue;
+                };
+                // An empty template silences it on purpose.
+                if text.trim().is_empty() {
+                    continue;
+                }
+                if let Some(problem) = template_problem(text, slot) {
+                    dropped.push(format!(
+                        "{place}.tools.{language}.{name}: '{text}' is ignored: {problem}"
+                    ));
+                    *template = None;
+                }
+            }
+        }
+        dropped.sort();
+        dropped
+    }
+
+    /// The lines and templates that apply in `language` (a bare tag such as
+    /// `de`): the configured slot where set, else the built-in one. A
+    /// language with neither has no lines: English for a French listener
+    /// would be worse than silence.
+    pub fn set_for(&self, language: &str) -> WaitLineSet {
+        let built_in = built_in(language);
+        let phrases = self.phrases.get(language);
+        let mut lines = Vec::new();
+        for slot in WaitLineSlot::ALL {
+            let configured = phrases.and_then(|phrases| phrases.slot(slot));
+            let texts: Vec<String> = match configured {
+                Some(lines) => lines.iter().map(|line| line.trim().to_string()).collect(),
+                None => built_in
+                    .map(|set| set.slot(slot).iter().map(|line| line.to_string()).collect())
+                    .unwrap_or_default(),
+            };
+            lines.extend(texts.into_iter().map(|text| (slot, text)));
+        }
+        let tools = self.tools.get(language);
+        let template = |configured: Option<&Option<String>>, fallback: Option<&'static str>| {
+            match configured {
+                Some(Some(text)) if text.trim().is_empty() => None,
+                Some(Some(text)) => Some(text.trim().to_string()),
+                _ => fallback.map(str::to_string),
+            }
+        };
+        WaitLineSet {
+            lines,
+            search: template(tools.map(|t| &t.search), built_in.map(|b| b.search)),
+            items: template(tools.map(|t| &t.items), built_in.map(|b| b.items)),
+            list: template(tools.map(|t| &t.list), built_in.map(|b| b.list)),
+        }
+    }
+}
+
+impl WaitLinePhrasesConfig {
+    fn slot(&self, slot: WaitLineSlot) -> Option<&Vec<String>> {
+        match slot {
+            WaitLineSlot::Opener => self.opener.as_ref(),
+            WaitLineSlot::OpenerShort => self.opener_short.as_ref(),
+            WaitLineSlot::Still => self.still.as_ref(),
+            WaitLineSlot::Long => self.long.as_ref(),
+        }
+    }
+
+    fn slot_mut(&mut self, slot: WaitLineSlot) -> Option<&mut Vec<String>> {
+        match slot {
+            WaitLineSlot::Opener => self.opener.as_mut(),
+            WaitLineSlot::OpenerShort => self.opener_short.as_mut(),
+            WaitLineSlot::Still => self.still.as_mut(),
+            WaitLineSlot::Long => self.long.as_mut(),
+        }
+    }
+}
+
+impl BuiltIn {
+    fn slot(&self, slot: WaitLineSlot) -> &'static [&'static str] {
+        match slot {
+            WaitLineSlot::Opener => self.opener,
+            WaitLineSlot::OpenerShort => self.opener_short,
+            WaitLineSlot::Still => self.still,
+            WaitLineSlot::Long => self.long,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn built_in_lines_pass_their_own_checks() {
+        for set in [&GERMAN, &ENGLISH] {
+            for slot in WaitLineSlot::ALL {
+                for line in set.slot(slot) {
+                    assert_eq!(line_problem(line), None, "{line}");
+                }
+            }
+            assert_eq!(template_problem(set.search, "search"), None);
+            assert_eq!(template_problem(set.items, "table"), None);
+            assert_eq!(template_problem(set.list, "table"), None);
+        }
+    }
+
+    #[test]
+    fn a_configured_slot_replaces_its_built_in_one_and_empty_silences_it() {
+        let config = WaitLinesConfig {
+            phrases: HashMap::from([(
+                "de".to_string(),
+                WaitLinePhrasesConfig {
+                    opener: Some(vec!["Sekunde.".into()]),
+                    still: Some(vec![]),
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+        let set = config.set_for("de");
+        let of = |slot| {
+            set.lines
+                .iter()
+                .filter(|(s, _)| *s == slot)
+                .map(|(_, text)| text.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(of(WaitLineSlot::Opener), ["Sekunde."]);
+        assert!(of(WaitLineSlot::Still).is_empty());
+        assert_eq!(of(WaitLineSlot::OpenerShort), GERMAN.opener_short);
+        assert_eq!(set.search.as_deref(), Some(GERMAN.search));
+    }
+
+    #[test]
+    fn a_language_without_lines_has_none() {
+        let set = WaitLinesConfig::default().set_for("fr");
+        assert!(set.lines.is_empty());
+        assert_eq!(set.search, None);
+    }
+
+    #[test]
+    fn unusable_lines_and_templates_are_dropped_with_a_reason() {
+        let mut config = WaitLinesConfig {
+            phrases: HashMap::from([
+                (
+                    "de".to_string(),
+                    WaitLinePhrasesConfig {
+                        opener: Some(vec![
+                            "Einen Moment.".into(),
+                            "Darf ich kurz nachsehen?".into(),
+                            " ".into(),
+                            "Moment {name}.".into(),
+                        ]),
+                        ..Default::default()
+                    },
+                ),
+                ("DE".to_string(), WaitLinePhrasesConfig::default()),
+            ]),
+            tools: HashMap::from([(
+                "en".to_string(),
+                WaitLineToolsConfig {
+                    search: Some("Looking.".into()),
+                    items: Some(String::new()),
+                    list: Some("Checking {table} and {table}.".into()),
+                },
+            )]),
+            ..Default::default()
+        };
+        let dropped = config.drop_unusable();
+        assert_eq!(dropped.len(), 6, "{dropped:?}");
+        assert!(dropped.iter().any(|d| d.contains("asks a question")));
+        assert_eq!(
+            config.phrases["de"].opener.as_deref(),
+            Some(&["Einen Moment.".to_string()][..])
+        );
+        let set = config.set_for("en");
+        assert_eq!(set.search.as_deref(), Some(ENGLISH.search));
+        assert_eq!(set.items, None);
+        assert_eq!(set.list.as_deref(), Some(ENGLISH.list));
+    }
+
+    #[test]
+    fn a_timing_out_of_range_falls_back_to_its_default() {
+        let mut config = WaitLinesConfig {
+            first_after_ms: 200,
+            max_per_turn: 9,
+            ..Default::default()
+        };
+        let warnings = config.fall_back_out_of_range();
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert_eq!(config.first_after_ms, 3000);
+        assert_eq!(config.max_per_turn, 3);
+    }
+}

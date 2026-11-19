@@ -45,6 +45,13 @@ import {
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
+import {
+  beginWaitTurn,
+  endWaitTurn,
+  moveWaitTurn,
+  waitTurnAnswered,
+  waitTurnTool,
+} from "@/hooks/audio/waitLines";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
@@ -1063,6 +1070,7 @@ export function useChatMessaging(
         // Handle different message types from SSE
         switch (responseData.message_type) {
           case "audio_delta":
+            waitTurnAnswered(activeStreamKey);
             playSpeechChunk(
               responseData.message_id,
               responseData.sequence,
@@ -1082,6 +1090,7 @@ export function useChatMessaging(
             {
               const previousStreamKey = activeStreamKey;
               moveSpeechStream(previousStreamKey, responseData.chat_id);
+              moveWaitTurn(previousStreamKey, responseData.chat_id);
               // A resume stream replays the chat's full event history, so
               // this frame can announce a chat this client never submitted
               // (most visibly a delegated run entered mid-generation). Such
@@ -1209,6 +1218,8 @@ export function useChatMessaging(
             break;
 
           case "text_delta":
+            if (responseData.new_text.trim().length > 0)
+              waitTurnAnswered(activeStreamKey);
             handleTextDelta(responseData, activeStreamKey);
             break;
 
@@ -1217,6 +1228,7 @@ export function useChatMessaging(
             break;
 
           case "assistant_message_completed":
+            endWaitTurn(activeStreamKey);
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed event. Full payload:",
               responseData,
@@ -1301,6 +1313,13 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            waitTurnTool(
+              activeStreamKey,
+              responseData.message_id,
+              responseData.tool_call_id,
+              responseData.status,
+              responseData.display?.label,
+            );
             // The sidebar keeps the Scheduled lists cached, so without this
             // the Scheduled page and earlier cards would not show the change.
             if (
@@ -1546,6 +1565,7 @@ export function useChatMessaging(
               .getStreaming(resumeStreamKey).isStreaming;
             if (stillStreaming) {
               setError(connectionError);
+              endWaitTurn(resumeStreamKey);
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
@@ -2062,6 +2082,8 @@ export function useChatMessaging(
         requestBody.conversational_audio_back =
           speech.conversational && speech.enabled;
         beginSpeechResponse(streamKey);
+        if (useSpeechPlayback.getState().spokenTurn === streamKey)
+          beginWaitTurn(streamKey);
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
           requestBody,
           effectiveChatIdForRequest,
@@ -2180,6 +2202,7 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] SSE onError: Resetting streaming state.",
             );
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
 
@@ -2443,6 +2466,7 @@ export function useChatMessaging(
               }
             }
             setError(connectionError);
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             void handleRefetchAndClear({ logContext: "SSE error (edit)" });
             setSubmittingForKey(activeStreamKey, false);
@@ -2596,6 +2620,7 @@ export function useChatMessaging(
               }
             }
             setError(connectionError);
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             void handleRefetchAndClear({
               logContext: "SSE error (regenerate)",
@@ -2864,7 +2889,10 @@ export function useChatMessaging(
       // The answer after a decision is read back when the turn that stopped
       // was, and the voice can still play it.
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
-      if (readBack) beginSpeechResponse(streamKey);
+      if (readBack) {
+        beginSpeechResponse(streamKey);
+        beginWaitTurn(streamKey);
+      }
 
       return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
@@ -2917,6 +2945,7 @@ export function useChatMessaging(
                 }
               }
               setError(connectionError);
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "SSE error (continue)",

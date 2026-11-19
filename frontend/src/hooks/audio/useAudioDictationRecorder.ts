@@ -55,6 +55,7 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import { markSpeechEnded } from "./speechEnd";
 import {
   overVoiceGate,
   overVoiceStep,
@@ -1564,6 +1565,8 @@ export function useAudioDictationRecorder({
               if (vadAutoStopTriggeredRef.current) {
                 return;
               }
+              // The detector reports the end after the end-of-turn silence.
+              markSpeechEnded(Date.now() - tuning.redemptionMs);
               openSpeechGate(gate);
               // Heard in the audio from while the detector loaded: the turn
               // ends once the recording is under way.

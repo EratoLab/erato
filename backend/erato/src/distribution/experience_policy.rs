@@ -23,6 +23,10 @@ pub const STARTING_ASSISTANT_SETTING: &str = "starting_assistant";
 /// lists it under this key.
 pub const APPROVAL_SPEECH_SETTING: &str = "approval_speech";
 
+/// The `setting_orders` key of what the voice says while the user waits.
+/// Like approval speech, an audience takes part only once listed under it.
+pub const WAIT_LINES_SETTING: &str = "wait_lines";
+
 /// The shared resolution-contract fixture: the cases every resolver of this
 /// document must agree on. Downstream consumers keep a copy (the admin panel
 /// does) and assert it against this one byte for byte; the
@@ -228,6 +232,40 @@ pub struct ExperienceAudience {
     /// costs nothing else: the audience and its pin stay.
     #[serde(default, deserialize_with = "lenient_approval_speech")]
     pub approval_speech: Option<AudienceApprovalSpeech>,
+    /// What the voice says while this audience waits for an answer, where
+    /// an admin set it, resolved like `approval_speech` in the
+    /// [`WAIT_LINES_SETTING`] order. A block that does not parse is ignored.
+    #[serde(default, deserialize_with = "lenient_wait_lines")]
+    pub wait_lines: Option<AudienceWaitLines>,
+}
+
+/// A supervisor's choice for what an audience hears while it waits.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct AudienceWaitLines {
+    pub amount: Option<erato_config::wait_lines::WaitLinesAmount>,
+    /// Whether the audience's users may choose their own; absent keeps the
+    /// deployment's `wait_lines.user_choice`.
+    pub user_choice: Option<bool>,
+}
+
+fn lenient_wait_lines<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<AudienceWaitLines>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    match AudienceWaitLines::deserialize(&value) {
+        Ok(lines) => Ok(Some(lines)),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "An audience's wait_lines block is ignored: it does not parse"
+            );
+            Ok(None)
+        }
+    }
 }
 
 /// A supervisor's choice for how an audience hears approval cards.
@@ -685,6 +723,7 @@ mod tests {
             expires_at: Some(expires_at),
             provenance: None,
             approval_speech: None,
+            wait_lines: None,
         };
         assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
         assert!(!audience.is_active_at(expires_at));
@@ -940,6 +979,7 @@ mod tests {
             expires_at: None,
             provenance: None,
             approval_speech: None,
+            wait_lines: None,
         }
     }
 

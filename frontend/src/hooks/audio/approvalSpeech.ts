@@ -9,6 +9,7 @@ import { createSSEConnection } from "@/utils/sse/sseClient";
 
 import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
 import { useSpeechPlayback } from "./speechPlayback";
+import { afterWaitLine, waitLinePlaying } from "./waitLines";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { ReadAloudStreamEvent } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -655,16 +656,21 @@ function play_(
     speaking: true,
     failed: false,
   });
+  const start = (resumed: AudioContext) => {
+    if (current !== cardRun) return;
+    if (resumed.state !== "running") {
+      fail();
+      return;
+    }
+    context = resumed;
+    if (!prepared) loadPieces(pieces.map((_, index) => index));
+    apply({ type: "start" });
+  };
   void resumePlaybackContext().then(
     (resumed) => {
-      if (current !== cardRun) return;
-      if (resumed.state !== "running") {
-        fail();
-        return;
-      }
-      context = resumed;
-      if (!prepared) loadPieces(pieces.map((_, index) => index));
-      apply({ type: "start" });
+      // A wait line that is being said finishes first.
+      if (waitLinePlaying()) void afterWaitLine().then(() => start(resumed));
+      else start(resumed);
     },
     () => {
       if (current === cardRun) fail();

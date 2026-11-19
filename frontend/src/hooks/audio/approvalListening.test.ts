@@ -480,6 +480,7 @@ const fetchCommand = vi.fn();
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchInterpretApprovalVoiceCommand: (...args: unknown[]) =>
     fetchCommand(...args),
+  fetchWaitLines: () => Promise.reject(new Error("no wait lines in tests")),
 }));
 
 interface Connection {

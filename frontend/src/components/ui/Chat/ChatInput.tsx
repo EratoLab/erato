@@ -55,6 +55,7 @@ import {
   useAudioDictationRecorder,
 } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
+import { prepareWaitLines } from "@/hooks/audio/waitLines";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import {
   holdComposeReload,
@@ -608,6 +609,9 @@ export const ChatInput = ({
       conversational: isAudioMode && Boolean(speechEnabled),
     });
     if (!isAudioMode) stopSpeechPlayback();
+    // Asked again each time audio mode starts, so a changed voice brings
+    // lines in that voice.
+    if (isAudioMode && speechEnabled) void prepareWaitLines();
   }, [isAudioMode, speechEnabled]);
   useEffect(
     () => () => {

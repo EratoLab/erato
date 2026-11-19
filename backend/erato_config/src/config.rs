@@ -2543,6 +2543,16 @@ impl AppConfig {
         for warning in config.audio_conversational.drop_unusable_hesitation_words() {
             tracing::warn!("{warning}");
         }
+        for warning in config
+            .audio_conversational
+            .wait_lines
+            .fall_back_out_of_range()
+        {
+            tracing::warn!("{warning}");
+        }
+        for dropped in config.audio_conversational.wait_lines.drop_unusable() {
+            tracing::warn!("Wait line dropped: {dropped}.");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -8742,6 +8752,12 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_talk_over_voice_min_speech_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub talk_over_voice_min_speech_ms: u32,
+    /// What the voice says while the user waits for an answer: an opener,
+    /// a line per slow tool call, and lines for long waits.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub wait_lines: crate::wait_lines::WaitLinesConfig,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -8801,6 +8817,7 @@ impl Default for AudioConversationalConfig {
             hesitation_words_replace_base: false,
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
+            wait_lines: crate::wait_lines::WaitLinesConfig::default(),
         }
     }
 }
