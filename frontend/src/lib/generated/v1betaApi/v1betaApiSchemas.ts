@@ -307,6 +307,7 @@ export type ApprovalVoiceCommandRequest = {
    * The spoken card's pieces in the order they are said, at most 16.
    */
   pieces: ApprovalCardPiece[];
+  question?: ApprovalVoiceQuestion;
   /**
    * What the user said, as transcribed. At most 300 characters.
    */
@@ -330,6 +331,12 @@ export type ApprovalVoiceMeaning =
   | "reject"
   | "noise"
   | "unclear";
+
+/**
+ * What the voice just asked about the card, when the user's words may
+ * answer it.
+ */
+export type ApprovalVoiceQuestion = "which_text";
 
 /**
  * Response from the archive all chats endpoint

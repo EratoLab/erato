@@ -3213,7 +3213,7 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Estimated close date: vom 1. Dezember auf den 15. Januar 2030.",
+          "text": "Estimated close date: vom 1. Dezember 2026 auf den 15. Januar 2030.",
           "mustSay": false,
           "values": [
             {
@@ -3310,7 +3310,7 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Estimated close date: from 1 December to 15 January 2030.",
+          "text": "Estimated close date: from 1 December 2026 to 15 January 2030.",
           "mustSay": false,
           "values": [
             {
@@ -3978,7 +3978,7 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Estimated close date: vom 1. Dezember auf den 31. März 2030.",
+          "text": "Estimated close date: vom 1. Dezember 2026 auf den 31. März 2030.",
           "mustSay": false,
           "values": [
             {
@@ -4120,7 +4120,7 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Estimated close date: from 1 December to 31 March 2030.",
+          "text": "Estimated close date: from 1 December 2026 to 31 March 2030.",
           "mustSay": false,
           "values": [
             {

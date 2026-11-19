@@ -6,7 +6,8 @@ use super::me_profile_middleware::{MeProfile, normalize_supported_language};
 use crate::policy::engine::PolicyEngine;
 use crate::services::approval_voice_commands::{
     CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
-    VoiceModel, check_input, classify_by_model, classify_by_rules, classify_without_model,
+    VoiceModel, VoiceQuestion, check_input, classify_by_model, classify_by_rules,
+    classify_without_model,
 };
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::sentry::log_internal_server_error;
@@ -36,6 +37,10 @@ pub struct ApprovalVoiceCommandRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     pub current_piece_id: Option<String>,
+    /// What the voice just asked, when the words may answer it.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub question: Option<VoiceQuestion>,
 }
 
 /// Match what the user said while an approval card waits to one meaning.
@@ -81,6 +86,7 @@ pub async fn interpret_approval_voice_command(
         language: &language,
         pieces: &request.pieces,
         current_piece_id: request.current_piece_id.as_deref(),
+        question: request.question,
     };
     check_input(&input).map_err(|problem| match problem {
         InputProblem::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,

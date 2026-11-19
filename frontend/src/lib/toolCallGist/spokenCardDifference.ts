@@ -15,6 +15,7 @@ import {
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { spokenFieldName, spokenNamesFor } from "./spokenNames";
+import { numbersSaid, readableNumberWords } from "./spokenNumbers";
 import { spokenReadFactsOf } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
@@ -30,15 +31,19 @@ import type {
   SpokenReadOut,
   SpokenSource,
 } from "./spokenCard";
-import type { DifferenceIntro, LanguageWords } from "./spokenCardWords";
+import type { Asked, DifferenceIntro, LanguageWords } from "./spokenCardWords";
 import type { SpokenNames } from "./spokenNames";
+import type { NumberWords, NumbersSaid } from "./spokenNumbers";
 import type { EarValue } from "./spokenValues";
 
 /**
  * A corrected approval card as the voice says it after a change request:
  * the item, then only what differs from the card the user withdrew, then
  * that the rest is as before. Every difference is said, and one the user's
- * words do not name is marked as not asked for. A card about another item,
+ * words do not name is marked as not asked for. Where the words may name
+ * it but cannot be read for sure (a number said in words without the
+ * language's number words), it is said as changed, neither asked for nor
+ * not. A card about another item,
  * or a withdrawn card the user hardly heard, is said in full instead.
  *
  * The two calls are compared on their values, not on what the voice says
@@ -846,35 +851,80 @@ const wordMatches = (said: readonly string[], term: string): boolean => {
   );
 };
 
+/** The user's words, and the numbers in them, for telling what they named. */
+interface Heard {
+  tokens: readonly string[];
+  numbers: NumbersSaid;
+  /**
+   * No number words are read in this language: a number said in words
+   * cannot be told from one not said.
+   */
+  wordsUnread: boolean;
+}
+
+/** Whether words name a value: yes, maybe (they may, but cannot be read for sure), or no. */
+type Naming = "yes" | "maybe" | "no";
+
+const heardOf = (
+  words: string,
+  numberWords: NumberWords | undefined,
+): Heard => {
+  const tokens = tokensOf(words);
+  return {
+    tokens,
+    numbers: numbersSaid(tokens, numberWords),
+    wordsUnread: readableNumberWords(numberWords) === undefined,
+  };
+};
+
+const numberNamed = (heard: Heard, values: readonly number[]): Naming =>
+  values.some((value) => heard.numbers.sure.has(value))
+    ? "yes"
+    : values.some((value) => heard.numbers.maybe.has(value)) ||
+        heard.wordsUnread
+      ? "maybe"
+      : "no";
+
+const best = (namings: readonly Naming[]): Naming =>
+  namings.includes("yes") ? "yes" : namings.includes("maybe") ? "maybe" : "no";
+
 /**
- * Whether the user's words name a value. A date needs its day, and a month
- * said with it must be its own; its weekday names it too. A month, a year
- * or an hour alone names nothing.
+ * Whether the user's words name a value, compared as a value: a number by
+ * its value, however it was said. A date needs its day, and a month said
+ * with it must be its own; its weekday names it too. A month alone names
+ * nothing. A number is not tied to the field it was said for: "um 8 Uhr"
+ * names a date on the 8th.
  */
-const names = (said: readonly string[], value: EarValue): boolean => {
+const names = (heard: Heard, value: EarValue): Naming => {
+  const said = heard.tokens;
   switch (value.kind) {
     case "text":
-      return tokensOf(value.text).some((term) => wordMatches(said, term));
-    case "number":
-      return (
-        said.includes(String(Math.trunc(value.value))) ||
-        said.includes(String(value.value))
+      return best(
+        tokensOf(value.text).map((term) =>
+          wordMatches(said, term)
+            ? "yes"
+            : /^\d+$/.test(term)
+              ? numberNamed(heard, [Number(term)])
+              : "no",
+        ),
       );
+    case "number":
+      return numberNamed(heard, [Math.trunc(value.value), value.value]);
     case "date":
     case "datetime": {
       const date = new Date(Date.UTC(value.year, value.month - 1, value.day));
       if (calendarNames("weekday", date).some((day) => said.includes(day)))
-        return true;
-      if (!said.includes(String(value.day))) return false;
+        return "yes";
       const month = calendarNames("month", date);
-      return said
-        .filter((token) => ALL_MONTHS.has(token))
-        .every((token) => month.includes(token));
+      const otherMonth = said.some(
+        (token) => ALL_MONTHS.has(token) && !month.includes(token),
+      );
+      return otherMonth ? "no" : numberNamed(heard, [value.day]);
     }
     case "bool":
     case "unread":
     case "id":
-      return false;
+      return "no";
   }
 };
 
@@ -886,14 +936,17 @@ const names = (said: readonly string[], value: EarValue): boolean => {
  * makes the voice say more.
  */
 const asks = (
-  said: readonly string[],
+  heard: Heard,
   entry: Entry | undefined,
   old: Entry | undefined,
   siblings: readonly string[],
-): boolean => {
+): Asked => {
+  const said = heard.tokens;
   const field = entry?.field ?? old?.field;
-  if (field !== undefined && fieldNamed(said, field, siblings)) return true;
-  if (entry?.said.some((value) => names(said, value))) return true;
+  if (field !== undefined && fieldNamed(said, field, siblings)) return "asked";
+  const namings: Naming[] = (entry?.said ?? []).map((value) =>
+    names(heard, value),
+  );
   if (entry?.words !== undefined || old?.words !== undefined) {
     const before = new Set(tokensOf(old?.words ?? ""));
     const after = new Set(tokensOf(entry?.words ?? ""));
@@ -901,15 +954,18 @@ const asks = (
       ...[...after].filter((token) => !before.has(token)),
       ...[...before].filter((token) => !after.has(token)),
     ];
-    if (changed.some((term) => wordMatches(said, term))) return true;
+    if (changed.some((term) => wordMatches(said, term))) return "asked";
   }
   if (old && (!entry || entry.list || entry.said.length === 0)) {
     const kept = new Set(entry?.said.map((value) => JSON.stringify(value)));
-    return old.said
-      .filter((value) => !kept.has(JSON.stringify(value)))
-      .some((value) => names(said, value));
+    namings.push(
+      ...old.said
+        .filter((value) => !kept.has(JSON.stringify(value)))
+        .map((value) => names(heard, value)),
+    );
   }
-  return false;
+  const named = best(namings);
+  return named === "yes" ? "asked" : named === "maybe" ? "unsure" : "unasked";
 };
 
 /** The words of a field name a user may say for it. */
@@ -968,9 +1024,12 @@ const introduced = (
 
 interface Difference {
   piece: ComposedPiece;
-  asked: boolean;
+  asked: Asked;
   paths: string[];
 }
+
+/** What the user asked for first, then what may be asked for, then what was not. */
+const ASKED_ORDER: Record<Asked, number> = { asked: 0, unsure: 1, unasked: 2 };
 
 /**
  * The pieces the voice says for `next`, the card that replaces `previous`.
@@ -1046,7 +1105,7 @@ export const spokenDifference = (
     timeZone,
     newNames,
   );
-  const said = tokensOf(previous.words);
+  const said = heardOf(previous.words, options.numberWords);
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
   const newKeys = new Set(newEntries.map((entry) => entry.key));
   const siblings = [
@@ -1062,7 +1121,7 @@ export const spokenDifference = (
   const differs = (
     entry: Entry,
     sentence: string,
-    asked: boolean,
+    asked: Asked,
     paths: string[],
   ) =>
     differences.push({
@@ -1119,8 +1178,7 @@ export const spokenDifference = (
       old.paths,
     );
   }
-  // What the user asked for first, then what nobody asked for.
-  differences.sort((a, b) => Number(b.asked) - Number(a.asked));
+  differences.sort((a, b) => ASKED_ORDER[a.asked] - ASKED_ORDER[b.asked]);
 
   const spoken = spokenFactsOf(
     newCard.gist,
@@ -1208,7 +1266,11 @@ export const spokenDifference = (
             role: "more" as const,
             text: words.difference.more(
               counted.length,
-              counted.every((difference) => difference.asked),
+              counted.every((difference) => difference.asked === "asked")
+                ? "asked"
+                : counted.every((difference) => difference.asked === "unasked")
+                  ? "unasked"
+                  : "unsure",
             ),
             mustSay: true,
             values: [],

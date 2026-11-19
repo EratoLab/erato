@@ -119,8 +119,18 @@ const checkRun = (
         }
         break;
       case "repeat":
-        target = event.index ?? pieceOf(before.playing) ?? before.last;
-        if (target === request) requestAsked = true;
+        target =
+          event.index ??
+          pieceOf(before.playing) ??
+          before.lastRead ??
+          before.last;
+        // Again at the request is the whole card, as a new reading.
+        if (target === request && before.playing?.type !== "held") {
+          heardInReading = new Set();
+          afterRest = false;
+          requestAsked = false;
+          target = null;
+        }
         break;
       case "finished":
         if (before.playing?.type === "piece")
@@ -300,7 +310,7 @@ describe("what the voice says next", () => {
       indices(
         run(CARD, [{ type: "start" }, ...finished(4), { type: "repeat" }]).said,
       ),
-    ).toEqual([0, 1, 2, 3, 3]);
+    ).toEqual([0, 1, 2, 3, 0]);
   });
 
   it("reads a long text on request; a card without one stays as it is", () => {
@@ -328,6 +338,38 @@ describe("what the voice says next", () => {
     expect(read.flow.states).toEqual(["heard", "heard", "heard"]);
     const before = run(CARD, [{ type: "start" }]).flow;
     expect(spokenCardStep(CARD, before, { type: "read" })).toBe(before);
+  });
+
+  it("ERMAIN-1241: with several texts and none named, no text is picked by its order", () => {
+    const text = (id: string) => ({
+      ...piece("text", `${id}: ein Text von etwa 70 Wörtern.`),
+      id: `text:${id}`,
+      readOut: { text: `${id} ganz.`, cut: false },
+    });
+    const dictated = {
+      ...piece("text", "Summary: ein Teil des diktierten Textes, wörtlich."),
+      id: "text:Summary",
+      values: [
+        {
+          slot: "dictated" as const,
+          value: { kind: "text" as const, text: "part" },
+        },
+      ],
+      readOut: { text: "Summary ganz.", cut: false, dictated: "part" as const },
+    };
+    expect(namesLongText(dictated)).toBe(true);
+    const two = [CARD[0], dictated, text("Need"), CARD[3]];
+    const quiet = run(two, [{ type: "start" }, ...finished(4)]).flow;
+    expect(spokenCardStep(two, quiet, { type: "read" })).toBe(quiet);
+    expect(
+      spokenCardStep(two, quiet, { type: "read", index: 1 }).playing,
+    ).toEqual({ type: "text", index: 1 });
+    // The text being said is the one meant.
+    const during = run(two, [{ type: "start" }, { type: "finished" }]).flow;
+    expect(spokenCardStep(two, during, { type: "read" }).playing).toEqual({
+      type: "text",
+      index: 1,
+    });
   });
 
   it("stop and failure leave the card waiting; only a decision closes it", () => {
@@ -601,12 +643,16 @@ describe("findings of the review of 2026-11-17 (base)", () => {
       { type: "stop" },
     ]).flow;
     expect(stopped.owed).toEqual([1]);
+    // Asked for again, the request is the whole card: the consequence
+    // still comes before the request.
     const asked = spokenCardStep(contact, stopped, {
       type: "repeat",
       index: 2,
     });
-    expect(asked.playing).toEqual({ type: "piece", index: 1 });
-    const consequence = spokenCardStep(contact, asked, { type: "finished" });
+    expect(asked.playing).toEqual({ type: "piece", index: 0 });
+    const read = spokenCardStep(contact, asked, { type: "finished" });
+    expect(read.playing).toEqual({ type: "piece", index: 1 });
+    const consequence = spokenCardStep(contact, read, { type: "finished" });
     expect(consequence.owed).toEqual([]);
     expect(consequence.playing).toEqual({ type: "piece", index: 2 });
   });
@@ -864,13 +910,11 @@ describe("the card as a state machine, every pair of values at least once", () =
                 before.flow.last)
               : null;
           if (target === null) expect(after).toBe(before.flow);
+          // Again at the request is the whole card, from its start.
           else
             expect(said[0]).toEqual({
               type: "piece",
-              index:
-                target === request && before.flow.owed.length > 0
-                  ? before.flow.owed[0]
-                  : target,
+              index: target === request ? 0 : target,
             });
           break;
         }

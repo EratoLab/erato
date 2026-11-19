@@ -121,6 +121,17 @@ pub struct CardPiece {
     pub state: CardPieceState,
 }
 
+/// What the voice just asked about the card, when the user's words may
+/// answer it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalVoiceQuestion)]
+pub enum VoiceQuestion {
+    /// Which of the card's long texts to read: a text's field named alone
+    /// ("die Zusammenfassung") means reading that text.
+    WhichText,
+}
+
 /// Where the meaning came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -138,6 +149,7 @@ pub struct VoiceCommandInput<'a> {
     pub language: &'a str,
     pub pieces: &'a [CardPiece],
     pub current_piece_id: Option<&'a str>,
+    pub question: Option<VoiceQuestion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
