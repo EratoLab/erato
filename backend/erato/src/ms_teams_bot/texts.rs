@@ -97,6 +97,9 @@ texts! {
         "Öffnen Sie das Dokument in Word und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
     AskAgainInOutlook => "Open Outlook and ask again in the {app} add-in there.",
         "Öffnen Sie Outlook und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
+    GeneratedFiles => "Generated files", "Erstellte Dateien";
+    DownloadFile => "Download {file}", "{file} herunterladen";
+    OpenFile => "Open {file} in Erato", "{file} in Erato öffnen";
     NoText => "(The answer contained no text.)", "(Die Antwort enthielt keinen Text.)";
     UnavailableFile => "Unavailable file", "Nicht verfügbare Datei";
     File => "File", "Datei";

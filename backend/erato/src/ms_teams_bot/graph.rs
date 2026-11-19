@@ -8,7 +8,7 @@ use eyre::{Report, eyre};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const GRAPH: &str = "https://graph.microsoft.com/v1.0";
+pub(super) const GRAPH: &str = "https://graph.microsoft.com/v1.0";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,18 +51,24 @@ pub struct SharedItem {
 }
 
 pub struct Graph<'a> {
+    base: &'a str,
     http: &'a reqwest::Client,
     token: &'a str,
 }
 
 impl<'a> Graph<'a> {
     pub fn new(http: &'a reqwest::Client, token: &'a str) -> Self {
-        Self { http, token }
+        Self::with_base(http, token, GRAPH)
+    }
+
+    pub(super) fn with_base(http: &'a reqwest::Client, token: &'a str, base: &'a str) -> Self {
+        Self { http, token, base }
     }
 
     pub async fn me(&self) -> Result<GraphIdentity, Report> {
         self.get_json(&format!(
-            "{GRAPH}/me?$select=id,displayName,mail,userPrincipalName,preferredLanguage"
+            "{}/me?$select=id,displayName,mail,userPrincipalName,preferredLanguage",
+            self.base
         ))
         .await
     }
@@ -71,7 +77,7 @@ impl<'a> Graph<'a> {
     pub async fn member_groups(&self, security_only: bool) -> Result<Vec<String>, Report> {
         let response = self
             .http
-            .post(format!("{GRAPH}/me/getMemberGroups"))
+            .post(format!("{}/me/getMemberGroups", self.base))
             .bearer_auth(self.token)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(serde_json::to_vec(
@@ -99,7 +105,8 @@ impl<'a> Graph<'a> {
         count: u32,
     ) -> Result<Vec<ContextMessage>, Report> {
         let url = format!(
-            "{GRAPH}/chats/{}/messages?$top={}&$orderby=createdDateTime%20desc",
+            "{}/chats/{}/messages?$top={}&$orderby=createdDateTime%20desc",
+            self.base,
             encode(chat_id),
             count.clamp(1, 50)
         );
@@ -119,7 +126,8 @@ impl<'a> Graph<'a> {
         count: u32,
     ) -> Result<Vec<ContextMessage>, Report> {
         let base = format!(
-            "{GRAPH}/teams/{}/channels/{}/messages/{}",
+            "{}/teams/{}/channels/{}/messages/{}",
+            self.base,
             encode(team_id),
             encode(channel_id),
             encode(root_id)
@@ -140,7 +148,8 @@ impl<'a> Graph<'a> {
     pub async fn resolve_shared_item(&self, url: &str) -> Result<SharedItem, Report> {
         let item: Value = self
             .get_json(&format!(
-                "{GRAPH}/shares/{}/driveItem?$select=id,name,parentReference,folder",
+                "{}/shares/{}/driveItem?$select=id,name,parentReference,folder",
+                self.base,
                 share_id(url)
             ))
             .await?;
@@ -170,7 +179,8 @@ impl<'a> Graph<'a> {
         let response = self
             .http
             .get(format!(
-                "{GRAPH}/shares/{}/driveItem/content",
+                "{}/shares/{}/driveItem/content",
+                self.base,
                 share_id(url)
             ))
             .bearer_auth(self.token)

@@ -8,7 +8,7 @@ use super::TeamsBot;
 use super::activity::{Activity, ConversationKind, IncomingFile, split_channel_thread};
 use super::cards::{self, ApprovalSubmit};
 use super::controls::{self, ControlCommand};
-use super::graph::{Graph, GraphIdentity, context_markdown};
+use super::graph::{GraphIdentity, context_markdown};
 use super::host::{
     ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TaskClient,
     TeamsRequest,
@@ -282,8 +282,16 @@ async fn process_message(
     .await;
     match prepared {
         Ok(Ok(updates)) => {
-            let user_id = user.session.user_id();
-            render_generation(bot, host, target, user_id, updates, stream, Some(request)).await
+            render_generation(
+                bot,
+                host,
+                target,
+                &user.session,
+                updates,
+                stream,
+                Some(request),
+            )
+            .await
         }
         Ok(Err(error)) => {
             let finished = stream.finish(&start_error_text(error, lang)).await;
@@ -365,8 +373,7 @@ async fn on_approval(
     }
     let stream = stream_for(bot, target, activity.conversation_kind());
     let request = host.request_for_assistant(message_id).await?;
-    let user_id = user.session.user_id();
-    render_generation(bot, host, target, user_id, updates, stream, request).await
+    render_generation(bot, host, target, &user.session, updates, stream, request).await
 }
 
 /// The reply to an approval answer that did not continue the response.
@@ -503,8 +510,7 @@ async fn on_control(
                 }
             };
             let stream = stream_for(bot, target, activity.conversation_kind());
-            let user_id = user.session.user_id();
-            render_generation(bot, host, target, user_id, updates, stream, current).await
+            render_generation(bot, host, target, &user.session, updates, stream, current).await
         }
         Err(error @ (StartError::Busy | StartError::Internal)) => {
             host.restore_request_action(&claimed, token, &request)
@@ -1198,7 +1204,7 @@ async fn authenticate(
     let (identity, groups) = match bot.identities.get(entra_object_id).await {
         Some(cached) => cached,
         None => {
-            let graph = Graph::new(bot.connector.http(), &graph_token);
+            let graph = bot.graph(&graph_token);
             let identity = graph.me().await?;
             let groups = graph
                 .member_groups(bot.settings.security_groups_only)
@@ -1463,7 +1469,7 @@ async fn intake_file(
                 .await
         }
         IncomingFile::Reference { name, url } => {
-            let graph = Graph::new(bot.connector.http(), &user.graph_token);
+            let graph = bot.graph(&user.graph_token);
             if host.sharepoint_enabled() {
                 let item = graph.resolve_shared_item(url).await?;
                 host.link_sharepoint_file(&user.session, chat_id, item)
@@ -1486,7 +1492,7 @@ async fn conversation_context(
     user: &UserContext,
     chat_id: Uuid,
 ) -> Result<Option<Uuid>, Report> {
-    let graph = Graph::new(bot.connector.http(), &user.graph_token);
+    let graph = bot.graph(&user.graph_token);
     let count = bot.settings.context_message_count;
     let conversation_id = activity.conversation_id().unwrap_or_default();
     let (label, mut messages) = match activity.conversation_kind() {
@@ -1538,12 +1544,13 @@ async fn render_generation(
     bot: &TeamsBot,
     host: &Host,
     target: &ReplyTarget<'_>,
-    user_id: Uuid,
+    session: &Session,
     mut updates: mpsc::Receiver<GenerationUpdate>,
     mut stream: StreamingReply<'_>,
     mut request: Option<TeamsRequest>,
 ) -> Result<(), Report> {
     let lang = target.lang;
+    let user_id = session.user_id();
     stream.informative(Msg::Working.text(lang)).await;
     let mut timer = tokio::time::interval(PROGRESS_INTERVAL);
     timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -1635,15 +1642,18 @@ async fn render_generation(
         bot.settings.public_base_url.as_deref(),
         &completion.chat_id.to_string(),
     );
-    let sources = citation_sources(host, &completion).await;
-    let delivered = stream
-        .finish_with_sources(
-            &completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang),
-            &completion.earlier_text,
-            &sources,
-            bot.settings.public_base_url.as_deref(),
-        )
-        .await;
+    let files = completion_files(host, session, &completion).await;
+    let delivered = super::files::finish(
+        host,
+        Some(session),
+        target,
+        &mut stream,
+        &files,
+        &completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang),
+        &completion.earlier_text,
+        bot.settings.public_base_url.as_deref(),
+    )
+    .await;
     if stream.is_cancelled() {
         if let Some((chat_id, message_id)) = generation {
             host.stop_generation(chat_id, message_id).await;
@@ -1695,18 +1705,49 @@ async fn confirm_unfinished_turn(
     send_reminder_confirmations(bot, host, target, user_id, &reminders).await;
 }
 
-async fn citation_sources(
+async fn completion_files(
     host: &Host,
+    session: &Session,
     completion: &Completion,
-) -> Vec<super::citations::FileSource> {
-    match host.citation_sources(completion).await {
-        Ok(sources) => sources,
-        Err(error) => {
-            // Source enrichment must not turn a successful answer into a failure.
-            tracing::warn!(%error, "Could not resolve Teams file citations");
-            Vec::new()
-        }
-    }
+) -> super::host::CompletionFiles {
+    host.completion_files(session, completion)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Could not resolve Teams files");
+            Default::default()
+        })
+}
+
+async fn proactive_session(
+    bot: &TeamsBot,
+    host: &Host,
+    teams_user: &str,
+    user_id: Uuid,
+) -> Result<Session, Report> {
+    let token = bot
+        .user_tokens
+        .get_token(&bot.connector, teams_user, None)
+        .await?
+        .ok_or_else(|| eyre!("Missing delegated token"))?;
+    let graph = bot.graph(&token);
+    let identity = graph.me().await?;
+    let user = host
+        .find_user(&identity.id)
+        .await?
+        .filter(|user| user.id == user_id)
+        .ok_or_else(|| eyre!("Proactive identity mismatch"))?;
+    let groups = graph
+        .member_groups(bot.settings.security_groups_only)
+        .await?;
+    host.session(
+        &user,
+        &identity,
+        groups,
+        token,
+        None,
+        &bot.settings.tenant_id,
+    )
+    .await
 }
 
 /// How much of a task's brief names it in an answer.
@@ -1774,7 +1815,13 @@ pub(super) fn completion_text(
         text = format!("{text}\n\n_{}_ {open}", Msg::NeedsApp.fill(lang, &[app]));
     }
     if text.trim().is_empty() {
-        text = Msg::NoText.text(lang).to_string();
+        text = if completion.output_ids.is_empty() {
+            Msg::NoText
+        } else {
+            Msg::GeneratedFiles
+        }
+        .text(lang)
+        .to_string();
     }
     text
 }
@@ -1837,12 +1884,28 @@ pub(super) async fn deliver_proactive(
         bot.settings.public_base_url.as_deref(),
         &chat_id.to_string(),
     );
-    let sources = citation_sources(host, &completion).await;
+    let needs_files = !completion.requested_ids().is_empty();
     for conversation in conversations {
         // Nothing to answer: the result is in the conversation owner's language.
         let lang = host
             .stored_language(conversation.user_id, &bot.settings.default_language)
             .await;
+        let session = if needs_files {
+            proactive_session(
+                bot,
+                host,
+                &conversation.ms_teams_user_id,
+                conversation.user_id,
+            )
+            .await
+            .ok()
+        } else {
+            None
+        };
+        let files = match &session {
+            Some(session) => completion_files(host, session, &completion).await,
+            None => Default::default(),
+        };
         let text = format!(
             "**{}**\n\n{}",
             Msg::TaskFinished.text(lang),
@@ -1857,14 +1920,24 @@ pub(super) async fn deliver_proactive(
             lang,
         };
         let mut reply = StreamingReply::new(&target, false);
-        reply
-            .finish_with_sources(
-                &text,
-                &completion.earlier_text,
-                &sources,
-                bot.settings.public_base_url.as_deref(),
-            )
-            .await?;
+        super::files::finish(
+            host,
+            session.as_ref(),
+            &target,
+            &mut reply,
+            &files,
+            &text,
+            &completion.earlier_text,
+            bot.settings.public_base_url.as_deref(),
+        )
+        .await?;
+        if session.is_none()
+            && needs_files
+            && let Some(link) = link.as_deref()
+        {
+            let title = Msg::OpenApp.fill(lang, &[("app", &bot.settings.app_name)]);
+            let _ = target.send_text(&format!("[{title}](<{link}>)")).await;
+        }
         send_reminder_confirmations(
             bot,
             host,
@@ -2015,6 +2088,7 @@ mod tests {
             message_id: Uuid::nil(),
             text: text.to_string(),
             earlier_text: String::new(),
+            output_ids: Vec::new(),
             approvals: None,
             needs_client: false,
             reminders: Default::default(),
