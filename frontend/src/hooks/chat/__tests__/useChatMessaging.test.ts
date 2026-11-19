@@ -1274,7 +1274,9 @@ describe("useChatMessaging", () => {
 
   describe("when the connection drops mid-answer", () => {
     type ResumeOptions = {
+      onMessage?: (event: { data: string; type: string }) => void;
       onError?: (error: Error) => void;
+      onClose?: () => void;
       idleTimeoutMs?: number;
     };
 
@@ -1352,6 +1354,32 @@ describe("useChatMessaging", () => {
       } finally {
         waitUntilOnline.mockRestore();
       }
+    });
+
+    it("keeps a reattached answer on screen until the completion refetch has it", async () => {
+      const { result, resumeCalls } = await startDroppedAnswer();
+      mockFetchChatMessages.mockReturnValue(new Promise(() => {}));
+      const finished = [
+        { content_type: "text", text: "read so far, and the rest" },
+      ];
+
+      await act(async () => {
+        resumeCalls[0].onMessage?.({
+          type: "message",
+          data: JSON.stringify({
+            message_type: "assistant_message_completed",
+            message_id: "assistant-dropped",
+            content: finished,
+          }),
+        });
+      });
+      await act(async () => {
+        resumeCalls[0].onClose?.();
+      });
+
+      expect(result.current.messages["assistant-dropped"].content).toEqual(
+        finished,
+      );
     });
 
     it("ends the turn when the user stops it while waiting for the network", async () => {
@@ -1552,6 +1580,70 @@ describe("useChatMessaging", () => {
         expect(
           harness.result.current.messages["assistant-stopped"].content,
         ).toEqual([{ content_type: "text", text: "partial answer" }]);
+      } finally {
+        getStatus.mockRestore();
+      }
+    });
+
+    it("keeps the text read so far until the server has saved the stopped answer", async () => {
+      const getStatus = vi
+        .spyOn(connectivity, "getStatus")
+        .mockReturnValue("offline");
+      try {
+        const harness = setupChatMessagingTest();
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-stopped",
+        });
+        await harness.sendSSEEvent({
+          message_type: "text_delta",
+          message_id: "assistant-stopped",
+          content_index: 0,
+          new_text: "partial answer",
+        });
+        mockFetchChatMessages.mockReturnValue(new Promise(() => {}));
+        await act(async () => {
+          harness.result.current.cancelMessage();
+        });
+
+        const serverCopy = (text: string) => ({
+          id: "assistant-stopped",
+          role: "assistant" as const,
+          content: text ? [{ content_type: "text" as const, text }] : [],
+          createdAt: "2026-02-18T12:00:01.000Z",
+          status: "complete" as const,
+        });
+        const refetch = async (text: string) => {
+          await act(async () => {
+            const messaging = useMessagingStore.getState();
+            messaging.setApiMessages(
+              [
+                ...Object.values(messaging.getApiMessages("chat1")).filter(
+                  (message) => message.id !== "assistant-stopped",
+                ),
+                serverCopy(text),
+              ],
+              "chat1",
+            );
+          });
+        };
+
+        // Back online, the chat is read before the server saved the stop.
+        await refetch("");
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([{ content_type: "text", text: "partial answer" }]);
+
+        await refetch("partial answer, and what the server wrote meanwhile");
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([
+          {
+            content_type: "text",
+            text: "partial answer, and what the server wrote meanwhile",
+          },
+        ]);
       } finally {
         getStatus.mockRestore();
       }
