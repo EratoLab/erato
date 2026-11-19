@@ -398,6 +398,18 @@ fn enable_conversational_voice(app_config: &mut AppConfig, speech_url: &str) {
     enable_read_aloud(app_config, speech_url);
     app_config.audio_conversational.transcription.enabled = true;
     app_config.audio_conversational.speech_provider = Some("voice".into());
+    // Lines come from a content package; the backend has none of its own.
+    for language in ["de", "en"] {
+        app_config.audio_conversational.wait_lines.phrases.insert(
+            language.into(),
+            serde_json::from_value(json!({
+                "opener": ["One moment.", "Okay, one moment."],
+                "opener_short": ["One moment."],
+                "still": ["Still on it."]
+            }))
+            .unwrap(),
+        );
+    }
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

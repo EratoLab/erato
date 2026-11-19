@@ -3166,7 +3166,7 @@ talk_over_voice_min_speech_ms = 500
 
 What the voice says while the user waits for an answer, when Audio-back is on. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working, and later that the answer will also be in the chat. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, and no line is stored in the chat. The lines are synthesised once with the conversational voice and kept per voice: after a change of `speech_provider`, its model, voice or instructions, new lines are made, so lines and answers never come in two voices.
 
-Built-in lines exist for German and English. Other languages say nothing unless `phrases` and `tools` provide lines for them. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`.
+Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`.
 
 **Type:** `object`
 
@@ -3257,7 +3257,7 @@ Whether a user may choose their own amount, unless a supervisor's audience setti
 {/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.still.[] */}
 {/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.long.[] */}
 
-Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. Each slot that is set replaces its built-in lines; an empty list silences it. A variant is picked at random, never the one said last. A line must be at most 120 characters, must not end in a question mark, and must not hold braces or control characters; other lines are dropped with a warning. Write lines that say only that the wait is real, never what was found, without a time promise ("eine Sekunde") and without hesitation sounds ("ähm", "hmm").
+Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. A slot without lines says nothing. A variant is picked at random, never the one said last. A line must be at most 120 characters, must not end in a question mark, and must not hold braces or control characters; other lines are dropped with a warning. Write lines that say only that the wait is real, never what was found, without a time promise ("eine Sekunde") and without hesitation sounds ("ähm", "hmm").
 
 #### `audio_conversational.wait_lines.tools`
 
@@ -3265,7 +3265,7 @@ Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. Each
 {/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.items */}
 {/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.list */}
 
-Templates per language tag for the line of a running tool call that only reads: `search` holds `{search}` (the text it searches for), `items` and `list` hold `{table}` (what the records are called, from the server's spoken vocabulary). An empty string silences a template. A call that writes, or whose label says nothing about what it reads, gets no line of its own.
+Templates per language tag for the line of a running tool call that only reads: `search` holds `{search}` (the text it searches for), `items` and `list` hold `{table}` (what the records are called, from the server's spoken vocabulary). A template not set, or empty, says nothing. A call that writes, or whose label says nothing about what it reads, gets no line of its own.
 
 ```toml
 [audio_conversational.wait_lines]

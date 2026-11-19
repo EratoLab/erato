@@ -1,7 +1,8 @@
 //! What the voice says while the user waits for an answer in conversational
 //! audio mode: short lines in the answer's own voice, on timers, and a line
-//! naming what a running tool call reads. The wording is data; a built-in
-//! German and English set works without any.
+//! naming what a running tool call reads. Only the mechanism is here: the
+//! words are data, from a content package or the deployment. A language
+//! without lines says nothing, and the screen shows the wait as before.
 
 use std::collections::HashMap;
 
@@ -75,19 +76,19 @@ pub struct WaitLinesConfig {
     /// audience setting says otherwise. Defaults to `true`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
-    /// Lines per language tag, replacing the built-in ones slot by slot. An
-    /// empty list silences its slot.
+    /// Lines per language tag, by slot. A language or slot without lines
+    /// says nothing.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub phrases: HashMap<String, WaitLinePhrasesConfig>,
-    /// Tool call line templates per language tag, replacing the built-in
-    /// ones template by template. `search` holds `{search}`; `items` and
-    /// `list` hold `{table}`. An empty string silences its template.
+    /// Tool call line templates per language tag. `search` holds
+    /// `{search}`; `items` and `list` hold `{table}`. A template not set, or
+    /// empty, says nothing.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub tools: HashMap<String, WaitLineToolsConfig>,
 }
 
-/// The lines of one language, by slot. Each one set replaces its built-in
-/// slot; the variants are picked at random, never the one said last.
+/// The lines of one language, by slot. The variants are picked at random,
+/// never the one said last.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
 #[serde(default)]
 pub struct WaitLinePhrasesConfig {
@@ -175,50 +176,6 @@ pub struct WaitLineSet {
     pub search: Option<String>,
     pub items: Option<String>,
     pub list: Option<String>,
-}
-
-struct BuiltIn {
-    opener: &'static [&'static str],
-    opener_short: &'static [&'static str],
-    still: &'static [&'static str],
-    long: &'static [&'static str],
-    search: &'static str,
-    items: &'static str,
-    list: &'static str,
-}
-
-// No address form (du/Sie), no question, no time promise, no hesitation
-// sound: a line says only that the wait is real, never what was found.
-const GERMAN: BuiltIn = BuiltIn {
-    opener: &[
-        "Einen Moment.",
-        "Alles klar, einen Moment.",
-        "Moment, ich kümmere mich darum.",
-    ],
-    opener_short: &["Moment.", "Okay, Moment."],
-    still: &["Ich bin noch dran.", "Ich bin noch dabei."],
-    long: &["Das dauert gerade länger. Die Antwort kommt auch in den Chat."],
-    search: "Ich suche nach {search}.",
-    items: "Ich sehe mir {table} an.",
-    list: "Ich sehe mir die {table} an.",
-};
-
-const ENGLISH: BuiltIn = BuiltIn {
-    opener: &["One moment.", "Okay, one moment.", "Sure, I'm on it."],
-    opener_short: &["One moment.", "Okay."],
-    still: &["Still on it.", "I'm still working on it."],
-    long: &["This is taking a while. The answer will also be in the chat."],
-    search: "Searching for {search}.",
-    items: "Looking at {table}.",
-    list: "Looking at the {table}.",
-};
-
-fn built_in(language: &str) -> Option<&'static BuiltIn> {
-    match language {
-        "de" => Some(&GERMAN),
-        "en" => Some(&ENGLISH),
-        _ => None,
-    }
 }
 
 /// Why `line` cannot be said as a wait line, or `None` when it can.
@@ -390,8 +347,8 @@ impl WaitLinesConfig {
                 let Some(text) = template.as_deref() else {
                     continue;
                 };
-                // An empty template silences it on purpose.
                 if text.trim().is_empty() {
+                    *template = None;
                     continue;
                 }
                 if let Some(problem) = template_problem(text, slot) {
@@ -406,37 +363,32 @@ impl WaitLinesConfig {
         dropped
     }
 
-    /// The lines and templates that apply in `language` (a bare tag such as
-    /// `de`): the configured slot where set, else the built-in one. A
-    /// language with neither has no lines: English for a French listener
-    /// would be worse than silence.
+    /// The lines and templates set for `language` (a bare tag such as
+    /// `de`). A language with none says nothing: English for a French
+    /// listener would be worse than silence.
     pub fn set_for(&self, language: &str) -> WaitLineSet {
-        let built_in = built_in(language);
         let phrases = self.phrases.get(language);
         let mut lines = Vec::new();
         for slot in WaitLineSlot::ALL {
-            let configured = phrases.and_then(|phrases| phrases.slot(slot));
-            let texts: Vec<String> = match configured {
-                Some(lines) => lines.iter().map(|line| line.trim().to_string()).collect(),
-                None => built_in
-                    .map(|set| set.slot(slot).iter().map(|line| line.to_string()).collect())
-                    .unwrap_or_default(),
-            };
-            lines.extend(texts.into_iter().map(|text| (slot, text)));
+            let set = phrases.and_then(|phrases| phrases.slot(slot));
+            lines.extend(
+                set.into_iter()
+                    .flatten()
+                    .map(|line| (slot, line.trim().to_string())),
+            );
         }
         let tools = self.tools.get(language);
-        let template = |configured: Option<&Option<String>>, fallback: Option<&'static str>| {
-            match configured {
-                Some(Some(text)) if text.trim().is_empty() => None,
-                Some(Some(text)) => Some(text.trim().to_string()),
-                _ => fallback.map(str::to_string),
-            }
+        let template = |text: Option<&Option<String>>| {
+            text.and_then(Option::as_deref)
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(str::to_string)
         };
         WaitLineSet {
             lines,
-            search: template(tools.map(|t| &t.search), built_in.map(|b| b.search)),
-            items: template(tools.map(|t| &t.items), built_in.map(|b| b.items)),
-            list: template(tools.map(|t| &t.list), built_in.map(|b| b.list)),
+            search: template(tools.map(|t| &t.search)),
+            items: template(tools.map(|t| &t.items)),
+            list: template(tools.map(|t| &t.list)),
         }
     }
 }
@@ -461,66 +413,51 @@ impl WaitLinePhrasesConfig {
     }
 }
 
-impl BuiltIn {
-    fn slot(&self, slot: WaitLineSlot) -> &'static [&'static str] {
-        match slot {
-            WaitLineSlot::Opener => self.opener,
-            WaitLineSlot::OpenerShort => self.opener_short,
-            WaitLineSlot::Still => self.still,
-            WaitLineSlot::Long => self.long,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn built_in_lines_pass_their_own_checks() {
-        for set in [&GERMAN, &ENGLISH] {
-            for slot in WaitLineSlot::ALL {
-                for line in set.slot(slot) {
-                    assert_eq!(line_problem(line), None, "{line}");
-                }
-            }
-            assert_eq!(template_problem(set.search, "search"), None);
-            assert_eq!(template_problem(set.items, "table"), None);
-            assert_eq!(template_problem(set.list, "table"), None);
-        }
-    }
-
-    #[test]
-    fn a_configured_slot_replaces_its_built_in_one_and_empty_silences_it() {
-        let config = WaitLinesConfig {
+    fn german() -> WaitLinesConfig {
+        WaitLinesConfig {
             phrases: HashMap::from([(
                 "de".to_string(),
                 WaitLinePhrasesConfig {
-                    opener: Some(vec!["Sekunde.".into()]),
+                    opener: Some(vec!["Einen Moment.".into(), "Moment, bitte.".into()]),
                     still: Some(vec![]),
                     ..Default::default()
                 },
             )]),
+            tools: HashMap::from([(
+                "de".to_string(),
+                WaitLineToolsConfig {
+                    list: Some("Ich sehe mir die {table} an.".into()),
+                    items: Some(" ".into()),
+                    ..Default::default()
+                },
+            )]),
             ..Default::default()
-        };
-        let set = config.set_for("de");
-        let of = |slot| {
-            set.lines
-                .iter()
-                .filter(|(s, _)| *s == slot)
-                .map(|(_, text)| text.as_str())
-                .collect::<Vec<_>>()
-        };
-        assert_eq!(of(WaitLineSlot::Opener), ["Sekunde."]);
-        assert!(of(WaitLineSlot::Still).is_empty());
-        assert_eq!(of(WaitLineSlot::OpenerShort), GERMAN.opener_short);
-        assert_eq!(set.search.as_deref(), Some(GERMAN.search));
+        }
     }
 
     #[test]
-    fn a_language_without_lines_has_none() {
-        let set = WaitLinesConfig::default().set_for("fr");
-        assert!(set.lines.is_empty());
+    fn without_lines_nothing_is_said() {
+        let set = WaitLinesConfig::default().set_for("de");
+        assert_eq!(set, WaitLineSet::default());
+        assert_eq!(german().set_for("en"), WaitLineSet::default());
+    }
+
+    #[test]
+    fn only_the_slots_and_templates_set_are_said() {
+        let set = german().set_for("de");
+        assert_eq!(
+            set.lines,
+            [
+                (WaitLineSlot::Opener, "Einen Moment.".to_string()),
+                (WaitLineSlot::Opener, "Moment, bitte.".to_string()),
+            ]
+        );
+        assert_eq!(set.list.as_deref(), Some("Ich sehe mir die {table} an."));
+        assert_eq!(set.items, None);
         assert_eq!(set.search, None);
     }
 
@@ -559,10 +496,7 @@ mod tests {
             config.phrases["de"].opener.as_deref(),
             Some(&["Einen Moment.".to_string()][..])
         );
-        let set = config.set_for("en");
-        assert_eq!(set.search.as_deref(), Some(ENGLISH.search));
-        assert_eq!(set.items, None);
-        assert_eq!(set.list.as_deref(), Some(ENGLISH.list));
+        assert_eq!(config.set_for("en"), WaitLineSet::default());
     }
 
     #[test]
