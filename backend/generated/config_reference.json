@@ -641,6 +641,12 @@
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
+  "audio_conversational.wait_lines.still_repeat_max": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "audio_conversational.wait_lines.still_repeat_ms": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",

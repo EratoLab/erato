@@ -16570,6 +16570,7 @@
           "voice",
           "version",
           "unchanged",
+          "incomplete",
           "timing",
           "lines",
           "tools"
@@ -16581,6 +16582,10 @@
           "audience": {
             "type": "string",
             "description": "The audience whose value applies, by its display name."
+          },
+          "incomplete": {
+            "type": "boolean",
+            "description": "A configured line could not be said and is missing from `lines`. A\nclient then asks again without `known`, so the line is tried again."
           },
           "language": {
             "type": "string",
@@ -16640,6 +16645,7 @@
           "still_quiet_ms",
           "long_after_ms",
           "still_repeat_ms",
+          "still_repeat_max",
           "min_gap_ms",
           "max_per_turn",
           "taper_after_turns"
@@ -16675,6 +16681,12 @@
             "type": "integer",
             "format": "int32",
             "description": "Silence before the \"still on it\" line, from the end of the last line.",
+            "minimum": 0
+          },
+          "still_repeat_max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many \"still on it\" lines at most after the long line.",
             "minimum": 0
           },
           "still_repeat_ms": {

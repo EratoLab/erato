@@ -68,6 +68,11 @@ pub struct WaitLinesConfig {
     /// `18000`; allowed `0` or from `10000` to `60000`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub still_repeat_ms: u32,
+    /// How many "still on it" lines at most after the long line, so a turn
+    /// that hangs goes quiet while the screen shows the wait. Defaults to
+    /// `3`; allowed from `0` to `20`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub still_repeat_max: u32,
     /// From the end of one line to the start of the next. Defaults to
     /// `4000`; allowed from `1000` to `15000`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
@@ -128,6 +133,7 @@ pub const STILL_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 5000..=60_000;
 pub const STILL_QUIET_MS_RANGE: std::ops::RangeInclusive<u32> = 2000..=30_000;
 pub const LONG_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 10_000..=120_000;
 pub const STILL_REPEAT_MS_RANGE: std::ops::RangeInclusive<u32> = 10_000..=60_000;
+pub const STILL_REPEAT_MAX_RANGE: std::ops::RangeInclusive<u32> = 0..=20;
 pub const MIN_GAP_MS_RANGE: std::ops::RangeInclusive<u32> = 1000..=15_000;
 pub const MAX_PER_TURN_RANGE: std::ops::RangeInclusive<u32> = 0..=5;
 pub const TAPER_AFTER_TURNS_RANGE: std::ops::RangeInclusive<u32> = 0..=50;
@@ -147,6 +153,7 @@ impl Default for WaitLinesConfig {
             still_quiet_ms: 8000,
             long_after_ms: 22_000,
             still_repeat_ms: 18_000,
+            still_repeat_max: 3,
             min_gap_ms: 4000,
             max_per_turn: 3,
             taper_after_turns: 3,
@@ -280,6 +287,12 @@ impl WaitLinesConfig {
             &mut self.long_after_ms,
             defaults.long_after_ms,
             &LONG_AFTER_MS_RANGE,
+        );
+        check(
+            "still_repeat_max",
+            &mut self.still_repeat_max,
+            defaults.still_repeat_max,
+            &STILL_REPEAT_MAX_RANGE,
         );
         check(
             "min_gap_ms",
@@ -422,6 +435,7 @@ const TIMINGS: &[&str] = &[
     "still_quiet_ms",
     "long_after_ms",
     "still_repeat_ms",
+    "still_repeat_max",
     "min_gap_ms",
     "max_per_turn",
     "taper_after_turns",
@@ -459,6 +473,7 @@ fn shaped_wait_lines(written: Written) -> (WaitLinesConfig, Vec<String>) {
             "still_quiet_ms" => &mut config.still_quiet_ms,
             "long_after_ms" => &mut config.long_after_ms,
             "still_repeat_ms" => &mut config.still_repeat_ms,
+            "still_repeat_max" => &mut config.still_repeat_max,
             "min_gap_ms" => &mut config.min_gap_ms,
             "max_per_turn" => &mut config.max_per_turn,
             _ => &mut config.taper_after_turns,
@@ -757,10 +772,12 @@ mod tests {
             first_after_ms: 200,
             max_per_turn: 9,
             still_repeat_ms: 5000,
+            still_repeat_max: 99,
             ..Default::default()
         };
         let warnings = config.fall_back_out_of_range();
-        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(warnings.len(), 4, "{warnings:?}");
+        assert_eq!(config.still_repeat_max, 3);
         assert_eq!(config.still_repeat_ms, 18_000);
         assert_eq!(config.first_after_ms, 3000);
         assert_eq!(config.max_per_turn, 3);

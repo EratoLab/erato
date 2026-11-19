@@ -14,11 +14,17 @@
  *   `stillQuietMs`; "this takes longer" from `longAfterMs`.
  * - At most `maxPerTurn` of the opener, tool and first "still" lines. The
  *   long line is outside that cap, so a long wait always hears it; after it,
- *   "still on it" again every `stillRepeatMs` until the turn ends.
+ *   "still on it" again every `stillRepeatMs`, at most `stillRepeatMax`
+ *   times, so a turn that hangs goes quiet while the screen shows the wait.
+ * - The opener is said only close to when it was due: a check of the lines
+ *   that answers late leaves it out rather than say "one moment" at 20 s.
  * - Lines `minGapMs` apart, one at a time. `maxPerTurn` 0 says nothing.
  */
 
 export type WaitAmount = "normal" | "long_only" | "off";
+
+/** Later than this after it was due, the opener is not said at all. */
+export const OPENER_LATE_MS = 3000;
 
 export interface WaitTiming {
   firstAfterMs: number;
@@ -28,6 +34,8 @@ export interface WaitTiming {
   longAfterMs: number;
   /** After the long line, between "still on it" lines; 0 says it no more. */
   stillRepeatMs: number;
+  /** How many "still on it" lines at most after the long line. */
+  stillRepeatMax: number;
   minGapMs: number;
   maxPerTurn: number;
 }
@@ -125,14 +133,14 @@ export function nextWaitStep(
     turn.said.length === 0 &&
     usable("opener")
   ) {
-    due.push({
-      step: { kind: "say", line: "opener" },
-      at: Math.max(
-        turn.speechEndedAt + timing.firstAfterMs,
-        turn.transcriptAt,
-        gapReady,
-      ),
-    });
+    const at = Math.max(
+      turn.speechEndedAt + timing.firstAfterMs,
+      turn.transcriptAt,
+      gapReady,
+    );
+    if (now <= at + OPENER_LATE_MS) {
+      due.push({ step: { kind: "say", line: "opener" }, at });
+    }
   }
   if (
     underCap &&
@@ -155,7 +163,13 @@ export function nextWaitStep(
       at: Math.max(turn.speechEndedAt + timing.longAfterMs, gapReady),
     });
   }
-  if (longSaid && timing.stillRepeatMs > 0 && usable("still")) {
+  const repeats = turn.said.filter((line) => line.repeat).length;
+  if (
+    longSaid &&
+    timing.stillRepeatMs > 0 &&
+    repeats < timing.stillRepeatMax &&
+    usable("still")
+  ) {
     due.push({
       step: { kind: "say", line: "still", repeat: true },
       at: Math.max(lastEnd + timing.stillRepeatMs, gapReady),

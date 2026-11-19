@@ -58,6 +58,8 @@ pub struct WaitLinesTiming {
     pub long_after_ms: u32,
     /// After the long line, between "still on it" lines; `0` says it no more.
     pub still_repeat_ms: u32,
+    /// How many "still on it" lines at most after the long line.
+    pub still_repeat_max: u32,
     /// From the end of one line to the start of the next.
     pub min_gap_ms: u32,
     pub max_per_turn: u32,
@@ -114,6 +116,9 @@ pub struct WaitLinesResponse {
     /// The caller already has this `version`: `lines` is left empty and
     /// nothing is synthesised.
     pub unchanged: bool,
+    /// A configured line could not be said and is missing from `lines`. A
+    /// client then asks again without `known`, so the line is tried again.
+    pub incomplete: bool,
     pub timing: WaitLinesTiming,
     /// Empty when the amount is `off`, in a language without lines, or when
     /// the voice could not say them.
@@ -216,6 +221,7 @@ fn version_of(
             timing.still_quiet_ms,
             timing.long_after_ms,
             timing.still_repeat_ms,
+            timing.still_repeat_max,
             timing.min_gap_ms,
             timing.max_per_turn,
             timing.taper_after_turns,
@@ -332,6 +338,7 @@ pub async fn wait_lines(
         still_quiet_ms: config.still_quiet_ms,
         long_after_ms: config.long_after_ms,
         still_repeat_ms: config.still_repeat_ms,
+        still_repeat_max: config.still_repeat_max,
         min_gap_ms: config.min_gap_ms,
         max_per_turn: config.max_per_turn,
         taper_after_turns: config.taper_after_turns,
@@ -367,6 +374,7 @@ pub async fn wait_lines(
             .collect()
             .await
     };
+    let incomplete = amount != WaitLinesAmount::Off && !unchanged && lines.len() < set.lines.len();
 
     Ok(Json(WaitLinesResponse {
         amount,
@@ -377,6 +385,7 @@ pub async fn wait_lines(
         voice,
         version,
         unchanged,
+        incomplete,
         timing,
         lines,
         tools: WaitLineToolTemplates {

@@ -434,6 +434,7 @@ async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Po
         .await
         .json();
     assert_eq!(first["amount"], "normal");
+    assert_eq!(first["incomplete"], false);
     assert_eq!(first["source"], "deployment");
     let lines = first["lines"].as_array().unwrap();
     assert!(!lines.is_empty(), "{first}");
@@ -594,7 +595,10 @@ async fn a_voice_that_fails_is_not_asked_again_for_a_minute(pool: Pool<Postgres>
             .json();
         lines
     };
-    assert_eq!(ask().await["lines"], json!([]));
+    let first = ask().await;
+    assert_eq!(first["lines"], json!([]));
+    // The client is told, so it asks in full again next time.
+    assert_eq!(first["incomplete"], true);
     let tried = requests.load(Ordering::SeqCst);
     assert!(tried > 0);
     // Asked again within the minute: the voice is not tried again.

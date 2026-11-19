@@ -3164,9 +3164,9 @@ talk_over_voice_min_speech_ms = 500
 
 {/* erato_toml_config_key: audio_conversational.wait_lines */}
 
-What the voice says while the user waits for an answer, when Audio-back is on. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working and that the wait is long, and then again that it is still working every `still_repeat_ms` until the turn ends. The wait counts from the end of the speech that became the turn; after a decision on a card it counts from the decision, with no opener. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, nothing is said into an open microphone, and no line is stored in the chat.
+What the voice says while the user waits for an answer, when Audio-back is on. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working and that the wait is long, and then again that it is still working every `still_repeat_ms`, at most `still_repeat_max` times, so a turn that hangs goes quiet while the screen shows the wait. The wait counts from the end of the speech that became the turn; after a decision on a card it counts from the decision, with no opener. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, nothing is said into an open microphone, and no line is stored in the chat.
 
-The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute.
+The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute; a browser whose lines came back incomplete asks for all of them again at its next turn. The opener is left out when the lines are confirmed more than 3 s after it was due.
 
 Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
 
@@ -3224,9 +3224,17 @@ When the line saying that the wait is long is due, from the end of the user's sp
 
 {/* erato_toml_config_key: audio_conversational.wait_lines.still_repeat_ms */}
 
-After the long line, "still on it" again every this many milliseconds until the turn ends, outside `max_per_turn`. `0` says it no more.
+After the long line, "still on it" again every this many milliseconds, outside `max_per_turn`. `0` says it no more.
 
 **Type:** `integer`, `0` or from `10000` to `60000` · **Default:** `18000`
+
+#### `audio_conversational.wait_lines.still_repeat_max`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.still_repeat_max */}
+
+How many "still on it" lines at most after the long line. After them the voice is quiet and the screen shows the wait; with the defaults the last one comes about 80 s after the user stopped speaking.
+
+**Type:** `integer`, from `0` to `20` · **Default:** `3`
 
 #### `audio_conversational.wait_lines.min_gap_ms`
 
@@ -3286,6 +3294,7 @@ still_after_ms = 12000
 still_quiet_ms = 8000
 long_after_ms = 22000
 still_repeat_ms = 18000
+still_repeat_max = 3
 min_gap_ms = 4000
 max_per_turn = 3
 taper_after_turns = 3

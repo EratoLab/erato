@@ -45,6 +45,8 @@ interface Loaded {
   language: string;
   /** Changes with the voice, the words, the timings or the amount. */
   version: string;
+  /** A configured line could not be said yet: asked for again next turn. */
+  incomplete: boolean;
   clips: Record<"opener" | "opener_short" | "still" | "long", Clip[]>;
   tools: ToolLineTemplates;
 }
@@ -113,12 +115,14 @@ const fromResponse = (response: WaitLinesResponse): Loaded => {
       stillQuietMs: timing.still_quiet_ms,
       longAfterMs: timing.long_after_ms,
       stillRepeatMs: timing.still_repeat_ms,
+      stillRepeatMax: timing.still_repeat_max,
       minGapMs: timing.min_gap_ms,
       maxPerTurn: timing.max_per_turn,
     },
     taperAfterTurns: timing.taper_after_turns,
     language: response.language,
     version: response.version,
+    incomplete: response.incomplete,
     clips,
     tools: {
       search: response.tools.search,
@@ -146,7 +150,9 @@ const statusOf = (error: unknown): number | undefined =>
 export function prepareWaitLines(): Promise<Loaded | null> {
   if (unsupported) return Promise.resolve(null);
   loading ??= fetchWaitLines({
-    queryParams: loaded ? { known: loaded.version } : {},
+    // Lines that came back incomplete are asked for in full again, so a
+    // line the voice failed on once is not missing for the whole session.
+    queryParams: loaded && !loaded.incomplete ? { known: loaded.version } : {},
   })
     .then((response) => {
       if (response.unchanged && loaded?.version === response.version) {

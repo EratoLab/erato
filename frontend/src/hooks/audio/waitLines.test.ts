@@ -58,6 +58,7 @@ const response = (
   voice: "v1",
   version: "v1-lines",
   unchanged: false,
+  incomplete: false,
   timing: {
     first_after_ms: 3000,
     tool_after_ms: 1500,
@@ -65,6 +66,7 @@ const response = (
     still_quiet_ms: 8000,
     long_after_ms: 22000,
     still_repeat_ms: 18000,
+    still_repeat_max: 3,
     min_gap_ms: 4000,
     max_per_turn: 3,
     taper_after_turns: 3,
@@ -291,6 +293,13 @@ describe("wait lines", () => {
     fetchWaitLines.mockResolvedValue(response({ unchanged: true, lines: [] }));
     const next = await lines.prepareWaitLines();
     expect(next?.clips.opener).toHaveLength(1);
+  });
+
+  it("asks in full again while a line is missing", async () => {
+    const { lines } = await setup({ incomplete: true });
+    fetchWaitLines.mockClear();
+    await lines.prepareWaitLines();
+    expect(fetchWaitLines).toHaveBeenCalledWith({ queryParams: {} });
   });
 
   it("says nothing in a turn whose lines could not be confirmed", async () => {

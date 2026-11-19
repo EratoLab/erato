@@ -6252,6 +6252,11 @@ export type WaitLinesResponse = {
    */
   audience?: string;
   /**
+   * A configured line could not be said and is missing from `lines`. A
+   * client then asks again without `known`, so the line is tried again.
+   */
+  incomplete: boolean;
+  /**
    * The language the lines are in: the language the voice speaks to the
    * caller.
    */
@@ -6329,6 +6334,13 @@ export type WaitLinesTiming = {
    * @minimum 0
    */
   still_quiet_ms: number;
+  /**
+   * How many "still on it" lines at most after the long line.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_max: number;
   /**
    * After the long line, between "still on it" lines; `0` says it no more.
    *

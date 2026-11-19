@@ -11,6 +11,7 @@ const timing: WaitTiming = {
   stillQuietMs: 8000,
   longAfterMs: 22000,
   stillRepeatMs: 18000,
+  stillRepeatMax: 3,
   minGapMs: 4000,
   maxPerTurn: 3,
 };
@@ -164,6 +165,30 @@ describe("nextWaitStep", () => {
     expect(
       nextWaitStep("normal", { ...timing, stillRepeatMs: 0 }, long, 60000),
     ).toEqual({ kind: "done" });
+  });
+
+  it("stops repeating after stillRepeatMax lines, so a hung turn goes quiet", () => {
+    const repeated = turn({
+      said: [
+        { kind: "opener", startedAt: 3200, endedAt: 4000 },
+        { kind: "still", startedAt: 12000, endedAt: 12800 },
+        { kind: "long", startedAt: 22000, endedAt: 25000 },
+        { kind: "still", repeat: true, startedAt: 43000, endedAt: 44000 },
+        { kind: "still", repeat: true, startedAt: 62000, endedAt: 63000 },
+        { kind: "still", repeat: true, startedAt: 81000, endedAt: 82000 },
+      ],
+    });
+    expect(nextWaitStep("normal", timing, repeated, 600000)).toEqual({
+      kind: "done",
+    });
+  });
+
+  it("leaves the opener out when the lines were confirmed too late for it", () => {
+    // Confirmed at 9 s: the opener was due at 3.2 s.
+    expect(nextWaitStep("normal", timing, turn(), 9000)).toEqual({
+      kind: "wake",
+      at: 12000,
+    });
   });
 
   it("says nothing at all with a cap of 0", () => {
