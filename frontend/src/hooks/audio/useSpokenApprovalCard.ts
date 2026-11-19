@@ -15,7 +15,11 @@ import {
   speakApprovalCard,
 } from "./approvalSpeech";
 import { useSpeechPlayback } from "./speechPlayback";
-import { deploymentSentences, useSpokenStyle } from "./spokenStyle";
+import {
+  deploymentNumberWords,
+  deploymentSentences,
+  useSpokenStyle,
+} from "./spokenStyle";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
@@ -100,6 +104,7 @@ export function useSpokenApprovalCard({
             }
           : undefined,
       userTurns,
+      numberWords: deploymentNumberWords(i18n.locale),
     };
     const item = items.at(index);
     const withdrawn =

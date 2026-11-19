@@ -5,6 +5,7 @@ import { fetchApprovalSpeechStyle } from "@/lib/generated/v1betaApi/v1betaApiCom
 
 import type { ApprovalSpeechStyleResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenOptions } from "@/lib/toolCallGist/spokenCard";
+import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
 import type { SentenceSet } from "@/lib/toolCallGist/spokenSentences";
 
 /**
@@ -89,4 +90,16 @@ export const deploymentSentences = (
   const all = env().approvalSpeechSentences;
   const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
   return all?.[language] ?? all?.[code];
+};
+
+/**
+ * The deployment's number words for `language`, or for its primary subtag;
+ * `undefined` when none are configured, and only digits are read.
+ */
+export const deploymentNumberWords = (
+  language: string,
+): NumberWords | undefined => {
+  const all = env().spokenNumberWords;
+  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
+  return all?.[language.toLowerCase()] ?? all?.[code];
 };

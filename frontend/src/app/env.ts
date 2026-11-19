@@ -7,6 +7,8 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
+
 // The `[delegation.tasks.approval] mode` the backend is running, as its config
 // spelling.
 export type DelegationTasksApprovalMode =
@@ -95,6 +97,8 @@ export type Env = {
   approvalSpeechSentences?: Partial<
     Record<string, Partial<Record<string, string>>>
   >;
+  /** The deployment's number words, by language, to read numbers said in words. */
+  spokenNumberWords?: Partial<Record<string, NumberWords>>;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   audioConversationalCardEndOfTurnSilenceMs?: number;
@@ -204,6 +208,7 @@ declare global {
     APPROVAL_SPEECH_SENTENCES?: Partial<
       Record<string, Partial<Record<string, string>>>
     >;
+    SPOKEN_NUMBER_WORDS?: Partial<Record<string, NumberWords>>;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS?: number;
@@ -732,6 +737,7 @@ export const env = (): Env => {
         ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
         : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
     approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
+    spokenNumberWords: window.SPOKEN_NUMBER_WORDS,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     audioConversationalCardEndOfTurnSilenceMs,

@@ -207,6 +207,7 @@ enum Written {
     Flag(bool),
     Number(i64),
     Table(HashMap<String, Written>),
+    List(Vec<Written>),
     Other(serde::de::IgnoredAny),
 }
 
@@ -397,6 +398,286 @@ pub fn deserialize_approval_speech<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<ApprovalSpeechConfig, D::Error> {
     Ok(shaped_approval_speech(Written::deserialize(deserializer)?).0)
+}
+
+/// One language's number words, so that a number or date a person says in
+/// words ("den zweiundzwanzigsten", "sixty percent") is recognised as the
+/// value on a corrected approval card. The web app combines them the same
+/// way for every language; which words exist, and how ordinals end, is this
+/// data. Without it only digits are read.
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct SpokenNumberWordsConfig {
+    /// Words that are a number alone and inside a compound: `zwei = 2`,
+    /// `zwanzig = 20`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub numbers: HashMap<String, u64>,
+    /// Words that may be a number or another word (`ein`, `one`, `second`):
+    /// inside a compound they are a number, alone only maybe, so the voice
+    /// then neither calls a change asked for nor unasked.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub ambiguous: HashMap<String, u64>,
+    /// Words that multiply what comes before them: `hundert = 100`,
+    /// `thousand = 1000`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub multipliers: HashMap<String, u64>,
+    /// Words that join the parts of one number: `und`, `and`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub joiners: Vec<String>,
+    /// Ordinals as the stem before an ending: `zwanzigst = 20`,
+    /// `third = 3`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub ordinals: HashMap<String, u64>,
+    /// Ordinal stems that may be another word (`acht` in "achte darauf",
+    /// `erst` in "als Erstes"): inside a compound an ordinal, alone only
+    /// maybe, like `ambiguous`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub ambiguous_ordinals: HashMap<String, u64>,
+    /// What may follow an ordinal stem (`en` in "zwanzigsten"); `""` lets a
+    /// stem stand alone, as in English.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub ordinal_endings: Vec<String>,
+}
+
+/// `[spoken_number_words.<language>]`, by lowercase language tag.
+pub type SpokenNumberWordsByLanguage = HashMap<String, SpokenNumberWordsConfig>;
+
+const NUMBER_WORDS_SETTINGS: &[&str] = &[
+    "numbers",
+    "ambiguous",
+    "multipliers",
+    "joiners",
+    "ordinals",
+    "ambiguous_ordinals",
+    "ordinal_endings",
+];
+/// Words one language holds; far more than any language's number words.
+const MAX_NUMBER_WORDS: usize = 2_000;
+/// A word longer than this is no number word.
+const MAX_NUMBER_WORD_BYTES: usize = 64;
+/// A value above this is no number a person says to a card.
+const MAX_NUMBER_VALUE: i64 = 1_000_000_000_000;
+const MAX_ORDINAL_ENDING_BYTES: usize = 16;
+
+fn written_numbers(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> HashMap<String, u64> {
+    let mut numbers = HashMap::new();
+    for (word, value) in written_table(place, written, dropped) {
+        match value {
+            Written::Number(number) if (0..=MAX_NUMBER_VALUE).contains(&number) => {
+                numbers.insert(word, number.unsigned_abs());
+            }
+            _ => dropped.push(format!(
+                "{place}: '{}' is not a whole number from 0 to {MAX_NUMBER_VALUE} and is ignored",
+                shown(&word)
+            )),
+        }
+    }
+    numbers
+}
+
+fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Vec<String> {
+    let Written::List(entries) = written else {
+        dropped.push(format!("{place} is not a list and is ignored"));
+        return Vec::new();
+    };
+    let mut words = Vec::new();
+    for entry in entries {
+        match entry {
+            Written::Text(text) => words.push(text),
+            _ => dropped.push(format!("{place}: an entry is not a text and is ignored")),
+        }
+    }
+    words
+}
+
+/// The number words whose shape is right, and each part that is not.
+fn shaped_number_words(written: Written) -> (SpokenNumberWordsByLanguage, Vec<String>) {
+    let mut dropped = Vec::new();
+    let mut languages = SpokenNumberWordsByLanguage::new();
+    for (language, settings) in written_table("spoken_number_words", written, &mut dropped) {
+        let place = format!("spoken_number_words.{language}");
+        if !matches!(settings, Written::Table(_)) {
+            dropped.push(format!("{place} is not a table and is ignored"));
+            continue;
+        }
+        let mut settings = written_table(&place, settings, &mut dropped);
+        let mut numbers = |setting: &str, dropped: &mut Vec<String>| {
+            settings
+                .remove(setting)
+                .map(|written| written_numbers(&format!("{place}.{setting}"), written, dropped))
+                .unwrap_or_default()
+        };
+        let words = numbers("numbers", &mut dropped);
+        let ambiguous = numbers("ambiguous", &mut dropped);
+        let multipliers = numbers("multipliers", &mut dropped);
+        let ordinals = numbers("ordinals", &mut dropped);
+        let ambiguous_ordinals = numbers("ambiguous_ordinals", &mut dropped);
+        let mut list = |setting: &str, dropped: &mut Vec<String>| {
+            settings
+                .remove(setting)
+                .map(|written| written_words(&format!("{place}.{setting}"), written, dropped))
+                .unwrap_or_default()
+        };
+        let joiners = list("joiners", &mut dropped);
+        let ordinal_endings = list("ordinal_endings", &mut dropped);
+        languages.insert(
+            language,
+            SpokenNumberWordsConfig {
+                numbers: words,
+                ambiguous,
+                multipliers,
+                joiners,
+                ordinals,
+                ambiguous_ordinals,
+                ordinal_endings,
+            },
+        );
+    }
+    dropped.sort();
+    (languages, dropped)
+}
+
+/// Reads `[spoken_number_words]` leaving out every wrongly shaped part;
+/// [`misshaped_number_words`] names them.
+pub fn deserialize_spoken_number_words<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<SpokenNumberWordsByLanguage, D::Error> {
+    Ok(shaped_number_words(Written::deserialize(deserializer)?).0)
+}
+
+/// The parts of `[spoken_number_words]` the loader leaves out for their
+/// shape, sorted.
+pub fn misshaped_number_words(schema: &Config) -> Vec<String> {
+    schema
+        .get::<Written>("spoken_number_words")
+        .map(|written| shaped_number_words(written).1)
+        .unwrap_or_default()
+}
+
+impl SpokenNumberWordsConfig {
+    fn entries(&self) -> usize {
+        self.numbers.len()
+            + self.ambiguous.len()
+            + self.multipliers.len()
+            + self.ordinals.len()
+            + self.ambiguous_ordinals.len()
+            + self.joiners.len()
+            + self.ordinal_endings.len()
+    }
+
+    /// Removes the words that cannot be a number word and names each one:
+    /// blank, too long, with spaces or hidden characters. A language with
+    /// more words than allowed is removed whole.
+    fn drop_unusable(&mut self, place: &str) -> Vec<String> {
+        if self.entries() > MAX_NUMBER_WORDS {
+            let count = self.entries();
+            *self = Self::default();
+            return vec![format!(
+                "{place} holds {count} words, more than the {MAX_NUMBER_WORDS} allowed; it is ignored"
+            )];
+        }
+        let word_ok = |word: &str| {
+            usable(word, MAX_NUMBER_WORD_BYTES) && !word.chars().any(char::is_whitespace)
+        };
+        let mut dropped = Vec::new();
+        for (what, entries) in [
+            ("numbers", &mut self.numbers),
+            ("ambiguous", &mut self.ambiguous),
+            ("multipliers", &mut self.multipliers),
+            ("ordinals", &mut self.ordinals),
+            ("ambiguous_ordinals", &mut self.ambiguous_ordinals),
+        ] {
+            entries.retain(|word, _| {
+                let keep = word_ok(word);
+                if !keep {
+                    dropped.push(format!("{place}.{what}: '{}' is ignored", shown(word)));
+                }
+                keep
+            });
+        }
+        self.multipliers.retain(|word, value| {
+            let keep = *value >= 10;
+            if !keep {
+                dropped.push(format!(
+                    "{place}.multipliers: '{}' multiplies by less than 10 and is ignored",
+                    shown(word)
+                ));
+            }
+            keep
+        });
+        self.joiners.retain(|word| {
+            let keep = word_ok(word);
+            if !keep {
+                dropped.push(format!("{place}.joiners: '{}' is ignored", shown(word)));
+            }
+            keep
+        });
+        // An empty ending is meaningful: the stem may stand alone.
+        self.ordinal_endings.retain(|ending| {
+            let keep = ending.len() <= MAX_ORDINAL_ENDING_BYTES
+                && !ending.chars().any(|c| c.is_control() || c.is_whitespace())
+                && !has_hidden_chars(ending);
+            if !keep {
+                dropped.push(format!(
+                    "{place}.ordinal_endings: '{}' is ignored",
+                    shown(ending)
+                ));
+            }
+            keep
+        });
+        dropped
+    }
+}
+
+/// Removes what cannot be read as number words, so that one bad entry of a
+/// content package never stops a deployment, and names each removal for a
+/// warning.
+pub fn drop_unusable_number_words(languages: &mut SpokenNumberWordsByLanguage) -> Vec<String> {
+    let mut dropped = Vec::new();
+    languages.retain(|language, words| {
+        if !is_language_tag(language) {
+            dropped.push(format!(
+                "spoken_number_words: '{}' is not a lowercase language tag such as `de` and is ignored",
+                shown(language)
+            ));
+            return false;
+        }
+        let place = format!("spoken_number_words.{language}");
+        dropped.extend(words.drop_unusable(&place));
+        // Without numbers, ordinals or their endings a day said in words
+        // would read as not said: such a table counts as none.
+        let missing: Vec<&str> = [
+            ("numbers", words.numbers.is_empty()),
+            (
+                "ordinals",
+                words.ordinals.is_empty() && words.ambiguous_ordinals.is_empty(),
+            ),
+            ("ordinal_endings", words.ordinal_endings.is_empty()),
+        ]
+        .into_iter()
+        .filter_map(|(what, empty)| empty.then_some(what))
+        .collect();
+        if !missing.is_empty() {
+            dropped.push(format!(
+                "{place} has no {}; it is ignored and only digits are read in this language",
+                missing.join(", ")
+            ));
+            return false;
+        }
+        true
+    });
+    dropped.sort();
+    dropped
 }
 
 /// A language tag as the voice uses it: `de`, `en`, `pt-br`.
@@ -682,6 +963,19 @@ pub fn unknown_spoken_keys(schema: &Config) -> Vec<String> {
                 .filter(|key| !APPROVAL_SPEECH_SETTINGS.contains(&key.as_str()))
                 .map(|key| format!("approval_speech.{key}")),
         );
+    }
+    if let Ok(languages) = schema.get_table("spoken_number_words") {
+        for (language, settings) in languages {
+            let Ok(settings) = settings.into_table() else {
+                continue;
+            };
+            unknown.extend(
+                settings
+                    .into_keys()
+                    .filter(|key| !NUMBER_WORDS_SETTINGS.contains(&key.as_str()))
+                    .map(|key| format!("spoken_number_words.{language}.{key}")),
+            );
+        }
     }
     if let Ok(vocabularies) = schema.get_table("spoken_vocabularies") {
         for (name, languages) in vocabularies {
@@ -998,5 +1292,122 @@ mod tests {
             missing_vocabularies([("dynamics", used.as_slice())], &loaded),
             vec!["mcp_servers.dynamics.glossary.vocabularies: 'sap'".to_string()]
         );
+    }
+    fn number_words(toml: &str) -> SpokenNumberWordsByLanguage {
+        #[derive(Deserialize)]
+        struct Holder {
+            #[serde(default, deserialize_with = "deserialize_spoken_number_words")]
+            spoken_number_words: SpokenNumberWordsByLanguage,
+        }
+        schema(toml)
+            .try_deserialize::<Holder>()
+            .unwrap()
+            .spoken_number_words
+    }
+
+    #[test]
+    fn number_words_hold_one_language_each() {
+        let loaded = number_words(
+            r#"
+            [spoken_number_words.de]
+            numbers = { zwei = 2, zwanzig = 20 }
+            ambiguous = { ein = 1 }
+            multipliers = { tausend = 1000 }
+            joiners = ["und"]
+            ordinals = { zwanzigst = 20 }
+            ambiguous_ordinals = { acht = 8, "zwölft" = 12 }
+            ordinal_endings = ["e", "en"]
+            [spoken_number_words.en]
+            ordinal_endings = [""]
+        "#,
+        );
+        assert_eq!(loaded["de"].ambiguous_ordinals["acht"], 8);
+        assert_eq!(loaded["de"].ambiguous_ordinals["zwölft"], 12);
+        let de = &loaded["de"];
+        assert_eq!(de.numbers["zwanzig"], 20);
+        assert_eq!(de.ambiguous["ein"], 1);
+        assert_eq!(de.multipliers["tausend"], 1000);
+        assert_eq!(de.joiners, vec!["und"]);
+        assert_eq!(de.ordinals["zwanzigst"], 20);
+        assert_eq!(de.ordinal_endings, vec!["e", "en"]);
+        assert_eq!(loaded["en"].ordinal_endings, vec![""]);
+    }
+
+    #[test]
+    fn wrongly_shaped_number_words_are_dropped_and_named() {
+        let toml = r#"
+            [spoken_number_words]
+            fr = "x"
+            [spoken_number_words.de]
+            numbers = { zwei = 2, minus = -1, halb = 0.5, viel = "viel", riesig = 9999999999999 }
+            joiners = "und"
+            ordinal_endings = ["en", 5]
+            colour = "blue"
+        "#;
+        let loaded = number_words(toml);
+        assert_eq!(loaded["de"].numbers.len(), 1);
+        assert!(loaded["de"].joiners.is_empty());
+        assert_eq!(loaded["de"].ordinal_endings, vec!["en"]);
+        assert!(!loaded.contains_key("fr"));
+        assert_eq!(
+            misshaped_number_words(&schema(toml)),
+            vec![
+                "spoken_number_words.de.joiners is not a list and is ignored",
+                "spoken_number_words.de.numbers: 'halb' is not a whole number from 0 to 1000000000000 and is ignored",
+                "spoken_number_words.de.numbers: 'minus' is not a whole number from 0 to 1000000000000 and is ignored",
+                "spoken_number_words.de.numbers: 'riesig' is not a whole number from 0 to 1000000000000 and is ignored",
+                "spoken_number_words.de.numbers: 'viel' is not a whole number from 0 to 1000000000000 and is ignored",
+                "spoken_number_words.de.ordinal_endings: an entry is not a text and is ignored",
+                "spoken_number_words.fr is not a table and is ignored",
+            ]
+        );
+        assert_eq!(
+            unknown_spoken_keys(&schema(toml)),
+            vec!["spoken_number_words.de.colour"]
+        );
+    }
+
+    #[test]
+    fn unusable_number_words_are_dropped_with_a_warning() {
+        let mut loaded = number_words(
+            r#"
+            [spoken_number_words.de]
+            numbers = { zwei = 2, "zwei drei" = 23, "" = 0 }
+            multipliers = { tausend = 1000, eins = 1 }
+            joiners = ["und", " "]
+            ordinals = { zweit = 2 }
+            ordinal_endings = ["", "en", "sehr lange endung"]
+            [spoken_number_words.DE]
+            numbers = { zwei = 2 }
+            [spoken_number_words.en]
+            numbers = { "two words" = 2 }
+            ordinals = { second = 2 }
+            ordinal_endings = [""]
+            [spoken_number_words.fr]
+            numbers = { deux = 2 }
+        "#,
+        );
+        let dropped = drop_unusable_number_words(&mut loaded);
+        assert_eq!(
+            dropped,
+            vec![
+                "spoken_number_words.de.joiners: ' ' is ignored",
+                "spoken_number_words.de.multipliers: 'eins' multiplies by less than 10 and is ignored",
+                "spoken_number_words.de.numbers: '' is ignored",
+                "spoken_number_words.de.numbers: 'zwei drei' is ignored",
+                "spoken_number_words.de.ordinal_endings: 'sehr lange endung' is ignored",
+                "spoken_number_words.en has no numbers; it is ignored and only digits are read in this language",
+                "spoken_number_words.en.numbers: 'two words' is ignored",
+                "spoken_number_words.fr has no ordinals, ordinal_endings; it is ignored and only digits are read in this language",
+                "spoken_number_words: 'DE' is not a lowercase language tag such as `de` and is ignored",
+            ]
+        );
+        assert!(!loaded.contains_key("en"));
+        assert!(!loaded.contains_key("fr"));
+        let de = &loaded["de"];
+        assert_eq!(de.numbers.len(), 1);
+        assert_eq!(de.multipliers.len(), 1);
+        assert_eq!(de.joiners, vec!["und"]);
+        assert_eq!(de.ordinal_endings, vec!["", "en"]);
     }
 }

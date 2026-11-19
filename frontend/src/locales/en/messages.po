@@ -8752,7 +8752,7 @@ msgstr "Something else is different too; it's on screen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.entry"
-msgstr "{shape, select, asked {Changed: {sentence}} other {Also changed, without being asked: {sentence}}}"
+msgstr "{asked, select, asked {Changed: {sentence}} unsure {Also changed: {sentence}} other {Also changed, without being asked: {sentence}}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8767,7 +8767,7 @@ msgstr "{kind, select, changed {The new version: {what}} same {The new card is t
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.more"
-msgstr "{shape, select, asked {{count, plural, one {And one more field changed as asked; it's on screen.} other {And {countWord} more fields changed as asked; they're on screen.}}} other {{count, plural, one {And one more field changed without being asked; it's on screen.} other {And {countWord} more fields changed without being asked; they're on screen.}}}}"
+msgstr "{shape, select, asked {{count, plural, one {And one more field changed as asked; it's on screen.} other {And {countWord} more fields changed as asked; they're on screen.}}} unsure {{count, plural, one {And one more field changed; it's on screen.} other {And {countWord} more fields changed; they're on screen.}}} other {{count, plural, one {And one more field changed without being asked; it's on screen.} other {And {countWord} more fields changed without being asked; they're on screen.}}}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8868,6 +8868,11 @@ msgstr "Voice commands aren't working right now. The card is waiting on screen."
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.unclear"
 msgstr "{commands, select, withText {I didn't catch that. You can say: go on, what else, again, read the text, or stop.} other {I didn't catch that. You can say: go on, what else, again, or stop.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichText"
+msgstr "{shape, select, named {Which text: {texts}?} other {Which text? The texts are on screen.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

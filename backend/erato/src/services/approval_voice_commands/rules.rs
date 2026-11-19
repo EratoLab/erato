@@ -2,7 +2,9 @@
 //! people mix them, matched without a model. A sentence the rules are not
 //! sure of is left to the model; the rules never guess.
 
-use super::{CardPiece, CardPieceRole, VoiceCommandInput, VoiceMeaning, default_text_piece};
+use super::{
+    CardPiece, CardPieceRole, VoiceCommandInput, VoiceMeaning, VoiceQuestion, default_text_piece,
+};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use unicode_normalization::UnicodeNormalization;
@@ -1666,6 +1668,17 @@ fn pattern(segment: &[String], input: &VoiceCommandInput<'_>) -> Option<Segment>
         .any(|word| NEGATIONS.contains(&word.as_str()));
     if STOP_FIRST.contains(&first) {
         return Some(Segment::Nav(VoiceMeaning::Stop, None));
+    }
+    // The voice asked which text to read: naming one answers it.
+    if input.question == Some(VoiceQuestion::WhichText)
+        && !negated
+        && let Reference::Piece(id) = reference(segment, input.pieces)
+        && input
+            .pieces
+            .iter()
+            .any(|piece| piece.id == id && piece.role == CardPieceRole::Text)
+    {
+        return Some(Segment::Nav(VoiceMeaning::ReadText, Some(id)));
     }
     if has_cue(segment, READ_CUES)
         && !negated

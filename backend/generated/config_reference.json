@@ -420,16 +420,16 @@
     "stability": "unreviewed"
   },
   "audio_conversational.card_end_of_turn_silence_ms": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.card_min_speech_ms": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.chat_provider_id": {
     "default_value_security": "unreviewed",
@@ -462,16 +462,16 @@
     "stability": "unreviewed"
   },
   "audio_conversational.hesitation_words.[]": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.hesitation_words_replace_base": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.initial_backoff_ms": {
     "default_value_security": "unreviewed",
@@ -516,10 +516,10 @@
     "stability": "unreviewed"
   },
   "audio_conversational.min_speech_ms": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.min_unique_word_ratio": {
     "default_value_security": "unreviewed",
@@ -564,16 +564,16 @@
     "stability": "unreviewed"
   },
   "audio_conversational.voice_start_buffer_ms": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_conversational.voice_start_max_wait_ms": {
-    "default_value_security": "unknown",
+    "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
   },
   "audio_dictation.chat_provider_id": {
     "default_value_security": "unreviewed",
@@ -4928,6 +4928,48 @@
     "introduced_in": "0.8.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
+  },
+  "spoken_number_words.<key>.ambiguous.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.ambiguous_ordinals.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.joiners.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.multipliers.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.numbers.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.ordinal_endings.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_number_words.<key>.ordinals.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
   },
   "spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value>": {
     "default_value_security": "unreviewed",
