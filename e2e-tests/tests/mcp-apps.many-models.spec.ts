@@ -237,6 +237,42 @@ test(
 );
 
 test(
+  "A reopened chat shows its MCP Apps view again on every reload, never the sandbox page in the view's frame",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const message = await callCounterTool(page);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+
+      // The view's frame gets a name of its own on every load, so the
+      // browser has no earlier frame to restore it to.
+      const viewFrameName = (reopened: Locator) =>
+        reopened
+          .frameLocator('[data-testid="mcp-app-view"]')
+          .locator("iframe")
+          .getAttribute("name");
+      const names = new Set([await viewFrameName(message)]);
+      for (let reload = 1; reload <= 8; reload += 1) {
+        await page.reload();
+        await chatIsReadyToChat(page, { expectAssistantResponse: true });
+        const reopened = page.getByTestId("message-assistant").last();
+        await expect(viewCount(reopened), `reload ${reload}`).toHaveText("41", {
+          timeout: 15000,
+        });
+        names.add(await viewFrameName(reopened));
+      }
+      expect(names.size).toBe(9);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
   "In dark mode, an MCP Apps view sits on the message's background too, with no backdrop behind it",
   { tag: TAG_CI },
   async ({ browser }) => {

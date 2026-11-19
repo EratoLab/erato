@@ -157,6 +157,14 @@
 
     inner = document.createElement("iframe");
     inner.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    // A name of its own on every load. Writing the view into the frame gives
+    // its document this page's URL, and on a reload a browser may restore a
+    // frame it finds by name or position to the URL it last had: this page,
+    // which would refuse to run there and leave the view out. A frame no
+    // earlier load had is not restored.
+    inner.name = `view-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
     (document.body || document.documentElement).appendChild(inner);
     const doc = inner.contentDocument;
     doc.open();

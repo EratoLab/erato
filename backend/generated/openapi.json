@@ -15638,6 +15638,10 @@
           "view": {
             "$ref": "#/components/schemas/ToolResultView",
             "description": "The interactive view (MCP Apps) the tool declares, set when its server\nenables `mcp_apps` and the view was read and accepted for this call."
+          },
+          "view_unavailable": {
+            "type": "boolean",
+            "description": "Set instead of `view` when the tool declares a view and its server\nenables `mcp_apps`, but the view was refused or could not be read."
           }
         }
       },
@@ -15671,12 +15675,16 @@
       },
       "ToolResultView": {
         "type": "object",
-        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output` and `structured_content`.",
+        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output`, `structured_content` and `meta`.",
         "required": [
           "server_id",
           "uri"
         ],
         "properties": {
+          "meta": {
+            "type": "object",
+            "description": "The result's `_meta` as the server returned it, which the view gets\nunchanged with the result. Kept only here, for the view, like\n`structured_content`: the model never reads it."
+          },
           "server_id": {
             "type": "string"
           },

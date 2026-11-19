@@ -11019,6 +11019,26 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "Die interaktive Ansicht von {toolName} möchte diese Datei auf Ihrem Gerät speichern."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "{fileName} speichern?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "Die interaktive Ansicht konnte nicht angezeigt werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
 msgid "trace.tool.appView.title"
 msgstr "Interaktive Ansicht von {toolName}"
 

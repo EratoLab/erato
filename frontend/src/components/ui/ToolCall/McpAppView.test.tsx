@@ -1,7 +1,13 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   afterEach,
   beforeAll,
@@ -16,10 +22,11 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { defaultTheme } from "@/config/theme";
 import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
 import { setClientPlatform } from "@/lib/clientPlatform";
+import { MAX_VIEW_DOWNLOAD_BYTES } from "@/lib/mcpApps/download";
 import { viewStyleVariables } from "@/lib/mcpApps/hostContext";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { McpAppView } from "./McpAppView";
+import { McpAppView, VIEW_START_TIMEOUT_MS } from "./McpAppView";
 
 import type {
   McpAppViewResponse,
@@ -35,6 +42,7 @@ const CSP = { connectDomains: [], resourceDomains: [] };
 const call = (
   withView = true,
   structuredContent?: Record<string, unknown>,
+  meta?: Record<string, unknown>,
 ): ToolUse =>
   ({
     tool_call_id: "call-1",
@@ -48,10 +56,17 @@ const call = (
             server_id: "apps",
             uri: "ui://mock/counter",
             structured_content: structuredContent,
+            meta,
           },
         }
       : undefined,
   }) as unknown as ToolUse;
+
+/** A call whose view Erato refused or could not read. */
+const refusedCall = (): ToolUse => ({
+  ...call(false),
+  result_details: { view_unavailable: true },
+});
 
 const viewResponse = (
   overrides: Partial<McpAppViewResponse> = {},
@@ -74,14 +89,15 @@ const renderView = (
   {
     onShown,
     withTheme = false,
-  }: { onShown?: () => void; withTheme?: boolean } = {},
+    withFiles,
+  }: { onShown?: () => void; withTheme?: boolean; withFiles?: boolean } = {},
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const view = (
     <QueryClientProvider client={queryClient}>
-      <McpAppView part={part} onShown={onShown} />
+      <McpAppView part={part} onShown={onShown} withFiles={withFiles} />
     </QueryClientProvider>
   );
   return render(
@@ -176,6 +192,44 @@ const initialize = {
   },
 };
 
+/** The first bytes of a PNG, as base64. */
+const PNG_BASE64 = globalThis.btoa("\x89PNG\r\n\x1a\n");
+
+/** A view's `ui/download-file` request for `resource`. */
+const downloadRequest = (id: number, resource: Record<string, unknown>) => ({
+  jsonrpc: "2.0",
+  id,
+  method: "ui/download-file",
+  params: { contents: [{ type: "resource", resource }] },
+});
+
+/** The view, started, with the files it had saved and their bytes. */
+const startedView = async () => {
+  const view = await loadedFrame();
+  view.fromFrame(PROXY_READY);
+  view.fromFrame(initialize);
+  view.fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+  await waitFor(() => {
+    expect(view.frame).toHaveAttribute("aria-hidden", "false");
+  });
+  const blobs: Blob[] = [];
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    blobs.push(blob as Blob);
+    return "blob:view-download";
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+  const saved: { name: string; href: string }[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push({ name: this.download, href: this.href });
+  });
+  /** What the view was answered to its request `id`. */
+  const answer = (id: number) =>
+    view.sent().find((message) => message.id === id);
+  return { ...view, saved, blobs, answer };
+};
+
 describe("McpAppView", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -191,6 +245,7 @@ describe("McpAppView", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     setClientPlatform("web");
   });
 
@@ -204,19 +259,87 @@ describe("McpAppView", () => {
   it("shows nothing outside the web app", () => {
     setClientPlatform("outlook");
     renderView(call());
+    renderView(refusedCall());
 
     expect(screen.queryByTestId("mcp-app-view")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mcp-app-view-not-shown"),
+    ).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("shows nothing when the view cannot be fetched", async () => {
+  it("shows nothing when the view cannot be fetched and the call's files show instead", async () => {
     fetchMock.mockResolvedValue(json({ message: "Bad gateway" }, 502));
-    renderView(call());
+    renderView(call(), { withFiles: true });
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.queryByTestId("mcp-app-view")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("mcp-app-view-not-shown"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says the view could not be shown when it cannot be fetched and the call returned no files", async () => {
+    fetchMock.mockResolvedValue(json({ message: "Bad gateway" }, 502));
+    renderView(call());
+
+    expect(
+      await screen.findByTestId("mcp-app-view-not-shown"),
+    ).toHaveTextContent("The interactive view could not be shown.");
+    expect(screen.queryByTestId("mcp-app-view")).not.toBeInTheDocument();
+  });
+
+  it("says the view could not be shown when Erato refused it and the call returned no files, without fetching it", () => {
+    const refused = refusedCall();
+    const { unmount } = renderView(refused);
+
+    expect(screen.getByTestId("mcp-app-view-not-shown")).toHaveTextContent(
+      "The interactive view could not be shown.",
+    );
+
+    // With files, they show instead, as for a view that cannot be fetched.
+    unmount();
+    renderView(refused, { withFiles: true });
+    expect(
+      screen.queryByTestId("mcp-app-view-not-shown"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-app-view")).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("says the view could not be shown when it does not start in time, until it does", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderView(call());
+      const { fromFrame } = await loadedFrame();
+      expect(
+        screen.queryByTestId("mcp-app-view-not-shown"),
+      ).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(VIEW_START_TIMEOUT_MS);
+      });
+      expect(screen.getByTestId("mcp-app-view-not-shown")).toBeInTheDocument();
+
+      // A view that starts late still shows, and the line goes.
+      fromFrame(PROXY_READY);
+      fromFrame(initialize);
+      fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      await waitFor(() => {
+        expect(
+          screen.queryByTestId("mcp-app-view-not-shown"),
+        ).not.toBeInTheDocument();
+      });
+      expect(screen.getByTestId("mcp-app-view")).toHaveAttribute(
+        "aria-hidden",
+        "false",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never loads a view from the app's own origin", async () => {
@@ -266,7 +389,7 @@ describe("McpAppView", () => {
           id: 1,
           result: expect.objectContaining({
             protocolVersion: "2026-01-26",
-            hostCapabilities: {},
+            hostCapabilities: { downloadFile: {} },
             hostContext: expect.objectContaining({
               theme: "light",
               displayMode: "inline",
@@ -335,6 +458,31 @@ describe("McpAppView", () => {
           params: {
             content: [{ type: "text", text: "Counter started at 41." }],
             structuredContent: { start: 41 },
+          },
+        }),
+      );
+    });
+  });
+
+  it("hands the view the result's _meta unchanged, as the server returned it", async () => {
+    const meta = {
+      "io.example/chart": { svg: "<svg/>", kind: "bar" },
+      note: "for the view only",
+    };
+    renderView(call(true, { start: 41 }, meta));
+    const { sent, fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+
+    await waitFor(() => {
+      expect(sent()).toContainEqual(
+        expect.objectContaining({
+          method: "ui/notifications/tool-result",
+          params: {
+            content: [{ type: "text", text: "Counter started at 41." }],
+            structuredContent: { start: 41 },
+            _meta: meta,
           },
         }),
       );
@@ -413,7 +561,7 @@ describe("McpAppView", () => {
     });
   });
 
-  it("refuses every request the view makes", async () => {
+  it("refuses every request the view makes but a download", async () => {
     renderView(call());
     const { sent, fromFrame } = await loadedFrame();
     fromFrame(PROXY_READY);
@@ -426,7 +574,6 @@ describe("McpAppView", () => {
       { method: "ui/open-link", params: { url: "https://example.com" } },
       { method: "ui/update-model-context", params: { content: [] } },
       { method: "resources/read", params: { uri: "ui://mock/counter" } },
-      { method: "ui/download-file", params: { contents: [] } },
       // The two the SDK would answer on its own.
       { method: "ui/request-display-mode", params: { mode: "fullscreen" } },
       { method: "ping" },
@@ -446,6 +593,101 @@ describe("McpAppView", () => {
         );
       }
     });
+  });
+
+  it("saves a PNG the view asks to download once the user confirms", async () => {
+    renderView(call());
+    const view = await startedView();
+
+    view.fromFrame(
+      downloadRequest(20, {
+        uri: "ui://charts/Revenue%20by%20region.png",
+        mimeType: "image/png",
+        blob: PNG_BASE64,
+      }),
+    );
+    expect(
+      await screen.findByText("Save Revenue by region.png?"),
+    ).toBeInTheDocument();
+    // Nothing is saved, and the view is not answered, before the user decides.
+    expect(view.saved).toEqual([]);
+    expect(view.answer(20)).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(view.answer(20)).toMatchObject({ result: {} });
+    });
+    expect(view.answer(20)?.result).toEqual({});
+    expect(view.saved).toEqual([
+      { name: "Revenue by region.png", href: "blob:view-download" },
+    ]);
+    expect(view.blobs).toHaveLength(1);
+    expect(view.blobs[0].size).toBe(8);
+    expect(screen.queryByText("Save Revenue by region.png?")).toBeNull();
+  });
+
+  it("saves nothing and tells the view so when the user cancels", async () => {
+    renderView(call());
+    const view = await startedView();
+
+    view.fromFrame(
+      downloadRequest(21, {
+        uri: "ui://charts/chart.svg",
+        mimeType: "image/svg+xml",
+        text: "<svg xmlns='http://www.w3.org/2000/svg'/>",
+      }),
+    );
+    expect(await screen.findByText("Save chart.svg?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(view.answer(21)).toMatchObject({ result: { isError: true } });
+    });
+    expect(view.saved).toEqual([]);
+    expect(screen.queryByText("Save chart.svg?")).toBeNull();
+  });
+
+  it("refuses, without asking the user, a file of another type, one too large and one the app would have to fetch", async () => {
+    renderView(call());
+    const view = await startedView();
+
+    view.fromFrame(
+      downloadRequest(30, {
+        uri: "ui://charts/chart.html",
+        mimeType: "text/html",
+        text: "<p>chart</p>",
+      }),
+    );
+    view.fromFrame(
+      downloadRequest(31, {
+        uri: "ui://charts/chart.svg",
+        mimeType: "image/svg+xml",
+        text: "x".repeat(MAX_VIEW_DOWNLOAD_BYTES + 1),
+      }),
+    );
+    view.fromFrame({
+      jsonrpc: "2.0",
+      id: 32,
+      method: "ui/download-file",
+      params: {
+        contents: [
+          {
+            type: "resource_link",
+            uri: "https://charts.example.com/chart.png",
+            name: "chart.png",
+            mimeType: "image/png",
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      for (const id of [30, 31, 32]) {
+        expect(view.answer(id)).toMatchObject({ result: { isError: true } });
+      }
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(view.saved).toEqual([]);
   });
 
   it("ignores messages from the frame's window on another origin", async () => {

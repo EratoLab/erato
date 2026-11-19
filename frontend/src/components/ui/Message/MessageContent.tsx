@@ -2101,7 +2101,8 @@ export const MessageContent = memo(function MessageContent({
               {cluster.parts.map((tracePart, partIndex) => {
                 if (
                   tracePart.content_type !== "tool_use" ||
-                  !tracePart.result_details?.view
+                  (!tracePart.result_details?.view &&
+                    !tracePart.result_details?.view_unavailable)
                 ) {
                   return null;
                 }
@@ -2110,6 +2111,7 @@ export const MessageContent = memo(function MessageContent({
                   <React.Fragment key={`mcp-app-${toolCallId ?? partIndex}`}>
                     <McpAppView
                       part={tracePart}
+                      withFiles={eratoFileIdsIn(tracePart.output).length > 0}
                       onShown={
                         toolCallId
                           ? () => {

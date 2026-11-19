@@ -1,8 +1,10 @@
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
 
+import { viewDownloadOf } from "./download";
 import { MAX_VIEW_HEIGHT } from "./hostContext";
 
+import type { ViewDownload } from "./download";
 import type {
   CallToolResult,
   JSONRPCMessage,
@@ -91,16 +93,25 @@ export interface ViewEvents {
   onInitialized: () => void;
   /** The view asked for a new height, already capped. */
   onHeight: (height: number) => void;
+  /**
+   * The view asked to save `file`, already checked: resolves to whether the
+   * user confirmed and it was saved.
+   */
+  onDownload: (file: ViewDownload) => Promise<boolean>;
 }
 
 /**
  * Shows a call's view in `frame`: loads the sandbox page at `sandboxPageUrl`
  * into it, hands it the view, answers the view's `ui/initialize` with
  * `hostContext`, then sends the call's input and result and follows the
- * view's size changes. Render-only: the bridge has no MCP client, declares no
- * capabilities and drops the two requests the SDK answers on its own (`ping`
- * and `ui/request-display-mode`), so every request the view makes (tool
- * calls, messages, links, and anything else) is refused with an error.
+ * view's size changes. Render-only but for saving a file: the bridge has no
+ * MCP client and declares one capability, `downloadFile`. It answers
+ * `ui/download-file` for a PNG or SVG the view holds, which the user
+ * confirms in `events.onDownload`, with `isError` for any other file or when
+ * the user declines. It drops the two requests the SDK answers on its own
+ * (`ping` and `ui/request-display-mode`), so every other request the view
+ * makes (tool calls, messages, links, and anything else) is refused with an
+ * error.
  */
 export function connectView(
   frame: HTMLIFrameElement,
@@ -109,10 +120,20 @@ export function connectView(
   hostContext: McpUiHostContext,
   events: ViewEvents,
 ): ViewConnection {
-  const bridge = new AppBridge(null, HOST_INFO, {}, { hostContext });
+  const bridge = new AppBridge(
+    null,
+    HOST_INFO,
+    { downloadFile: {} },
+    { hostContext },
+  );
   bridge.removeRequestHandler("ping");
   // eslint-disable-next-line lingui/no-unlocalized-strings -- protocol method
   bridge.removeRequestHandler("ui/request-display-mode");
+  bridge.ondownloadfile = async ({ contents }) => {
+    const file = viewDownloadOf(contents);
+    const saved = file !== undefined && (await events.onDownload(file));
+    return saved ? {} : { isError: true };
+  };
   let initialized = false;
   let closed = false;
   // A context handed over before the handshake, sent once it is done.

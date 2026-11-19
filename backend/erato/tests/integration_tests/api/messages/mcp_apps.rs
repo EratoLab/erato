@@ -3,8 +3,8 @@
 //! through its own route, and the model sees none of it.
 use super::*;
 use mock_mcp_server::{
-    COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_MARKER, COUNTER_VIEW_URI, VIEW_MIME_TYPE,
-    counter_view_ui_meta,
+    COUNTER_RESULT_META_MARKER, COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_MARKER,
+    COUNTER_VIEW_URI, VIEW_MIME_TYPE, counter_result_meta, counter_view_ui_meta,
 };
 use std::sync::{Arc, Mutex};
 
@@ -165,11 +165,13 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
         "server_id": "charts",
         "uri": COUNTER_VIEW_URI,
         "structured_content": {"start": 3},
+        "meta": counter_result_meta(3),
     });
 
     // The stream and the stored row name the view, with the result's
-    // structuredContent for it, beside the call's input and output; the
-    // calls whose views are refused still succeed, without.
+    // structuredContent and its `_meta`, unchanged, for it, beside the call's
+    // input and output; the calls whose views are refused still succeed,
+    // marked as without one, so the web app can say so.
     let updates = final_updates(&events);
     assert_eq!(updates["call_counter"]["status"], "success", "{era}");
     assert_eq!(updates["call_counter"]["result_details"]["view"], view);
@@ -183,8 +185,9 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
     for refused in ["call_wrong_type", "call_oversized"] {
         assert_eq!(rows[refused]["status"], "success", "{era} {refused}");
         assert_eq!(rows[refused]["output"], json!("Counter started at 0."));
-        assert!(rows[refused].get("result_details").is_none(), "{era}");
-        assert!(updates[refused].get("result_details").is_none(), "{era}");
+        let unavailable = json!({"view_unavailable": true});
+        assert_eq!(rows[refused]["result_details"], unavailable, "{era}");
+        assert_eq!(updates[refused]["result_details"], unavailable, "{era}");
     }
     // Static outputs are untouched: no file part was added.
     assert_eq!(
@@ -197,16 +200,23 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
     );
 
     // Nothing of the view reached the model, neither in the tools it was
-    // offered nor in the results it read back.
+    // offered nor in the results it read back, the result's `_meta` included.
     let bodies = setup.recorder.bodies();
     assert!(bodies.iter().any(|body| body.contains(RESULT)), "{era}");
     for body in &bodies {
-        for hidden in [COUNTER_VIEW_MARKER, "ui://", VIEW_MIME_TYPE, "resourceUri"] {
+        for hidden in [
+            COUNTER_VIEW_MARKER,
+            COUNTER_RESULT_META_MARKER,
+            "ui://",
+            VIEW_MIME_TYPE,
+            "resourceUri",
+            "view_unavailable",
+        ] {
             assert!(!body.contains(hidden), "{era}: {hidden} in {body}");
         }
     }
 
-    // A reopened chat still names the view.
+    // A reopened chat still names the view, with the result's `_meta`.
     let row = Messages::find_by_id(message_id)
         .one(&setup.state.db)
         .await
@@ -324,7 +334,7 @@ async fn with_mcp_apps_off_nothing_changes(pool: Pool<Postgres>) {
     assert!(
         offered_tools(&on.recorder)
             .as_array()
-            .is_some_and(|tools| tools.len() == 5)
+            .is_some_and(|tools| tools.len() == 7)
     );
 }
 

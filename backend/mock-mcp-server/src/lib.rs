@@ -1200,6 +1200,11 @@ pub const OVERSIZED_VIEW_URI: &str = "ui://mock/oversized";
 pub const OVERSIZED_VIEW_BYTES: usize = 9 * 1024 * 1024;
 /// A view whose `resources/read` never answers.
 pub const SLOW_VIEW_URI: &str = "ui://mock/slow";
+/// The counter view, read with `cacheScope: "public"` and `ttlMs` of an hour:
+/// a host may keep it for every user.
+pub const PUBLIC_VIEW_URI: &str = "ui://mock/public";
+/// The counter view, read with `ttlMs: 0`: a host keeps it for no later call.
+pub const UNCACHED_VIEW_URI: &str = "ui://mock/uncached";
 /// The tool that shows the counter view.
 pub const COUNTER_TOOL_NAME: &str = "show_counter";
 /// The counter view's tool that also returns a picture as a file, as a chart
@@ -1234,12 +1239,23 @@ pub fn counter_view_ui_meta() -> serde_json::Value {
     json!({"csp": {"connectDomains": [], "resourceDomains": []}, "prefersBorder": true})
 }
 
+/// Text that only the `_meta` of a counter call's result holds.
+pub const COUNTER_RESULT_META_MARKER: &str = "mock-counter-result-meta";
+
+/// The `_meta` of the counter's result for `start`: data for its view only,
+/// as a chart tool hands its view the picture to save.
+pub fn counter_result_meta(start: i64) -> serde_json::Value {
+    json!({"mock/counter": {"start": start, "note": COUNTER_RESULT_META_MARKER}})
+}
+
 /// Each tool of the apps server and the view it declares.
-const APP_TOOLS: [(&str, &str); 4] = [
+const APP_TOOLS: [(&str, &str); 6] = [
     (COUNTER_TOOL_NAME, COUNTER_VIEW_URI),
     ("show_wrong_type_view", WRONG_TYPE_VIEW_URI),
     ("show_oversized_view", OVERSIZED_VIEW_URI),
     ("show_slow_view", SLOW_VIEW_URI),
+    ("show_public_view", PUBLIC_VIEW_URI),
+    ("show_uncached_view", UNCACHED_VIEW_URI),
 ];
 
 /// `show_counter_with_image`: the counter view, and a PNG file in its
@@ -1306,6 +1322,10 @@ impl ServerHandler for AppsServer {
             "Counter started at {start}."
         ))]);
         result.structured_content = Some(json!({"start": start}));
+        if request.name == COUNTER_TOOL_NAME {
+            let meta = counter_result_meta(start);
+            result.meta = Some(MetaObject(meta.as_object().unwrap().clone()));
+        }
         std::future::ready(Ok(result.into()))
     }
 
@@ -1314,12 +1334,14 @@ impl ServerHandler for AppsServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        // With a TTL, as a host keeps its views no longer than the tool list.
         std::future::ready(Ok(ListToolsResult {
             tools: APP_TOOLS
                 .iter()
                 .map(|(name, view_uri)| app_tool(name, view_uri))
                 .chain([counter_image_tool()])
                 .collect(),
+            ttl_ms: Some(10 * 60 * 1000),
             ..Default::default()
         }))
     }
@@ -1330,7 +1352,9 @@ impl ServerHandler for AppsServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResponse, McpError> {
         let (mime_type, text) = match request.uri.as_str() {
-            COUNTER_VIEW_URI => (VIEW_MIME_TYPE, COUNTER_VIEW_HTML.to_string()),
+            COUNTER_VIEW_URI | PUBLIC_VIEW_URI | UNCACHED_VIEW_URI => {
+                (VIEW_MIME_TYPE, COUNTER_VIEW_HTML.to_string())
+            }
             WRONG_TYPE_VIEW_URI => ("text/html", COUNTER_VIEW_HTML.to_string()),
             OVERSIZED_VIEW_URI => (VIEW_MIME_TYPE, "x".repeat(OVERSIZED_VIEW_BYTES)),
             SLOW_VIEW_URI => std::future::pending().await,
@@ -1347,7 +1371,15 @@ impl ServerHandler for AppsServer {
             let meta = json!({"ui": counter_view_ui_meta()});
             contents = contents.with_meta(MetaObject(meta.as_object().unwrap().clone()));
         }
-        Ok(ReadResourceResult::new(vec![contents]).into())
+        let result = ReadResourceResult::new(vec![contents]);
+        Ok(match request.uri.as_str() {
+            PUBLIC_VIEW_URI => result
+                .with_cache_scope(rmcp::model::CacheScope::Public)
+                .with_ttl_ms(60 * 60 * 1000),
+            UNCACHED_VIEW_URI => result.with_ttl_ms(0),
+            _ => result,
+        }
+        .into())
     }
 
     fn get_info(&self) -> ServerInfo {
@@ -1743,7 +1775,7 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
         },
         MechanismSummary {
             name: "Apps server",
-            description: "Tools that declare MCP Apps views: ui://mock/counter, also with a PNG file, one served as plain HTML, one too large and one that never answers",
+            description: "Tools that declare MCP Apps views: ui://mock/counter, also with a PNG file, one served as plain HTML, one too large, one that never answers, and the counter read as public and as never kept",
             endpoint: "Streamable HTTP /mcp/apps",
             tools: &[
                 COUNTER_TOOL_NAME,
@@ -1751,6 +1783,8 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
                 "show_wrong_type_view",
                 "show_oversized_view",
                 "show_slow_view",
+                "show_public_view",
+                "show_uncached_view",
             ],
         },
         MechanismSummary {

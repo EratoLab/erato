@@ -22,8 +22,19 @@ import type { ComponentProps } from "react";
 
 // The view itself is covered by its own tests; here it shows on a click.
 vi.mock("@/components/ui/ToolCall/McpAppView", () => ({
-  McpAppView: ({ onShown }: { onShown?: () => void }) => (
-    <button type="button" data-testid="mcp-app-view" onClick={onShown}>
+  McpAppView: ({
+    onShown,
+    withFiles,
+  }: {
+    onShown?: () => void;
+    withFiles?: boolean;
+  }) => (
+    <button
+      type="button"
+      data-testid="mcp-app-view"
+      data-with-files={String(withFiles)}
+      onClick={onShown}
+    >
       show the view
     </button>
   ),
@@ -196,6 +207,40 @@ describe("MessageContent with a tool call's view", () => {
 
     expect(fullImage()).not.toBeNull();
     expect(screen.queryByText("chart.png")).not.toBeInTheDocument();
+  });
+
+  it("hands a call whose view Erato refused to the view, which says so in its place, with whether it returned files", () => {
+    const refused = (withFiles: boolean) =>
+      ({
+        ...callWithView(false),
+        ...(withFiles ? {} : { output: "Chart rendered." }),
+        result_details: { view_unavailable: true },
+      }) as unknown as ContentPart;
+    const { unmount } = render(
+      ui({
+        content: [refused(false), { content_type: "text", text: "Done." }],
+      }),
+    );
+    expect(screen.getByTestId("mcp-app-view")).toHaveAttribute(
+      "data-with-files",
+      "false",
+    );
+    unmount();
+
+    render(
+      ui({
+        content: [
+          refused(true),
+          chartImage,
+          { content_type: "text", text: "Here is the chart." },
+        ],
+      }),
+    );
+    expect(screen.getByTestId("mcp-app-view")).toHaveAttribute(
+      "data-with-files",
+      "true",
+    );
+    expect(fullImage()).not.toBeNull();
   });
 
   it("keeps the full image for a call without a view", () => {

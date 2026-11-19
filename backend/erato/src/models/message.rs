@@ -491,17 +491,22 @@ pub struct ToolResultDetails {
     pub failure: Option<ToolCallFailure>,
     /// The interactive view (MCP Apps) the tool declares, set when its server
     /// enables `mcp_apps` and the view was read and accepted for this call.
+    // Boxed: it holds the result's `structuredContent` and `_meta`, and most
+    // calls have no view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
-    pub view: Option<ToolResultView>,
+    pub view: Option<Box<ToolResultView>>,
+    /// Set instead of `view` when the tool declares a view and its server
+    /// enables `mcp_apps`, but the view was refused or could not be read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub view_unavailable: bool,
 }
 
 impl ToolResultDetails {
     pub fn failed(failure: ToolCallFailure) -> Self {
         Self {
-            links: Vec::new(),
             failure: Some(failure),
-            view: None,
+            ..Self::default()
         }
     }
 }
@@ -509,7 +514,7 @@ impl ToolResultDetails {
 /// Where the web app gets a call's view: `GET
 /// /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
 /// HTML and its `_meta.ui`. The view is shown with the call's `input`, its
-/// `output` and `structured_content`.
+/// `output`, `structured_content` and `meta`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultView {
     pub server_id: String,
@@ -520,6 +525,12 @@ pub struct ToolResultView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, value_type = Object)]
     pub structured_content: Option<serde_json::Value>,
+    /// The result's `_meta` as the server returned it, which the view gets
+    /// unchanged with the result. Kept only here, for the view, like
+    /// `structured_content`: the model never reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, value_type = Object)]
+    pub meta: Option<serde_json::Value>,
 }
 
 /// How a call failed when Erato, not the tool, wrote its error.

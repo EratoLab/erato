@@ -1229,11 +1229,13 @@ mod tests {
                 title: Some("SYNTHETIC-LINK-TITLE".to_string()),
             }],
             failure: None,
-            view: Some(crate::models::message::ToolResultView {
+            view: Some(Box::new(crate::models::message::ToolResultView {
                 server_id: "records".to_string(),
                 uri: "ui://records/SYNTHETIC-VIEW".to_string(),
                 structured_content: Some(serde_json::json!({"rows": "SYNTHETIC-STRUCTURED"})),
-            }),
+                meta: Some(serde_json::json!({"svg": "SYNTHETIC-RESULT-META"})),
+            })),
+            view_unavailable: false,
         });
 
         let replayed = replay_assistant_content(
@@ -1253,6 +1255,7 @@ mod tests {
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
         assert!(!snapshot.contains("SYNTHETIC-VIEW"), "{snapshot}");
         assert!(!snapshot.contains("SYNTHETIC-STRUCTURED"), "{snapshot}");
+        assert!(!snapshot.contains("SYNTHETIC-RESULT-META"), "{snapshot}");
     }
 
     #[test]
