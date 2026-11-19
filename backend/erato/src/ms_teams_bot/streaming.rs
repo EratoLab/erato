@@ -438,6 +438,26 @@ impl<'a> StreamingReply<'a> {
         self.finish_details(text, earlier_text).await
     }
 
+    /// Settle the native stream before replacing its progress message with a card-only
+    /// activity. On rejection the caller can still finalize the usual Markdown answer.
+    pub(super) async fn finish_card(&mut self, activity: &Value) -> bool {
+        for _ in 0..3 {
+            if self.stream_id.is_none() || self.cancelled {
+                break;
+            }
+            self.wait_ready().await;
+            self.close_native().await;
+        }
+        if self.cancelled || self.stream_id.is_some() {
+            return false;
+        }
+        self.wait_ready().await;
+        match &self.message_id {
+            Some(id) => self.target.update(id, activity.clone()).await.is_ok(),
+            None => self.target.send(activity).await.is_ok(),
+        }
+    }
+
     pub async fn finish_with_sources(
         &mut self,
         text: &str,

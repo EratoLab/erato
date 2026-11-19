@@ -1643,14 +1643,17 @@ async fn render_generation(
         &completion.chat_id.to_string(),
     );
     let files = completion_files(host, session, &completion).await;
-    let delivered = stream
-        .finish_with_sources(
-            &completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang),
-            &completion.earlier_text,
-            &files.sources,
-            bot.settings.public_base_url.as_deref(),
-        )
-        .await;
+    let delivered = super::files::finish(
+        host,
+        Some(session),
+        target,
+        &mut stream,
+        &files,
+        &completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang),
+        &completion.earlier_text,
+        bot.settings.public_base_url.as_deref(),
+    )
+    .await;
     if stream.is_cancelled() {
         if let Some((chat_id, message_id)) = generation {
             host.stop_generation(chat_id, message_id).await;
@@ -1663,14 +1666,6 @@ async fn render_generation(
         return delivered.and(stopped);
     }
     if delivered.is_ok() {
-        super::files::send(
-            host,
-            session,
-            target,
-            &files.outputs,
-            bot.settings.public_base_url.as_deref(),
-        )
-        .await;
         send_reminder_confirmations(bot, host, target, user_id, &completion.reminders).await;
     }
     let approvals = match (&delivered, &completion.approvals) {
@@ -1925,24 +1920,21 @@ pub(super) async fn deliver_proactive(
             lang,
         };
         let mut reply = StreamingReply::new(&target, false);
-        reply
-            .finish_with_sources(
-                &text,
-                &completion.earlier_text,
-                &files.sources,
-                bot.settings.public_base_url.as_deref(),
-            )
-            .await?;
-        if let Some(session) = &session {
-            super::files::send(
-                host,
-                session,
-                &target,
-                &files.outputs,
-                bot.settings.public_base_url.as_deref(),
-            )
-            .await;
-        } else if needs_files && let Some(link) = link.as_deref() {
+        super::files::finish(
+            host,
+            session.as_ref(),
+            &target,
+            &mut reply,
+            &files,
+            &text,
+            &completion.earlier_text,
+            bot.settings.public_base_url.as_deref(),
+        )
+        .await?;
+        if session.is_none()
+            && needs_files
+            && let Some(link) = link.as_deref()
+        {
             let title = Msg::OpenApp.fill(lang, &[("app", &bot.settings.app_name)]);
             let _ = target.send_text(&format!("[{title}](<{link}>)")).await;
         }

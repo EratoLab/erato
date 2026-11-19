@@ -467,7 +467,8 @@ async fn resource_reply(
     State(outgoing): State<Arc<Mutex<Vec<Value>>>>,
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
-    let reject = body["attachments"][0]["name"] == "reject.png";
+    let reject = body["attachments"][0]["name"] == "reject.png"
+        || body["attachments"][0]["content"]["body"][0]["text"] == "Reject this layout";
     outgoing.lock().unwrap().push(body);
     if reject {
         (
@@ -682,5 +683,122 @@ async fn file_only_completion_sends_authorized_resources_after_text(pool: sqlx::
             .await
             .is_err()
     );
+    h.server.abort();
+}
+
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn illustrated_answer_keeps_captions_next_to_their_images(pool: sqlx::PgPool) {
+    use crate::db::entity::messages;
+    use crate::services::file_storage::FileStorage;
+    use sea_orm::ActiveValue::Set;
+    let mut h = harness(pool).await;
+    h.host
+        .app_state
+        .file_storage_providers
+        .insert("source".into(), FileStorage::in_memory_azblob());
+    h.host.app_state.default_file_storage_provider = Some("source".into());
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::new_rgb8(2, 1)
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    let mut parts = Vec::new();
+    let mut refs = Vec::new();
+    for name in ["green", "red", "blue"] {
+        let id = h
+            .host
+            .store_file(
+                &h.session,
+                h.chat_id,
+                &format!("{name}.png"),
+                None,
+                png.get_ref().clone(),
+            )
+            .await
+            .unwrap();
+        parts.push(json!({"content_type":"image_file_pointer","file_upload_id":id}));
+        refs.push(format!("{name} caption\n\n![{name}](erato-file://{id})"));
+    }
+    refs.reverse();
+    parts.push(json!({"content_type":"text","text":refs.join("\n\n")}));
+    let message_id = Uuid::new_v4();
+    Messages::insert(messages::ActiveModel {
+        id: Set(message_id),
+        chat_id: Set(h.chat_id),
+        raw_message: Set(json!({"role":"assistant","content":parts})),
+        ..Default::default()
+    })
+    .exec(&h.state.db)
+    .await
+    .unwrap();
+    let bot = TeamsBot::for_test(&h.base, true);
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &h.base,
+        conversation_id: "resource-test",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    let completion = h
+        .host
+        .completion_for_message(h.chat_id, message_id)
+        .await
+        .unwrap()
+        .unwrap();
+    for mode in ["stream", "proactive", "rejected"] {
+        if mode == "proactive" {
+            deliver_proactive(&bot, &h.host, h.chat_id, message_id)
+                .await
+                .unwrap();
+        } else {
+            let (tx, rx) = mpsc::channel(1);
+            let mut answer = completion.clone();
+            if mode == "rejected" {
+                answer.text = answer
+                    .text
+                    .replacen("blue caption", "Reject this layout", 1);
+            }
+            tx.send(GenerationUpdate::Completed(answer)).await.unwrap();
+            drop(tx);
+            render_generation(
+                &bot,
+                &h.host,
+                &target,
+                &h.session,
+                rx,
+                stream_for(&bot, &target, ConversationKind::Personal),
+                None,
+            )
+            .await
+            .unwrap();
+        }
+        let activities = std::mem::take(&mut *h.outgoing.lock().unwrap());
+        let body = activities
+            .iter()
+            .find_map(|a| a["attachments"][0]["content"]["body"].as_array())
+            .unwrap();
+        assert_eq!(body.len(), 6);
+        for (pair, color) in body.chunks_exact(2).zip(["blue", "red", "green"]) {
+            assert_eq!(pair[0]["type"], "TextBlock");
+            if mode != "rejected" {
+                assert!(
+                    pair[0]["text"]
+                        .as_str()
+                        .unwrap()
+                        .ends_with(&format!("{color} caption"))
+                );
+            }
+            assert_eq!(pair[1]["type"], "Image");
+            assert_eq!(pair[1]["altText"], color);
+            assert!(pair[1]["url"].as_str().unwrap().starts_with("https://"));
+        }
+        let standalone = activities
+            .iter()
+            .filter(|a| a["attachments"][0]["contentType"] == "image/png")
+            .count();
+        assert_eq!(standalone, if mode == "rejected" { 3 } else { 0 });
+    }
     h.server.abort();
 }

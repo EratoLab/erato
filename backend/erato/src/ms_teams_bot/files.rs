@@ -1,9 +1,9 @@
 //! Short-lived URLs exist only while sending the resource activity.
 use super::{
     cards, citations,
-    host::{Host, Session},
+    host::{CompletionFiles, Host, Session},
     render,
-    streaming::ReplyTarget,
+    streaming::{ReplyTarget, StreamingReply},
     texts::Msg,
 };
 use crate::db::entity::file_uploads;
@@ -12,7 +12,11 @@ use eyre::{OptionExt, Result, ensure};
 use futures::TryStreamExt;
 use image::{AnimationDecoder, ImageFormat, ImageReader};
 use serde_json::{Value, json};
-use std::{io::Cursor, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Cursor,
+    time::Duration,
+};
 
 const URL_LIFETIME: Duration = Duration::from_secs(86_400);
 const MAX_IMAGE_BYTES: u64 = 1_000_000;
@@ -199,15 +203,133 @@ async fn signed_url(
     }
 }
 
-pub(super) async fn send(
-    host: &Host,
-    session: &Session,
+fn push_text(body: &mut Vec<Value>, text: &str) {
+    if !text.trim().is_empty() {
+        body.push(json!({"type":"TextBlock","text":text.trim(),"wrap":true}));
+    }
+}
+
+fn illustrated_answer(
+    text: &str,
+    earlier: &str,
+    sources: &[citations::FileSource],
+    images: &HashMap<String, &Value>,
     target: &ReplyTarget<'_>,
-    files: &[file_uploads::Model],
     base: Option<&str>,
-) {
-    for file in files {
-        if let Ok(activity) = activity(host, session, file, target).await
+) -> Option<(Value, HashSet<String>)> {
+    if images.is_empty() {
+        return None;
+    }
+    let mut body = Vec::new();
+    let mut placed = HashSet::new();
+    let (tail, _) = citations::render_with_limit(
+        text,
+        sources,
+        base,
+        0,
+        target.lang,
+        |file, alt, preceding| {
+            let Some(attachment) = images.get(&file.id) else {
+                return false;
+            };
+            if !placed.insert(file.id.clone()) {
+                return false;
+            }
+            push_text(&mut body, preceding);
+            preceding.clear();
+            body.push(json!({"type":"Image","url":attachment["contentUrl"],"altText":if alt.is_empty() { &file.name } else { alt },"size":"Auto"}));
+            true
+        },
+    );
+    if placed.is_empty() {
+        return None;
+    }
+    push_text(&mut body, &tail);
+    let earlier = citations::details(earlier, sources, base, target.lang);
+    let (extra_text, details) = render::answer_with_details("", &earlier, target.lang);
+    push_text(&mut body, &extra_text);
+    let mut card = cards::adaptive_card(body, vec![]);
+    if let Some(details) = details {
+        card["content"]["actions"] = details["content"]["actions"].clone();
+    }
+    if let Some(mention) = &target.mention {
+        let message = render::message("", Some(mention));
+        card["content"]["body"].as_array_mut()?.insert(
+            0,
+            json!({"type":"TextBlock","text":message["text"],"wrap":true}),
+        );
+        card["content"]["msteams"] = json!({"entities":message["entities"]});
+    }
+    let summary = card["content"]["body"]
+        .as_array()?
+        .iter()
+        .filter_map(|b| b["text"].as_str().or(b["altText"].as_str()))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let activity = render::card_message(card, &render::bounded_text(&summary, 200));
+    render::card_fits(&activity).then_some((activity, placed))
+}
+
+/// Render the final answer and deliver each authorized output exactly once. Only
+/// Markdown image references have a position in the answer; other outputs follow it.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn finish(
+    host: &Host,
+    session: Option<&Session>,
+    target: &ReplyTarget<'_>,
+    stream: &mut StreamingReply<'_>,
+    files: &CompletionFiles,
+    text: &str,
+    earlier: &str,
+    base: Option<&str>,
+) -> Result<()> {
+    let Some(session) = session else {
+        return stream
+            .finish_with_sources(text, earlier, &files.sources, base)
+            .await;
+    };
+    let mut prepared = HashMap::new();
+    if !files.outputs.is_empty() {
+        let referenced = citations::image_ids(text);
+        for file in &files.outputs {
+            if referenced.contains(&file.id) {
+                prepared.insert(file.id, activity(host, session, file, target).await.ok());
+            }
+        }
+    }
+    let images = prepared
+        .iter()
+        .filter_map(|(id, activity)| {
+            let attachment = activity.as_ref()?["attachments"].get(0)?;
+            attachment["contentType"]
+                .as_str()?
+                .starts_with("image/")
+                .then(|| (id.to_string(), attachment))
+        })
+        .collect();
+    let mut placed = HashSet::new();
+    if let Some((card, ids)) =
+        illustrated_answer(text, earlier, &files.sources, &images, target, base)
+        && stream.finish_card(&card).await
+    {
+        placed = ids;
+    } else {
+        stream
+            .finish_with_sources(text, earlier, &files.sources, base)
+            .await?;
+    }
+    if stream.is_cancelled() {
+        return Ok(());
+    }
+    for file in &files.outputs {
+        if placed.contains(&file.id.to_string()) {
+            continue;
+        }
+        let outgoing = match prepared.remove(&file.id) {
+            Some(prepared) => prepared,
+            None => activity(host, session, file, target).await.ok(),
+        };
+        if let Some(activity) = outgoing
             && target.send(&activity).await.is_ok()
         {
             continue;
@@ -218,6 +340,7 @@ pub(super) async fn send(
             let _ = target.send(&open_action(&title, &url)).await;
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

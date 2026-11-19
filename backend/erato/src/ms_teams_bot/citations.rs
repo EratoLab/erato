@@ -175,6 +175,17 @@ pub fn referenced_file_ids(text: &str) -> HashSet<String> {
         .collect()
 }
 
+pub(super) fn image_ids(text: &str) -> HashSet<uuid::Uuid> {
+    Parser::new_ext(text, Options::ENABLE_FOOTNOTES)
+        .filter_map(|event| {
+            let Event::Start(Tag::Image { dest_url, .. }) = event else {
+                return None;
+            };
+            file_url(&dest_url)?.host_str()?.parse().ok()
+        })
+        .collect()
+}
+
 /// Convert only known file references. Unknown IDs stay readable without a
 /// broken link or made-up citation. General MCP provenance is a separate feature.
 pub fn render(
@@ -183,7 +194,14 @@ pub fn render(
     public_base_url: Option<&str>,
     lang: Lang,
 ) -> (String, Vec<Citation>) {
-    render_with_limit(text, sources, public_base_url, MAX_CITATIONS, lang)
+    render_with_limit(
+        text,
+        sources,
+        public_base_url,
+        MAX_CITATIONS,
+        lang,
+        |_, _, _| false,
+    )
 }
 
 pub fn details(
@@ -192,15 +210,16 @@ pub fn details(
     public_base_url: Option<&str>,
     lang: Lang,
 ) -> String {
-    render_with_limit(text, sources, public_base_url, 0, lang).0
+    render_with_limit(text, sources, public_base_url, 0, lang, |_, _, _| false).0
 }
 
-fn render_with_limit(
+pub(super) fn render_with_limit(
     text: &str,
     sources: &[FileSource],
     public_base_url: Option<&str>,
     limit: usize,
     lang: Lang,
+    mut place_image: impl FnMut(&FileSource, &str, &mut String) -> bool,
 ) -> (String, Vec<Citation>) {
     let references = references(text);
     let files: HashMap<_, _> = sources
@@ -241,7 +260,11 @@ fn render_with_limit(
             }));
             continue;
         };
-        if file.generated || text[reference.range.clone()].starts_with("![") {
+        let image = text[reference.range.clone()].starts_with("![");
+        if image && file.generated && place_image(file, &reference.label, &mut output) {
+            continue;
+        }
+        if file.generated || image {
             output.push_str(&escape_label(if reference.label.is_empty() {
                 &file.name
             } else {

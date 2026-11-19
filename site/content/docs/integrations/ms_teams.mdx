@@ -382,7 +382,7 @@ time_zone = "Europe/Berlin"
 
 ## Generated files and images
 
-After the answer, the bot posts each generated file in the same conversation. Small PNG, JPEG and single-frame GIF images appear inline. Documents and images over 1 MB or 1024 × 1024 pixels get a download action with the original filename. Source citations still open the authenticated Erato preview.
+When an answer embeds a generated PNG, JPEG or single-frame GIF in Markdown, Teams displays it at that point in the answer card. Images without a Markdown position appear after the answer. If the card exceeds the Teams message limit or Teams rejects it, the bot sends the text and images as separate activities. Documents and images over 1 MB or 1024 × 1024 pixels get a download action with the original filename. Source citations still open the authenticated Erato preview.
 
 Azure Blob and S3 objects stay private. Erato requests signed HTTPS read URLs valid for 24 hours. Anyone holding a URL can read the object until the signature or the signing credentials expire. SharePoint supplies its own expiry through delegated Microsoft Graph access.
 
