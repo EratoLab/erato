@@ -527,6 +527,7 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] Resetting streaming state on mount/chatId change.",
       );
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
     } else {
       logger.log(
@@ -797,6 +798,7 @@ export function useChatMessaging(
           logger.log(
             `[DEBUG_STREAMING] ${logContext}: Persisted assistant detected, resetting streaming state.`,
           );
+          endWaitTurn(effectiveStreamKey);
           store.resetStreaming(effectiveStreamKey);
         } else {
           logger.log(
@@ -873,6 +875,7 @@ export function useChatMessaging(
       const cleanupForStreamKey = getSSECleanupForKey(streamKey);
       cleanupForStreamKey?.();
       setSSECleanupForKey(streamKey, null);
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
       setSubmittingForKey(streamKey, false);
       return;
@@ -959,6 +962,7 @@ export function useChatMessaging(
 
       // Reset streaming state
       logger.log("SSE Cleanup: Calling resetStreaming.");
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
 
       // Clear error on unmount
@@ -1384,6 +1388,7 @@ export function useChatMessaging(
                 .getState()
                 .markTerminalLocal(activeStreamKey, "error");
             }
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
             setSubmittingForKey(activeStreamKey, false);
@@ -1446,6 +1451,7 @@ export function useChatMessaging(
       setHandoffSubmitKey((current) =>
         current === resumeStreamKey ? null : current,
       );
+      endWaitTurn(resumeStreamKey);
       resetStreaming(resumeStreamKey);
     },
     [isSubmittingForKey, resetStreaming, setSubmittingForKey],
@@ -1596,6 +1602,7 @@ export function useChatMessaging(
               logger.warn(
                 "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
               );
+              endWaitTurn(resumeStreamKey);
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream closed without completion (${reason})`,
@@ -1737,6 +1744,7 @@ export function useChatMessaging(
           [handoff.optimisticMessageId],
           handoff.streamKeyForDraft,
         );
+        endWaitTurn(handoff.streamKeyForDraft);
         resetStreaming(handoff.streamKeyForDraft);
       }
       return true;
@@ -1968,6 +1976,7 @@ export function useChatMessaging(
         if (!prepared || controller.signal.aborted) {
           // Nothing reached the server, so no refetch can restore these rows.
           removeUserMessages([userMessage.id], streamKey);
+          endWaitTurn(streamKey);
           resetStreaming(streamKey);
           if (silentChatId) {
             setAwaitingFirstStreamChunkForNewChat(false);
@@ -2278,6 +2287,7 @@ export function useChatMessaging(
               logger.log(
                 "[DEBUG_STREAMING] SSE onClose (unexpected): Resetting streaming state.",
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               clearPendingChat(activeStreamKey);
 
@@ -2324,6 +2334,7 @@ export function useChatMessaging(
         logger.log(
           "[DEBUG_STREAMING] sendMessage catch: Resetting streaming state.",
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         // Use the new utility for refetch and clear
@@ -2496,6 +2507,7 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(new Error("SSE connection closed unexpectedly (edit)"));
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Edit SSE closed unexpectedly",
@@ -2520,6 +2532,7 @@ export function useChatMessaging(
         setError(
           err instanceof Error ? err : new Error("Failed to edit message"),
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         void handleRefetchAndClear({ logContext: "Edit message error" });
@@ -2654,6 +2667,7 @@ export function useChatMessaging(
               setError(
                 new Error("SSE connection closed unexpectedly (regenerate)"),
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Regenerate SSE closed unexpectedly",
@@ -2680,6 +2694,7 @@ export function useChatMessaging(
             ? err
             : new Error("Failed to regenerate message"),
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         void handleRefetchAndClear({ logContext: "Regenerate message error" });
@@ -2867,6 +2882,7 @@ export function useChatMessaging(
       const rollBackUnaccepted = (activeStreamKey: string) => {
         setSSECleanupForKey(activeStreamKey, null);
         setSSEAbortCallback(null, activeStreamKey);
+        endWaitTurn(activeStreamKey);
         resetStreaming(activeStreamKey);
         setSubmittingForKey(activeStreamKey, false);
         if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
@@ -2891,7 +2907,7 @@ export function useChatMessaging(
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) {
         beginSpeechResponse(streamKey);
-        beginWaitTurn(streamKey);
+        beginWaitTurn(streamKey, { continuation: true });
       }
 
       return new Promise<void>((resolve, reject) => {
@@ -2990,6 +3006,7 @@ export function useChatMessaging(
               setError(
                 new Error("SSE connection closed unexpectedly (continue)"),
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Continue SSE closed unexpectedly",

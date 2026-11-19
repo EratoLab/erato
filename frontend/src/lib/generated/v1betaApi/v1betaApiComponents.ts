@@ -8466,9 +8466,18 @@ export const useStartingAssistant = <
   });
 };
 
+export type WaitLinesQueryParams = {
+  /**
+   * The `version` the caller already has.
+   */
+  known?: string;
+};
+
 export type WaitLinesError = Fetcher.ErrorWrapper<undefined>;
 
-export type WaitLinesVariables = V1betaApiContext["fetcherOptions"];
+export type WaitLinesVariables = {
+  queryParams?: WaitLinesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
 
 export const fetchWaitLines = (
   variables: WaitLinesVariables,
@@ -8479,7 +8488,7 @@ export const fetchWaitLines = (
     WaitLinesError,
     undefined,
     {},
-    {},
+    WaitLinesQueryParams,
     {}
   >({ url: "/api/v1beta/me/wait-lines", method: "get", ...variables, signal });
 

@@ -4,7 +4,7 @@ import { toolWaitLine } from "@/lib/waitLines/toolLine";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
 import { createPcmQueue, playbackContext } from "./pcmPlayback";
-import { takeSpeechEnd } from "./speechEnd";
+import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
   holdReplyAudio,
   onSpeechInterrupted,
@@ -43,7 +43,8 @@ interface Loaded {
   timing: WaitTiming;
   taperAfterTurns: number;
   language: string;
-  voice: string;
+  /** Changes with the voice, the words, the timings or the amount. */
+  version: string;
   clips: Record<"opener" | "opener_short" | "still" | "long", Clip[]>;
   tools: ToolLineTemplates;
 }
@@ -61,6 +62,10 @@ interface Turn {
   toolLines: Map<string, ToolLine>;
   /** Calls already looked at: one request per call at most. */
   toolsSeen: Set<string>;
+  /** The lines are confirmed for this turn: same voice as the answer. */
+  checked: boolean;
+  /** A continuation after a decision has no opener of its own. */
+  opener: boolean;
 }
 
 /** Speech that ended this long ago no longer belongs to the turn sent now. */
@@ -69,13 +74,6 @@ const SPEECH_END_FRESH_MS = 30_000;
 const AFTER_LINE_MS = 150;
 
 let loaded: Loaded | null = null;
-let loadedAt = 0;
-/**
- * Lines older than this are asked for again at the next turn, so a voice
- * changed while audio mode stays on reaches the lines too. The server keeps
- * them, so asking again costs nothing new.
- */
-const FRESH_FOR_MS = 5 * 60_000;
 let loading: Promise<Loaded | null> | null = null;
 let unsupported = false;
 let openersSaid = 0;
@@ -114,12 +112,13 @@ const fromResponse = (response: WaitLinesResponse): Loaded => {
       stillAfterMs: timing.still_after_ms,
       stillQuietMs: timing.still_quiet_ms,
       longAfterMs: timing.long_after_ms,
+      stillRepeatMs: timing.still_repeat_ms,
       minGapMs: timing.min_gap_ms,
       maxPerTurn: timing.max_per_turn,
     },
     taperAfterTurns: timing.taper_after_turns,
     language: response.language,
-    voice: response.voice,
+    version: response.version,
     clips,
     tools: {
       search: response.tools.search,
@@ -138,24 +137,30 @@ const statusOf = (error: unknown): number | undefined =>
     : undefined;
 
 /**
- * Asks for the lines again, as audio mode starts: a deployment that changed
- * its voice answers with a new `voice`, and the old lines are dropped, so
- * the lines always sound like the answers.
+ * Asks whether the lines still hold, and for new ones where they do not:
+ * the server answers `unchanged` for the version the browser has, without
+ * any audio. Asked when audio mode starts and again at every turn, so a
+ * deployment that changed its voice is never heard with lines in the old
+ * one, and a changed amount or timing applies from the next turn.
  */
 export function prepareWaitLines(): Promise<Loaded | null> {
   if (unsupported) return Promise.resolve(null);
-  loading ??= fetchWaitLines({})
+  loading ??= fetchWaitLines({
+    queryParams: loaded ? { known: loaded.version } : {},
+  })
     .then((response) => {
-      const next = fromResponse(response);
-      if (loaded?.voice !== next.voice) lastSaid.clear();
-      loaded = next;
-      loadedAt = Date.now();
+      if (response.unchanged && loaded?.version === response.version) {
+        return loaded;
+      }
+      lastSaid.clear();
+      loaded = fromResponse(response);
       return loaded;
     })
     .catch((error: unknown) => {
-      // No voice, or a backend without wait lines: nothing is said.
+      // No voice, or a backend without wait lines: nothing is said. Lines
+      // that could not be confirmed are not said in this turn either.
       if (statusOf(error) === 404) unsupported = true;
-      return loaded;
+      throw error;
     })
     .finally(() => {
       loading = null;
@@ -176,14 +181,24 @@ export function resetWaitLines() {
 
 /**
  * A turn whose answer is read back was sent on `streamKey`: the wait starts.
- * The user's words are known at this point, so nothing is due earlier.
+ * It counts from the end of the speech that became this turn, or from now
+ * for a continuation after a decision, never from an earlier utterance such
+ * as a command said to a card. A continuation has no opener: the decision
+ * was already acknowledged, by the card or by the voice.
  */
-export function beginWaitTurn(streamKey: string) {
+export function beginWaitTurn(
+  streamKey: string,
+  options: { continuation?: boolean } = {},
+) {
   stopWaitLines();
   const sent = now();
   const ended = takeSpeechEnd();
   const speechEndedAt =
-    ended !== undefined && sent - ended <= SPEECH_END_FRESH_MS ? ended : sent;
+    !options.continuation &&
+    ended !== undefined &&
+    sent - ended <= SPEECH_END_FRESH_MS
+      ? ended
+      : sent;
   turn = {
     streamKey,
     state: {
@@ -197,12 +212,20 @@ export function beginWaitTurn(streamKey: string) {
     },
     toolLines: new Map(),
     toolsSeen: new Set(),
+    checked: false,
+    opener: !options.continuation,
   };
   const current = turn;
-  const stale = !loaded || sent - loadedAt > FRESH_FOR_MS;
-  void (stale ? prepareWaitLines() : Promise.resolve(loaded)).then(() => {
-    if (turn === current) plan();
-  });
+  prepareWaitLines().then(
+    (lines) => {
+      if (turn !== current || !lines) return;
+      current.checked = true;
+      plan();
+    },
+    () => {
+      // Not confirmed: this turn says nothing.
+    },
+  );
 }
 
 const forTurn = (streamKey: string): Turn | null =>
@@ -338,6 +361,9 @@ export function stopWaitLines() {
 }
 
 onSpeechInterrupted(stopWaitLines);
+// Whatever ends a turn, nothing the voice says may play into a recording
+// without the echo-cancelling hold.
+onMicrophoneOpened(stopWaitLines);
 
 /** Whether a wait line is being said right now. */
 export function waitLinePlaying(): boolean {
@@ -380,10 +406,11 @@ function plan() {
   clearTimeout(timer);
   timer = undefined;
   const current = turn;
-  if (!current || !loaded) return;
+  if (!current || !loaded || !current.checked) return;
   const { state } = current;
   const unavailable: WaitLineKind[] = [];
-  if (loaded.clips[openerSlot()].length === 0) unavailable.push("opener");
+  if (!current.opener || loaded.clips[openerSlot()].length === 0)
+    unavailable.push("opener");
   if (loaded.clips.still.length === 0) unavailable.push("still");
   if (loaded.clips.long.length === 0) unavailable.push("long");
   state.unavailable = unavailable;
@@ -421,6 +448,7 @@ function plan() {
   state.said.push({
     kind: step.line,
     ...(step.line === "tool" ? { toolCallId: step.toolCallId } : {}),
+    ...(step.line === "still" && step.repeat ? { repeat: true } : {}),
     startedAt: now(),
   });
   if (step.line === "opener") openersSaid += 1;

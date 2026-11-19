@@ -253,19 +253,30 @@ fn lenient_wait_lines<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceWaitLines>, D::Error> {
     let value = serde_json::Value::deserialize(deserializer)?;
-    if value.is_null() {
+    let serde_json::Value::Object(fields) = value else {
+        if !value.is_null() {
+            tracing::warn!("An audience's wait_lines block is ignored: it is not a table");
+        }
         return Ok(None);
-    }
-    match AudienceWaitLines::deserialize(&value) {
-        Ok(lines) => Ok(Some(lines)),
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                "An audience's wait_lines block is ignored: it does not parse"
-            );
-            Ok(None)
+    };
+    // Each field on its own: a typo in one never drops a lock in another.
+    let mut lines = AudienceWaitLines::default();
+    for (key, value) in fields {
+        let parsed = match key.as_str() {
+            "amount" => serde_json::from_value(value).map(|amount| lines.amount = Some(amount)),
+            "user_choice" => {
+                serde_json::from_value(value).map(|choice| lines.user_choice = Some(choice))
+            }
+            _ => {
+                tracing::warn!(%key, "An audience's wait_lines field is not known and is ignored");
+                Ok(())
+            }
+        };
+        if let Err(error) = parsed {
+            tracing::warn!(%key, %error, "An audience's wait_lines field is ignored: it does not parse");
         }
     }
+    Ok(Some(lines))
 }
 
 /// A supervisor's choice for how an audience hears approval cards.
@@ -885,6 +896,42 @@ mod tests {
         )
         .unwrap();
         assert_eq!(document.priority_order, vec!["engineering"]);
+    }
+
+    #[test]
+    fn a_typo_in_one_wait_lines_field_keeps_the_others() {
+        let audience = |block: &str| {
+            let document = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "subjects": [{{"subject_type": "organization"}}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                            "wait_lines": {block}
+                        }}
+                    }},
+                    "priority_order": ["engineering"]
+                }}"#
+            ))
+            .unwrap_or_else(|error| panic!("{block}: {error}"));
+            document.audiences["engineering"].wait_lines.clone()
+        };
+        // The lock survives a misspelt amount.
+        assert_eq!(
+            audience(r#"{"amount": "loud", "user_choice": false}"#),
+            Some(AudienceWaitLines {
+                amount: None,
+                user_choice: Some(false),
+            })
+        );
+        assert_eq!(
+            audience(r#"{"amount": "long_only", "user_choice": "no", "volume": 3}"#),
+            Some(AudienceWaitLines {
+                amount: Some(erato_config::wait_lines::WaitLinesAmount::LongOnly),
+                user_choice: None,
+            })
+        );
+        assert_eq!(audience(r#""off""#), None);
     }
 
     #[test]

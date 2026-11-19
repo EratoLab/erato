@@ -13,7 +13,9 @@ use utoipa::ToSchema;
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
-use crate::spoken::is_language_tag;
+use crate::spoken::{Written, is_language_tag, written_table};
+use config::Config;
+use serde::Deserializer;
 
 /// How much the voice says while the user waits.
 #[derive(
@@ -61,11 +63,18 @@ pub struct WaitLinesConfig {
     /// allowed from `10000` to `120000`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub long_after_ms: u32,
+    /// After the long line, "still on it" again every this many
+    /// milliseconds until the turn ends. `0` says it no more. Defaults to
+    /// `18000`; allowed `0` or from `10000` to `60000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub still_repeat_ms: u32,
     /// From the end of one line to the start of the next. Defaults to
     /// `4000`; allowed from `1000` to `15000`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub min_gap_ms: u32,
-    /// Lines in one turn at most. Defaults to `3`; allowed from `0` to `5`.
+    /// Openers, tool lines and the first "still on it" in one turn at most;
+    /// the long line and the repeats after it are outside this cap. `0` says
+    /// nothing at all. Defaults to `3`; allowed from `0` to `5`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub max_per_turn: u32,
     /// After this many turns with an opener, the opener comes from the short
@@ -118,6 +127,7 @@ pub const TOOL_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 0..=10_000;
 pub const STILL_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 5000..=60_000;
 pub const STILL_QUIET_MS_RANGE: std::ops::RangeInclusive<u32> = 2000..=30_000;
 pub const LONG_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 10_000..=120_000;
+pub const STILL_REPEAT_MS_RANGE: std::ops::RangeInclusive<u32> = 10_000..=60_000;
 pub const MIN_GAP_MS_RANGE: std::ops::RangeInclusive<u32> = 1000..=15_000;
 pub const MAX_PER_TURN_RANGE: std::ops::RangeInclusive<u32> = 0..=5;
 pub const TAPER_AFTER_TURNS_RANGE: std::ops::RangeInclusive<u32> = 0..=50;
@@ -136,6 +146,7 @@ impl Default for WaitLinesConfig {
             still_after_ms: 12_000,
             still_quiet_ms: 8000,
             long_after_ms: 22_000,
+            still_repeat_ms: 18_000,
             min_gap_ms: 4000,
             max_per_turn: 3,
             taper_after_turns: 3,
@@ -288,6 +299,16 @@ impl WaitLinesConfig {
             defaults.taper_after_turns,
             &TAPER_AFTER_TURNS_RANGE,
         );
+        if self.still_repeat_ms != 0 && !STILL_REPEAT_MS_RANGE.contains(&self.still_repeat_ms) {
+            warnings.push(format!(
+                "`audio_conversational.wait_lines.still_repeat_ms` = {} is neither 0 nor from {} to {}; using the default {}.",
+                self.still_repeat_ms,
+                STILL_REPEAT_MS_RANGE.start(),
+                STILL_REPEAT_MS_RANGE.end(),
+                defaults.still_repeat_ms
+            ));
+            self.still_repeat_ms = defaults.still_repeat_ms;
+        }
         warnings
     }
 
@@ -307,7 +328,7 @@ impl WaitLinesConfig {
         });
         for (language, phrases) in &mut self.phrases {
             for slot in WaitLineSlot::ALL {
-                let Some(lines) = phrases.slot_mut(slot) else {
+                let Some(lines) = phrases.slot_mut(slot).as_mut() else {
                     continue;
                 };
                 lines.retain(|line| match line_problem(line) {
@@ -393,6 +414,169 @@ impl WaitLinesConfig {
     }
 }
 
+const PLACE: &str = "audio_conversational.wait_lines";
+const TIMINGS: &[&str] = &[
+    "first_after_ms",
+    "tool_after_ms",
+    "still_after_ms",
+    "still_quiet_ms",
+    "long_after_ms",
+    "still_repeat_ms",
+    "min_gap_ms",
+    "max_per_turn",
+    "taper_after_turns",
+];
+
+/// `[audio_conversational.wait_lines]` as written: a value of the wrong kind
+/// keeps its default and an unknown key is left out, each with a warning, so
+/// that one bad entry of a content package never stops a deployment.
+fn shaped_wait_lines(written: Written) -> (WaitLinesConfig, Vec<String>) {
+    let mut warnings = Vec::new();
+    let mut config = WaitLinesConfig::default();
+    let mut settings = written_table(PLACE, written, &mut warnings);
+    match settings.remove("amount") {
+        None => {}
+        Some(Written::Text(text)) => match text.as_str() {
+            "normal" => config.amount = WaitLinesAmount::Normal,
+            "long_only" => config.amount = WaitLinesAmount::LongOnly,
+            "off" => config.amount = WaitLinesAmount::Off,
+            _ => warnings.push(format!(
+                "{PLACE}.amount is not `normal`, `long_only` or `off`; the default is used"
+            )),
+        },
+        Some(_) => warnings.push(format!(
+            "{PLACE}.amount is not `normal`, `long_only` or `off`; the default is used"
+        )),
+    }
+    for key in TIMINGS {
+        let Some(value) = settings.remove(*key) else {
+            continue;
+        };
+        let slot = match *key {
+            "first_after_ms" => &mut config.first_after_ms,
+            "tool_after_ms" => &mut config.tool_after_ms,
+            "still_after_ms" => &mut config.still_after_ms,
+            "still_quiet_ms" => &mut config.still_quiet_ms,
+            "long_after_ms" => &mut config.long_after_ms,
+            "still_repeat_ms" => &mut config.still_repeat_ms,
+            "min_gap_ms" => &mut config.min_gap_ms,
+            "max_per_turn" => &mut config.max_per_turn,
+            _ => &mut config.taper_after_turns,
+        };
+        match value {
+            Written::Number(number) if u32::try_from(number).is_ok() => {
+                *slot = u32::try_from(number).unwrap_or(*slot);
+            }
+            _ => warnings.push(format!(
+                "{PLACE}.{key} is not a whole number; the default is used"
+            )),
+        }
+    }
+    match settings.remove("user_choice") {
+        None => {}
+        Some(Written::Flag(flag)) => config.user_choice = flag,
+        Some(_) => warnings.push(format!(
+            "{PLACE}.user_choice is not `true` or `false`; the default is used"
+        )),
+    }
+    if let Some(languages) = settings.remove("phrases") {
+        let place = format!("{PLACE}.phrases");
+        for (language, slots) in written_table(&place, languages, &mut warnings) {
+            let place = format!("{place}.{language}");
+            let mut slots = written_table(&place, slots, &mut warnings);
+            let mut phrases = WaitLinePhrasesConfig::default();
+            for slot in WaitLineSlot::ALL {
+                let Some(value) = slots.remove(slot.name()) else {
+                    continue;
+                };
+                let place = format!("{place}.{}", slot.name());
+                let lines = match value {
+                    Written::List(items) => items
+                        .into_iter()
+                        .filter_map(|item| match item {
+                            Written::Text(text) => Some(text),
+                            _ => {
+                                warnings.push(format!(
+                                    "{place}: an entry is not a text and is ignored"
+                                ));
+                                None
+                            }
+                        })
+                        .collect(),
+                    _ => {
+                        warnings.push(format!("{place} is not a list of lines and is ignored"));
+                        continue;
+                    }
+                };
+                *phrases.slot_mut(slot) = Some(lines);
+            }
+            let mut unknown: Vec<String> = slots.into_keys().collect();
+            unknown.sort();
+            for key in unknown {
+                warnings.push(format!("{place}.{key} is not a known slot and is ignored"));
+            }
+            config.phrases.insert(language, phrases);
+        }
+    }
+    if let Some(languages) = settings.remove("tools") {
+        let place = format!("{PLACE}.tools");
+        for (language, templates) in written_table(&place, languages, &mut warnings) {
+            let place = format!("{place}.{language}");
+            let mut templates = written_table(&place, templates, &mut warnings);
+            let mut tools = WaitLineToolsConfig::default();
+            for (name, target) in [
+                ("search", &mut tools.search),
+                ("items", &mut tools.items),
+                ("list", &mut tools.list),
+            ] {
+                match templates.remove(name) {
+                    None => {}
+                    Some(Written::Text(text)) => *target = Some(text),
+                    Some(_) => {
+                        warnings.push(format!("{place}.{name} is not a text and is ignored"))
+                    }
+                }
+            }
+            let mut unknown: Vec<String> = templates.into_keys().collect();
+            unknown.sort();
+            for key in unknown {
+                warnings.push(format!(
+                    "{place}.{key} is not a known template and is ignored"
+                ));
+            }
+            config.tools.insert(language, tools);
+        }
+    }
+    let mut unknown: Vec<String> = settings.into_keys().collect();
+    unknown.sort();
+    for key in unknown {
+        warnings.push(format!(
+            "{PLACE}.{key} is not known to this Erato version and is ignored"
+        ));
+    }
+    warnings.sort();
+    (config, warnings)
+}
+
+/// Reads `[audio_conversational.wait_lines]` keeping the default for every
+/// value of the wrong kind; [`misshaped_wait_lines`] names them.
+pub fn deserialize_wait_lines<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Box<WaitLinesConfig>, D::Error> {
+    Ok(Box::new(
+        shaped_wait_lines(Written::deserialize(deserializer)?).0,
+    ))
+}
+
+/// What the loader replaced or left out of `[audio_conversational.wait_lines]`
+/// for its kind or name, sorted.
+pub fn misshaped_wait_lines(schema: &Config) -> Vec<String> {
+    schema
+        .get::<Written>(PLACE)
+        .map(|written| shaped_wait_lines(written).1)
+        .unwrap_or_default()
+}
+
 impl WaitLinePhrasesConfig {
     fn slot(&self, slot: WaitLineSlot) -> Option<&Vec<String>> {
         match slot {
@@ -403,12 +587,12 @@ impl WaitLinePhrasesConfig {
         }
     }
 
-    fn slot_mut(&mut self, slot: WaitLineSlot) -> Option<&mut Vec<String>> {
+    fn slot_mut(&mut self, slot: WaitLineSlot) -> &mut Option<Vec<String>> {
         match slot {
-            WaitLineSlot::Opener => self.opener.as_mut(),
-            WaitLineSlot::OpenerShort => self.opener_short.as_mut(),
-            WaitLineSlot::Still => self.still.as_mut(),
-            WaitLineSlot::Long => self.long.as_mut(),
+            WaitLineSlot::Opener => &mut self.opener,
+            WaitLineSlot::OpenerShort => &mut self.opener_short,
+            WaitLineSlot::Still => &mut self.still,
+            WaitLineSlot::Long => &mut self.long,
         }
     }
 }
@@ -499,15 +683,85 @@ mod tests {
         assert_eq!(config.set_for("en"), WaitLineSet::default());
     }
 
+    fn shaped(value: serde_json::Value) -> (WaitLinesConfig, Vec<String>) {
+        shaped_wait_lines(Written::deserialize(value).unwrap())
+    }
+
+    #[test]
+    fn a_wrong_kind_or_an_unknown_key_warns_instead_of_stopping() {
+        let (config, warnings) = shaped(serde_json::json!({
+            "amount": "loud",
+            "first_after_ms": "3000",
+            "oppener": ["Moment."],
+            "still_repeat_ms": 0,
+            "phrases": {
+                "de": {
+                    "opener": "Einen Moment.",
+                    "still": ["Ich bin noch dran.", 7],
+                    "oppener": ["Moment."]
+                }
+            },
+            "tools": { "de": { "list": 3, "lists": "x" } }
+        }));
+        assert_eq!(config.amount, WaitLinesAmount::Normal);
+        assert_eq!(config.first_after_ms, 3000);
+        assert_eq!(config.still_repeat_ms, 0);
+        let de = &config.phrases["de"];
+        assert_eq!(de.opener, None);
+        assert_eq!(
+            de.still.as_deref(),
+            Some(&["Ich bin noch dran.".to_string()][..])
+        );
+        assert_eq!(config.tools["de"].list, None);
+        for expected in [
+            "wait_lines.amount",
+            "wait_lines.first_after_ms",
+            "wait_lines.oppener",
+            "phrases.de.opener is not a list",
+            "phrases.de.still: an entry",
+            "phrases.de.oppener",
+            "tools.de.list is not a text",
+            "tools.de.lists",
+        ] {
+            assert!(
+                warnings.iter().any(|warning| warning.contains(expected)),
+                "{expected}: {warnings:?}"
+            );
+        }
+        assert_eq!(warnings.len(), 8, "{warnings:?}");
+    }
+
+    #[test]
+    fn a_well_formed_block_reads_as_written() {
+        let (config, warnings) = shaped(serde_json::json!({
+            "amount": "long_only",
+            "max_per_turn": 2,
+            "user_choice": false,
+            "phrases": { "en": { "long": ["This is taking a while."] } },
+            "tools": { "en": { "search": "Searching for {search}." } }
+        }));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(config.amount, WaitLinesAmount::LongOnly);
+        assert_eq!(config.max_per_turn, 2);
+        assert!(!config.user_choice);
+        assert_eq!(config.set_for("en").lines.len(), 1);
+        assert_eq!(
+            config.set_for("en").search.as_deref(),
+            Some("Searching for {search}.")
+        );
+    }
+
     #[test]
     fn a_timing_out_of_range_falls_back_to_its_default() {
         let mut config = WaitLinesConfig {
             first_after_ms: 200,
             max_per_turn: 9,
+            still_repeat_ms: 5000,
             ..Default::default()
         };
         let warnings = config.fall_back_out_of_range();
-        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(config.still_repeat_ms, 18_000);
         assert_eq!(config.first_after_ms, 3000);
         assert_eq!(config.max_per_turn, 3);
     }

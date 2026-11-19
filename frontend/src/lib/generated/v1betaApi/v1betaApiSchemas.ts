@@ -6248,12 +6248,22 @@ export type WaitLinesResponse = {
   timing: WaitLinesTiming;
   tools: WaitLineToolTemplates;
   /**
+   * The caller already has this `version`: `lines` is left empty and
+   * nothing is synthesised.
+   */
+  unchanged: boolean;
+  /**
    * Whether the caller may choose their own amount.
    */
   user_choice: boolean;
   /**
-   * Changes whenever the voice that says the lines changes: a client
-   * keeps lines only as long as this stays the same.
+   * Changes whenever anything here changes: the voice, the language, the
+   * words, the timings or the amount. A client keeps its lines only as
+   * long as this stays the same.
+   */
+  version: string;
+  /**
+   * Changes whenever the voice that says the lines changes.
    */
   voice: string;
 };
@@ -6302,6 +6312,13 @@ export type WaitLinesTiming = {
    * @minimum 0
    */
   still_quiet_ms: number;
+  /**
+   * After the long line, between "still on it" lines; `0` says it no more.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_ms: number;
   /**
    * Turns with an opener before the opener comes from the short set; `0`
    * never shortens.

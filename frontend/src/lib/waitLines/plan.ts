@@ -3,7 +3,8 @@
  * has happened in the turn so far. Pure: the player asks again after every
  * event and when the returned time comes.
  *
- * Rules (times from the end of the user's speech):
+ * Rules (times from the start of the wait: the end of the user's speech
+ * that became the turn, or the tap that started a continuation):
  * - Nothing once the answer has started or the turn has ended.
  * - The opener when `firstAfterMs` has passed and the transcript is back,
  *   only as the turn's first line and only in the `normal` amount.
@@ -11,7 +12,10 @@
  *   ready; never after the call ended.
  * - "Still on it" from `stillAfterMs`, once nothing was said for
  *   `stillQuietMs`; "this takes longer" from `longAfterMs`.
- * - At most `maxPerTurn` lines, `minGapMs` apart, one at a time.
+ * - At most `maxPerTurn` of the opener, tool and first "still" lines. The
+ *   long line is outside that cap, so a long wait always hears it; after it,
+ *   "still on it" again every `stillRepeatMs` until the turn ends.
+ * - Lines `minGapMs` apart, one at a time. `maxPerTurn` 0 says nothing.
  */
 
 export type WaitAmount = "normal" | "long_only" | "off";
@@ -22,6 +26,8 @@ export interface WaitTiming {
   stillAfterMs: number;
   stillQuietMs: number;
   longAfterMs: number;
+  /** After the long line, between "still on it" lines; 0 says it no more. */
+  stillRepeatMs: number;
   minGapMs: number;
   maxPerTurn: number;
 }
@@ -31,6 +37,8 @@ export type WaitLineKind = "opener" | "tool" | "still" | "long";
 export interface SaidLine {
   kind: WaitLineKind;
   toolCallId?: string;
+  /** A "still on it" said again after the long line. */
+  repeat?: boolean;
   startedAt: number;
   /** Absent while it plays. */
   endedAt?: number;
@@ -45,6 +53,7 @@ export interface WaitTool {
 }
 
 export interface WaitTurnState {
+  /** When the wait began: the end of the speech, or the tap. */
   speechEndedAt: number;
   /** When the user's words were sent; nothing is said before. */
   transcriptAt: number;
@@ -57,7 +66,8 @@ export interface WaitTurnState {
 }
 
 export type WaitStep =
-  | { kind: "say"; line: Exclude<WaitLineKind, "tool"> }
+  | { kind: "say"; line: "opener" | "long" }
+  | { kind: "say"; line: "still"; repeat: boolean }
   | { kind: "say"; line: "tool"; toolCallId: string }
   | { kind: "wake"; at: number }
   /** A line plays, or a tool line is still loading: ask again on the event. */
@@ -70,10 +80,14 @@ export function nextWaitStep(
   turn: WaitTurnState,
   now: number,
 ): WaitStep {
-  if (amount === "off" || turn.answerStarted || turn.ended) {
+  if (
+    amount === "off" ||
+    timing.maxPerTurn <= 0 ||
+    turn.answerStarted ||
+    turn.ended
+  ) {
     return { kind: "done" };
   }
-  if (turn.said.length >= timing.maxPerTurn) return { kind: "done" };
   if (turn.said.some((line) => line.endedAt === undefined)) {
     return { kind: "wait" };
   }
@@ -82,25 +96,35 @@ export function nextWaitStep(
     ...turn.said.map((line) => line.endedAt ?? -Infinity),
   );
   const gapReady = lastEnd + timing.minGapMs;
-  const saidKind = (kind: WaitLineKind) =>
-    turn.said.some((line) => line.kind === kind);
   const usable = (kind: WaitLineKind) => !turn.unavailable.includes(kind);
+  const longSaid = turn.said.some((line) => line.kind === "long");
+  const capped = turn.said.filter(
+    (line) => line.kind !== "long" && !line.repeat,
+  ).length;
+  const underCap = capped < timing.maxPerTurn;
 
   const due: { step: WaitStep; at: number }[] = [];
   let toolLoading = false;
-  for (const tool of turn.tools) {
-    if (tool.endedAt !== undefined || !usable("tool")) continue;
-    if (turn.said.some((line) => line.toolCallId === tool.id)) continue;
-    if (!tool.ready) {
-      toolLoading = true;
-      continue;
+  if (underCap && usable("tool")) {
+    for (const tool of turn.tools) {
+      if (tool.endedAt !== undefined) continue;
+      if (turn.said.some((line) => line.toolCallId === tool.id)) continue;
+      if (!tool.ready) {
+        toolLoading = true;
+        continue;
+      }
+      due.push({
+        step: { kind: "say", line: "tool", toolCallId: tool.id },
+        at: Math.max(tool.startedAt + timing.toolAfterMs, gapReady),
+      });
     }
-    due.push({
-      step: { kind: "say", line: "tool", toolCallId: tool.id },
-      at: Math.max(tool.startedAt + timing.toolAfterMs, gapReady),
-    });
   }
-  if (amount === "normal" && turn.said.length === 0 && usable("opener")) {
+  if (
+    underCap &&
+    amount === "normal" &&
+    turn.said.length === 0 &&
+    usable("opener")
+  ) {
     due.push({
       step: { kind: "say", line: "opener" },
       at: Math.max(
@@ -110,9 +134,14 @@ export function nextWaitStep(
       ),
     });
   }
-  if (!saidKind("still") && usable("still")) {
+  if (
+    underCap &&
+    !longSaid &&
+    !turn.said.some((line) => line.kind === "still") &&
+    usable("still")
+  ) {
     due.push({
-      step: { kind: "say", line: "still" },
+      step: { kind: "say", line: "still", repeat: false },
       at: Math.max(
         turn.speechEndedAt + timing.stillAfterMs,
         lastEnd + timing.stillQuietMs,
@@ -120,10 +149,16 @@ export function nextWaitStep(
       ),
     });
   }
-  if (!saidKind("long") && usable("long")) {
+  if (!longSaid && usable("long")) {
     due.push({
       step: { kind: "say", line: "long" },
       at: Math.max(turn.speechEndedAt + timing.longAfterMs, gapReady),
+    });
+  }
+  if (longSaid && timing.stillRepeatMs > 0 && usable("still")) {
+    due.push({
+      step: { kind: "say", line: "still", repeat: true },
+      at: Math.max(lastEnd + timing.stillRepeatMs, gapReady),
     });
   }
 

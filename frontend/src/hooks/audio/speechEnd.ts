@@ -15,3 +15,18 @@ export function takeSpeechEnd(): number | undefined {
   endedAt = undefined;
   return at;
 }
+
+const openListeners = new Set<() => void>();
+
+/**
+ * The recorder opens the microphone without the echo-cancelling hold used
+ * over the voice. Nothing the voice says may play into such a recording.
+ */
+export function microphoneOpened() {
+  for (const listener of openListeners) listener();
+}
+
+export function onMicrophoneOpened(listener: () => void): () => void {
+  openListeners.add(listener);
+  return () => openListeners.delete(listener);
+}

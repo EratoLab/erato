@@ -10,6 +10,7 @@ const timing: WaitTiming = {
   stillAfterMs: 12000,
   stillQuietMs: 8000,
   longAfterMs: 22000,
+  stillRepeatMs: 18000,
   minGapMs: 4000,
   maxPerTurn: 3,
 };
@@ -64,6 +65,7 @@ describe("nextWaitStep", () => {
     expect(nextWaitStep("long_only", timing, turn(), 12000)).toEqual({
       kind: "say",
       line: "still",
+      repeat: false,
     });
   });
 
@@ -111,17 +113,63 @@ describe("nextWaitStep", () => {
     });
   });
 
-  it("stops at the cap", () => {
+  it("keeps the long line outside the cap", () => {
     const full = turn({
       said: [
         { kind: "opener", startedAt: 3200, endedAt: 4000 },
         { kind: "tool", toolCallId: "b", startedAt: 9900, endedAt: 11600 },
         { kind: "tool", toolCallId: "c", startedAt: 15700, endedAt: 17000 },
       ],
+      tools: [{ id: "d", startedAt: 17500, ready: true }],
     });
-    expect(nextWaitStep("normal", timing, full, 30000)).toEqual({
-      kind: "done",
+    // The cap holds back a fourth tool line, never the long line.
+    expect(nextWaitStep("normal", timing, full, 21500)).toEqual({
+      kind: "wake",
+      at: 22000,
     });
+    expect(nextWaitStep("normal", timing, full, 22000)).toEqual({
+      kind: "say",
+      line: "long",
+    });
+  });
+
+  it("says still on it again after the long line until the turn ends", () => {
+    const long = turn({
+      said: [
+        { kind: "opener", startedAt: 3200, endedAt: 4000 },
+        { kind: "still", startedAt: 12000, endedAt: 12800 },
+        { kind: "long", startedAt: 22000, endedAt: 25000 },
+      ],
+    });
+    expect(nextWaitStep("normal", timing, long, 26000)).toEqual({
+      kind: "wake",
+      at: 43000,
+    });
+    expect(nextWaitStep("normal", timing, long, 43000)).toEqual({
+      kind: "say",
+      line: "still",
+      repeat: true,
+    });
+    const again = turn({
+      ...long,
+      said: [
+        ...long.said,
+        { kind: "still", repeat: true, startedAt: 43000, endedAt: 44000 },
+      ],
+    });
+    expect(nextWaitStep("normal", timing, again, 50000)).toEqual({
+      kind: "wake",
+      at: 62000,
+    });
+    expect(
+      nextWaitStep("normal", { ...timing, stillRepeatMs: 0 }, long, 60000),
+    ).toEqual({ kind: "done" });
+  });
+
+  it("says nothing at all with a cap of 0", () => {
+    expect(
+      nextWaitStep("normal", { ...timing, maxPerTurn: 0 }, turn(), 30000),
+    ).toEqual({ kind: "done" });
   });
 
   it("waits for a tool line that is still loading", () => {

@@ -54,6 +54,21 @@ describe("toolWaitLine", () => {
     expect(
       toolWaitLine(search, "de", { ...templates, search: undefined }),
     ).toBeUndefined();
+    // A long search text would hold the answer back: no line.
+    const long = {
+      action: "other",
+      object_kind: "row",
+      source: "rules",
+      read: {
+        object_kind: "row",
+        item: {
+          title: {
+            values: [{ text: "Keller Maschinenbau GmbH Werk Süd Halle drei" }],
+          },
+        },
+      },
+    } as unknown as ToolCallLabel;
+    expect(toolWaitLine(long, "de", templates)).toBeUndefined();
   });
 
   it("says nothing for a call that writes", () => {

@@ -457,6 +457,17 @@ async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Po
     assert_eq!(again["lines"], first["lines"]);
     assert_eq!(speech.requests.load(Ordering::SeqCst), said);
 
+    // A caller that already has this version is told so, without audio.
+    let version = first["version"].as_str().unwrap();
+    let known: Value = server
+        .get(&format!("/api/v1beta/me/wait-lines?known={version}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(known["unchanged"], true);
+    assert_eq!(known["version"], first["version"]);
+    assert_eq!(known["lines"], json!([]));
+
     // The user's own amount applies, since the deployment lets them choose.
     server
         .put("/api/v1beta/me/profile/preferences")
@@ -472,6 +483,9 @@ async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Po
     assert_eq!(off["amount"], "off");
     assert_eq!(off["source"], "user");
     assert_eq!(off["lines"], json!([]));
+    // The amount is part of the version, so an open session sees the change
+    // at its next turn.
+    assert_ne!(off["version"], first["version"]);
     server
         .put("/api/v1beta/me/profile/preferences")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -541,4 +555,50 @@ async fn progress_speech_speaks_only_while_the_users_answer_is_generated(pool: P
     );
     app.abort();
     speech.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_voice_that_fails_is_not_asked_again_for_a_minute(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(None).await;
+    let requests = Arc::new(AtomicUsize::new(0));
+    let counter = requests.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let voice = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route(
+                "/audio/speech",
+                post(move || {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        Response::builder()
+                            .status(500)
+                            .body(Body::from("broken"))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    enable_conversational_voice(&mut app_config, &url);
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state);
+    let ask = || async {
+        let lines: Value = server
+            .get("/api/v1beta/me/wait-lines")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json();
+        lines
+    };
+    assert_eq!(ask().await["lines"], json!([]));
+    let tried = requests.load(Ordering::SeqCst);
+    assert!(tried > 0);
+    // Asked again within the minute: the voice is not tried again.
+    assert_eq!(ask().await["lines"], json!([]));
+    assert_eq!(requests.load(Ordering::SeqCst), tried);
+    voice.abort();
 }

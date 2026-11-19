@@ -55,7 +55,7 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
-import { markSpeechEnded } from "./speechEnd";
+import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
   overVoiceStep,
@@ -1109,6 +1109,7 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      if (hold === null) microphoneOpened();
 
       const mediaDevices =
         typeof navigator === "undefined"

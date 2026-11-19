@@ -56,12 +56,15 @@ const response = (
   user_choice: true,
   language: "de",
   voice: "v1",
+  version: "v1-lines",
+  unchanged: false,
   timing: {
     first_after_ms: 3000,
     tool_after_ms: 1500,
     still_after_ms: 12000,
     still_quiet_ms: 8000,
     long_after_ms: 22000,
+    still_repeat_ms: 18000,
     min_gap_ms: 4000,
     max_per_turn: 3,
     taper_after_turns: 3,
@@ -252,11 +255,111 @@ describe("wait lines", () => {
     expect(sse).toHaveBeenCalledOnce();
   });
 
-  it("drops lines when the voice changes", async () => {
-    const { lines } = await setup();
-    fetchWaitLines.mockResolvedValue(response({ voice: "v2", lines: [] }));
+  it("asks at every turn and takes new lines when the voice changed", async () => {
+    const { playback, lines } = await setup();
+    fetchWaitLines.mockClear();
+    fetchWaitLines.mockResolvedValue(
+      response({
+        voice: "v2",
+        version: "v2-lines",
+        lines: [
+          {
+            slot: "opener",
+            text: "Neue Stimme.",
+            audio: "BQYHCA==",
+            sample_rate: 24000,
+          },
+        ],
+      }),
+    );
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    expect(fetchWaitLines).toHaveBeenCalledWith({
+      queryParams: { known: "v1-lines" },
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
     const next = await lines.prepareWaitLines();
-    expect(next?.voice).toBe("v2");
-    expect(next?.clips.opener).toHaveLength(0);
+    expect(next?.version).toBe("v2-lines");
+    expect(next?.clips.opener.map((clip) => clip.text)).toEqual([
+      "Neue Stimme.",
+    ]);
+  });
+
+  it("keeps its lines when the server says they are unchanged", async () => {
+    const { lines } = await setup();
+    fetchWaitLines.mockResolvedValue(response({ unchanged: true, lines: [] }));
+    const next = await lines.prepareWaitLines();
+    expect(next?.clips.opener).toHaveLength(1);
+  });
+
+  it("says nothing in a turn whose lines could not be confirmed", async () => {
+    const { playback, lines } = await setup();
+    fetchWaitLines.mockRejectedValue(new Error("offline"));
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("says nothing after a stream that closed without completing", async () => {
+    const { playback, lines } = await setup();
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
+    endSources();
+    await vi.advanceTimersByTimeAsync(200);
+    // The stream closes on its own; the chat shows the error.
+    lines.endWaitTurn("s");
+    sources.length = 0;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(sources).toHaveLength(0);
+    expect(playback.useSpeechPlayback.getState().playing).toBe(false);
+  });
+
+  it("never plays into a recording opened without the echo-cancelling hold", async () => {
+    const { playback, lines } = await setup();
+    const speechEnd = await import("./speechEnd");
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
+    const playing = sources[0] as unknown as { stop: ReturnType<typeof vi.fn> };
+    speechEnd.microphoneOpened();
+    // The line is silenced at once, and nothing more is said.
+    expect(playing.stop).toHaveBeenCalled();
+    expect(lines.waitLinePlaying()).toBe(false);
+    sources.length = 0;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("counts a continuation from its start, without an opener", async () => {
+    const { playback, lines } = await setup({
+      lines: [
+        {
+          slot: "opener",
+          text: "Einen Moment.",
+          audio: "AQIDBA==",
+          sample_rate: 24000,
+        },
+        {
+          slot: "long",
+          text: "Das dauert gerade länger.",
+          audio: "AQIDBA==",
+          sample_rate: 24000,
+        },
+      ],
+    });
+    const speechEnd = await import("./speechEnd");
+    // A command said to a card 25 s before the tap.
+    speechEnd.markSpeechEnded(Date.now() - 25000);
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true });
+    await vi.advanceTimersByTimeAsync(21000);
+    expect(sources).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(sources).toHaveLength(1);
   });
 });

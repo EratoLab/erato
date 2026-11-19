@@ -21,7 +21,7 @@ use crate::services::speech::{self, CompleteAudio};
 use crate::state::AppState;
 use axum::{
     Extension, Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Response,
 };
@@ -56,6 +56,8 @@ pub struct WaitLinesTiming {
     /// Silence before the "still on it" line, from the end of the last line.
     pub still_quiet_ms: u32,
     pub long_after_ms: u32,
+    /// After the long line, between "still on it" lines; `0` says it no more.
+    pub still_repeat_ms: u32,
     /// From the end of one line to the start of the next.
     pub min_gap_ms: u32,
     pub max_per_turn: u32,
@@ -103,9 +105,15 @@ pub struct WaitLinesResponse {
     /// The language the lines are in: the language the voice speaks to the
     /// caller.
     pub language: String,
-    /// Changes whenever the voice that says the lines changes: a client
-    /// keeps lines only as long as this stays the same.
+    /// Changes whenever the voice that says the lines changes.
     pub voice: String,
+    /// Changes whenever anything here changes: the voice, the language, the
+    /// words, the timings or the amount. A client keeps its lines only as
+    /// long as this stays the same.
+    pub version: String,
+    /// The caller already has this `version`: `lines` is left empty and
+    /// nothing is synthesised.
+    pub unchanged: bool,
     pub timing: WaitLinesTiming,
     /// Empty when the amount is `off`, in a language without lines, or when
     /// the voice could not say them.
@@ -187,12 +195,58 @@ pub fn voice_fingerprint(provider_id: &str, config: &SpeechProviderConfig) -> St
         .collect()
 }
 
+/// The version of what a caller hears: everything the response holds,
+/// except the audio, which follows from the voice and the words.
+fn version_of(
+    voice: &str,
+    language: &str,
+    amount: WaitLinesAmount,
+    timing: &WaitLinesTiming,
+    set: &erato_config::wait_lines::WaitLineSet,
+) -> String {
+    let mut hasher = Sha256::new();
+    let parts = serde_json::json!([
+        voice,
+        language,
+        amount,
+        [
+            timing.first_after_ms,
+            timing.tool_after_ms,
+            timing.still_after_ms,
+            timing.still_quiet_ms,
+            timing.long_after_ms,
+            timing.still_repeat_ms,
+            timing.min_gap_ms,
+            timing.max_per_turn,
+            timing.taper_after_turns,
+        ],
+        set.lines,
+        [&set.search, &set.items, &set.list],
+    ]);
+    hasher.update(parts.to_string().as_bytes());
+    hasher
+        .finalize()
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 /// Lines said once are kept per voice, language and text. A changed voice
 /// has a new fingerprint, so its old lines are never played and age out.
 static CLIPS: LazyLock<moka::future::Cache<String, Arc<CompleteAudio>>> = LazyLock::new(|| {
     moka::future::Cache::builder()
         .max_capacity(512)
         .time_to_idle(Duration::from_secs(7 * 24 * 3600))
+        .build()
+});
+
+/// A line the voice could not say is not asked for again for a minute, so a
+/// broken provider is not asked for every line at every turn.
+static FAILED: LazyLock<moka::future::Cache<String, ()>> = LazyLock::new(|| {
+    moka::future::Cache::builder()
+        .max_capacity(512)
+        .time_to_live(Duration::from_secs(60))
         .build()
 });
 
@@ -207,8 +261,13 @@ async fn clip(
     text: &str,
 ) -> Result<Arc<CompleteAudio>, Arc<eyre::Report>> {
     let key = format!("{voice}\n{language}\n{text}");
-    CLIPS
-        .try_get_with(key, async {
+    if FAILED.contains_key(&key) {
+        return Err(Arc::new(eyre::eyre!(
+            "The voice failed on this line less than a minute ago"
+        )));
+    }
+    let result = CLIPS
+        .try_get_with(key.clone(), async {
             let provider = speech::provider(config)?;
             let audio = tokio::time::timeout(SYNTHESIS_TIMEOUT, provider.synthesize(text))
                 .await
@@ -216,7 +275,19 @@ async fn clip(
             let _ = provider.finish().await;
             Ok::<_, eyre::Report>(Arc::new(audio?))
         })
-        .await
+        .await;
+    if result.is_err() {
+        FAILED.insert(key, ()).await;
+    }
+    result
+}
+
+#[derive(Debug, Deserialize, utoipa::IntoParams)]
+pub struct WaitLinesQuery {
+    /// The `version` the caller already has.
+    #[serde(default)]
+    #[param(required = false)]
+    pub known: String,
 }
 
 /// What the voice says while the caller waits, and the audio of its fixed
@@ -224,6 +295,7 @@ async fn clip(
 #[utoipa::path(
     get,
     path = "/me/wait-lines",
+    params(WaitLinesQuery),
     responses(
         (status = OK, body = WaitLinesResponse),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
@@ -234,6 +306,7 @@ async fn clip(
 pub async fn wait_lines(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Query(query): Query<WaitLinesQuery>,
 ) -> Result<Json<WaitLinesResponse>, StatusCode> {
     let Some((provider_id, provider_config)) = app_state.config.conversational_speech_provider()
     else {
@@ -252,7 +325,20 @@ pub async fn wait_lines(
     let language = speech_language(&me_user).code().to_string();
     let voice = voice_fingerprint(provider_id, provider_config);
     let set = config.set_for(&language);
-    let lines = if amount == WaitLinesAmount::Off {
+    let timing = WaitLinesTiming {
+        first_after_ms: config.first_after_ms,
+        tool_after_ms: config.tool_after_ms,
+        still_after_ms: config.still_after_ms,
+        still_quiet_ms: config.still_quiet_ms,
+        long_after_ms: config.long_after_ms,
+        still_repeat_ms: config.still_repeat_ms,
+        min_gap_ms: config.min_gap_ms,
+        max_per_turn: config.max_per_turn,
+        taper_after_turns: config.taper_after_turns,
+    };
+    let version = version_of(&voice, &language, amount, &timing, &set);
+    let unchanged = query.known == version;
+    let lines = if amount == WaitLinesAmount::Off || unchanged {
         Vec::new()
     } else {
         let provider_config = Arc::new(provider_config.clone());
@@ -289,16 +375,9 @@ pub async fn wait_lines(
         user_choice,
         language,
         voice,
-        timing: WaitLinesTiming {
-            first_after_ms: config.first_after_ms,
-            tool_after_ms: config.tool_after_ms,
-            still_after_ms: config.still_after_ms,
-            still_quiet_ms: config.still_quiet_ms,
-            long_after_ms: config.long_after_ms,
-            min_gap_ms: config.min_gap_ms,
-            max_per_turn: config.max_per_turn,
-            taper_after_turns: config.taper_after_turns,
-        },
+        version,
+        unchanged,
+        timing,
         lines,
         tools: WaitLineToolTemplates {
             search: set.search,

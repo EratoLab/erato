@@ -4751,6 +4751,17 @@
         ],
         "summary": "What the voice says while the caller waits, and the audio of its fixed\nlines in the caller's language.",
         "operationId": "wait_lines",
+        "parameters": [
+          {
+            "name": "known",
+            "in": "query",
+            "description": "The `version` the caller already has.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -16545,6 +16556,8 @@
           "user_choice",
           "language",
           "voice",
+          "version",
+          "unchanged",
           "timing",
           "lines",
           "tools"
@@ -16578,13 +16591,21 @@
           "tools": {
             "$ref": "#/components/schemas/WaitLineToolTemplates"
           },
+          "unchanged": {
+            "type": "boolean",
+            "description": "The caller already has this `version`: `lines` is left empty and\nnothing is synthesised."
+          },
           "user_choice": {
             "type": "boolean",
             "description": "Whether the caller may choose their own amount."
           },
+          "version": {
+            "type": "string",
+            "description": "Changes whenever anything here changes: the voice, the language, the\nwords, the timings or the amount. A client keeps its lines only as\nlong as this stays the same."
+          },
           "voice": {
             "type": "string",
-            "description": "Changes whenever the voice that says the lines changes: a client\nkeeps lines only as long as this stays the same."
+            "description": "Changes whenever the voice that says the lines changes."
           }
         }
       },
@@ -16606,6 +16627,7 @@
           "still_after_ms",
           "still_quiet_ms",
           "long_after_ms",
+          "still_repeat_ms",
           "min_gap_ms",
           "max_per_turn",
           "taper_after_turns"
@@ -16641,6 +16663,12 @@
             "type": "integer",
             "format": "int32",
             "description": "Silence before the \"still on it\" line, from the end of the last line.",
+            "minimum": 0
+          },
+          "still_repeat_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "After the long line, between \"still on it\" lines; `0` says it no more.",
             "minimum": 0
           },
           "taper_after_turns": {

@@ -12,6 +12,11 @@ export interface ToolLineTemplates {
 
 /** Longer than this, a line is not a short line; the server refuses it. */
 export const MAX_TOOL_LINE_CHARS = 160;
+/**
+ * A search text said in a wait line: a line that has started is finished
+ * before the answer plays, so a long one would hold the answer back.
+ */
+export const MAX_SEARCH_WORDS = 6;
 
 const fill = (template: string, slot: string, value: string) =>
   template.replace(`{${slot}}`, value);
@@ -35,7 +40,13 @@ export function toolWaitLine(
     facts.search && "text" in facts.search
       ? facts.search.text.trim()
       : undefined;
-  if (facts.shape === "search" && searchText && templates.search) {
+  const searchWords = searchText?.split(/\s+/).filter(Boolean).length ?? 0;
+  if (
+    facts.shape === "search" &&
+    searchText &&
+    searchWords <= MAX_SEARCH_WORDS &&
+    templates.search
+  ) {
     line = fill(templates.search, "search", searchText);
   } else if (facts.things) {
     const template = facts.shape === "list" ? templates.list : templates.items;
