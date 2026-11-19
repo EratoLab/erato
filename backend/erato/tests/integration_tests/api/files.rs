@@ -1628,6 +1628,44 @@ async fn client_tool_file_result(
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_client_tool_picture_is_announced_after_the_text_limit(pool: Pool<Postgres>) {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
+    let (mut config, _llm) = setup_mock_llm_server(None).await;
+    config.file_uploads.upload_allowed_if_supports =
+        vec![erato::config::FileUploadOperationSelector::Any];
+    let state = test_app_state(config, pool).await;
+    let app: Router = router(state.clone())
+        .split_for_parts()
+        .0
+        .with_state(state.clone());
+    let server = TestServer::new(app.into_make_service()).unwrap();
+    let chat_id = create_chat(&server).await;
+    let mut ids = Vec::new();
+    for (name, mime_type, bytes) in [
+        ("long.txt", "text/plain", "x".repeat(80_001).into_bytes()),
+        (
+            "picture.png",
+            "image/png",
+            STANDARD.decode(crate::test_utils::TINY_PNG_BASE64).unwrap(),
+        ),
+    ] {
+        let uploaded = upload_file_to_chat(&server, &chat_id, bytes, name, mime_type).await;
+        ids.push(Uuid::parse_str(uploaded["files"][0]["id"].as_str().unwrap()).unwrap());
+    }
+
+    let result = client_tool_file_result(&server, &state, &chat_id, &ids).await;
+    assert_eq!(result["files"][0]["truncated"], true);
+    let picture = &result["files"][1];
+    assert!(picture.get("unavailableReason").is_none(), "{picture}");
+    assert_eq!(
+        picture["contentNotice"],
+        crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE,
+        "{picture}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_client_tool_files_deduplicate_before_limit(pool: Pool<Postgres>) {
     let (mut config, _llm) = setup_mock_llm_server(None).await;
     config.frontend.max_files = 2;

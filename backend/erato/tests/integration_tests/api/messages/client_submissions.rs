@@ -1738,3 +1738,203 @@ async fn client_tool_attachments_are_linked_streamed_and_persisted(pool: Pool<Po
         );
     }
 }
+
+fn message_index(request: &Value, found: impl Fn(&Value) -> bool) -> Option<usize> {
+    request["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(found)
+}
+
+fn has_image(message: &Value, data_url: &str) -> bool {
+    message["content"].as_array().is_some_and(|parts| {
+        parts
+            .iter()
+            .any(|part| part["type"] == "image_url" && part["image_url"]["url"] == data_url)
+    })
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn client_tool_picture_reaches_the_model_after_its_result(pool: Pool<Postgres>) {
+    use axum_test::multipart::{MultipartForm, Part};
+    use base64::Engine;
+
+    const LATER_TURN: &str = "LATER_TURN_QUESTION";
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &["call_picture"]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_picture",
+                "fetch_picture",
+                json!({}),
+            )]),
+        );
+    });
+    for (required, forbidden, answer) in [
+        (vec!["call_picture"], vec![LATER_TURN], "Seen."),
+        (vec![LATER_TURN], vec![], "Answered."),
+    ] {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&required, &forbidden))
+                .matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&[answer]));
+        });
+    }
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    for provider in config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .providers
+        .values_mut()
+    {
+        provider.model_capabilities.supports_image_understanding = true;
+    }
+    config.client_tools.tools.insert(
+        "picture".into(),
+        ClientToolConfig {
+            name: "fetch_picture".into(),
+            parameters: json!({"type":"object","properties":{}}).to_string(),
+            ..Default::default()
+        },
+    );
+    config.facets.tool_call_allowlist = vec!["client/fetch_picture".into()];
+    let state = test_app_state(config, pool).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let server = app_server(state.clone());
+
+    let data_url = format!(
+        "data:image/png;base64,{}",
+        crate::test_utils::TINY_PNG_BASE64
+    );
+    let picture = base64::engine::general_purpose::STANDARD
+        .decode(crate::test_utils::TINY_PNG_BASE64)
+        .unwrap();
+    let uploaded = server
+        .post(&format!("/api/v1beta/me/files?chat_id={chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(
+            MultipartForm::new().add_part(
+                "file",
+                Part::bytes(picture)
+                    .file_name("picture.png")
+                    .mime_type("image/png"),
+            ),
+        )
+        .await;
+    uploaded.assert_status_ok();
+    let file_id = uploaded.json::<Value>()["files"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let request = json!({"existing_chat_id":chat_id,"user_message":"Fetch the picture"});
+    let submit = async {
+        server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&request)
+            .await
+    };
+    let client = async {
+        loop {
+            if let Some(task) = state.background_tasks.get_task(&chat_id).await {
+                for event in task.get_event_history().await {
+                    if let StreamingEvent::ClientToolCall {
+                        message_id,
+                        tool_call_id,
+                        ..
+                    } = event
+                    {
+                        let response = server
+                            .post("/api/v1beta/me/messages/clienttoolresult")
+                            .with_bearer_token(TEST_JWT_TOKEN)
+                            .json(&json!({
+                                "chat_id": chat_id, "message_id": message_id, "tool_call_id": tool_call_id,
+                                "result": {"subject": "PICTURE_SUBJECT"},
+                                "file_upload_ids": [file_id],
+                            }))
+                            .await;
+                        response.assert_status_ok();
+                        assert_eq!(response.json::<Value>()["delivered"], true);
+                        return;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    };
+    let (response, ()) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(submit, client)
+    })
+    .await
+    .expect("picture tool loop did not finish");
+    response.assert_status_ok();
+    let message_id = parse_sse_events(&response)
+        .into_iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .expect("completed event")["message_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"existing_chat_id":chat_id,"previous_message_id":message_id,"user_message":LATER_TURN}))
+        .await
+        .assert_status_ok();
+
+    let requests: Vec<Value> = recorder
+        .bodies()
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(requests.len(), 2);
+    let is_result = |message: &Value| message["tool_call_id"] == "call_picture";
+    let names_file = |message: &Value| message.to_string().contains("file name: picture.png");
+
+    let same_turn = &requests[0];
+    let result = message_index(same_turn, is_result).expect("tool result");
+    let image = message_index(same_turn, |message| has_image(message, &data_url))
+        .expect("the picture is in the request that follows the tool result");
+    assert!(
+        image > result,
+        "the picture comes after the result: {same_turn}"
+    );
+    assert_eq!(same_turn["messages"][image]["role"], "user");
+    assert!(
+        message_index(same_turn, names_file).is_some_and(|name| name > result && name < image),
+        "the file name comes between the result and the picture: {same_turn}"
+    );
+    let result_text = same_turn["messages"][result]["content"].as_str().unwrap();
+    assert!(result_text.contains("PICTURE_SUBJECT"), "{result_text}");
+    assert!(result_text.contains("picture.png"), "{result_text}");
+    assert!(
+        result_text.contains(crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE),
+        "{result_text}"
+    );
+    assert!(!result_text.contains("text only"), "{result_text}");
+    assert!(!result_text.contains("unavailableReason"), "{result_text}");
+
+    // Replayed inside the assistant's message, where this adapter sends no
+    // image. `only_ollama_sends_an_image_replayed_in_an_assistant_message`
+    // covers the other adapters.
+    let later_turn = &requests[1];
+    assert!(message_index(later_turn, is_result).is_some());
+    assert!(message_index(later_turn, names_file).is_some());
+    assert!(
+        !later_turn.to_string().contains("data:image/"),
+        "the later turn carried the picture again: {later_turn}"
+    );
+}
