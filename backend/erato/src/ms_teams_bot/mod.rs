@@ -24,6 +24,7 @@ mod handler;
 pub mod host;
 pub mod inbound_auth;
 pub mod nudge;
+mod probe;
 pub mod reminders;
 pub mod render;
 pub mod streaming;
@@ -325,14 +326,28 @@ pub async fn messages_route(
     }
     bot.activity_received.store(true, Ordering::Relaxed);
 
+    probe::capture_marked_html(&activity);
+    let probe_token = (matches!(activity.kind.as_str(), "message" | "messageUpdate")
+        && std::env::var("ERATO_TEAMS_ATTACHMENT_PROBE").as_deref() == Ok("1"))
+    .then(|| {
+        let token = Uuid::new_v4();
+        probe::TOKEN.sync_scope(token, || probe::receipt(&body));
+        token
+    });
     let host = Host::new(app_state);
     match activity.kind.as_str() {
         "message" => {
-            tokio::spawn(handler::on_message(bot, host, activity));
+            probe::spawn(probe_token, handler::on_message(bot, host, activity));
             StatusCode::OK.into_response()
         }
         "messageUpdate" if activity.is_edit_message() => {
-            tokio::spawn(handler::on_message_edit(bot, host, activity));
+            probe::spawn(probe_token, handler::on_message_edit(bot, host, activity));
+            StatusCode::OK.into_response()
+        }
+        "messageUpdate" => {
+            if let Some(token) = probe_token {
+                probe::TOKEN.sync_scope(token, || probe::decision("ignored_update"));
+            }
             StatusCode::OK.into_response()
         }
         "invoke" => {

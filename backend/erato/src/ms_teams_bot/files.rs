@@ -397,9 +397,7 @@ mod tests {
         let mut gif = Vec::new();
         let mut encoder = image::codecs::gif::GifEncoder::new(&mut gif);
         let frame = image::Frame::new(image::RgbaImage::new(2, 2));
-        encoder
-            .encode_frames([frame.clone(), frame].into_iter())
-            .unwrap();
+        encoder.encode_frames([frame.clone(), frame]).unwrap();
         drop(encoder);
         assert_eq!(inline_type(&gif), None);
     }

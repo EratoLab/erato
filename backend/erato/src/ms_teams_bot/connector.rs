@@ -401,6 +401,7 @@ impl Connector {
             request = request.bearer_auth(self.app_token().await?);
         }
         let response = request.send().await?;
+        super::probe::http(response.status());
         if !response.status().is_success() {
             return Err(eyre!(
                 "attachment download failed with {}",

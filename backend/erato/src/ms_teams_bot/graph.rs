@@ -186,6 +186,7 @@ impl<'a> Graph<'a> {
             .bearer_auth(self.token)
             .send()
             .await?;
+        super::probe::http(response.status());
         if !response.status().is_success() {
             return Err(eyre!(
                 "shared file download failed with {}",
@@ -203,6 +204,7 @@ impl<'a> Graph<'a> {
 
 async fn checked_json(response: reqwest::Response) -> Result<Value, Report> {
     let status = response.status();
+    super::probe::http(status);
     let bytes = response.bytes().await?;
     if !status.is_success() {
         let code = serde_json::from_slice::<Value>(&bytes)

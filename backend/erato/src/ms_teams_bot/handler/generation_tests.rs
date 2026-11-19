@@ -780,7 +780,7 @@ async fn illustrated_answer_keeps_captions_next_to_their_images(pool: sqlx::PgPo
             .find_map(|a| a["attachments"][0]["content"]["body"].as_array())
             .unwrap();
         assert_eq!(body.len(), 6);
-        for (pair, color) in body.chunks_exact(2).zip(["blue", "red", "green"]) {
+        for (pair, color) in body.as_chunks::<2>().0.iter().zip(["blue", "red", "green"]) {
             assert_eq!(pair[0]["type"], "TextBlock");
             if mode != "rejected" {
                 assert!(
