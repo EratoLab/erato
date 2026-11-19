@@ -7147,7 +7147,7 @@ separate sharing-consent workflow.
 | Index search | Emails, attachment files, and Teams messages; optional kind, source, sender, mailbox, date, and file-type filters, plus `metadata_filters` predicates. Returns metadata and source references, not excerpts or bodies. Only indexed local data is covered. |
 | Outlook conversation read | A search email's `readConversation` reference supplies the mailbox and Message-ID. Bodies are converted to readable text. Attachment metadata is always returned. |
 | Attachment contents | `includeAttachments=true` uploads selected available bytes using the normal authenticated file API. Server authorization and the existing file processor apply before attachment text enters the tool result. `attachmentNames` selects exact names; otherwise inline files are skipped. |
-| Missing or partial content | Explicit statuses for unavailable bytes, disabled uploads, limits, upload failures, unparseable files, and truncated bodies/text. Images can be downloaded, but this tool returns text; image understanding uses normal message attachments. |
+| Missing or partial content | Explicit statuses for unavailable bytes, disabled uploads, limits, upload failures, unparseable files, and truncated bodies/text. An image attachment has no text in the tool result. It is passed to the model as image input after the result in the turn it was read; later turns keep only its file entry. |
 
 Each `metadata_filters` entry has `field`, `operator`, and `value`, as defined by
 the pinned `SearchQueryV1Params` contract. Metadata predicates and the existing

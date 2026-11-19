@@ -1597,6 +1597,119 @@ async fn a_claimed_result_with_files_is_read_at_continuation(pool: Pool<Postgres
     assert!(message.raw_message.to_string().contains(ANSWER));
 }
 
+async fn upload_picture(state: &erato::state::AppState) -> Uuid {
+    use axum_test::multipart::{MultipartForm, Part};
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let response = app_server(state.clone())
+        .post("/api/v1beta/me/files")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(
+            MultipartForm::new().add_part(
+                "file",
+                Part::bytes(STANDARD.decode(crate::test_utils::TINY_PNG_BASE64).unwrap())
+                    .file_name("picture.png")
+                    .mime_type("image/png"),
+            ),
+        )
+        .await;
+    response.assert_status_ok();
+    Uuid::parse_str(response.json::<Value>()["files"][0]["id"].as_str().unwrap()).unwrap()
+}
+
+/// A setup whose uploads accept a picture although its model takes none.
+async fn setup_with_pictures(pool: Pool<Postgres>, timeout_ms: u64) -> Setup {
+    let mut setup = setup(pool, timeout_ms, true, true).await;
+    setup.state.config.file_uploads.upload_allowed_if_supports =
+        vec![erato::config::FileUploadOperationSelector::Any];
+    setup
+}
+
+fn last_request_names_the_picture(setup: &Setup) -> bool {
+    turn_requests(&setup.recorder)
+        .last()
+        .unwrap()
+        .to_string()
+        .contains("file name: picture.png")
+}
+
+fn last_request_has_an_image(setup: &Setup) -> bool {
+    turn_requests(&setup.recorder)
+        .last()
+        .unwrap()
+        .to_string()
+        .contains("data:image/png;base64,")
+}
+
+// The continuation replays the picture inside the stored assistant message,
+// where the OpenAI adapter sends no image, so the result must not promise it.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_claimed_result_with_a_picture_does_not_promise_it_to_the_model(pool: Pool<Postgres>) {
+    let setup = setup_with_pictures(pool, 10).await;
+    let request = park(&setup).await;
+    let file_id = upload_picture(&setup.state).await;
+    let token = claim_token(&setup.state, &request).await;
+    post_result(
+        &setup.state,
+        &token,
+        &file_result(
+            &request,
+            json!({"document": "CLAIMED-VALUE"}),
+            vec![file_id],
+        ),
+    )
+    .await
+    .assert_status_ok();
+
+    continue_turn(&setup.state, request.attempt_id).await;
+    let message = assistant_message(&setup).await;
+    assert!(
+        message.raw_message["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|part| part["content_type"] == "image_file_pointer"
+                && part["file_upload_id"] == json!(file_id))
+    );
+    let seen = last_tool_results(&setup.recorder);
+    assert_eq!(seen.len(), 1);
+    let file = &seen[0]["result"]["files"][0];
+    assert_eq!(file["filename"], "picture.png");
+    assert!(
+        file["contentNotice"].as_str().unwrap().starts_with(
+            "This file is an image. It is saved with the conversation, but it may not be shown"
+        ),
+        "{file}"
+    );
+    assert!(last_request_names_the_picture(&setup));
+    assert!(!last_request_has_an_image(&setup));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_live_picture_on_a_durable_tool_follows_its_result(pool: Pool<Postgres>) {
+    let setup = setup_with_pictures(pool, 60_000).await;
+    let file_id = upload_picture(&setup.state).await;
+    let (response, answer) = submit_and_answer(
+        &setup,
+        Some(&mailbox()),
+        json!({"result": {"document": "LIVE-VALUE"}, "file_upload_ids": [file_id]}),
+        Some(&mailbox()),
+    )
+    .await;
+    response.assert_status_ok();
+    answer.assert_status_ok();
+    let file = &last_tool_results(&setup.recorder)[0]["result"]["files"][0];
+    assert_eq!(file["filename"], "picture.png");
+    assert!(
+        file["contentNotice"]
+            .as_str()
+            .unwrap()
+            .starts_with("This file is an image. It follows this tool result as image input."),
+        "{file}"
+    );
+    assert!(last_request_names_the_picture(&setup));
+    assert!(last_request_has_an_image(&setup));
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_live_result_with_files_on_a_durable_tool_keeps_its_text(pool: Pool<Postgres>) {
     let setup = setup(pool, 60_000, true, true).await;

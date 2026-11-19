@@ -319,7 +319,7 @@ async fn legacy_snapshot_can_continue_and_round_trip_without_migration() {
 
 /// Capture the real adapter HTTP body, rather than using our OpenAI-shaped
 /// normalization helper (which does not exercise provider-specific hoisting).
-async fn provider_body(
+pub(super) async fn provider_body(
     kind: genai::adapter::AdapterKind,
     request: genai::chat::ChatRequest,
 ) -> JsonValue {

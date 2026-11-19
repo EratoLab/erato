@@ -64,6 +64,32 @@ pub(crate) async fn attach_client_tool_files(
     Ok(parts)
 }
 
+/// How a client tool result with files reaches the model that reads it. It
+/// decides what the result says about an image file.
+#[derive(Clone, Copy)]
+pub(crate) enum ResultDelivery {
+    /// To a waiting turn, whose next request carries the image as user
+    /// content after the result. Later turns, and the same turn once it has
+    /// parked, replay it as `Stored` does.
+    Live,
+    /// From the stored message at a continuation, where the image replays as
+    /// assistant content, which most providers do not read.
+    Stored,
+}
+
+impl ResultDelivery {
+    fn image_notice(self) -> &'static str {
+        match self {
+            Self::Live => {
+                "This file is an image. It follows this tool result as image input. If no image follows, the image is not in view; call the tool again to see it."
+            }
+            Self::Stored => {
+                "This file is an image. It is saved with the conversation, but it may not be shown to you as image input. If no image follows this tool result, the image is not in view."
+            }
+        }
+    }
+}
+
 /// Client tools return file references, never base64 in the model's JSON.
 /// Reuse normal parsing/cache and enforce file policy before any storage read.
 pub(crate) async fn resolve_client_tool_files(
@@ -73,6 +99,7 @@ pub(crate) async fn resolve_client_tool_files(
     access_token: Option<&str>,
     result: Option<serde_json::Value>,
     file_ids: &[Uuid],
+    delivery: ResultDelivery,
 ) -> Option<(serde_json::Value, Vec<Uuid>)> {
     let result = result?;
     if file_ids.is_empty() {
@@ -102,7 +129,8 @@ pub(crate) async fn resolve_client_tool_files(
         };
         authorized_file_ids.push(*id);
         let mut entry = serde_json::json!({ "fileId": id, "filename": file.filename });
-        if remaining_chars == 0 {
+        // The limit bounds text. An image has none and still follows the result.
+        if remaining_chars == 0 && !crate::models::message::is_image_file(&file.filename) {
             entry["unavailableReason"] = "Attachment text limit reached.".into();
         } else if let Some(reason) = file_upload::get_audio_transcription_blocking_reason(&file) {
             entry["unavailableReason"] = reason.into();
@@ -131,7 +159,7 @@ pub(crate) async fn resolve_client_tool_files(
                         entry["truncated"] = truncated.into();
                     }
                     FileContent::Image { .. } => {
-                        entry["unavailableReason"] = "Image bytes are available as a file, but this tool returns text only. Attach the image to a message for image understanding.".into();
+                        entry["contentNotice"] = delivery.image_notice().into();
                     }
                     FileContent::ReferenceOnly => {
                         entry["fileReference"] = format!("erato-file://{id}").into();
