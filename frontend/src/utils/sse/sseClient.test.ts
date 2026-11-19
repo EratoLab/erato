@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
+import {
+  connectivity,
+  isNetworkFailure,
+  isStalledStream,
+} from "@/lib/connectivity/connectivity";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { createSSEConnection } from "./sseClient";
@@ -226,5 +231,134 @@ describe("sseClient fetch parser", () => {
     expect(fetchMock.mock.calls[0][1]?.headers).toEqual({
       Authorization: "Bearer test-id-token",
     });
+  });
+});
+
+describe("sseClient network failures", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // A stream that delivers one chunk and then goes silent without closing,
+  // like a connection that died on the way.
+  const makeSilentStream = (signal: AbortSignal) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: hi\n\n"));
+        signal.addEventListener(
+          "abort",
+          () => controller.error(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      },
+    });
+
+  it("reports a stream that goes silent past idleTimeoutMs as a network failure", async () => {
+    vi.useFakeTimers();
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    vi.spyOn(connectivity, "reportNetworkSuccess").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          body: makeSilentStream(init.signal as AbortSignal),
+        }),
+      ),
+    );
+    const onError = vi.fn();
+    const onClose = vi.fn();
+
+    createSSEConnection("/api/test", {
+      method: "POST",
+      idleTimeoutMs: 20_000,
+      onMessage: vi.fn(),
+      onError,
+      onClose,
+    });
+
+    await vi.advanceTimersByTimeAsync(19_000);
+    expect(onError).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(onError).toHaveBeenCalledTimes(1);
+    const error = onError.mock.calls[0][0] as Error;
+    expect(error.message).toBe("SSE stream stalled");
+    expect(isNetworkFailure(error)).toBe(true);
+    expect(isStalledStream(error)).toBe(true);
+    expect(failure).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("marks a request that never got a response", async () => {
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+    const onError = vi.fn();
+
+    createSSEConnection("/api/test", { method: "POST", onError });
+    await waitForAsyncWork();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(isNetworkFailure(onError.mock.calls[0][0])).toBe(true);
+  });
+
+  it("does not mark an HTTP error", async () => {
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    vi.spyOn(connectivity, "reportNetworkSuccess").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        headers: new Headers(),
+        text: async () => "generation_running",
+      }),
+    );
+    const onError = vi.fn();
+
+    createSSEConnection("/api/test", { method: "POST", onError });
+    await waitForAsyncWork();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(isNetworkFailure(onError.mock.calls[0][0])).toBe(false);
+    expect(failure).not.toHaveBeenCalled();
+  });
+  it("gives up on a request whose response never starts within connectTimeoutMs", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("Aborted", "AbortError")),
+            );
+          }),
+      ),
+    );
+    const onError = vi.fn();
+
+    createSSEConnection("/api/test", {
+      method: "POST",
+      connectTimeoutMs: 20_000,
+      onError,
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(isStalledStream(onError.mock.calls[0][0])).toBe(true);
   });
 });

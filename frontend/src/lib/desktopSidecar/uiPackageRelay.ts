@@ -4,6 +4,8 @@ import {
   UI_PACKAGE_MAX_ARCHIVE_BYTES,
 } from "@erato/desktop-sidecar-protocol";
 
+import { abortableDelay } from "@/utils/abortableDelay";
+
 import type { UiPackageReference } from "@/providers/DesktopSidecarProvider";
 import type {
   DesktopSidecarClient,
@@ -332,19 +334,4 @@ function warn(detail: string): void {
   console.warn(
     `The desktop UI package was not relayed to the desktop sidecar: ${detail}.`,
   );
-}
-
-function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, delayMs);
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (signal.aborted) onAbort();
-  });
 }
