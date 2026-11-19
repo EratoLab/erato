@@ -9655,6 +9655,10 @@ pub struct TeamsBotConfig {
     // downloaded from.
     #[serde(default)]
     pub sso_resource: Option<String>,
+    // Storage provider for externally reachable private copies of generated Teams files.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub delivery_storage_provider_id: Option<String>,
     // Address users open Erato at, used for links in bot messages (chat links,
     // citations). An internal host is fine: users open these links in their own
     // browser. Unrelated to `messaging_endpoint`.
@@ -9703,6 +9707,7 @@ impl Default for TeamsBotConfig {
             sso_enabled: true,
             sso_app_id: None,
             sso_resource: None,
+            delivery_storage_provider_id: None,
             public_base_url: None,
             messaging_endpoint: None,
             assistant_id: None,
