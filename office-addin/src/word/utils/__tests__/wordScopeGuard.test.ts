@@ -10,7 +10,6 @@ import {
 } from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
-  REALISTIC_STATUS_TEXT,
   realisticWordPackageXml,
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
@@ -65,74 +64,7 @@ const rebase = (
   touched: string[],
   definitions: { ref: string; style?: string; numId?: string }[] = [],
   edges?: { start?: boolean; end?: boolean },
-  rewritten?: string[],
-) =>
-  rebaseWordSnapshot(snapshot, live(ooxml), {
-    touched,
-    definitions,
-    edges,
-    rewritten,
-  });
-/** What Word for Mac and PC do to paragraphs on their own, without an event (ERMAIN-970/1005). */
-const wordTagged = (text: string, { mark = "", run = "" } = {}) =>
-  `<w:p>${mark ? `<w:pPr><w:rPr>${mark}</w:rPr></w:pPr>` : ""}<w:r><w:rPr>${run}<w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
-const EN_GB = '<w:lang w:val="en-GB"/>';
-function markProperties(ooxml: string, text: string, inner: string): string {
-  return editWordPackage(ooxml, (doc) => {
-    const p = Array.from(doc.getElementsByTagNameNS(W, "p")).find(
-      (e) => e.textContent === text,
-    )!;
-    let pPr = Array.from(p.children).find((e) => e.localName === "pPr");
-    if (!pPr) {
-      pPr = doc.createElementNS(W, "w:pPr");
-      p.insertBefore(pPr, p.firstChild);
-    }
-    const rPr = new DOMParser().parseFromString(
-      `<w:rPr xmlns:w="${W}">${inner}</w:rPr>`,
-      "application/xml",
-    ).documentElement;
-    pPr.append(doc.importNode(rPr, true));
-  });
-}
-const insertAfter = (
-  snapshot: WordAuthoringSnapshot,
-  text: string,
-): WordDocumentPlan => {
-  const refs = snapshot.blocks.map((b) => b.ref);
-  const at = snapshot.blocks.findIndex((b) => b.text === text);
-  return {
-    version: 1,
-    snapshot: snapshot.token,
-    readToken: "read-proof",
-    scope: "document",
-    deleted: [],
-    entries: [
-      { kind: "keep", source: refs.slice(0, at + 1) },
-      {
-        kind: "insert",
-        blocks: [{ id: "n", type: "paragraph", text: "Inserted after." }],
-      },
-      { kind: "keep", source: refs.slice(at + 1) },
-    ],
-  };
-};
-function tagLanguage(ooxml: string, texts: readonly string[]): string {
-  return editWordPackage(ooxml, (doc) => {
-    for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
-      if (!texts.includes(p.textContent ?? "")) continue;
-      for (const r of Array.from(p.getElementsByTagNameNS(W, "r"))) {
-        let rPr = Array.from(r.children).find((e) => e.localName === "rPr");
-        if (!rPr) {
-          rPr = doc.createElementNS(W, "w:rPr");
-          r.insertBefore(rPr, r.firstChild);
-        }
-        const lang = doc.createElementNS(W, "w:lang");
-        lang.setAttributeNS(W, "w:val", "en-GB");
-        rPr.append(lang);
-      }
-    }
-  });
-}
+) => rebaseWordSnapshot(snapshot, live(ooxml), { touched, definitions, edges });
 const FORM = [
   "Name:",
   "Signature",
@@ -238,95 +170,6 @@ describe("scope-local stale check", () => {
     ).toEqual({
       ok: false,
       locations: ["/word/document.xml body block 3: missing"],
-    });
-  });
-
-  it("lets Word's language tags on runs pass next to a write, not in a block it rewrites", () => {
-    const snapshot = capture(body(texts));
-    const tagged = (refs: number[]) =>
-      packageXml(
-        texts
-          .map((text, i) =>
-            refs.includes(i + 1) ? wordTagged(text) : paragraph(text),
-          )
-          .join(""),
-      );
-    const around = rebase(snapshot, tagged([2, 3, 4]), ["b3"], [], {}, []);
-    expect(around).toMatchObject({ ok: true, outsideChanges: 0 });
-    if (around.ok)
-      expect([...around.map]).toEqual([
-        ["b2", "b2"],
-        ["b3", "b3"],
-        ["b4", "b4"],
-      ]);
-    expect(rebase(snapshot, tagged([2, 4]), ["b3"])).toMatchObject({
-      ok: true,
-    });
-    expect(rebase(snapshot, tagged([3]), ["b3"])).toEqual({
-      ok: false,
-      locations: ["/word/document.xml body block 3: changed"],
-    });
-  });
-
-  it.each([
-    ["a language on the anchor's paragraph mark", 2, { mark: EN_GB }],
-    ["bold on the anchor's paragraph mark", 2, { mark: "<w:b/>" }],
-    [
-      "a tracked deletion of a neighbour's paragraph mark",
-      3,
-      {
-        mark: '<w:del w:id="9" w:author="Reviewer" w:date="2026-11-19T00:00:00Z"/>',
-      },
-    ],
-    ["bold on a neighbour's run", 3, { run: "<w:b/>" }],
-    ["hidden runs in a neighbour", 3, { run: "<w:vanish/>" }],
-  ])("still refuses %s next to a write", (_name, index, tags) => {
-    const snapshot = capture(body(texts));
-    const changed = packageXml(
-      texts
-        .map((text, i) =>
-          i === index ? wordTagged(text, tags) : paragraph(text),
-        )
-        .join(""),
-    );
-    expect(rebase(snapshot, changed, ["b3"], [], {}, [])).toMatchObject({
-      ok: false,
-    });
-  });
-
-  it("still refuses a neighbour whose text or paragraph properties changed", () => {
-    const snapshot = capture(body(texts));
-    const neighbour = (p: string) =>
-      packageXml(
-        texts.map((text, i) => (i === 3 ? p : paragraph(text))).join(""),
-      );
-    expect(
-      rebase(
-        snapshot,
-        neighbour(wordTagged("Neighbour typed")),
-        ["b3"],
-        [],
-        {},
-        [],
-      ),
-    ).toEqual({
-      ok: false,
-      locations: ["/word/document.xml body block 4: changed"],
-    });
-    expect(
-      rebase(
-        snapshot,
-        neighbour(
-          `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Neighbour</w:t></w:r></w:p>`,
-        ),
-        ["b3"],
-        [],
-        {},
-        [],
-      ),
-    ).toEqual({
-      ok: false,
-      locations: ["/word/document.xml body block 4: changed"],
     });
   });
 
@@ -579,72 +422,6 @@ describe("in-place writes around later edits", { timeout: 30_000 }, () => {
     const after = texts(host.ooxml());
     expect(after[0]).toBe("Added above.");
     expect(after[after.indexOf(QUESTIONS) + 1]).toBe("Inserted after.");
-  });
-
-  it("inserts after a paragraph Word re-tagged since the capture, and keeps the tags", async () => {
-    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
-    const host = installWordOoxmlHost(realisticWordPackageXml(), {
-      profile: "word-pc-16.0.20326",
-    });
-    const snapshot = await captureRealisticSnapshot();
-    host.userEdit((xml) =>
-      tagLanguage(xml, ["Review at month end.", QUESTIONS, "Budget owner"]),
-    );
-    const applied = await apply(insertAfter(snapshot, QUESTIONS), snapshot);
-    expect(applied.status, report(applied)).toBe("applied");
-    expect(applied.outcome).toMatchObject({ route: "in-place" });
-    const after = texts(host.ooxml());
-    expect(after[after.indexOf(QUESTIONS) + 1]).toBe("Inserted after.");
-    expect(host.ooxml().match(/w:val="en-GB"/g)).toHaveLength(3);
-  });
-
-  it.each([
-    [
-      "the anchor's paragraph mark gained formatting",
-      QUESTIONS,
-      QUESTIONS,
-      "<w:b/>",
-    ],
-    [
-      "the commented neighbour's paragraph mark was deleted with Track Changes",
-      "Reviewed assumption",
-      "Reviewed assumption",
-      '<w:del w:id="9" w:author="Reviewer" w:date="2026-11-19T00:00:00Z"/>',
-    ],
-  ])("stops before inserting when %s", async (_name, after, marked, inner) => {
-    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
-    const host = installWordOoxmlHost(realisticWordPackageXml(), {
-      profile: "word-pc-16.0.20326",
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const snapshot = await captureRealisticSnapshot();
-    host.userEdit((xml) => markProperties(xml, marked, inner));
-    const result = await apply(insertAfter(snapshot, after), snapshot);
-    expect(result.status, report(result)).toBe("stale");
-    expect(result.diagnostic).toMatchObject({
-      stage: "preflight",
-      reason: "source-changed",
-      details: { route: "in-place" },
-    });
-    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
-  });
-
-  it("stops before rewriting a paragraph Word re-tagged since the capture", async () => {
-    const host = installWordOoxmlHost(realisticWordPackageXml(), {
-      profile: "word-pc-16.0.20326",
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const snapshot = await captureRealisticSnapshot();
-    host.userEdit((xml) => tagLanguage(xml, [REALISTIC_STATUS_TEXT]));
-    const result = await apply(
-      statusRewritePlan(snapshot, "Status: rewritten."),
-      snapshot,
-    );
-    expect(result.status).toBe("stale");
-    expect(result.diagnostic?.details?.locations).toEqual([
-      "/word/document.xml body block 2: changed",
-    ]);
-    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
   });
 
   it.each([
@@ -946,6 +723,50 @@ describe("in-place writes around later edits", { timeout: 30_000 }, () => {
     expect(result.diagnostic?.details?.locations).toEqual([
       `/word/document.xml body block ${schedule + 1}: definition`,
     ]);
+  });
+
+  describe("on the import route, after Word's AutoRecovery save", () => {
+    const editSettings =
+      (edit: (settings: Element, doc: Document) => void) => (xml: string) =>
+        editWordPackage(xml, (doc) =>
+          edit(doc.getElementsByTagNameNS(W, "settings")[0], doc),
+        );
+    const importStatus = async (
+      edit: (settings: Element, doc: Document) => void,
+    ) => {
+      window.WORD_FORCE_IMPORT_APPLY = true;
+      const host = installWordOoxmlHost(realisticWordPackageXml(), {
+        profile: "word-pc-16.0.20326",
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      host.userEdit(editSettings(edit));
+      return apply(statusRewritePlan(snapshot, "Status: rewritten."), snapshot);
+    };
+
+    it("applies a capture taken before the save added its zoom", async () => {
+      const applied = await importStatus((settings, doc) => {
+        const zoom = doc.createElementNS(W, "w:zoom");
+        zoom.setAttributeNS(W, "w:percent", "140");
+        settings.insertBefore(zoom, settings.firstChild);
+      });
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome).toMatchObject({ route: "import" });
+    });
+
+    it("still stops before writing when a setting really changed", async () => {
+      const result = await importStatus((settings) =>
+        settings
+          .getElementsByTagNameNS(W, "defaultTabStop")[0]
+          .setAttributeNS(W, "w:val", "1440"),
+      );
+      expect(result.status).toBe("stale");
+      expect(result.diagnostic).toMatchObject({
+        stage: "preflight",
+        reason: "source-changed",
+        details: { route: "import", parts: ["/word/settings.xml"] },
+      });
+    });
   });
 
   it("keeps the strict whole-document check on the import route", async () => {

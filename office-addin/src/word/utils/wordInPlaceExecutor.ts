@@ -352,7 +352,6 @@ function scopeRequest(
   slots: readonly WordInPlaceSlot[],
 ): WordScopeRequest {
   const touched = new Set<string>();
-  const rewritten = new Set<string>();
   const definitions: { ref: string; style?: string; numId?: string }[] = [];
   const state = (
     ref: string,
@@ -369,7 +368,6 @@ function scopeRequest(
   };
   for (const op of ops) {
     touched.add(op.ref);
-    if (op.kind !== "insert") rewritten.add(op.ref);
     if (op.kind === "insert" || op.kind === "delete") state(op.ref, op.state);
     if (op.kind === "text") {
       const source = snapshot.blocks.find((b) => b.ref === op.ref);
@@ -384,7 +382,6 @@ function scopeRequest(
     slot?.kind === "op" && slot.op.kind === "insert";
   return {
     touched,
-    rewritten,
     definitions,
     edges: { start: inserted(slots[0]), end: inserted(slots.at(-1)) },
   };

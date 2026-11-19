@@ -57,9 +57,6 @@ const IMPORT_QUIET_MS = 2_000;
 /** A write still open this long after it began counts as ended then, so a Word.run that settles
  * late or never cannot claim the user's later edits. The slowest F1 Apply took 6.4 s. */
 const OPEN_WRITE_CAP_MS = 60_000;
-/** Word re-tags languages after a write and sends no event: Word for Mac 5–11 s after an import
- * (ERMAIN-970), both desktops up to about 100 s after opening a long document (ERMAIN-1005). */
-const OWN_WRITE_SETTLE_MS = 120_000;
 /** A local or remote event of the kind and source of one this recent joins its entry, so a burst
  * of one-id events cannot push older positions out of the journal. */
 const MERGE_BURST_MS = 250;
@@ -104,7 +101,6 @@ let writes: OpenWrite[] = [];
 let pendingNeighbours = new Map<string, WordChangeEntry>();
 let neighbourTimer: ReturnType<typeof setTimeout> | undefined;
 let activeChat: string | null = null;
-let lastOwnWrite = Number.NEGATIVE_INFINITY;
 
 /** The chat the pane shows now; its writes are recorded as that chat's own. */
 export function noteWordActiveChat(chatId: string | null): void {
@@ -168,21 +164,13 @@ export function beginWordOwnWrite(kind: WordOwnWriteKind): WordOwnWrite {
     entries: {},
   };
   writes.push(write);
-  lastOwnWrite = now;
   return {
     end() {
       if (write.end !== undefined) return;
       write.end = Date.now();
       write.lastEvent = Math.max(write.lastEvent, write.end);
-      lastOwnWrite = Math.max(lastOwnWrite, write.end);
     },
   };
-}
-
-/** A capture taken now may miss what Word still changes, without an event, after the pane's last
- * write. */
-export function wordOwnWriteSettling(now = Date.now()): boolean {
-  return now - lastOwnWrite < OWN_WRITE_SETTLE_MS;
 }
 
 /** Names paragraphs the open writes change, delete or create. */
@@ -477,5 +465,4 @@ export function resetWordChangeJournalForTests(): void {
   clearTimeout(neighbourTimer);
   neighbourTimer = undefined;
   activeChat = null;
-  lastOwnWrite = Number.NEGATIVE_INFINITY;
 }

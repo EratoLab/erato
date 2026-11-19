@@ -12,7 +12,8 @@ export type WordHousekeepingId =
   | "people-list"
   | "glossary-rsids"
   | "placeholder-entries"
-  | "font-obfuscation-key";
+  | "font-obfuscation-key"
+  | "view-zoom";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -117,6 +118,15 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     hosts: ["Word for Mac"],
     probe:
       'ERMAIN-1189 field report, Word for Mac 16.115, 2026-11-13: an Apply preflight went stale on a document with "Embed fonts in the file" on, with only /word/fonts/*.odttf, /word/fontTable.xml and /word/settings.xml differing; not yet measured natively',
+    scope: "any",
+  },
+  {
+    id: "view-zoom",
+    element: "w:zoom, the window's magnification",
+    part: "/word/settings.xml",
+    hosts: ["Word for Mac"],
+    probe:
+      'ERMAIN-1248 native, Word for Mac 16.115.1, 2026-11-19: about 10 minutes after an import Apply, the AutoRecovery save put w:zoom w:percent="140" into a package read without it, with no paragraph event (a saved and an unsaved German document); the next import Apply on a capture taken before it went stale on /word/settings.xml alone',
     scope: "any",
   },
 ];
@@ -236,6 +246,15 @@ export function isWordGlossaryRsids(element: Element, part: string): boolean {
     part === "/word/glossary/settings.xml" &&
     element.namespaceURI === W &&
     element.localName === "rsids"
+  );
+}
+
+/** view-zoom. */
+export function isWordViewZoom(element: Element, part: string): boolean {
+  return (
+    part === "/word/settings.xml" &&
+    element.namespaceURI === W &&
+    element.localName === "zoom"
   );
 }
 

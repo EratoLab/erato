@@ -5,6 +5,7 @@ import {
   isWordGlossaryRsids,
   isWordInertTableLook,
   isWordListInstanceId,
+  isWordViewZoom,
   wordDeobfuscatedFont,
   wordThemeFontLanguage,
 } from "./wordHousekeeping";
@@ -508,6 +509,7 @@ export function createWordXmlComparison(
         ns === W &&
         ["rsids", "proofState"].includes(local)) ||
       isWordGlossaryRsids(element, owner) ||
+      isWordViewZoom(element, owner) ||
       (owner === "/docProps/app.xml" &&
         ns ===
           "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" &&
@@ -521,6 +523,9 @@ export function createWordXmlComparison(
           "Paragraphs",
           "Application",
           "AppVersion",
+          // Word for Mac's AutoRecovery save adds both to a document it never saved (ERMAIN-1248).
+          "HeadingPairs",
+          "TitlesOfParts",
         ].includes(local)) ||
       (owner === "/docProps/core.xml" &&
         ((ns ===

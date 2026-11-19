@@ -468,6 +468,53 @@ describe("glossary-rsids", () => {
   });
 });
 
+describe("view-zoom", () => {
+  // What Word for Mac's AutoRecovery save changed natively (ERMAIN-1248).
+  const EP =
+    "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+  const VT =
+    "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
+  const TITLES = `<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Title</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr></vt:lpstr></vt:vector></TitlesOfParts>`;
+  const saved = ({
+    zoom = "",
+    tabStop = "720",
+    titles = "",
+    company = "Contoso",
+    text = "Text",
+  } = {}) =>
+    pkg({
+      body: `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`,
+      settings: `${zoom}<w:defaultTabStop w:val="${tabStop}"/>`,
+    }).replace(
+      "</pkg:package>",
+      part(
+        "/docProps/app.xml",
+        `<Properties xmlns="${EP}" xmlns:vt="${VT}"><Template>Normal.dotm</Template>${titles}<Company>${company}</Company></Properties>`,
+      ) + "</pkg:package>",
+    );
+  const fingerprint = (xml: string) =>
+    createWordXmlComparison(parse(xml)).fingerprint();
+
+  it("reads a document alike before and after Word's AutoRecovery save", () => {
+    expect(
+      fingerprint(saved({ zoom: '<w:zoom w:percent="140"/>', titles: TITLES })),
+    ).toBe(fingerprint(saved()));
+    expect(fingerprint(saved({ zoom: '<w:zoom w:percent="100"/>' }))).toBe(
+      fingerprint(saved({ zoom: '<w:zoom w:percent="140"/>' })),
+    );
+  });
+
+  it("still sees another setting, another document property or the body", () => {
+    const base = fingerprint(saved({ zoom: '<w:zoom w:percent="140"/>' }));
+    const zoomed = { zoom: '<w:zoom w:percent="140"/>' };
+    expect(fingerprint(saved({ ...zoomed, tabStop: "1440" }))).not.toBe(base);
+    expect(fingerprint(saved({ ...zoomed, company: "Fabrikam" }))).not.toBe(
+      base,
+    );
+    expect(fingerprint(saved({ ...zoomed, text: "Edited" }))).not.toBe(base);
+  });
+});
+
 describe("font-obfuscation-key", () => {
   const R =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
