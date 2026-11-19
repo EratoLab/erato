@@ -60,6 +60,12 @@ const renderWithTheme = (ui: React.ReactElement) => {
   );
 };
 
+/** A finished trace renders its timeline from its first open on. */
+const openTraces = () =>
+  screen
+    .queryAllByTestId("trace-cluster-header")
+    .forEach((header) => fireEvent.click(header));
+
 /** Approval cards read cached chat state, so they need a query client. */
 const renderWithQueryClient = (ui: React.ReactElement) =>
   renderWithTheme(
@@ -766,6 +772,7 @@ describe("MessageContent", () => {
         ]}
       />,
     );
+    openTraces();
 
     const articleText = container.querySelector("article")?.textContent ?? "";
     expect(articleText.indexOf("First answer part.")).toBeLessThan(
@@ -2134,6 +2141,7 @@ describe("decisions in the trace", () => {
         ]}
       />,
     );
+    openTraces();
 
     expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(text);
   });
@@ -2169,6 +2177,7 @@ describe("decisions in the trace", () => {
         ]}
       />,
     );
+    openTraces();
 
     expect(
       screen.getAllByTestId("tool-decision-row").map((row) => row.textContent),
@@ -2741,6 +2750,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     renderWithTheme(
       <MessageContent messageId="message-1" content={[search, pending]} />,
     );
+    openTraces();
     const step = screen.getByTestId("tool-call-item");
     expect(step).toHaveTextContent("This review has ended");
     expect(step).not.toHaveTextContent("Review in the Erato desktop app");
@@ -2758,6 +2768,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     renderWithTheme(
       <MessageContent messageId="message-1" content={[search, pending]} />,
     );
+    openTraces();
     const step = screen.getByTestId("tool-call-item");
     expect(step).toHaveTextContent("Review in the Erato desktop app");
     expect(step).not.toHaveTextContent("This review has ended");
@@ -2814,6 +2825,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     renderWithTheme(
       <MessageContent messageId="message-1" content={[search, pending]} />,
     );
+    openTraces();
     const step = screen.getByTestId("tool-call-item");
     expect(step).toHaveTextContent("Review in the Erato desktop app");
     expect(step).not.toHaveTextContent("Interrupted");
@@ -2824,6 +2836,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     renderWithTheme(
       <MessageContent messageId="message-1" content={[search, pending]} />,
     );
+    openTraces();
     const step = screen.getByTestId("tool-call-item");
     expect(step).toHaveTextContent(
       "Waiting for a connected app on this device",
@@ -2844,6 +2857,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
         ]}
       />,
     );
+    openTraces();
     const step = screen.getByTestId("tool-call-item");
     expect(step).not.toHaveTextContent("Review in the Erato desktop app");
     expect(step).not.toHaveTextContent("Interrupted");
@@ -2857,6 +2871,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
         content={[search, pending, { content_type: "text", text: "Stopped." }]}
       />,
     );
+    openTraces();
     expect(screen.getByTestId("tool-call-item")).toHaveTextContent(
       "Interrupted",
     );

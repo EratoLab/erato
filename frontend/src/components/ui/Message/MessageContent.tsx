@@ -1433,13 +1433,16 @@ const MARKDOWN_COMPONENTS: Partial<Components> = {
   },
 };
 
+/** One shared default, so a message without files keeps a stable markdown context. */
+const NO_FILES: Record<string, FileUploadItem> = {};
+
 export const MessageContent = memo(function MessageContent({
   content: messageContent,
   messageId,
   isStreaming = false,
   showRaw = false,
   onImageClick,
-  filesById = {},
+  filesById = NO_FILES,
   onFileLinkPreview,
   preserveSoftLineBreaks = false,
   createdAt,
@@ -1650,17 +1653,28 @@ export const MessageContent = memo(function MessageContent({
     return briefs;
   }, [content]);
 
-  const generatedImageFileIds = React.useMemo(() => {
-    const fileIds = new Set<string>();
-
-    content.forEach((part) => {
-      if (part.content_type === "image_file_pointer") {
-        fileIds.add(part.file_upload_id);
-      }
-    });
-
-    return fileIds;
-  }, [content]);
+  // Keyed by value: a new set on every streamed chunk would re-render every
+  // finished markdown block through the markdown context.
+  const generatedImageFileIdsKey = React.useMemo(
+    () =>
+      content
+        .flatMap((part) =>
+          part.content_type === "image_file_pointer"
+            ? [part.file_upload_id]
+            : [],
+        )
+        .join("\n"),
+    [content],
+  );
+  const generatedImageFileIds = React.useMemo(
+    () =>
+      new Set<string>(
+        generatedImageFileIdsKey === ""
+          ? []
+          : generatedImageFileIdsKey.split("\n"),
+      ),
+    [generatedImageFileIdsKey],
+  );
 
   const textReferencedEratoFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
@@ -1757,68 +1771,78 @@ export const MessageContent = memo(function MessageContent({
     ],
   );
 
-  const renderMarkdown = (text: string, textBlockPrefix?: string) => {
-    const mentionLinkedText =
-      mentionedAssistants && mentionedAssistants.length > 0
-        ? linkAssistantMentions(text, mentionedAssistants)
-        : text;
-    const linkedTextContent = autolinkEratoFiles(mentionLinkedText);
+  const renderMarkdown = React.useCallback(
+    (text: string, textBlockPrefix?: string) => {
+      const mentionLinkedText =
+        mentionedAssistants && mentionedAssistants.length > 0
+          ? linkAssistantMentions(text, mentionedAssistants)
+          : text;
+      const linkedTextContent = autolinkEratoFiles(mentionLinkedText);
 
-    return (
-      <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
-        <HostArtifactContext.Provider value={hostArtifact ?? null}>
-          <WordHistoryContext.Provider value={wordHistoryRendering}>
-            <MarkdownMessageContext.Provider value={markdownMessage}>
-              <Markdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[
-                  rehypeRaw,
-                  [rehypeSanitize, markdownSanitizeSchema],
-                  rehypeKatex,
-                  ...(textBlockPrefix === undefined
-                    ? []
-                    : [
-                        [
-                          rehypeMessageTextBlocks,
-                          {
-                            prefix: textBlockPrefix,
-                            slotAfter: explainAnchor?.endBlock,
-                          },
-                        ] as NonNullable<
-                          MarkdownOptions["rehypePlugins"]
-                        >[number],
-                      ]),
-                ]}
-                components={MARKDOWN_COMPONENTS}
-                urlTransform={(url, key, node) => {
-                  // Sanitization prefixes IDs to prevent DOM clobbering; keep
-                  // generated footnote links pointed at those prefixed IDs.
-                  if (
-                    key === "href" &&
-                    url.startsWith("#") &&
-                    (node.properties.dataFootnoteRef !== undefined ||
-                      node.properties.dataFootnoteBackref !== undefined)
-                  ) {
-                    return `#user-content-${url.slice(1)}`;
-                  }
-                  // eslint-disable-next-line lingui/no-unlocalized-strings
-                  return url.startsWith("erato-file://") ||
-                    url.startsWith(ERATO_MENTION_SCHEME)
-                    ? url
-                    : defaultUrlTransform(url);
-                }}
-                // Handle incomplete markdown patterns gracefully
-                skipHtml={false}
-                unwrapDisallowed={false}
-              >
-                {linkedTextContent}
-              </Markdown>
-            </MarkdownMessageContext.Provider>
-          </WordHistoryContext.Provider>
-        </HostArtifactContext.Provider>
-      </BlockCodeContext.Provider>
-    );
-  };
+      return (
+        <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
+          <HostArtifactContext.Provider value={hostArtifact ?? null}>
+            <WordHistoryContext.Provider value={wordHistoryRendering}>
+              <MarkdownMessageContext.Provider value={markdownMessage}>
+                <Markdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[
+                    rehypeRaw,
+                    [rehypeSanitize, markdownSanitizeSchema],
+                    rehypeKatex,
+                    ...(textBlockPrefix === undefined
+                      ? []
+                      : [
+                          [
+                            rehypeMessageTextBlocks,
+                            {
+                              prefix: textBlockPrefix,
+                              slotAfter: explainAnchor?.endBlock,
+                            },
+                          ] as NonNullable<
+                            MarkdownOptions["rehypePlugins"]
+                          >[number],
+                        ]),
+                  ]}
+                  components={MARKDOWN_COMPONENTS}
+                  urlTransform={(url, key, node) => {
+                    // Sanitization prefixes IDs to prevent DOM clobbering; keep
+                    // generated footnote links pointed at those prefixed IDs.
+                    if (
+                      key === "href" &&
+                      url.startsWith("#") &&
+                      (node.properties.dataFootnoteRef !== undefined ||
+                        node.properties.dataFootnoteBackref !== undefined)
+                    ) {
+                      return `#user-content-${url.slice(1)}`;
+                    }
+                    // eslint-disable-next-line lingui/no-unlocalized-strings
+                    return url.startsWith("erato-file://") ||
+                      url.startsWith(ERATO_MENTION_SCHEME)
+                      ? url
+                      : defaultUrlTransform(url);
+                  }}
+                  // Handle incomplete markdown patterns gracefully
+                  skipHtml={false}
+                  unwrapDisallowed={false}
+                >
+                  {linkedTextContent}
+                </Markdown>
+              </MarkdownMessageContext.Provider>
+            </WordHistoryContext.Provider>
+          </HostArtifactContext.Provider>
+        </BlockCodeContext.Provider>
+      );
+    },
+    [
+      mentionedAssistants,
+      isStreaming,
+      hostArtifact,
+      wordHistoryRendering,
+      markdownMessage,
+      explainAnchor?.endBlock,
+    ],
+  );
 
   // Whole-body fallback: a `"body"`-mode facet response whose email the model
   // emitted with NO fence at all (common with newer models) — there's no code

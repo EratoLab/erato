@@ -1,6 +1,10 @@
 import { t } from "@lingui/core/macro";
+import { memo } from "react";
+
+import { shallowEqual } from "@/utils/chat/stableValues";
 
 import { TraceStep } from "../TraceStep";
+import { liveReasoningTail } from "../hooks/liveReasoningTail";
 import { railIconFor } from "../icons";
 
 import type { ReasoningSegment } from "../hooks/useReasoningSegments";
@@ -16,7 +20,18 @@ interface ReasoningStepProps extends BaseStepProps {
 
 const STREAMING_CARET = "▊";
 
-export const ReasoningStep = ({
+/** Re-renders only when its text or the renderer changes, so finished sections cost nothing per streamed chunk. */
+const ReasoningBody = memo(function ReasoningBody({
+  text,
+  renderMarkdown,
+}: {
+  text: string;
+  renderMarkdown: (text: string) => React.ReactNode;
+}) {
+  return <>{renderMarkdown(text)}</>;
+});
+
+const ReasoningStepView = ({
   segment,
   status,
   isStreaming,
@@ -72,12 +87,13 @@ export const ReasoningStep = ({
     );
   }
 
+  const bodyText = isRunning ? liveReasoningTail(segment.body) : segment.body;
   // The streaming caret only sits on the body when there IS a body to anchor
   // to. A header-only segment (body not arrived yet) just shows the title.
   const displayBody =
-    isRunning && segment.body.length > 0 && !segment.body.endsWith("\n")
-      ? segment.body + STREAMING_CARET
-      : segment.body;
+    isRunning && bodyText.length > 0 && !bodyText.endsWith("\n")
+      ? bodyText + STREAMING_CARET
+      : bodyText;
 
   return (
     <TraceStep
@@ -87,8 +103,17 @@ export const ReasoningStep = ({
       defaultOpen={isRunning}
       autoCollapse={isCollapsed}
       isActive={isRunning}
+      liveBody={isRunning}
     >
-      {renderMarkdown(displayBody)}
+      <ReasoningBody text={displayBody} renderMarkdown={renderMarkdown} />
     </TraceStep>
   );
 };
+
+/** The parser hands out a new segment per chunk; comparing its text lets every finished step skip. */
+export const ReasoningStep = memo(
+  ReasoningStepView,
+  (previous, next) =>
+    shallowEqual(previous.segment, next.segment) &&
+    shallowEqual({ ...previous, segment: null }, { ...next, segment: null }),
+);
