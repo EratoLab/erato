@@ -237,7 +237,12 @@ fn illustrated_answer(
             }
             push_text(&mut body, preceding);
             preceding.clear();
-            body.push(json!({"type":"Image","url":attachment["contentUrl"],"altText":if alt.is_empty() { &file.name } else { alt },"size":"Auto"}));
+            let alt_text = if alt.is_empty() { &file.name } else { alt };
+            body.push(json!({
+                "type": "Image",
+                "url": attachment["contentUrl"],
+                "altText": alt_text,
+            }));
             true
         },
     );
