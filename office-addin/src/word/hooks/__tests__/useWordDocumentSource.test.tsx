@@ -12,6 +12,7 @@ import {
   wordApprovalScopeOptions,
 } from "../../utils/wordApprovalScope";
 import {
+  beginWordOwnWrite,
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
   resetWordChangeJournalForTests,
@@ -155,6 +156,35 @@ describe("useWordDocumentSource", () => {
 
     expect(read).toHaveBeenCalledTimes(2);
     expect(build!.args.document_text).toContain("Beta");
+  });
+
+  it("does not reuse a capture taken soon after the pane's own write", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    readsText(["Alpha"]);
+    const { result } = renderSource();
+    await waitFor(() => expect(result.current.preview.status).toBe("included"));
+    beginWordOwnWrite("ids").end();
+    readsText(["Alpha", "Written"]);
+    changeDocument();
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(3);
+    focusPane();
+    expect(read).toHaveBeenCalledTimes(3);
+
+    vi.setSystemTime(Date.now() + 120_000);
+    focusPane();
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+    await act(async () => {
+      await result.current.capture();
+    });
+    expect(read).toHaveBeenCalledTimes(4);
   });
 
   it("lets a send join the capture that is already running", async () => {

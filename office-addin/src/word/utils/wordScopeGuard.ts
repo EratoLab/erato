@@ -13,6 +13,11 @@ const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export interface WordScopeRequest {
   /** Captured blocks the write changes, removes, writes next to or reads a list from. */
   touched: Iterable<string>;
+  /** The touched blocks the write replaces or removes; every touched block when left out. Only these
+   * must be exactly as captured. The scope's other blocks keep their place by text and paragraph
+   * properties: Word re-tags their languages without an event, and run formatting is no change
+   * (owner decision 2026-10-30). */
+  rewritten?: Iterable<string>;
   /** Paragraph styles and list instances the write applies, each reported on a captured block. */
   definitions: Iterable<{ ref: string; style?: string; numId?: string }>;
   /** The write adds a paragraph ahead of every surviving captured block (start) or after all of them
@@ -37,6 +42,7 @@ const MAX_LOCATIONS = 8;
 const MAX_DIFF_CELLS = 1_000_000;
 
 const cache = new WeakMap<WordAuthoringSnapshot, string[]>();
+const placementCache = new WeakMap<WordAuthoringSnapshot, string[]>();
 
 function blockSignatures(snapshot: WordAuthoringSnapshot): string[] {
   const cached = cache.get(snapshot);
@@ -45,6 +51,41 @@ function blockSignatures(snapshot: WordAuthoringSnapshot): string[] {
   const result = snapshot.blocks.map((block) => signature(block.xml));
   cache.set(snapshot, result);
   return result;
+}
+
+function withoutRunProperties(xml: string): string {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  for (const properties of Array.from(doc.getElementsByTagNameNS(W, "rPr")))
+    properties.remove();
+  return new XMLSerializer().serializeToString(doc);
+}
+
+/** What a write next to a block relies on: its text and paragraph properties. */
+function placementSignatures(snapshot: WordAuthoringSnapshot): string[] {
+  const cached = placementCache.get(snapshot);
+  if (cached) return cached;
+  const signature = createNativeContentSignature(snapshot.ooxml);
+  const result = snapshot.blocks.map((block) =>
+    signature(withoutRunProperties(block.xml)),
+  );
+  placementCache.set(snapshot, result);
+  return result;
+}
+
+/** Where a run of `length` blocks from `start` stands among `total` blocks, by `same`. */
+function placed(
+  start: number,
+  length: number,
+  total: number,
+  same: (i: number, j: number) => boolean,
+): number[] {
+  const found: number[] = [];
+  for (let j = 0; j + length <= total; j++) {
+    let k = 0;
+    while (k < length && same(start + k, j + k)) k++;
+    if (k === length) found.push(j);
+  }
+  return found;
 }
 
 /** Blocks that differ between two runs of the document: max(length) minus their longest common subsequence. */
@@ -187,6 +228,29 @@ export function rebaseWordSnapshot(
     if (last && last[1] === i - 1) last[1] = i;
     else windows.push([i, i]);
   }
+  const rewritten = new Set<number>();
+  for (const ref of request.rewritten ?? request.touched) {
+    const index = order.get(ref);
+    if (index !== undefined) rewritten.add(index);
+  }
+  let placement: { captured: string[]; actual: string[] } | undefined;
+  const placementOf = () =>
+    (placement ??= {
+      captured: placementSignatures(snapshot),
+      actual: placementSignatures(current),
+    });
+  /** Captured block `i` stands at live block `j`. */
+  const same = (i: number, j: number) =>
+    captured[i] === actual[j] ||
+    (!rewritten.has(i) &&
+      i < captured.length &&
+      j >= 0 &&
+      j < actual.length &&
+      placementOf().captured[i] === placementOf().actual[j]);
+  const sameCaptured = (i: number, j: number) =>
+    captured[i] === captured[j] ||
+    (!rewritten.has(i) &&
+      placementOf().captured[i] === placementOf().captured[j]);
   const locations: string[] = [];
   const map = new Map<string, string>();
   let outsideChanges = 0;
@@ -195,13 +259,16 @@ export function rebaseWordSnapshot(
   for (const [start, end] of windows) {
     const length = end - start + 1;
     const run = captured.slice(start, end + 1);
-    const matches = occurrences(actual, positions, run);
+    let matches = occurrences(actual, positions, run);
+    let repeated = occurrences(captured, capturedPositions, run).length > 1;
+    if (!matches.length && !repeated) {
+      matches = placed(start, length, actual.length, same);
+      repeated =
+        placed(start, length, captured.length, sameCaptured).length > 1;
+    }
     // A run the captured document already held twice cannot be told apart from its copy once one
     // of them was edited: the remaining one would match uniquely and take the write.
-    if (
-      matches.length > 1 ||
-      occurrences(captured, capturedPositions, run).length > 1
-    ) {
+    if (matches.length > 1 || repeated) {
       locations.push(location(start, "ambiguous"));
       continue;
     }
@@ -209,18 +276,16 @@ export function rebaseWordSnapshot(
       // Report the first block of the run that no longer lines up.
       let best = 0;
       let at = -1;
-      for (const j of positions.get(captured[start]) ?? []) {
+      for (let j = 0; j < actual.length; j++) {
         let k = 0;
-        while (k < length && actual[j + k] === captured[start + k]) k++;
+        while (k < length && same(start + k, j + k)) k++;
         if (k > best) [best, at] = [k, j];
       }
       const failed = start + best;
       locations.push(
         location(
           failed,
-          at >= 0 && actual[at + best] === captured[failed + 1]
-            ? "missing"
-            : "changed",
+          at >= 0 && same(failed + 1, at + best) ? "missing" : "changed",
         ),
       );
       continue;

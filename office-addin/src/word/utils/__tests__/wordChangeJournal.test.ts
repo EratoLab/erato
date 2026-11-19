@@ -15,6 +15,7 @@ import {
   resetWordChangeJournalForTests,
   wordChangePosition,
   wordChangesSince,
+  wordOwnWriteSettling,
 } from "../wordChangeJournal";
 
 import type { WordChangeEntry } from "../wordChangeJournal";
@@ -194,6 +195,18 @@ describe("wordChangeJournal", () => {
   });
 
   describe("the pane's own writes", () => {
+    it("counts Word as settling from a write's start until 2 minutes after it ended", () => {
+      expect(wordOwnWriteSettling()).toBe(false);
+      const write = beginWordOwnWrite("ids");
+      vi.advanceTimersByTime(5_000);
+      expect(wordOwnWriteSettling()).toBe(true);
+      write.end();
+      vi.advanceTimersByTime(119_999);
+      expect(wordOwnWriteSettling()).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(wordOwnWriteSettling()).toBe(false);
+    });
+
     it("claims events naming only the ids an in-place write named, until 6 s after it", () => {
       const write = beginWordOwnWrite("ids");
       nameWordOwnWriteIds(["p1", null, undefined]);

@@ -10,6 +10,7 @@ import {
 } from "../../../test/mocks/word/ooxmlHost";
 import {
   captureRealisticSnapshot,
+  REALISTIC_STATUS_TEXT,
   realisticWordPackageXml,
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
@@ -64,7 +65,34 @@ const rebase = (
   touched: string[],
   definitions: { ref: string; style?: string; numId?: string }[] = [],
   edges?: { start?: boolean; end?: boolean },
-) => rebaseWordSnapshot(snapshot, live(ooxml), { touched, definitions, edges });
+  rewritten?: string[],
+) =>
+  rebaseWordSnapshot(snapshot, live(ooxml), {
+    touched,
+    definitions,
+    edges,
+    rewritten,
+  });
+/** What Word for Mac and PC do to paragraphs on their own, without an event (ERMAIN-970/1005). */
+const wordTagged = (text: string, extra = "") =>
+  `<w:p><w:pPr><w:rPr><w:lang w:val="en-GB"/></w:rPr></w:pPr><w:r><w:rPr>${extra}<w:lang w:val="en-GB"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+function tagLanguage(ooxml: string, texts: readonly string[]): string {
+  return editWordPackage(ooxml, (doc) => {
+    for (const p of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
+      if (!texts.includes(p.textContent ?? "")) continue;
+      for (const r of Array.from(p.getElementsByTagNameNS(W, "r"))) {
+        let rPr = Array.from(r.children).find((e) => e.localName === "rPr");
+        if (!rPr) {
+          rPr = doc.createElementNS(W, "w:rPr");
+          r.insertBefore(rPr, r.firstChild);
+        }
+        const lang = doc.createElementNS(W, "w:lang");
+        lang.setAttributeNS(W, "w:val", "en-GB");
+        rPr.append(lang);
+      }
+    }
+  });
+}
 const FORM = [
   "Name:",
   "Signature",
@@ -170,6 +198,76 @@ describe("scope-local stale check", () => {
     ).toEqual({
       ok: false,
       locations: ["/word/document.xml body block 3: missing"],
+    });
+  });
+
+  it("lets Word's language tags and run formatting pass next to a write, not in a block it rewrites", () => {
+    const snapshot = capture(body(texts));
+    const tagged = (refs: number[], extra = "") =>
+      packageXml(
+        texts
+          .map((text, i) =>
+            refs.includes(i + 1) ? wordTagged(text, extra) : paragraph(text),
+          )
+          .join(""),
+      );
+    const around = rebase(
+      snapshot,
+      tagged([2, 3, 4], "<w:b/>"),
+      ["b3"],
+      [],
+      {},
+      [],
+    );
+    expect(around).toMatchObject({ ok: true, outsideChanges: 0 });
+    if (around.ok)
+      expect([...around.map]).toEqual([
+        ["b2", "b2"],
+        ["b3", "b3"],
+        ["b4", "b4"],
+      ]);
+    expect(rebase(snapshot, tagged([2, 4]), ["b3"])).toMatchObject({
+      ok: true,
+    });
+    expect(rebase(snapshot, tagged([3]), ["b3"])).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 3: changed"],
+    });
+  });
+
+  it("still refuses a neighbour whose text or paragraph properties changed", () => {
+    const snapshot = capture(body(texts));
+    const neighbour = (p: string) =>
+      packageXml(
+        texts.map((text, i) => (i === 3 ? p : paragraph(text))).join(""),
+      );
+    expect(
+      rebase(
+        snapshot,
+        neighbour(wordTagged("Neighbour typed")),
+        ["b3"],
+        [],
+        {},
+        [],
+      ),
+    ).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 4: changed"],
+    });
+    expect(
+      rebase(
+        snapshot,
+        neighbour(
+          `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Neighbour</w:t></w:r></w:p>`,
+        ),
+        ["b3"],
+        [],
+        {},
+        [],
+      ),
+    ).toEqual({
+      ok: false,
+      locations: ["/word/document.xml body block 4: changed"],
     });
   });
 
@@ -422,6 +520,60 @@ describe("in-place writes around later edits", { timeout: 30_000 }, () => {
     const after = texts(host.ooxml());
     expect(after[0]).toBe("Added above.");
     expect(after[after.indexOf(QUESTIONS) + 1]).toBe("Inserted after.");
+  });
+
+  it("inserts after a paragraph Word re-tagged since the capture, and keeps the tags", async () => {
+    setWordInPlaceCapabilitiesForTests(ALL_WORD_IN_PLACE_CAPABILITIES);
+    const host = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    const snapshot = await captureRealisticSnapshot();
+    host.userEdit((xml) =>
+      tagLanguage(xml, ["Review at month end.", QUESTIONS, "Budget owner"]),
+    );
+    const refs = snapshot.blocks.map((b) => b.ref);
+    const questions = snapshot.blocks.findIndex((b) => b.text === QUESTIONS);
+    const applied = await apply(
+      {
+        version: 1,
+        snapshot: snapshot.token,
+        readToken: "read-proof",
+        scope: "document",
+        deleted: [],
+        entries: [
+          { kind: "keep", source: refs.slice(0, questions + 1) },
+          {
+            kind: "insert",
+            blocks: [{ id: "n", type: "paragraph", text: "Inserted after." }],
+          },
+          { kind: "keep", source: refs.slice(questions + 1) },
+        ],
+      },
+      snapshot,
+    );
+    expect(applied.status, report(applied)).toBe("applied");
+    expect(applied.outcome).toMatchObject({ route: "in-place" });
+    const after = texts(host.ooxml());
+    expect(after[after.indexOf(QUESTIONS) + 1]).toBe("Inserted after.");
+    expect(host.ooxml().match(/w:val="en-GB"/g)).toHaveLength(3);
+  });
+
+  it("stops before rewriting a paragraph Word re-tagged since the capture", async () => {
+    const host = installWordOoxmlHost(realisticWordPackageXml(), {
+      profile: "word-pc-16.0.20326",
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const snapshot = await captureRealisticSnapshot();
+    host.userEdit((xml) => tagLanguage(xml, [REALISTIC_STATUS_TEXT]));
+    const result = await apply(
+      statusRewritePlan(snapshot, "Status: rewritten."),
+      snapshot,
+    );
+    expect(result.status).toBe("stale");
+    expect(result.diagnostic?.details?.locations).toEqual([
+      "/word/document.xml body block 2: changed",
+    ]);
+    expect(host.events.filter((e) => e.startsWith("mutation:"))).toEqual([]);
   });
 
   it.each([

@@ -9,6 +9,7 @@ import { wordErrorText } from "../utils/wordApplyDiagnostics";
 import {
   noteWordCapturedIds,
   wordChangePosition,
+  wordOwnWriteSettling,
 } from "../utils/wordChangeJournal";
 import {
   readWordChangeTrackingMode,
@@ -88,6 +89,8 @@ interface CachedCapture {
   /** A failed read or package transfer, or a capture Word was still tagging, is retried at the
    * next send; a file that can never be edited is not. */
   retry: boolean;
+  /** Started soon after the pane's own write, which Word may still change without an event. */
+  settling: boolean;
 }
 
 const RETRIED_AUTHORING_DETAILS = new Set([
@@ -205,7 +208,9 @@ async function captureDocument(
   return { build };
 }
 
-/** Reusing a capture is safe: every apply re-reads the document and refuses a stale plan. */
+/** Reusing a capture is safe: every apply re-reads the document and refuses a stale plan. A plan
+ * on a stale capture still costs the user its whole planning time, so a capture Word may still
+ * change after the pane's own write is not reused. */
 export function useWordDocumentSource({
   enabled,
   documentIdentity,
@@ -248,6 +253,7 @@ export function useWordDocumentSource({
     const identity = identityRef.current;
     const authoring = authoringRef.current;
     const generation = generationRef.current;
+    const settling = wordOwnWriteSettling();
     const startedAt = globalThis.performance.now();
     const slowTimer = setTimeout(() => {
       if (flightRef.current?.startedAt === startedAt)
@@ -273,9 +279,11 @@ export function useWordDocumentSource({
           generation,
           durationMs: globalThis.performance.now() - startedAt,
           startedAt,
+          settling,
           retry:
             !build ||
             !!retry ||
+            settling ||
             !!build.authoring?.issueDetails?.some((detail) =>
               RETRIED_AUTHORING_DETAILS.has(detail),
             ),
@@ -326,9 +334,11 @@ export function useWordDocumentSource({
   const prefetch = useCallback(() => {
     const entry = cacheRef.current;
     if (isClean(entry) || flightRef.current) return;
-    // A failure the document did not cause is retried at the next send, not on every focus.
+    // A failure the document did not cause is retried at the next send, not on every focus; a
+    // capture taken while Word settled after a write is retaken once it has.
     if (
       entry?.retry &&
+      !(entry.settling && !wordOwnWriteSettling()) &&
       entry.generation === generationRef.current &&
       entry.authoring === authoringRef.current
     )
