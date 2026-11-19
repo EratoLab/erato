@@ -6,3 +6,4 @@ pub mod config_facet_attrs;
 pub mod config_reference;
 pub mod spoken;
 pub mod startup_log;
+pub mod wait_lines;

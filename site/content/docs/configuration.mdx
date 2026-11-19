@@ -3160,6 +3160,154 @@ talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```
 
+#### `audio_conversational.wait_lines`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines */}
+
+What the voice says while the user waits for an answer, when Audio-back is on. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working and that the wait is long, and then again that it is still working every `still_repeat_ms`, at most `still_repeat_max` times, so a turn that hangs goes quiet while the screen shows the wait. The wait counts from the end of the speech that became the turn; after a decision on a card it counts from the decision, with no opener. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, nothing is said into an open microphone, and no line is stored in the chat.
+
+The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute; a browser whose lines came back incomplete asks for all of them again at its next turn. The opener is left out when the lines are confirmed more than 3 s after it was due.
+
+Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
+
+**Type:** `object`
+
+#### `audio_conversational.wait_lines.amount`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.amount */}
+
+`normal`: the opener, tool lines and the lines for long waits. `long_only`: no opener. `off`: nothing is said; the screen shows the wait.
+
+**Type:** `string` · **Default:** `normal`
+
+#### `audio_conversational.wait_lines.first_after_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.first_after_ms */}
+
+When the opener is due, in milliseconds from the end of the user's speech, and never before the transcript is back.
+
+**Type:** `integer`, from `1500` to `10000` · **Default:** `3000`
+
+#### `audio_conversational.wait_lines.tool_after_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.tool_after_ms */}
+
+How long a tool call runs, in milliseconds, before its line is due. A call that ends sooner gets no line.
+
+**Type:** `integer`, from `0` to `10000` · **Default:** `1500`
+
+#### `audio_conversational.wait_lines.still_after_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.still_after_ms */}
+
+When the "still on it" line is due, from the end of the user's speech.
+
+**Type:** `integer`, from `5000` to `60000` · **Default:** `12000`
+
+#### `audio_conversational.wait_lines.still_quiet_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.still_quiet_ms */}
+
+How long nothing must have been said before the "still on it" line, so it is skipped while tool lines keep coming.
+
+**Type:** `integer`, from `2000` to `30000` · **Default:** `8000`
+
+#### `audio_conversational.wait_lines.long_after_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.long_after_ms */}
+
+When the line saying that the wait is long is due, from the end of the user's speech. It is outside `max_per_turn`, so a long wait always hears it.
+
+**Type:** `integer`, from `10000` to `120000` · **Default:** `22000`
+
+#### `audio_conversational.wait_lines.still_repeat_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.still_repeat_ms */}
+
+After the long line, "still on it" again every this many milliseconds, outside `max_per_turn`. `0` says it no more.
+
+**Type:** `integer`, `0` or from `10000` to `60000` · **Default:** `18000`
+
+#### `audio_conversational.wait_lines.still_repeat_max`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.still_repeat_max */}
+
+How many "still on it" lines at most after the long line. After them the voice is quiet and the screen shows the wait; with the defaults the last one comes about 80 s after the user stopped speaking.
+
+**Type:** `integer`, from `0` to `20` · **Default:** `3`
+
+#### `audio_conversational.wait_lines.min_gap_ms`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.min_gap_ms */}
+
+From the end of one line to the start of the next, in milliseconds.
+
+**Type:** `integer`, from `1000` to `15000` · **Default:** `4000`
+
+#### `audio_conversational.wait_lines.max_per_turn`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.max_per_turn */}
+
+Openers, tool lines and the first "still on it" line in one turn at most. The long line and the "still on it" lines after it are outside this cap. `0` says nothing at all.
+
+**Type:** `integer`, from `0` to `5` · **Default:** `3`
+
+#### `audio_conversational.wait_lines.taper_after_turns`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.taper_after_turns */}
+
+After this many turns with an opener in one session, the opener comes from the short set (`opener_short`). `0` never shortens.
+
+**Type:** `integer`, from `0` to `50` · **Default:** `3`
+
+#### `audio_conversational.wait_lines.user_choice`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.user_choice */}
+
+Whether a user may choose their own amount, unless a supervisor's audience setting says otherwise.
+
+**Type:** `boolean` · **Default:** `true`
+
+#### `audio_conversational.wait_lines.phrases`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.opener.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.opener_short.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.still.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.long.[] */}
+
+Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. A slot without lines says nothing. A variant is picked at random, never the one said last. A line must be at most 120 characters, must not end in a question mark, and must not hold braces or control characters; other lines are dropped with a warning. Write lines that say only that the wait is real, never what was found, without a time promise ("eine Sekunde") and without hesitation sounds ("ähm", "hmm").
+
+#### `audio_conversational.wait_lines.tools`
+
+{/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.search */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.items */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.list */}
+
+Templates per language tag for the line of a running tool call that only reads: `search` holds `{search}` (the text it searches for), `items` and `list` hold `{table}` (what the records are called, from the server's spoken vocabulary). A template not set, or empty, says nothing. A call that writes, or whose label says nothing about what it reads, gets no line of its own.
+
+```toml
+[audio_conversational.wait_lines]
+amount = "normal"
+first_after_ms = 3000
+tool_after_ms = 1500
+still_after_ms = 12000
+still_quiet_ms = 8000
+long_after_ms = 22000
+still_repeat_ms = 18000
+still_repeat_max = 3
+min_gap_ms = 4000
+max_per_turn = 3
+taper_after_turns = 3
+user_choice = true
+
+[audio_conversational.wait_lines.phrases.de]
+opener = ["Einen Moment.", "Alles klar, einen Moment."]
+opener_short = ["Moment."]
+
+[audio_conversational.wait_lines.tools.de]
+list = "Ich sehe mir die {table} an."
+```
+
 ### `model_permissions`
 
 {/* erato_toml_config_key: model_permissions */}

@@ -39,6 +39,7 @@ import {
 import { hesitationMatcher } from "@/hooks/audio/hesitations";
 import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
+import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
 import {
   enableSpeechPlayback,
   pauseSpeechPlayback,
@@ -55,6 +56,7 @@ import {
   useAudioDictationRecorder,
 } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
+import { prepareWaitLines } from "@/hooks/audio/waitLines";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import {
   holdComposeReload,
@@ -608,6 +610,9 @@ export const ChatInput = ({
       conversational: isAudioMode && Boolean(speechEnabled),
     });
     if (!isAudioMode) stopSpeechPlayback();
+    // Asked again each time audio mode starts, so a changed voice brings
+    // lines in that voice.
+    if (isAudioMode && speechEnabled) prepareWaitLines().catch(() => {});
   }, [isAudioMode, speechEnabled]);
   useEffect(
     () => () => {
@@ -827,6 +832,9 @@ export const ChatInput = ({
         target.nextChunkIndex += 1;
 
         if (target.card) {
+          // Words to a card are no turn: the wait of a later turn must not
+          // count from them.
+          takeSpeechEnd();
           target.card.words = appendDictationText(
             target.card.words,
             nextTranscript,

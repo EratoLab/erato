@@ -1569,6 +1569,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
@@ -1590,6 +1591,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
@@ -2543,6 +2545,16 @@ impl AppConfig {
         for warning in config.audio_conversational.drop_unusable_hesitation_words() {
             tracing::warn!("{warning}");
         }
+        for warning in config
+            .audio_conversational
+            .wait_lines
+            .fall_back_out_of_range()
+        {
+            tracing::warn!("{warning}");
+        }
+        for dropped in config.audio_conversational.wait_lines.drop_unusable() {
+            tracing::warn!("Wait line dropped: {dropped}.");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -3451,6 +3463,19 @@ mod audio_config_tests {
             .unwrap()
             .try_deserialize::<AudioConversationalConfig>()
             .unwrap()
+    }
+
+    #[test]
+    fn a_misshaped_wait_line_package_does_not_stop_the_configuration() {
+        let settings = load_conversational(
+            "[wait_lines]\nmax_per_turn = 2\n\
+             [wait_lines.phrases.de]\nopener = \"Einen Moment.\"\nstill = [\"Ich bin noch dran.\"]\n\
+             [wait_lines.tools.de]\nlist = \"Ich sehe mir die {table} an.\"\n",
+        );
+        assert_eq!(settings.wait_lines.max_per_turn, 2);
+        let set = settings.wait_lines.set_for("de");
+        assert_eq!(set.lines.len(), 1);
+        assert_eq!(set.list.as_deref(), Some("Ich sehe mir die {table} an."));
     }
 
     #[test]
@@ -8745,6 +8770,18 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_talk_over_voice_min_speech_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub talk_over_voice_min_speech_ms: u32,
+    /// What the voice says while the user waits for an answer: an opener,
+    /// a line per slow tool call, and lines for long waits.
+    ///
+    /// Boxed: the configuration is moved through deep test and request
+    /// futures, which must not grow by its size.
+    #[serde(
+        default,
+        deserialize_with = "crate::wait_lines::deserialize_wait_lines"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub wait_lines: Box<crate::wait_lines::WaitLinesConfig>,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -8804,6 +8841,7 @@ impl Default for AudioConversationalConfig {
             hesitation_words_replace_base: false,
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
+            wait_lines: Box::default(),
         }
     }
 }
@@ -8986,6 +9024,12 @@ fn warn_unknown_spoken_keys(schema: &Config) {
         tracing::warn!(
             "Config key `{key}` is not known to this Erato version and is ignored. It may come from a newer content package."
         );
+    }
+}
+
+fn warn_misshaped_wait_lines(schema: &Config) {
+    for warning in crate::wait_lines::misshaped_wait_lines(schema) {
+        tracing::warn!("Wait line setting dropped: {warning}.");
     }
 }
 

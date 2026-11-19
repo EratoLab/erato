@@ -35,6 +35,8 @@ pub struct Model {
     pub approval_speech_amount: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub approval_speech_wording: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub wait_lines_amount: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

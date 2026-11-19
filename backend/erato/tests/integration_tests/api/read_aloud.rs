@@ -391,3 +391,218 @@ async fn read_aloud_rejects_a_message_that_is_still_generating(pool: Pool<Postgr
     app.abort();
     speech.server.abort();
 }
+
+/// The read aloud voice made the conversational voice too, so that wait lines
+/// have a voice to be said in.
+fn enable_conversational_voice(app_config: &mut AppConfig, speech_url: &str) {
+    enable_read_aloud(app_config, speech_url);
+    app_config.audio_conversational.transcription.enabled = true;
+    app_config.audio_conversational.speech_provider = Some("voice".into());
+    // Lines come from a content package; the backend has none of its own.
+    for language in ["de", "en"] {
+        app_config.audio_conversational.wait_lines.phrases.insert(
+            language.into(),
+            serde_json::from_value(json!({
+                "opener": ["One moment.", "Okay, one moment."],
+                "opener_short": ["One moment."],
+                "still": ["Still on it."]
+            }))
+            .unwrap(),
+        );
+    }
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(None).await;
+    let speech = mock_speech(usize::MAX).await;
+    let app_state = test_app_state(app_config.clone(), pool.clone()).await;
+    let server = create_test_server(app_state);
+    // Without a conversational voice there is nothing to say lines with.
+    server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_not_found();
+
+    enable_conversational_voice(&mut app_config, &speech.url);
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state);
+    let first: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(first["amount"], "normal");
+    assert_eq!(first["incomplete"], false);
+    assert_eq!(first["source"], "deployment");
+    let lines = first["lines"].as_array().unwrap();
+    assert!(!lines.is_empty(), "{first}");
+    assert!(lines.iter().all(|line| line["audio"] == "AQIDBA=="));
+    assert!(lines.iter().any(|line| line["slot"] == "opener"));
+    // A line in two slots ("One moment.") is synthesised once.
+    let texts: std::collections::HashSet<&str> = lines
+        .iter()
+        .filter_map(|line| line["text"].as_str())
+        .collect();
+    let said = speech.requests.load(Ordering::SeqCst);
+    assert_eq!(said, texts.len());
+
+    // Asked again with the same voice: nothing is synthesised again.
+    let again: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(again["voice"], first["voice"]);
+    assert_eq!(again["lines"], first["lines"]);
+    assert_eq!(speech.requests.load(Ordering::SeqCst), said);
+
+    // A caller that already has this version is told so, without audio.
+    let version = first["version"].as_str().unwrap();
+    let known: Value = server
+        .get(&format!("/api/v1beta/me/wait-lines?known={version}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(known["unchanged"], true);
+    assert_eq!(known["version"], first["version"]);
+    assert_eq!(known["lines"], json!([]));
+
+    // The user's own amount applies, since the deployment lets them choose.
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_wait_lines_amount": "off" }))
+        .await
+        .assert_status_ok();
+    let off: Value = server
+        .get("/api/v1beta/me/wait-lines")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(off["amount"], "off");
+    assert_eq!(off["source"], "user");
+    assert_eq!(off["lines"], json!([]));
+    // The amount is part of the version, so an open session sees the change
+    // at its next turn.
+    assert_ne!(off["version"], first["version"]);
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_wait_lines_amount": "chatty" }))
+        .await
+        .assert_status(axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    speech.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn progress_speech_speaks_only_while_the_users_answer_is_generated(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(Some(MockLlmConfig {
+        chunks: vec!["Slow. ".to_string(); 20],
+        delay_ms: 150,
+        ..Default::default()
+    }))
+    .await;
+    let speech = mock_speech(usize::MAX).await;
+    enable_conversational_voice(&mut app_config, &speech.url);
+    let app_state = test_app_state(app_config, pool).await;
+    let (base_url, app) = serve(app_state).await;
+    let client = reqwest::Client::new();
+    let progress = |message_id: &str, text: &str| {
+        client
+            .post(format!(
+                "{base_url}/api/v1beta/me/messages/{message_id}/progress-speech"
+            ))
+            .bearer_auth(TEST_JWT_TOKEN)
+            .json(&json!({ "text": text }))
+            .send()
+    };
+
+    let mut generation = client
+        .post(format!("{base_url}/api/v1beta/me/messages/submitstream"))
+        .bearer_auth(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Please answer slowly" }))
+        .send()
+        .await
+        .unwrap();
+    let body = read_until(&mut generation, "\"message_type\":\"text_delta\"").await;
+    let message_id = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+        .find(|json| json["message_type"] == "assistant_message_started")
+        .and_then(|json| json["message_id"].as_str().map(str::to_string))
+        .expect("assistant_message_started event");
+
+    let said = progress(&message_id, "Looking at the opportunities.")
+        .await
+        .unwrap();
+    assert_eq!(said.status(), 200);
+    assert!(said.text().await.unwrap().contains("event: done"));
+    assert_eq!(progress(&message_id, " ").await.unwrap().status(), 400);
+    let long = "word ".repeat(40);
+    assert_eq!(progress(&message_id, &long).await.unwrap().status(), 400);
+
+    read_until(&mut generation, "assistant_message_completed").await;
+    while generation.chunk().await.unwrap().is_some() {}
+    // Once the answer is there, the voice says no free text about it.
+    assert_eq!(
+        progress(&message_id, "Looking at the opportunities.")
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    app.abort();
+    speech.server.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_voice_that_fails_is_not_asked_again_for_a_minute(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(None).await;
+    let requests = Arc::new(AtomicUsize::new(0));
+    let counter = requests.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let voice = tokio::spawn(async move {
+        axum::serve(
+            listener,
+            Router::new().route(
+                "/audio/speech",
+                post(move || {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    async {
+                        Response::builder()
+                            .status(500)
+                            .body(Body::from("broken"))
+                            .unwrap()
+                    }
+                }),
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    enable_conversational_voice(&mut app_config, &url);
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state);
+    let ask = || async {
+        let lines: Value = server
+            .get("/api/v1beta/me/wait-lines")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json();
+        lines
+    };
+    let first = ask().await;
+    assert_eq!(first["lines"], json!([]));
+    // The client is told, so it asks in full again next time.
+    assert_eq!(first["incomplete"], true);
+    let tried = requests.load(Ordering::SeqCst);
+    assert!(tried > 0);
+    // Asked again within the minute: the voice is not tried again.
+    assert_eq!(ask().await["lines"], json!([]));
+    assert_eq!(requests.load(Ordering::SeqCst), tried);
+    voice.abort();
+}

@@ -74,6 +74,9 @@ pub struct UpdateUserPreferencesInput {
     /// How approval cards are worded aloud; `Some(None)` follows the
     /// organisation again.
     pub approval_speech_wording: Option<Option<crate::config::ApprovalSpeechWording>>,
+    /// What the voice says while the user waits; `Some(None)` follows the
+    /// organisation again.
+    pub wait_lines_amount: Option<Option<erato_config::wait_lines::WaitLinesAmount>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
@@ -362,6 +365,9 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.approval_speech_wording {
             model.approval_speech_wording = ActiveValue::Set(value.map(wording_name));
         }
+        if let Some(value) = input.wait_lines_amount {
+            model.wait_lines_amount = ActiveValue::Set(value.map(style_name));
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -405,6 +411,7 @@ async fn upsert_user_preferences_row(
             approval_speech_wording: ActiveValue::Set(
                 input.approval_speech_wording.flatten().map(wording_name),
             ),
+            wait_lines_amount: ActiveValue::Set(input.wait_lines_amount.flatten().map(style_name)),
             ..Default::default()
         };
 
@@ -425,6 +432,14 @@ pub fn amount_name(amount: crate::config::ApprovalSpeechAmount) -> String {
 /// The stored name of a wording, as the API and the config spell it.
 pub fn wording_name(wording: crate::config::ApprovalSpeechWording) -> String {
     serde_json::to_value(wording)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The stored name of a style value, as the API and the config spell it.
+pub fn style_name<T: serde::Serialize>(value: T) -> String {
+    serde_json::to_value(value)
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_default()

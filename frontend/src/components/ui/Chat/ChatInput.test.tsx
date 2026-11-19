@@ -174,6 +174,7 @@ vi.mock("@/hooks/chat/useChatCompaction", () => ({
 }));
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  fetchWaitLines: () => Promise.reject(new Error("no wait lines in tests")),
   fetchGetFile: (...args: unknown[]) => mockFetchGetFile(...args),
   useCreateChat: (...args: unknown[]) => mockUseCreateChat(...args),
   useFacets: (...args: unknown[]) => mockUseFacets(...args),

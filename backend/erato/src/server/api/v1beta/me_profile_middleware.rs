@@ -124,6 +124,11 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_approval_speech_wording: Option<crate::config::ApprovalSpeechWording>,
+    /// What the voice says while the user waits, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_wait_lines_amount: Option<erato_config::wait_lines::WaitLinesAmount>,
 }
 
 impl UserProfile {
@@ -152,6 +157,7 @@ impl UserProfile {
             preference_language: None,
             preference_approval_speech_amount: None,
             preference_approval_speech_wording: None,
+            preference_wait_lines_amount: None,
         }
     }
 
@@ -224,6 +230,10 @@ impl UserProfile {
                 .and_then(crate::models::user_preference::parse_style_name);
             self.preference_approval_speech_wording = prefs
                 .approval_speech_wording
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_wait_lines_amount = prefs
+                .wait_lines_amount
                 .as_deref()
                 .and_then(crate::models::user_preference::parse_style_name);
             self.client_tool_decisions =

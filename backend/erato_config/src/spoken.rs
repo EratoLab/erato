@@ -202,7 +202,7 @@ pub fn sentences_in_use(
 /// of stopping the configuration.
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum Written {
+pub(crate) enum Written {
     Text(String),
     Flag(bool),
     Number(i64),
@@ -211,7 +211,7 @@ enum Written {
     Other(serde::de::IgnoredAny),
 }
 
-fn written_table(
+pub(crate) fn written_table(
     place: &str,
     written: Written,
     dropped: &mut Vec<String>,

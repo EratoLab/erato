@@ -3652,6 +3652,13 @@ export type PolicyGuidesConfig = {
   };
 };
 
+export type ProgressSpeechRequest = {
+  /**
+   * The line, composed by the client from the tool call's label.
+   */
+  text: string;
+};
+
 /**
  * Request to optimize a prompt using the configured prompt optimizer.
  */
@@ -5704,11 +5711,6 @@ export type ToolDisplayMetadata = {
  * links. Its structured content and embedded resources are not kept.
  */
 export type ToolResultDetails = {
-  /**
-   * Set by Erato when a call failed without an answer from the tool that
-   * Erato could read: the row's error text is then Erato's, never the
-   * tool's.
-   */
   failure?: ToolCallFailure;
   links?: ToolResultLink[];
   view?: ToolResultView;
@@ -6048,6 +6050,11 @@ export type UpdateProfilePreferencesRequest = {
    * @example Europe/Berlin
    */
   preference_time_zone?: string;
+  /**
+   * What the voice says while the user waits: `normal`, `long_only` or
+   * `off`, like the amount.
+   */
+  preference_wait_lines_amount?: null | undefined;
 };
 
 export type UsageBucket = {
@@ -6158,6 +6165,7 @@ export type UserProfile = {
    * time, are resolved in it.
    */
   preference_time_zone?: string;
+  preference_wait_lines_amount?: WaitLinesAmount;
   /**
    * The user's preferred language.
    *
@@ -6199,3 +6207,160 @@ export type UserToolApprovalSettingsResponse = {
 export type UserToolDecision = "always_allow" | "ask" | "denied";
 
 export type Value = void;
+
+/**
+ * One fixed line, ready to play.
+ */
+export type WaitLineAudio = {
+  /**
+   * Base64 of signed 16-bit little-endian mono PCM.
+   */
+  audio: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  sample_rate: number;
+  slot: WaitLineSlot;
+  text: string;
+};
+
+/**
+ * The slots of a language's lines.
+ */
+export type WaitLineSlot = "opener" | "opener_short" | "still" | "long";
+
+/**
+ * Templates for a running tool call's line. `search` holds `{search}`;
+ * `items` and `list` hold `{table}`. Absent ones say nothing.
+ */
+export type WaitLineToolTemplates = {
+  items?: string;
+  list?: string;
+  search?: string;
+};
+
+/**
+ * How much the voice says while the user waits.
+ */
+export type WaitLinesAmount = "normal" | "long_only" | "off";
+
+export type WaitLinesResponse = {
+  amount: WaitLinesAmount;
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * A configured line could not be said and is missing from `lines`. A
+   * client then asks again without `known`, so the line is tried again.
+   */
+  incomplete: boolean;
+  /**
+   * The language the lines are in: the language the voice speaks to the
+   * caller.
+   */
+  language: string;
+  /**
+   * Empty when the amount is `off`, in a language without lines, or when
+   * the voice could not say them.
+   */
+  lines: WaitLineAudio[];
+  source: WaitLinesSource;
+  timing: WaitLinesTiming;
+  tools: WaitLineToolTemplates;
+  /**
+   * The caller already has this `version`: `lines` is left empty and
+   * nothing is synthesised.
+   */
+  unchanged: boolean;
+  /**
+   * Whether the caller may choose their own amount.
+   */
+  user_choice: boolean;
+  /**
+   * Changes whenever anything here changes: the voice, the language, the
+   * words, the timings or the amount. A client keeps its lines only as
+   * long as this stays the same.
+   */
+  version: string;
+  /**
+   * Changes whenever the voice that says the lines changes.
+   */
+  voice: string;
+};
+
+/**
+ * Where the caller's amount comes from.
+ */
+export type WaitLinesSource = "deployment" | "audience" | "user";
+
+/**
+ * When lines are due, in milliseconds from the end of the user's speech
+ * unless said otherwise.
+ */
+export type WaitLinesTiming = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  first_after_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  long_after_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  max_per_turn: number;
+  /**
+   * From the end of one line to the start of the next.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  min_gap_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  still_after_ms: number;
+  /**
+   * Silence before the "still on it" line, from the end of the last line.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_quiet_ms: number;
+  /**
+   * How many "still on it" lines at most after the long line.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_max: number;
+  /**
+   * After the long line, between "still on it" lines; `0` says it no more.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_ms: number;
+  /**
+   * Turns with an opener before the opener comes from the short set; `0`
+   * never shortens.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  taper_after_turns: number;
+  /**
+   * From the start of a tool call.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  tool_after_ms: number;
+};
