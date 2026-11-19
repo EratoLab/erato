@@ -1,5 +1,6 @@
 import {
   createNativeContentSignature,
+  isWordDetectedLanguage,
   removeWordNumberingIdentity,
 } from "@erato/frontend/word-review";
 
@@ -13,10 +14,10 @@ const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 export interface WordScopeRequest {
   /** Captured blocks the write changes, removes, writes next to or reads a list from. */
   touched: Iterable<string>;
-  /** The touched blocks the write replaces or removes; every touched block when left out. Only these
-   * must be exactly as captured. The scope's other blocks keep their place by text and paragraph
-   * properties: Word re-tags their languages without an event, and run formatting is no change
-   * (owner decision 2026-10-30). */
+  /** The touched blocks the write replaces or removes; every touched block when left out. The scope's
+   * other blocks may also differ in Word's own language tags on their runs, which Word changes
+   * without an event (ERMAIN-970/1005). Paragraph marks stay exact: an inserted paragraph inherits
+   * its anchor's. */
   rewritten?: Iterable<string>;
   /** Paragraph styles and list instances the write applies, each reported on a captured block. */
   definitions: Iterable<{ ref: string; style?: string; numId?: string }>;
@@ -53,20 +54,28 @@ function blockSignatures(snapshot: WordAuthoringSnapshot): string[] {
   return result;
 }
 
-function withoutRunProperties(xml: string): string {
+function withoutRunLanguages(xml: string): string {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
-  for (const properties of Array.from(doc.getElementsByTagNameNS(W, "rPr")))
-    properties.remove();
+  for (const lang of Array.from(doc.getElementsByTagNameNS(W, "lang"))) {
+    const properties = lang.parentElement;
+    const run = properties?.parentElement;
+    if (!properties || run?.namespaceURI !== W || run.localName !== "r")
+      continue;
+    if (!isWordDetectedLanguage(lang)) continue;
+    lang.remove();
+    if (!properties.children.length && !properties.attributes.length)
+      properties.remove();
+  }
   return new XMLSerializer().serializeToString(doc);
 }
 
-/** What a write next to a block relies on: its text and paragraph properties. */
+/** Blocks as a write next to them relies on them: all but Word's language tags on runs. */
 function placementSignatures(snapshot: WordAuthoringSnapshot): string[] {
   const cached = placementCache.get(snapshot);
   if (cached) return cached;
   const signature = createNativeContentSignature(snapshot.ooxml);
   const result = snapshot.blocks.map((block) =>
-    signature(withoutRunProperties(block.xml)),
+    signature(withoutRunLanguages(block.xml)),
   );
   placementCache.set(snapshot, result);
   return result;
