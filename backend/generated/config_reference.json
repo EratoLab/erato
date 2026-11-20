@@ -215,6 +215,576 @@
     "security_relevance": "medium",
     "stability": "alpha"
   },
+  "approval_voice_commands.words.<language>.again.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.agreement_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.already.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.approve.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.backchannels.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.change_anywhere.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.change_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.conditions.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.continuations.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.corrections.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.dangling.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.date_prepositions.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.date_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.doubled_yes.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.fillers.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.generic.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.hesitations.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.keep_endings.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.keep_verbs.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.known_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.known_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.leading.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.leading_no.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.leading_yes.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.make_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.make_object.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.negations.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.negations_before.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.noise_phrases.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.noise_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.not_like_that.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.not_like_that_alone.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.not_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.onward_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.personal_subjects.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.pronouns.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.question_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.question_verbs.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.rather.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.read_cues.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.refusal_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.reject.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.again.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.agreement_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.already.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.approve.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.change_anywhere.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.change_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.corrections.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.dangling.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.date_prepositions.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.date_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.fillers.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.generic.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.hesitations.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.keep_endings.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.keep_verbs.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.known_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.known_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.leading.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.make_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.make_object.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.negations_before.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.noise_phrases.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.noise_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.not_like_that.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.not_like_that_alone.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.not_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.onward_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.personal_subjects.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.pronouns.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.rather.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.read_cues.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.refusal_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.reject.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.repeat.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.repeat_cues.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.rest_ask.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.rest_what.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.rest_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.skip.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.stop.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.stop_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.remove.subjects.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.repeat.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.repeat_cues.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.rest_ask.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.rest_what.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.rest_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.skip.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.stop.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.stop_first.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.subjects.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.wh_words.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.words.<language>.yes_particles.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
   "approval_voice_decisions.echo_tail_ms": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",

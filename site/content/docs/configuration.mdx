@@ -5696,6 +5696,197 @@ Replaces the model's built-in instruction, for example from subscription content
 
 **Type:** `string`
 
+#### `approval_voice_commands.words`
+
+{/* erato_toml_config_key: approval_voice_commands.words */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.again.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.agreement_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.already.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.approve.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.backchannels.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.change_anywhere.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.change_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.conditions.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.continuations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.corrections.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.dangling.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.date_prepositions.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.date_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.doubled_yes.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.fillers.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.generic.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.hesitations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.keep_endings.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.keep_verbs.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.known_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.known_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.leading.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.leading_no.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.leading_yes.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.make_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.make_object.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.negations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.negations_before.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.noise_phrases.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.noise_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.not_like_that.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.not_like_that_alone.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.not_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.onward_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.personal_subjects.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.pronouns.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.question_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.question_verbs.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.rather.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.read_cues.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.refusal_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.reject.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.again.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.agreement_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.already.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.approve.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.change_anywhere.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.change_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.corrections.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.dangling.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.date_prepositions.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.date_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.fillers.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.generic.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.hesitations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.keep_endings.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.keep_verbs.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.known_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.known_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.leading.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.make_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.make_object.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.negations_before.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.noise_phrases.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.noise_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_like_that.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_like_that_alone.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.onward_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.personal_subjects.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.pronouns.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rather.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.read_cues.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.refusal_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.reject.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.repeat.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.repeat_cues.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rest_ask.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rest_what.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rest_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.skip.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.stop.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.stop_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.subjects.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.repeat.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.repeat_cues.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.rest_ask.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.rest_what.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.rest_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.skip.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.stop.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.stop_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.subjects.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.wh_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.yes_particles.[] */}
+
+Words the rules match in a language besides the built-in German and English ones, by lowercase language tag, usually from a content package. Without this table the rules know German and English only: in another language they match nothing, a model's approve or refuse is turned into "unclear", and decisions are made on screen.
+
+A card uses the built-in lists, the words configured for `de` and `en` (people mix them), and those of the card's own language. Each list is the built-in list, then the configured words, without the words under `remove`. Words and phrases are compared as transcripts are: lower case, umlauts as "ae", apostrophes dropped, punctuation as a word break. A list of single words drops an entry of several words; phrase lists (`approve`, `reject`, `stop`, `skip`, `repeat`, `noise_phrases`, `not_like_that_alone`) match the whole segment, and `repeat_cues`, `read_cues`, `not_like_that` and `again` match words in a row anywhere in it.
+
+The guards cannot be weakened by data:
+
+- The lists whose words only hold a decision back cannot be shortened: a `remove` entry for them is ignored with a warning.
+- An entry that holds a negation or condition is not added to `approve`, `agreement_words`, `noise_words`, `noise_phrases`, `yes_particles`, `doubled_yes`, `leading_yes`, `hesitations` or `fillers`, nor one that holds a condition to `leading`.
+- A word the guards look for (a negation, condition, continuation, question word or yes/no word) is never added to `hesitations` or `fillers`, which are dropped before the guards look. The confirmation phrase of [`approval_voice_decisions`](#approval_voice_decisions) is checked with the card language's negations and conditions, and `audio_conversational.hesitation_words` never trims a negation, condition or question word before it.
+- A transcript in a script written without spaces between words (Chinese, Japanese, Thai, …) is never matched by the rules and never decides a card, whatever the lists hold: the model may still steer the voice, and decisions are made on screen.
+
+Lists whose words only hold a decision back; they can be added to, not shortened:
+
+| List | What it holds |
+|---|---|
+| `negations` | Words that negate: a sentence with one is never an approval. |
+| `conditions` | Words that make a sentence conditional: it never decides. |
+| `continuations` | A sentence ending in one of these goes on and does not decide. |
+| `question_verbs` | Verbs that open a question when a subject follows ("passt das"). |
+| `wh_words` | Question words that open a question. |
+| `question_first` | First words of a segment that make the utterance a question. |
+| `backchannels` | Sounds that, heard before a yes, make it listening. |
+| `yes_particles` | Words of a bare yes, which alone or doubled is listening. |
+| `doubled_yes` | A yes said twice in a row ("ja ja") is listening. |
+| `leading_yes` | Leading words that are a yes: they make a following no unclear. |
+| `leading_no` | Leading words that are a no: they make a following yes unclear. |
+
+Lists that can be added to and shortened under `remove`:
+
+| List | What it holds |
+|---|---|
+| `hesitations` | Hesitation sounds, dropped wherever they stand. |
+| `fillers` | Fillers dropped wherever they stand. |
+| `noise_words` | A segment made only of these is listening noise. |
+| `noise_phrases` | Phrases that are listening noise. |
+| `leading` | Words dropped from the start of a segment when something follows. |
+| `approve` | Phrases that approve. |
+| `agreement_words` | Besides the words of `approve`, the words an approval may hold. |
+| `refusal_words` | Besides the words of `reject` and the negations, the words a refusal may hold. |
+| `reject` | Phrases that refuse. |
+| `stop` | Phrases that stop the voice. |
+| `stop_first` | First words that stop the voice whatever follows. |
+| `skip` | Phrases that skip to the next piece. |
+| `known_first` | Verbs of "hab ich", "kenn ich": the user knows this piece. |
+| `repeat` | Phrases that ask to repeat. |
+| `personal_subjects` | Words that open a sentence about the speaker, not the card. |
+| `subjects` | Subjects after a question verb ("kannst du"). |
+| `corrections` | Words that say something on the card is wrong: maybe a change. |
+| `dangling` | A change ending on one of these has not said what to change. |
+| `rest_words` | Besides the question for the rest, the words it may hold. |
+| `known_words` | Besides "hab ich", the words a skip of a known piece may hold. |
+| `onward_words` | Besides "weiter", the words a "weiter …" skip may hold. |
+| `not_like_that_alone` | "Not like that" said alone: a wish for a different call. |
+| `not_like_that` | "Not like that" anywhere: the call, but different. |
+| `change_anywhere` | Words that ask for a different call wherever they stand. |
+| `change_first` | Verbs that ask for a different call at the start of a segment. |
+| `make_first` | Verbs that ask for a change only with a date, number or one of `make_object` after them. |
+| `make_object` | What after a `make_first` verb makes it a change. |
+| `keep_verbs` | Verbs that keep or drop a part ("lass X weg"). |
+| `keep_endings` | What after a `keep_verbs` verb says the part is kept or dropped. |
+| `pronouns` | Pronouns, which name no part of the card. |
+| `date_prepositions` | Prepositions before a date. |
+| `date_words` | Weekday and month names. |
+| `repeat_cues` | Phrases that ask to repeat wherever they stand. |
+| `read_cues` | Words that ask to read a text aloud. |
+| `rest_ask` | Words that, with one of `rest_what`, ask for the rest. |
+| `rest_what` | Words that, with one of `rest_ask`, ask for the rest. |
+| `generic` | Words that name no piece of the card. |
+| `rather` | "Lieber", "rather": a wish for something else, unless a word of `not_words` follows. |
+| `not_words` | The word "not" after `rather` ("lieber nicht"): a refusal. |
+| `already` | "Schon", "already": a read cue with it is a skip. |
+| `again` | Phrases meaning "again" ("noch mal"): their words are no fillers. |
+| `negations_before` | Negations that stand before the word they negate ("nicht machen"). |
+
+Entries are checked at startup, each list on its own: a language that is not a lowercase tag, a list name the backend does not know, a value of the wrong kind, a blank entry, one longer than 128 bytes or with hidden characters, and entries past 500 in one list are ignored with a warning, so one bad entry of a content package never stops the server or drops the rest of its language. The startup log names, per configured language, how many words each list adds and removes. The card's language is the one the endpoint resolves (`language`, else the user's), so today only `fr`, `es` and `pl` tables are used besides `de` and `en`.
+
+```toml
+[approval_voice_commands.words.fr]
+approve = ["oui", "d'accord", "vas-y"]
+reject = ["non", "non merci", "annule"]
+negations = ["non", "ne", "pas", "jamais"]
+conditions = ["mais", "si", "sauf"]
+leading = ["oui", "non", "alors"]
+leading_yes = ["oui"]
+leading_no = ["non"]
+yes_particles = ["oui"]
+hesitations = ["euh", "bah"]
+
+[approval_voice_commands.words.fr.remove]
+reject = ["ne"]
+```
+
 ### `approval_voice_decisions`
 
 {/* erato_toml_config_key: approval_voice_decisions */}

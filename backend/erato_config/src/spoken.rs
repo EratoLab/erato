@@ -79,6 +79,15 @@ pub fn fold(text: &str) -> String {
 /// Whether `word` decides what a sentence means, also drawn out ("neee",
 /// "nichtt") as transcribers write a long sound.
 pub fn decides_meaning(word: &str) -> bool {
+    decides_meaning_in(word, |word| {
+        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+    })
+}
+
+/// [`decides_meaning`] with a language's own negation, condition and
+/// question words: `listed` is asked with the folded word and its drawn-out
+/// form collapsed.
+pub fn decides_meaning_in(word: &str, listed: impl Fn(&str) -> bool) -> bool {
     let folded = fold(word);
     let mut collapsed = String::with_capacity(folded.len());
     for c in folded.chars() {
@@ -86,10 +95,7 @@ pub fn decides_meaning(word: &str) -> bool {
             collapsed.push(c);
         }
     }
-    [folded, collapsed].iter().any(|word| {
-        let word = word.as_str();
-        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
-    })
+    listed(&folded) || listed(&collapsed)
 }
 
 /// Entries one vocabulary holds in one language.
@@ -770,14 +776,14 @@ pub fn is_language_tag(tag: &str) -> bool {
         })
 }
 
-fn usable(text: &str, max_bytes: usize) -> bool {
+pub(crate) fn usable(text: &str, max_bytes: usize) -> bool {
     !text.trim().is_empty()
         && text.len() <= max_bytes
         && !text.chars().any(char::is_control)
         && !has_hidden_chars(text)
 }
 
-fn shown(text: &str) -> String {
+pub(crate) fn shown(text: &str) -> String {
     text.chars().take(MAX_ENTRY_BYTES).collect()
 }
 

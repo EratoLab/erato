@@ -30,11 +30,21 @@ fn custom_leaf_paths(shape: &Shape) -> Option<&'static [&'static str]> {
     ])
 }
 
+/// Sections that hold language data by language tag.
+const KEYED_BY_LANGUAGE: &[&[&str]] = &[&["approval_voice_commands", "words"]];
+
+fn is_keyed_by_language(path: &[String]) -> bool {
+    KEYED_BY_LANGUAGE
+        .iter()
+        .any(|keyed| keyed.iter().copied().eq(path.iter().map(String::as_str)))
+}
+
 fn map_key_placeholder(path: &[String]) -> String {
     match path.last().map(String::as_str) {
         Some("facets") => "<facet-id>".to_string(),
         Some("file_storage_providers") => "<provider-id>".to_string(),
         Some("localized_prompts") => "<locale>".to_string(),
+        Some(_) if is_keyed_by_language(path) => "<language>".to_string(),
         Some("mcp_servers") => "<server-id>".to_string(),
         Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
         Some("field_names" | "choice_labels")

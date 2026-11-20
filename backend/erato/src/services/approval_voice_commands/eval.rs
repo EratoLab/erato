@@ -133,7 +133,7 @@ async fn score<'a>(
                 let model_ms = start.elapsed().as_millis();
                 let (model, model_outcome) = match answer {
                     Ok(answer) => {
-                        let classified = from_answer(&input, &answer);
+                        let classified = from_answer(&input, CommandWords::base(), &answer);
                         (classified.command, classified.outcome)
                     }
                     Err(outcome) => (unclear(), outcome),

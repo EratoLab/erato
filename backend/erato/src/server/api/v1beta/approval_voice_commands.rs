@@ -12,12 +12,12 @@ use crate::services::approval_voice_commands::decision::{
     RecordInput, SignalProblem, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked,
     card_digest, check_signals, issue_receipt, only_points, record, stop_is_screen_only,
 };
-use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase, syllables};
+use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase_with, syllables};
 use crate::services::approval_voice_commands::{
-    CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
-    VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning, VoiceModel,
-    VoiceQuestion, check_input, classify_by_model, classify_by_rules, classify_without_model,
-    request_heard,
+    CardPiece, Classified, CommandWords, DEFAULT_PROMPT, InputProblem, VoiceCommand,
+    VoiceCommandInput, VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning,
+    VoiceModel, VoiceQuestion, check_input, classify_by_model_with, classify_by_rules_with,
+    classify_without_model, request_heard,
 };
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::sentry::log_internal_server_error;
@@ -124,15 +124,17 @@ pub async fn interpret_approval_voice_command(
         check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     let start = Instant::now();
+    let words = app_state.voice_command_words.for_language(&language);
     let deciding = app_state.config.approval_voice_decisions.enabled;
     let phrase = deciding
         .then(|| {
-            match_phrase(
+            match_phrase_with(
                 &request.transcript,
                 &app_state
                     .config
                     .audio_conversational
                     .effective_hesitation_words(),
+                words,
             )
         })
         .flatten();
@@ -156,12 +158,12 @@ pub async fn interpret_approval_voice_command(
             },
             outcome: "phrase",
         },
-        None => match classify_by_rules(&input) {
+        None => match classify_by_rules_with(&input, words) {
             Some(classified) => classified,
             None => {
                 let deadline = tokio::time::Instant::now()
                     + Duration::from_millis(u64::from(config.model_timeout_ms));
-                ask_model(&app_state, &policy, &me_user, &input, deadline).await?
+                ask_model(&app_state, &policy, &me_user, &input, words, deadline).await?
             }
         },
     };
@@ -335,6 +337,7 @@ async fn ask_model(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
     deadline: tokio::time::Instant,
 ) -> Result<Classified, StatusCode> {
     let provider = match app_state.chat_provider_for_approval_voice_commands() {
@@ -385,5 +388,5 @@ async fn ask_model(
         prompt,
         timeout: deadline.saturating_duration_since(tokio::time::Instant::now()),
     };
-    Ok(classify_by_model(input, &model).await)
+    Ok(classify_by_model_with(input, words, &model).await)
 }

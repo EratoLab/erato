@@ -1,13 +1,14 @@
 //! The plain words and short phrases, German and English together since
 //! people mix them, matched without a model. A sentence the rules are not
-//! sure of is left to the model; the rules never guess.
+//! sure of is left to the model; the rules never guess. The lists below are
+//! the built-in base; `words.rs` adds what a language package brings.
 
+use super::words::CommandWords;
 use super::{
     CardPiece, CardPieceRole, VoiceCommandInput, VoiceMeaning, VoiceQuestion, default_text_piece,
 };
 pub(super) use erato_config::spoken::{CONDITIONS, NEGATIONS, WH_WORDS, fold};
 use std::collections::HashSet;
-use std::sync::LazyLock;
 
 pub(super) struct RuleMatch {
     pub meaning: VoiceMeaning,
@@ -20,14 +21,11 @@ pub(super) const HESITATIONS: &[&str] = &[
     "mhmm", "uh", "uhm", "uhh", "um", "umm", "erm",
 ];
 /// Fillers dropped wherever they stand, besides the hesitation sounds.
-const FILLER_WORDS: &[&str] = &["bitte", "please", "mal", "doch", "einfach", "eben", "kurz"];
-
-fn fillers() -> HashSet<&'static str> {
-    HESITATIONS.iter().chain(FILLER_WORDS).copied().collect()
-}
+pub(super) const FILLER_WORDS: &[&str] =
+    &["bitte", "please", "mal", "doch", "einfach", "eben", "kurz"];
 
 /// A segment made only of these is listening noise.
-const NOISE_WORDS: &[&str] = &[
+pub(super) const NOISE_WORDS: &[&str] = &[
     "okay",
     "ok",
     "oke",
@@ -62,7 +60,7 @@ const NOISE_WORDS: &[&str] = &[
     "thanks",
 ];
 
-const NOISE_PHRASES: &[&str] = &[
+pub(super) const NOISE_PHRASES: &[&str] = &[
     "in ordnung",
     "uh huh",
     "i see",
@@ -76,7 +74,7 @@ const NOISE_PHRASES: &[&str] = &[
 ];
 
 /// Dropped from the start of a segment when something follows.
-const LEADING: &[&str] = &[
+pub(super) const LEADING: &[&str] = &[
     "okay",
     "ok",
     "oke",
@@ -115,10 +113,10 @@ const LEADING: &[&str] = &[
     "no",
     "nope",
 ];
-const LEADING_YES: &[&str] = &["ja", "jo", "yes", "yeah", "yep"];
-const LEADING_NO: &[&str] = &["nein", "nee", "no", "nope"];
+pub(super) const LEADING_YES: &[&str] = &["ja", "jo", "yes", "yeah", "yep"];
+pub(super) const LEADING_NO: &[&str] = &["nein", "nee", "no", "nope"];
 
-const APPROVE: &[&str] = &[
+pub(super) const APPROVE: &[&str] = &[
     "ja",
     "jawohl",
     "ja genau",
@@ -176,7 +174,7 @@ const APPROVE: &[&str] = &[
 /// Besides the words of [`APPROVE`], acknowledgements and noise: the only
 /// words an approval may have. A word outside them, even a misheard one, is
 /// a doubt, and a doubt is not a decision.
-const AGREEMENT_WORDS: &[&str] = &[
+pub(super) const AGREEMENT_WORDS: &[&str] = &[
     "das",
     "es",
     "so",
@@ -225,12 +223,12 @@ const AGREEMENT_WORDS: &[&str] = &[
 /// Besides the words of [`REJECT`], negations, acknowledgements and noise:
 /// the only words a refusal may have. A yes is not among them, so "ja nee"
 /// and "yeah, nope" are left as they are: not a refusal the guard lets pass.
-const REFUSAL_WORDS: &[&str] = &[
+pub(super) const REFUSAL_WORDS: &[&str] = &[
     "das", "es", "machen", "mal", "bitte", "please", "it", "that", "this", "do", "lieber",
     "besser", "sein", "wir", "we", "jetzt", "now",
 ];
 
-const REJECT: &[&str] = &[
+pub(super) const REJECT: &[&str] = &[
     "nein",
     "nee",
     "ne",
@@ -283,7 +281,7 @@ const REJECT: &[&str] = &[
     "absolutely not",
 ];
 
-const STOP: &[&str] = &[
+pub(super) const STOP: &[&str] = &[
     "stopp",
     "stop",
     "halt",
@@ -325,9 +323,9 @@ const STOP: &[&str] = &[
     "one sec",
     "silence",
 ];
-const STOP_FIRST: &[&str] = &["stopp", "stop", "halt", "ruhe"];
+pub(super) const STOP_FIRST: &[&str] = &["stopp", "stop", "halt", "ruhe"];
 
-const SKIP: &[&str] = &[
+pub(super) const SKIP: &[&str] = &[
     "weiter",
     "mach weiter",
     "weitermachen",
@@ -357,9 +355,9 @@ const SKIP: &[&str] = &[
     "continue",
 ];
 /// "hab ich", "kenn ich (schon)": the user knows this piece.
-const KNOWN_FIRST: &[&str] = &["hab", "habe", "kenn", "kenne", "weiss"];
+pub(super) const KNOWN_FIRST: &[&str] = &["hab", "habe", "kenn", "kenne", "weiss"];
 
-const REPEAT: &[&str] = &[
+pub(super) const REPEAT: &[&str] = &[
     "nochmal",
     "noch mal",
     "noch einmal",
@@ -398,11 +396,11 @@ const REPEAT: &[&str] = &[
 ];
 
 /// Heard before a yes, these make it a listening "mhm, ja", not agreement.
-const BACKCHANNELS: &[&str] = &["mhm", "mhmm", "mh", "hm", "hmm", "hmmm", "aha", "huh"];
-const YES_PARTICLES: &[&str] = &["ja", "jo", "yes", "yeah", "yep"];
+pub(super) const BACKCHANNELS: &[&str] = &["mhm", "mhmm", "mh", "hm", "hmm", "hmmm", "aha", "huh"];
+pub(super) const YES_PARTICLES: &[&str] = &["ja", "jo", "yes", "yeah", "yep"];
 /// Words that open a question without a question mark: "passt das",
 /// "kannst du", "is that".
-const QUESTION_VERBS: &[&str] = &[
+pub(super) const QUESTION_VERBS: &[&str] = &[
     "passt",
     "stimmt",
     "ist",
@@ -436,18 +434,18 @@ const QUESTION_VERBS: &[&str] = &[
     "have",
     "has",
 ];
-const SUBJECTS: &[&str] = &[
+pub(super) const SUBJECTS: &[&str] = &[
     "das", "es", "du", "ihr", "sie", "wir", "ich", "man", "you", "it", "that", "this", "we", "i",
     "he", "she", "they", "there",
 ];
 /// A sentence that starts with its own subject ("ich möchte lieber …") is
 /// about the speaker, not obviously about the card.
-const PERSONAL_SUBJECTS: &[&str] = &[
+pub(super) const PERSONAL_SUBJECTS: &[&str] = &[
     "ich", "i", "id", "ill", "im", "ive", "wir", "we", "man", "du", "you",
 ];
 /// Words that say something on the card is wrong, or that a part goes out
 /// or in: maybe a change.
-const CORRECTIONS: &[&str] = &[
+pub(super) const CORRECTIONS: &[&str] = &[
     "falsch",
     "falsche",
     "falschen",
@@ -467,14 +465,14 @@ const CORRECTIONS: &[&str] = &[
     "should",
 ];
 /// A change that ends on one of these has not yet said what to change.
-const DANGLING: &[&str] = &[
+pub(super) const DANGLING: &[&str] = &[
     "den", "die", "der", "das", "dem", "des", "ein", "eine", "einen", "the", "a", "an", "to", "on",
     "at", "auf", "am", "zum", "zur", "mit", "ohne", "statt", "und", "and", "aber", "but", "for",
     "fuer", "von", "of", "in", "im", "bis", "ab", "lieber", "rather", "without",
 ];
 /// Besides "the rest" and "what else", the only words a request for the
 /// rest may have.
-const REST_WORDS: &[&str] = &[
+pub(super) const REST_WORDS: &[&str] = &[
     "geaendert",
     "aktualisiert",
     "veraendert",
@@ -529,7 +527,7 @@ const REST_WORDS: &[&str] = &[
 ];
 /// Besides "hab ich", "kenn ich", "I know", the only words a skip of a known
 /// piece may have.
-const KNOWN_WORDS: &[&str] = &[
+pub(super) const KNOWN_WORDS: &[&str] = &[
     "schon",
     "bereits",
     "gehoert",
@@ -559,7 +557,7 @@ const KNOWN_WORDS: &[&str] = &[
     "weiter",
 ];
 /// Besides "weiter", the only words a "weiter …" skip may have.
-const ONWARD_WORDS: &[&str] = &[
+pub(super) const ONWARD_WORDS: &[&str] = &[
     "zum",
     "naechsten",
     "naechste",
@@ -579,13 +577,13 @@ const ONWARD_WORDS: &[&str] = &[
 /// A sentence ending in one of these goes on; it is not a finished decision.
 /// A final "so" or "then" after what it qualifies closes it: see
 /// [`Words::ends_open`].
-const CONTINUATIONS: &[&str] = &[
+pub(super) const CONTINUATIONS: &[&str] = &[
     "so", "also", "und", "and", "aber", "but", "dann", "then", "well", "weil", "because", "wenn",
     "if", "ich", "i", "naja",
 ];
 
 /// "Not like that" said on its own: a wish for a different call.
-const NOT_LIKE_THAT_ALONE: &[&str] = &[
+pub(super) const NOT_LIKE_THAT_ALONE: &[&str] = &[
     "nicht so",
     "so nicht",
     "nicht so machen",
@@ -601,7 +599,7 @@ const NOT_LIKE_THAT_ALONE: &[&str] = &[
 ];
 
 /// Words that ask for a different call wherever they stand.
-const CHANGE_ANYWHERE: &[&str] = &[
+pub(super) const CHANGE_ANYWHERE: &[&str] = &[
     "ohne",
     "statt",
     "anstatt",
@@ -623,7 +621,7 @@ const CHANGE_ANYWHERE: &[&str] = &[
     "ersetzen",
 ];
 /// Verbs that ask for a different call at the start of a segment.
-const CHANGE_FIRST: &[&str] = &[
+pub(super) const CHANGE_FIRST: &[&str] = &[
     "nimm",
     "nehm",
     "nehme",
@@ -662,16 +660,16 @@ const CHANGE_FIRST: &[&str] = &[
     "put",
 ];
 /// "mach", "make": a change only with a date, a number or a preposition after.
-const MAKE_FIRST: &[&str] = &["mach", "make"];
-const MAKE_OBJECT: &[&str] = &[
+pub(super) const MAKE_FIRST: &[&str] = &["mach", "make"];
+pub(super) const MAKE_OBJECT: &[&str] = &[
     "am", "auf", "zum", "zur", "bis", "ab", "um", "daraus", "spaeter", "frueher", "to", "on", "at",
     "later", "earlier",
 ];
 /// "lass X weg", "leave X as it is": keep or drop a part.
-const KEEP_VERBS: &[&str] = &[
+pub(super) const KEEP_VERBS: &[&str] = &[
     "lass", "lasst", "lasse", "leave", "keep", "behalte", "behalt",
 ];
-const KEEP_ENDINGS: &[&str] = &[
+pub(super) const KEEP_ENDINGS: &[&str] = &[
     "weg",
     "raus",
     "wie",
@@ -685,13 +683,13 @@ const KEEP_ENDINGS: &[&str] = &[
     "unchanged",
     "same",
 ];
-const PRONOUNS: &[&str] = &[
+pub(super) const PRONOUNS: &[&str] = &[
     "es", "das", "den", "die", "der", "sie", "ihn", "it", "that", "this", "them", "mal",
 ];
-const DATE_PREPOSITIONS: &[&str] = &[
+pub(super) const DATE_PREPOSITIONS: &[&str] = &[
     "am", "auf", "zum", "zur", "den", "der", "ab", "bis", "um", "on", "to", "the", "at", "by",
 ];
-const DATE_WORDS: &[&str] = &[
+pub(super) const DATE_WORDS: &[&str] = &[
     "montag",
     "dienstag",
     "mittwoch",
@@ -726,12 +724,12 @@ const DATE_WORDS: &[&str] = &[
     "october",
     "december",
 ];
-const QUESTION_FIRST: &[&str] = &[
+pub(super) const QUESTION_FIRST: &[&str] = &[
     "was", "wer", "wie", "wann", "wo", "warum", "ist", "hat", "kann", "hast", "habe", "gibt",
     "what", "whats", "who", "when", "where", "why", "is", "does", "do", "can", "have", "will",
 ];
 
-const REPEAT_CUES: &[&[&str]] = &[
+pub(super) const REPEAT_CUES: &[&[&str]] = &[
     &["nochmal"],
     &["nochmals"],
     &["noch", "mal"],
@@ -755,7 +753,7 @@ const REPEAT_CUES: &[&[&str]] = &[
     &["didnt", "get"],
     &["didnt", "hear"],
 ];
-const READ_CUES: &[&[&str]] = &[
+pub(super) const READ_CUES: &[&[&str]] = &[
     &["vorlesen"],
     &["vorlest"],
     &["lies"],
@@ -764,8 +762,8 @@ const READ_CUES: &[&[&str]] = &[
     &["lest"],
     &["read"],
 ];
-const REST_ASK: &[&str] = &["was", "what", "whats", "anything", "sonst", "und"];
-const REST_WHAT: &[&str] = &[
+pub(super) const REST_ASK: &[&str] = &["was", "what", "whats", "anything", "sonst", "und"];
+pub(super) const REST_WHAT: &[&str] = &[
     "noch",
     "sonst",
     "else",
@@ -777,7 +775,7 @@ const REST_WHAT: &[&str] = &[
 ];
 
 /// Words that say nothing about which piece is meant.
-const GENERIC: &[&str] = &[
+pub(super) const GENERIC: &[&str] = &[
     "der",
     "die",
     "das",
@@ -941,127 +939,54 @@ const GENERIC: &[&str] = &[
     "habe",
 ];
 
-fn set(words: &[&'static str]) -> HashSet<&'static str> {
-    words.iter().copied().collect()
+/// "lieber", "rather": a wish for something else, unless "not" follows.
+pub(super) const RATHER: &[&str] = &["lieber", "rather"];
+/// "not" after [`RATHER`]: "lieber nicht" refuses.
+pub(super) const NOT_WORDS: &[&str] = &["nicht", "not"];
+/// A read cue said with one of these ("das hab ich schon gelesen") is no
+/// wish to hear the text.
+pub(super) const ALREADY: &[&str] = &["already", "schon"];
+/// "Again": its words are no fillers ("noch mal") and ask for no rest.
+pub(super) const AGAIN: &[&str] = &["noch mal", "noch einmal"];
+/// "Not like that" anywhere in a segment.
+pub(super) const NOT_LIKE_THAT: &[&str] = &["nicht so", "so nicht", "not like that"];
+/// A yes said twice in a row is listening: "ja ja".
+pub(super) const DOUBLED_YES: &[&str] = &["ja"];
+/// Negations that stand right before the word they negate.
+pub(super) const NEGATIONS_BEFORE: &[&str] = &["nicht", "not", "dont", "never", "nie"];
+
+/// Whether `words[index]` ends one of the `again` phrases ("noch mal").
+fn ends_again(words: &[String], index: usize, again: &[Vec<String>]) -> bool {
+    again.iter().any(|cue| {
+        cue.len() > 1 && index + 1 >= cue.len() && words[index + 1 - cue.len()..=index] == cue[..]
+    })
 }
 
-fn phrases(list: &[&str]) -> HashSet<String> {
-    list.iter()
-        .map(|phrase| drop_fillers(&words_of(phrase), &fillers()).join(" "))
-        .collect()
+/// Whether one of the `again` phrases starts at `words[index]`.
+fn starts_again(words: &[String], index: usize, again: &[Vec<String>]) -> bool {
+    again.iter().any(|cue| words[index..].starts_with(cue))
 }
 
-/// `fillers` is passed in because the phrase lists are built before [`LISTS`].
-fn drop_fillers(words: &[String], fillers: &HashSet<&'static str>) -> Vec<String> {
+/// `fillers` and `again` are passed in because the phrase lists are built
+/// with them.
+pub(super) fn drop_fillers(
+    words: &[String],
+    fillers: &HashSet<String>,
+    again: &[Vec<String>],
+) -> Vec<String> {
     let mut kept = Vec::with_capacity(words.len());
     for (index, word) in words.iter().enumerate() {
-        // German "um 10" is a time and "noch mal" means again.
+        // German "um 10" is a time.
         let time = word == "um"
             && words
                 .get(index + 1)
                 .is_some_and(|next| next.starts_with(|c: char| c.is_ascii_digit()));
-        let again = word == "mal" && index > 0 && words[index - 1] == "noch";
-        if time || again || !fillers.contains(word.as_str()) {
+        if time || ends_again(words, index, again) || !fillers.contains(word.as_str()) {
             kept.push(word.clone());
         }
     }
     kept
 }
-
-struct Lists {
-    fillers: HashSet<&'static str>,
-    noise_words: HashSet<&'static str>,
-    noise_phrases: HashSet<String>,
-    leading: HashSet<&'static str>,
-    approve: HashSet<String>,
-    reject: HashSet<String>,
-    stop: HashSet<String>,
-    skip: HashSet<String>,
-    repeat: HashSet<String>,
-    generic: HashSet<&'static str>,
-    agreement: HashSet<String>,
-    /// Words that carry the agreement itself, not just accompany it.
-    agreeing: HashSet<String>,
-    refusal: HashSet<String>,
-    refusing: HashSet<String>,
-}
-
-/// The words of `phrases` that carry their meaning: without pronouns,
-/// acknowledgements and noise.
-fn carrying(phrases: &[&str], also_not: &[&str]) -> HashSet<String> {
-    phrases
-        .iter()
-        .flat_map(|phrase| words_of(phrase))
-        .filter(|word| {
-            let word = word.as_str();
-            !NOISE_WORDS.contains(&word)
-                && !PRONOUNS.contains(&word)
-                && !SUBJECTS.contains(&word)
-                && !also_not.contains(&word)
-        })
-        .collect()
-}
-
-static LISTS: LazyLock<Lists> = LazyLock::new(|| Lists {
-    fillers: fillers(),
-    noise_words: set(NOISE_WORDS),
-    noise_phrases: phrases(NOISE_PHRASES),
-    leading: set(LEADING),
-    approve: phrases(APPROVE),
-    reject: phrases(REJECT),
-    stop: phrases(STOP),
-    skip: phrases(SKIP),
-    repeat: phrases(REPEAT),
-    generic: set(GENERIC),
-    agreement: APPROVE
-        .iter()
-        .flat_map(|phrase| words_of(phrase))
-        .chain(
-            AGREEMENT_WORDS
-                .iter()
-                .chain(NOISE_WORDS)
-                .chain(LEADING.iter().filter(|word| !LEADING_NO.contains(word)))
-                .map(|word| word.to_string()),
-        )
-        .collect(),
-    agreeing: carrying(APPROVE, &["bin", "s", "gehts"]),
-    refusal: REJECT
-        .iter()
-        .flat_map(|phrase| words_of(phrase))
-        .chain(
-            REFUSAL_WORDS
-                .iter()
-                .chain(NEGATIONS)
-                .chain(NOISE_WORDS)
-                .chain(LEADING.iter().filter(|word| !LEADING_YES.contains(word)))
-                .map(|word| word.to_string()),
-        )
-        .filter(|word| !YES_PARTICLES.contains(&word.as_str()))
-        .collect(),
-    refusing: carrying(
-        REJECT,
-        &[
-            "mach",
-            "machen",
-            "do",
-            "sein",
-            "gut",
-            "danke",
-            "thanks",
-            "thank",
-            "besser",
-            "lieber",
-            "auf",
-            "fall",
-            "way",
-            "absolutely",
-            "mal",
-            "bitte",
-            "please",
-            "ab",
-        ],
-    ),
-});
 
 pub(super) fn words_of(text: &str) -> Vec<String> {
     fold(text)
@@ -1074,12 +999,52 @@ pub(super) fn words_of(text: &str) -> Vec<String> {
 fn is_segment_break(c: char) -> bool {
     matches!(
         c,
-        ',' | '.' | ';' | ':' | '!' | '?' | '…' | '–' | '—' | '(' | ')' | '"' | '\n'
+        ',' | '.'
+            | ';'
+            | ':'
+            | '!'
+            | '?'
+            | '…'
+            | '–'
+            | '—'
+            | '('
+            | ')'
+            | '"'
+            | '\n'
+            | '、'
+            | '。'
+            | '！'
+            | '？'
+            | '，'
+            | '；'
+    )
+}
+
+/// A letter of a script written without spaces between words (Han, kana,
+/// Thai, …): the rules cannot tell its words apart, so they never decide on it.
+fn is_unspaced_letter(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x0E00..=0x0EFF // Thai, Lao
+            | 0x0F00..=0x0FFF // Tibetan
+            | 0x1000..=0x109F // Myanmar
+            | 0x1780..=0x17FF // Khmer
+            | 0x19E0..=0x19FF // Khmer symbols
+            | 0x1B00..=0x1B7F // Balinese
+            | 0x3040..=0x30FF // Hiragana, Katakana
+            | 0x31F0..=0x31FF // Katakana extension
+            | 0x3400..=0x4DBF // CJK extension A
+            | 0x4E00..=0x9FFF // CJK
+            | 0xA980..=0xA9DF // Javanese
+            | 0xF900..=0xFAFF // CJK compatibility
+            | 0xFF66..=0xFF9F // half-width Katakana
+            | 0x20000..=0x3134F // CJK extensions B to G
     )
 }
 
 /// An utterance as words, in segments split at punctuation, fillers dropped.
-pub(super) struct Words {
+pub(super) struct Words<'l> {
+    lists: &'l CommandWords,
     segments: Vec<Vec<String>>,
     /// Per segment: it ends with a question mark.
     marked_questions: Vec<bool>,
@@ -1090,17 +1055,24 @@ pub(super) struct Words {
     backchannel: bool,
     /// A no is taken back: "nein, doch".
     takes_back: bool,
+    /// Written in a script without spaces between words.
+    unspaced: bool,
 }
 
-impl Words {
-    pub(super) fn of(transcript: &str) -> Self {
-        let lists = &*LISTS;
+impl<'l> Words<'l> {
+    /// With the built-in lists only.
+    #[cfg(test)]
+    pub(super) fn of(transcript: &str) -> Words<'static> {
+        Words::with(transcript, CommandWords::base())
+    }
+
+    pub(super) fn with(transcript: &str, lists: &'l CommandWords) -> Self {
         let folded = fold(transcript);
         let mut raw: Vec<(String, bool)> = Vec::new();
         let mut current = String::new();
         for c in folded.chars() {
             if is_segment_break(c) {
-                raw.push((std::mem::take(&mut current), c == '?'));
+                raw.push((std::mem::take(&mut current), matches!(c, '?' | '？')));
             } else {
                 current.push(c);
             }
@@ -1111,12 +1083,12 @@ impl Words {
         for (text, marked) in raw {
             let words = words_of(&text);
             for word in &words {
-                backchannel |= BACKCHANNELS.contains(&word.as_str());
+                backchannel |= lists.backchannels.contains(word.as_str());
                 takes_back |= said_no && word == "doch";
-                said_no |=
-                    LEADING_NO.contains(&word.as_str()) || matches!(word.as_str(), "ne" | "noe");
+                said_no |= lists.leading_no.contains(word.as_str())
+                    || matches!(word.as_str(), "ne" | "noe");
             }
-            let kept = drop_fillers(&words, &lists.fillers);
+            let kept = drop_fillers(&words, &lists.fillers, &lists.again);
             if kept.is_empty() {
                 if marked && let Some(last) = marked_questions.last_mut() {
                     *last = true;
@@ -1128,12 +1100,14 @@ impl Words {
         }
         let end = transcript.trim_end();
         Self {
+            lists,
             segments,
             marked_questions,
-            question: transcript.contains('?'),
+            question: transcript.contains(['?', '？']),
             broken_off: end.ends_with('-') || end.ends_with('…') || end.ends_with("..."),
             backchannel,
             takes_back,
+            unspaced: transcript.chars().any(is_unspaced_letter),
         }
     }
 
@@ -1144,9 +1118,10 @@ impl Words {
         self.marked_questions[index]
             || segment
                 .first()
-                .is_some_and(|word| WH_WORDS.contains(&word.as_str()))
+                .is_some_and(|word| self.lists.wh_words.contains(word.as_str()))
             || matches!(segment.as_slice(), [verb, subject, ..]
-                if QUESTION_VERBS.contains(&verb.as_str()) && SUBJECTS.contains(&subject.as_str()))
+                if self.lists.question_verbs.contains(verb.as_str())
+                    && self.lists.subjects.contains(subject.as_str()))
     }
 
     fn any_asks(&self) -> bool {
@@ -1160,20 +1135,21 @@ impl Words {
             || self
                 .all()
                 .last()
-                .is_some_and(|last| DANGLING.contains(&last))
+                .is_some_and(|last| self.lists.dangling.contains(last))
     }
 
     /// A yes that only shows the user is listening: "mhm, ja", "ja ja".
     pub(super) fn is_backchannel_yes(&self) -> bool {
+        let lists = self.lists;
         let only_yes = self
             .all()
-            .all(|word| YES_PARTICLES.contains(&word) || NOISE_WORDS.contains(&word));
+            .all(|word| lists.yes_particles.contains(word) || lists.noise_words.contains(word));
         let doubled = self.segments.iter().any(|segment| {
             segment
                 .windows(2)
-                .any(|pair| pair[0] == "ja" && pair[1] == "ja")
+                .any(|pair| pair[0] == pair[1] && lists.doubled_yes.contains(&pair[0]))
         });
-        only_yes && (self.backchannel || doubled)
+        !self.unspaced && only_yes && (self.backchannel || doubled)
     }
 
     fn all(&self) -> impl Iterator<Item = &str> {
@@ -1184,8 +1160,8 @@ impl Words {
         self.segments.iter().map(Vec::len).sum()
     }
 
-    fn has_any(&self, list: &[&str]) -> bool {
-        self.all().any(|word| list.contains(&word))
+    fn has_any(&self, list: &HashSet<String>) -> bool {
+        self.all().any(|word| list.contains(word))
     }
 
     fn has_number(&self) -> bool {
@@ -1198,7 +1174,7 @@ impl Words {
             || self.segments.iter().any(|segment| {
                 segment
                     .first()
-                    .is_some_and(|w| QUESTION_FIRST.contains(&w.as_str()))
+                    .is_some_and(|w| self.lists.question_first.contains(w.as_str()))
             })
     }
 
@@ -1215,6 +1191,7 @@ impl Words {
     }
 
     fn change_marker(&self, plain: bool) -> bool {
+        let lists = self.lists;
         // "nicht so", "so nicht", "not like that": the call, but different.
         // For the guards it counts anywhere. As a change the rules report
         // without the model, only when the segment says nothing else: "nicht
@@ -1224,21 +1201,16 @@ impl Words {
                 // After leading words ("nein", "also"); "so" leads too.
                 let leading = segment
                     .iter()
-                    .take_while(|word| LEADING.contains(&word.as_str()))
+                    .take_while(|word| lists.leading.contains(word.as_str()))
                     .count();
                 !self.asks(index)
                     && (0..=leading).any(|start| {
-                        NOT_LIKE_THAT_ALONE.contains(&segment[start..].join(" ").as_str())
+                        lists
+                            .not_like_that_alone
+                            .contains(&segment[start..].join(" "))
                     })
             } else {
-                segment.windows(2).any(|pair| {
-                    matches!(
-                        (pair[0].as_str(), pair[1].as_str()),
-                        ("nicht", "so") | ("so", "nicht")
-                    )
-                }) || segment
-                    .windows(3)
-                    .any(|words| words[0] == "not" && words[1] == "like" && words[2] == "that")
+                has_cue(segment, &lists.not_like_that)
             }
         }) {
             return true;
@@ -1246,20 +1218,20 @@ impl Words {
         for (index, segment) in self.segments.iter().enumerate() {
             let personal = segment
                 .first()
-                .is_some_and(|word| PERSONAL_SUBJECTS.contains(&word.as_str()));
+                .is_some_and(|word| lists.personal_subjects.contains(word.as_str()));
             if plain && (self.asks(index) || personal) {
                 continue;
             }
             let rather_not = |at: usize| {
-                matches!(segment[at].as_str(), "lieber" | "rather")
+                lists.rather.contains(segment[at].as_str())
                     && segment
                         .get(at + 1)
-                        .is_none_or(|next| matches!(next.as_str(), "nicht" | "not"))
+                        .is_none_or(|next| lists.not_words.contains(next.as_str()))
             };
             if segment
                 .iter()
                 .enumerate()
-                .any(|(at, word)| CHANGE_ANYWHERE.contains(&word.as_str()) && !rather_not(at))
+                .any(|(at, word)| lists.change_anywhere.contains(word.as_str()) && !rather_not(at))
             {
                 return true;
             }
@@ -1269,55 +1241,60 @@ impl Words {
             let start = segment
                 .iter()
                 .take_while(|word| {
-                    LEADING.contains(&word.as_str()) || matches!(word.as_str(), "aber" | "but")
+                    lists.leading.contains(word.as_str()) || matches!(word.as_str(), "aber" | "but")
                 })
                 .count();
             let segment = &segment[start..];
             let Some(first) = segment.first().map(String::as_str) else {
                 continue;
             };
-            if CHANGE_FIRST.contains(&first) && !(first == "take" && segment.len() == 1) {
+            if lists.change_first.contains(first) && !(first == "take" && segment.len() == 1) {
                 return true;
             }
             let dated = |words: &[String]| {
                 words.iter().any(|word| {
-                    word.chars().any(|c| c.is_ascii_digit()) || DATE_WORDS.contains(&word.as_str())
+                    word.chars().any(|c| c.is_ascii_digit())
+                        || lists.date_words.contains(word.as_str())
                 })
             };
-            if MAKE_FIRST.contains(&first)
+            if lists.make_first.contains(first)
                 && (dated(segment)
                     || segment[1..]
                         .iter()
-                        .any(|word| MAKE_OBJECT.contains(&word.as_str())))
+                        .any(|word| lists.make_object.contains(word.as_str())))
             {
                 return true;
             }
             // "den 22.", "am Freitag": a short segment that is only a date.
-            if DATE_PREPOSITIONS.contains(&first)
+            if lists.date_prepositions.contains(first)
                 && segment.len() <= 4
                 && dated(segment)
                 && !self.starts_as_question()
-                && !self.has_cue(REPEAT_CUES)
+                && !self.has_cue(&lists.repeat_cues)
             {
                 return true;
             }
         }
         // "die Wahrscheinlichkeit lass, wie sie ist" spans a comma.
         for (index, word) in all.iter().enumerate() {
-            if !KEEP_VERBS.contains(word) {
+            if !lists.keep_verbs.contains(*word) {
                 continue;
             }
             let object = all[..index]
                 .iter()
                 .chain(all[index + 1..].iter())
                 .any(|other| {
-                    !PRONOUNS.contains(other)
-                        && !KEEP_ENDINGS.contains(other)
-                        && !KEEP_VERBS.contains(other)
-                        && !LEADING.contains(other)
+                    !lists.pronouns.contains(*other)
+                        && !lists.keep_endings.contains(*other)
+                        && !lists.keep_verbs.contains(*other)
+                        && !lists.leading.contains(*other)
                         && !["ist", "is", "sind", "are", "war", "was", "so"].contains(other)
                 });
-            if object && all[index + 1..].iter().any(|w| KEEP_ENDINGS.contains(w)) {
+            if object
+                && all[index + 1..]
+                    .iter()
+                    .any(|w| lists.keep_endings.contains(*w))
+            {
                 return true;
             }
         }
@@ -1330,9 +1307,9 @@ impl Words {
                     | ["nicht", "aendern" | "veraendern" | "anfassen"]
             )
         }) && all.iter().any(|word| {
-            !PRONOUNS.contains(word)
-                && !LEADING.contains(word)
-                && !NEGATIONS.contains(word)
+            !lists.pronouns.contains(*word)
+                && !lists.leading.contains(*word)
+                && !lists.negations.contains(*word)
                 && !matches!(
                     *word,
                     "do" | "change" | "touch" | "anything" | "aendern" | "veraendern" | "anfassen"
@@ -1340,20 +1317,20 @@ impl Words {
         })
     }
 
-    fn has_cue(&self, cues: &[&[&str]]) -> bool {
+    fn has_cue(&self, cues: &[Vec<String>]) -> bool {
         self.segments.iter().any(|segment| has_cue(segment, cues))
     }
 
     /// Whether the words could be a plain decision: short; no question, also
     /// without a question mark; no condition, change, number or field of the
-    /// card; and only words of agreement (or of refusal), at least one of
-    /// which carries it.
+    /// card; only words of agreement (or of refusal), at least one of which
+    /// carries it; and not in a script the rules cannot split into words.
     pub(super) fn could_be_plain_decision(
         &self,
         meaning: VoiceMeaning,
         pieces: &[CardPiece],
     ) -> bool {
-        let lists = &*LISTS;
+        let lists = self.lists;
         let (allowed, carrying) = if meaning == VoiceMeaning::Approve {
             (&lists.agreement, &lists.agreeing)
         } else {
@@ -1373,20 +1350,21 @@ impl Words {
         } else {
             self.all()
                 .last()
-                .is_some_and(|last| CONTINUATIONS.contains(&last))
+                .is_some_and(|last| lists.continuations.contains(last))
         };
-        !self.question
+        !self.unspaced
+            && !self.question
             && !self.any_asks()
             && !self.broken_off
             && !self.takes_back
             && !open
-            && !(approve && self.has_any(NEGATIONS))
+            && !(approve && self.has_any(&lists.negations))
             && !(!approve && self.agrees_without_its_no())
             && words.iter().all(|word| allowed.contains(*word))
             && words.iter().any(|word| carrying.contains(*word))
             && self.count() > 0
             && self.count() <= 6
-            && !self.has_any(CONDITIONS)
+            && !self.has_any(&lists.conditions)
             && !self.has_number()
             && !self.has_change_marker()
             && !self.names_a_field(pieces)
@@ -1397,29 +1375,29 @@ impl Words {
     /// das so", "passt so", "go ahead then"), not after a yes, a joining word
     /// or a condition ("uh, yes, so", "ja, und so").
     pub(super) fn ends_open(&self) -> bool {
+        let lists = self.lists;
         let words: Vec<&str> = self.all().collect();
         let Some((last, before)) = words.split_last() else {
             return false;
         };
-        if !CONTINUATIONS.contains(last) {
+        if !lists.continuations.contains(*last) {
             return false;
         }
         if !matches!(*last, "so" | "then") {
             return true;
         }
         before.last().is_none_or(|previous| {
-            CONTINUATIONS.contains(previous)
-                || CONDITIONS.contains(previous)
-                || YES_PARTICLES.contains(previous)
+            lists.continuations.contains(*previous)
+                || lists.conditions.contains(*previous)
+                || lists.yes_particles.contains(*previous)
         })
     }
 
     /// The words a yes is checked for: without a first segment that is only
     /// an acknowledgement ("in Ordnung, mach", "I see, go ahead").
     fn decision_words(&self) -> Vec<&str> {
-        let lists = &*LISTS;
         let skip = self.segments.first().is_some_and(|segment| {
-            segment.len() > 1 && lists.noise_phrases.contains(&segment.join(" "))
+            segment.len() > 1 && self.lists.noise_phrases.contains(&segment.join(" "))
         });
         self.segments
             .iter()
@@ -1433,18 +1411,15 @@ impl Words {
     /// mach" is no clear no. Its negation follows it in the segment ("mach
     /// das nicht") or stands right before it ("nicht machen", "don't do").
     fn agrees_without_its_no(&self) -> bool {
-        let lists = &*LISTS;
+        let lists = self.lists;
         self.segments.iter().any(|segment| {
             segment.iter().enumerate().any(|(at, word)| {
                 lists.agreeing.contains(word.as_str())
                     && !segment[at + 1..]
                         .iter()
-                        .any(|later| NEGATIONS.contains(&later.as_str()))
+                        .any(|later| lists.negations.contains(later.as_str()))
                     && !at.checked_sub(1).is_some_and(|before| {
-                        matches!(
-                            segment[before].as_str(),
-                            "nicht" | "not" | "dont" | "never" | "nie"
-                        )
+                        lists.negations_before.contains(segment[before].as_str())
                     })
             })
         })
@@ -1453,22 +1428,26 @@ impl Words {
     /// Whether the words could be about this card's call rather than
     /// something new.
     pub(super) fn could_be_change(&self, pieces: &[CardPiece]) -> bool {
+        let lists = self.lists;
         self.has_change_marker()
             || self.has_number()
-            || self.has_any(NEGATIONS)
-            || self.has_any(CONDITIONS)
-            || self.has_any(DATE_WORDS)
-            || self.has_any(CORRECTIONS)
+            || self.has_any(&lists.negations)
+            || self.has_any(&lists.conditions)
+            || self.has_any(&lists.date_words)
+            || self.has_any(&lists.corrections)
             || self.names_a_field(pieces)
     }
 
     fn names_a_field(&self, pieces: &[CardPiece]) -> bool {
-        self.all()
-            .any(|word| pieces.iter().any(|piece| field_matches(piece, word)))
+        self.all().any(|word| {
+            pieces
+                .iter()
+                .any(|piece| field_matches(piece, word, self.lists))
+        })
     }
 }
 
-fn has_cue(segment: &[String], cues: &[&[&str]]) -> bool {
+fn has_cue(segment: &[String], cues: &[Vec<String>]) -> bool {
     cues.iter().any(|cue| {
         segment
             .windows(cue.len())
@@ -1478,13 +1457,12 @@ fn has_cue(segment: &[String], cues: &[&[&str]]) -> bool {
 
 /// The segment without its leading acknowledgements, and whether those
 /// included a yes or a no.
-fn strip_leading(segment: &[String]) -> (&[String], bool, bool) {
-    let lists = &*LISTS;
+fn strip_leading<'s>(segment: &'s [String], lists: &CommandWords) -> (&'s [String], bool, bool) {
     let mut start = 0;
     let (mut yes, mut no) = (false, false);
     while start + 1 < segment.len() && lists.leading.contains(segment[start].as_str()) {
-        yes |= LEADING_YES.contains(&segment[start].as_str());
-        no |= LEADING_NO.contains(&segment[start].as_str());
+        yes |= lists.leading_yes.contains(segment[start].as_str());
+        no |= lists.leading_no.contains(segment[start].as_str());
         start += 1;
     }
     (&segment[start..], yes, no)
@@ -1500,11 +1478,11 @@ fn field_tokens(field: &str) -> Vec<String> {
 /// Whether a word the user said names this piece's field: the same word,
 /// the head of a compound ("Datum" for "Abschlussdatum"), or an inflected
 /// form ("Teilnehmern").
-fn field_matches(piece: &CardPiece, word: &str) -> bool {
+fn field_matches(piece: &CardPiece, word: &str, lists: &CommandWords) -> bool {
     let Some(field) = piece.field.as_deref() else {
         return false;
     };
-    if word.chars().count() < 3 || LISTS.generic.contains(word) {
+    if word.chars().count() < 3 || lists.generic.contains(word) {
         return false;
     }
     field_tokens(field).iter().any(|token| {
@@ -1523,8 +1501,7 @@ enum Reference {
     Unknown,
 }
 
-fn reference(segment: &[String], pieces: &[CardPiece]) -> Reference {
-    let lists = &*LISTS;
+fn reference(segment: &[String], pieces: &[CardPiece], lists: &CommandWords) -> Reference {
     let mut found: Option<&str> = None;
     let mut any = false;
     for word in segment {
@@ -1534,7 +1511,7 @@ fn reference(segment: &[String], pieces: &[CardPiece]) -> Reference {
         any = true;
         let matches: Vec<&CardPiece> = pieces
             .iter()
-            .filter(|piece| field_matches(piece, word))
+            .filter(|piece| field_matches(piece, word, lists))
             .collect();
         match (matches.as_slice(), found) {
             ([only], None) => found = Some(only.id.as_str()),
@@ -1557,8 +1534,11 @@ enum Segment {
     Unknown,
 }
 
-fn classify_segment(segment: &[String], input: &VoiceCommandInput<'_>) -> Segment {
-    let lists = &*LISTS;
+fn classify_segment(
+    segment: &[String],
+    input: &VoiceCommandInput<'_>,
+    lists: &CommandWords,
+) -> Segment {
     let joined = segment.join(" ");
     if segment
         .iter()
@@ -1567,21 +1547,21 @@ fn classify_segment(segment: &[String], input: &VoiceCommandInput<'_>) -> Segmen
     {
         return Segment::Noise;
     }
-    if let Some(found) = exact(&joined, input) {
+    if let Some(found) = exact(&joined, input, lists) {
         return found;
     }
-    let (rest, yes, no) = strip_leading(segment);
+    let (rest, yes, no) = strip_leading(segment, lists);
     let found = if rest.len() < segment.len() {
         let joined = rest.join(" ");
         if lists.noise_phrases.contains(&joined) {
             Some(Segment::Noise)
         } else {
-            exact(&joined, input)
+            exact(&joined, input, lists)
         }
     } else {
         None
     };
-    let found = found.or_else(|| pattern(rest, input));
+    let found = found.or_else(|| pattern(rest, input, lists));
     match found {
         Some(Segment::Decision(VoiceMeaning::Approve)) if no => Segment::Unknown,
         Some(Segment::Decision(VoiceMeaning::Reject)) if yes => Segment::Unknown,
@@ -1590,8 +1570,7 @@ fn classify_segment(segment: &[String], input: &VoiceCommandInput<'_>) -> Segmen
     }
 }
 
-fn exact(joined: &str, input: &VoiceCommandInput<'_>) -> Option<Segment> {
-    let lists = &*LISTS;
+fn exact(joined: &str, input: &VoiceCommandInput<'_>, lists: &CommandWords) -> Option<Segment> {
     if lists.approve.contains(joined) {
         Some(Segment::Decision(VoiceMeaning::Approve))
     } else if lists.reject.contains(joined) {
@@ -1610,18 +1589,22 @@ fn exact(joined: &str, input: &VoiceCommandInput<'_>) -> Option<Segment> {
     }
 }
 
-fn pattern(segment: &[String], input: &VoiceCommandInput<'_>) -> Option<Segment> {
+fn pattern(
+    segment: &[String],
+    input: &VoiceCommandInput<'_>,
+    lists: &CommandWords,
+) -> Option<Segment> {
     let first = segment.first()?.as_str();
     let negated = segment
         .iter()
-        .any(|word| NEGATIONS.contains(&word.as_str()));
-    if STOP_FIRST.contains(&first) {
+        .any(|word| lists.negations.contains(word.as_str()));
+    if lists.stop_first.contains(first) {
         return Some(Segment::Nav(VoiceMeaning::Stop, None));
     }
     // The voice asked which text to read: naming one answers it.
     if input.question == Some(VoiceQuestion::WhichText)
         && !negated
-        && let Reference::Piece(id) = reference(segment, input.pieces)
+        && let Reference::Piece(id) = reference(segment, input.pieces, lists)
         && input
             .pieces
             .iter()
@@ -1629,13 +1612,13 @@ fn pattern(segment: &[String], input: &VoiceCommandInput<'_>) -> Option<Segment>
     {
         return Some(Segment::Nav(VoiceMeaning::ReadText, Some(id)));
     }
-    if has_cue(segment, READ_CUES)
+    if has_cue(segment, &lists.read_cues)
         && !negated
         && !segment
             .iter()
-            .any(|word| word == "already" || word == "schon")
+            .any(|word| lists.already.contains(word.as_str()))
     {
-        return match reference(segment, input.pieces) {
+        return match reference(segment, input.pieces, lists) {
             Reference::None => {
                 let text = default_text_piece(input);
                 let has_text = input
@@ -1655,8 +1638,8 @@ fn pattern(segment: &[String], input: &VoiceCommandInput<'_>) -> Option<Segment>
             Reference::Unknown => None,
         };
     }
-    if has_cue(segment, REPEAT_CUES) {
-        return match reference(segment, input.pieces) {
+    if has_cue(segment, &lists.repeat_cues) {
+        return match reference(segment, input.pieces, lists) {
             Reference::None => Some(Segment::Nav(
                 VoiceMeaning::Repeat,
                 input.current_piece_id.map(str::to_string),
@@ -1666,54 +1649,61 @@ fn pattern(segment: &[String], input: &VoiceCommandInput<'_>) -> Option<Segment>
         };
     }
     let asks_rest = segment.iter().any(|word| word == "rest")
-        || (segment.iter().any(|word| REST_ASK.contains(&word.as_str()))
+        || (segment
+            .iter()
+            .any(|word| lists.rest_ask.contains(word.as_str()))
             && segment.iter().enumerate().any(|(index, word)| {
-                REST_WHAT.contains(&word.as_str())
-                    && !(word == "noch"
-                        && segment
-                            .get(index + 1)
-                            .is_some_and(|next| next == "mal" || next == "einmal"))
+                lists.rest_what.contains(word.as_str())
+                    && !starts_again(segment, index, &lists.again)
             }));
     if asks_rest {
         // "Was steht heute noch in meinem Kalender?" asks about something else.
         let only_rest_words = segment.iter().all(|word| {
             let word = word.as_str();
-            LISTS.generic.contains(word)
-                || REST_ASK.contains(&word)
-                || REST_WHAT.contains(&word)
-                || REST_WORDS.contains(&word)
-                || LEADING.contains(&word)
-                || NOISE_WORDS.contains(&word)
+            lists.generic.contains(word)
+                || lists.rest_ask.contains(word)
+                || lists.rest_what.contains(word)
+                || lists.rest_words.contains(word)
+                || lists.leading.contains(word)
+                || lists.noise_words.contains(word)
         });
         return (only_rest_words && !negated).then_some(Segment::Nav(VoiceMeaning::Rest, None));
     }
     if negated {
         return None;
     }
-    let only = |extra: &[&str]| {
+    let only = |extra: &HashSet<String>| {
         segment.iter().all(|word| {
             let word = word.as_str();
-            extra.contains(&word) || PRONOUNS.contains(&word) || SUBJECTS.contains(&word)
+            extra.contains(word) || lists.pronouns.contains(word) || lists.subjects.contains(word)
         })
     };
     let knows = segment.windows(2).any(|pair| {
-        (KNOWN_FIRST.contains(&pair[0].as_str()) && pair[1] == "ich")
-            || (pair[0] == "ich" && KNOWN_FIRST.contains(&pair[1].as_str()))
+        (lists.known_first.contains(pair[0].as_str()) && pair[1] == "ich")
+            || (pair[0] == "ich" && lists.known_first.contains(pair[1].as_str()))
             || (pair[0] == "i" && matches!(pair[1].as_str(), "know" | "already" | "heard"))
     });
-    if first == "weiter" && only(ONWARD_WORDS)
+    if first == "weiter" && only(&lists.onward_words)
         || segment
             .iter()
             .any(|word| word.starts_with("ueberspr") || word == "skip")
-        || knows && only(KNOWN_WORDS)
+        || knows && only(&lists.known_words)
     {
         return Some(Segment::Nav(VoiceMeaning::Skip, None));
     }
     None
 }
 
-pub(super) fn match_rules(input: &VoiceCommandInput<'_>) -> Option<RuleMatch> {
-    let words = Words::of(input.transcript);
+pub(super) fn match_rules(
+    input: &VoiceCommandInput<'_>,
+    lists: &CommandWords,
+) -> Option<RuleMatch> {
+    let words = Words::with(input.transcript, lists);
+    // A script without spaces is left to the model, and the guard keeps
+    // its decisions on screen.
+    if words.unspaced {
+        return None;
+    }
     if words.segments.is_empty() {
         return Some(RuleMatch {
             meaning: VoiceMeaning::Noise,
@@ -1729,7 +1719,7 @@ pub(super) fn match_rules(input: &VoiceCommandInput<'_>) -> Option<RuleMatch> {
     let mut navigation = None;
     let mut decisions = HashSet::new();
     for segment in &words.segments {
-        match classify_segment(segment, input) {
+        match classify_segment(segment, input, lists) {
             Segment::Noise => {}
             Segment::Nav(meaning, piece_id) => navigation = Some((meaning, piece_id)),
             Segment::Decision(meaning) => {

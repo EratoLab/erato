@@ -1580,6 +1580,7 @@ impl AppConfig {
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
+        warn_misshaped_voice_command_words(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1602,6 +1603,7 @@ impl AppConfig {
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
+        warn_misshaped_voice_command_words(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -4081,6 +4083,13 @@ pub struct ApprovalVoiceCommandsConfig {
     pub model_timeout_ms: u32,
     /// Replaces the model's built-in instruction. Unset or blank keeps it.
     pub prompt: Option<String>,
+    /// Words per language tag that the rules match besides the built-in
+    /// German and English ones, usually from a content package. A card
+    /// uses the German and English words and those of its own language.
+    #[serde(deserialize_with = "crate::voice_command_words::deserialize_voice_command_words")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub words: crate::voice_command_words::VoiceCommandWordsByLanguage,
 }
 
 /// Off by default. Lets the user decide a waiting card by voice: "nein"
@@ -4129,6 +4138,7 @@ impl Default for ApprovalVoiceCommandsConfig {
             chat_provider_id: None,
             model_timeout_ms: 2500,
             prompt: None,
+            words: Default::default(),
         }
     }
 }
@@ -9191,6 +9201,12 @@ fn warn_misshaped_approval_speech(schema: &Config) {
 fn warn_misshaped_number_words(schema: &Config) {
     for dropped in crate::spoken::misshaped_number_words(schema) {
         tracing::warn!("Spoken number word dropped: {dropped}.");
+    }
+}
+
+fn warn_misshaped_voice_command_words(schema: &Config) {
+    for dropped in crate::voice_command_words::misshaped_voice_command_words(schema) {
+        tracing::warn!("Voice-command word dropped: {dropped}.");
     }
 }
 
