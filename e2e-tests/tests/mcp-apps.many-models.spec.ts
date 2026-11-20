@@ -314,6 +314,47 @@ test(
 );
 
 test(
+  "An MCP Apps view shows again when the sandbox page reloads itself, which never takes itself for the app",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    const refusals: string[] = [];
+    const recordRefusal = (text: string) => {
+      if (/only runs in the frame|origin of the embedding app/.test(text)) {
+        refusals.push(text);
+      }
+    };
+    page.on("pageerror", (error) => recordRefusal(error.message));
+    page.on("console", (entry) => recordRefusal(entry.text()));
+    try {
+      const message = await callCounterTool(page);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+
+      const sandbox = message.frameLocator('[data-testid="mcp-app-view"]');
+      const sandboxRoot = sandbox.locator("html");
+      // Marks the sandbox page's document, which the reload replaces. A reload
+      // the page starts itself sends its own URL as the referrer in Chromium.
+      await sandboxRoot.evaluate((root) => {
+        root.dataset.reloaded = "no";
+        window.location.reload();
+      });
+
+      await expect(sandboxRoot).not.toHaveAttribute("data-reloaded", "no", {
+        timeout: 15000,
+      });
+      // The page announces itself again and the app sends it the view anew.
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      expect(refusals).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
   "In dark mode, an MCP Apps view sits on the message's background too, with no backdrop behind it",
   { tag: TAG_CI },
   async ({ browser }) => {

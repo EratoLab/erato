@@ -53,11 +53,21 @@
       "This page only runs in the frame of the app it belongs to.",
     );
   }
-  if (!document.referrer) {
-    throw new Error("No referrer: the origin of the embedding app is unknown.");
+  // The embedding app's origin: messages are taken from it and sent to it
+  // only. The browser's own record of the parent's origin where it keeps one
+  // (`location.ancestorOrigins`); else the referrer. A referrer alone is not
+  // enough: when this page reloads itself, some browsers send its own URL as
+  // the referrer, and the page would take itself for the app.
+  const parentOrigin = window.location.ancestorOrigins?.[0];
+  const HOST_ORIGIN =
+    parentOrigin && parentOrigin !== "null"
+      ? parentOrigin
+      : document.referrer
+        ? new URL(document.referrer).origin
+        : "";
+  if (!HOST_ORIGIN) {
+    throw new Error("The origin of the embedding app is unknown.");
   }
-  // The embedding app's origin: messages are taken from it and sent to it only.
-  const HOST_ORIGIN = new URL(document.referrer).origin;
   const HOST_NAME = new URL(HOST_ORIGIN).hostname;
   const OWN_ORIGIN = window.location.origin;
   const OWN_NAME = window.location.hostname;
