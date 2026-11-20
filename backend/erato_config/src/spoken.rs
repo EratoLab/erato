@@ -473,6 +473,10 @@ fn shaped_approval_speech(written: Written) -> (ApprovalSpeechConfig, Vec<String
             }
         }
     }
+    if let Some(words) = settings.remove("words") {
+        config.words =
+            crate::approval_speech_words::shaped_approval_speech_words(words, &mut dropped);
+    }
     dropped.sort();
     (config, dropped)
 }
@@ -957,6 +961,13 @@ pub struct ApprovalSpeechConfig {
     /// not the meaning: the sentence is its author's responsibility.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub sentences: HashMap<String, HashMap<String, String>>,
+    /// Per language tag, the words a spoken card says as code (number
+    /// words, ordinals, times, a value's direction) and reads the user's
+    /// words with, added to the built-in German and English ones. A
+    /// language says the whole card only with `full_card = true`.
+    #[serde(deserialize_with = "crate::approval_speech_words::deserialize_approval_speech_words")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub words: crate::approval_speech_words::ApprovalSpeechWordsByLanguage,
 }
 
 pub const MAX_SHORT_DETAILS: u8 = 3;
@@ -969,6 +980,7 @@ impl Default for ApprovalSpeechConfig {
             wording: ApprovalSpeechWording::Precise,
             user_choice: true,
             sentences: HashMap::new(),
+            words: HashMap::new(),
         }
     }
 }
@@ -1016,6 +1028,7 @@ const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
     "wording",
     "user_choice",
     "sentences",
+    "words",
 ];
 
 /// The vocabularies a server names that no source defines. Warned about, not

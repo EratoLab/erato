@@ -31,6 +31,7 @@ fn custom_leaf_paths(shape: &Shape) -> Option<&'static [&'static str]> {
 /// Sections that hold language data by language tag.
 const KEYED_BY_LANGUAGE: &[&[&str]] = &[
     &["approval_voice_commands", "words"],
+    &["approval_speech", "words"],
     &["spoken_readings"],
 ];
 

@@ -1,5 +1,6 @@
 //! Shared Erato configuration types, loading, validation, and reference metadata.
 
+pub mod approval_speech_words;
 pub mod client_tool_schema;
 pub mod config;
 pub mod config_facet_attrs;

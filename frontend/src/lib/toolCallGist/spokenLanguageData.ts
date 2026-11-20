@@ -1,0 +1,87 @@
+import { env } from "@/app/env";
+import languageBase from "@/lib/generated/languageBase.json";
+
+/**
+ * One language's words for spoken approval cards: what a card says as code
+ * (number words, ordinals, times, a value's direction) and the words the
+ * user's own words are read with. The backend merges the built-in German and
+ * English words with `[approval_speech.words.<language>]`; without an
+ * injected environment (development server, tests) the built-in words the
+ * backend generated into `languageBase.json` apply.
+ */
+export interface SpokenCardLanguage {
+  /** The locale `Intl` formats dates, numbers and lists in. */
+  locale: string;
+  /** Whether the whole card is said, not only the pointer sentence. */
+  full_card: boolean;
+  /** Number words for 0 to 12. */
+  numbers: readonly string[];
+  /** Ordinals for the first to the tenth. */
+  ordinals: readonly string[];
+  /** A full hour, with `{hour}`. */
+  time_full_hour?: string;
+  /** A time of day, with `{hour}` and a two-digit `{minute}`. */
+  time?: string;
+  /** An old value with its direction, with `{value}`. */
+  from?: string;
+  /** A new value with its direction, with `{value}`. */
+  to?: string;
+  dictation_verbs: readonly string[];
+  dictation_words: readonly string[];
+  difference_fillers: readonly string[];
+}
+
+export type SpokenCardLanguages = Partial<Record<string, SpokenCardLanguage>>;
+
+const BUILT_IN: SpokenCardLanguages = languageBase.approval_speech_words;
+
+/** Every language with words: the injected ones, else the built-in ones. */
+export const spokenCardLanguages = (): SpokenCardLanguages => {
+  try {
+    return env().approvalSpeechWords ?? BUILT_IN;
+  } catch {
+    return BUILT_IN;
+  }
+};
+
+/** "de-DE" or "de_DE" as "de". */
+export const primaryLanguage = (language: string): string =>
+  language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
+
+/** The words of `language` ("fr", "fr-FR", …), if it has any. */
+export const spokenCardLanguage = (
+  language: string,
+): SpokenCardLanguage | undefined =>
+  spokenCardLanguages()[primaryLanguage(language)];
+
+/**
+ * The languages whose words read what a user said about a card: German and
+ * English, which people mix with any language, and the card's own. Without
+ * a card language, every language with words.
+ */
+export const languagesHeard = (language?: string): SpokenCardLanguage[] => {
+  const all = spokenCardLanguages();
+  const tags =
+    language === undefined
+      ? Object.keys(all)
+      : ["de", "en", primaryLanguage(language)];
+  return [...new Set(tags)]
+    .map((tag) => all[tag])
+    .filter((words): words is SpokenCardLanguage => words !== undefined);
+};
+
+/** `locale` when `Intl` accepts it; the backend checks only its shape. */
+export const intlLocale = (locale: string): string | undefined => {
+  try {
+    return Intl.getCanonicalLocales(locale).length > 0 ? locale : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** A template's `{slot}`s filled in; an unknown slot stays as written. */
+export const filledTemplate = (
+  template: string,
+  slots: Readonly<Record<string, string>>,
+): string =>
+  template.replace(/\{(\w+)\}/g, (whole, slot: string) => slots[slot] ?? whole);

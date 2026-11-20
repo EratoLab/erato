@@ -14,6 +14,7 @@ import {
   withDictation,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
+import { intlLocale, languagesHeard } from "./spokenLanguageData";
 import { spokenFieldName, spokenNamesFor } from "./spokenNames";
 import { numbersSaid, readableNumberWords } from "./spokenNumbers";
 import { spokenReadFactsOf } from "./spokenRead";
@@ -759,64 +760,6 @@ const readAt = (input: unknown, pointer: string): unknown =>
 
 // Whether the user's words ask for a difference
 
-/** Words that say nothing about a value on their own. */
-const FILLERS = new Set([
-  "und",
-  "oder",
-  "der",
-  "die",
-  "das",
-  "den",
-  "dem",
-  "des",
-  "ein",
-  "eine",
-  "einen",
-  "mit",
-  "für",
-  "von",
-  "auf",
-  "nicht",
-  "the",
-  "and",
-  "for",
-  "with",
-  "from",
-  "not",
-  // Words that frame a change rather than name what changes.
-  "bitte",
-  "doch",
-  "lieber",
-  "statt",
-  "stattdessen",
-  "nimm",
-  "nehmen",
-  "mach",
-  "mache",
-  "machen",
-  "setz",
-  "setze",
-  "setzen",
-  "ändere",
-  "ändern",
-  "noch",
-  "eben",
-  "jetzt",
-  "lass",
-  "aber",
-  "auch",
-  "please",
-  "instead",
-  "rather",
-  "make",
-  "take",
-  "change",
-  "just",
-  "also",
-  "then",
-  "now",
-]);
-
 const tokensOf = (text: string): string[] =>
   text
     .toLowerCase()
@@ -826,22 +769,51 @@ const tokensOf = (text: string): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length > 0);
 
-const LOCALES = ["de-DE", "en-GB"];
-const calendarNames = (option: "month" | "weekday", date: Date): string[] =>
-  LOCALES.map((locale) =>
+/**
+ * What the user's words are read with: the words that say nothing about a
+ * value on their own, and the locales whose weekday and month names count,
+ * of German, English and the card's language (language data).
+ */
+interface HeardLanguage {
+  fillers: ReadonlySet<string>;
+  locales: readonly string[];
+  months: ReadonlySet<string>;
+}
+
+const calendarNames = (
+  locales: readonly string[],
+  option: "month" | "weekday",
+  date: Date,
+): string[] =>
+  locales.map((locale) =>
     new Intl.DateTimeFormat(locale, { [option]: "long", timeZone: "UTC" })
       .format(date)
       .toLowerCase(),
   );
-const ALL_MONTHS = new Set(
-  Array.from({ length: 12 }, (_, month) =>
-    calendarNames("month", new Date(Date.UTC(2000, month, 1))),
-  ).flat(),
-);
 
-const wordMatches = (said: readonly string[], term: string): boolean => {
+const heardLanguage = (language: string): HeardLanguage => {
+  const languages = languagesHeard(language);
+  const locales = [
+    ...new Set(languages.flatMap((words) => intlLocale(words.locale) ?? [])),
+  ];
+  return {
+    fillers: new Set(languages.flatMap((words) => words.difference_fillers)),
+    locales,
+    months: new Set(
+      Array.from({ length: 12 }, (_, month) =>
+        calendarNames(locales, "month", new Date(Date.UTC(2000, month, 1))),
+      ).flat(),
+    ),
+  };
+};
+
+const wordMatches = (
+  said: readonly string[],
+  term: string,
+  fillers: ReadonlySet<string>,
+): boolean => {
   if (/^\d+$/.test(term)) return said.includes(term);
-  if (FILLERS.has(term) || term.length < 3) return false;
+  if (fillers.has(term) || term.length < 3) return false;
   return said.some(
     (token) =>
       token === term ||
@@ -855,6 +827,7 @@ const wordMatches = (said: readonly string[], term: string): boolean => {
 interface Heard {
   tokens: readonly string[];
   numbers: NumbersSaid;
+  language: HeardLanguage;
   /**
    * No number words are read in this language: a number said in words
    * cannot be told from one not said.
@@ -868,11 +841,13 @@ type Naming = "yes" | "maybe" | "no";
 const heardOf = (
   words: string,
   numberWords: NumberWords | undefined,
+  language: string,
 ): Heard => {
   const tokens = tokensOf(words);
   return {
     tokens,
     numbers: numbersSaid(tokens, numberWords),
+    language: heardLanguage(language),
     wordsUnread: readableNumberWords(numberWords) === undefined,
   };
 };
@@ -901,7 +876,7 @@ const names = (heard: Heard, value: EarValue): Naming => {
     case "text":
       return best(
         tokensOf(value.text).map((term) =>
-          wordMatches(said, term)
+          wordMatches(said, term, heard.language.fillers)
             ? "yes"
             : /^\d+$/.test(term)
               ? numberNamed(heard, [Number(term)])
@@ -913,11 +888,16 @@ const names = (heard: Heard, value: EarValue): Naming => {
     case "date":
     case "datetime": {
       const date = new Date(Date.UTC(value.year, value.month - 1, value.day));
-      if (calendarNames("weekday", date).some((day) => said.includes(day)))
+      const { locales, months } = heard.language;
+      if (
+        calendarNames(locales, "weekday", date).some((day) =>
+          said.includes(day),
+        )
+      )
         return "yes";
-      const month = calendarNames("month", date);
+      const month = calendarNames(locales, "month", date);
       const otherMonth = said.some(
-        (token) => ALL_MONTHS.has(token) && !month.includes(token),
+        (token) => months.has(token) && !month.includes(token),
       );
       return otherMonth ? "no" : numberNamed(heard, [value.day]);
     }
@@ -943,7 +923,9 @@ const asks = (
 ): Asked => {
   const said = heard.tokens;
   const field = entry?.field ?? old?.field;
-  if (field !== undefined && fieldNamed(said, field, siblings)) return "asked";
+  const { fillers } = heard.language;
+  if (field !== undefined && fieldNamed(said, field, siblings, fillers))
+    return "asked";
   const namings: Naming[] = (entry?.said ?? []).map((value) =>
     names(heard, value),
   );
@@ -954,7 +936,8 @@ const asks = (
       ...[...after].filter((token) => !before.has(token)),
       ...[...before].filter((token) => !after.has(token)),
     ];
-    if (changed.some((term) => wordMatches(said, term))) return "asked";
+    if (changed.some((term) => wordMatches(said, term, fillers)))
+      return "asked";
   }
   if (old && (!entry || entry.list || entry.said.length === 0)) {
     const kept = new Set(entry?.said.map((value) => JSON.stringify(value)));
@@ -969,8 +952,8 @@ const asks = (
 };
 
 /** The words of a field name a user may say for it. */
-const fieldWords = (field: string): string[] =>
-  tokensOf(field).filter((word) => word.length >= 4 && !FILLERS.has(word));
+const fieldWords = (field: string, fillers: ReadonlySet<string>): string[] =>
+  tokensOf(field).filter((word) => word.length >= 4 && !fillers.has(word));
 
 /**
  * Whether the user's words name a field: one of its words whole, or a whole
@@ -981,19 +964,20 @@ const fieldNamed = (
   said: readonly string[],
   field: string,
   siblings: readonly string[],
+  fillers: ReadonlySet<string>,
 ): boolean => {
   const others = siblings
     .filter((sibling) => sibling !== field)
-    .flatMap(fieldWords);
+    .flatMap((sibling) => fieldWords(sibling, fillers));
   const partOf = (part: string, word: string) =>
     part !== word && (word.startsWith(part) || word.endsWith(part));
-  return fieldWords(field).some(
+  return fieldWords(field, fillers).some(
     (word) =>
       said.includes(word) ||
       said.some(
         (token) =>
           token.length >= 4 &&
-          !FILLERS.has(token) &&
+          !fillers.has(token) &&
           ((partOf(token, word) &&
             !others.some((other) => other === token || partOf(token, other))) ||
             (partOf(word, token) && !others.includes(word))),
@@ -1105,7 +1089,7 @@ export const spokenDifference = (
     timeZone,
     newNames,
   );
-  const said = heardOf(previous.words, options.numberWords);
+  const said = heardOf(previous.words, options.numberWords, options.language);
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
   const newKeys = new Set(newEntries.map((entry) => entry.key));
   const siblings = [

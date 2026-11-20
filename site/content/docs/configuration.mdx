@@ -5990,6 +5990,49 @@ changed = "{field} geht {from} {to}."
 updated = "{field} wird {value} gesetzt."
 ```
 
+#### `approval_speech.words`
+
+{/* erato_toml_config_key: approval_speech.words */}
+{/* erato_toml_config_key: approval_speech.words.<language>.locale */}
+{/* erato_toml_config_key: approval_speech.words.<language>.full_card */}
+{/* erato_toml_config_key: approval_speech.words.<language>.numbers.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.ordinals.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.time_full_hour */}
+{/* erato_toml_config_key: approval_speech.words.<language>.time */}
+{/* erato_toml_config_key: approval_speech.words.<language>.from */}
+{/* erato_toml_config_key: approval_speech.words.<language>.to */}
+{/* erato_toml_config_key: approval_speech.words.<language>.dictation_verbs.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.dictation_words.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.difference_fillers.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.remove.dictation_verbs.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.remove.dictation_words.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.remove.difference_fillers.[] */}
+
+Per lowercase language tag, the words a spoken card says as code rather than as catalog sentences, and the words it reads the user's own words with. German and English are built in; this table adds a language, usually from a content package, or changes a built-in one. The web app gets the merged words from the backend; a development server without an injected environment uses the built-in ones, which the backend generates into `frontend/src/lib/generated/languageBase.json` (`just generate_language_base` in `backend/`, checked by `just generate_language_base_check`).
+
+- `locale`: the locale dates, numbers and lists are formatted in (`fr-FR`). Unset keeps the built-in one (`de-DE`, `en-GB`), else the language tag itself.
+- `full_card`: whether the voice says the whole card in this language. Without it, only the pointer sentence ("A decision is waiting on screen.") is said, and voice commands on the card are not listened for. On for German and English; a language should get it only after a native speaker has judged the full card in it, with the card sentences translated in the web app's catalog.
+- `numbers`: number words for 0 to 12, in order ("null", "eins", …); larger numbers are said as digits. `ordinals`: the first to the tenth, in order, for a queue of cards. One wrong entry would move every later one, so a list with a wrong entry, or with more than 13 or 10 entries, is ignored as a whole.
+- `time_full_hour` (slot `{hour}`) and `time` (slots `{hour}` and `{minute}`, the minute said with two digits): a time of day, `"{hour} Uhr"` and `"{hour}:{minute} Uhr"` in German. A full hour uses `time` when `time_full_hour` is unset; without both, the locale's own format is used, as in English.
+- `from` and `to` (slot `{value}`): an old and a new value in a [sentence variant](#approval_speechsentences), for a language whose value carries no direction of its own: `"from {value}"`, `"to {value}"` in English. German has none: its values say "vom", "auf den" already.
+- `dictation_verbs` and `dictation_words`: an instruction before a dictated text ("Schreib dem Kunden:") is not part of the dictation when every word of it is a word of one language and one of them is a verb.
+- `difference_fillers`: words that say nothing about a value on their own when telling which differences of a corrected card a [change request](#approval_change_requests) named ("und", "bitte", "instead").
+
+Values replace the built-in ones of their language; `dictation_verbs`, `dictation_words` and `difference_fillers` add to them, without the words under `remove`. A change request is read with the fillers of German, English and the card's language, and with weekday and month names in the locales of these three; an instruction before a dictation is read in every language with words. Entries are checked at startup: a template without exactly its slots, a locale of the wrong shape, an entry that is blank, longer than 128 bytes or holds hidden characters, and an unknown key are ignored with a warning; the rest of the language is kept.
+
+```toml
+[approval_speech.words.fr]
+locale = "fr-FR"
+full_card = true
+numbers = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze"]
+ordinals = ["premier", "deuxième", "troisième"]
+time_full_hour = "{hour} heures"
+time = "{hour} h {minute}"
+dictation_verbs = ["écris", "envoie"]
+dictation_words = ["au", "client", "un", "message"]
+difference_fillers = ["et", "plutôt"]
+```
+
 ### `spoken_vocabularies`
 
 {/* erato_toml_config_key: spoken_vocabularies */}

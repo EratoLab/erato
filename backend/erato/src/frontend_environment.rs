@@ -738,6 +738,15 @@ fn build_frontend_environment(
             serde_json::to_value(&config.approval_speech.sentences).unwrap_or(Value::Null),
         );
     }
+    // The words a spoken card says as code and reads the user's words with,
+    // built in and configured, per language.
+    env.additional_environment.insert(
+        "APPROVAL_SPEECH_WORDS".to_string(),
+        serde_json::to_value(erato_config::approval_speech_words::spoken_card_languages(
+            &config.approval_speech.words,
+        ))
+        .unwrap_or(Value::Null),
+    );
     // The deployment's number words, so that the voice can tell a number or
     // date a person said in words.
     if !config.spoken_number_words.is_empty() {
@@ -1640,6 +1649,41 @@ mod tests {
             get(&config),
             Some(serde_json::json!({"de": {"changed": "{field} geht {from} {to}."}}))
         );
+    }
+
+    #[test]
+    fn approval_speech_words_reach_web_and_office_addin_merged() {
+        let mut config = AppConfig::default();
+        let get = |config: &AppConfig, kind| {
+            build_frontend_environment(config, kind)
+                .additional_environment
+                .get("APPROVAL_SPEECH_WORDS")
+                .cloned()
+                .expect("spoken card words")
+        };
+        let built_in = get(&config, FrontendKind::Web);
+        assert_eq!(
+            built_in,
+            serde_json::to_value(
+                erato_config::approval_speech_words::language_base().approval_speech_words
+            )
+            .unwrap()
+        );
+        config.approval_speech.words = std::collections::HashMap::from([(
+            "fr".to_string(),
+            erato_config::approval_speech_words::ApprovalSpeechWords {
+                full_card: Some(true),
+                numbers: vec!["zéro".into(), "un".into()],
+                ..Default::default()
+            },
+        )]);
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let words = get(&config, kind);
+            assert_eq!(words["fr"]["full_card"], Value::Bool(true));
+            assert_eq!(words["fr"]["locale"], serde_json::json!("fr"));
+            assert_eq!(words["fr"]["numbers"], serde_json::json!(["zéro", "un"]));
+            assert_eq!(words["de"], built_in["de"]);
+        }
     }
 
     #[test]

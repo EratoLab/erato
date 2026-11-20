@@ -3,6 +3,12 @@ import { plural, select, t } from "@lingui/core/macro";
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
+import {
+  filledTemplate,
+  intlLocale,
+  primaryLanguage,
+  spokenCardLanguage,
+} from "./spokenLanguageData";
 import { fillVariant, naturalVariant } from "./spokenSentences";
 import { bothPercent } from "./spokenValues";
 
@@ -18,6 +24,7 @@ import type {
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
 import type { DictationRelation } from "./spokenDictation";
+import type { SpokenCardLanguage } from "./spokenLanguageData";
 import type {
   SpokenCondition,
   SpokenReadFacts,
@@ -140,7 +147,7 @@ interface LanguageCode {
   numbers: readonly string[];
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
-  time?: (hour: number, minute: number) => string;
+  time?: (hour: number, minute: number) => string | undefined;
   /**
    * An old or new value with its direction, for a sentence variant, where
    * the language's value in that role carries none ("from 1 December"). A
@@ -149,75 +156,34 @@ interface LanguageCode {
   directed?: (role: "from" | "to", value: string) => string;
 }
 
-/* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
-const GERMAN: LanguageCode = {
-  locale: "de-DE",
-  numbers: [
-    "null",
-    "eins",
-    "zwei",
-    "drei",
-    "vier",
-    "fünf",
-    "sechs",
-    "sieben",
-    "acht",
-    "neun",
-    "zehn",
-    "elf",
-    "zwölf",
-  ],
-  ordinals: [
-    "erste",
-    "zweite",
-    "dritte",
-    "vierte",
-    "fünfte",
-    "sechste",
-    "siebte",
-    "achte",
-    "neunte",
-    "zehnte",
-  ],
-  // Said as people say it: "10 Uhr", "10:30 Uhr".
-  time: (hour, minute) =>
-    minute === 0
-      ? `${hour} Uhr`
-      : `${hour}:${String(minute).padStart(2, "0")} Uhr`,
-};
+/** The code parts of a language from its words (`languageBase.json`, `[approval_speech.words]`). */
+const codeOf = (words: SpokenCardLanguage): LanguageCode => ({
+  locale: intlLocale(words.locale) ?? withoutWords().locale,
+  numbers: words.numbers,
+  ordinals: words.ordinals,
+  time: (hour, minute) => {
+    const template =
+      minute === 0 ? (words.time_full_hour ?? words.time) : words.time;
+    return template === undefined
+      ? undefined
+      : filledTemplate(template, {
+          hour: String(hour),
+          minute: String(minute).padStart(2, "0"),
+        });
+  },
+  directed: (role, value) => {
+    const template = role === "from" ? words.from : words.to;
+    return template === undefined ? value : filledTemplate(template, { value });
+  },
+});
 
-const ENGLISH: LanguageCode = {
-  locale: "en-GB",
-  directed: (role, value) => `${role} ${value}`,
-  numbers: [
-    "zero",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-  ],
-  ordinals: [
-    "first",
-    "second",
-    "third",
-    "fourth",
-    "fifth",
-    "sixth",
-    "seventh",
-    "eighth",
-    "ninth",
-    "tenth",
-  ],
-};
-/* eslint-enable lingui/no-unlocalized-strings */
+/** A language without words says only the pointer, formatted as English is. */
+const withoutWords = (): LanguageCode => ({
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- a locale
+  locale: spokenCardLanguage("en")?.locale ?? "en-GB",
+  numbers: [],
+  ordinals: [],
+});
 
 /** `Intl` separates some parts with no-break spaces; a voice needs none. */
 const plainSpaces = (text: string): string =>
@@ -1857,18 +1823,18 @@ const words = (
 const spokenToolTitle = (title: string): string =>
   title.replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 
-/** Languages with the pointer sentence only, until a native speaker has judged the full card in them. */
-const POINTER_ONLY: readonly string[] = ["fr", "es", "pl"];
-
 /**
  * The words for `language` ("de", "de-DE", …), from the catalog of the
- * language shown; the code parts are English for a language without its own.
+ * language shown and the language's words. Only a language whose words say
+ * `full_card` says the whole card, until a native speaker has judged it;
+ * any other says the pointer sentence only.
  */
 export const spokenWordsFor = (
   language: string,
   options: WordOptions,
 ): LanguageWords => {
-  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const said = words(code === "de" ? GERMAN : ENGLISH, options, code);
-  return POINTER_ONLY.includes(code) ? { ...said, full: false } : said;
+  const code = primaryLanguage(language);
+  const own = spokenCardLanguage(code);
+  const said = words(own ? codeOf(own) : withoutWords(), options, code);
+  return own?.full_card === true ? said : { ...said, full: false };
 };
