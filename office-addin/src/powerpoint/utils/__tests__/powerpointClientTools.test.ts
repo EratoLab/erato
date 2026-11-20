@@ -12,6 +12,7 @@ import {
   POWERPOINT_READ_PRESENTATION_TOOL,
   POWERPOINT_READ_SELECTION_TOOL,
   POWERPOINT_READ_SLIDE_TOOL,
+  POWERPOINT_VIEW_SLIDE_TOOL,
   registerPowerPointClientTools,
 } from "../powerpointClientTools";
 import {
@@ -51,6 +52,7 @@ afterEach(() => {
 });
 
 const FULL = powerpointReadSupport(requirementsUpTo("1.10"));
+const LIMITS = { maxFiles: 10, maxBytes: 20 * 1024 * 1024 };
 const DECK = {
   slides: [
     {
@@ -133,6 +135,50 @@ describe("PowerPoint client tool registration", () => {
       slideId: "256#",
     });
     expect(read).toMatchObject({ ok: true, result: { tier: "full" } });
+  });
+
+  it("registers the slide picture only at the full tier and only when the pane gates it", () => {
+    for (const [set, gated, expected] of [
+      ["1.10", true, true],
+      ["1.10", false, false],
+      ["1.9", true, false],
+    ] as const) {
+      mocks.registered.length = 0;
+      registerPowerPointClientTools({
+        support: powerpointReadSupport(requirementsUpTo(set)),
+        readEnabled: () => true,
+        listed: () => true,
+        ...(gated
+          ? { view: { listed: () => true, limits: () => LIMITS } }
+          : {}),
+      });
+      expect(
+        mocks.registered.some(
+          (entry) => entry.name === POWERPOINT_VIEW_SLIDE_TOOL,
+        ),
+      ).toBe(expected);
+    }
+  });
+
+  it("lists the slide picture by its own gate, and answers that inclusion is off without rendering", async () => {
+    const host = installFakePowerPoint(DECK);
+    let viewListed = false;
+    registerPowerPointClientTools({
+      support: FULL,
+      readEnabled: () => false,
+      listed: () => true,
+      view: { listed: () => viewListed, limits: () => LIMITS },
+    });
+    expect(tool(POWERPOINT_VIEW_SLIDE_TOOL).isAvailable()).toBe(false);
+    viewListed = true;
+    expect(tool(POWERPOINT_VIEW_SLIDE_TOOL).isAvailable()).toBe(true);
+    await expect(
+      tool(POWERPOINT_VIEW_SLIDE_TOOL).executor(
+        { slideId: "256#" },
+        { toolCallId: "c", messageId: "m", chatId: "chat" },
+      ),
+    ).resolves.toEqual({ ok: false, error: "Presentation inclusion is off." });
+    expect(host.runs).toBe(0);
   });
 });
 
