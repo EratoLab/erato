@@ -2614,6 +2614,12 @@ pub struct ApprovalDecisionItem {
     #[serde(default)]
     #[schema(nullable = false)]
     pub change_request: Option<String>,
+    /// For `approve` or `reject` said by voice: the receipt the voice command
+    /// endpoint gave for it. It must be for this card as it is now, and is
+    /// taken once. A tap carries none.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub voice_receipt: Option<String>,
 }
 
 /// Rehydrates a generation that was deliberately stopped for tool approval.
@@ -2670,6 +2676,10 @@ pub struct ContinueStreamRequest {
     /// task's `approve_context` decision.
     #[serde(skip)]
     scope_approval: Option<Uuid>,
+    /// How each decision by voice was given, by approval id, from its
+    /// receipt.
+    #[serde(skip)]
+    voice_records: HashMap<String, crate::models::message::VoiceDecisionRecord>,
 }
 
 impl ContinueStreamRequest {
@@ -2689,6 +2699,7 @@ impl ContinueStreamRequest {
                     decision,
                     scope_position: None,
                     change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
@@ -2701,6 +2712,7 @@ impl ContinueStreamRequest {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 }
@@ -14303,6 +14315,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 
@@ -14316,6 +14329,7 @@ mod tests {
                     decision,
                     scope_position: None,
                     change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
@@ -14328,6 +14342,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 
@@ -14910,6 +14925,7 @@ mod tests {
             decision: ToolApprovalDecision::Approve,
             scope_position: None,
             change_request: None,
+            voice_receipt: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
             message_id: Uuid::new_v4(),
@@ -14924,6 +14940,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         };
         assert!(
             super::resolve_submitted_decisions(
@@ -15027,6 +15044,7 @@ mod tests {
                 child_chat_id: None,
                 covers: None,
                 scope_approval_id: None,
+                voice: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -15078,6 +15096,7 @@ mod tests {
                 child_chat_id: None,
                 covers: None,
                 scope_approval_id: None,
+                voice: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -15143,6 +15162,7 @@ mod tests {
                 child_chat_id: None,
                 covers: scope_approval_id.map(|_| ApprovalScopeCovers::Document),
                 scope_approval_id,
+                voice: None,
             })
         };
         let mut ask = gated_request("read", "2026-10-30T10:00:00Z");
@@ -15603,6 +15623,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -15644,6 +15665,7 @@ mod tests {
             decision,
             scope_position: None,
             change_request: Some("nimm den 22.".to_string()),
+            voice_receipt: None,
         };
         let refused = |stop: &super::ContentPartToolApprovalRequest, decisions| {
             let mut request = super::ContinueStreamRequest::with_decisions(Uuid::nil(), Vec::new());
@@ -21533,6 +21555,64 @@ fn approve_always_refused(
     })
 }
 
+/// The records of the decisions said by voice, once each receipt is
+/// checked against the card as it is now. A receipt is taken once, so a
+/// refused body needs a new one.
+async fn voice_receipts_taken(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    message_id: Uuid,
+    open: &[ApprovalItem],
+    request: &ContinueStreamRequest,
+) -> Result<HashMap<String, crate::models::message::VoiceDecisionRecord>, String> {
+    use crate::models::message::VoiceDecisionOutcome;
+    use crate::services::approval_voice_commands::decision::check_receipt;
+    let ttl = Duration::from_secs(u64::from(
+        app_state.config.approval_voice_commands.receipt_ttl_seconds,
+    ));
+    let mut records = HashMap::new();
+    for item in &request.decisions {
+        let Some(id) = item.voice_receipt.as_deref() else {
+            continue;
+        };
+        let outcome = match item.decision {
+            ToolApprovalDecision::Approve => VoiceDecisionOutcome::Approved,
+            ToolApprovalDecision::Reject => VoiceDecisionOutcome::Refused,
+            _ => return Err("`voice_receipt` belongs to `approve` or `reject` only".to_string()),
+        };
+        let receipt = app_state.voice_receipts.take(id).await;
+        let checked = open
+            .iter()
+            .find(|open| open.approval_id == item.approval_id)
+            .map(|open| {
+                check_receipt(
+                    receipt.as_deref(),
+                    &me_user.id,
+                    message_id,
+                    open,
+                    outcome,
+                    ttl,
+                )
+            });
+        match (checked, receipt) {
+            (Some(Ok(())), Some(receipt)) => {
+                records.insert(item.approval_id.clone(), receipt.record.clone());
+            }
+            (checked, _) => {
+                tracing::info!(
+                    problem = ?checked,
+                    "Refused a decision by voice: its receipt does not match the card"
+                );
+                return Err(
+                    "The decision by voice no longer matches this card. Please decide on screen."
+                        .to_string(),
+                );
+            }
+        }
+    }
+    Ok(records)
+}
+
 /// The user's words of each `request_change` decision, by approval id.
 fn change_request_words(request: &ContinueStreamRequest) -> HashMap<String, String> {
     request
@@ -21906,6 +21986,7 @@ pub(crate) async fn start_continuation(
     });
     let mut resume_parked = false;
     let mut context = HashMap::new();
+    let mut voice_records = HashMap::new();
     let entry = if state.open.is_empty() {
         if has_waiting_items && empty_body && awaiting_approval && state.unanswered {
             resume_parked = true;
@@ -21973,6 +22054,10 @@ pub(crate) async fn start_continuation(
             ) {
                 return Err((axum::http::StatusCode::BAD_REQUEST, refusal).into());
             }
+            voice_records =
+                voice_receipts_taken(app_state, me_user, message.id, &decidable, &request)
+                    .await
+                    .map_err(|refusal| (axum::http::StatusCode::CONFLICT, refusal))?;
             if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
@@ -22008,6 +22093,7 @@ pub(crate) async fn start_continuation(
         }
     };
     request.context = context;
+    request.voice_records = voice_records;
 
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
@@ -22409,6 +22495,7 @@ async fn resume_parked_child(
                     decision,
                     scope_position: None,
                     change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
@@ -22423,6 +22510,7 @@ async fn resume_parked_child(
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval,
+            voice_records: Default::default(),
         };
         let client_reads = configuration
             .as_ref()
@@ -22723,6 +22811,7 @@ async fn settle_parked_children(
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
                 covers: scope_approval.map(|(covers, _)| covers),
                 scope_approval_id: scope_approval.map(|(_, approval)| approval),
+                voice: None,
             }));
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
@@ -22736,6 +22825,7 @@ async fn settle_parked_children(
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
                 reason: rejection_reason(decision),
                 change_request: None,
+                voice: None,
             }));
         }
 
@@ -23288,6 +23378,7 @@ pub(crate) async fn run_continuation(
                             child_chat_id: None,
                             covers: None,
                             scope_approval_id: None,
+                            voice: None,
                         }))
                 }
                 ToolApprovalDecision::Reject | ToolApprovalDecision::Withdraw => parsed
@@ -23301,6 +23392,7 @@ pub(crate) async fn run_continuation(
                         child_chat_id: None,
                         reason: rejection_reason(*decision),
                         change_request: None,
+                        voice: None,
                     })),
                 _ => {
                     return Err(eyre!(
@@ -23535,6 +23627,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     covers: None,
                     scope_approval_id: None,
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
         } else {
             parsed
@@ -23550,6 +23643,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     reason: rejection_reason(decision),
                     change_request: change_requests.get(&item.approval_id).cloned(),
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
         }
 
@@ -23900,6 +23994,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     covers: scope_approval.map(|(_, covers)| covers),
                     scope_approval_id: scope_approval.map(|(approval, _)| approval),
+                    voice: None,
                 }));
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
@@ -23919,6 +24014,7 @@ pub(crate) async fn run_continuation(
                 child_chat_id: None,
                 reason: rejection_reason(decision),
                 change_request: change_requests.get(&item.approval_id).cloned(),
+                voice: None,
             }));
         let tool_use = ToolUse {
             tool_call_id: item.tool_call_id.clone(),

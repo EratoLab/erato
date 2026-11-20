@@ -18,10 +18,12 @@ import { gistPlainLine } from "./gistLabels";
 import {
   MAX_READ_WORDS,
   MAX_SPOKEN_DETAILS,
+  MAX_VOICE_ITEMS,
   sameSpokenKind,
   spokenApprovalFor,
   spokenApprovalPieces,
   spokenUtteranceSentences,
+  voiceApprovalOffered,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
@@ -1385,5 +1387,60 @@ describe("what the voice says besides the pieces", () => {
     expect(say("en", { type: "text", index }, held).at(-1)).toBe(
       "The rest of the text is on screen.",
     );
+  });
+});
+
+describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
+  const request = (id: string, language: string, voiceApproval: boolean) =>
+    inLanguage(language, () =>
+      spokenApprovalPieces(approvalOf(callOf(id)), {
+        language,
+        now: NOW,
+        timeZone: ZONE,
+        voiceApproval,
+      }),
+    ).find((piece) => piece.role === "request")?.text;
+
+  it("says the phrase as the card's last sentence, in German and English", () => {
+    expect(request("update-01-date-and-probability", "de", true)).toBe(
+      "Zum Ausführen bitte „Ich bestätige“ sagen.",
+    );
+    expect(request("update-01-date-and-probability", "en", true)).toBe(
+      "To go ahead, say: I confirm.",
+    );
+    expect(request("update-01-date-and-probability", "de", false)).toBe(
+      "Bitte auf dem Bildschirm bestätigen.",
+    );
+  });
+
+  it("keeps statements, label warnings, big batches and pointer cards on screen", () => {
+    const offered = (id: string) =>
+      voiceApprovalOffered(approvalOf(callOf(id)));
+    expect(offered("update-01-date-and-probability")).toBe(true);
+    expect(offered("delete-01-task-created-earlier")).toBe(true);
+    expect(offered("read-01-search")).toBe(true);
+    expect(offered("run-01-sql")).toBe(false);
+    expect(offered("create-12-hidden-characters")).toBe(false);
+    expect(voiceApprovalOffered({ type: "pointer" })).toBe(false);
+    expect(request("run-01-sql", "de", true)).toBe(
+      "Bitte auf dem Bildschirm bestätigen.",
+    );
+    const batch = approvalOf(callOf("delete-06-batch-pages"));
+    if (batch.type !== "call") throw new Error("a call");
+    const card = toolCallCardOf(batch.label, batch.input);
+    if (card.kind !== "gist") throw new Error("a gist card");
+    const total = card.gist.change?.batch?.total ?? card.gist.items[0].count;
+    expect(voiceApprovalOffered(batch)).toBe(total <= MAX_VOICE_ITEMS);
+    const big = {
+      ...batch,
+      label: {
+        ...batch.label,
+        change: {
+          ...batch.label?.change,
+          batch: { ...batch.label?.change?.batch, total: MAX_VOICE_ITEMS + 1 },
+        },
+      } as ToolCallLabel,
+    };
+    expect(voiceApprovalOffered(big)).toBe(false);
   });
 });

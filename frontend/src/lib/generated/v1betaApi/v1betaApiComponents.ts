@@ -6594,11 +6594,18 @@ export type InterpretApprovalVoiceCommandVariables = {
 /**
  * Built-in rules answer the plain words; a configured model may answer the
  * rest, seeing the words and the pieces' roles and field names. The answer
- * carries no text, approves nothing and is not stored. `approve` and
- * `reject` are reported so the caller can say that decisions are made on
- * screen, and only once the card's request piece was heard (or the card has
- * none): a yes or no before that, or beside a backchannel ("mhm, ja"), is
- * `noise`.
+ * carries no text and is not stored. `approve` and `reject` count only once
+ * the card's request piece was heard (or the card has none): a yes or no
+ * before that, or beside a backchannel ("mhm, ja"), is `noise`.
+ *
+ * With `decide_by_voice` on, `decision` says whether the words decide the
+ * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
+ * confirm"), checked before any rule or model and never by a model; a
+ * refusal by the rules or the model refuses. Either needs the turn's own
+ * single call as `approval_id`, a card whose request was heard with nothing
+ * owed, and for an approval a recording that started after the voice and
+ * heard enough speech. An accepted decision gets a receipt, kept for
+ * `receipt_ttl_seconds`, with a record of how it was given.
  */
 export const fetchInterpretApprovalVoiceCommand = (
   variables: InterpretApprovalVoiceCommandVariables,
@@ -6621,11 +6628,18 @@ export const fetchInterpretApprovalVoiceCommand = (
 /**
  * Built-in rules answer the plain words; a configured model may answer the
  * rest, seeing the words and the pieces' roles and field names. The answer
- * carries no text, approves nothing and is not stored. `approve` and
- * `reject` are reported so the caller can say that decisions are made on
- * screen, and only once the card's request piece was heard (or the card has
- * none): a yes or no before that, or beside a backchannel ("mhm, ja"), is
- * `noise`.
+ * carries no text and is not stored. `approve` and `reject` count only once
+ * the card's request piece was heard (or the card has none): a yes or no
+ * before that, or beside a backchannel ("mhm, ja"), is `noise`.
+ *
+ * With `decide_by_voice` on, `decision` says whether the words decide the
+ * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
+ * confirm"), checked before any rule or model and never by a model; a
+ * refusal by the rules or the model refuses. Either needs the turn's own
+ * single call as `approval_id`, a card whose request was heard with nothing
+ * owed, and for an approval a recording that started after the voice and
+ * heard enough speech. An accepted decision gets a receipt, kept for
+ * `receipt_ttl_seconds`, with a record of how it was given.
  */
 export const useInterpretApprovalVoiceCommand = (
   options?: Omit<

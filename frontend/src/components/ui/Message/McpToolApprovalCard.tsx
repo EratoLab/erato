@@ -12,7 +12,10 @@ import {
 import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
-import { quietApprovalListening } from "@/hooks/audio/approvalListening";
+import {
+  quietApprovalListening,
+  useApprovalListening,
+} from "@/hooks/audio/approvalListening";
 import {
   stopApprovalSpeech,
   useApprovalSpeech,
@@ -39,8 +42,12 @@ import {
   isApprovalDecision,
 } from "@/lib/toolApprovalDecisions";
 import { approvalDisplayOf } from "@/lib/toolCallGist/approvalCard";
-import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
+import {
+  spokenApprovalFor,
+  voiceApprovalOffered,
+} from "@/lib/toolCallGist/spokenCard";
 import { ChatContext } from "@/providers/ChatProvider";
+import { useOptionalFeatureConfig } from "@/providers/FeatureConfigProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
@@ -70,6 +77,7 @@ import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
   VoiceChange,
   VoiceChangeOutcome,
+  VoiceDecision,
 } from "@/hooks/audio/approvalChanges";
 import type {
   ContentPartToolApprovalRequest,
@@ -698,6 +706,57 @@ export const McpToolApprovalCard = ({
     [approvalIds.join("\n"), kind],
   );
 
+  /**
+   * A decision said by voice: only on the turn's own single call, and only
+   * while deciding by voice is on. An approval goes out with the receipt the
+   * voice command endpoint gave for the phrase; the server refuses it
+   * without one.
+   */
+  const voiceDecisionsOn =
+    useOptionalFeatureConfig()?.audioConversational.voiceDecisionsEnabled ===
+    true;
+  const voiceDecide =
+    useRef<
+      (
+        approvalId: string,
+        decision: "approve" | "reject",
+        receipt: string | undefined,
+      ) => Promise<VoiceChangeOutcome>
+    >(null);
+  voiceDecide.current = (approvalId, decision, receipt) => {
+    const [only] = approvalItems;
+    if (approvalItems.length !== 1 || only.approval_id !== approvalId)
+      return Promise.resolve("conflict");
+    return decide(decision, [
+      {
+        approvalId,
+        decision,
+        ...(receipt ? { voiceReceipt: receipt } : {}),
+      },
+    ]);
+  };
+  const decideByVoice = useCallback(
+    (approvalId: string): Omit<VoiceDecision, "approves"> | undefined => {
+      const [only] = approvalItems;
+      if (
+        !voiceDecisionsOn ||
+        approvalItems.length !== 1 ||
+        only.approval_id !== approvalId ||
+        isChildItem(only, kind) ||
+        (kind !== "mcp_tool" && kind !== "client_tool")
+      )
+        return undefined;
+      return {
+        approvalId,
+        send: (decision, receipt) =>
+          voiceDecide.current?.(approvalId, decision, receipt) ??
+          Promise.resolve("failed"),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the items are read through the ref; their ids and kind decide
+    [approvalIds.join("\n"), kind, voiceDecisionsOn],
+  );
+
   const chatMessages = chatContext?.messages;
   const chatOrder = chatContext?.messageOrder;
   const composeSessionId = useComposeSessionStore((state) =>
@@ -753,6 +812,7 @@ export const McpToolApprovalCard = ({
       replaces: item.replaces_approval_id ?? null,
     })),
     change: changeByVoice,
+    decide: decideByVoice,
     index: isQueue && unanswered > 0 ? unanswered : 0,
     active:
       isPending &&
@@ -763,6 +823,16 @@ export const McpToolApprovalCard = ({
     responding: chatContext?.isPendingResponse ?? false,
     userTurns,
   });
+
+  // While the card listens, the words that approve it are on screen too.
+  const ownKey = `${messageId}:${spokenKeys[0] ?? 0}`;
+  const listening = useApprovalListening((state) => state.listening === ownKey);
+  const phraseShown =
+    listening &&
+    !isQueue &&
+    approvalItems.length === 1 &&
+    decideByVoice(approvalItems[0].approval_id) !== undefined &&
+    voiceApprovalOffered(spokenApprovals[0]);
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -919,6 +989,17 @@ export const McpToolApprovalCard = ({
         scrollIntoViewOnMount
         onDecide={(decision) => void decide(decision)}
       />
+      {phraseShown && (
+        <p
+          className="mt-2 text-sm text-theme-fg-secondary"
+          data-testid="approval-voice-phrase"
+        >
+          {t({
+            id: "toolApproval.voicePhrase",
+            message: "By voice: “I confirm”",
+          })}
+        </p>
+      )}
       {refusal}
     </div>
   );

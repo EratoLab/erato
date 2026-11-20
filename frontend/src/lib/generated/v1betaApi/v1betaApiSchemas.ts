@@ -151,6 +151,12 @@ export type ApprovalDecisionItem = {
    * take it; it sends the decision with that host's `X-Erato-Executor`.
    */
   scope_position?: Record<string, any>;
+  /**
+   * For `approve` or `reject` said by voice: the receipt the voice command
+   * endpoint gave for it. It must be for this card as it is now, and is
+   * taken once. A tap carries none.
+   */
+  voice_receipt?: string;
 };
 
 /**
@@ -284,6 +290,7 @@ export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
 export type ApprovalSpeechWording = "precise" | "natural";
 
 export type ApprovalVoiceCommand = {
+  decision?: ApprovalVoiceDecision;
   meaning: ApprovalVoiceMeaning;
   /**
    * For `repeat` and `read_text`: the piece meant. Null when the words do
@@ -294,6 +301,10 @@ export type ApprovalVoiceCommand = {
 };
 
 export type ApprovalVoiceCommandRequest = {
+  /**
+   * The approval the card asks about; deciding by voice needs it.
+   */
+  approval_id?: string;
   /**
    * The piece being spoken, or the last one spoken.
    */
@@ -308,6 +319,7 @@ export type ApprovalVoiceCommandRequest = {
    */
   pieces: ApprovalCardPiece[];
   question?: ApprovalVoiceQuestion;
+  signals?: ApprovalVoiceSignals;
   /**
    * What the user said, as transcribed. At most 300 characters.
    */
@@ -318,6 +330,20 @@ export type ApprovalVoiceCommandRequest = {
  * Where the meaning came from.
  */
 export type ApprovalVoiceCommandSource = "rules" | "model" | "none";
+
+export type ApprovalVoiceDecision = {
+  /**
+   * With `accepted`: the receipt the decision carries as `voice_receipt`.
+   */
+  receipt?: string;
+  status: ApprovalVoiceDecisionStatus;
+};
+
+export type ApprovalVoiceDecisionStatus =
+  | "accepted"
+  | "phrase_needed"
+  | "screen_only"
+  | "not_yet";
 
 export type ApprovalVoiceMeaning =
   | "skip"
@@ -337,6 +363,62 @@ export type ApprovalVoiceMeaning =
  * answer it.
  */
 export type ApprovalVoiceQuestion = "which_text";
+
+/**
+ * What the device measured about the recording the words came from. Times
+ * are milliseconds since the Unix epoch on the device's clock.
+ */
+export type ApprovalVoiceSignals = {
+  /**
+   * The first detector frame heard as speech.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  first_speech_at_ms?: number;
+  /**
+   * The recording was opened while the voice spoke.
+   */
+  over_voice?: boolean;
+  /**
+   * All detector frames of the recording, in milliseconds.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  recorded_ms: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  recording_ended_at_ms: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  recording_started_at_ms: number;
+  /**
+   * When the card's request to decide was heard in full.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  request_heard_at_ms?: number;
+  /**
+   * Detector frames heard as speech, in milliseconds.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_ms: number;
+  /**
+   * When the voice last stopped speaking before the recording.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  voice_stopped_at_ms: number;
+};
 
 /**
  * Response from the archive all chats endpoint
@@ -1749,6 +1831,7 @@ export type ContentPartToolApproval = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+  voice?: VoiceDecisionRecord;
 };
 
 /**
@@ -1810,6 +1893,7 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+  voice?: VoiceDecisionRecord;
 };
 
 export type ContentPartTurnInstructionMarker = {
@@ -3619,6 +3703,8 @@ export type PendingToolCall = {
   fn_arguments: Value;
   fn_name: string;
 };
+
+export type PhraseMatchKind = "exact" | "variant";
 
 export type PolicyGuideConfig = {
   /**
@@ -6207,6 +6293,73 @@ export type UserToolApprovalSettingsResponse = {
 export type UserToolDecision = "always_allow" | "ask" | "denied";
 
 export type Value = void;
+
+export type VoiceDecisionOutcome = "approved" | "refused";
+
+/**
+ * A piece of the spoken card and what the user had heard of it.
+ */
+export type VoiceDecisionPiece = {
+  id: string;
+  role: string;
+  state: string;
+};
+
+/**
+ * How a decision was given by voice, kept with the decision for audits and
+ * for tuning. Never the audio; times are RFC 3339 as the device measured
+ * them.
+ */
+export type VoiceDecisionRecord = {
+  /**
+   * From the request heard to the first speech of the answer.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  answer_latency_ms?: number;
+  approval_id: string;
+  /**
+   * What the card asked about: the call's tool and arguments, hashed.
+   */
+  card_digest: string;
+  language: string;
+  match_kind?: PhraseMatchKind;
+  /**
+   * When the words were matched.
+   */
+  matched_at: string;
+  /**
+   * The words as matched, folded; at most 100 characters.
+   */
+  matched_words: string;
+  outcome: VoiceDecisionOutcome;
+  pieces: VoiceDecisionPiece[];
+  recording_ended_at: string;
+  recording_started_at: string;
+  request_heard_at?: string;
+  /**
+   * The phrase an approval needed, by its id.
+   */
+  required_phrase?: string;
+  /**
+   * The share of the recording's detector frames heard as speech, in
+   * thousandths.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_frames_permille: number;
+  /**
+   * How long the speech detector heard speech in the recording.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_ms: number;
+  user_id: string;
+  voice_stopped_at: string;
+};
 
 /**
  * One fixed line, ready to play.

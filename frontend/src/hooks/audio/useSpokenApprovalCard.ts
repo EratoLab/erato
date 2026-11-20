@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
   sameSpokenKind,
   spokenApprovalPieces,
+  voiceApprovalOffered,
 } from "@/lib/toolCallGist/spokenCard";
 import { spokenDifference } from "@/lib/toolCallGist/spokenCardDifference";
 
@@ -21,7 +22,7 @@ import {
   useSpokenStyle,
 } from "./spokenStyle";
 
-import type { VoiceChange } from "./approvalChanges";
+import type { VoiceChange, VoiceDecision } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
 
@@ -40,6 +41,7 @@ export function useSpokenApprovalCard({
   keys,
   items = [],
   change,
+  decide,
   index,
   active,
   responding,
@@ -59,6 +61,8 @@ export function useSpokenApprovalCard({
   items?: readonly { approvalId: string; replaces: string | null }[];
   /** How an approval is changed by voice, where it can be. */
   change?: (approvalId: string) => VoiceChange | undefined;
+  /** How an approval is decided by voice, where it can be. */
+  decide?: (approvalId: string) => Omit<VoiceDecision, "approves"> | undefined;
   /** The one on screen now. */
   index: number;
   /** The card asks for a decision and none is on its way. */
@@ -91,6 +95,9 @@ export function useSpokenApprovalCard({
       return;
     if (approvalSpoken(key)) return;
     const total = approvals.length;
+    const item = items.at(index);
+    const decision = item ? decide?.(item.approvalId) : undefined;
+    const approves = decision !== undefined && voiceApprovalOffered(approval);
     const options = {
       language: i18n.locale,
       now: new Date(),
@@ -105,8 +112,8 @@ export function useSpokenApprovalCard({
           : undefined,
       userTurns,
       numberWords: deploymentNumberWords(i18n.locale),
+      voiceApproval: approves,
     };
-    const item = items.at(index);
     const withdrawn =
       item?.replaces != null
         ? takeWithdrawnCard(item.replaces, item.approvalId)
@@ -129,6 +136,7 @@ export function useSpokenApprovalCard({
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
       approval,
       change: item ? change?.(item.approvalId) : undefined,
+      decision: decision ? { ...decision, approves } : undefined,
     };
     // A stop during the turn's own words means quiet: the card waits to be
     // asked for.
@@ -139,6 +147,7 @@ export function useSpokenApprovalCard({
     approval,
     approvals,
     change,
+    decide,
     index,
     items,
     key,

@@ -4,11 +4,14 @@ import {
   clearApprovalWordsHeard,
   heardApprovalWords,
   listensIn,
+  noteApprovalListening,
   quietApprovalListening,
   resumeTalkedOverCard,
   useApprovalListening,
 } from "./approvalListening";
 import { useApprovalSpeech } from "./approvalSpeech";
+
+import type { RecordingSignals } from "./useAudioDictationRecorder";
 
 /**
  * Opens the microphone for a spoken approval card once the voice has said
@@ -48,7 +51,12 @@ export function useApprovalCardListening({
   open: (key: string) => void;
   /** Closes the microphone; what it heard is dropped. */
   close: () => void;
-  readTurn: () => { ended: boolean; words: string };
+  /** With what the recorder measured, which deciding by voice needs. */
+  readTurn: () => {
+    ended: boolean;
+    words: string;
+    recording?: RecordingSignals;
+  };
 }): { listeningFor: string | null } {
   const key = useApprovalSpeech((state) => state.key);
   const language = useApprovalSpeech((state) =>
@@ -73,6 +81,11 @@ export function useApprovalCardListening({
 
   const [listeningFor, setListeningFor] = useState<string | null>(null);
   const opened = useRef(false);
+
+  useEffect(() => {
+    noteApprovalListening(listeningFor);
+  }, [listeningFor]);
+  useEffect(() => () => noteApprovalListening(null), []);
 
   useEffect(() => {
     if (!want || listeningFor !== null || !recorderIdle) return;
@@ -112,9 +125,10 @@ export function useApprovalCardListening({
       quietApprovalListening(card);
       return;
     }
-    const { words } = readTurn();
+    const { words, recording } = readTurn();
     setListeningFor(null);
-    if (words.trim().length > 0) void heardApprovalWords(card, words);
+    if (words.trim().length > 0)
+      void heardApprovalWords(card, words, recording);
     else resumeTalkedOverCard(card);
   }, [listeningFor, readTurn, recorderIdle]);
 

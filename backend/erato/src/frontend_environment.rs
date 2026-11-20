@@ -724,6 +724,13 @@ fn build_frontend_environment(
         "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
         Value::Bool(config.approval_voice_commands.enabled),
     );
+    env.additional_environment.insert(
+        "APPROVAL_VOICE_DECISIONS_ENABLED".to_string(),
+        Value::Bool(
+            config.approval_voice_commands.enabled
+                && config.approval_voice_commands.decide_by_voice,
+        ),
+    );
     // The deployment's natural sentence variants for approval cards read
     // aloud; how much is said and how it is worded is asked per user.
     if !config.approval_speech.sentences.is_empty() {
@@ -1589,6 +1596,26 @@ mod tests {
                     .additional_environment
                     .get("APPROVAL_VOICE_COMMANDS_ENABLED"),
                 Some(&Value::Bool(enabled))
+            );
+        }
+    }
+
+    #[test]
+    fn deciding_by_voice_reaches_the_web_only_with_voice_commands_on() {
+        for (enabled, decide_by_voice, expected) in [
+            (false, true, false),
+            (true, false, false),
+            (true, true, true),
+        ] {
+            let mut config = AppConfig::default();
+            config.approval_voice_commands.enabled = enabled;
+            config.approval_voice_commands.decide_by_voice = decide_by_voice;
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get("APPROVAL_VOICE_DECISIONS_ENABLED"),
+                Some(&Value::Bool(expected))
             );
         }
     }

@@ -2891,6 +2891,31 @@ impl AppConfig {
                 APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.end()
             ));
         }
+        for (key, value, range) in [
+            (
+                "echo_tail_ms",
+                commands.echo_tail_ms,
+                APPROVAL_VOICE_ECHO_TAIL_MS_RANGE,
+            ),
+            (
+                "min_speech_ms_per_syllable",
+                commands.min_speech_ms_per_syllable,
+                APPROVAL_VOICE_MIN_SPEECH_MS_PER_SYLLABLE_RANGE,
+            ),
+            (
+                "receipt_ttl_seconds",
+                commands.receipt_ttl_seconds,
+                APPROVAL_VOICE_RECEIPT_TTL_SECONDS_RANGE,
+            ),
+        ] {
+            if commands.decide_by_voice && !range.contains(&value) {
+                return Err(eyre!(
+                    "approval_voice_commands.{key} must be from {} to {}",
+                    range.start(),
+                    range.end()
+                ));
+            }
+        }
         if let Some(id) = commands
             .chat_provider_id
             .as_deref()
@@ -4018,9 +4043,32 @@ pub struct ApprovalVoiceCommandsConfig {
     pub model_timeout_ms: u32,
     /// Replaces the model's built-in instruction. Unset or blank keeps it.
     pub prompt: Option<String>,
+    /// Lets the user decide a waiting card by voice: "nein" refuses, and only
+    /// the confirmation phrase ("Ich bestätige" / "I confirm") approves,
+    /// never a plain "ja" or a model's judgement. Needs `enabled`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub decide_by_voice: bool,
+    /// How long after the voice stops speech still counts as its echo and
+    /// cannot approve, in milliseconds. Defaults to `300`; allowed up to
+    /// `2000`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub echo_tail_ms: u32,
+    /// Speech the detector must have heard per syllable of the phrase, in
+    /// milliseconds. Defaults to `80`; allowed from `20` to `400`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub min_speech_ms_per_syllable: u32,
+    /// How long an accepted decision by voice may take to arrive, in
+    /// seconds. Defaults to `120`; allowed from `5` to `600`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub receipt_ttl_seconds: u32,
 }
 
 pub const APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=10_000;
+pub const APPROVAL_VOICE_ECHO_TAIL_MS_RANGE: std::ops::RangeInclusive<u32> = 0..=2_000;
+pub const APPROVAL_VOICE_MIN_SPEECH_MS_PER_SYLLABLE_RANGE: std::ops::RangeInclusive<u32> = 20..=400;
+pub const APPROVAL_VOICE_RECEIPT_TTL_SECONDS_RANGE: std::ops::RangeInclusive<u32> = 5..=600;
 
 impl Default for ApprovalVoiceCommandsConfig {
     fn default() -> Self {
@@ -4029,6 +4077,10 @@ impl Default for ApprovalVoiceCommandsConfig {
             chat_provider_id: None,
             model_timeout_ms: 2500,
             prompt: None,
+            decide_by_voice: false,
+            echo_tail_ms: 300,
+            min_speech_ms_per_syllable: 80,
+            receipt_ttl_seconds: 120,
         }
     }
 }
@@ -4043,7 +4095,7 @@ mod approval_voice_commands_tests {
                 enabled,
                 chat_provider_id: provider.map(str::to_string),
                 model_timeout_ms: timeout_ms,
-                prompt: None,
+                ..ApprovalVoiceCommandsConfig::default()
             },
             ..AppConfig::default()
         };
@@ -4058,6 +4110,31 @@ mod approval_voice_commands_tests {
         assert!(check(true, None, 2500).is_ok());
         assert!(check(true, Some("removed"), 2500).is_err());
         assert!(check(true, None, 0).is_err());
+    }
+
+    #[test]
+    fn deciding_by_voice_checks_its_timings_only_when_on() {
+        let config = |decide_by_voice: bool, echo_tail_ms: u32| AppConfig {
+            approval_voice_commands: ApprovalVoiceCommandsConfig {
+                enabled: true,
+                decide_by_voice,
+                echo_tail_ms,
+                ..ApprovalVoiceCommandsConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        assert!(!ApprovalVoiceCommandsConfig::default().decide_by_voice);
+        assert!(config(true, 300).validate_approval_voice_commands().is_ok());
+        assert!(
+            config(true, 5000)
+                .validate_approval_voice_commands()
+                .is_err()
+        );
+        assert!(
+            config(false, 5000)
+                .validate_approval_voice_commands()
+                .is_ok()
+        );
     }
 }
 

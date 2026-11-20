@@ -2,10 +2,13 @@
 //! says is matched to one meaning from a closed list: skip, the rest, repeat,
 //! read a long text, stop, a change request, a new request, a decision,
 //! listening noise. Rules match the plain words; a configured model may pick
-//! for the rest. Neither writes anything to be spoken, nothing is decided
-//! here, and nothing is stored.
+//! for the rest. Neither writes anything to be spoken. With deciding by
+//! voice on, an approval needs the confirmation phrase (`phrase`), and
+//! `decision` issues the receipt the decision then carries.
 
+pub mod decision;
 mod model;
+pub mod phrase;
 mod rules;
 
 use crate::config::ChatProviderConfig;
@@ -15,6 +18,7 @@ use std::time::Duration;
 use utoipa::ToSchema;
 
 pub use model::DEFAULT_PROMPT;
+pub use phrase::PhraseMatchKind;
 
 pub const MAX_TRANSCRIPT_CHARS: usize = 300;
 pub const MAX_PIECES: usize = 16;
@@ -160,6 +164,36 @@ pub struct VoiceCommand {
     /// not say which and the card has no single candidate.
     pub piece_id: Option<String>,
     pub source: VoiceCommandSource,
+    /// For `approve` and `reject` while deciding by voice is on: whether the
+    /// words decide the card.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub decision: Option<VoiceDecisionAnswer>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalVoiceDecisionStatus)]
+pub enum VoiceDecisionStatus {
+    /// The words decide the card: send the decision with the receipt.
+    Accepted,
+    /// An approval, but not in the confirmation phrase, or not from a
+    /// recording that can carry one.
+    PhraseNeeded,
+    /// This card is decided on screen.
+    ScreenOnly,
+    /// The card has not asked yet, or something it must say is still owed.
+    NotYet,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = ApprovalVoiceDecision)]
+pub struct VoiceDecisionAnswer {
+    pub status: VoiceDecisionStatus,
+    /// With `accepted`: the receipt the decision carries as `voice_receipt`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub receipt: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -279,6 +313,7 @@ fn unclear() -> VoiceCommand {
         meaning: VoiceMeaning::Unclear,
         piece_id: None,
         source: VoiceCommandSource::None,
+        decision: None,
     }
 }
 
@@ -359,6 +394,7 @@ fn guarded(
             meaning: VoiceMeaning::Noise,
             piece_id: None,
             source,
+            decision: None,
         };
     }
     let refused = (meaning.is_decision() && !words.could_be_plain_decision(meaning, input.pieces))
@@ -377,6 +413,7 @@ fn guarded(
         meaning,
         piece_id,
         source,
+        decision: None,
     }
 }
 

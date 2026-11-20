@@ -50,6 +50,7 @@ import {
   resolveMinSpeechMs,
   SESSION_RETRY_DELAY_MS,
   SILENT_FRAME_PROBABILITY,
+  SPEECH_FRAME_PROBABILITY,
 } from "./audioTuning";
 import {
   createSpeechOnsetController,
@@ -178,6 +179,20 @@ type LiveAudioDictationSession = {
   firstChunkIndex: number;
   pendingSourceSamples: number[];
   sourceSampleRate: number;
+};
+
+/**
+ * What the detector heard in one recording, for deciding by voice: when it
+ * started on the device's clock, and its speech by sample time from there.
+ */
+export type RecordingSignals = {
+  startedAt: number;
+  endedAt: number;
+  firstSpeechAt: number | null;
+  speechMs: number;
+  recordedMs: number;
+  /** Opened while the voice spoke. */
+  overVoice: boolean;
 };
 
 export type AudioDictationTranscriptChunk = {
@@ -423,6 +438,7 @@ export function useAudioDictationRecorder({
   const onVoiceLoweredRef = useRef(onVoiceLowered);
   /** The current recording's wait over the voice, from its start. */
   const holdRef = useRef<OverVoiceHold | null>(null);
+  const recordingSignalsRef = useRef<RecordingSignals | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
    * the component is mounted and flips to `false` exactly once during
@@ -1059,6 +1075,13 @@ export function useAudioDictationRecorder({
    * transcription and no words arrive. For a recording whose words are no
    * longer wanted, such as one for a card that was decided.
    */
+  /** What the detector heard in the last recording, as a copy. */
+  const readRecordingSignals = useCallback(
+    (): RecordingSignals | null =>
+      recordingSignalsRef.current ? { ...recordingSignalsRef.current } : null,
+    [],
+  );
+
   const cancelDictation = useCallback(() => {
     finishWhenOpenRef.current = false;
     const session = liveSessionRef.current;
@@ -1109,6 +1132,16 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      // Taken before the microphone opens, so a first speech counted from
+      // here is never later than it was.
+      recordingSignalsRef.current = {
+        startedAt: Date.now(),
+        endedAt: 0,
+        firstSpeechAt: null,
+        speechMs: 0,
+        recordedMs: 0,
+        overVoice: hold !== null,
+      };
       if (hold === null) microphoneOpened();
 
       const mediaDevices =
@@ -1487,6 +1520,21 @@ export function useAudioDictationRecorder({
                   event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
                     ? gate.quietFrames + 1
                     : 0;
+                const signals = recordingSignalsRef.current;
+                if (signals) {
+                  const frameMs =
+                    (event.frame.samples.length / event.frame.sampleRate) *
+                    1000;
+                  signals.recordedMs += frameMs;
+                  if (
+                    event.probabilities.isSpeech >= SPEECH_FRAME_PROBABILITY
+                  ) {
+                    signals.firstSpeechAt ??=
+                      signals.startedAt + signals.recordedMs - frameMs;
+                    signals.speechMs += frameMs;
+                  }
+                  signals.endedAt = signals.startedAt + signals.recordedMs;
+                }
                 if (gate.heard) cutAtPause(gate);
                 const current = holdRef.current;
                 if (current?.released !== null) return;
@@ -1903,6 +1951,7 @@ export function useAudioDictationRecorder({
     heldHesitation,
     toggleDictation,
     cancelDictation,
+    readRecordingSignals,
   };
 }
 

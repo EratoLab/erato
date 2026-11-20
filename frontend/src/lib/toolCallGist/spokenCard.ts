@@ -335,6 +335,11 @@ export interface SpokenOptions {
    * named as such.
    */
   userTurns?: readonly UserTurn[];
+  /**
+   * The card may be approved by voice: its request names the phrase, where
+   * `voiceApprovalOffered` allows it for the call.
+   */
+  voiceApproval?: boolean;
 }
 
 export interface SpokenWords {
@@ -353,7 +358,8 @@ export interface SpokenWords {
   more(count: number): string;
   text(text: SpokenText): string;
   consequence(consequences: SpokenConsequence[], facts: SpokenFacts): string;
-  request(): string;
+  /** The request to decide; with `phrase`, naming the phrase that approves. */
+  request(phrase?: boolean): string;
   /** A call the card has no verb for: the tool's title and its server. */
   generic(toolTitle: string, server?: string): string;
   /** Before the rest of the card: how many pieces follow. */
@@ -1203,7 +1209,9 @@ const composedPieces = (
   }
   const request: ComposedPiece = {
     role: "request",
-    text: words.request(),
+    text: words.request(
+      options.voiceApproval === true && voiceApprovalOffered(approval),
+    ),
     mustSay: false,
     values: [],
   };
@@ -1404,6 +1412,33 @@ export const spokenApprovalFor = (
     toolTitle: call.display?.title ?? call.tool_name,
     server: call.display?.server_name ?? undefined,
   };
+};
+
+/** More items than this are approved on screen. */
+export const MAX_VOICE_ITEMS = 20;
+
+/**
+ * Whether a call may be approved by voice, as far as the card can tell: a
+ * read, or a card that describes the call. A statement it cannot read (SQL,
+ * code), a label warning or more than `MAX_VOICE_ITEMS` items are approved
+ * on screen; so is a call the card cannot describe. The backend checks the
+ * same before it accepts the phrase.
+ */
+export const voiceApprovalOffered = (approval: SpokenApproval): boolean => {
+  if (approval.type !== "call") return false;
+  const { label } = approval;
+  if ((label?.warnings ?? []).length > 0 || label?.action === "run")
+    return false;
+  if (spokenReadFactsOf(label) !== undefined) return true;
+  const card = toolCallCardOf(label, approval.input);
+  if (card.kind !== "gist") return false;
+  const { gist } = card;
+  const count = gist.change?.batch?.total ?? gist.items[0].count;
+  return (
+    gist.warnings.length === 0 &&
+    (gist.change?.opaque.length ?? 0) === 0 &&
+    count <= MAX_VOICE_ITEMS
+  );
 };
 
 /** Whether two approvals said one after another are of the same kind. */

@@ -8851,6 +8851,16 @@ msgstr "{decision, select, approve {For now, approving is done on screen.} other
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decisionFailed"
+msgstr "That didn't go through. Please decide on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.declined"
+msgstr "All right, I won't do it."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.newRequest"
 msgstr "First this card: decide on it on screen, or say what should be different. Then please say the new request again."
 
@@ -8858,6 +8868,16 @@ msgstr "First this card: decide on it on screen, or say what should be different
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.noText"
 msgstr "This card has no long text."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.phraseOnScreen"
+msgstr "Then please confirm on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhrase"
+msgstr "Please say: I confirm."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8963,6 +8983,11 @@ msgstr "{shape, select, unnamed {{total, plural, one {one recipient} other {{cou
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.request"
 msgstr "Please confirm on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.requestPhrase"
+msgstr "To go ahead, say: I confirm."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9371,6 +9396,11 @@ msgstr "Allowed — sent once every item is decided"
 #: src/components/ui/Message/ApprovalDecisionActions.tsx
 msgid "toolApproval.staged.denied"
 msgstr "Denied — sent once every item is decided"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.voicePhrase"
+msgstr "By voice: “I confirm”"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

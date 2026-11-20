@@ -2,7 +2,7 @@
 //! the approval still waits for a decision.
 
 use super::me_profile_middleware::MeProfile;
-use super::message_streaming::parked_approval_state;
+use super::message_streaming::{ParkedApprovalState, parked_approval_state};
 use crate::models::chat::get_chat_by_message_id;
 use crate::models::message::{MessageSchema, get_message_by_id};
 use crate::policy::engine::PolicyEngine;
@@ -11,7 +11,7 @@ use crate::state::AppState;
 use axum::http::StatusCode;
 use uuid::Uuid;
 
-/// `Ok` for a message in the user's own chat with an approval waiting. A
+/// What waits, for a message in the user's own chat with an approval waiting. A
 /// message the user may not read, or one in a chat they do not own, answers
 /// 404; one with nothing left to decide answers 409.
 pub(crate) async fn check_waiting_approval_of_user(
@@ -19,7 +19,7 @@ pub(crate) async fn check_waiting_approval_of_user(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     message_id: &Uuid,
-) -> Result<(), StatusCode> {
+) -> Result<ParkedApprovalState, StatusCode> {
     policy
         .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
         .await?;
@@ -44,8 +44,7 @@ pub(crate) async fn check_waiting_approval_of_user(
     }
     let parsed =
         MessageSchema::validate(&message.raw_message).map_err(log_internal_server_error)?;
-    if parked_approval_state(&parsed.content).is_none_or(|state| state.decidable().is_empty()) {
-        return Err(StatusCode::CONFLICT);
-    }
-    Ok(())
+    parked_approval_state(&parsed.content)
+        .filter(|state| !state.decidable().is_empty())
+        .ok_or(StatusCode::CONFLICT)
 }

@@ -987,6 +987,13 @@ const differenceSameHint = (): string =>
 const requestSentence = (): string =>
   t({ id: "spokenCard.request", message: "Please confirm on screen." });
 
+/** The request where the card is approved by voice: it names the phrase. */
+const requestPhraseSentence = (): string =>
+  t({
+    id: "spokenCard.requestPhrase",
+    message: "To go ahead, say: I confirm.",
+  });
+
 const cutMark = (): string =>
   t({ id: "spokenCard.cut", message: "… shortened" });
 
@@ -1010,6 +1017,28 @@ const textCutSentence = (): string =>
 
 const noticeSentence = (notice: SpokenNotice, locale: string): string => {
   switch (notice.kind) {
+    case "confirm_on_screen":
+      return requestSentence();
+    case "say_phrase":
+      return t({
+        id: "spokenCard.notice.sayPhrase",
+        message: "Please say: I confirm.",
+      });
+    case "phrase_on_screen":
+      return t({
+        id: "spokenCard.notice.phraseOnScreen",
+        message: "Then please confirm on screen.",
+      });
+    case "declined":
+      return t({
+        id: "spokenCard.notice.declined",
+        message: "All right, I won't do it.",
+      });
+    case "decision_failed":
+      return t({
+        id: "spokenCard.notice.decisionFailed",
+        message: "That didn't go through. Please decide on screen.",
+      });
     case "decide_on_screen": {
       const { decision } = notice;
       return t({
@@ -1771,7 +1800,7 @@ const words = (
         .map((consequence) => consequenceSentence(consequence, subject))
         .join(" ");
     },
-    request: requestSentence,
+    request: (phrase) => (phrase ? requestPhraseSentence() : requestSentence()),
     generic: (toolTitle, server) =>
       genericSentence(
         spokenToolTitle(toolTitle),
