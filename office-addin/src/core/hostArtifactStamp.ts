@@ -25,15 +25,24 @@ const sameFields = (
   );
 };
 
+// Keys say nothing about a Map, Set or Date, so only arrays and plain records
+// are compared by their entries.
+const isPlain = (value: unknown): value is object => {
+  if (typeof value !== "object" || value === null) return false;
+  if (Array.isArray(value)) return true;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
 const sameValueOrFields = (previous: unknown, next: unknown): boolean =>
   Object.is(previous, next) ||
-  (typeof previous === "object" &&
-    typeof next === "object" &&
-    previous !== null &&
-    next !== null &&
-    sameFields(previous, next, Object.is));
+  (isPlain(previous) && isPlain(next) && sameFields(previous, next, Object.is));
 
-/** Field by field, and one level into the arrays and objects a build makes anew each time. */
+/**
+ * A build makes new arrays and records for an artifact whose values did not
+ * change. One level down is enough: artifacts nest only flat records and arrays,
+ * and anything deeper counts as changed.
+ */
 export const isSameHostArtifact = (
   previous: HostArtifact,
   next: HostArtifact,
@@ -45,8 +54,6 @@ const sameInputs = (previous: readonly unknown[], next: readonly unknown[]) =>
   previous.every((input, index) => Object.is(input, next[index]));
 
 /**
- * Stamps `source` with the artifact `build` makes from it and `inputs`.
- *
  * The message list re-renders a row whenever its message object changes, and
  * a streamed chunk rebuilds every host artifact, so the last stamp is kept
  * while its message and inputs are unchanged, and a rebuilt artifact equal to

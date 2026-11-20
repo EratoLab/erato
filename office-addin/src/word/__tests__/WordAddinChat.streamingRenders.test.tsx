@@ -27,7 +27,10 @@ const harness = vi.hoisted(() => {
   const messages: Record<string, object> = {};
   const messageOrder: string[] = [];
   const rows: string[] = [];
-  return { messages, messageOrder, rows };
+  const stamped: { current: Record<string, { hostArtifact?: object }> } = {
+    current: {},
+  };
+  return { messages, messageOrder, rows, stamped };
 });
 
 const FACETS = {
@@ -96,20 +99,23 @@ vi.mock("../../core/AddinChatCore", () => {
       messages,
     }: {
       messages: AddinChatController["messages"];
-    }) => (
-      <MessageList
-        messages={messages}
-        messageOrder={harness.messageOrder}
-        loadOlderMessages={() => {}}
-        hasOlderMessages={false}
-        isPending={false}
-        currentSessionId="chat-1"
-        controlsContext={{ canEdit: true }}
-        onMessageAction={async () => true}
-        messageRenderer={CountingRenderer}
-        pageSize={harness.messageOrder.length}
-      />
-    ),
+    }) => {
+      harness.stamped.current = messages;
+      return (
+        <MessageList
+          messages={messages}
+          messageOrder={harness.messageOrder}
+          loadOlderMessages={() => {}}
+          hasOlderMessages={false}
+          isPending={false}
+          currentSessionId="chat-1"
+          controlsContext={{ canEdit: true }}
+          onMessageAction={async () => true}
+          messageRenderer={CountingRenderer}
+          pageSize={harness.messageOrder.length}
+        />
+      );
+    },
   };
 });
 
@@ -237,5 +243,7 @@ describe("the Word pane while a reply streams", () => {
 
     expect(harness.rows.filter((id) => id !== LIVE_ID)).toEqual([]);
     expect(harness.rows.filter((id) => id === LIVE_ID)).toHaveLength(5);
+    expect(harness.stamped.current.a0.hostArtifact).toBeDefined();
+    expect(harness.stamped.current[LIVE_ID].hostArtifact).toBeDefined();
   });
 });

@@ -1758,8 +1758,8 @@ export const MessageContent = memo(function MessageContent({
       shown.has(toolCallId) ? shown : new Set(shown).add(toolCallId),
     );
   }, []);
-  // Keyed by value for the same reason: the chipped set below feeds the
-  // markdown context.
+  // Keyed by value: the chipped set below feeds the markdown context, so a new
+  // map on every streamed chunk would re-render every finished markdown block.
   const viewFileIdsKey = React.useMemo(() => {
     const byCall: [string, string[]][] = [];
     content.forEach((part) => {

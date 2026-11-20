@@ -203,6 +203,9 @@ describe("MessageList while a reply streams", () => {
       container.querySelectorAll('[data-testid="tool-call-item"]'),
     ).toHaveLength(FINISHED_TURNS + 1);
 
+    expect(renders.markdown).toContain("The table has three columns.");
+    expect(renders.json).toHaveLength(2 * (FINISHED_TURNS + 1));
+
     renders.rows.length = 0;
     renders.markdown.length = 0;
     renders.json.length = 0;

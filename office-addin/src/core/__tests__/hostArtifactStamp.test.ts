@@ -115,6 +115,27 @@ describe("stampHostArtifact", () => {
     expect(second.message.hostArtifact).toBe(changed);
   });
 
+  it("drops an artifact the new inputs no longer build", () => {
+    const first = stampHostArtifact(
+      undefined,
+      message("Done."),
+      ["word_document_review"],
+      () => artifact(),
+      withArtifact,
+    );
+
+    const second = stampHostArtifact(
+      first,
+      first.source,
+      [undefined],
+      () => undefined,
+      withArtifact,
+    );
+
+    expect(second.message).toBe(first.source);
+    expect(second.message.hostArtifact).toBeUndefined();
+  });
+
   it("leaves a message without an artifact as it is", () => {
     const source = message("Done.");
 
@@ -148,6 +169,23 @@ describe("isSameHostArtifact", () => {
             language: "plan",
             content: "call-2",
           },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("counts a nested value that is not a plain record as changed", () => {
+    const scopes = new Map([["word.apply_edits", "device"]]);
+    expect(
+      isSameHostArtifact(
+        artifact({
+          clientActionGrantScopes: scopes as unknown as Record<string, string>,
+        }),
+        artifact({
+          clientActionGrantScopes: new Map(scopes) as unknown as Record<
+            string,
+            string
+          >,
         }),
       ),
     ).toBe(false);
