@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const starts: number[] = [];
 const stops = vi.fn();
+const ended: (() => void)[] = [];
 class MockAudioContext {
   state = "running";
   currentTime = 1;
@@ -22,19 +23,22 @@ class MockAudioContext {
     };
   }
   createBufferSource() {
-    return {
+    const source = {
       connect: vi.fn(),
       disconnect: vi.fn(),
       stop: stops,
       start: (time: number) => starts.push(time),
       buffer: null,
-      onended: null,
+      onended: null as (() => void) | null,
     };
+    ended.push(() => source.onended?.());
+    return source;
   }
 }
 beforeEach(() => {
   vi.resetModules();
   starts.length = 0;
+  ended.length = 0;
   stops.mockClear();
   vi.stubGlobal("AudioContext", MockAudioContext);
   const storage = new Map<string, string>();
@@ -219,5 +223,126 @@ describe("talking over a reply", () => {
     expect(p.useSpeechPlayback.getState().paused).toBe(false);
     p.resumeSpeechPlayback();
     expect(starts).toHaveLength(2);
+  });
+});
+
+describe("one reply, one utterance", () => {
+  const replying = async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse("chat-1");
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+    return p;
+  };
+  const playedOut = () => {
+    for (const end of ended.splice(0)) end();
+  };
+
+  it("keeps speaking while the voice runs dry before the reply has ended", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = await replying();
+      const flips: boolean[] = [];
+      const unsubscribe = p.useSpeechPlayback.subscribe((state, before) => {
+        if (state.playing !== before.playing) flips.push(state.playing);
+      });
+      playedOut();
+      vi.advanceTimersByTime(700);
+      p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+      playedOut();
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      p.endSpeechResponse("chat-1", "m1");
+      expect(p.useSpeechPlayback.getState().playing).toBe(false);
+      expect(flips).toEqual([false]);
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is quiet as soon as the last audio of an ended reply has played", async () => {
+    const p = await replying();
+    p.endSpeechResponse("chat-1", "m1");
+    expect(p.useSpeechPlayback.getState().playing).toBe(true);
+    playedOut();
+    expect(p.useSpeechPlayback.getState().playing).toBe(false);
+  });
+
+  it("counts as quiet after a while when the reply never says it ended", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = await replying();
+      playedOut();
+      vi.advanceTimersByTime(1499);
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(p.useSpeechPlayback.getState().playing).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a dry spell's hold never reaches into the next response", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = await replying();
+      playedOut();
+      p.beginSpeechResponse("chat-1");
+      p.useSpeechPlayback.setState({ playing: true });
+      vi.advanceTimersByTime(1500);
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("an end heard while paused lets the resumed voice go quiet when it has played", async () => {
+    const p = await replying();
+    p.pauseSpeechPlayback();
+    p.endSpeechResponse("chat-1", "m1");
+    expect(p.useSpeechPlayback.getState()).toMatchObject({ paused: true });
+    p.resumeSpeechPlayback();
+    expect(p.useSpeechPlayback.getState().playing).toBe(true);
+    playedOut();
+    expect(p.useSpeechPlayback.getState().playing).toBe(false);
+  });
+
+  it("plays a short reply at once when its stream ends, not after the start wait", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.configureVoiceStart({ bufferMs: 1000 });
+    try {
+      const p = await replying();
+      expect(starts).toHaveLength(0);
+      // The completion of another message does not end this one.
+      p.endSpeechResponse("chat-1", "m0");
+      expect(starts).toHaveLength(0);
+      p.endSpeechResponse("chat-1", "m1");
+      expect(starts).toHaveLength(1);
+    } finally {
+      playback.configureVoiceStart({});
+    }
+  });
+
+  it("plays a reply held behind a wait line at once when it has ended meanwhile", async () => {
+    const playback = await import("./pcmPlayback");
+    playback.configureVoiceStart({ bufferMs: 1000 });
+    try {
+      const p = await import("./speechPlayback");
+      p.useSpeechPlayback.setState({ conversational: true });
+      await p.enableSpeechPlayback(true);
+      p.beginSpeechResponse("chat-1");
+      p.holdReplyAudio();
+      p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+      p.endSpeechResponse("chat-1", "m1");
+      expect(starts).toHaveLength(0);
+      p.releaseReplyAudio();
+      expect(starts).toHaveLength(1);
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      playedOut();
+      expect(p.useSpeechPlayback.getState().playing).toBe(false);
+    } finally {
+      playback.configureVoiceStart({});
+    }
   });
 });

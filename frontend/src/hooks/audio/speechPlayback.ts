@@ -48,9 +48,6 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   blocked: false,
   failed: false,
 }));
-const queue = createPcmQueue(() =>
-  useSpeechPlayback.setState({ playing: false }),
-);
 const sequences = new Map<string, number>();
 let activeMessage: string | undefined;
 let accepting = false;
@@ -59,6 +56,31 @@ let acceptingStream: string | undefined;
 let held: PcmChunk[] | null = null;
 /** The answer's audio held back while a wait line finishes. */
 let gate: PcmChunk[] | null = null;
+/**
+ * A reply whose voice runs dry before its stream has ended still counts as
+ * speaking, so that it does not flicker off and on inside one utterance. If
+ * the stream never says it has ended, the voice counts as quiet after this.
+ */
+const UNDERRUN_HOLD_MS = 1500;
+/** The reply's stream has ended: no more audio comes for it. */
+let audioEnded = true;
+let underrunTimer: ReturnType<typeof setTimeout> | undefined;
+const clearUnderrun = () => {
+  clearTimeout(underrunTimer);
+  underrunTimer = undefined;
+};
+const queue = createPcmQueue(() => {
+  clearUnderrun();
+  if (audioEnded || !accepting) {
+    useSpeechPlayback.setState({ playing: false });
+    return;
+  }
+  underrunTimer = setTimeout(() => {
+    underrunTimer = undefined;
+    if (!queue.active && held === null && gate === null)
+      useSpeechPlayback.setState({ playing: false });
+  }, UNDERRUN_HOLD_MS);
+});
 const interruptListeners = new Set<() => void>();
 
 /**
@@ -100,6 +122,7 @@ export function releaseReplyAudio() {
       return;
     }
   }
+  if (audioEnded) queue.flush();
   useSpeechPlayback.setState({ playing: true });
 }
 
@@ -126,6 +149,7 @@ export function stopSpeechPlayback(streamKey?: string) {
   accepting = false;
   held = null;
   gate = null;
+  clearUnderrun();
   queue.stop();
   useSpeechPlayback.setState({ playing: false, paused: false });
   interrupted();
@@ -138,6 +162,7 @@ export function stopSpeechPlayback(streamKey?: string) {
 export function pauseSpeechPlayback() {
   const context = playbackContext();
   if (!accepting || held !== null || !context) return;
+  clearUnderrun();
   held = queue.pause(context);
   if (gate) held.push(...gate);
   gate = null;
@@ -173,6 +198,7 @@ export function beginSpeechResponse(streamKey?: string) {
   accepting =
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
+  audioEnded = !accepting;
   useSpeechPlayback.setState({
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
@@ -187,6 +213,23 @@ export function beginSpeechResponse(streamKey?: string) {
 export function readsBackContinuation(streamKey: string): boolean {
   const { spokenTurn, conversational, enabled } = useSpeechPlayback.getState();
   return spokenTurn === streamKey && conversational && enabled;
+}
+
+/**
+ * The reply's stream has sent its last audio. What waits for the start
+ * buffer plays now, and the voice counts as quiet once it has played out.
+ */
+export function endSpeechResponse(streamKey?: string, messageId?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  if (messageId && activeMessage && activeMessage !== messageId) return;
+  audioEnded = true;
+  // A paused voice or one behind a wait line is finished by its release.
+  if (held !== null || gate !== null) return;
+  queue.flush();
+  if (!queue.active) {
+    clearUnderrun();
+    useSpeechPlayback.setState({ playing: false });
+  }
 }
 
 /** The user stopped the voice: quiet for the rest of this turn. */
@@ -245,5 +288,6 @@ export function playSpeechChunk(
     speechFailed();
     return;
   }
+  clearUnderrun();
   useSpeechPlayback.setState({ playing: true });
 }

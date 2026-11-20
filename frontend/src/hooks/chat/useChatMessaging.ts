@@ -39,6 +39,7 @@ import { useChatHistory } from "@/hooks";
 import { stopReadAloud } from "@/hooks/audio/readAloud";
 import {
   beginSpeechResponse,
+  endSpeechResponse,
   moveSpeechStream,
   playSpeechChunk,
   readsBackContinuation,
@@ -1238,6 +1239,7 @@ export function useChatMessaging(
 
           case "assistant_message_completed":
             endWaitTurn(activeStreamKey);
+            endSpeechResponse(activeStreamKey, responseData.message_id);
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed event. Full payload:",
               responseData,

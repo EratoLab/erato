@@ -169,3 +169,73 @@ describe("starting a voice from silence", () => {
     expect(queue.active).toBe(false);
   });
 });
+
+/**
+ * Replays a stream as it arrived, [ms after the first chunk, ms of audio],
+ * with the context's clock running, and returns the silences inside it and
+ * when its first sound starts, in ms.
+ */
+function replay(stream: [number, number][]) {
+  const mock = new MockContext();
+  const base = Date.now();
+  Object.defineProperty(mock, "currentTime", {
+    get: () => (Date.now() - base) / 1000,
+  });
+  const queue = createPcmQueue(vi.fn());
+  const ctx = mock as unknown as AudioContext;
+  for (const [at, ms] of stream) {
+    vi.advanceTimersByTime(at - (Date.now() - base));
+    queue.enqueue(ctx, pcm(ms), RATE);
+  }
+  queue.flush();
+  const gaps = mock.started
+    .slice(1)
+    .map((chunk, i) => {
+      const before = mock.started[i];
+      return Math.round((chunk.at - before.at - before.duration) * 1000);
+    })
+    .filter((gap) => gap > 0);
+  return { gaps, first: Math.round(mock.started[0].at * 1000) };
+}
+
+/** The rest of a sentence, faster than it plays as on staging: 2 s in 0.4 s. */
+const rest = (from: number): [number, number][] =>
+  Array.from({ length: 20 }, (_, i) => [from + i * 20, 100]);
+
+describe("streams as measured", () => {
+  it("staging's voice (small chunks, steady): no silence, first sound within 0.1 s", () => {
+    // A reply on MS staging, 2026-11-20: the first 12 chunks.
+    const { gaps, first } = replay([
+      [0, 40],
+      [0, 40],
+      [19, 120],
+      [19, 40],
+      [35, 40],
+      [35, 40],
+      [38, 40],
+      [54, 40],
+      [54, 80],
+      [83, 120],
+      [101, 40],
+      [101, 40],
+      ...rest(120),
+    ]);
+    expect(gaps).toEqual([]);
+    expect(first).toBeLessThanOrEqual(100);
+  });
+
+  it.each([290, 450, 550])(
+    "the local voice's first pause of %i ms after 200 ms of audio: no silence",
+    (pause) => {
+      const { gaps, first } = replay([[0, 171], [0, 29], ...rest(pause)]);
+      expect(gaps).toEqual([]);
+      expect(first).toBeLessThanOrEqual(START_WAIT_MS + 30);
+    },
+  );
+
+  it("a pause longer than the wait and the audio it holds leaves only the excess", () => {
+    // The longest pause measured on 2026-11-18.
+    const { gaps } = replay([[0, 171], [0, 29], ...rest(736)]);
+    expect(gaps).toEqual([736 - START_WAIT_MS - 200]);
+  });
+});
