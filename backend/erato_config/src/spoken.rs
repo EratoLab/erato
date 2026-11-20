@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 
+use unicode_normalization::UnicodeNormalization;
+
 use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
@@ -12,6 +14,83 @@ use utoipa::ToSchema;
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
+
+/// Words that decide what a sentence means, in German and English, folded
+/// (lower case, umlauts as "ae", no apostrophes): an utterance with one of
+/// them never approves a card by voice, and none of them is ever a
+/// hesitation sound.
+pub const NEGATIONS: &[&str] = &[
+    "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
+    "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
+    "niemand",
+];
+pub const CONDITIONS: &[&str] = &[
+    "aber",
+    "but",
+    "wenn",
+    "falls",
+    "if",
+    "unless",
+    "sofern",
+    "nur",
+    "only",
+    "ausser",
+    "except",
+    "though",
+    "however",
+    "jedoch",
+    "allerdings",
+    "vorausgesetzt",
+    "provided",
+    "oder",
+    "or",
+];
+pub const WH_WORDS: &[&str] = &[
+    "was", "wer", "wie", "wann", "wo", "warum", "wieso", "welche", "welcher", "welches", "what",
+    "whats", "who", "whos", "when", "where", "why", "which", "how",
+];
+
+/// Composed Unicode, lower case, umlauts folded, apostrophes dropped, an ordinal's dot kept
+/// with its number.
+pub fn fold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut previous_digit = false;
+    for c in text.nfc() {
+        match c {
+            '\'' | '’' | '`' | '´' => {}
+            '.' if previous_digit => {}
+            c => {
+                for lower in c.to_lowercase() {
+                    match lower {
+                        'ä' => out.push_str("ae"),
+                        'ö' => out.push_str("oe"),
+                        'ü' => out.push_str("ue"),
+                        'ß' => out.push_str("ss"),
+                        other => out.push(other),
+                    }
+                }
+            }
+        }
+        previous_digit = c.is_ascii_digit();
+    }
+    out
+}
+
+/// Whether `word` decides what a sentence means, also drawn out ("neee",
+/// "nichtt") as transcribers write a long sound.
+pub fn decides_meaning(word: &str) -> bool {
+    let folded = fold(word);
+    let mut collapsed = String::with_capacity(folded.len());
+    for c in folded.chars() {
+        if !collapsed.ends_with(c) {
+            collapsed.push(c);
+        }
+    }
+    [folded, collapsed].iter().any(|word| {
+        let word = word.as_str();
+        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+    })
+}
 
 /// Entries one vocabulary holds in one language.
 const MAX_VOCABULARY_ENTRIES: usize = 5_000;

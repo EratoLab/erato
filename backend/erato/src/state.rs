@@ -134,8 +134,6 @@ pub struct AppState {
     pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
-    /// Decisions by voice accepted on this replica, until the decision comes.
-    pub voice_receipts: crate::services::approval_voice_commands::decision::VoiceReceipts,
     /// Model label mappings per user, tool and argument shape.
     pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// How long one labeller request may take; tests shorten it.
@@ -373,7 +371,6 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
-            voice_receipts: Default::default(),
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: Arc::new(Semaphore::new(
@@ -1363,7 +1360,6 @@ impl Clone for AppState {
             file_bytes_cache: self.file_bytes_cache.clone(),
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
-            voice_receipts: self.voice_receipts.clone(),
             tool_label_cache: self.tool_label_cache.clone(),
             tool_label_timeout: self.tool_label_timeout,
             tool_label_permits: self.tool_label_permits.clone(),

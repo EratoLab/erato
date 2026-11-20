@@ -2,7 +2,8 @@
 //! utterance counts, compared word for word, so the person and an auditor
 //! know in advance what approves; no model's judgement ever does.
 
-use super::rules::{CONDITIONS, HESITATIONS, NEGATIONS, words_of};
+use super::rules::{HESITATIONS, words_of};
+use erato_config::spoken::decides_meaning;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -64,10 +65,11 @@ pub fn phrase_for(language: &str) -> Option<&'static ConfirmationPhrase> {
         .find(|phrase| phrase.language == code)
 }
 
-/// Question marks of any script, and quotation marks: a phrase in quotes
-/// was quoted, not said.
+/// Question marks of any script, quotation marks (a phrase in quotes was
+/// quoted, not said) and ellipses.
 const NEVER_IN_PHRASE: &[char] = &[
-    '?', '？', '¿', '‽', '⸮', '"', '„', '“', '”', '«', '»', '‹', '›', '‚', '‘', '「', '」',
+    '?', '？', '¿', '‽', '⸮', '"', '„', '“', '”', '«', '»', '‹', '›', '‚', '‘', '「', '」', '…',
+    '⋯',
 ];
 
 /// Which phrase the whole utterance is, if any. People mix languages, so
@@ -78,21 +80,21 @@ const NEVER_IN_PHRASE: &[char] = &[
 /// `hesitations` are the deployment's own besides the built-in ones, as the
 /// web app drops them from a turn.
 pub fn match_phrase(transcript: &str, hesitations: &[String]) -> Option<PhraseMatch> {
-    if transcript.contains(NEVER_IN_PHRASE) {
+    // An ellipsis means the transcriber heard the speaker trail or break off.
+    if transcript.contains(NEVER_IN_PHRASE) || transcript.contains("..") {
+        return None;
+    }
+    let words = words_of(transcript);
+    // Before any word is trimmed: a deployment's hesitation word must never
+    // hide a negation, a condition or a question.
+    if words.iter().any(|word| decides_meaning(word)) {
         return None;
     }
     let extra: Vec<String> = hesitations.iter().flat_map(|word| words_of(word)).collect();
     let hesitation = |word: &String| HESITATIONS.contains(&word.as_str()) || extra.contains(word);
-    let words = words_of(transcript);
     let start = words.iter().position(|word| !hesitation(word))?;
     let end = words.iter().rposition(|word| !hesitation(word))?;
     let words: Vec<&str> = words[start..=end].iter().map(String::as_str).collect();
-    if words
-        .iter()
-        .any(|word| NEGATIONS.contains(word) || CONDITIONS.contains(word))
-    {
-        return None;
-    }
     BUILT_IN_PHRASES.iter().find_map(|phrase| {
         let kind = matches(phrase, &words)?;
         Some(PhraseMatch {

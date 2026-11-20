@@ -2953,6 +2953,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+ "unicode-normalization",
  "url",
  "utoipa",
  "uuid",

@@ -1176,7 +1176,11 @@ export const spokenApprovalPieces = (
 ): SpokenPiece[] =>
   withIds(
     fitted(
-      composedPieces(approval, options),
+      mustHearWhatIsApproved(
+        composedPieces(approval, options),
+        approval,
+        options,
+      ),
       spokenWordsFor(options.language, options).cut(),
     ),
   );
@@ -1187,6 +1191,24 @@ export const spokenPiecesOf = (
   options: SpokenOptions,
 ): SpokenPiece[] =>
   withIds(fitted(pieces, spokenWordsFor(options.language, options).cut()));
+
+/**
+ * Where the card offers the phrase, what the call does and on which record
+ * must be heard before it counts, as for a delete: skipping them has the
+ * voice say them again before the request.
+ */
+const mustHearWhatIsApproved = (
+  pieces: ComposedPiece[],
+  approval: SpokenApproval,
+  options: SpokenOptions,
+): ComposedPiece[] =>
+  options.voiceApproval === true && voiceApprovalOffered(approval)
+    ? pieces.map((piece) =>
+        piece.role === "what" || piece.role === "item"
+          ? { ...piece, mustSay: true }
+          : piece,
+      )
+    : pieces;
 
 const composedPieces = (
   approval: SpokenApproval,
@@ -1441,6 +1463,8 @@ export const voiceApprovable = (
   const { change } = label;
   return (
     !generic &&
+    // SQL stays on screen, a plain read included.
+    !label.read?.query &&
     (label.warnings ?? []).length === 0 &&
     label.action !== "run" &&
     (change?.opaque ?? []).length === 0 &&

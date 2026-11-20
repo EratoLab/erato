@@ -3374,7 +3374,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), a decision by voice carries a `voice_receipt` that is unknown, used, expired or for another card or decision (JSON, code = voice_receipt_refused, body = VoiceReceiptRefusedError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3668,7 +3668,7 @@
           "approval_voice_commands"
         ],
         "summary": "Match what the user said while an approval card waits to one meaning.",
-        "description": "Built-in rules answer the plain words; a configured model may answer the\nrest, seeing the words and the pieces' roles and field names. The answer\ncarries no text and is not stored. `approve` and `reject` count only once\nthe card's request piece was heard (or the card has none): a yes or no\nbefore that, or beside a backchannel (\"mhm, ja\"), is `noise`.\n\nWith `[approval_voice_decisions]` on, `decision` says whether the words decide the\ncard. Only the whole confirmation phrase approves (\"Ich bestätige\", \"I\nconfirm\"), checked before any rule or model and never by a model; a\nrefusal by the rules or the model refuses. Either needs the turn's own\nsingle call as `approval_id`, a card whose request was heard with nothing\nowed, and for an approval a recording that started after the voice and\nheard enough speech. An accepted decision gets a receipt, kept for\n`receipt_ttl_seconds`, with a record of how it was given.",
+        "description": "Built-in rules answer the plain words; a configured model may answer the\nrest, seeing the words and the pieces' roles and field names. The answer\ncarries no text and is not stored. `approve` and `reject` count only once\nthe card's request piece was heard (or the card has none): a yes or no\nbefore that, or beside a backchannel (\"mhm, ja\"), is `noise`.\n\nWith `[approval_voice_decisions]` on, `decision` says whether the words decide the\ncard. Only the whole confirmation phrase approves (\"Ich bestätige\", \"I\nconfirm\"), checked before any rule or model and never by a model; a\nrefusal by the rules or the model refuses. Either needs the turn's own\nsingle call as `approval_id`, a card whose request was heard with nothing\nowed, and a recording that started after the voice and heard enough\nspeech; one that did not gets `say_again`. An accepted decision gets a\nreceipt, kept in the database for `receipt_ttl_seconds`, with a record of\nhow it was given.",
         "operationId": "interpret_approval_voice_command",
         "parameters": [
           {
@@ -16727,6 +16727,19 @@
           },
           "voice_stopped_at": {
             "type": "string"
+          }
+        }
+      },
+      "VoiceReceiptRefusedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers to a decision by voice whose\n`voice_receipt` is unknown, used, expired, or for another card or\ndecision. Nothing was decided; the card waits on screen.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `voice_receipt_refused`."
           }
         }
       },

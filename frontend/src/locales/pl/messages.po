@@ -8882,6 +8882,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayAgain"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhrase"
 msgstr ""
 

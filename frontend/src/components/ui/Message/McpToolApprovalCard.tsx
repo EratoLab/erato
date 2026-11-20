@@ -109,6 +109,13 @@ const SILENT_REFUSALS: ReadonlySet<string | undefined> = new Set([
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
 const DECISIONS_MISMATCH = "decisions_mismatch";
 
+/**
+ * The `409` for a decision by voice the server would not take: the card
+ * still waits, and the voice says so; no server text is shown.
+ */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+const VOICE_RECEIPT_REFUSED = "voice_receipt_refused";
+
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
 const APPROVE_CONTEXT: ToolApprovalDecision = "approve_context";
 
@@ -520,10 +527,12 @@ export const McpToolApprovalCard = ({
       // landed, so say nothing and let the settled row resolve the card.
       const alreadyContinued =
         refusal?.status === 409 && SILENT_REFUSALS.has(refusal.code);
+      const receiptRefused =
+        refusal?.status === 409 && refusal.code === VOICE_RECEIPT_REFUSED;
       // The refusal envelope is API wire text; printed beside the link that
       // says where to go instead, it reads as a second, unexplained failure.
       setError(
-        covered || alreadyContinued
+        covered || alreadyContinued || receiptRefused
           ? null
           : cause instanceof Error
             ? cause.message

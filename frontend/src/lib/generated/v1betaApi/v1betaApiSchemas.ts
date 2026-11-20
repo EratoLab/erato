@@ -6366,6 +6366,18 @@ export type VoiceDecisionRecord = {
 };
 
 /**
+ * Body of the `409` `continuestream` answers to a decision by voice whose
+ * `voice_receipt` is unknown, used, expired, or for another card or
+ * decision. Nothing was decided; the card waits on screen.
+ */
+export type VoiceReceiptRefusedError = {
+  /**
+   * Always `voice_receipt_refused`.
+   */
+  code: string;
+};
+
+/**
  * One fixed line, ready to play.
  */
 export type WaitLineAudio = {

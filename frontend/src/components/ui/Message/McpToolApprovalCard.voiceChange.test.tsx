@@ -339,6 +339,20 @@ describe("ERMAIN-1259: deciding a card by voice", () => {
     );
   });
 
+  it("a receipt the server refused shows no server text; the card waits", async () => {
+    const refused = vi
+      .fn()
+      .mockRejectedValue(conflict("voice_receipt_refused"));
+    renderCard(request, refused, true);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await spoken.decide?.("call-1")?.send("approve", "receipt-1");
+    });
+    expect(outcome).toBe("failed");
+    expect(screen.queryByText(/SSE request failed/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("mcp-tool-approval")).toBeInTheDocument();
+  });
+
   it("is not offered while deciding by voice is off, nor for another approval", () => {
     renderCard(request, vi.fn());
     expect(spoken.decide?.("call-1")).toBeUndefined();
