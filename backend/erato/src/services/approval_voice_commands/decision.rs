@@ -89,7 +89,11 @@ pub fn check_signals(
     let first_speech = signals
         .first_speech_at_ms
         .ok_or(SignalProblem::TooLittleSpeech)?;
-    if first_speech < signals.voice_stopped_at_ms + u64::from(echo_tail_ms) {
+    if first_speech
+        < signals
+            .voice_stopped_at_ms
+            .saturating_add(u64::from(echo_tail_ms))
+    {
         return Err(SignalProblem::InEchoTail);
     }
     if signals.speech_ms < syllables(matched.phrase) * min_speech_ms_per_syllable {
@@ -98,24 +102,31 @@ pub fn check_signals(
     Ok(())
 }
 
+/// Whether the card's request was heard in full.
+pub fn request_heard(pieces: &[CardPiece]) -> bool {
+    pieces
+        .iter()
+        .any(|piece| piece.role == CardPieceRole::Request && piece.state == CardPieceState::Heard)
+}
+
+/// Whether the voice only points to the screen for this card.
+pub fn only_points(pieces: &[CardPiece]) -> bool {
+    pieces
+        .iter()
+        .any(|piece| piece.role == CardPieceRole::Pointer)
+}
+
 /// Whether the card's request was heard and every piece that must be said
 /// before a decision (a loss, a consequence, recipients outside) was too.
 /// The device's own gate checks the same; this keeps an older device honest.
 pub fn card_asked(pieces: &[CardPiece]) -> bool {
-    let request = pieces
-        .iter()
-        .any(|piece| piece.role == CardPieceRole::Request && piece.state == CardPieceState::Heard);
     let owed = pieces.iter().any(|piece| {
         matches!(
             piece.role,
             CardPieceRole::Consequence | CardPieceRole::Outside
         ) && piece.state != CardPieceState::Heard
     });
-    request
-        && !owed
-        && !pieces
-            .iter()
-            .any(|piece| piece.role == CardPieceRole::Pointer)
+    request_heard(pieces) && !owed && !only_points(pieces)
 }
 
 /// Why a stop is decided on screen only, for any decision by voice: it is
@@ -157,9 +168,32 @@ pub fn label_is_screen_only(label: &ToolCallLabel) -> bool {
         || !label.warnings.is_empty()
         || label.action == ToolCallAction::Run
         || change.is_some_and(|change| !change.opaque.is_empty())
-        || change
-            .and_then(|change| change.batch.as_ref())
-            .is_some_and(|batch| batch.total > MAX_VOICE_ITEMS)
+        || item_count(label) > MAX_VOICE_ITEMS
+}
+
+/// How many things the call acts on, counted as the card counts them: the
+/// batch's total, else the values of the first item's title (or id) slot.
+fn item_count(label: &ToolCallLabel) -> u32 {
+    if let Some(batch) = label
+        .change
+        .as_ref()
+        .and_then(|change| change.batch.as_ref())
+    {
+        return batch.total;
+    }
+    label
+        .items
+        .first()
+        .and_then(|item| {
+            item.title
+                .as_ref()
+                .filter(|title| !title.values.is_empty())
+                .or(item.id.as_ref())
+        })
+        .map_or(1, |slot| {
+            (u32::try_from(slot.values.len()).unwrap_or(u32::MAX)).saturating_add(slot.omitted)
+        })
+        .max(1)
 }
 
 /// What the card asked about, for binding a decision to the version heard:
@@ -258,16 +292,22 @@ pub struct VoiceReceipt {
     pub record: VoiceDecisionRecord,
 }
 
-/// Receipts by id, on this replica. Each is taken once.
+/// Receipts by id, on this replica. Each is taken once, and a card has at
+/// most one: a new one for the same user and approval replaces the last.
 #[derive(Clone)]
 pub struct VoiceReceipts {
     receipts: Cache<String, Arc<VoiceReceipt>>,
+    latest: Cache<(String, Uuid, String), String>,
 }
 
 impl Default for VoiceReceipts {
     fn default() -> Self {
         Self {
             receipts: Cache::builder()
+                .max_capacity(10_000)
+                .time_to_live(MAX_RECEIPT_TTL)
+                .build(),
+            latest: Cache::builder()
                 .max_capacity(10_000)
                 .time_to_live(MAX_RECEIPT_TTL)
                 .build(),
@@ -278,7 +318,16 @@ impl Default for VoiceReceipts {
 impl VoiceReceipts {
     pub async fn issue(&self, receipt: VoiceReceipt) -> String {
         let id = Uuid::new_v4().to_string();
+        let card = (
+            receipt.user_id.clone(),
+            receipt.message_id,
+            receipt.approval_id.clone(),
+        );
+        if let Some(previous) = self.latest.get(&card).await {
+            self.receipts.remove(&previous).await;
+        }
         self.receipts.insert(id.clone(), Arc::new(receipt)).await;
+        self.latest.insert(card, id.clone()).await;
         id
     }
 

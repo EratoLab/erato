@@ -799,7 +799,7 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     let mut over = signals.clone();
     over["over_voice"] = json!(true);
     let over_voice = say("Ich bestätige.", over).await;
-    assert_eq!(over_voice["decision"], json!({"status": "phrase_needed"}));
+    assert_eq!(over_voice["decision"], json!({"status": "say_again"}));
     let not_asked = server
         .post(&format!(
             "/api/v1beta/me/messages/{message_id}/approval-voice-command"
@@ -813,7 +813,26 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         }))
         .await
         .json::<Value>();
-    assert_eq!(not_asked["decision"], json!({"status": "not_yet"}));
+    // Before the card asked, the phrase is listening, as any yes.
+    assert_eq!(not_asked["meaning"], "noise", "{not_asked}");
+    assert!(not_asked.get("decision").is_none());
+    let owed = server
+        .post(&format!(
+            "/api/v1beta/me/messages/{message_id}/approval-voice-command"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "transcript": "Ich bestätige.",
+            "pieces": [
+                {"id": "loss", "role": "consequence", "state": "cut_short"},
+                {"id": "request", "role": "request", "state": "heard"},
+            ],
+            "approval_id": approval_id,
+            "signals": signals,
+        }))
+        .await
+        .json::<Value>();
+    assert_eq!(owed["decision"], json!({"status": "not_yet"}));
     let early = say(
         "Ich bestätige.",
         json!({
@@ -828,7 +847,7 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     .await;
     assert_eq!(
         early["decision"],
-        json!({"status": "phrase_needed"}),
+        json!({"status": "say_again"}),
         "echo tail"
     );
 
@@ -836,7 +855,6 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     assert_eq!(confirmed["meaning"], "approve");
     assert_eq!(confirmed["decision"]["status"], "accepted", "{confirmed}");
     let receipt = confirmed["decision"]["receipt"].clone();
-    let other = say("Ich bestätige das.", signals.clone()).await;
     // A made-up receipt, or one used up, is refused, and nothing runs.
     decide(json!("not-a-receipt"))
         .await
@@ -859,7 +877,6 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         voice["pieces"][1],
         json!({"id": "request", "role": "request", "state": "heard"})
     );
-    assert!(other["decision"]["receipt"].is_string());
     // The receipt was taken.
     decide(receipt)
         .await

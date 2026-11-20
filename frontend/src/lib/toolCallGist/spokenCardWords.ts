@@ -987,11 +987,14 @@ const differenceSameHint = (): string =>
 const requestSentence = (): string =>
   t({ id: "spokenCard.request", message: "Please confirm on screen." });
 
-/** The request where the card is approved by voice: it names the phrase. */
+/**
+ * The request where the card is approved by voice: it names the phrase, never
+ * as its last words, so an echo of the voice's end is not the phrase.
+ */
 const requestPhraseSentence = (): string =>
   t({
     id: "spokenCard.requestPhrase",
-    message: "To go ahead, say: I confirm.",
+    message: "Say “I confirm” to go ahead.",
   });
 
 const cutMark = (): string =>
@@ -1022,7 +1025,12 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
     case "say_phrase":
       return t({
         id: "spokenCard.notice.sayPhrase",
-        message: "Please say: I confirm.",
+        message: "Please say “I confirm” to go ahead.",
+      });
+    case "say_phrase_again":
+      return t({
+        id: "spokenCard.notice.sayPhraseAgain",
+        message: "Please say “I confirm” once more.",
       });
     case "phrase_on_screen":
       return t({

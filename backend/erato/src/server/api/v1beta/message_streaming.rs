@@ -23994,7 +23994,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     covers: scope_approval.map(|(_, covers)| covers),
                     scope_approval_id: scope_approval.map(|(approval, _)| approval),
-                    voice: None,
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
@@ -24014,7 +24014,7 @@ pub(crate) async fn run_continuation(
                 child_chat_id: None,
                 reason: rejection_reason(decision),
                 change_request: change_requests.get(&item.approval_id).cloned(),
-                voice: None,
+                voice: request.voice_records.get(&item.approval_id).cloned(),
             }));
         let tool_use = ToolUse {
             tool_call_id: item.tool_call_id.clone(),

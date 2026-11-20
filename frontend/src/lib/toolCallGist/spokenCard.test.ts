@@ -1406,7 +1406,7 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
       "Zum Ausführen bitte „Ich bestätige“ sagen.",
     );
     expect(request("update-01-date-and-probability", "en", true)).toBe(
-      "To go ahead, say: I confirm.",
+      "Say “I confirm” to go ahead.",
     );
     expect(request("update-01-date-and-probability", "de", false)).toBe(
       "Bitte auf dem Bildschirm bestätigen.",

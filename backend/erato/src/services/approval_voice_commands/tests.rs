@@ -1167,6 +1167,13 @@ mod deciding_by_voice {
             "I can confirm",
             "Zum Ausführen bitte „Ich bestätige“ sagen.",
             "To go ahead, say: I confirm.",
+            "Say I confirm to go ahead.",
+            "Bitte noch einmal Ich bestätige sagen.",
+            "„Ich bestätige“",
+            "\"I confirm\"",
+            "Ich bestätige？",
+            "¿I confirm?",
+            "Ich bestätige‽",
         ] {
             assert!(!approves(words), "{words}");
         }
@@ -1265,6 +1272,10 @@ mod deciding_by_voice {
             piece("r", Request, Heard),
         ];
         assert!(!card_asked(&owed));
+        assert!(
+            super::super::decision::request_heard(&owed)
+                && only_points(&[piece("p", Pointer, Heard)])
+        );
         let outside = [piece("o", Outside, CutShort), piece("r", Request, Heard)];
         assert!(!card_asked(&outside));
         assert!(!card_asked(&[piece("p", Pointer, Heard)]));
@@ -1389,6 +1400,21 @@ mod deciding_by_voice {
         };
         assert!(!label_is_screen_only(&batch(20)));
         assert!(label_is_screen_only(&batch(21)));
+        let ids = |count: usize| -> ToolCallLabel {
+            let mut many = label(ToolCallAction::Delete);
+            many.items = vec![
+                serde_json::from_value(json!({
+                    "id": {
+                        "pointer": "/ids/*",
+                        "values": (0..count).map(|n| json!({"path": format!("/ids/{n}"), "text": format!("id-{n}"), "truncated": false})).collect::<Vec<_>>(),
+                    },
+                }))
+                .unwrap(),
+            ];
+            many
+        };
+        assert!(!label_is_screen_only(&ids(20)));
+        assert!(label_is_screen_only(&ids(21)));
     }
 
     fn receipt(item: &ApprovalItem, outcome: VoiceDecisionOutcome) -> VoiceReceipt {
@@ -1497,6 +1523,28 @@ mod deciding_by_voice {
             .await;
         assert!(receipts.take(&id).await.is_some());
         assert!(receipts.take(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_new_receipt_for_the_same_card_replaces_the_last() {
+        let receipts = VoiceReceipts::default();
+        let card = item("a1", Some(label(ToolCallAction::Update)));
+        let first = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
+            .await;
+        let second = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
+            .await;
+        assert!(receipts.take(&first).await.is_none());
+        assert!(receipts.take(&second).await.is_some());
+        let other = item("a2", Some(label(ToolCallAction::Update)));
+        let kept = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Approved))
+            .await;
+        receipts
+            .issue(receipt(&other, VoiceDecisionOutcome::Approved))
+            .await;
+        assert!(receipts.take(&kept).await.is_some());
     }
 
     #[test]

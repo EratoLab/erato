@@ -8881,6 +8881,11 @@ msgstr "Bitte „Ich bestätige“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhraseAgain"
+msgstr "Bitte noch einmal „Ich bestätige“ sagen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.unavailable"
 msgstr "Sprachbefehle gehen gerade nicht. Die Karte wartet auf dem Bildschirm."
 

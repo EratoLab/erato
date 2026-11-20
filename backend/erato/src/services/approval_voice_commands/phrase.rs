@@ -64,12 +64,18 @@ pub fn phrase_for(language: &str) -> Option<&'static ConfirmationPhrase> {
         .find(|phrase| phrase.language == code)
 }
 
+/// Question marks of any script, and quotation marks: a phrase in quotes
+/// was quoted, not said.
+const NEVER_IN_PHRASE: &[char] = &[
+    '?', '？', '¿', '‽', '⸮', '"', '„', '“', '”', '«', '»', '‹', '›', '‚', '‘', '「', '」',
+];
+
 /// Which phrase the whole utterance is, if any. People mix languages, so
-/// every built-in phrase is tried. A question, a negation or a condition
-/// anywhere is never a match, and neither is a phrase inside a longer
-/// sentence.
+/// every built-in phrase is tried. A question, a quotation, a negation or a
+/// condition anywhere is never a match, and neither is a phrase inside a
+/// longer sentence.
 pub fn match_phrase(transcript: &str) -> Option<PhraseMatch> {
-    if transcript.contains('?') {
+    if transcript.contains(NEVER_IN_PHRASE) {
         return None;
     }
     let words = words_of(transcript);

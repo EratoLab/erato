@@ -10,7 +10,7 @@ use crate::models::message::VoiceDecisionOutcome;
 use crate::policy::engine::PolicyEngine;
 use crate::services::approval_voice_commands::decision::{
     RecordInput, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked, card_digest,
-    check_signals, record, stop_is_screen_only,
+    check_signals, only_points, record, request_heard, stop_is_screen_only,
 };
 use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase};
 use crate::services::approval_voice_commands::{
@@ -127,6 +127,16 @@ pub async fn interpret_approval_voice_command(
         .then(|| match_phrase(&request.transcript))
         .flatten();
     let mut classified = match &phrase {
+        // As any yes said before the card asked: listening.
+        Some(_) if !request_heard(&request.pieces) => Classified {
+            command: VoiceCommand {
+                meaning: VoiceMeaning::Noise,
+                piece_id: None,
+                source: VoiceCommandSource::Rules,
+                decision: None,
+            },
+            outcome: "phrase_early",
+        },
         Some(_) => Classified {
             command: VoiceCommand {
                 meaning: VoiceMeaning::Approve,
@@ -210,11 +220,13 @@ async fn decide(
         problem: None,
     };
     let decidable = waiting.decidable();
-    if stop_is_screen_only(
-        waiting.request.kind,
-        &decidable,
-        request.approval_id.as_deref(),
-    ) {
+    if only_points(&request.pieces)
+        || stop_is_screen_only(
+            waiting.request.kind,
+            &decidable,
+            request.approval_id.as_deref(),
+        )
+    {
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     let item = &decidable[0];
@@ -238,7 +250,7 @@ async fn decide(
             ) {
                 return Decided {
                     problem: Some(problem.name()),
-                    ..answer(VoiceDecisionStatus::PhraseNeeded)
+                    ..answer(VoiceDecisionStatus::SayAgain)
                 };
             }
             Some(matched)
@@ -250,13 +262,16 @@ async fn decide(
     let Some(signals) = request.signals.as_ref() else {
         return answer(VoiceDecisionStatus::Accepted);
     };
+    // A refusal keeps its words only when a rule matched them, so they are
+    // a short refusal and nothing else the user said.
     let transcript_words;
     let matched_words = match matched {
         Some(matched) => matched.words.as_str(),
-        None => {
+        None if command.source == VoiceCommandSource::Rules => {
             transcript_words = request.transcript.trim().to_lowercase();
             transcript_words.as_str()
         }
+        None => "",
     };
     let record = record(RecordInput {
         user_id: &me_user.id,

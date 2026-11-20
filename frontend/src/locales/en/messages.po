@@ -8877,7 +8877,12 @@ msgstr "Then please confirm on screen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhrase"
-msgstr "Please say: I confirm."
+msgstr "Please say “I confirm” to go ahead."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhraseAgain"
+msgstr "Please say “I confirm” once more."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8987,7 +8992,7 @@ msgstr "Please confirm on screen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.requestPhrase"
-msgstr "To go ahead, say: I confirm."
+msgstr "Say “I confirm” to go ahead."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

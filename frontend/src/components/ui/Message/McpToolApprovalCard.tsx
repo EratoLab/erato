@@ -708,9 +708,11 @@ export const McpToolApprovalCard = ({
 
   /**
    * A decision said by voice: only on the turn's own single call, and only
-   * while deciding by voice is on. An approval goes out with the receipt the
-   * voice command endpoint gave for the phrase; the server refuses it
-   * without one.
+   * while deciding by voice is on. The decision goes out with the receipt the
+   * voice command endpoint gave for the words; the server checks a receipt
+   * against the card and keeps how the decision was given. Only this client
+   * holds back an approval said without the phrase: to the server, an
+   * approval without a receipt is a tap.
    */
   const voiceDecisionsOn =
     useOptionalFeatureConfig()?.audioConversational.voiceDecisionsEnabled ===

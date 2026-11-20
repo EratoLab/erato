@@ -343,7 +343,8 @@ export type ApprovalVoiceDecisionStatus =
   | "accepted"
   | "phrase_needed"
   | "screen_only"
-  | "not_yet";
+  | "not_yet"
+  | "say_again";
 
 export type ApprovalVoiceMeaning =
   | "skip"

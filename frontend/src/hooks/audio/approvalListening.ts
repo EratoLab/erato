@@ -121,7 +121,7 @@ export const noteApprovalListening = (key: string | null) => {
 
 /** When the voice last stopped speaking, on the device's clock. */
 let voiceStoppedAt = 0;
-/** When each card's request was first heard in full. */
+/** When each card's request was last heard in full. */
 const requestHeardAt = new Map<string, number>();
 
 /** The user's words to the card under `key` ended; they are being transcribed. */
@@ -259,8 +259,9 @@ export const stepForMeaning = (
       switch (decision.status) {
         case "accepted":
           // A card whose request did not name the phrase is approved on
-          // screen, whatever the words were.
-          if (approve && !byVoice.approves) return confirmOnScreen;
+          // screen, whatever the words were; an approval needs its receipt.
+          if (approve && (!byVoice.approves || !decision.receipt))
+            return confirmOnScreen;
           return {
             event: null,
             listen: false,
@@ -271,14 +272,17 @@ export const stepForMeaning = (
           return listen({ type: "rest" });
         case "screen_only":
           return approve ? confirmOnScreen : onScreen;
-        case "phrase_needed": {
+        case "phrase_needed":
+        case "say_again": {
           if (!approve) return onScreen;
           if (!byVoice.approves) return confirmOnScreen;
           const second = (context.misses ?? 0) >= 1;
+          const teach =
+            decision.status === "say_again" ? "say_phrase_again" : "say_phrase";
           return {
             ...listen({
               type: "notice",
-              notice: { kind: second ? "phrase_on_screen" : "say_phrase" },
+              notice: { kind: second ? "phrase_on_screen" : teach },
             }),
             missed: true,
           };
@@ -701,12 +705,13 @@ export const quietApprovalListening = (key: string) =>
 // When the voice stops, and when a card's request was first heard: an
 // approval by voice counts only from a recording after both.
 useApprovalSpeech.subscribe((state, previous) => {
-  if (!state.speaking && previous.speaking) voiceStoppedAt = Date.now();
+  if (state.speaking || !previous.speaking) return;
+  voiceStoppedAt = Date.now();
   const now = spokenApprovalCardNow();
-  if (!now || requestHeardAt.has(now.card.key)) return;
+  if (!now) return;
   const request = now.pieces.findIndex((piece) => piece.role === "request");
-  if (request !== -1 && now.flow.heard[request])
-    requestHeardAt.set(now.card.key, Date.now());
+  if (request !== -1 && now.flow.last === request)
+    requestHeardAt.set(now.card.key, voiceStoppedAt);
 });
 
 // Saying a card again, by the control or by a new card, listens again; a

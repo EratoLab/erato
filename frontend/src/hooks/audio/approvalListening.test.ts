@@ -1498,6 +1498,28 @@ describe("listening against the endpoint", () => {
       expect(useApprovalListening.getState().misses[KEY]).toBe(2);
     });
 
+    it("the phrase from a recording that cannot approve is asked for once more", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "say_again" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte noch einmal „Ich bestätige“ sagen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("an accepted approval without a receipt is decided on screen", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "accepted" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte auf dem Bildschirm bestätigen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it("'nein' is confirmed, then refused with its receipt", async () => {
       const { decision, send } = deciding();
       const { heardApprovalWords } = await heardCard(undefined, CARD, decision);

@@ -184,6 +184,10 @@ pub enum VoiceDecisionStatus {
     ScreenOnly,
     /// The card has not asked yet, or something it must say is still owed.
     NotYet,
+    /// The phrase, but from a recording that cannot carry an approval:
+    /// opened while the voice spoke, said within its echo, or with too
+    /// little speech for the words.
+    SayAgain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

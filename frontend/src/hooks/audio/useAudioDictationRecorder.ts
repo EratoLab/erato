@@ -1731,6 +1731,16 @@ export function useAudioDictationRecorder({
             preSessionSamplesRef.current = [...primerSamples];
             preDroppedRef.current = 0;
             vadEngineRef.current?.reset?.();
+            // Nothing was said over the voice: the recording counts as one
+            // that opened after it, and may approve by voice.
+            recordingSignalsRef.current = {
+              startedAt: Date.now(),
+              endedAt: 0,
+              firstSpeechAt: null,
+              speechMs: 0,
+              recordedMs: 0,
+              overVoice: false,
+            };
             if (gate) {
               gate.speaking = false;
               gate.realStarted = false;
