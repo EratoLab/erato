@@ -9,7 +9,8 @@
   (examples/basic-host/src/sandbox.ts, Copyright (c) Model Context Protocol a
   Series of LF Projects, LLC, MIT License). Unlike the reference, which gets
   the view's CSP as an HTTP header, this page is a static file: it applies the
-  CSP to itself before it creates the view's frame, which inherits it.
+  CSP to itself before it creates the view's frame, which inherits it. And
+  it loads the view as that frame's srcdoc, where the reference writes it in.
 
   The page has no <head> tag on purpose: Erato's server adds its frontend
   settings to the <head> of the pages it serves, and this page carries none.
@@ -52,11 +53,21 @@
       "This page only runs in the frame of the app it belongs to.",
     );
   }
-  if (!document.referrer) {
-    throw new Error("No referrer: the origin of the embedding app is unknown.");
+  // The embedding app's origin: messages are taken from it and sent to it
+  // only. The browser's own record of the parent's origin where it keeps one
+  // (`location.ancestorOrigins`); else the referrer. A referrer alone is not
+  // enough: when this page reloads itself, some browsers send its own URL as
+  // the referrer, and the page would take itself for the app.
+  const parentOrigin = window.location.ancestorOrigins?.[0];
+  const HOST_ORIGIN =
+    parentOrigin && parentOrigin !== "null"
+      ? parentOrigin
+      : document.referrer
+        ? new URL(document.referrer).origin
+        : "";
+  if (!HOST_ORIGIN) {
+    throw new Error("The origin of the embedding app is unknown.");
   }
-  // The embedding app's origin: messages are taken from it and sent to it only.
-  const HOST_ORIGIN = new URL(document.referrer).origin;
   const HOST_NAME = new URL(HOST_ORIGIN).hostname;
   const OWN_ORIGIN = window.location.origin;
   const OWN_NAME = window.location.hostname;
@@ -145,6 +156,23 @@
   };
 
   let inner = null;
+  // What the app sends the view before the view's document is in its frame.
+  // The frame loads its srcdoc after this page sets it; until then its window
+  // is the empty document it starts with, which would drop the messages.
+  let held = [];
+
+  const toView = (data) => {
+    if (held) held.push(data);
+    else inner.contentWindow?.postMessage(data, OWN_ORIGIN);
+  };
+
+  // The view's document has loaded or sent its first message: what the app
+  // sent before goes to it now, in order.
+  const viewArrived = () => {
+    const earlier = held;
+    held = null;
+    earlier?.forEach(toView);
+  };
 
   const load = ({ html, csp }) => {
     if (inner || typeof html !== "string") return;
@@ -157,19 +185,21 @@
 
     inner = document.createElement("iframe");
     inner.setAttribute("sandbox", "allow-scripts allow-same-origin");
-    // A name of its own on every load. Writing the view into the frame gives
-    // its document this page's URL, and on a reload a browser may restore a
-    // frame it finds by name or position to the URL it last had: this page,
-    // which would refuse to run there and leave the view out. A frame no
-    // earlier load had is not restored.
+    // A name of its own on every load, so no frame of an earlier load matches
+    // it: a browser that restores frames by name or position on a reload
+    // could otherwise put an earlier load's view, under that load's policy,
+    // in this frame instead of the view this load was sent.
     inner.name = `view-${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2)}`;
+    // The view as the frame's srcdoc, never written into it: its document is
+    // about:srcdoc, so a reload of the frame shows the view again, under this
+    // page's policy, which a srcdoc document inherits. Written into the frame,
+    // the view's document would have this page's URL, and a reload of the
+    // frame would lose the view.
+    inner.srcdoc = html;
+    inner.addEventListener("load", viewArrived, { once: true });
     (document.body || document.documentElement).appendChild(inner);
-    const doc = inner.contentDocument;
-    doc.open();
-    doc.write(html);
-    doc.close();
   };
 
   const isSandboxMessage = (data) =>
@@ -194,11 +224,14 @@
         load(event.data.params ?? {});
       } else if (!isSandboxMessage(event.data)) {
         followTheme(event.data);
-        inner?.contentWindow?.postMessage(event.data, OWN_ORIGIN);
+        if (inner) toView(event.data);
       }
     } else if (inner && event.source === inner.contentWindow) {
-      if (event.origin !== OWN_ORIGIN || isSandboxMessage(event.data)) return;
-      window.parent.postMessage(event.data, HOST_ORIGIN);
+      if (event.origin !== OWN_ORIGIN) return;
+      viewArrived();
+      if (!isSandboxMessage(event.data)) {
+        window.parent.postMessage(event.data, HOST_ORIGIN);
+      }
     }
   });
 
