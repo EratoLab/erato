@@ -94,7 +94,10 @@ interface ApprovalListeningState {
   stopped: string | null;
   /** The card the microphone is open for. */
   listening: string | null;
-  /** Approvals by voice that missed the phrase, by card. */
+  /**
+   * Decisions by voice that did not decide, by card: an approval without
+   * the phrase, or words from a recording that could not carry them.
+   */
   misses: Record<string, number>;
 }
 
@@ -161,7 +164,7 @@ export interface MeaningStep {
   stops?: true;
   /** The words decide the card: the decision goes out with this receipt. */
   decide?: { decision: "approve" | "reject"; receipt: string | undefined };
-  /** An approval that missed the phrase. */
+  /** A decision by voice that did not decide. */
   missed?: true;
 }
 
@@ -178,7 +181,7 @@ export interface MeaningContext {
   byVoice?: { approves: boolean };
   /** The endpoint's answer on whether the words decide the card. */
   decision?: ApprovalVoiceDecision;
-  /** Approvals on this card that missed the phrase so far. */
+  /** Decisions by voice on this card that did not decide so far. */
   misses?: number;
 }
 
@@ -275,15 +278,20 @@ export const stepForMeaning = (
           return approve
             ? confirmOnScreen
             : listen({ type: "notice", notice: { kind: "decline_on_screen" } });
-        case "say_again":
-          // The words were right; the recording could not carry them.
-          if (!approve)
-            return listen({ type: "notice", notice: { kind: "say_again" } });
-          if (!byVoice.approves) return confirmOnScreen;
-          return listen({
-            type: "notice",
-            notice: { kind: "say_phrase_again" },
-          });
+        case "say_again": {
+          // The words were right; the recording could not carry them. Asked
+          // once more, then the screen, as after a near miss.
+          if (approve && !byVoice.approves) return confirmOnScreen;
+          const second = (context.misses ?? 0) >= 1;
+          const notice: SpokenNotice = second
+            ? approve
+              ? { kind: "phrase_on_screen" }
+              : { kind: "decision_failed" }
+            : approve
+              ? { kind: "say_phrase_again" }
+              : { kind: "say_again" };
+          return { ...listen({ type: "notice", notice }), missed: true };
+        }
         case "phrase_needed": {
           if (!approve) return onScreen;
           if (!byVoice.approves) return confirmOnScreen;

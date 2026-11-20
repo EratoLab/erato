@@ -1241,6 +1241,10 @@ export function useAudioDictationRecorder({
           primer.fill(0);
           primerSamples = primer;
           preSessionSamplesRef.current = [...primer];
+          recordingSignalsRef.current = {
+            ...recordingSignalsRef.current,
+            leadInMs: (primerSampleCount / audioContext.sampleRate) * 1000,
+          };
           const heldSampleCount = Math.floor(
             (audioContext.sampleRate * HELD_AUDIO_MS) / 1000,
           );

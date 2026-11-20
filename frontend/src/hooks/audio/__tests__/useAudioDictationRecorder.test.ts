@@ -1169,6 +1169,35 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
     }
   };
 
+  it("ERMAIN-1271: measures time from the microphone's first sample, not from the silence before it", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(50_000);
+    const hook = render();
+    await listen(hook, { minSpeechMs: 64 });
+    await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+    const signals = () => hook.result.current.readRecordingSignals();
+    await waitFor(() => expect(signals()?.leadInMs).toBeCloseTo(300, 0));
+    await waitFor(() =>
+      expect(vadMock.engines[0].acceptedFrames.length).toBeGreaterThan(0),
+    );
+    const first = vadMock.engines[0].acceptedFrames[0] as {
+      samples: Float32Array;
+      sampleRate: number;
+    };
+    const leadIn = Math.round(
+      ((signals()?.leadInMs ?? 0) * first.sampleRate) / 1000,
+    );
+    expect(first.samples.length).toBeGreaterThanOrEqual(leadIn);
+    expect(first.samples.slice(0, leadIn).every((value) => value === 0)).toBe(
+      true,
+    );
+    act(() => {
+      frames(0, 288);
+      frames(0.95, 32);
+    });
+    expect(signals()?.firstSpeechAt).toBe(50_000);
+    expect(signals()?.recordedMs).toBeLessThanOrEqual(32);
+  });
+
   /** Every sample sent so far, as 16-bit values, without the WAV header. */
   const sentPcm = (index = 0) =>
     MockWebSocket.instances[index].sentBinaryFrames.flatMap((frame, at) => {
