@@ -1,6 +1,7 @@
 import {
   useChatInputControls,
   useLiveAnnouncement,
+  useUploadFeature,
 } from "@erato/frontend/library";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,6 +14,7 @@ import {
 } from "../../core/clientActions/useAvailableActionFacets";
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { powerpointInclusionStore } from "../hooks/powerpointInclusionStore";
+import { useModelTakesSlidePictures } from "../hooks/useModelTakesSlidePictures";
 import { usePowerPointSlidePictures } from "../hooks/usePowerPointSlidePictures";
 import { registerPowerPointClientTools } from "../utils/powerpointClientTools";
 import {
@@ -70,12 +72,33 @@ export function PowerPointChatInput({
   const readEnabledRef = useRef(included && readable);
   readEnabledRef.current = included && readable;
   const lastSendIncludedRef = useRef(false);
+
+  const modelId = chatInputProps.controlledSelectedModel?.chat_provider_id;
+  const { enabled: uploadEnabled, maxSizeBytes } = useUploadFeature();
+  const viewPossible =
+    support.slidePicture && readable && included && uploadEnabled;
+  const { takes: modelTakesPictures } = useModelTakesSlidePictures(
+    modelId,
+    viewPossible,
+  );
+  const viewEnabledRef = useRef(false);
+  viewEnabledRef.current = viewPossible && modelTakesPictures;
+  const lastSendViewRef = useRef(false);
+  const uploadLimitsRef = useRef({ maxFiles: 0, maxBytes: 0 });
+  uploadLimitsRef.current = {
+    maxFiles: chatInputProps.maxFiles,
+    maxBytes: maxSizeBytes,
+  };
   useEffect(
     () =>
       registerPowerPointClientTools({
         support,
         readEnabled: () => readEnabledRef.current,
         listed: () => lastSendIncludedRef.current || readEnabledRef.current,
+        view: {
+          listed: () => lastSendViewRef.current || viewEnabledRef.current,
+          limits: () => uploadLimitsRef.current,
+        },
       }),
     [support],
   );
@@ -91,7 +114,7 @@ export function PowerPointChatInput({
   } = usePowerPointSlidePictures({
     enabled: support.slidePicture && readable && included,
     locked: !!chatInputProps.disabled,
-    modelId: chatInputProps.controlledSelectedModel?.chat_provider_id,
+    modelId,
     conversationKey,
     uploadFiles: chatInputProps.uploadFiles,
     addUploadedFiles: controls.addUploadedFiles,
@@ -169,6 +192,7 @@ export function PowerPointChatInput({
       const pictureLine = describeFiles(inputFileIds);
       const sendsPresentation = readEnabledRef.current;
       lastSendIncludedRef.current = sendsPresentation;
+      lastSendViewRef.current = viewEnabledRef.current;
       const prepare: AddinSendPreparation | undefined = sendsPresentation
         ? {
             run: async () => {

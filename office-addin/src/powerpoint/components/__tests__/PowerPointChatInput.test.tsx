@@ -230,6 +230,12 @@ function renderInput(set = "1.10", options: InputOptions = {}) {
 }
 
 const chip = () => mocks.composer?.contextItems?.[0] as ComposerContextItem;
+const readTools = () =>
+  [...mocks.available.entries()]
+    .filter(([name]) => name.startsWith("powerpoint_read_"))
+    .map(([, isAvailable]) => isAvailable);
+const viewListed = () =>
+  mocks.available.get("powerpoint_view_slide")?.() ?? false;
 const send = () =>
   act(() => mocks.composer!.onSendMessage("Summarise slide 1"));
 
@@ -253,9 +259,7 @@ describe("PowerPoint composer", () => {
         },
       },
     });
-    expect(
-      [...mocks.available.values()].every((isAvailable) => isAvailable()),
-    ).toBe(true);
+    expect(readTools().every((isAvailable) => isAvailable())).toBe(true);
   });
 
   it("sends nothing of the presentation and withholds the tools once left out", () => {
@@ -276,9 +280,7 @@ describe("PowerPoint composer", () => {
     renderInput();
     send();
     act(() => chip().onRemove?.());
-    expect(
-      [...mocks.available.values()].every((isAvailable) => isAvailable()),
-    ).toBe(true);
+    expect(readTools().every((isAvailable) => isAvailable())).toBe(true);
   });
 
   it("shows no chip, lists no tools and reads nothing when the server offers no PowerPoint facet", () => {
@@ -316,6 +318,63 @@ describe("PowerPoint composer", () => {
       "powerpoint_read_presentation",
       "powerpoint_read_slide",
     ]);
+  });
+});
+
+describe("slide picture tool", () => {
+  it("is listed on a full host, with the facet, the presentation included, a model that sees images and uploads on", () => {
+    mocks.capabilities = VISION;
+    renderInput();
+    expect(viewListed()).toBe(true);
+    expect(mocks.capabilityQueries.at(-1)).toEqual({
+      modelId: "vision-model",
+      enabled: true,
+    });
+  });
+
+  it("is not registered below the full tier", () => {
+    mocks.capabilities = VISION;
+    renderInput("1.9");
+    expect(mocks.available.has("powerpoint_view_slide")).toBe(false);
+  });
+
+  it("is not listed while the selected model cannot see images", () => {
+    mocks.capabilities = VISION;
+    mocks.capabilitiesByModel.set("text-model", [
+      { ...VISION[0], operations: ["extract_text"] },
+    ]);
+    renderInput("1.10", { modelId: "text-model" });
+    expect(viewListed()).toBe(false);
+  });
+
+  it("is not listed, and asks nothing about the model, while uploads are off", () => {
+    mocks.capabilities = VISION;
+    mocks.uploadEnabled = false;
+    renderInput();
+    expect(viewListed()).toBe(false);
+    expect(mocks.capabilityQueries.every((query) => !query.enabled)).toBe(true);
+  });
+
+  it("is not listed with the presentation left out or without the facet", () => {
+    mocks.capabilities = VISION;
+    renderInput();
+    act(() => chip().onRemove?.());
+    expect(viewListed()).toBe(false);
+    cleanup();
+    mocks.facets = [];
+    renderInput();
+    expect(viewListed()).toBe(false);
+  });
+
+  it("stays listed for the turn when the model is switched after the send", () => {
+    mocks.capabilities = VISION;
+    mocks.capabilitiesByModel.set("text-model", []);
+    const { update } = renderInput();
+    send();
+    update({ modelId: "text-model" });
+    expect(viewListed()).toBe(true);
+    send();
+    expect(viewListed()).toBe(false);
   });
 });
 
