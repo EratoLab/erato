@@ -1337,8 +1337,8 @@ const words = (
   language: string,
 ): LanguageWords => {
   const natural = options.wording === "natural";
-  // A card without a phrase of its own is approved on screen; its notices
-  // name the English phrase, which every card takes.
+  // A card without a phrase of its own is approved on screen only and never
+  // asks for a phrase; the English one only keeps the text whole.
   const confirmationPhrase =
     confirmationPhraseOf(language, options.confirmationPhrases) ??
     confirmationPhraseOf("en", options.confirmationPhrases) ??

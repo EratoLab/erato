@@ -335,6 +335,12 @@
     "security_relevance": "medium",
     "stability": "alpha"
   },
+  "approval_voice_commands.words.<language>.casual_approvals.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
   "approval_voice_commands.words.<language>.change_anywhere.[]": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",
@@ -1184,7 +1190,7 @@
   "audio_conversational.hesitations.<language>.[]": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
-    "security_relevance": "unreviewed",
+    "security_relevance": "high",
     "stability": "alpha"
   },
   "audio_conversational.initial_backoff_ms": {

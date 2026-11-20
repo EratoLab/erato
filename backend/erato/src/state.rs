@@ -358,6 +358,9 @@ impl AppState {
                 &config.approval_voice_decisions.phrases,
             ),
         );
+        for note in voice_command_words.hesitation_notes(&config.audio_conversational) {
+            tracing::warn!("Hesitation words kept with a warning: {note}.");
+        }
         let speech_readings = Arc::new(
             crate::services::speech::readings::ReadingsByLanguage::from_config(
                 &config.spoken_readings,

@@ -281,6 +281,24 @@ pub(super) const REJECT: &[&str] = &[
     "absolutely not",
 ];
 
+/// Approvals said in passing, without meaning to approve: never a
+/// confirmation phrase. Compared after fillers are dropped.
+pub(super) const CASUAL_APPROVALS: &[&str] = &[
+    "ja bitte gern",
+    "ja das passt",
+    "in ordnung",
+    "passt",
+    "geht klar",
+    "vielen dank",
+    "go ahead",
+    "sure",
+    "sure fine",
+    "fine",
+    "okay go",
+    "sounds good",
+    "thank you",
+];
+
 /// Words of an [`APPROVE`] phrase that do not approve on their own.
 pub(super) const APPROVE_HELPERS: &[&str] = &["bin", "s", "gehts"];
 /// Words of a [`REJECT`] phrase that do not refuse on their own. "will",

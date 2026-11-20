@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import languageBase from "@/lib/generated/languageBase.json";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
 
@@ -219,6 +220,44 @@ describe("useSpokenApprovalCard", () => {
       });
       renderHook(() => useSpokenApprovalCard(next));
       expect(cardOf(0).pieces[0].text).toMatch(/^I'd like to /);
+    });
+
+    it("names the phrase only on a card in a language with a phrase of its own", async () => {
+      const { i18n } = await import("@lingui/core");
+      const previous = i18n.locale;
+      const decide = () => ({
+        approvalId: "call-1",
+        send: () => Promise.resolve("sent" as const),
+      });
+      const card = () =>
+        props({
+          approvals: [UPDATE],
+          keys: ["t:call-1"],
+          items: [{ approvalId: "call-1", replaces: null }],
+          decide,
+          active: false,
+        });
+      const approves = () =>
+        renderHook(() => useSpokenApprovalCard(card())).result.current.approves;
+      try {
+        expect(approves()).toBe(true);
+        // French is said in full, but has no phrase: approved on screen.
+        window.APPROVAL_SPEECH_WORDS = {
+          ...languageBase.approval_speech_words,
+          fr: { ...languageBase.approval_speech_words.en, locale: "fr-FR" },
+        };
+        i18n.loadAndActivate({ locale: "fr", messages: {} });
+        expect(approves()).toBe(false);
+        window.APPROVAL_VOICE_PHRASES = {
+          ...languageBase.confirmation_phrases,
+          fr: "Je confirme",
+        };
+        expect(approves()).toBe(true);
+      } finally {
+        window.APPROVAL_SPEECH_WORDS = undefined;
+        window.APPROVAL_VOICE_PHRASES = undefined;
+        i18n.activate(previous);
+      }
     });
 
     it("hands the card how it is changed by voice, for its own approval", () => {

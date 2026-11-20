@@ -115,6 +115,9 @@ voice_command_lists! {
         /// Words of a refusing phrase that do not refuse on their own
         /// ("mach" of "mach das nicht", "will" of "das will ich nicht").
         reject_helpers,
+        /// Approvals said in passing ("passt", "go ahead"): a confirmation
+        /// phrase equal to one of them is refused.
+        casual_approvals,
     }
     removable {
         /// Hesitation sounds, dropped wherever they stand.

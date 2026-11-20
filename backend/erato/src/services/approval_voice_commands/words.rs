@@ -6,7 +6,7 @@
 //! fill a list: "ne"/"noe"/"doch", "aber"/"but", "take", the copula words,
 //! "nicht ändern", a final "so"/"then", "rest", "ueberspr"/"skip" and "um".
 
-use super::phrase::{ConfirmationPhrase, built_in_phrases};
+use super::phrase::{ConfirmationPhrase, PhraseNote, built_in_phrases};
 use super::rules::{self, drop_fillers, words_of};
 use erato_config::confirmation_phrases::{ConfirmationPhraseConfig, ConfirmationPhrasesByLanguage};
 use erato_config::language_words::{WordLists, merge_word_list};
@@ -94,6 +94,7 @@ fn base(name: &str) -> Option<(Kind, Vec<String>)> {
         "negations_before" => (Word, NEGATIONS_BEFORE),
         "approve_helpers" => (Word, APPROVE_HELPERS),
         "reject_helpers" => (Word, REJECT_HELPERS),
+        "casual_approvals" => (Phrase, CASUAL_APPROVALS),
         _ => return None,
     };
     Some((kind, words.iter().map(|word| word.to_string()).collect()))
@@ -161,6 +162,16 @@ pub struct CommandWords {
     pub(super) agreeing: HashSet<String>,
     pub(super) refusal: HashSet<String>,
     pub(super) refusing: HashSet<String>,
+    /// `agreement_words` alone.
+    pub(super) agreement_words: HashSet<String>,
+    /// `refusal_words` alone.
+    pub(super) refusal_words: HashSet<String>,
+    /// The words of `stop` phrases that carry the stop, and `stop_first`.
+    pub(super) stopping: HashSet<String>,
+    pub(super) casual_approvals: HashSet<String>,
+    /// Every word the guards and decisions rely on: never trimmed or dropped
+    /// as a hesitation.
+    pub(super) relied_on: HashSet<String>,
     /// The confirmation phrases tried: German, English, then the card
     /// language's.
     pub(super) phrases: Vec<ConfirmationPhrase>,
@@ -269,6 +280,23 @@ impl CommandWords {
             || self.wh_words.contains(word)
             || self.question_first.contains(word)
             || self.question_verbs.contains(word)
+    }
+
+    /// A word that carries a stop: never said with the confirmation phrase.
+    pub(super) fn stops(&self, word: &str) -> bool {
+        self.stopping.contains(word)
+    }
+
+    /// A word that carries a refusal, or one a refusal holds and an approval
+    /// does not: never said with the confirmation phrase.
+    pub(super) fn refuses(&self, word: &str) -> bool {
+        self.refusing.contains(word)
+            || self.reject.contains(word)
+            || (self.refusal_words.contains(word)
+                && !self.agreement_words.contains(word)
+                && !self.fillers.contains(word)
+                && !self.pronouns.contains(word)
+                && !self.subjects.contains(word))
     }
 
     /// A negation, condition or question word of these languages, also
@@ -402,10 +430,11 @@ impl CommandWords {
         let yes_particles = set(yes_particles);
         let negations = set(negations);
         let pronouns = set(list("pronouns"));
+        let agreement_words = set(agreement_words);
         let agreement = approve
             .iter()
             .flat_map(|phrase| words_of(phrase))
-            .chain(agreement_words)
+            .chain(agreement_words.iter().cloned())
             .chain(noise_words.iter().cloned())
             .chain(
                 leading
@@ -417,7 +446,7 @@ impl CommandWords {
         let refusal = reject
             .iter()
             .flat_map(|phrase| words_of(phrase))
-            .chain(refusal_words)
+            .chain(refusal_words.iter().cloned())
             .chain(negations.iter().cloned())
             .chain(noise_words.iter().cloned())
             .chain(
@@ -436,6 +465,12 @@ impl CommandWords {
             &approve_helpers,
         );
         let refusing = carrying(&reject, &noise_words, &pronouns, &subjects, &reject_helpers);
+        let casual_approvals = phrases(&list("casual_approvals"));
+        let stop_first = set(list("stop_first"));
+        let stopping = carrying(&stop, &noise_words, &pronouns, &subjects, &HashSet::new())
+            .into_iter()
+            .chain(stop_first.iter().cloned())
+            .collect();
         let words = CommandWords {
             noise_phrases: phrases(&noise_phrases),
             approve: phrases(&approve),
@@ -450,7 +485,7 @@ impl CommandWords {
             leading: set(leading),
             leading_yes: leading_yes_set,
             leading_no: leading_no_set,
-            stop_first: set(list("stop_first")),
+            stop_first,
             known_cues: cues(list("known_cues")),
             negations,
             backchannels: set(list("backchannels")),
@@ -493,6 +528,11 @@ impl CommandWords {
             agreeing,
             refusal,
             refusing,
+            agreement_words,
+            refusal_words: set(refusal_words),
+            stopping,
+            casual_approvals,
+            relied_on,
             phrases: built_in_phrases().to_vec(),
         };
         let mut notes = builder.notes;
@@ -545,8 +585,13 @@ impl CommandWordsByLanguage {
                 language,
             );
         }
-        let (built, notes) = Self::build(config, phrases);
-        warn_unused(notes);
+        let (built, notes, phrase_notes) = Self::build_noted(config, phrases);
+        for note in notes {
+            tracing::warn!("Voice-command word dropped: {note}.");
+        }
+        for note in phrase_notes {
+            tracing::warn!("{}", note.log_line());
+        }
         if !phrases.is_empty() {
             for (language, phrases) in built.shown_phrases_by_card_language() {
                 tracing::info!("Confirmation phrases on `{language}` cards: {phrases}.");
@@ -561,6 +606,19 @@ impl CommandWordsByLanguage {
         config: &VoiceCommandWordsByLanguage,
         phrases: &ConfirmationPhrasesByLanguage,
     ) -> (Self, Vec<String>) {
+        let (built, mut notes, phrase_notes) = Self::build_noted(config, phrases);
+        notes.extend(phrase_notes.iter().map(|note| note.text().to_string()));
+        notes.sort();
+        notes.dedup();
+        (built, notes)
+    }
+
+    /// The lists, the notes on configured words and those on phrases.
+    fn build_noted(
+        config: &VoiceCommandWordsByLanguage,
+        phrases: &ConfirmationPhrasesByLanguage,
+    ) -> (Self, Vec<String>, Vec<PhraseNote>) {
+        let mut phrase_notes = Vec::new();
         let mut languages: Vec<(&String, &VoiceCommandWordLists)> = config.iter().collect();
         languages.sort_by(|a, b| a.0.cmp(b.0));
         let shared_languages: Vec<(&str, &VoiceCommandWordLists, bool)> = languages
@@ -577,8 +635,13 @@ impl CommandWordsByLanguage {
             .enumerate()
             .filter_map(|(at, phrase)| {
                 let configured = phrases.get(&phrase.language)?;
-                ConfirmationPhrase::checked(&phrase.language, configured, &shared, &mut all_notes)
-                    .map(|checked| (at, checked))
+                ConfirmationPhrase::checked(
+                    &phrase.language,
+                    configured,
+                    &shared,
+                    &mut phrase_notes,
+                )
+                .map(|checked| (at, checked))
             })
             .collect();
         for (at, phrase) in replacing {
@@ -618,7 +681,7 @@ impl CommandWordsByLanguage {
             all_notes.extend(notes);
             words.phrases = shared_phrases.clone();
             if let Some(phrase) = phrase.and_then(|phrase| {
-                ConfirmationPhrase::checked(language, phrase, &words, &mut all_notes)
+                ConfirmationPhrase::checked(language, phrase, &words, &mut phrase_notes)
             }) {
                 words.phrases.push(phrase);
             }
@@ -626,12 +689,15 @@ impl CommandWordsByLanguage {
         }
         all_notes.sort();
         all_notes.dedup();
+        phrase_notes.sort_by(|a, b| a.text().cmp(b.text()));
+        phrase_notes.dedup();
         (
             Self {
                 shared: Arc::new(shared),
                 by_language,
             },
             all_notes,
+            phrase_notes,
         )
     }
 
@@ -669,18 +735,51 @@ impl CommandWordsByLanguage {
         let mut lines = vec![("de/en".to_string(), said(&self.shared))];
         let mut languages: Vec<_> = self.by_language.iter().collect();
         languages.sort_by(|a, b| a.0.cmp(b.0));
-        lines.extend(
-            languages
-                .into_iter()
-                .map(|(language, words)| (language.clone(), said(words))),
-        );
+        lines.extend(languages.into_iter().map(|(language, words)| {
+            // The API approves such a card on screen only.
+            let shown = match words.phrase_of(language) {
+                Some(_) => said(words),
+                None => "none, screen only".to_string(),
+            };
+            (language.clone(), shown)
+        }));
         lines
     }
-}
 
-fn warn_unused(notes: Vec<String>) {
-    for note in notes {
-        tracing::warn!("Voice-command word dropped: {note}.");
+    /// A note for each configured hesitation sound a card never trims before
+    /// its confirmation phrase, since the guards or decisions rely on it.
+    pub fn hesitation_notes(
+        &self,
+        audio: &erato_config::config::AudioConversationalConfig,
+    ) -> Vec<String> {
+        let mut notes = Vec::new();
+        let mut check = |place: String, entries: &[String], words: &CommandWords| {
+            for entry in entries {
+                let relied_on = words_of(entry).iter().any(|word| {
+                    !words.hesitations.contains(word)
+                        && (words.relied_on.contains(word) || words.is_guard_word(word))
+                });
+                if relied_on {
+                    notes.push(format!(
+                        "{place}: '{entry}' is never trimmed before a confirmation phrase, since the voice commands rely on it"
+                    ));
+                }
+            }
+        };
+        check(
+            "audio_conversational.hesitation_words".to_string(),
+            &audio.hesitation_words,
+            &self.shared,
+        );
+        for (language, entries) in &audio.hesitations {
+            check(
+                format!("audio_conversational.hesitations.{language}"),
+                entries,
+                self.for_language(language),
+            );
+        }
+        notes.sort();
+        notes
     }
 }
 

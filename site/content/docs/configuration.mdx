@@ -3121,7 +3121,7 @@ Hesitation sounds per language, usually from a content package. They are added t
 fr = ["euh", "bah"]
 ```
 
-The same entries are dropped with a warning as for `hesitation_words`, and so is a negation, condition or question word of German, English or that language's [voice-command words](#approval_voice_commandswords). These sounds are separate from the voice-command `hesitations` and `fillers` of approval cards.
+The same entries are dropped with a warning as for `hesitation_words`, and so is a negation, condition or question word of German, English or that language's [voice-command words](#approval_voice_commandswords). These sounds are separate from the voice-command `hesitations` and `fillers` of approval cards. Before a confirmation phrase, an entry of either list is never trimmed when the voice commands rely on it (a stop, refusal, yes or subject word, such as „halt“); the startup log warns about it.
 
 **Type:** table of lists of strings by language tag. **Default:** none.
 
@@ -5721,6 +5721,7 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.approve.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.approve_helpers.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.backchannels.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.casual_approvals.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.change_anywhere.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.change_first.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.conditions.[] */}
@@ -5821,7 +5822,7 @@ The guards cannot be weakened by data:
 
 - The lists the guards rely on cannot be shortened: a `remove` entry for them is ignored with a warning.
 - An entry that holds a negation, condition or question word (`wh_words`, `question_first`) is not added to `approve`, `agreement_words`, `noise_words`, `noise_phrases`, `yes_particles`, `doubled_yes`, `leading_yes`, `hesitations` or `fillers`, nor one that holds a condition or question word to `leading`.
-- `hesitations` and `fillers` are dropped before the guards look, so they never take a word the guards or decisions rely on: a word of a protected list, of `reject`, `refusal_words` or `stop`. A filler "das" would otherwise turn "passt das" into an approval. The confirmation phrase of [`approval_voice_decisions`](#approval_voice_decisions) is checked with the card language's negations and conditions, and `audio_conversational.hesitation_words` never trims a negation, condition or question word before it.
+- `hesitations` and `fillers` are dropped before the guards look, so they never take a word the guards or decisions rely on: a word of a protected list, of `reject`, `refusal_words` or `stop`. A filler "das" would otherwise turn "passt das" into an approval. The confirmation phrase of [`approval_voice_decisions`](#approval_voice_decisions) is checked with the card language's negations and conditions, and `audio_conversational.hesitation_words` and `audio_conversational.hesitations` never trim a word before it that the guards or decisions rely on.
 - A word of `approve_helpers` or `reject_helpers` never decides on its own: an approval or refusal must hold one of its phrase's other words. A package that adds "das will ich nicht" as a refusal therefore cannot make "will" alone refuse.
 - A transcript in a script written without spaces between words (Chinese, Japanese, Thai, …) is never matched by the rules and never decides a card, whatever the lists hold: the model may still steer the voice, and decisions are made on screen.
 
@@ -5844,6 +5845,7 @@ Lists the guards rely on; they can be added to, not shortened:
 | `noise_words` | A segment made only of these is listening noise. | "okay", "right", "thanks" |
 | `approve_helpers` | Words of an approving phrase that do not approve on their own ("bin" of "bin einverstanden"). | "bin", "s", "gehts" |
 | `reject_helpers` | Words of a refusing phrase that do not refuse on their own ("mach" of "mach das nicht", "will" of "das will ich nicht"). | "mach", "fall", "run" |
+| `casual_approvals` | Approvals said in passing; a [confirmation phrase](#approval_voice_decisionsphrases) equal to one of them, fillers left out, is refused. | "passt", "in ordnung", "go ahead", "sure" |
 
 Lists that can be added to and shortened under `remove`:
 
@@ -5972,7 +5974,17 @@ trailing = ["svp"]
 
 A card tries the German and English phrases, which people mix with any language, and the phrase of its own language. A configured `de` or `en` phrase replaces the built-in one of that language. A card in a language without a phrase is approved on screen; a refusal by voice still counts when that language's [voice-command words](#approval_voice_commandswords) refuse. The web app names the phrase of the card's language in the request, the near-miss lines and under the buttons (`{phrase}` in those catalog texts).
 
-Each phrase is checked at startup with the voice-command words of its language, and dropped with a warning (the built-in one stays for German and English) when it has fewer than three syllables, holds a negation, condition or question word, holds a digit, is only noise or hesitation words, or a refusal starts with it. At exactly three syllables it is kept with a warning. A leading or trailing word that is not one word, holds a digit or is a negation, condition or question word is dropped on its own. The startup log names the phrases each card language approves with. Syllables are groups of vowels, accented ones included (also „å“, „æ“, „ø“, „œ“); a word without Latin letters counts one per letter. [`min_speech_ms_per_syllable`](#approval_voice_decisionsmin_speech_ms_per_syllable) uses the same count.
+Each phrase is checked at startup with the voice-command words of its language, and dropped with a warning (the built-in one stays for German and English) when it:
+
+- has fewer than three syllables, or is in a script whose syllables are not counted;
+- holds a negation, condition or question word, or a digit;
+- is only noise, hesitation, filler, yes or agreement words, or `leading` words of the voice commands („Ja, bitte gern“);
+- is, fillers left out, a listening phrase (`noise_phrases`, „In Ordnung“) or a casual approval (`casual_approvals`: „passt“, „geht klar“, "go ahead", "sure, fine", which a package can add to);
+- holds a refusal, or a refusal starts with it („Vergiss es bitte“, "Cancel it now").
+
+A phrase is not refused merely because the `approve` list holds it, so „Ich bestätige“ and "I confirm" pass. At exactly three syllables it is kept with a warning. A leading or trailing word is dropped on its own when it is not one word, holds a digit, is a negation, condition or question word (question verbs and question-first words such as "can" included), stops the voice or refuses, or is the phrase's own first or last word. The startup log marks each note „Confirmation phrase dropped“ or „Confirmation phrase kept with a warning“, and names the phrases each card language approves with, or "screen only" for a language without a usable phrase.
+
+Syllables are groups of vowels, accented ones included (also „å“, „æ“, „ø“, „œ“); in French and English a final „e“ or „es“ after a consonant, and in English a final „ed“ after a consonant other than „t“ or „d“, is not one („J'approuve“ has two, „Je confirme“ three). Chinese, Japanese and Korean count one per character; a phrase in another script (Cyrillic, Greek, Arabic, Hebrew, Devanagari, …) is refused, since its syllables are not counted. [`min_speech_ms_per_syllable`](#approval_voice_decisionsmin_speech_ms_per_syllable) uses the same count.
 
 **Type:** table of tables by language tag. **Default:** none (the built-in „Ich bestätige“ and "I confirm").
 

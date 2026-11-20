@@ -9003,11 +9003,14 @@ pub struct AudioConversationalConfig {
     /// added to the list above for a user whose interface is in that
     /// language and for a card in it. Each entry is one word of letters, and
     /// never a negation, condition or question word of German, English or
-    /// that language; others are dropped with a warning. Defaults to none.
+    /// that language; others are dropped with a warning. A word the voice
+    /// commands rely on ("halt") is never trimmed before a confirmation
+    /// phrase, with a warning. Defaults to none.
     #[serde(
         default,
         deserialize_with = "crate::language_words::deserialize_hesitations"
     )]
+    #[facet(erato_config::security_relevance(level = "high"))]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub hesitations: HashMap<String, Vec<String>>,
