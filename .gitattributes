@@ -6,5 +6,6 @@
 site/public/setup/teams/** text eol=lf
 
 frontend/src/lib/generated/**/* linguist-generated
+backend/erato/src/services/adaptive_cards/tool_call_cards.generated.js linguist-generated
 infrastructure/charts/erato/tests_schema/helm-testsuite.json linguist-generated
 infrastructure/k3d/erato-local/tests_schema/helm-testsuite.json linguist-generated

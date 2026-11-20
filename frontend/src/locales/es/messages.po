@@ -22,6 +22,7 @@ msgid "about.title"
 msgstr "Acerca de"
 
 #. js-lingui-explicit-id
+#: src/adaptiveCards/toolCallCards.tsx
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.allowOnce"
 msgstr "Permitir una vez"

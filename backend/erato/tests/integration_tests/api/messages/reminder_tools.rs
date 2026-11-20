@@ -830,7 +830,7 @@ async fn a_cancel_in_teams_is_approved_in_teams(pool: Pool<Postgres>) {
         let mut completion = None;
         while let Some(update) = updates.recv().await {
             match update {
-                GenerationUpdate::Completed(done) => completion = Some(done),
+                GenerationUpdate::Completed(done) => completion = Some(*done),
                 GenerationUpdate::Failed(error) => panic!("generation failed: {error}"),
                 _ => {}
             }

@@ -66,6 +66,10 @@ uuid = { version = "1", features = ["v4", "v5", "v7"] }
 hmac = "0.13.0"
 jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
 regorus = "0.5.0"
+# Runs the web's tool call cards for Adaptive Card surfaces (services::adaptive_cards).
+# Without C assertions, freeing an engine after a failed render can leak
+# instead of aborting the process.
+rquickjs = { version = "0.14.0", features = ["disable-assertions"] }
 sha2 = "0.11.0"
 
 # Dependencies: Async runtime

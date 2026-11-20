@@ -591,7 +591,7 @@ async fn file_only_completion_sends_authorized_resources_after_text(pool: sqlx::
                 .unwrap()
                 .unwrap();
             let (tx, rx) = mpsc::channel(1);
-            tx.send(GenerationUpdate::Completed(completion))
+            tx.send(GenerationUpdate::Completed(Box::new(completion)))
                 .await
                 .unwrap();
             drop(tx);
@@ -760,7 +760,9 @@ async fn illustrated_answer_keeps_captions_next_to_their_images(pool: sqlx::PgPo
                     .text
                     .replacen("blue caption", "Reject this layout", 1);
             }
-            tx.send(GenerationUpdate::Completed(answer)).await.unwrap();
+            tx.send(GenerationUpdate::Completed(Box::new(answer)))
+                .await
+                .unwrap();
             drop(tx);
             render_generation(
                 &bot,
