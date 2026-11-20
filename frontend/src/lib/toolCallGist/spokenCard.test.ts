@@ -1454,15 +1454,17 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
   };
 
   it.each([
-    ["update-01-date-and-probability", "what"],
-    ["create-03-contact", "item"],
+    ["update-01-date-and-probability", "what", "de"],
+    ["update-01-date-and-probability", "what", "en"],
+    ["create-03-contact", "item", "de"],
+    ["create-03-contact", "item", "en"],
   ] as const)(
-    "%s: the %s skipped is said again before the phrase can count",
-    (id, role) => {
+    "%s: the %s skipped is said again before the phrase can count (%s)",
+    (id, role, language) => {
       const card = (voiceApproval: boolean) =>
-        inLanguage("de", () =>
+        inLanguage(language, () =>
           spokenApprovalPieces(approvalOf(callOf(id)), {
-            language: "de",
+            language,
             now: NOW,
             timeZone: ZONE,
             voiceApproval,
@@ -1474,10 +1476,37 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
       const flow = skippedThenHeard(pieces);
       expect(voiceDecisionGate(pieces, flow).ready).toBe(true);
       expect(flow.heard[at]).toBe(true);
-      // Without deciding by voice the card is as before: nothing owed.
       const plain = card(false);
       expect(plain.every((piece) => !piece.mustSay)).toBe(true);
       expect(skippedThenHeard(plain).heard[at]).toBe(false);
+    },
+  );
+
+  it.each(["de", "en"])(
+    "says every voice decision line in %s, none ending with the phrase",
+    (language) => {
+      const kinds = [
+        "say_phrase",
+        "say_phrase_again",
+        "say_again",
+        "phrase_on_screen",
+        "declined",
+        "decline_on_screen",
+        "confirm_on_screen",
+        "decision_failed",
+      ] as const;
+      const lines = inLanguage(language, () => {
+        const words = spokenWordsFor(language, { now: NOW });
+        return [
+          words.request(true),
+          ...kinds.map((kind) => words.notice({ kind })),
+        ];
+      });
+      expect(new Set(lines).size).toBe(lines.length);
+      for (const line of lines) {
+        expect(line.length).toBeGreaterThan(0);
+        expect(line).not.toMatch(/(ich bestätige|i confirm)\W*$/i);
+      }
     },
   );
 
@@ -1486,7 +1515,6 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
       voiceApprovalOffered(approvalOf(callOf(id)));
     expect(offered("update-01-date-and-probability")).toBe(true);
     expect(offered("read-01-search")).toBe(true);
-    // SQL stays on screen, a plain read included.
     expect(offered("read-03-sql-several-filters")).toBe(false);
     expect(offered("run-01-sql")).toBe(false);
     expect(offered("create-12-hidden-characters")).toBe(false);

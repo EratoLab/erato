@@ -3586,10 +3586,10 @@ mod audio_config_tests {
         );
 
         let mut settings = load_conversational(
-            "hesitation_words = [\"ne\", \"Nicht\", \"aber\", \"wie\", \"nö\", \"euh\"]",
+            "hesitation_words = [\"ne\", \"Nicht\", \"aber\", \"wie\", \"nö\", \"neee\", \"euh\"]",
         );
         let warnings = settings.drop_unusable_hesitation_words();
-        assert_eq!(warnings.len(), 5, "{warnings:?}");
+        assert_eq!(warnings.len(), 6, "{warnings:?}");
         assert!(
             warnings
                 .iter()
@@ -4097,7 +4097,7 @@ pub struct ApprovalVoiceDecisionsConfig {
     /// `100` to `2000`.
     #[facet(erato_config::security_relevance(level = "high"))]
     pub echo_tail_ms: u32,
-    /// Speech the detector must have heard per syllable of the phrase, in
+    /// Speech the detector must have heard per syllable of the words, in
     /// milliseconds. Defaults to `80`; allowed from `20` to `400`.
     #[facet(erato_config::security_relevance(level = "medium"))]
     pub min_speech_ms_per_syllable: u32,

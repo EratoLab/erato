@@ -5,10 +5,9 @@
 use super::{
     CardPiece, CardPieceRole, VoiceCommandInput, VoiceMeaning, VoiceQuestion, default_text_piece,
 };
-pub(super) use erato_config::spoken::{CONDITIONS, NEGATIONS, WH_WORDS};
+pub(super) use erato_config::spoken::{CONDITIONS, NEGATIONS, WH_WORDS, fold};
 use std::collections::HashSet;
 use std::sync::LazyLock;
-use unicode_normalization::UnicodeNormalization;
 
 pub(super) struct RuleMatch {
     pub meaning: VoiceMeaning,
@@ -1063,32 +1062,6 @@ static LISTS: LazyLock<Lists> = LazyLock::new(|| Lists {
         ],
     ),
 });
-
-/// Composed Unicode, lower case, umlauts folded, apostrophes dropped, an ordinal's dot kept
-/// with its number.
-fn fold(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut previous_digit = false;
-    for c in text.nfc() {
-        match c {
-            '\'' | '’' | '`' | '´' => {}
-            '.' if previous_digit => {}
-            c => {
-                for lower in c.to_lowercase() {
-                    match lower {
-                        'ä' => out.push_str("ae"),
-                        'ö' => out.push_str("oe"),
-                        'ü' => out.push_str("ue"),
-                        'ß' => out.push_str("ss"),
-                        other => out.push(other),
-                    }
-                }
-            }
-        }
-        previous_digit = c.is_ascii_digit();
-    }
-    out
-}
 
 pub(super) fn words_of(text: &str) -> Vec<String> {
     fold(text)

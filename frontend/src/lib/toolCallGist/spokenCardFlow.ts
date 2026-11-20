@@ -553,18 +553,28 @@ export const currentPiece = (flow: SpokenCardFlow): number | null =>
 
 /**
  * Whether a decision said by voice may count: the card is waiting, its
- * request to decide was heard, and no loss or consequence is owed. `owed`
- * lists what must be said first. A card without a request (the pointer
- * sentence) is decided on screen.
+ * request to decide was heard, and nothing is owed. `owed` lists what must
+ * be said first. A refusal runs nothing, so it does not wait for what the
+ * call does and on which record, only for a loss, a consequence or
+ * recipients outside. A card without a request (the pointer sentence) is
+ * decided on screen.
  */
 export const voiceDecisionGate = (
   pieces: readonly SpokenPiece[],
   flow: SpokenCardFlow,
+  decision: "approve" | "reject" = "approve",
 ): { ready: boolean; owed: number[] } => {
   const request = requestOf(pieces);
   const asked = request !== -1 && flow.heard[request];
+  const owed =
+    decision === "approve"
+      ? flow.owed
+      : flow.owed.filter(
+          (index) =>
+            pieces[index].role !== "what" && pieces[index].role !== "item",
+        );
   return {
-    ready: !flow.closed && asked && flow.owed.length === 0,
-    owed: flow.owed,
+    ready: !flow.closed && asked && owed.length === 0,
+    owed,
   };
 };

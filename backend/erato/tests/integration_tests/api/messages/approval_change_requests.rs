@@ -775,25 +775,22 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     };
     let say =
         |transcript: &'static str, signals: Value| say_to(transcript, pieces.clone(), signals);
-    let decide = |receipt: Value| {
-        let server = &server;
+    let decide_on = |server: &TestServer, receipt: Value| {
         let approval_id = approval_id.clone();
-        async move {
-            server
-                .post("/api/v1beta/me/messages/continuestream")
-                .with_bearer_token(TEST_JWT_TOKEN)
-                .json(&json!({
-                    "message_id": message_id,
-                    "decisions": [{
-                        "approval_id": approval_id,
-                        "decision": "approve",
-                        "voice_receipt": receipt,
-                    }],
-                }))
-                .await
-        }
+        let request = server
+            .post("/api/v1beta/me/messages/continuestream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({
+                "message_id": message_id,
+                "decisions": [{
+                    "approval_id": approval_id,
+                    "decision": "approve",
+                    "voice_receipt": receipt,
+                }],
+            }));
+        async move { request.await }
     };
-
+    let decide = |receipt: Value| decide_on(&server, receipt);
     let yes = say("Ja, mach das.", signals.clone()).await;
     assert_eq!(yes["meaning"], "approve", "{yes}");
     assert_eq!(yes["decision"], json!({"status": "phrase_needed"}));
@@ -849,16 +846,34 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     short["speech_ms"] = json!(90);
     assert_eq!(nein(short).await["decision"]["status"], "accepted");
 
+    let receipt_of = |answer: Value| {
+        assert_eq!(answer["decision"]["status"], "accepted", "{answer}");
+        answer["decision"]["receipt"].clone()
+    };
+    let refused_receipt = |response: axum_test::TestResponse| {
+        response.assert_status(axum::http::StatusCode::CONFLICT);
+        assert_eq!(
+            response.json::<Value>(),
+            json!({"code": "voice_receipt_refused"})
+        );
+    };
+    refused_receipt(decide(json!("not-a-receipt")).await);
+    // A newer receipt for the card replaces the older one.
+    let older = receipt_of(say("Ich bestätige.", signals.clone()).await);
+    let newer = receipt_of(say("Ich bestätige das.", signals.clone()).await);
+    refused_receipt(decide(older).await);
+    // One past its time is refused, and taken.
+    sea_orm::ConnectionTrait::execute_unprepared(
+        &app_state.db,
+        "UPDATE voice_decision_receipts SET expires_at = now() - interval '1 second'",
+    )
+    .await
+    .unwrap();
+    refused_receipt(decide(newer).await);
+
     let confirmed = say("Ich bestätige.", signals.clone()).await;
     assert_eq!(confirmed["meaning"], "approve");
-    assert_eq!(confirmed["decision"]["status"], "accepted", "{confirmed}");
-    let receipt = confirmed["decision"]["receipt"].clone();
-    let refused = decide(json!("not-a-receipt")).await;
-    refused.assert_status(axum::http::StatusCode::CONFLICT);
-    assert_eq!(
-        refused.json::<Value>(),
-        json!({"code": "voice_receipt_refused"})
-    );
+    let receipt = receipt_of(confirmed);
     // Another server on the same database takes the receipt: another
     // replica, or this one after a restart.
     let mut other_mocks = MockSet::new();
@@ -869,19 +884,7 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         build_openai_text_streaming_response(&["DONE"]),
     );
     let other = app_server(records_app_state_with(pool, other_mocks, deciding).await);
-    other
-        .post("/api/v1beta/me/messages/continuestream")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({
-            "message_id": message_id,
-            "decisions": [{
-                "approval_id": approval_id,
-                "decision": "approve",
-                "voice_receipt": receipt.clone(),
-            }],
-        }))
-        .await
-        .assert_status_ok();
+    decide_on(&other, receipt.clone()).await.assert_status_ok();
     let content = message_content(&app_state, message_id).await;
     let approval = content
         .iter()

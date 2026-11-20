@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 
+use unicode_normalization::UnicodeNormalization;
+
 use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
@@ -48,21 +50,46 @@ pub const WH_WORDS: &[&str] = &[
     "whats", "who", "whos", "when", "where", "why", "which", "how",
 ];
 
-/// Folds a word as the voice-command rules do: lower case, umlauts and ß
-/// spelled out.
-pub fn fold_word(word: &str) -> String {
-    word.to_lowercase()
-        .replace('ä', "ae")
-        .replace('ö', "oe")
-        .replace('ü', "ue")
-        .replace('ß', "ss")
+/// Composed Unicode, lower case, umlauts folded, apostrophes dropped, an ordinal's dot kept
+/// with its number.
+pub fn fold(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut previous_digit = false;
+    for c in text.nfc() {
+        match c {
+            '\'' | '’' | '`' | '´' => {}
+            '.' if previous_digit => {}
+            c => {
+                for lower in c.to_lowercase() {
+                    match lower {
+                        'ä' => out.push_str("ae"),
+                        'ö' => out.push_str("oe"),
+                        'ü' => out.push_str("ue"),
+                        'ß' => out.push_str("ss"),
+                        other => out.push(other),
+                    }
+                }
+            }
+        }
+        previous_digit = c.is_ascii_digit();
+    }
+    out
 }
 
-/// Whether `word` decides what a sentence means.
+/// Whether `word` decides what a sentence means, also drawn out ("neee",
+/// "nichtt") as transcribers write a long sound.
 pub fn decides_meaning(word: &str) -> bool {
-    let word = fold_word(word);
-    let word = word.as_str();
-    NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+    let folded = fold(word);
+    let mut collapsed = String::with_capacity(folded.len());
+    for c in folded.chars() {
+        if !collapsed.ends_with(c) {
+            collapsed.push(c);
+        }
+    }
+    [folded, collapsed].iter().any(|word| {
+        let word = word.as_str();
+        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+    })
 }
 
 /// Entries one vocabulary holds in one language.

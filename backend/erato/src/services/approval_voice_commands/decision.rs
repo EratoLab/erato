@@ -1,6 +1,7 @@
 //! Deciding a waiting card by voice: which cards may be, what the recording
 //! must show, and the short-lived receipt that lets the decision through.
-//! An approval needs the phrase; a refusal needs only a plain "nein".
+//! An approval needs the phrase, a refusal a plain "nein"; both need a
+//! recording that can carry a decision.
 
 use super::phrase::PhraseMatchKind;
 use super::{CardPiece, CardPieceRole, CardPieceState, request_heard};
@@ -69,9 +70,9 @@ impl SignalProblem {
     }
 }
 
-/// Whether the recording can carry an approval with `phrase`: opened after
-/// the voice stopped, its first speech after the echo tail, and enough
-/// speech for the phrase's syllables.
+/// Whether the recording can carry a decision: opened after the voice
+/// stopped and not while it spoke, its first speech after the echo tail,
+/// and enough speech for `syllables`.
 pub fn check_signals(
     signals: &VoiceSignals,
     syllables: u32,
@@ -108,23 +109,25 @@ pub fn only_points(pieces: &[CardPiece]) -> bool {
 }
 
 /// Whether the card's request was heard and every piece that must be said
-/// before a decision was too: what the call does and on which record, a
-/// loss, a consequence, recipients outside.
-/// The device's own gate checks the same; this keeps an older device honest.
-pub fn card_asked(pieces: &[CardPiece]) -> bool {
+/// before the decision was too: a loss, a consequence, recipients outside,
+/// and for an approval what the call does and on which record. A refusal
+/// runs nothing, so it never waits for those. The device's own gate checks
+/// the same; this keeps an older device honest.
+pub fn card_asked(pieces: &[CardPiece], outcome: VoiceDecisionOutcome) -> bool {
     let asks = pieces
         .iter()
         .any(|piece| piece.role == CardPieceRole::Request);
+    let names_the_call =
+        |piece: &CardPiece| matches!(piece.role, CardPieceRole::What | CardPieceRole::Item);
     let owed = pieces.iter().any(|piece| {
-        (piece.must_say
-            || matches!(
-                piece.role,
-                CardPieceRole::What
-                    | CardPieceRole::Item
-                    | CardPieceRole::Consequence
-                    | CardPieceRole::Outside
-            ))
-            && piece.state != CardPieceState::Heard
+        let must = match outcome {
+            VoiceDecisionOutcome::Approved => piece.must_say || names_the_call(piece),
+            VoiceDecisionOutcome::Refused => piece.must_say && !names_the_call(piece),
+        } || matches!(
+            piece.role,
+            CardPieceRole::Consequence | CardPieceRole::Outside
+        );
+        must && piece.state != CardPieceState::Heard
     });
     asks && request_heard(pieces) && !owed && !only_points(pieces)
 }
@@ -378,10 +381,10 @@ pub async fn take_receipt(
             message_id: row.try_get("", "message_id")?,
             approval_id: row.try_get("", "approval_id")?,
             card_digest: row.try_get("", "card_digest")?,
-            outcome: if outcome == "approved" {
-                VoiceDecisionOutcome::Approved
-            } else {
-                VoiceDecisionOutcome::Refused
+            outcome: match outcome.as_str() {
+                "approved" => VoiceDecisionOutcome::Approved,
+                "refused" => VoiceDecisionOutcome::Refused,
+                other => return Err(eyre!("A voice receipt has the unknown outcome {other:?}")),
             },
             record: serde_json::from_value(record)?,
         },

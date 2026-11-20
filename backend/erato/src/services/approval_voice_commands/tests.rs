@@ -1198,9 +1198,16 @@ mod deciding_by_voice {
 
     #[test]
     fn a_hesitation_word_never_hides_a_negation_condition_or_question() {
-        let deployment = ["ne".to_string(), "nicht".to_string(), "aber".to_string()];
+        let deployment = [
+            "ne".to_string(),
+            "nicht".to_string(),
+            "aber".to_string(),
+            "neee".to_string(),
+        ];
         for words in [
             "Ich bestätige, ne",
+            "Ich bestätige, neee",
+            "ich bestätige nichtt",
             "ich bestätige nicht",
             "aber ich bestätige",
             "Wie, ich bestätige",
@@ -1211,7 +1218,16 @@ mod deciding_by_voice {
 
     #[test]
     fn a_transcript_marked_as_unfinished_never_matches() {
-        for words in ["Ich bestätige…", "ich bestätige ...", "I confirm..."] {
+        for words in [
+            "Ich bestätige…",
+            "ich bestätige ...",
+            "I confirm...",
+            "Ich bestätige⋯",
+            "Ich bestätige….",
+            "(Ich bestätige…)",
+            "Ich bestätige…\u{200b}",
+            "Äh… ich bestätige",
+        ] {
             assert!(match_phrase(words, &[]).is_none(), "{words}");
         }
     }
@@ -1321,47 +1337,52 @@ mod deciding_by_voice {
     fn the_card_must_have_asked_with_nothing_owed() {
         use CardPieceRole::*;
         use CardPieceState::*;
+        let approve = |pieces: &[CardPiece]| card_asked(pieces, VoiceDecisionOutcome::Approved);
+        let refuse = |pieces: &[CardPiece]| card_asked(pieces, VoiceDecisionOutcome::Refused);
         let heard = [
             piece("w", What, Heard),
             piece("c", Consequence, Heard),
             piece("r", Request, Heard),
         ];
-        assert!(card_asked(&heard));
+        assert!(approve(&heard) && refuse(&heard));
         let not_asked = [piece("w", What, Heard), piece("r", Request, CutShort)];
-        assert!(!card_asked(&not_asked));
+        assert!(!approve(&not_asked) && !refuse(&not_asked));
         let owed = [
             piece("w", What, Heard),
             piece("c", Consequence, NotSaid),
             piece("r", Request, Heard),
         ];
-        assert!(!card_asked(&owed));
-        assert!(super::super::request_heard(&owed) && only_points(&[piece("p", Pointer, Heard)]));
+        assert!(!approve(&owed) && !refuse(&owed));
         let outside = [piece("o", Outside, CutShort), piece("r", Request, Heard)];
-        assert!(!card_asked(&outside));
-        assert!(!card_asked(&[piece("p", Pointer, Heard)]));
-        assert!(!card_asked(&[piece("w", What, Heard)]));
+        assert!(!approve(&outside) && !refuse(&outside));
+        assert!(!approve(&[piece("p", Pointer, Heard)]));
+        assert!(!approve(&[piece("w", What, Heard)]));
         let loss = CardPiece {
             must_say: true,
             ..piece("d", Detail, CutShort)
         };
-        assert!(!card_asked(&[loss, piece("r", Request, Heard)]));
-        // What the call does and on which record is owed on every card, so a
-        // device that skipped it cannot have the phrase count.
-        assert!(!card_asked(&[
-            piece("w", What, CutShort),
+        assert!(!approve(&[loss.clone(), piece("r", Request, Heard)]));
+        assert!(!refuse(&[loss, piece("r", Request, Heard)]));
+        // An approval waits for what the call does and on which record; a
+        // refusal runs nothing, so it does not, also where the device marks
+        // them must-say.
+        let skipped_what = [
+            CardPiece {
+                must_say: true,
+                ..piece("w", What, CutShort)
+            },
             piece("d", Detail, Heard),
-            piece("r", Request, Heard)
-        ]));
-        assert!(!card_asked(&[
+            piece("r", Request, Heard),
+        ];
+        assert!(!approve(&skipped_what) && refuse(&skipped_what));
+        let unsaid_item = [
             piece("w", What, Heard),
             piece("i", Item, NotSaid),
-            piece("r", Request, Heard)
-        ]));
-        // A detail skipped is not owed.
-        assert!(card_asked(&[
-            piece("d", Detail, NotSaid),
-            piece("r", Request, Heard)
-        ]));
+            piece("r", Request, Heard),
+        ];
+        assert!(!approve(&unsaid_item) && refuse(&unsaid_item));
+        let detail = [piece("d", Detail, NotSaid), piece("r", Request, Heard)];
+        assert!(approve(&detail) && refuse(&detail));
     }
 
     fn label(action: ToolCallAction) -> ToolCallLabel {

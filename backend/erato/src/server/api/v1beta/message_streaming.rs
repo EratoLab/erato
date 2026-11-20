@@ -21602,10 +21602,13 @@ async fn voice_receipts_taken(
                     .into());
             }
         };
+        // A receipt that cannot be read refuses like one that does not
+        // match: nothing is decided, and the card waits on screen.
         let taken = take_receipt(&app_state.db, id)
             .await
-            .map_err(crate::services::sentry::log_internal_server_error)
-            .map_err(|status| (status, "Reading the voice receipt failed".to_string()))?;
+            .inspect_err(|error| tracing::error!(%error, "Reading a voice receipt failed"))
+            .ok()
+            .flatten();
         let checked = open
             .iter()
             .find(|open| open.approval_id == item.approval_id)

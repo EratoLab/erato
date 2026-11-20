@@ -6603,9 +6603,10 @@ export type InterpretApprovalVoiceCommandVariables = {
  * confirm"), checked before any rule or model and never by a model; a
  * refusal by the rules or the model refuses. Either needs the turn's own
  * single call as `approval_id`, a card whose request was heard with nothing
- * owed, and for an approval a recording that started after the voice and
- * heard enough speech. An accepted decision gets a receipt, kept for
- * `receipt_ttl_seconds`, with a record of how it was given.
+ * owed, and a recording that started after the voice and heard enough
+ * speech; one that did not gets `say_again`. An accepted decision gets a
+ * receipt, kept in the database for `receipt_ttl_seconds`, with a record of
+ * how it was given.
  */
 export const fetchInterpretApprovalVoiceCommand = (
   variables: InterpretApprovalVoiceCommandVariables,
@@ -6637,9 +6638,10 @@ export const fetchInterpretApprovalVoiceCommand = (
  * confirm"), checked before any rule or model and never by a model; a
  * refusal by the rules or the model refuses. Either needs the turn's own
  * single call as `approval_id`, a card whose request was heard with nothing
- * owed, and for an approval a recording that started after the voice and
- * heard enough speech. An accepted decision gets a receipt, kept for
- * `receipt_ttl_seconds`, with a record of how it was given.
+ * owed, and a recording that started after the voice and heard enough
+ * speech; one that did not gets `say_again`. An accepted decision gets a
+ * receipt, kept in the database for `receipt_ttl_seconds`, with a record of
+ * how it was given.
  */
 export const useInterpretApprovalVoiceCommand = (
   options?: Omit<

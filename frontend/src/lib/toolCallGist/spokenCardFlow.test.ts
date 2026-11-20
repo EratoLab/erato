@@ -547,6 +547,41 @@ describe("while the voice is quiet and listens", () => {
     expect(voiceDecisionGate(CARD, closed).ready).toBe(false);
   });
 
+  it("a refusal does not wait for what the call does and on which record", () => {
+    const pieces: SpokenPiece[] = [
+      {
+        id: "what",
+        role: "what",
+        text: "Ich ändere den Datensatz.",
+        mustSay: true,
+        values: [],
+      },
+      {
+        id: "detail",
+        role: "detail",
+        text: "Status: offen.",
+        mustSay: false,
+        values: [],
+      },
+      {
+        id: "request",
+        role: "request",
+        text: "Zum Ausführen bitte „Ich bestätige“ sagen.",
+        mustSay: false,
+        values: [],
+      },
+    ];
+    const skipped = run(pieces, [{ type: "start" }, { type: "skip" }]).flow;
+    expect(skipped.owed).toEqual([0]);
+    expect(voiceDecisionGate(pieces, skipped, "approve").ready).toBe(false);
+    const asked = { ...skipped, heard: [false, true, true] };
+    expect(voiceDecisionGate(pieces, asked, "approve").ready).toBe(false);
+    expect(voiceDecisionGate(pieces, asked, "reject")).toEqual({
+      ready: true,
+      owed: [],
+    });
+  });
+
   it("a card without a request is never decided by voice", () => {
     const pointer = CARD.filter((piece) => piece.role !== "request").map(
       (piece) => ({ ...piece, mustSay: false }),

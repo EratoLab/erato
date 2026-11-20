@@ -538,8 +538,8 @@ export async function heardApprovalWords(
 
 /**
  * The recording's measurements as the endpoint takes them, with when the
- * voice stopped and when the card's request was heard. Without the
- * recorder's measurements an approval cannot count, but a refusal still can.
+ * voice stopped and when the card's request was heard. Without them no
+ * decision by voice counts.
  */
 const voiceSignals = (
   key: string,
@@ -577,7 +577,7 @@ async function decideByVoice(
   const { card, pieces, flow } = now;
   const notice = cardNotice(key, card);
   const voice = card.decision;
-  if (!voice || !voiceDecisionGate(pieces, flow).ready) {
+  if (!voice || !voiceDecisionGate(pieces, flow, decision).ready) {
     notice(
       decision === "approve"
         ? { kind: "confirm_on_screen" }
