@@ -215,7 +215,7 @@ async fn record_generation(
                 GenerationUpdate::Started { chat_id, .. } => {
                     assert_eq!(*chat_id, fixture.chat_id);
                 }
-                GenerationUpdate::Completed(done) => finished = Some(done.clone()),
+                GenerationUpdate::Completed(done) => finished = Some(done.as_ref().clone()),
                 GenerationUpdate::Failed(error) => panic!("revision generation failed: {error}"),
                 _ => {}
             }

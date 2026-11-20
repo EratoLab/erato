@@ -12,6 +12,11 @@
 
 use super::render::{bounded_text, card_fits};
 use super::texts::{Lang, Msg};
+use crate::models::message::{ToolDisplayMetadata, ToolUse};
+use crate::services::adaptive_cards::{
+    self, AllowOnceEmphasis, ApprovalItemCard, ApprovalItemRequest, CardKind, ResultRow,
+    ResultRowRequest,
+};
 use crate::services::scheduled_items::chat_tools::{CANCEL_REMINDER, CREATE_REMINDER};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -37,7 +42,7 @@ pub enum ApprovalKind {
 }
 
 /// One decision the user owes.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PendingApprovalItem {
     pub approval_id: String,
     /// The tool the decision is about (for delegated tasks: the child's call).
@@ -51,6 +56,15 @@ pub struct PendingApprovalItem {
     /// The tool-call limit's own choice, which the card's buttons give. The
     /// tasks' items on the same stop are asked about one by one.
     pub budget: bool,
+    /// The descriptor saved with the call, label included, which the web's
+    /// card is drawn from.
+    pub metadata: Option<ToolDisplayMetadata>,
+    pub server_id: String,
+    /// The call this item decides when it runs in this chat, so the decided
+    /// card can show how it ended.
+    pub tool_call_id: Option<String>,
+    /// The web's card for the call, once `render_cards` drew it.
+    pub card: Option<ApprovalItemCard>,
 }
 
 /// Display-only projection of the backend's descriptor snapshot.
@@ -63,6 +77,19 @@ pub struct ToolDisplay {
 impl PendingApprovalItem {
     fn display_name(&self) -> &str {
         self.display.as_ref().map_or(&self.tool_name, |d| &d.title)
+    }
+
+    /// The web's card, for an item that is a tool call and got one.
+    fn web_card(&self) -> Option<&ApprovalItemCard> {
+        self.card
+            .as_ref()
+            .filter(|card| !self.own_tool && !self.budget && card.kind != CardKind::Legacy)
+    }
+
+    /// What the notice and the decided card call the call.
+    fn summary(&self) -> &str {
+        self.web_card()
+            .map_or_else(|| self.display_name(), |card| card.summary.as_str())
     }
 
     /// The item's question, and what the decided card says was approved or
@@ -92,6 +119,75 @@ pub struct PendingApprovalSet {
     pub message_id: String,
     pub kind: ApprovalKind,
     pub items: Vec<PendingApprovalItem>,
+}
+
+/// Draws each tool call's card as the web shows it. An item whose card cannot
+/// be drawn keeps the card it had before, so a decision is never lost.
+pub async fn render_cards(set: &mut PendingApprovalSet, lang: Lang) {
+    // A task plan asks about tasks, which the web shows on a card of its own.
+    if set.kind == ApprovalKind::TaskPlan {
+        return;
+    }
+    for (index, item) in set.items.iter_mut().enumerate() {
+        if item.own_tool || item.budget {
+            continue;
+        }
+        let id_prefix = format!("i{index}");
+        let rendered = adaptive_cards::approval_item(&ApprovalItemRequest {
+            locale: lang.code(),
+            tool_name: &item.tool_name,
+            display: item.metadata.as_ref(),
+            input: &item.input,
+            server_id: &item.server_id,
+            id_prefix: &id_prefix,
+        })
+        .await;
+        match rendered {
+            Ok(card) => {
+                if !card.errors.is_empty() {
+                    tracing::warn!(errors = ?card.errors, tool = %item.tool_name, "Teams approval card fell back");
+                }
+                item.card = Some(card);
+            }
+            Err(error) => {
+                tracing::warn!(%error, tool = %item.tool_name, "Teams approval card fell back");
+            }
+        }
+    }
+}
+
+/// How each finished call ended, as the web's trace row reads, by call id.
+pub async fn render_results(
+    tool_uses: &[ToolUse],
+    tool_call_ids: &[String],
+    lang: Lang,
+) -> Vec<Option<ResultRow>> {
+    let mut rows = Vec::with_capacity(tool_call_ids.len());
+    for (index, id) in tool_call_ids.iter().enumerate() {
+        let part = tool_uses.iter().find(|part| {
+            !id.is_empty()
+                && part.tool_call_id == *id
+                && matches!(
+                    part.status,
+                    crate::models::message::ToolCallStatus::Success
+                        | crate::models::message::ToolCallStatus::Error
+                )
+        });
+        let row = match part {
+            Some(part) => adaptive_cards::result_row(&ResultRowRequest {
+                locale: lang.code(),
+                part,
+                id_prefix: &format!("r{index}"),
+            })
+            .await
+            .inspect_err(|error| tracing::debug!(%error, "Teams result row fell back"))
+            .ok()
+            .filter(|row| row.errors.is_empty() && !row.elements.is_empty()),
+            None => None,
+        };
+        rows.push(row);
+    }
+    rows
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -128,6 +224,10 @@ pub struct ApprovalSubmit {
     /// Set by "Approve all" / "Deny all" (and the buttons of a single item).
     #[serde(default)]
     pub all: Option<ApprovalChoice>,
+    /// The calls the items decide, in the order of `approval_ids` and empty
+    /// where an item runs elsewhere; only for the decided card's results.
+    #[serde(default)]
+    pub tool_call_ids: Vec<String>,
     #[serde(flatten)]
     pub inputs: HashMap<String, Value>,
 }
@@ -200,9 +300,14 @@ fn build_approval_card(
     let item_budget = (MAX_INPUT_PREVIEW_BYTES / count.max(1)).min(MAX_ITEM_PREVIEW_BYTES);
     let asks: Vec<(String, String)> = set.items.iter().map(|item| item.ask(lang)).collect();
     // Display names also travel in each button's data for the decided card.
-    let names: Vec<String> = asks
+    let names: Vec<String> = set
+        .items
         .iter()
-        .map(|(_, name)| bounded_text(name, MAX_NAME_BYTES / count.max(1)))
+        .zip(&asks)
+        .map(|(item, (_, name))| {
+            let name = item.web_card().map_or(name.as_str(), |card| &card.summary);
+            bounded_text(name, MAX_NAME_BYTES / count.max(1))
+        })
         .collect();
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
@@ -225,6 +330,23 @@ fn build_approval_card(
         .enumerate()
         .filter(|(index, _)| !limit || budget_index.is_some_and(|budget| budget != *index))
     {
+        if let Some(card) = item.web_card() {
+            let start = body.len();
+            push_web_card(&mut body, card, detail);
+            if index > 0
+                && let Some(first) = body.get_mut(start)
+            {
+                first["separator"] = json!(true);
+                first["spacing"] = json!("Medium");
+            }
+            if count > 1 {
+                body.push(choice_set(index, &card.allow_once, &card.deny, lang));
+            }
+            if detail < Detail::NoDescriptions {
+                body.extend(card.details.iter().cloned());
+            }
+            continue;
+        }
         let question = if item.own_tool {
             bounded_text(&asks[index].0, MAX_NAME_BYTES / count.max(1))
         } else {
@@ -283,17 +405,7 @@ fn build_approval_card(
         }
         if count > 1 {
             let ((approve, _), (deny, _)) = answers(Some(item));
-            body.push(json!({
-                "type": "Input.ChoiceSet",
-                "id": input_id(index),
-                "style": "expanded",
-                "isRequired": true,
-                "errorMessage": Msg::ChooseApproveOrDeny.text(lang),
-                "choices": [
-                    {"title": approve.text(lang), "value": "approve"},
-                    {"title": deny.text(lang), "value": "reject"},
-                ],
-            }));
+            body.push(choice_set(index, approve.text(lang), deny.text(lang), lang));
         }
     }
     if detail > Detail::Full {
@@ -313,18 +425,28 @@ fn build_approval_card(
         if let Some(all) = all {
             data["all"] = json!(all);
         }
+        if set.items.iter().any(|item| item.tool_call_id.is_some()) {
+            data["tool_call_ids"] = json!(
+                set.items
+                    .iter()
+                    .map(|item| item.tool_call_id.as_deref().unwrap_or_default())
+                    .collect::<Vec<_>>()
+            );
+        }
         data
     };
-    let button = |title: Msg, style: &str, all: Option<ApprovalChoice>| {
+    let titled = |title: &str, style: &str, all: Option<ApprovalChoice>| {
         json!({
             "type": "Action.Submit",
-            "title": title.text(lang),
+            "title": title,
             "style": style,
             // Per-item choices only travel (and are required) on the submit button.
             "associatedInputs": if all.is_some() { "none" } else { "auto" },
             "data": data(all),
         })
     };
+    let button =
+        |title: Msg, style: &str, all: Option<ApprovalChoice>| titled(title.text(lang), style, all);
     let actions = if limit {
         // With tasks asking too, Continue and Answer now carry the budget's
         // choice beside the tasks' own answers. Stop withdraws everything: the
@@ -350,6 +472,18 @@ fn build_approval_card(
             button(Msg::ApproveAll, "positive", Some(ApprovalChoice::Approve)),
             button(Msg::DenyAll, "destructive", Some(ApprovalChoice::Reject)),
         ]
+    } else if let Some(card) = set.items.first().and_then(PendingApprovalItem::web_card) {
+        // As on the web: Allow once says how much the card asks to check, and
+        // Deny is the plain way out.
+        let allow_style = match card.emphasis {
+            AllowOnceEmphasis::Filled => "positive",
+            AllowOnceEmphasis::Plain => "default",
+            AllowOnceEmphasis::Loss => "destructive",
+        };
+        vec![
+            titled(&card.allow_once, allow_style, Some(ApprovalChoice::Approve)),
+            titled(&card.deny, "default", Some(ApprovalChoice::Reject)),
+        ]
     } else {
         let ((approve, approve_style), (deny, deny_style)) = answers(set.items.first());
         vec![
@@ -358,6 +492,62 @@ fn build_approval_card(
         ]
     };
     adaptive_card(body, actions)
+}
+
+/// The web's card for one call: what it does, then the question and the
+/// facts about the tool. A smaller card gives up the closed parts first.
+fn push_web_card(body: &mut Vec<Value>, card: &ApprovalItemCard, detail: Detail) {
+    match detail {
+        Detail::Full | Detail::NoDescriptions => body.extend(card.referent.iter().cloned()),
+        Detail::NoArguments => body.extend(without_disclosures(&card.referent)),
+        Detail::Minimal => {}
+    }
+    body.push(plain_text(&card.question, json!({"weight": "Bolder"})));
+    if let Some(facts) = card.facts.as_deref() {
+        body.push(plain_text(
+            facts,
+            json!({"isSubtle": true, "size": "Small"}),
+        ));
+    }
+}
+
+/// The elements without what only opens on a click, and without the toggles.
+fn without_disclosures(elements: &[Value]) -> Vec<Value> {
+    elements
+        .iter()
+        .filter(|element| {
+            let toggles = element["type"] == "ActionSet"
+                && element["actions"].as_array().is_some_and(|actions| {
+                    actions
+                        .iter()
+                        .all(|action| action["type"] == "Action.ToggleVisibility")
+                });
+            !toggles && element["isVisible"] != json!(false)
+        })
+        .map(|element| {
+            let mut element = element.clone();
+            for key in ["items", "columns"] {
+                if let Some(children) = element[key].as_array() {
+                    element[key] = json!(without_disclosures(children));
+                }
+            }
+            element
+        })
+        .collect()
+}
+
+fn choice_set(index: usize, approve: &str, deny: &str, lang: Lang) -> Value {
+    json!({
+        "type": "Input.ChoiceSet",
+        "id": input_id(index),
+        "style": "expanded",
+        "isRequired": true,
+        "errorMessage": Msg::ChooseApproveOrDeny.text(lang),
+        "choices": [
+            {"title": approve, "value": "approve"},
+            {"title": deny, "value": "reject"},
+        ],
+    })
 }
 
 /// The two answers to an item with their button styles. A reminder question
@@ -413,6 +603,33 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str, la
     adaptive_card(body, Vec::new())
 }
 
+/// The decided card once the calls ran: under each decision, how its call
+/// ended, as the web's trace row says it.
+pub fn decided_card_with_results(
+    decisions: &[(String, ApprovalChoice)],
+    decided_by: &str,
+    lang: Lang,
+    results: &[Option<ResultRow>],
+) -> Value {
+    let mut body = Vec::new();
+    for (index, (name, choice)) in decisions.iter().enumerate() {
+        let mut line = plain_text(&choice.decided(name, decided_by, lang), json!({}));
+        if index > 0 {
+            line["separator"] = json!(true);
+        }
+        body.push(line);
+        if let Some(Some(row)) = results.get(index) {
+            body.extend(row.elements.iter().cloned());
+        }
+    }
+    let card = adaptive_card(body, Vec::new());
+    if card_fits(&card) {
+        card
+    } else {
+        decided_card(decisions, decided_by, lang)
+    }
+}
+
 /// Notification and preview text: the card heading, plus what the card body
 /// would otherwise have said. A task plan's items are all `delegate_task`, so
 /// only tool approvals name their tool.
@@ -423,6 +640,11 @@ pub fn approval_summary(set: &PendingApprovalSet, app_name: &str, lang: Lang) ->
         }
         (_, [item]) if item.own_tool => {
             format!("{}: {}", heading(set, app_name, lang), item.ask(lang).0)
+        }
+        (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item])
+            if item.web_card().is_some() =>
+        {
+            format!("{}: {}", heading(set, app_name, lang), item.summary())
         }
         (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
             Msg::ApprovalSummary.fill(lang, &[("tool", item.display_name())])
@@ -556,6 +778,7 @@ mod tests {
                     input: json!({"n": index}),
                     own_tool: false,
                     budget: false,
+                    ..Default::default()
                 })
                 .collect(),
         }
@@ -597,6 +820,7 @@ mod tests {
                 input: json!({"reminder_id": "0b9f3c1e-0000-4000-8000-000000000001"}),
                 own_tool: true,
                 budget: false,
+                ..Default::default()
             }],
         }
     }
@@ -818,6 +1042,7 @@ mod tests {
             input: json!({"budget": 4}),
             own_tool: false,
             budget: true,
+            ..Default::default()
         };
         let alone = PendingApprovalSet {
             message_id: "m-1".into(),
@@ -851,6 +1076,7 @@ mod tests {
             input: json!({}),
             own_tool: false,
             budget: false,
+            ..Default::default()
         });
         let card = approval_card(&with_task, "Erato", Lang::En);
         let all = texts(&card);
@@ -996,6 +1222,169 @@ mod tests {
             let submit = ApprovalSubmit::from_value(&submitted(&card, 1, json!({}))).unwrap();
             assert_eq!(submit.decisions().unwrap().len(), count);
         }
+    }
+
+    fn web_card(emphasis: &str) -> ApprovalItemCard {
+        serde_json::from_value(json!({
+            "kind": "gist",
+            "summary": "Update record Line 4 Retrofit",
+            "referent": [
+                {"type": "RichTextBlock", "inlines": [{"type": "TextRun", "text": "Dynamics 365"}]},
+                {"type": "ActionSet", "actions": [
+                    {"type": "Action.ToggleVisibility", "title": "See 2 more", "targetElements": ["i0ar1"]},
+                ]},
+                {"type": "Container", "id": "i0ar1", "isVisible": false, "items": [
+                    {"type": "RichTextBlock", "inlines": [{"type": "TextRun", "text": "hidden row"}]},
+                ]},
+            ],
+            "question": "Run this action in Dynamics 365?",
+            "facts": "This tool may send data to an external service.",
+            "emphasis": emphasis,
+            "details": [
+                {"type": "ActionSet", "actions": [
+                    {"type": "Action.ToggleVisibility", "title": "Technical details", "targetElements": ["i0dr1"]},
+                ]},
+                {"type": "Container", "id": "i0dr1", "isVisible": false, "items": []},
+            ],
+            "allowOnce": "Allow once",
+            "deny": "Deny",
+            "locale": "en",
+        }))
+        .unwrap()
+    }
+
+    fn web_set(emphasis: &str) -> PendingApprovalSet {
+        let mut set = set(1);
+        set.items[0].tool_call_id = Some("call-0".into());
+        set.items[0].card = Some(web_card(emphasis));
+        set
+    }
+
+    /// A call with a label reads as the web's card: no raw input, the web's
+    /// question and words, and the summary for the decided card.
+    #[test]
+    fn a_labelled_call_reads_as_the_web_card() {
+        let card = approval_card(&web_set("filled"), "Erato", Lang::En);
+        let text = card.to_string();
+        assert_eq!(
+            texts(&card),
+            [
+                "Approval needed",
+                "Dynamics 365",
+                "Run this action in Dynamics 365?",
+                "This tool may send data to an external service.",
+            ]
+        );
+        assert!(!text.contains("Monospace"), "raw input shown: {text}");
+        assert!(text.contains("Technical details"));
+        assert_eq!(action_titles(&card), ["Allow once", "Deny"]);
+        let actions = &card["content"]["actions"];
+        assert_eq!(actions[0]["style"], "positive");
+        assert_eq!(actions[1]["style"], "default");
+        assert_eq!(
+            actions[0]["data"]["display_names"],
+            json!(["Update record Line 4 Retrofit"])
+        );
+        assert_eq!(actions[0]["data"]["tool_call_ids"], json!(["call-0"]));
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 0, json!({}))).unwrap();
+        assert_eq!(submit.tool_call_ids, ["call-0"]);
+        assert_eq!(
+            approval_summary(&web_set("filled"), "Erato", Lang::En),
+            "Approval needed: Update record Line 4 Retrofit"
+        );
+    }
+
+    #[test]
+    fn allow_once_follows_what_the_card_asks_to_check() {
+        let style = |emphasis| {
+            approval_card(&web_set(emphasis), "Erato", Lang::En)["content"]["actions"][0]["style"]
+                .clone()
+        };
+        assert_eq!(style("plain"), "default");
+        assert_eq!(style("loss"), "destructive");
+    }
+
+    #[test]
+    fn a_card_too_large_gives_up_the_closed_parts_first() {
+        let set = web_set("filled");
+        let card = &set.items[0].card.as_ref().unwrap();
+        let mut body = Vec::new();
+        push_web_card(&mut body, card, Detail::NoArguments);
+        let text = json!(body).to_string();
+        assert!(!text.contains("hidden row"), "{text}");
+        assert!(!text.contains("See 2 more"), "{text}");
+        assert!(text.contains("Run this action in Dynamics 365?"));
+        let mut minimal = Vec::new();
+        push_web_card(&mut minimal, card, Detail::Minimal);
+        assert!(!json!(minimal).to_string().contains("Dynamics 365\""));
+    }
+
+    #[test]
+    fn the_decided_card_shows_how_an_approved_call_ended() {
+        let row: ResultRow = serde_json::from_value(json!({
+            "elements": [{"type": "RichTextBlock", "inlines": [{"type": "TextRun", "text": "Updated record Line 4 Retrofit"}]}],
+            "locale": "en",
+        }))
+        .unwrap();
+        let decisions = [
+            (
+                "Update record Line 4 Retrofit".to_string(),
+                ApprovalChoice::Approve,
+            ),
+            ("Delete page Notes".to_string(), ApprovalChoice::Reject),
+        ];
+        let card = decided_card_with_results(&decisions, "you", Lang::En, &[Some(row), None]);
+        assert_eq!(
+            texts(&card),
+            [
+                "Update record Line 4 Retrofit was approved by you.",
+                "Updated record Line 4 Retrofit",
+                "Delete page Notes was denied by you.",
+            ]
+        );
+    }
+
+    /// The real renderer, end to end: a stored label becomes the web's card.
+    #[tokio::test]
+    async fn render_cards_draws_a_fixture_call_as_the_web_does() {
+        #[derive(serde::Deserialize)]
+        struct Call {
+            id: String,
+            tool_name: String,
+            server_id: String,
+            input: Value,
+            display: ToolDisplayMetadata,
+        }
+        let calls: Vec<Call> = serde_json::from_value(
+            serde_json::from_str::<Value>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/calls.json"
+            )))
+            .unwrap()["calls"]
+                .clone(),
+        )
+        .unwrap();
+        let call = calls
+            .into_iter()
+            .find(|call| call.id == "update-06-many-fields")
+            .unwrap();
+        let mut set = set(1);
+        set.items[0] = PendingApprovalItem {
+            approval_id: "call-1".into(),
+            tool_name: call.tool_name,
+            input: call.input,
+            server_id: call.server_id,
+            metadata: Some(call.display),
+            tool_call_id: Some("call-1".into()),
+            ..Default::default()
+        };
+        render_cards(&mut set, Lang::De).await;
+        let card = approval_card(&set, "Erato", Lang::De);
+        let text = card.to_string();
+        assert!(text.contains("Aktion in Dynamics 365 ausführen?"), "{text}");
+        assert!(text.contains("Line 4 Retrofit"), "{text}");
+        assert!(!text.contains("Monospace"), "raw input shown: {text}");
+        assert!(card_fits(&card));
     }
 
     #[test]

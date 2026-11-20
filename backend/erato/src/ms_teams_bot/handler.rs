@@ -29,7 +29,7 @@ use chrono_tz::Tz;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -346,6 +346,7 @@ async fn on_approval(
         Err(error) => return target.send_text(&approval_error_text(error, lang)).await,
     };
     // Replace the card so it cannot be answered twice.
+    let mut decided = None;
     if let Some(card_activity_id) = activity.reply_to_id.as_deref() {
         let named: Vec<(String, cards::ApprovalChoice)> = decisions
             .iter()
@@ -370,10 +371,86 @@ async fn on_approval(
         if let Err(error) = target.update(card_activity_id, update).await {
             tracing::debug!(%error, "Could not replace the decided approval card");
         }
+        decided = Some((
+            card_activity_id.to_string(),
+            named,
+            decided_by.to_string(),
+            summary,
+        ));
     }
     let stream = stream_for(bot, target, activity.conversation_kind());
     let request = host.request_for_assistant(message_id).await?;
-    render_generation(bot, host, target, &user.session, updates, stream, request).await
+    // Keep the turn's completion to show on the decided card how each
+    // approved call ended, as the web's trace rows do.
+    let wanted = decided.is_some()
+        && submit
+            .tool_call_ids
+            .iter()
+            .zip(&decisions)
+            .any(|(id, (_, choice))| !id.is_empty() && *choice == cards::ApprovalChoice::Approve);
+    let (updates, completion) = if wanted {
+        keep_completion(updates)
+    } else {
+        (updates, Arc::new(Mutex::new(None)))
+    };
+    let rendered =
+        render_generation(bot, host, target, &user.session, updates, stream, request).await;
+    let completion = completion.lock().ok().and_then(|mut kept| kept.take());
+    if let (Some((card_activity_id, named, decided_by, summary)), Some(completion)) =
+        (decided, completion)
+    {
+        let approved: Vec<String> = submit
+            .tool_call_ids
+            .iter()
+            .zip(&decisions)
+            .map(|(id, (_, choice))| {
+                if *choice == cards::ApprovalChoice::Approve {
+                    id.clone()
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
+        let results = Box::pin(cards::render_results(
+            &completion.tool_uses,
+            &approved,
+            lang,
+        ))
+        .await;
+        if results.iter().any(Option::is_some) {
+            let card = cards::decided_card_with_results(&named, &decided_by, lang, &results);
+            let update = render::card_message(card, &summary);
+            if let Err(error) = target.update(&card_activity_id, update).await {
+                tracing::debug!(%error, "Could not show results on the decided approval card");
+            }
+        }
+    }
+    rendered
+}
+
+/// Passes every update on, keeping the completion for after the turn.
+fn keep_completion(
+    mut updates: mpsc::Receiver<GenerationUpdate>,
+) -> (
+    mpsc::Receiver<GenerationUpdate>,
+    Arc<Mutex<Option<Completion>>>,
+) {
+    let kept = Arc::new(Mutex::new(None));
+    let (sender, receiver) = mpsc::channel(updates.max_capacity().max(1));
+    let keep = kept.clone();
+    tokio::spawn(async move {
+        while let Some(update) = updates.recv().await {
+            if let GenerationUpdate::Completed(done) = &update
+                && let Ok(mut kept) = keep.lock()
+            {
+                *kept = Some(done.as_ref().clone());
+            }
+            if sender.send(update).await.is_err() {
+                break;
+            }
+        }
+    });
+    (receiver, kept)
 }
 
 /// The reply to an approval answer that did not continue the response.
@@ -1587,7 +1664,7 @@ async fn render_generation(
                         }
                     }
                     GenerationUpdate::Status(status) => stream.informative(&status).await,
-                    GenerationUpdate::Completed(done) => completion = Some(done),
+                    GenerationUpdate::Completed(done) => completion = Some(*done),
                     GenerationUpdate::Failed(message) => failure = Some(message),
                     GenerationUpdate::UserMessageSaved(_) | GenerationUpdate::ToolStarted => {}
                 }
@@ -1832,8 +1909,11 @@ async fn send_approval_card(
     set: &cards::PendingApprovalSet,
     app_name: &str,
 ) -> Result<(), Report> {
-    let card = cards::approval_card(set, app_name, target.lang);
-    let summary = cards::approval_summary(set, app_name, target.lang);
+    let mut set = set.clone();
+    // Boxed: this is awaited inside the turn's own large future.
+    Box::pin(cards::render_cards(&mut set, target.lang)).await;
+    let card = cards::approval_card(&set, app_name, target.lang);
+    let summary = cards::approval_summary(&set, app_name, target.lang);
     target.send(&render::card_message(card, &summary)).await?;
     Ok(())
 }
@@ -2093,6 +2173,7 @@ mod tests {
             needs_client: false,
             reminders: Default::default(),
             client_tasks: Vec::new(),
+            tool_uses: Vec::new(),
         }
     }
 
@@ -2310,6 +2391,7 @@ mod tests {
                 input: json!({}),
                 own_tool: false,
                 budget: false,
+                ..Default::default()
             }],
         });
         assert_eq!(

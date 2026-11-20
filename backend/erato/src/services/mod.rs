@@ -1,3 +1,4 @@
+pub mod adaptive_cards;
 pub(crate) mod approval_change_requests;
 pub mod approval_scope;
 pub mod approval_voice_commands;

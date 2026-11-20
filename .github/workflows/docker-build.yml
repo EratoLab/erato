@@ -222,6 +222,11 @@ jobs:
         if: success() || failure()
         run: pnpm run i18n:compile
 
+      - name: "Adaptive card bundle is up-to-date"
+        working-directory: ./frontend
+        if: success() || failure()
+        run: pnpm run check:adaptive-cards
+
       - name: "Frontend lint"
         working-directory: ./frontend
         if: success() || failure()

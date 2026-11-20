@@ -60,7 +60,7 @@ pub enum GenerationUpdate {
     Text(String),
     /// User-facing phase or tool progress, without arguments or raw reasoning.
     Status(String),
-    Completed(Completion),
+    Completed(Box<Completion>),
     Failed(String),
 }
 
@@ -81,6 +81,8 @@ pub struct Completion {
     /// The turn's tasks that needed a client tool, which a turn sent from
     /// Teams never has.
     pub client_tasks: Vec<ClientTask>,
+    /// The turn's tool calls as they ended, for the decided cards' results.
+    pub tool_uses: Vec<crate::models::message::ToolUse>,
 }
 
 #[derive(Default)]
@@ -943,9 +945,9 @@ fn translate(
                     message_id,
                     content,
                     ..
-                }) => GenerationUpdate::Completed(completion_from_content(
+                }) => GenerationUpdate::Completed(Box::new(completion_from_content(
                     &facets, chat_id, message_id, &content,
-                )),
+                ))),
                 Ok(StreamingEvent::Error { error }) => {
                     GenerationUpdate::Failed(error_message(error.as_ref(), lang))
                 }
@@ -1048,19 +1050,27 @@ fn completion_from_content(
                             approval_id: item.approval_id,
                             tool_name: child.tool_name,
                             source: approval_source(child.display.as_ref(), &child.mcp_server_id),
+                            metadata: child.display.clone(),
                             display: child.display.map(approval_display),
                             input: child.input,
-                            own_tool: false,
-                            budget: false,
+                            server_id: child.mcp_server_id,
+                            // The call runs in the task's own chat.
+                            tool_call_id: None,
+                            ..Default::default()
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: item.tool_name,
                             source: approval_source(item.display.as_ref(), &request.mcp_server_id),
+                            metadata: item.display.clone(),
                             display: item.display.map(approval_display),
                             input: item.input,
                             own_tool: request.kind == ToolApprovalKind::BuiltinTool,
                             budget: request.kind == ToolApprovalKind::ToolCallLimit,
+                            server_id: request.mcp_server_id.clone(),
+                            tool_call_id: (request.kind == ToolApprovalKind::McpTool)
+                                .then_some(item.tool_call_id),
+                            card: None,
                         },
                     })
                     .collect(),
@@ -1088,6 +1098,13 @@ fn completion_from_content(
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
         reminders: super::reminders::turn_reminders(content),
         client_tasks: tasks_without_client(facets, content),
+        tool_uses: content
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::ToolUse(tool_use) => Some(tool_use.clone()),
+                _ => None,
+            })
+            .collect(),
     }
 }
 
