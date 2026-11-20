@@ -636,11 +636,22 @@ type ChatContextHook = () => Record<string, unknown>;
 export const chatHooksFrom = (useChatContext: ChatContextHook) => {
   const useMessages = () =>
     (useChatContext().messages ?? {}) as Record<string, unknown>;
+  // One session per described chat, as the real provider keeps it while only
+  // the transcript changes; the pane's handlers and edit context key on it.
+  const sessions = new WeakMap<object, Record<string, unknown>>();
+  const useChatSession = () => {
+    const context = useChatContext();
+    let session = sessions.get(context);
+    if (!session) {
+      const transcript = context;
+      session = { ...context, getTranscript: () => transcript };
+      sessions.set(context, session);
+    }
+    return session;
+  };
   return {
-    useChatSession: () => {
-      const context = useChatContext();
-      return { ...context, getTranscript: () => context };
-    },
+    useChatSession,
+    useOptionalChatSession: useChatSession,
     useChatTranscript: useChatContext,
     useConversationMessage: (messageId?: string) => {
       const messages = useMessages();
@@ -657,7 +668,7 @@ export const chatHooksFrom = (useChatContext: ChatContextHook) => {
  * defaults with `overrides` spread over them. The spread is shallow, so an
  * override replaces a default outright rather than merging into it. A
  * `useChatContext` override also backs the narrower chat hooks, and a
- * `ChatContext` override is what the real chat providers fill.
+ * test's own `ChatContext` override is what the mocked chat providers fill.
  */
 export const createEratoLibraryMock = (
   overrides: Record<string, unknown> = {},

@@ -21,8 +21,9 @@ import {
   transformEmailFencesForCopy,
   useActiveModelSelection,
   useChatCanEdit,
-  useChatContext,
   useChatHeader,
+  useChatSession,
+  useChatTranscript,
   useConversationDropzone,
   useFileCapabilitiesContext,
   useFileUploadStore,
@@ -36,6 +37,7 @@ import {
   useUploadFeature,
   type ActionFacetRequest,
   type AssistantMention,
+  type ChatContextValue,
   type ChatInputControlsHandle,
   type ChatMessageProps,
   type DelegatedRunsSectionProps,
@@ -152,15 +154,15 @@ export interface AddinChatController {
     clearQueuedMessage: () => void;
   };
   hostCallbacksRef: MutableRefObject<AddinChatHostCallbacks>;
-  messages: ReturnType<typeof useChatContext>["messages"];
+  messages: ChatContextValue["messages"];
   messageOrder: string[];
   modelSwitches: ReturnType<typeof useModelSwitches>;
   isMessagingLoading: boolean;
   isPendingResponse: boolean;
-  chats: ReturnType<typeof useChatContext>["chats"];
+  chats: ChatContextValue["chats"];
   currentChatId: string | null;
-  createNewChat: ReturnType<typeof useChatContext>["createNewChat"];
-  refetchHistory: ReturnType<typeof useChatContext>["refetchHistory"];
+  createNewChat: ChatContextValue["createNewChat"];
+  refetchHistory: ChatContextValue["refetchHistory"];
   profile: ReturnType<typeof useProfile>["profile"];
   acceptedFileTypes: ReturnType<typeof getSupportedFileTypes>;
   availableModels: ReturnType<
@@ -281,7 +283,11 @@ function useAddinChatController({
     [],
   );
 
-  const chat = useChatContext();
+  // The session keeps its identity while a reply streams, so the handlers
+  // built on it, and the edit context, do too; handlers read the messages
+  // through getTranscript.
+  const chat = useChatSession();
+  const { messages, messageOrder } = useChatTranscript();
   const { profile } = useProfile();
   const { capabilities } = useFileCapabilitiesContext();
   // In the pane a chat opens through the session controller, the same path
@@ -309,8 +315,8 @@ function useAddinChatController({
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: chat.currentChatLastModel });
   const modelSwitches = useModelSwitches(
-    chat.messages,
-    chat.messageOrder,
+    messages,
+    messageOrder,
     availableModels,
   );
   const acceptedFileTypes = useMemo(
@@ -450,7 +456,9 @@ function useAddinChatController({
       userMessageId: string | undefined,
       overrides?: Partial<AddinRerunRequest>,
     ): AddinRerunRequest | undefined => {
-      const original = userMessageId ? chat.messages[userMessageId] : undefined;
+      const original = userMessageId
+        ? chat.getTranscript().messages[userMessageId]
+        : undefined;
       if (!original || original.role !== "user") return undefined;
       return {
         message: extractTextFromContent(original.content),
@@ -459,7 +467,7 @@ function useAddinChatController({
         ...overrides,
       };
     },
-    [chat.messages],
+    [chat],
   );
   const handleEditSubmit = useCallback(
     (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
@@ -520,7 +528,10 @@ function useAddinChatController({
     (assistantMessageId: string) => {
       if (chat.isPendingResponse) return;
       rerun(
-        rerunRequest(chat.messages[assistantMessageId]?.previous_message_id),
+        rerunRequest(
+          chat.getTranscript().messages[assistantMessageId]
+            ?.previous_message_id,
+        ),
         () => hostCallbacksRef.current.beforeRegenerate?.(assistantMessageId),
         (actionFacet) =>
           void chat.regenerateMessage(
@@ -551,7 +562,9 @@ function useAddinChatController({
     async (action: MessageAction): Promise<boolean> => {
       if (action.type !== "copy") return false;
       const textContent = transformEmailFencesForCopy(
-        extractTextFromContent(chat.messages[action.messageId]?.content),
+        extractTextFromContent(
+          chat.getTranscript().messages[action.messageId]?.content,
+        ),
       );
       if (!textContent) return false;
       try {
@@ -576,10 +589,10 @@ function useAddinChatController({
         }
       }
     },
-    [chat.messages],
+    [chat],
   );
   const standardMessageActionHandler = useStandardMessageActions({
-    messages: chat.messages,
+    messages,
     onBeginEdit: setEditingMessageId,
     handleRegenerate,
     handleFeedbackSubmit: feedback.handleFeedbackSubmit,
@@ -617,8 +630,8 @@ function useAddinChatController({
     rerunPreparationRef,
     chatInputControls,
     hostCallbacksRef,
-    messages: chat.messages,
-    messageOrder: chat.messageOrder,
+    messages,
+    messageOrder,
     modelSwitches,
     isMessagingLoading: chat.isMessagingLoading,
     isPendingResponse: chat.isPendingResponse,

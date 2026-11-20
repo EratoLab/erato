@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { useContext, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { stopWaitingForCall } from "@/lib/clientOperations/stopWaiting";
-import { ChatContext } from "@/providers/ChatProvider";
+import { useOptionalChatSession } from "@/providers/ChatProvider";
 
 import { Button } from "../Controls/Button";
 
@@ -35,7 +35,7 @@ export const StopWaitingAction = ({
   /** Called with the attempt once its wait is stopped or found ended. */
   onWaitOver?: (attemptId: string) => void;
 }) => {
-  const refetchMessages = useContext(ChatContext)?.refetchMessages;
+  const refetchMessages = useOptionalChatSession()?.refetchMessages;
   const [stop, setStop] = useState<{
     attemptId: string;
     state: StopState;

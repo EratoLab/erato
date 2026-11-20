@@ -3,10 +3,13 @@ import { memo, useContext } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  ChatContext,
   ChatContextProviders,
+  ChatSessionContext,
+  useChatContext,
   useChatSession,
   useChatTranscript,
+  useChatTranscriptSelector,
+  useOptionalChatSession,
 } from "@/providers/ChatProvider";
 
 import type {
@@ -45,12 +48,14 @@ const valueFor = (
   }) as unknown as ChatContextValue;
 
 function renderProviders(initial: ChatContextValue) {
-  const renders = { session: 0, transcript: 0, legacy: 0 };
+  const renders = { session: 0, transcript: 0, whole: 0, selected: 0 };
   const seen: {
     session?: ChatSessionValue;
     transcript?: ChatTranscriptValue;
-    legacy?: ChatContextValue | null;
-  } = {};
+    whole?: ChatContextValue;
+    selected?: number;
+    pairs: [string | null, Messages][];
+  } = { pairs: [] };
   const SessionReader = memo(function SessionReader() {
     renders.session += 1;
     seen.session = useChatSession();
@@ -61,16 +66,31 @@ function renderProviders(initial: ChatContextValue) {
     seen.transcript = useChatTranscript();
     return null;
   });
-  const LegacyReader = memo(function LegacyReader() {
-    renders.legacy += 1;
-    seen.legacy = useContext(ChatContext);
+  const WholeReader = memo(function WholeReader() {
+    renders.whole += 1;
+    seen.whole = useChatContext();
+    return null;
+  });
+  const SelectingReader = memo(function SelectingReader() {
+    renders.selected += 1;
+    seen.selected = useChatTranscriptSelector(
+      (transcript) => transcript?.messageOrder.length ?? -1,
+    );
+    return null;
+  });
+  const PairReader = memo(function PairReader() {
+    const { currentChatId } = useChatSession();
+    const { messages } = useChatTranscript();
+    seen.pairs.push([currentChatId, messages]);
     return null;
   });
   const tree = (value: ChatContextValue) => (
     <ChatContextProviders value={value}>
       <SessionReader />
       <TranscriptReader />
-      <LegacyReader />
+      <WholeReader />
+      <SelectingReader />
+      <PairReader />
     </ChatContextProviders>
   );
   const view = render(tree(initial));
@@ -91,10 +111,16 @@ describe("ChatContextProviders", () => {
     const latest = valueFor({ reply: reply("Hello") });
     update(latest);
 
-    expect(renders).toEqual({ session: 1, transcript: 2, legacy: 2 });
+    expect(renders).toEqual({
+      session: 1,
+      transcript: 2,
+      whole: 2,
+      selected: 1,
+    });
     expect(seen.session).toBe(session);
     expect(seen.transcript?.messages).toBe(latest.messages);
-    expect(seen.legacy).toBe(latest);
+    expect(seen.whole).toBe(latest);
+    expect(seen.selected).toBe(1);
     expect(seen.session?.getTranscript().messages).toBe(latest.messages);
     expect(seen.session?.sendMessage).toBe(sendMessage);
   });
@@ -125,5 +151,72 @@ describe("ChatContextProviders", () => {
     );
     expect(seen.session?.hasMessages).toBe(true);
     expect(seen.session?.isLastMessageBlockedByPromptInjection).toBe(true);
+  });
+
+  it("hands a chat switch to session and transcript readers in the same render", () => {
+    const first = { reply: reply("Old chat") };
+    const { seen, update } = renderProviders(valueFor(first));
+
+    const second = { reply: reply("New chat") };
+    update(valueFor(second, { currentChatId: "chat-2" }));
+
+    expect(seen.pairs).toEqual([
+      ["chat-1", first],
+      ["chat-2", second],
+    ]);
+  });
+
+  it("re-renders a selecting reader only when what it selects changes", () => {
+    const { renders, seen, update } = renderProviders(
+      valueFor({ reply: reply("Hel") }),
+    );
+
+    update(valueFor({ reply: reply("Hello") }));
+    expect(renders.selected).toBe(1);
+
+    update(
+      valueFor({
+        question: { ...reply("Why?"), id: "question", role: "user" },
+        reply: reply("Hello"),
+      }),
+    );
+    expect(renders.selected).toBe(2);
+    expect(seen.selected).toBe(2);
+  });
+
+  it("reads nothing outside a chat provider", () => {
+    const seen: { session?: unknown; selected?: unknown } = {};
+    function Reader() {
+      seen.session = useOptionalChatSession();
+      seen.selected = useChatTranscriptSelector((transcript) => transcript);
+      return null;
+    }
+    render(<Reader />);
+
+    expect(seen).toEqual({ session: null, selected: null });
+  });
+
+  it("fills the session context for readers outside the hooks", () => {
+    const seen: unknown[] = [];
+    const ContextReader = memo(function ContextReader() {
+      seen.push(useContext(ChatSessionContext));
+      return null;
+    });
+    let hookSession: unknown;
+    function HookReader() {
+      hookSession = useChatSession();
+      return null;
+    }
+    const tree = (value: ChatContextValue) => (
+      <ChatContextProviders value={value}>
+        <ContextReader />
+        <HookReader />
+      </ChatContextProviders>
+    );
+    const view = render(tree(valueFor({ reply: reply("Hel") })));
+    view.rerender(tree(valueFor({ reply: reply("Hello") })));
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(hookSession);
   });
 });

@@ -21,8 +21,9 @@ import {
 import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { chatDetailQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
-import { ChatContext } from "@/providers/ChatProvider";
+import { ChatContextProviders } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { testChatValue } from "@/test/chatContextValue";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
@@ -2782,13 +2783,9 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     const reviewEnded = markAwaitingReview("chat");
     try {
       renderWithQueryClient(
-        <ChatContext.Provider
-          value={
-            { currentChatId: "chat" } as React.ContextType<typeof ChatContext>
-          }
-        >
+        <ChatContextProviders value={testChatValue({ currentChatId: "chat" })}>
           <MessageContent messageId="message-1" content={[pending]} />
-        </ChatContext.Provider>,
+        </ChatContextProviders>,
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Ready for review in the Erato desktop app",
@@ -2884,20 +2881,18 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
     );
     return renderWithTheme(
       <QueryClientProvider client={queryClient}>
-        <ChatContext.Provider
-          value={
-            {
-              currentChatId: "task-chat",
-              refetchMessages: async () => undefined,
-            } as unknown as React.ContextType<typeof ChatContext>
-          }
+        <ChatContextProviders
+          value={testChatValue({
+            currentChatId: "task-chat",
+            refetchMessages: async () => undefined,
+          })}
         >
           <MessageContent
             messageId="task-message"
             content={[pending]}
             readOnly={readOnly}
           />
-        </ChatContext.Provider>
+        </ChatContextProviders>
       </QueryClientProvider>,
     );
   };

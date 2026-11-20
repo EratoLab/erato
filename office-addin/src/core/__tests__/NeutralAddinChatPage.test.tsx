@@ -117,9 +117,8 @@ vi.mock("@erato/frontend/library", async () => {
   // host-neutral file; a test-only stub set is neither.
   // eslint-disable-next-line import/no-restricted-paths
   const mock = await import("../../test/helpers/eratoLibraryMock");
-  // Real context + throwing reader mirror the library, so these tests only
-  // pass when AddinChatProviderCore actually provides the value AddinChatCore
-  // consumes.
+  // A test-local context and a throwing reader, so these tests only pass when
+  // AddinChatProviderCore actually provides the value AddinChatCore consumes.
   const ChatContext = createContext<ChatContextValue | null>(null);
 
   return mock.createEratoLibraryMock({

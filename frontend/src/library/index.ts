@@ -415,13 +415,12 @@ export {
 } from "@/providers/FileCapabilitiesProvider";
 export {
   ChatProvider,
-  ChatContext,
   ChatContextProviders,
-  ChatSessionContext,
-  ChatTranscriptContext,
   useChatContext,
   useChatSession,
   useChatTranscript,
+  useChatTranscriptSelector,
+  useOptionalChatSession,
   type ChatContextValue,
   type ChatSessionValue,
   type ChatTranscriptValue,
