@@ -20,23 +20,81 @@ pub trait WordLists: Default {
     fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>>;
 }
 
+/// The entries of `place` by language. A key that is not a lowercase
+/// language tag (`pt-br`, not `pt-BR`) is dropped with a warning: lookups
+/// compare lowercase tags.
+fn language_entries(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> Vec<(String, Written)> {
+    written_table(place, written, dropped)
+        .into_iter()
+        .filter(|(language, _)| {
+            let tag = is_language_tag(language) && *language == language.to_ascii_lowercase();
+            if !tag {
+                dropped.push(format!(
+                    "{place}: '{}' is not a lowercase language tag such as `de` and is ignored",
+                    shown(language)
+                ));
+            }
+            tag
+        })
+        .collect()
+}
+
+/// The word lists of `place` by language, each checked as [`word_list`]
+/// checks it.
+pub(crate) fn language_word_lists(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> HashMap<String, Vec<String>> {
+    language_entries(place, written, dropped)
+        .into_iter()
+        .map(|(language, value)| {
+            let words = word_list(&format!("{place}.{language}"), value, dropped);
+            (language, words)
+        })
+        .collect()
+}
+
+const HESITATIONS_PLACE: &str = "audio_conversational.hesitations";
+
+/// Reads `audio_conversational.hesitations` leaving out every wrong part;
+/// [`misshaped_hesitations`] names them.
+pub fn deserialize_hesitations<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<HashMap<String, Vec<String>>, D::Error> {
+    use serde::Deserialize;
+    Ok(language_word_lists(
+        HESITATIONS_PLACE,
+        Written::deserialize(deserializer)?,
+        &mut Vec::new(),
+    ))
+}
+
+/// The parts of `audio_conversational.hesitations` the loader leaves out,
+/// sorted.
+pub fn misshaped_hesitations(schema: &config::Config) -> Vec<String> {
+    let mut dropped = Vec::new();
+    if let Ok(written) = schema.get::<Written>(HESITATIONS_PLACE) {
+        language_word_lists(HESITATIONS_PLACE, written, &mut dropped);
+    }
+    dropped.sort();
+    dropped
+}
+
 /// The tables of `place` by language. A key that is not a lowercase
-/// language tag (`pt-br`, not `pt-BR`), or a language that is not a table,
-/// is dropped with a warning: lookups compare lowercase tags.
+/// language tag, or a language that is not a table, is dropped with a
+/// warning.
 pub(crate) fn language_tables(
     place: &str,
     written: Written,
     dropped: &mut Vec<String>,
 ) -> Vec<(String, HashMap<String, Written>)> {
     let mut tables = Vec::new();
-    for (language, value) in written_table(place, written, dropped) {
-        if !is_language_tag(&language) || language != language.to_ascii_lowercase() {
-            dropped.push(format!(
-                "{place}: '{}' is not a lowercase language tag such as `de` and is ignored",
-                shown(&language)
-            ));
-            continue;
-        }
+    for (language, value) in language_entries(place, written, dropped) {
         let place = format!("{place}.{language}");
         if !matches!(value, Written::Table(_)) {
             dropped.push(format!("{place} is not a table and is ignored"));

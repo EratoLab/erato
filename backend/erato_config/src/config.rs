@@ -1595,6 +1595,7 @@ impl AppConfig {
         warn_misshaped_voice_command_words(&schema);
         warn_misshaped_spoken_readings(&schema);
         warn_misshaped_confirmation_phrases(&schema);
+        warn_misshaped_hesitations(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1620,6 +1621,7 @@ impl AppConfig {
         warn_misshaped_voice_command_words(&schema);
         warn_misshaped_spoken_readings(&schema);
         warn_misshaped_confirmation_phrases(&schema);
+        warn_misshaped_hesitations(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -2574,6 +2576,12 @@ impl AppConfig {
             tracing::warn!("{warning}");
         }
         for warning in config.audio_conversational.drop_unusable_hesitation_words() {
+            tracing::warn!("{warning}");
+        }
+        for warning in config
+            .audio_conversational
+            .drop_unusable_language_hesitations(&config.approval_voice_commands.words)
+        {
             tracing::warn!("{warning}");
         }
         for warning in config
@@ -3587,6 +3595,58 @@ mod audio_config_tests {
         assert!(words.contains(&"euh".to_string()));
         assert!(words.contains(&"ähm".to_string()));
         assert_eq!(words.iter().filter(|word| *word == "äh").count(), 1);
+    }
+
+    #[test]
+    fn hesitations_per_language_hold_only_that_languages_turns() {
+        let mut settings = load_conversational(
+            "hesitation_words = [\"erm\"]\n\
+             [hesitations]\nfr = [\"Euh\", \"bah\", \"ne\", \"pas\", \"Comment\", \"euh bah\", \"42\"]\n\
+             FR = [\"euh\"]\npl = \"yyy\"\n",
+        );
+        let voice_words = crate::voice_command_words::VoiceCommandWordsByLanguage::from([(
+            "fr".to_string(),
+            crate::voice_command_words::VoiceCommandWordLists {
+                negations: vec!["pas".into()],
+                wh_words: vec!["comment".into()],
+                ..Default::default()
+            },
+        )]);
+        let warnings = settings.drop_unusable_language_hesitations(&voice_words);
+        assert_eq!(warnings.len(), 5, "{warnings:?}");
+        for dropped in ["\"ne\"", "\"pas\"", "\"Comment\""] {
+            assert!(
+                warnings.iter().any(|warning| warning.contains(dropped)
+                    && warning.contains("never only a hesitation")),
+                "{dropped}: {warnings:?}"
+            );
+        }
+        assert_eq!(settings.hesitations["fr"], ["euh", "bah"]);
+        let fr = settings.effective_hesitation_words_for("fr-CA");
+        assert!(fr.contains(&"euh".to_string()) && fr.contains(&"erm".to_string()));
+        assert!(fr.contains(&"äh".to_string()));
+        let en = settings.effective_hesitation_words_for("en");
+        assert!(!en.contains(&"euh".to_string()));
+        assert_eq!(en, settings.effective_hesitation_words());
+        let mut misshaped = crate::language_words::misshaped_hesitations(
+            &config::Config::builder()
+                .add_source(config::File::from_str(
+                    "[audio_conversational.hesitations]\nFR = [\"euh\"]\npl = \"yyy\"\n",
+                    config::FileFormat::Toml,
+                ))
+                .build()
+                .unwrap(),
+        );
+        misshaped.sort();
+        assert_eq!(
+            misshaped,
+            [
+                "audio_conversational.hesitations.pl is not a list and is ignored",
+                "audio_conversational.hesitations: 'FR' is not a lowercase language tag such as `de` and is ignored",
+            ]
+        );
+        assert!(settings.hesitations["pl"].is_empty());
+        assert!(!settings.hesitations.contains_key("FR"));
     }
 
     #[test]
@@ -8939,6 +8999,18 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words_replace_base: bool,
+    /// Hesitation sounds per language tag, usually from a content package,
+    /// added to the list above for a user whose interface is in that
+    /// language and for a card in it. Each entry is one word of letters, and
+    /// never a negation, condition or question word of German, English or
+    /// that language; others are dropped with a warning. Defaults to none.
+    #[serde(
+        default,
+        deserialize_with = "crate::language_words::deserialize_hesitations"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub hesitations: HashMap<String, Vec<String>>,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -9018,6 +9090,7 @@ impl Default for AudioConversationalConfig {
             voice_start_max_wait_ms: default_voice_start_max_wait_ms(),
             hesitation_words: Vec::new(),
             hesitation_words_replace_base: false,
+            hesitations: HashMap::new(),
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
@@ -9042,6 +9115,74 @@ impl AudioConversationalConfig {
             }
         }
         words
+    }
+
+    /// The hesitation sounds in use for a user or card in `language` ("fr",
+    /// "fr-CA", …): [`Self::effective_hesitation_words`] and the language's
+    /// own.
+    pub fn effective_hesitation_words_for(&self, language: &str) -> Vec<String> {
+        let mut words = self.effective_hesitation_words();
+        let tag = language.trim().to_ascii_lowercase().replace('_', "-");
+        let primary = tag.split('-').next().unwrap_or_default();
+        let own = self
+            .hesitations
+            .get(&tag)
+            .or_else(|| self.hesitations.get(primary));
+        for word in own.into_iter().flatten() {
+            if !words.contains(word) {
+                words.push(word.clone());
+            }
+        }
+        words
+    }
+
+    /// Drops per-language hesitation entries that are not one word of
+    /// letters, or that are a negation, condition or question word of German,
+    /// English or that language (with the words `voice_words` configures),
+    /// saying so.
+    pub fn drop_unusable_language_hesitations(
+        &mut self,
+        voice_words: &crate::voice_command_words::VoiceCommandWordsByLanguage,
+    ) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for (language, list) in &mut self.hesitations {
+            let primary = language.split('-').next().unwrap_or_default();
+            let guard_words: Vec<String> = ["de", "en", primary, language.as_str()]
+                .iter()
+                .filter_map(|language| voice_words.get(*language))
+                .flat_map(|lists| {
+                    lists
+                        .negations
+                        .iter()
+                        .chain(&lists.conditions)
+                        .chain(&lists.wh_words)
+                })
+                .map(|word| crate::spoken::fold(word.trim()))
+                .collect();
+            list.retain(|word| {
+                let place = format!("`audio_conversational.hesitations.{language}` entry {word:?} dropped");
+                if word.trim().is_empty() || !word.trim().chars().all(char::is_alphabetic) {
+                    warnings.push(format!("{place}: it must be one word of letters."));
+                    return false;
+                }
+                let decides = crate::spoken::decides_meaning(word.trim())
+                    || crate::spoken::decides_meaning_in(word.trim(), |word| {
+                        guard_words.iter().any(|guard| guard == word)
+                    });
+                if decides {
+                    warnings.push(format!(
+                        "{place}: it is a negation, condition or question word, which is never only a hesitation."
+                    ));
+                    return false;
+                }
+                true
+            });
+            for word in list.iter_mut() {
+                *word = word.trim().to_lowercase();
+            }
+        }
+        warnings.sort();
+        warnings
     }
 
     /// Drops hesitation entries that are not one word of letters, saying so:
@@ -9234,6 +9375,12 @@ fn warn_misshaped_number_words(schema: &Config) {
 fn warn_misshaped_voice_command_words(schema: &Config) {
     for dropped in crate::voice_command_words::misshaped_voice_command_words(schema) {
         tracing::warn!("Voice-command word dropped: {dropped}.");
+    }
+}
+
+fn warn_misshaped_hesitations(schema: &Config) {
+    for dropped in crate::language_words::misshaped_hesitations(schema) {
+        tracing::warn!("Hesitation words dropped: {dropped}.");
     }
 }
 

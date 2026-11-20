@@ -133,7 +133,7 @@ pub async fn interpret_approval_voice_command(
                 &app_state
                     .config
                     .audio_conversational
-                    .effective_hesitation_words(),
+                    .effective_hesitation_words_for(&language),
                 words,
             )
         })

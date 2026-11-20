@@ -106,6 +106,7 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS: &str =
     "AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATION_WORDS: &str =
     "AUDIO_CONVERSATIONAL_HESITATION_WORDS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATIONS: &str = "AUDIO_CONVERSATIONAL_HESITATIONS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
@@ -696,6 +697,28 @@ fn build_frontend_environment(
                 .collect(),
         ),
     );
+    // Each language with its own hesitations gets its whole list; any other
+    // uses the list above.
+    if !config.audio_conversational.hesitations.is_empty() {
+        let by_language: serde_json::Map<String, Value> = config
+            .audio_conversational
+            .hesitations
+            .keys()
+            .map(|language| {
+                let words = config
+                    .audio_conversational
+                    .effective_hesitation_words_for(language);
+                (
+                    language.clone(),
+                    Value::Array(words.into_iter().map(Value::String).collect()),
+                )
+            })
+            .collect();
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATIONS.to_string(),
+            Value::Object(by_language),
+        );
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE.to_string(),
         Value::Bool(config.audio_conversational.talk_over_voice),
@@ -1533,6 +1556,30 @@ mod tests {
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS),
                 Some(&Value::Number((silence_ms - 500).into()))
+            );
+        }
+    }
+
+    #[test]
+    fn hesitations_per_language_reach_web_and_office_addin_with_the_shared_list() {
+        let mut config = AppConfig::default();
+        config.audio_conversational.hesitation_words = vec!["erm".into()];
+        config.audio_conversational.hesitation_words_replace_base = true;
+        config.audio_conversational.hesitations =
+            std::collections::HashMap::from([("fr".to_string(), vec!["euh".to_string()])]);
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATIONS),
+                Some(&serde_json::json!({"fr": ["erm", "euh"]}))
+            );
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_HESITATION_WORDS),
+                Some(&serde_json::json!(["erm"]))
             );
         }
     }

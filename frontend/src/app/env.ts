@@ -124,6 +124,11 @@ export type Env = {
   audioConversationalVoiceStartBufferMs?: number;
   audioConversationalVoiceStartMaxWaitMs?: number;
   audioConversationalHesitationWords?: string[];
+  /**
+   * The whole hesitation list of each language that has its own, for a
+   * user whose interface is in it; any other uses the list above.
+   */
+  audioConversationalHesitations?: Partial<Record<string, string[]>>;
   /** The user can speak over the voice, and the voice yields. */
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
@@ -237,6 +242,7 @@ declare global {
     AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS?: number;
     AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS?: number;
     AUDIO_CONVERSATIONAL_HESITATION_WORDS?: string[];
+    AUDIO_CONVERSATIONAL_HESITATIONS?: Partial<Record<string, string[]>>;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
@@ -772,6 +778,7 @@ export const env = (): Env => {
     audioConversationalVoiceStartBufferMs,
     audioConversationalVoiceStartMaxWaitMs,
     audioConversationalHesitationWords,
+    audioConversationalHesitations: window.AUDIO_CONVERSATIONAL_HESITATIONS,
     audioConversationalTalkOverVoice,
     audioConversationalTalkOverVoiceMinSpeechMs,
     maxUploadSizeBytes,

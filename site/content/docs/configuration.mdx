@@ -3109,6 +3109,22 @@ Whether `hesitation_words` replaces the built-in base instead of adding to it. U
 
 **Default:** `false`
 
+#### `audio_conversational.hesitations`
+
+{/* erato_toml_config_key: audio_conversational.hesitations */}
+{/* erato_toml_config_key: audio_conversational.hesitations.<language>.[] */}
+
+Hesitation sounds per language, usually from a content package. They are added to the base and `hesitation_words` for a user whose interface is in that language (the full tag first, then its primary language), and for a card in that language before its [confirmation phrase](#approval_voice_decisionsphrases): a French "euh" holds back a French turn, never an English one. `hesitation_words` and `hesitation_words_replace_base` keep applying to every language.
+
+```toml
+[audio_conversational.hesitations]
+fr = ["euh", "bah"]
+```
+
+The same entries are dropped with a warning as for `hesitation_words`, and so is a negation, condition or question word of German, English or that language's [voice-command words](#approval_voice_commandswords). These sounds are separate from the voice-command `hesitations` and `fillers` of approval cards.
+
+**Type:** table of lists of strings by language tag. **Default:** none.
+
 #### `audio_conversational.talk_over_voice`
 
 {/* erato_toml_config_key: audio_conversational.talk_over_voice */}

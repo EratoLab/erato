@@ -264,3 +264,20 @@ fn only_configured_phrases_are_handed_on_as_shown() {
         ])
     );
 }
+
+#[test]
+fn a_french_hesitation_holds_a_french_card_but_not_an_english_one() {
+    let config = erato_config::config::AudioConversationalConfig {
+        hesitations: std::collections::HashMap::from([("fr".to_string(), strings(&["euh"]))]),
+        ..Default::default()
+    };
+    let (words, _) = built(&[], &[("fr", phrase("Je confirme", &[], &[]))]);
+    let fr = words.for_language("fr");
+    let en = words.for_language("en");
+    let on_fr = config.effective_hesitation_words_for("fr");
+    let on_en = config.effective_hesitation_words_for("en");
+    assert!(match_phrase("Euh, je confirme", &on_fr, fr).is_some());
+    assert!(match_phrase("Euh, I confirm", &on_fr, fr).is_some());
+    assert!(match_phrase("Euh, je confirme", &[], fr).is_none());
+    assert!(match_phrase("Euh, I confirm", &on_en, en).is_none());
+}

@@ -1,3 +1,4 @@
+import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import {
@@ -36,7 +37,10 @@ import {
   noteDictatedTranscript,
   settleDictation,
 } from "@/hooks/audio/dictatedTurns";
-import { hesitationMatcher } from "@/hooks/audio/hesitations";
+import {
+  hesitationMatcher,
+  hesitationWordsFor,
+} from "@/hooks/audio/hesitations";
 import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
@@ -591,13 +595,22 @@ export const ChatInput = ({
     voiceStartBufferMs,
     voiceStartMaxWaitMs,
     hesitationWords,
+    hesitationsByLanguage,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
+  const interfaceLanguage = i18n.locale;
   const isHesitationOnly = useMemo(
-    () => hesitationMatcher(hesitationWords),
-    [hesitationWords],
+    () =>
+      hesitationMatcher(
+        hesitationWordsFor(
+          interfaceLanguage,
+          hesitationWords,
+          hesitationsByLanguage,
+        ),
+      ),
+    [interfaceLanguage, hesitationWords, hesitationsByLanguage],
   );
   useEffect(() => {
     configureVoiceStart({

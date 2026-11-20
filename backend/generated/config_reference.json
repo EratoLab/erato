@@ -1181,6 +1181,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "audio_conversational.hesitations.<language>.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "audio_conversational.initial_backoff_ms": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
