@@ -2,7 +2,7 @@ import {
   useConversationDropzone,
   useUploadFeature,
 } from "@erato/frontend/library";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { WordChatInput } from "./components/WordChatInput";
 import { WordSettingsDialog } from "./components/WordSettingsDialog";
@@ -12,8 +12,24 @@ import { buildWordArtifact } from "./utils/buildWordArtifact";
 import { getWordDocumentIdentity } from "./utils/wordDocumentIdentity";
 import { AddinChatCore, AddinChatCoreView } from "../core/AddinChatCore";
 import { useActionFacetClientActions } from "../core/clientActions/useAvailableActionFacets";
+import { stampHostArtifact } from "../core/hostArtifactStamp";
 
-import type { AddinChatHostProps } from "../core/AddinChatCore";
+import type {
+  AddinChatController,
+  AddinChatHostProps,
+} from "../core/AddinChatCore";
+import type { HostArtifactStamp } from "../core/hostArtifactStamp";
+import type { HostArtifact, Message } from "@erato/frontend/library";
+
+type PaneMessage = AddinChatController["messages"][string];
+
+const withHostArtifact = <M extends Message>(
+  message: M,
+  hostArtifact: HostArtifact,
+): M => ({
+  ...message,
+  hostArtifact,
+});
 
 export function WordAddinChat({ assistantId }: { assistantId?: string } = {}) {
   return <AddinChatCore assistantId={assistantId} Host={WordAddinChatHost} />;
@@ -50,7 +66,9 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     [setDraftMessage],
   );
   const { capturesByAssistantMessageId } = captures;
+  const stampsRef = useRef(new Map<string, HostArtifactStamp<PaneMessage>>());
   const messagesWithArtifact = useMemo(() => {
+    const stamps = new Map<string, HostArtifactStamp<PaneMessage>>();
     let next = messages;
     for (const id of messageOrder) {
       const message = messages[id];
@@ -62,19 +80,30 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
         continue;
       }
       const facetId = messages[message.previous_message_id]?.action_facet_id;
-      const hostArtifact = buildWordArtifact({
-        facetId,
-        clientActionInfo: facetId
-          ? clientActionsByFacetId.get(facetId)
-          : undefined,
-        content: message.content,
-        messageId: id,
-        capture: capturesByAssistantMessageId.get(id),
-      });
-      if (!hostArtifact) continue;
+      const clientActionInfo = facetId
+        ? clientActionsByFacetId.get(facetId)
+        : undefined;
+      const capture = capturesByAssistantMessageId.get(id);
+      const stamp = stampHostArtifact(
+        stampsRef.current.get(id),
+        message,
+        [facetId, clientActionInfo, capture],
+        () =>
+          buildWordArtifact({
+            facetId,
+            clientActionInfo,
+            content: message.content,
+            messageId: id,
+            capture,
+          }),
+        withHostArtifact,
+      );
+      stamps.set(id, stamp);
+      if (stamp.message === message) continue;
       if (next === messages) next = { ...messages };
-      next[id] = { ...message, hostArtifact };
+      next[id] = stamp.message;
     }
+    stampsRef.current = stamps;
     return next;
   }, [
     capturesByAssistantMessageId,
