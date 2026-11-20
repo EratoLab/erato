@@ -1103,12 +1103,15 @@ const BatchPart = ({
   listsMaybeReplaced,
   onlyAdds,
   operationsInHeadline,
+  rows,
 }: {
   batch: ChangeBatch;
   listsMaybeReplaced: boolean;
   onlyAdds: boolean;
   /** The card's headline says the operations already. */
   operationsInHeadline: boolean;
+  /** Whether the rows show; without them, what their fields hold does. */
+  rows: boolean;
 }) => {
   const named = batch.rows
     .filter((row) => row.action === "delete")
@@ -1129,6 +1132,7 @@ const BatchPart = ({
   const rest = listed.slice(MAX_FIRST_VIEW_ROWS);
   const unstored = batch.total - batch.rows.length;
   const rowsInView =
+    rows &&
     !batch.sameChange &&
     unstored === 0 &&
     rest.length === 0 &&
@@ -1179,22 +1183,24 @@ const BatchPart = ({
       ) : (
         <>
           {!rowsInView && (
+            <BatchFields
+              batch={batch}
+              listsMaybeReplaced={listsMaybeReplaced}
+            />
+          )}
+          {rows && (
             <>
-              <BatchFields
-                batch={batch}
-                listsMaybeReplaced={listsMaybeReplaced}
-              />
-              <p className={MUTED}>{batchDifferentLine()}</p>
+              {!rowsInView && <p className={MUTED}>{batchDifferentLine()}</p>}
+              <ul className="space-y-1">
+                {first.map((row) => (
+                  <BatchRow key={row.number} row={row} />
+                ))}
+              </ul>
             </>
           )}
-          <ul className="space-y-1">
-            {first.map((row) => (
-              <BatchRow key={row.number} row={row} />
-            ))}
-          </ul>
         </>
       )}
-      {seeMoreCount > 0 && batch.rows.length > 0 && (
+      {rows && seeMoreCount > 0 && batch.rows.length > 0 && (
         <SeeMore label={batchSeeMore(seeMoreCount)}>
           <ul className="space-y-1">
             {(batch.sameChange ? batch.rows : rest).map((row) => (
@@ -1544,6 +1550,7 @@ export const ToolCallChangeBody = ({
   action,
   replacesText = false,
   values = true,
+  rows = true,
   outside = true,
   summary,
   operationsInHeadline = false,
@@ -1552,6 +1559,11 @@ export const ToolCallChangeBody = ({
   action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
+  /**
+   * Whether a batch lists its rows; a card that keeps them in its details
+   * says only what their fields hold.
+   */
+  rows?: boolean;
   /** The card's headline says a batch's operations already. */
   operationsInHeadline?: boolean;
   /**
@@ -1589,6 +1601,7 @@ export const ToolCallChangeBody = ({
           listsMaybeReplaced={listReplaceIsUnknown(change)}
           onlyAdds={toolSaysOnlyAdds(change)}
           operationsInHeadline={operationsInHeadline}
+          rows={rows}
         />
       )}
       {values && <ValuesPart change={change} />}

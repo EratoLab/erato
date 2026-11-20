@@ -110,8 +110,8 @@ describe("parseReasoningSegments", () => {
     });
   });
 
-  it("handles a streaming-tail header with empty body in a multi-segment trace", () => {
-    const text = "**First**\n\nFirst body content.**Second**";
+  it("splits a streaming-tail header off once its paragraph break arrives", () => {
+    const text = "**First**\n\nFirst body content.**Second**\n\n";
     const segments = parseReasoningSegments(text);
     expect(segments).toHaveLength(2);
     expect(segments[0]).toEqual({
@@ -119,5 +119,16 @@ describe("parseReasoningSegments", () => {
       body: "First body content.",
     });
     expect(segments[1]).toEqual({ title: "Second", body: "" });
+  });
+
+  it("keeps a closed bold at the end of a longer text in the section being written", () => {
+    const atChunkEdge = "**First**\n\nFirst body content.**Second**";
+    expect(parseReasoningSegments(atChunkEdge)).toEqual([
+      { title: "First", body: "First body content.**Second**" },
+    ]);
+
+    const prose = "I checked the table. This is **important**";
+    expect(parseReasoningSegments(prose)).toHaveLength(1);
+    expect(parseReasoningSegments(`${prose} for the answer.`)).toHaveLength(1);
   });
 });

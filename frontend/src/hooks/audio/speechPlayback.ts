@@ -57,6 +57,51 @@ let accepting = false;
 let acceptingStream: string | undefined;
 /** What a paused voice has not said yet, and what arrives meanwhile. */
 let held: PcmChunk[] | null = null;
+/** The answer's audio held back while a wait line finishes. */
+let gate: PcmChunk[] | null = null;
+const interruptListeners = new Set<() => void>();
+
+/**
+ * Called whenever the voice is stopped or talked over, so that whatever
+ * else speaks for the turn (a wait line) falls silent with it.
+ */
+export function onSpeechInterrupted(listener: () => void): () => void {
+  interruptListeners.add(listener);
+  return () => interruptListeners.delete(listener);
+}
+
+const interrupted = () => {
+  for (const listener of interruptListeners) listener();
+};
+
+/**
+ * A wait line plays: the answer's audio waits for it. Until it is released
+ * the voice counts as speaking, so the microphone stays closed, the stop
+ * button shows, and a card waits, as for the answer itself.
+ */
+export function holdReplyAudio() {
+  gate ??= [];
+  useSpeechPlayback.setState({ playing: true });
+}
+
+/** The wait line is over: what the answer sent meanwhile plays now. */
+export function releaseReplyAudio() {
+  const chunks = gate;
+  if (chunks === null) return;
+  gate = null;
+  const context = playbackContext();
+  if (chunks.length === 0 || !accepting || context?.state !== "running") {
+    if (!queue.active) useSpeechPlayback.setState({ playing: false });
+    return;
+  }
+  for (const chunk of chunks) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+      speechFailed();
+      return;
+    }
+  }
+  useSpeechPlayback.setState({ playing: true });
+}
 
 export async function enableSpeechPlayback(enabled: boolean) {
   try {
@@ -80,8 +125,10 @@ export function stopSpeechPlayback(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
   accepting = false;
   held = null;
+  gate = null;
   queue.stop();
   useSpeechPlayback.setState({ playing: false, paused: false });
+  interrupted();
 }
 
 /**
@@ -92,7 +139,10 @@ export function pauseSpeechPlayback() {
   const context = playbackContext();
   if (!accepting || held !== null || !context) return;
   held = queue.pause(context);
+  if (gate) held.push(...gate);
+  gate = null;
   useSpeechPlayback.setState({ playing: false, paused: true });
+  interrupted();
 }
 
 /**
@@ -180,6 +230,10 @@ export function playSpeechChunk(
   activeMessage = messageId;
   if (held !== null) {
     held.push({ audio, sampleRate });
+    return;
+  }
+  if (gate !== null) {
+    gate.push({ audio, sampleRate });
     return;
   }
   const context = playbackContext();

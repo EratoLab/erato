@@ -396,6 +396,91 @@ mod tests {
         }
     }
 
+    /// The gate reads the hints as resolved: a tool that says it is read-only,
+    /// not destructive and closed-world runs without a card under either
+    /// preset, and the operator's override on the tool makes it ask again.
+    #[test]
+    fn a_read_only_closed_world_tool_runs_unasked_until_the_operator_says_otherwise() {
+        use crate::services::mcp_tool_approval::{McpToolEffectiveState, effective_mcp_tool_state};
+        use McpToolApprovalPreset::{Permissive, Restrictive};
+        let declared = |read_only, destructive, open_world| {
+            tool(Some(ToolAnnotations::from_raw(
+                None,
+                read_only,
+                destructive,
+                Some(true),
+                open_world,
+            )))
+        };
+        let reader = || declared(Some(true), Some(false), Some(false));
+        let asks = |tool: Tool, config: &McpServerConfig, preset| {
+            let resolved =
+                resolve_tool_annotations(tool, config, &Default::default(), &Default::default());
+            let approval = McpToolApprovalConfig {
+                enabled: true,
+                preset,
+                allow_always: false,
+            };
+            let verdict = evaluate_mcp_tool_approval(
+                &approval,
+                &resolved.tool,
+                resolved.approval_argument.as_deref(),
+            );
+            effective_mcp_tool_state(&approval, &verdict, None).0 == McpToolEffectiveState::Ask
+        };
+        let with_override = |hints: McpToolAnnotationsConfig| {
+            let mut config = server();
+            config.tools.insert(
+                "read_file".into(),
+                McpToolConfig {
+                    override_tool_annotations: hints,
+                    ..Default::default()
+                },
+            );
+            config
+        };
+
+        for preset in [Permissive, Restrictive] {
+            assert!(!asks(reader(), &server(), preset), "{preset:?}");
+            // Unannotated and destructive tools still ask.
+            assert!(asks(tool(None), &server(), preset), "{preset:?}");
+            assert!(
+                asks(
+                    declared(Some(false), Some(true), Some(false)),
+                    &server(),
+                    preset
+                ),
+                "{preset:?}"
+            );
+            // The operator marks the reader destructive: it asks again.
+            let marked = with_override(McpToolAnnotationsConfig {
+                destructive_hint: Some(true),
+                ..Default::default()
+            });
+            assert!(asks(reader(), &marked, preset), "{preset:?}");
+        }
+        // An open-world tool asks under the restrictive preset; the permissive
+        // one lets a non-destructive one run, as it always has.
+        let open = declared(Some(true), Some(false), Some(true));
+        assert!(asks(open.clone(), &server(), Restrictive));
+        assert!(!asks(open, &server(), Permissive));
+        for hints in [
+            McpToolAnnotationsConfig {
+                read_only_hint: Some(false),
+                ..Default::default()
+            },
+            McpToolAnnotationsConfig {
+                open_world_hint: Some(true),
+                ..Default::default()
+            },
+        ] {
+            assert!(
+                asks(reader(), &with_override(hints), Restrictive),
+                "{hints:?}"
+            );
+        }
+    }
+
     #[test]
     fn absent_empty_partial_and_title_only_objects_receive_only_missing_hints() {
         let mut config = server();

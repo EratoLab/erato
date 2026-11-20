@@ -4,6 +4,8 @@ mod test_cases {
     mod compaction;
     #[path = "facet_placement.rs"]
     mod facet_placement;
+    #[path = "replayed_images.rs"]
+    mod replayed_images;
     use super::super::replay_policy::{RECEIPT_MARKER_KEY, ToolReplayPolicy};
     use super::super::traits::{FileResolver, MessageRepository, PromptProvider};
     use super::super::transforms::replay_assistant_content;

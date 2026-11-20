@@ -5824,7 +5824,7 @@ msgstr "Wähle das Audioeingabegerät, das für Chat-Aufnahmen in diesem Browser
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.input.diagnostics"
-msgstr ""
+msgstr "Erkannte Eingabegeräte: {inputDeviceCount}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
@@ -8752,7 +8752,7 @@ msgstr "Außerdem ist noch etwas anders; das steht auf dem Bildschirm."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.entry"
-msgstr "{shape, select, asked {Geändert: {sentence}} other {Außerdem ungefragt geändert: {sentence}}}"
+msgstr "{asked, select, asked {Geändert: {sentence}} unsure {Außerdem geändert: {sentence}} other {Außerdem ungefragt geändert: {sentence}}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8767,7 +8767,7 @@ msgstr "{kind, select, changed {Die neue Fassung: {what}} same {Die neue Karte i
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.more"
-msgstr "{shape, select, asked {{count, plural, one {Dazu ist noch ein weiteres Feld wie gewünscht geändert; es steht auf dem Bildschirm.} other {Dazu sind noch {countWord} weitere Felder wie gewünscht geändert; sie stehen auf dem Bildschirm.}}} other {{count, plural, one {Außerdem ist noch ein weiteres Feld ungefragt geändert; es steht auf dem Bildschirm.} other {Außerdem sind noch {countWord} weitere Felder ungefragt geändert; sie stehen auf dem Bildschirm.}}}}"
+msgstr "{shape, select, asked {{count, plural, one {Dazu ist noch ein weiteres Feld wie gewünscht geändert; es steht auf dem Bildschirm.} other {Dazu sind noch {countWord} weitere Felder wie gewünscht geändert; sie stehen auf dem Bildschirm.}}} unsure {{count, plural, one {Außerdem ist noch ein weiteres Feld geändert; es steht auf dem Bildschirm.} other {Außerdem sind noch {countWord} weitere Felder geändert; sie stehen auf dem Bildschirm.}}} other {{count, plural, one {Außerdem ist noch ein weiteres Feld ungefragt geändert; es steht auf dem Bildschirm.} other {Außerdem sind noch {countWord} weitere Felder ungefragt geändert; sie stehen auf dem Bildschirm.}}}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8868,6 +8868,11 @@ msgstr "Sprachbefehle gehen gerade nicht. Die Karte wartet auf dem Bildschirm."
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.unclear"
 msgstr "{commands, select, withText {Das habe ich nicht verstanden. Möglich sind: weiter, was noch, nochmal, Text vorlesen und stopp.} other {Das habe ich nicht verstanden. Möglich sind: weiter, was noch, nochmal und stopp.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichText"
+msgstr "{shape, select, named {Welchen Text: {texts}?} other {Welchen Text? Die Texte stehen auf dem Bildschirm.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -10195,6 +10200,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Archivieren fehlgeschlagen: {kind} {title} in {where}} titled {Archivieren fehlgeschlagen: {kind} {title}} placed {Archivieren fehlgeschlagen: {kind} in {where}} other {Archivieren fehlgeschlagen: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} in {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} in {server}: # Zeile} other {{title} in {server}: # Zeilen}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -11006,6 +11021,26 @@ msgstr "Denkt nach…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "Die interaktive Ansicht von {toolName} möchte diese Datei auf Ihrem Gerät speichern."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Speichern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "{fileName} speichern?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "Die interaktive Ansicht konnte nicht angezeigt werden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx
@@ -11845,7 +11880,7 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Choose audio mode"
-msgstr ""
+msgstr "Audiomodus wählen"
 
 #: src/components/ui/FileUpload/FileUpload.tsx
 #~ msgid "Clear All"
@@ -11927,7 +11962,7 @@ msgstr "Die Kontextnutzung überschreitet die Modellkapazität. Der Assistent ka
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Conversational"
-msgstr ""
+msgstr "Gespräch"
 
 #: src/components/ui/Message/MessageContent.tsx
 #~ msgid "Copied"
@@ -11980,7 +12015,7 @@ msgstr "Antwort der Audio-Transkription konnte nicht gelesen werden."
 
 #: src/hooks/audio/transcribeClipOnce.ts
 msgid "Could not read the transcription response."
-msgstr ""
+msgstr "Die Antwort der Transkription konnte nicht gelesen werden."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "Could not start audio dictation."
@@ -11988,11 +12023,11 @@ msgstr "Audiodiktat konnte nicht gestartet werden."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Could not start audio recording."
-msgstr ""
+msgstr "Die Audioaufnahme konnte nicht gestartet werden."
 
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Could not start the microphone check."
-msgstr ""
+msgstr "Der Mikrofontest konnte nicht gestartet werden."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Could not start the microphone test."
@@ -12177,7 +12212,7 @@ msgstr "Tokennutzung wird geschätzt..."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Exit audio mode"
-msgstr ""
+msgstr "Audiomodus beenden"
 
 #: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Expand"
@@ -12234,7 +12269,7 @@ msgstr "Audiodiktat konnte nicht abgeschlossen werden."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Failed to upload audio recording for transcription."
-msgstr ""
+msgstr "Die Audioaufnahme konnte nicht zur Transkription hochgeladen werden."
 
 #: src/components/ui/FileUpload/AttachmentTile.tsx
 msgid "File"
@@ -12246,7 +12281,7 @@ msgstr "Datei"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing audio transcript"
-msgstr ""
+msgstr "Audio-Transkript wird abgeschlossen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Finishing dictation"
@@ -12335,11 +12370,11 @@ msgstr "Größte Kontextbeiträge von Dateien:"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
-msgstr ""
+msgstr "Hört zu"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Listening for your next message"
-msgstr ""
+msgstr "Hört auf Ihre nächste Nachricht"
 
 #: src/components/ui/Message/LoadMoreButton.tsx
 msgid "Load older messages"
@@ -12430,7 +12465,7 @@ msgstr "Mikrofon {microphoneIndex}"
 
 #: src/hooks/audio/useGuidedAudioCapture.ts
 msgid "Microphone permission denied. Allow access to run the mic check."
-msgstr ""
+msgstr "Mikrofonzugriff verweigert. Erlauben Sie den Zugriff, um den Mikrofontest auszuführen."
 
 #: src/hooks/audio/useAudioInputLevelPreview.ts
 msgid "Microphone permission denied. Allow access to test the microphone."
@@ -12438,7 +12473,7 @@ msgstr "Mikrofonzugriff verweigert. Erlauben Sie den Zugriff, um das Mikrofon zu
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Microphone permission denied. Allow microphone access and try again."
-msgstr ""
+msgstr "Mikrofonzugriff verweigert. Erlauben Sie den Mikrofonzugriff und versuchen Sie es erneut."
 
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Microphone settings:"
@@ -12472,7 +12507,7 @@ msgstr "Neuer Chat"
 #: src/hooks/audio/useAudioDictationRecorder.ts
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No audio was captured. Please try recording again."
-msgstr ""
+msgstr "Es wurde kein Ton aufgenommen. Bitte versuchen Sie es erneut."
 
 #: src/pages/SearchPage.tsx
 msgid "No chats found"
@@ -12492,7 +12527,7 @@ msgstr "Keine Nachrichten."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "No microphone is available. Connect or enable a microphone and try again."
-msgstr ""
+msgstr "Kein Mikrofon verfügbar. Schließen Sie ein Mikrofon an oder aktivieren Sie es, und versuchen Sie es erneut."
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "No text."
@@ -12681,7 +12716,7 @@ msgstr "Audioaufnahme ist deaktiviert, solange Uploads nicht verfügbar sind."
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Recording audio transcript"
-msgstr ""
+msgstr "Audio-Transkript wird aufgenommen"
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Recording stopped automatically after the configured maximum duration."
@@ -12882,7 +12917,7 @@ msgstr "Ursprüngliche E-Mail"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Start audio mode"
-msgstr ""
+msgstr "Audiomodus starten"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Start dictation"
@@ -12904,7 +12939,7 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Starting audio transcript recording"
-msgstr ""
+msgstr "Aufnahme für das Audio-Transkript wird gestartet"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Starting dictation"
@@ -12917,7 +12952,7 @@ msgstr "Stopp"
 #: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Stop audio mode"
-msgstr ""
+msgstr "Audiomodus beenden"
 
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 #~ msgid "Stop audio recording"
@@ -12925,7 +12960,7 @@ msgstr ""
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop audio transcript recording"
-msgstr ""
+msgstr "Aufnahme für das Audio-Transkript beenden"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Stop dictation"
@@ -13022,7 +13057,7 @@ msgstr "Das Mikrofon wird bereits von einer anderen Anwendung oder Aufnahme verw
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "The microphone is already in use by another application."
-msgstr ""
+msgstr "Das Mikrofon wird bereits von einer anderen Anwendung verwendet."
 
 #: src/hooks/audio/useAudioDictationRecorder.ts
 msgid "The microphone stopped sending audio. Please check your microphone and start dictation again."
@@ -13180,7 +13215,7 @@ msgstr "Nachricht eingeben..."
 
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 msgid "Unable to retry this transcription because the source audio is not available."
-msgstr ""
+msgstr "Diese Transkription kann nicht wiederholt werden, weil die Audioaufnahme nicht mehr verfügbar ist."
 
 #: src/components/ui/Teams/TeamsConversationView.tsx
 msgid "Unknown date"
@@ -13220,7 +13255,7 @@ msgstr "Datei wird hochgeladen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Use conversational mode for auto-send after a pause, or transcript mode for a manual audio attachment."
-msgstr ""
+msgstr "Im Gesprächsmodus wird nach einer Pause automatisch gesendet; im Transkriptmodus fügen Sie die Aufnahme selbst als Audioanhang hinzu."
 
 #: src/components/ui/Assistant/AssistantForm.tsx
 msgid "Used context: {usedContextPercentage}%"

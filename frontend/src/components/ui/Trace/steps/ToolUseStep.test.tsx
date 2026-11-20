@@ -1355,3 +1355,121 @@ describe("ToolUseStep proposal row", () => {
     expect(screen.queryByTestId("tool-call-identity")).toBeNull();
   });
 });
+
+describe("ToolUseStep plain line", () => {
+  const READ_DISPLAY = {
+    title: "Create chart",
+    description_truncated: false,
+    server_name: "Charts",
+    read_only: true,
+    closed_world: true,
+    label: {
+      action: "other" as const,
+      object_kind: "other" as const,
+      source: "generic" as const,
+    },
+  };
+  const step = (
+    display: unknown,
+    overrides: Partial<ToolUse> = {},
+    decision?: ToolDecision,
+  ) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-chart",
+          tool_name: "render_chart",
+          status: "success",
+          input: {
+            spec: { data: { values: [{ month: "2026-01-01", revenue: 120 }] } },
+          } as unknown as ToolUse["input"],
+          output: { files: ["chart.png"] } as unknown as ToolUse["output"],
+          allowed_by: "policy",
+          display: display as ToolUse["display"],
+          ...overrides,
+        }}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+        decision={decision}
+      />,
+    );
+
+  it("shows a read-only, closed-world call as its tool's title and server, with the arguments behind the toggle", () => {
+    step(READ_DISPLAY);
+
+    const toggle = screen.getByRole("button", { name: /Create chart/ });
+    const line = screen.getByTestId("tool-call-plain-line");
+    expect(line).toHaveTextContent(/^Create chart$/);
+    expect(line).toHaveAttribute("dir", "auto");
+    expect(toggle).toHaveTextContent(/^Create chart\s*Charts/);
+    expect(toggle).not.toHaveTextContent("render_chart");
+    // Ran on the policy, as a read: nothing more to say on the row.
+    expect(screen.queryByTestId("tool-decision-row")).toBeNull();
+    const input = screen.getByText(/Input Parameters/i);
+    expect(isFolded(input)).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(isFolded(input)).toBe(false);
+    const identity = screen.getByTestId("tool-call-identity");
+    expect(identity).toHaveTextContent("render_chart");
+    expect(identity).toHaveTextContent("Charts");
+    expect(screen.getByText(/2026-01-01/)).toBeInTheDocument();
+  });
+
+  it("puts the title in place of a line the label would give", () => {
+    step({
+      ...READ_DISPLAY,
+      label: {
+        action: "create",
+        object_kind: "page",
+        source: "rules",
+        items: [
+          {
+            title: {
+              pointer: "/spec",
+              values: [{ path: "/spec", text: "Revenue" }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      "Create chart",
+    );
+    expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
+    expect(screen.queryByTestId("tool-call-gist-values")).toBeNull();
+  });
+
+  it.each([
+    ["a tool without a title of its own", { title: "render_chart" }],
+    ["an open-world read", { closed_world: undefined }],
+    ["a closed-world write", { read_only: undefined }],
+    ["flags that are not true", { read_only: "yes", closed_world: 1 }],
+  ])("keeps the row's own line for %s", (_case, overrides) => {
+    step({ ...READ_DISPLAY, ...overrides });
+
+    expect(screen.queryByTestId("tool-call-plain-line")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /render_chart/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a decision the user took beside the plain line", () => {
+    step(
+      READ_DISPLAY,
+      { allowed_by: undefined },
+      { status: "approved", alwaysAllow: false },
+    );
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      "Create chart",
+    );
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      /^Charts · You allowed this once$/,
+    );
+  });
+});

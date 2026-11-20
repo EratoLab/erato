@@ -8871,6 +8871,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichText"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.ordinal"
 msgstr ""
 
@@ -10195,6 +10200,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Échec de l’archivage : {kind} {title} dans {where}} titled {Échec de l’archivage : {kind} {title}} placed {Échec de l’archivage : {kind} dans {where}} other {Échec de l’archivage : {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} dans {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} dans {server} : # ligne} other {{title} dans {server} : # lignes}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -11006,6 +11021,26 @@ msgstr "Réflexion…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "La vue interactive de {toolName} demande à enregistrer ce fichier sur votre appareil."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Enregistrer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "Enregistrer {fileName} ?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "La vue interactive n’a pas pu être affichée."
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx

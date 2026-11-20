@@ -3,14 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import expectedPieces from "@/lib/toolCallGist/fixtures/spokenCards/expected.json";
+import { spokenPieceField } from "@/lib/toolCallGist/spokenCard";
 import {
   currentPiece,
+  longTexts,
   namesLongText,
   piecesAhead,
   spokenCardFlow,
   spokenCardStep,
   voiceDecisionGate,
 } from "@/lib/toolCallGist/spokenCardFlow";
+import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import { commandPieces, stepForMeaning } from "./approvalListening";
@@ -281,7 +284,8 @@ describe("what a meaning does to a waiting card", () => {
     expect(end.flow.closed).toBe(false);
     // A change is sent by the listener and listens no more: the next card,
     // or a sentence about what came of it, follows.
-    expect(listen).toBe(meaning !== "stop" && meaning !== "change");
+    // After a stop it listens on for commands.
+    expect(listen).toBe(meaning !== "change");
     expect(change === true).toBe(meaning === "change");
     before.heard.forEach((heard, index) => {
       if (heard) expect(end.flow.heard[index]).toBe(true);
@@ -333,19 +337,27 @@ describe("what a meaning does to a waiting card", () => {
           },
         ]);
         break;
-      case "read_text":
+      case "read_text": {
+        const texts = longTexts(pieces);
         expect(said[0]).toEqual(
-          pieces.some(namesLongText)
-            ? {
-                type: "text",
-                index:
-                  current !== null && namesLongText(pieces[current])
-                    ? current
-                    : pieces.findIndex(namesLongText),
-              }
-            : { type: "notice", notice: { kind: "no_text" } },
+          texts.length === 0
+            ? { type: "notice", notice: { kind: "no_text" } }
+            : current !== null && namesLongText(pieces[current])
+              ? { type: "text", index: current }
+              : texts.length === 1
+                ? { type: "text", index: texts[0] }
+                : {
+                    type: "notice",
+                    notice: {
+                      kind: "which_text",
+                      fields: texts.map(
+                        (index) => spokenPieceField(pieces[index]) ?? "",
+                      ),
+                    },
+                  },
         );
         break;
+      }
       case "repeat":
         expect(said[0]).toEqual(
           current === null
@@ -354,10 +366,8 @@ describe("what a meaning does to a waiting card", () => {
               ? { type: "text", index: current }
               : {
                   type: "piece",
-                  index:
-                    current === request && before.owed.length > 0
-                      ? before.owed[0]
-                      : current,
+                  // Again at the request is the whole card, from its start.
+                  index: current === request ? 0 : current,
                 },
         );
         break;
@@ -470,6 +480,7 @@ const fetchCommand = vi.fn();
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchInterpretApprovalVoiceCommand: (...args: unknown[]) =>
     fetchCommand(...args),
+  fetchWaitLines: () => Promise.reject(new Error("no wait lines in tests")),
 }));
 
 interface Connection {
@@ -548,7 +559,7 @@ const KEY = "message-1:stop-1";
 const CARD = expected["update-08-long-text"].de[0];
 
 /** A card read to its end; the voice is quiet and the microphone would open. */
-async function heardCard(change?: VoiceChange) {
+async function heardCard(change?: VoiceChange, pieces: SpokenPiece[] = CARD) {
   const speech = await import("./approvalSpeech");
   const listening = await import("./approvalListening");
   const changes = await import("./approvalChanges");
@@ -557,13 +568,13 @@ async function heardCard(change?: VoiceChange) {
   speech.speakApprovalCard({
     key: KEY,
     messageId: "message-1",
-    pieces: CARD,
+    pieces,
     language: "de",
     approval: { type: "pointer" },
     ...(change ? { change } : {}),
   });
   await vi.waitFor(() => expect(connections).toHaveLength(1));
-  CARD.forEach((_, index) => {
+  pieces.forEach((_, index) => {
     audio(connections[0], index);
     playOut();
   });
@@ -685,18 +696,268 @@ describe("listening against the endpoint", () => {
     },
   );
 
-  it("stop: the voice stays quiet and the card stops listening", async () => {
-    const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
-      await heardCard();
-    fetchCommand.mockResolvedValue({
-      meaning: "stop",
-      piece_id: null,
-      source: "rules",
+  describe("ERMAIN-1241: reading a text when the card has several", () => {
+    // The staging visit report: a dictated summary and a text said by its length.
+    const DICTATED: SpokenPiece = {
+      ...CARD[1],
+      id: "text:erato_summary",
+      text: "Zusammenfassung: ein Teil des diktierten Textes, wörtlich.",
+      values: [
+        { slot: "field", value: { kind: "text", text: "Zusammenfassung" } },
+        { slot: "dictated", value: { kind: "text", text: "part" } },
+      ],
+      readOut: {
+        text: "Kunde will die Mischstation bis Dezember, Budget ist freigegeben.",
+        cut: false,
+        dictated: "part",
+      },
+    };
+    const NEED: SpokenPiece = {
+      ...CARD[1],
+      id: "text:erato_customerneed",
+      text: "Kundenbedarf: ein Text von etwa 16 Wörtern, er steht auf dem Bildschirm.",
+      values: [
+        { slot: "field", value: { kind: "text", text: "Kundenbedarf" } },
+        { slot: "words", value: { kind: "number", value: 16, percent: false } },
+      ],
+      readOut: {
+        text: "Zweite Variante der Mischstation mit größerem Durchsatz.",
+        cut: false,
+      },
+    };
+    const TWO_TEXTS = [CARD[0], DICTATED, NEED, CARD.at(-1) as SpokenPiece];
+    const ONE_DICTATED = [CARD[0], DICTATED, CARD.at(-1) as SpokenPiece];
+    const answer = (meaning: ApprovalVoiceMeaning, pieceId?: string) =>
+      fetchCommand.mockResolvedValueOnce({
+        meaning,
+        piece_id: pieceId ?? null,
+        source: "rules",
+      });
+    const bodyOf = (call: number) =>
+      (fetchCommand.mock.calls[call] as [{ body: Record<string, unknown> }])[0]
+        .body;
+
+    it("one text, the dictated one: 'Lies den Text vor' reads it", async () => {
+      const { heardApprovalWords } = await heardCard(undefined, ONE_DICTATED);
+      answer("read_text");
+      await heardApprovalWords(KEY, "Lies den Text vor");
+      expect(sentences(connections[1]).join(" ")).toContain(
+        "Kunde will die Mischstation",
+      );
     });
-    await heardApprovalWords(KEY, "stopp");
-    expect(connections).toHaveLength(1);
-    expect(useApprovalListening.getState().quiet).toBe(KEY);
-    expect(useApprovalSpeech.getState().closed).toBe(false);
+
+    it("several texts, none named: the voice asks which, naming them", async () => {
+      const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+        await heardCard(undefined, TWO_TEXTS);
+      const heardBefore = useApprovalSpeech.getState();
+      answer("read_text");
+      await heardApprovalWords(KEY, "Lies den Text vor");
+      expect(sentences(connections[1])).toEqual([
+        "Welchen Text: Zusammenfassung oder Kundenbedarf?",
+      ]);
+      expect(useApprovalListening.getState().askedWhichText).toBe(KEY);
+      // The question is no piece of the card: nothing counts as heard by it.
+      audio(connections[1], 0);
+      playOut();
+      const { spokenApprovalCardNow } = await import("./approvalSpeech");
+      expect(spokenApprovalCardNow()?.flow.heard).toEqual(
+        TWO_TEXTS.map(() => true),
+      );
+      expect(heardBefore.closed).toBe(false);
+    });
+
+    it("several texts, one named: it is read without a question", async () => {
+      const { heardApprovalWords } = await heardCard(undefined, TWO_TEXTS);
+      answer("read_text", NEED.id);
+      await heardApprovalWords(KEY, "Lies den Kundenbedarf vor");
+      expect(sentences(connections[1]).join(" ")).toContain(
+        "Zweite Variante der Mischstation",
+      );
+    });
+
+    it.each(["read_text", "repeat"] as const)(
+      "the answer to the question, understood as %s, reads the named text",
+      async (meaning) => {
+        const { heardApprovalWords, useApprovalListening } = await heardCard(
+          undefined,
+          TWO_TEXTS,
+        );
+        answer("read_text");
+        await heardApprovalWords(KEY, "Lies den Text vor");
+        audio(connections[1], 0);
+        playOut();
+        answer(meaning, DICTATED.id);
+        await heardApprovalWords(KEY, "die Zusammenfassung");
+        // The answer goes to the endpoint saying what was asked.
+        expect(bodyOf(1).question).toBe("which_text");
+        expect(bodyOf(0).question).toBeUndefined();
+        expect(sentences(connections[2]).join(" ")).toContain(
+          "Kunde will die Mischstation",
+        );
+        expect(useApprovalListening.getState().askedWhichText).toBeNull();
+      },
+    );
+
+    it("an answer that names no text is not taken as one", async () => {
+      const { heardApprovalWords } = await heardCard(undefined, TWO_TEXTS);
+      answer("read_text");
+      await heardApprovalWords(KEY, "Lies den Text vor");
+      audio(connections[1], 0);
+      playOut();
+      answer("read_text");
+      await heardApprovalWords(KEY, "egal");
+      expect(sentences(connections[2])).toEqual([
+        "Welchen Text: Zusammenfassung oder Kundenbedarf?",
+      ]);
+    });
+
+    it("in English the question names them the same way", () => {
+      const step = stepForMeaning("read_text", null, TWO_TEXTS);
+      expect(step.event).toEqual({
+        type: "notice",
+        notice: {
+          kind: "which_text",
+          fields: ["Zusammenfassung", "Kundenbedarf"],
+        },
+      });
+      const previous = i18n.locale;
+      i18n.activate("en");
+      try {
+        expect(
+          spokenWordsFor("en", { now: new Date() }).notice({
+            kind: "which_text",
+            fields: ["Summary", "Customer need"],
+          }),
+        ).toBe("Which text: Summary or Customer need?");
+      } finally {
+        i18n.activate(previous);
+      }
+    });
+  });
+
+  describe("after a stop the card listens on, silent to what it cannot use", () => {
+    const stopped = async (change?: VoiceChange, pieces = CARD) => {
+      const card = await heardCard(change, pieces);
+      fetchCommand.mockResolvedValueOnce({
+        meaning: "stop",
+        piece_id: null,
+        source: "rules",
+      });
+      await card.heardApprovalWords(KEY, "stopp");
+      return card;
+    };
+    const answer = (meaning: ApprovalVoiceMeaning, pieceId?: string) =>
+      fetchCommand.mockResolvedValueOnce({
+        meaning,
+        piece_id: pieceId ?? null,
+        source: "rules",
+      });
+
+    it("stop: the voice stays quiet and the card keeps listening", async () => {
+      const { useApprovalListening, useApprovalSpeech } = await stopped();
+      expect(connections).toHaveLength(1);
+      expect(useApprovalListening.getState().quiet).toBeNull();
+      expect(useApprovalListening.getState().stopped).toBe(KEY);
+      expect(useApprovalSpeech.getState().closed).toBe(false);
+    });
+
+    it.each([
+      ["weiter", "skip"],
+      ["nochmal", "repeat"],
+      ["was noch?", "rest"],
+    ] as const)("'%s' after a stop is acted on", async (words, meaning) => {
+      const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+        await stopped();
+      answer(meaning, meaning === "repeat" ? CARD.at(-1)?.id : undefined);
+      await heardApprovalWords(KEY, words);
+      // The voice speaks about the card again: the stop is over.
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+      expect(useApprovalListening.getState().stopped).toBeNull();
+      // Again at the end of the card is the card from its start; its sound
+      // was fetched before.
+      if (meaning === "repeat")
+        expect(useApprovalSpeech.getState().current).toBe(0);
+      else expect(connections).toHaveLength(2);
+    });
+
+    it.each([
+      ["noise", "mhm"],
+      ["unclear", "warte mal, ich muss kurz was klären"],
+      ["new_request", "Kannst du mir die Unterlagen rüberreichen?"],
+    ] as const)(
+      "%s after a stop is let be: no sentence, and the card listens on",
+      async (meaning, words) => {
+        const { heardApprovalWords, useApprovalListening } = await stopped();
+        answer(meaning);
+        await heardApprovalWords(KEY, words);
+        expect(connections).toHaveLength(1);
+        expect(useApprovalListening.getState().quiet).toBeNull();
+        expect(useApprovalListening.getState().stopped).toBe(KEY);
+      },
+    );
+
+    it.each(["approve", "reject"] as const)(
+      "%s after a stop is let be: no sentence, no decision, the stop goes on",
+      async (meaning) => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+        const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+          await stopped();
+        answer(meaning);
+        await heardApprovalWords(KEY, meaning === "approve" ? "ja" : "nein");
+        expect(connections).toHaveLength(1);
+        expect(useApprovalSpeech.getState().closed).toBe(false);
+        expect(useApprovalListening.getState().stopped).toBe(KEY);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        fetchSpy.mockRestore();
+      },
+    );
+
+    it("stop, then 'Ja' to a colleague, then words not understood: silent throughout", async () => {
+      const { heardApprovalWords, useApprovalListening } = await stopped();
+      answer("approve");
+      await heardApprovalWords(KEY, "Ja.");
+      answer("unclear");
+      await heardApprovalWords(KEY, "Dann machen wir das nachher zusammen.");
+      answer("new_request");
+      await heardApprovalWords(KEY, "Hast du die Unterlagen dabei?");
+      expect(connections).toHaveLength(1);
+      expect(useApprovalListening.getState().stopped).toBe(KEY);
+      expect(useApprovalListening.getState().quiet).toBeNull();
+    });
+
+    it("a notice said to words heard while stopped does not end the stop", async () => {
+      const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+        await stopped(undefined, [CARD[0], CARD.at(-1) as SpokenPiece]);
+      answer("read_text");
+      await heardApprovalWords(KEY, "lies den Text vor");
+      expect(sentences(connections[1])).toEqual([
+        "Diese Karte hat keinen langen Text.",
+      ]);
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+      expect(useApprovalListening.getState().stopped).toBe(KEY);
+    });
+
+    it("a change after a stop sends nothing and says nothing", async () => {
+      const { change, send } = changeable();
+      const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+        await stopped(change);
+      answer("change");
+      await heardApprovalWords(
+        KEY,
+        "Lass uns das lieber auf Freitag schieben.",
+      );
+      expect(send).not.toHaveBeenCalled();
+      expect(connections).toHaveLength(1);
+      expect(useApprovalSpeech.getState().closed).toBe(false);
+      expect(useApprovalListening.getState().stopped).toBe(KEY);
+    });
+
+    it("without a stop, words not understood are answered", async () => {
+      const { heardApprovalWords } = await heardCard();
+      answer("unclear");
+      await heardApprovalWords(KEY, "warte mal");
+      expect(sentences(connections[1])[0]).toMatch(/nicht verstanden/);
+    });
   });
 
   it("shows that words were heard, then the words, then what they were understood as", async () => {
@@ -1236,13 +1497,14 @@ describe("listening against the endpoint", () => {
       );
     });
 
-    it("'stopp' over the voice: the voice stays quiet and the card stops listening", async () => {
+    it("'stopp' over the voice: the voice stays quiet and the card listens on", async () => {
       const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
         await talkedOverAt(CARD, TEXT);
       answer("stop");
       await heardApprovalWords(KEY, "stopp");
       expect(useApprovalSpeech.getState().speaking).toBe(false);
-      expect(useApprovalListening.getState().quiet).toBe(KEY);
+      expect(useApprovalListening.getState().quiet).toBeNull();
+      expect(useApprovalListening.getState().stopped).toBe(KEY);
       expect(connections).toHaveLength(1);
     });
 

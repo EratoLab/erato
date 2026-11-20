@@ -6861,8 +6861,7 @@ mod generation_event_wire_format_tests {
                                     name: Some("row-1".into()),
                                     title: None,
                                 }],
-                                failure: None,
-                                view: None,
+                                ..Default::default()
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -10194,6 +10193,7 @@ async fn stream_generate_chat_completion<'a>(
                                 &file_content_parts,
                                 output_value.as_ref(),
                             ),
+                            tool_call_result.meta.as_ref(),
                         )
                         .await;
 
@@ -14651,6 +14651,7 @@ mod tests {
                 server_name: None,
                 label: None,
                 read_only: false,
+                closed_world: false,
             })
         };
         let asks = |config: &McpToolApprovalConfig, name: &str| {
@@ -23684,6 +23685,7 @@ pub(crate) async fn run_continuation(
                                             &file_content_parts,
                                             processed.output_value.as_ref(),
                                         ),
+                                        result.meta.as_ref(),
                                     )
                                     .await;
                                 (status, processed.output_value, result_details)

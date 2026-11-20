@@ -71,6 +71,7 @@ pub struct Completion {
     pub text: String,
     /// Text before the last tool step, kept separately from the answer.
     pub earlier_text: String,
+    pub output_ids: Vec<Uuid>,
     /// The open tool approvals the turn stopped on, answered together.
     pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
@@ -80,6 +81,22 @@ pub struct Completion {
     /// The turn's tasks that needed a client tool, which a turn sent from
     /// Teams never has.
     pub client_tasks: Vec<ClientTask>,
+}
+
+#[derive(Default)]
+pub struct CompletionFiles {
+    pub sources: Vec<FileSource>,
+    pub outputs: Vec<crate::db::entity::file_uploads::Model>,
+}
+
+impl Completion {
+    pub(super) fn requested_ids(&self) -> std::collections::HashSet<Uuid> {
+        citations::referenced_file_ids(&format!("{}\n\n{}", self.text, self.earlier_text))
+            .into_iter()
+            .filter_map(|id| id.parse().ok())
+            .chain(self.output_ids.iter().copied())
+            .collect()
+    }
 }
 
 /// A task that got no client tools because its turn was sent from Teams.
@@ -160,6 +177,9 @@ pub struct Session {
 }
 
 impl Session {
+    pub(super) fn access_token(&self) -> Option<&str> {
+        self.me.access_token.as_deref()
+    }
     pub fn user_id(&self) -> Uuid {
         self.user_id
     }
@@ -180,51 +200,78 @@ impl Host {
         Self { app_state }
     }
 
-    /// Resolve file references only within the already-authorized answer's
-    /// chat, using the same input-file inventory as the Web messages response.
-    /// Never look up an arbitrary model-supplied UUID across other chats.
-    pub async fn citation_sources(
+    pub async fn completion_files(
         &self,
+        session: &Session,
         completion: &Completion,
-    ) -> Result<Vec<FileSource>, Report> {
-        use crate::db::entity::{file_uploads, messages};
-        let requested: std::collections::HashSet<Uuid> = citations::referenced_file_ids(&format!(
-            "{}\n\n{}",
-            completion.text, completion.earlier_text
-        ))
-        .into_iter()
-        .filter_map(|id| Uuid::parse_str(&id).ok())
-        .collect();
-        if requested.is_empty() {
-            return Ok(Vec::new());
+    ) -> Result<CompletionFiles, Report> {
+        use crate::db::entity::{chat_file_uploads, messages};
+        use crate::models::file_upload::get_file_upload_by_id;
+        use crate::policy::prelude::{Action, Resource, authorize};
+        let requested = completion.requested_ids();
+        let mut resolved = CompletionFiles::default();
+        if requested.is_empty()
+            || !self
+                .usable_chat(session, completion.chat_id, &self.app_state.db)
+                .await?
+        {
+            return Ok(resolved);
         }
-        let inputs = Messages::find()
+        let db = &self.app_state.db;
+        let subject = session.me.to_subject();
+        authorize!(
+            session.policy,
+            &subject,
+            &Resource::Chat(completion.chat_id.to_string()),
+            Action::Read
+        )?;
+        let ids = chat_file_uploads::Entity::find()
+            .select_only()
+            .column(chat_file_uploads::Column::FileUploadId)
+            .filter(chat_file_uploads::Column::ChatId.eq(completion.chat_id))
+            .filter(chat_file_uploads::Column::FileUploadId.is_in(requested))
+            .into_tuple::<Uuid>()
+            .all(db)
+            .await?;
+        if ids.is_empty() {
+            return Ok(resolved);
+        }
+        let inputs: std::collections::HashSet<_> = Messages::find()
             .select_only()
             .column(messages::Column::InputFileUploads)
             .filter(messages::Column::ChatId.eq(completion.chat_id))
             .into_tuple::<Option<Vec<Uuid>>>()
-            .all(&self.app_state.db)
-            .await?;
-        let ids: std::collections::HashSet<Uuid> = inputs
+            .all(db)
+            .await?
             .into_iter()
             .flatten()
             .flatten()
-            .filter(|id| requested.contains(id))
             .collect();
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let files = file_uploads::Entity::find()
-            .filter(file_uploads::Column::Id.is_in(ids))
-            .all(&self.app_state.db)
-            .await?;
-        Ok(files
-            .into_iter()
-            .map(|file| FileSource {
+        for id in ids {
+            let Ok(file) = get_file_upload_by_id(db, &session.policy, &subject, &id).await else {
+                continue;
+            };
+            let input = inputs.contains(&id);
+            // MCP can return Markdown alone pointing at a previously generated object.
+            // Unsubmitted uploads can also belong to the chat, so association alone
+            // does not make them bot outputs.
+            let generated = !input
+                && (completion.output_ids.contains(&id)
+                    || file.file_storage_path.starts_with("generated_files/")
+                    || file.file_storage_path.starts_with("generated_images/"));
+            if !generated && !input {
+                continue;
+            }
+            resolved.sources.push(FileSource {
                 id: file.id.to_string(),
-                name: file.filename,
-            })
-            .collect())
+                name: file.filename.clone(),
+                generated,
+            });
+            if generated {
+                resolved.outputs.push(file);
+            }
+        }
+        Ok(resolved)
     }
 
     /// Stop only the generation which produced this Teams stream. A later
@@ -1027,6 +1074,15 @@ fn completion_from_content(
         message_id,
         text,
         earlier_text,
+        output_ids: since_earlier_stop(content)
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::TextFilePointer(p) => Some(p.file_upload_id),
+                ContentPart::ImageFilePointer(p) => Some(p.file_upload_id),
+                ContentPart::AudioFilePointer(p) => Some(p.file_upload_id),
+                _ => None,
+            })
+            .collect(),
         approvals,
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
@@ -1571,6 +1627,7 @@ mod tests {
             server_name: None,
             label: None,
             read_only: false,
+            closed_world: false,
         });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -1621,6 +1678,7 @@ mod tests {
                 server_name: Some("Team Wiki".into()),
                 label: None,
                 read_only: false,
+                closed_world: false,
             });
         let completion = completion_from_content(
             &FacetsConfig::default(),

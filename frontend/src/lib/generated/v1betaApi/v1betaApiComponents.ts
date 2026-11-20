@@ -6711,6 +6711,70 @@ export const useExplainMessageText = (
   });
 };
 
+export type ProgressSpeechPathParams = {
+  /**
+   * The assistant message being generated
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type ProgressSpeechError = Fetcher.ErrorWrapper<undefined>;
+
+export type ProgressSpeechVariables = {
+  body: Schemas.ProgressSpeechRequest;
+  pathParams: ProgressSpeechPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Answers only while that answer is still being generated, and only for a
+ * short sentence: the voice never says free text at any other time.
+ */
+export const fetchProgressSpeech = (
+  variables: ProgressSpeechVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ProgressSpeechError,
+    Schemas.ProgressSpeechRequest,
+    {},
+    {},
+    ProgressSpeechPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/progress-speech",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Answers only while that answer is still being generated, and only for a
+ * short sentence: the voice never says free text at any other time.
+ */
+export const useProgressSpeech = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ProgressSpeechError,
+      ProgressSpeechVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ProgressSpeechError,
+    ProgressSpeechVariables
+  >({
+    mutationFn: (variables: ProgressSpeechVariables) =>
+      fetchProgressSpeech(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ReadMessageAloudPathParams = {
   /**
    * The assistant message to read aloud
@@ -8402,6 +8466,108 @@ export const useStartingAssistant = <
   });
 };
 
+export type WaitLinesQueryParams = {
+  /**
+   * The `version` the caller already has.
+   */
+  known?: string;
+};
+
+export type WaitLinesError = Fetcher.ErrorWrapper<undefined>;
+
+export type WaitLinesVariables = {
+  queryParams?: WaitLinesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchWaitLines = (
+  variables: WaitLinesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.WaitLinesResponse,
+    WaitLinesError,
+    undefined,
+    {},
+    WaitLinesQueryParams,
+    {}
+  >({ url: "/api/v1beta/me/wait-lines", method: "get", ...variables, signal });
+
+export function waitLinesQuery(variables: WaitLinesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.WaitLinesResponse>;
+};
+
+export function waitLinesQuery(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.WaitLinesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function waitLinesQuery(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/wait-lines",
+      operationId: "waitLines",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchWaitLines(variables, signal),
+  };
+}
+
+export const useSuspenseWaitLines = <TData = Schemas.WaitLinesResponse,>(
+  variables: WaitLinesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.WaitLinesResponse,
+      WaitLinesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.WaitLinesResponse,
+    WaitLinesError,
+    TData
+  >({
+    ...waitLinesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useWaitLines = <TData = Schemas.WaitLinesResponse,>(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.WaitLinesResponse,
+      WaitLinesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.WaitLinesResponse, WaitLinesError, TData>({
+    ...waitLinesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type MessagesError = Fetcher.ErrorWrapper<undefined>;
 
 export type MessagesResponse = Schemas.Message[];
@@ -10079,6 +10245,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/starting-assistant";
       operationId: "startingAssistant";
       variables: StartingAssistantVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/wait-lines";
+      operationId: "waitLines";
+      variables: WaitLinesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/messages";

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { quietApprovalListening } from "@/hooks/audio/approvalListening";
@@ -364,26 +365,29 @@ export const McpToolApprovalCard = ({
       // is still parked, with no way left to decide it.
       return;
     }
-    const token = getIdToken();
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
-    const response = await fetch("/api/v1beta/me/messages/continuestream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...getClientToolHeaders(),
-      },
-      body: JSON.stringify(
-        buildContinueStreamBody({
-          messageId,
-          decision,
-          approvalIds,
-          itemDecisions,
-          enumerate,
-        }),
-      ),
-    });
+
+    const response = await fetchWithAuthRecovery(() => {
+      const token = getIdToken();
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- API route
+      return fetch("/api/v1beta/me/messages/continuestream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP auth header
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...getClientToolHeaders(),
+        },
+        body: JSON.stringify(
+          buildContinueStreamBody({
+            messageId,
+            decision,
+            approvalIds,
+            itemDecisions,
+            enumerate,
+          }),
+        ),
+      });
+    }, "continue-stream");
     if (!response.ok) {
       const body = await response.text();
       // A request error rather than a bare one, so a refusal envelope — the

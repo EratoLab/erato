@@ -1,16 +1,14 @@
 import clsx from "clsx";
 
-import { McpToolDescription } from "@/components/ui/ToolCall";
-
 import type { ToolDisplayMetadata } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 /**
  * The tool an approval asks about, from the descriptor saved when the call
- * parked: its title and where it runs, the executable name where the two
- * differ, and the description. The vendor-authored parts are shown as inert,
- * direction-isolated text; requests saved without a descriptor show the name.
- * The description stays open, because it bears on the decision.
+ * parked: its title and where it runs, and the executable name where the two
+ * differ. The vendor-authored parts are shown as inert, direction-isolated
+ * text; requests saved without a descriptor show the name. The tool's
+ * description is written for the model, so no card shows it.
  */
 export const ApprovalToolHeading = ({
   toolName,
@@ -55,13 +53,6 @@ export const ApprovalToolHeading = ({
         >
           {toolName}
         </p>
-      ) : null}
-      {display?.description ? (
-        <McpToolDescription
-          className="mt-2"
-          description={display.description}
-          truncated={display.description_truncated}
-        />
       ) : null}
     </div>
   );

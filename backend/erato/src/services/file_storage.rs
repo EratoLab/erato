@@ -88,12 +88,29 @@ pub struct SharepointContext<'a> {
 
 #[derive(Debug, Clone)]
 pub struct SharepointFileMetadata {
+    pub size_bytes: Option<u64>,
     pub download_url: String,
     pub etag: Option<String>,
     pub content_type: Option<String>,
 }
 
 impl FileStorage {
+    /// Exercise real Azure signatures with local object bytes in connector tests.
+    #[cfg(test)]
+    pub(crate) fn in_memory_azblob() -> Self {
+        Self::OpenDal(Box::new(OpenDalStorage {
+            opendal_operator: Operator::new(opendal::services::Memory::default()).unwrap(),
+            provider_kind: OpenDalProviderKind::AzBlob,
+            azblob_config: Some(StorageProviderAzBlobConfig {
+                container: "files".into(),
+                endpoint: "https://fixture.blob.core.windows.net".into(),
+                account_name: Some("fixture".into()),
+                account_key: Some("dGVzdA==".into()),
+                root: None,
+            }),
+        }))
+    }
+
     /// Create a FileStorage from configuration (for OpenDAL-based providers).
     pub fn from_config(config: &FileStorageProviderConfig) -> Result<Self, Report> {
         let (opendal_operator, provider_kind) =
@@ -975,6 +992,7 @@ impl SharepointStorage {
             .map(ToOwned::to_owned);
 
         Ok(SharepointFileMetadata {
+            size_bytes: item.get("size").and_then(|v| v.as_u64()),
             download_url: download_url.to_string(),
             etag,
             content_type,

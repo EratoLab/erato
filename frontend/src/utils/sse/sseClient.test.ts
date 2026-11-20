@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
 import { FrontendRequestError } from "@/utils/errorReport";
 
@@ -155,6 +156,47 @@ describe("sseClient fetch parser", () => {
       "Content-Type": "application/json",
       Authorization: "Bearer test-id-token",
     });
+  });
+
+  it("reopens once after the proxy's sign-in page, with the session renewed", async () => {
+    const recover = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(recover);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("<html>sign in</html>", {
+          status: 403,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        body: makeStream(["data: done\n\n"]),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const onMessage = vi.fn();
+    const onError = vi.fn();
+
+    try {
+      createSSEConnection("/api/v1beta/me/client-operations/stream", {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        onMessage,
+        onError,
+        onClose: vi.fn(),
+      });
+      await waitForAsyncWork();
+      await waitForAsyncWork();
+
+      expect(recover).toHaveBeenCalledWith("sse-signed-out");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onMessage).toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      setAuthRecoveryHandler(null);
+    }
   });
 
   it("preserves request and response context for failed SSE requests", async () => {

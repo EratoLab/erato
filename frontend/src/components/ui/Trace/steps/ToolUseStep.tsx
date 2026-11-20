@@ -124,6 +124,24 @@ const ResultLink = ({
 const textOf = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
+/**
+ * The title a read-only, closed-world MCP call's row shows as its one plain
+ * line: the one its tool declares. `undefined` keeps the row's own line, for
+ * a tool without a title of its own and for every other call.
+ */
+const plainTitleOf = (part: ToolUse): string | undefined => {
+  const display: unknown = part.display;
+  if (
+    !isRecord(display) ||
+    display.read_only !== true ||
+    display.closed_world !== true
+  ) {
+    return undefined;
+  }
+  const title = textOf(display.title);
+  return title !== part.tool_name ? title : undefined;
+};
+
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
 
@@ -340,14 +358,18 @@ const PlainToolUseStep = ({
   const notRun = decision?.status === "denied" || refused;
   const decisionTag = toolDecisionLabel(part, decision, refused);
   const label = part.display?.label;
+  const plainTitle = plainTitleOf(part);
   // Erato's own proposals have cards of their own: the row only names them.
   const proposal = useMemo(
     () => ownProposalOf(label, part.input),
     [label, part.input],
   );
   const gist = useMemo(
-    () => (proposal ? undefined : gistOf(label, part.input)),
-    [proposal, label, part.input],
+    () =>
+      proposal || plainTitle !== undefined
+        ? undefined
+        : gistOf(label, part.input),
+    [proposal, plainTitle, label, part.input],
   );
   const serverName = textOf(part.display?.server_name);
   const lead = gist?.items[0];
@@ -437,9 +459,10 @@ const PlainToolUseStep = ({
       </div>
     ) : undefined;
   const proposalLine = proposal && ownProposalLine(proposal, phase);
-  // A gist row's title is the line, so the tool it ran is named in the body.
+  // A gist or plain row's title is the line, so the tool it ran is named in
+  // the body.
   const body =
-    proposal || gist ? (
+    proposal || gist || plainTitle !== undefined ? (
       <>
         {proposal?.kind === "comments" && isMixedCommentProposal(proposal) && (
           <CommentChangeRows changes={proposal.changes} />
@@ -482,6 +505,14 @@ const PlainToolUseStep = ({
                 data-testid="tool-call-gist-line"
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={linePhase} />
+              </span>
+            ) : plainTitle !== undefined ? (
+              <span
+                dir="auto"
+                className="[unicode-bidi:isolate]"
+                data-testid="tool-call-plain-line"
+              >
+                {plainTitle}
               </span>
             ) : (
               toolName
@@ -563,6 +594,10 @@ const withoutLabel = (
           read_only:
             typeof display.read_only === "boolean"
               ? display.read_only
+              : undefined,
+          closed_world:
+            typeof display.closed_world === "boolean"
+              ? display.closed_world
               : undefined,
         }
       : undefined,

@@ -17,7 +17,8 @@ use utoipa::ToSchema;
 use crate::config_facet_attrs as erato_config;
 pub use crate::spoken::{
     ApprovalSpeechAmount, ApprovalSpeechConfig, ApprovalSpeechWording, MAX_SHORT_DETAILS,
-    SpokenNamesConfig, SpokenVocabulariesConfig,
+    SpokenNamesConfig, SpokenNumberWordsByLanguage, SpokenNumberWordsConfig,
+    SpokenVocabulariesConfig,
 };
 use crate::startup_log;
 
@@ -1019,6 +1020,19 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub spoken_vocabularies: SpokenVocabulariesConfig,
 
+    /// Number words by language tag, so that a number or date a person says
+    /// in words counts as named when the voice tells a corrected approval
+    /// card's changes. Language data, usually from a content package; without
+    /// it only digits are read, and a change the words may name is said as
+    /// changed, never as unasked.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_number_words"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_number_words: SpokenNumberWordsByLanguage,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -1555,6 +1569,8 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_wait_lines(&schema);
+        warn_misshaped_number_words(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1575,6 +1591,8 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_wait_lines(&schema);
+        warn_misshaped_number_words(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -1754,6 +1772,9 @@ impl AppConfig {
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
         for dropped in config.approval_speech.drop_unusable() {
             tracing::warn!("Approval speech setting dropped: {dropped}.");
+        }
+        for dropped in crate::spoken::drop_unusable_number_words(&mut config.spoken_number_words) {
+            tracing::warn!("Spoken number word dropped: {dropped}.");
         }
         for line in crate::spoken::sentences_in_use(
             &config.spoken_vocabularies,
@@ -2523,6 +2544,16 @@ impl AppConfig {
         }
         for warning in config.audio_conversational.drop_unusable_hesitation_words() {
             tracing::warn!("{warning}");
+        }
+        for warning in config
+            .audio_conversational
+            .wait_lines
+            .fall_back_out_of_range()
+        {
+            tracing::warn!("{warning}");
+        }
+        for dropped in config.audio_conversational.wait_lines.drop_unusable() {
+            tracing::warn!("Wait line dropped: {dropped}.");
         }
 
         // Validate that Langfuse is configured if any chat provider uses it
@@ -3432,6 +3463,19 @@ mod audio_config_tests {
             .unwrap()
             .try_deserialize::<AudioConversationalConfig>()
             .unwrap()
+    }
+
+    #[test]
+    fn a_misshaped_wait_line_package_does_not_stop_the_configuration() {
+        let settings = load_conversational(
+            "[wait_lines]\nmax_per_turn = 2\n\
+             [wait_lines.phrases.de]\nopener = \"Einen Moment.\"\nstill = [\"Ich bin noch dran.\"]\n\
+             [wait_lines.tools.de]\nlist = \"Ich sehe mir die {table} an.\"\n",
+        );
+        assert_eq!(settings.wait_lines.max_per_turn, 2);
+        let set = settings.wait_lines.set_for("de");
+        assert_eq!(set.lines.len(), 1);
+        assert_eq!(set.list.as_deref(), Some("Ich sehe mir die {table} an."));
     }
 
     #[test]
@@ -4627,7 +4671,10 @@ pub struct McpServerConfig {
     /// `mcp_servers_global.surfaces`. A call carries the hint only when its
     /// surface has an accept list: calls from an unknown surface and from
     /// delegated tasks carry none, and a request without the
-    /// `X-Erato-Platform` header counts as `web`. The hint travels in the
+    /// `X-Erato-Platform` header counts as `web`. With `mcp_apps` enabled
+    /// too, the web app's list starts with `text/html;profile=mcp-app`,
+    /// whatever its configured list holds: the web app shows the tool's
+    /// view, so the server can return the view alone. The hint travels in the
     /// call's MCP metadata, never as a tool argument, so the model never sees
     /// it. Off by default: other servers receive nothing.
     #[serde(default)]
@@ -8723,6 +8770,18 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_talk_over_voice_min_speech_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub talk_over_voice_min_speech_ms: u32,
+    /// What the voice says while the user waits for an answer: an opener,
+    /// a line per slow tool call, and lines for long waits.
+    ///
+    /// Boxed: the configuration is moved through deep test and request
+    /// futures, which must not grow by its size.
+    #[serde(
+        default,
+        deserialize_with = "crate::wait_lines::deserialize_wait_lines"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub wait_lines: Box<crate::wait_lines::WaitLinesConfig>,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -8782,6 +8841,7 @@ impl Default for AudioConversationalConfig {
             hesitation_words_replace_base: false,
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
+            wait_lines: Box::default(),
         }
     }
 }
@@ -8967,9 +9027,21 @@ fn warn_unknown_spoken_keys(schema: &Config) {
     }
 }
 
+fn warn_misshaped_wait_lines(schema: &Config) {
+    for warning in crate::wait_lines::misshaped_wait_lines(schema) {
+        tracing::warn!("Wait line setting dropped: {warning}.");
+    }
+}
+
 fn warn_misshaped_approval_speech(schema: &Config) {
     for dropped in crate::spoken::misshaped_approval_speech(schema) {
         tracing::warn!("Approval speech setting dropped: {dropped}.");
+    }
+}
+
+fn warn_misshaped_number_words(schema: &Config) {
+    for dropped in crate::spoken::misshaped_number_words(schema) {
+        tracing::warn!("Spoken number word dropped: {dropped}.");
     }
 }
 
@@ -9630,6 +9702,10 @@ pub struct TeamsBotConfig {
     // downloaded from.
     #[serde(default)]
     pub sso_resource: Option<String>,
+    // Storage provider for externally reachable private copies of generated Teams files.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub delivery_storage_provider_id: Option<String>,
     // Address users open Erato at, used for links in bot messages (chat links,
     // citations). An internal host is fine: users open these links in their own
     // browser. Unrelated to `messaging_endpoint`.
@@ -9678,6 +9754,7 @@ impl Default for TeamsBotConfig {
             sso_enabled: true,
             sso_app_id: None,
             sso_resource: None,
+            delivery_storage_provider_id: None,
             public_base_url: None,
             messaging_endpoint: None,
             assistant_id: None,

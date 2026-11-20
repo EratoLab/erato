@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ChevronRightIcon } from "@/components/ui/icons";
 
@@ -61,7 +61,59 @@ interface TraceStepProps {
   autoCollapse?: boolean;
   /** Pulses the rail icon to signal in-flight work. */
   isActive?: boolean;
+  /**
+   * The body is still being written: it shows its newest lines in a window of
+   * bounded height, and keeps that window until the user opens the step
+   * again, so the fold that ends the live phase stays short.
+   */
+  liveBody?: boolean;
 }
+
+const BodyWindow = ({
+  isWindowed,
+  children,
+}: {
+  isWindowed: boolean;
+  children: ReactNode;
+}) => {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const content = contentRef.current;
+    if (
+      !isWindowed ||
+      !frame ||
+      !content ||
+      typeof ResizeObserver === "undefined"
+    ) {
+      setOverflows(false);
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      setOverflows(content.offsetHeight > frame.clientHeight + 1);
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [isWindowed]);
+
+  return (
+    <div
+      ref={frameRef}
+      data-testid={isWindowed ? "trace-step-live-window" : undefined}
+      className={clsx(
+        isWindowed && "flex max-h-64 flex-col justify-end overflow-hidden",
+        isWindowed &&
+          overflows &&
+          "[mask-image:linear-gradient(to_bottom,transparent,black_2.5rem)]",
+      )}
+    >
+      <div ref={contentRef}>{children}</div>
+    </div>
+  );
+};
 
 const TraceStepTitle = ({
   title,
@@ -129,8 +181,23 @@ export const TraceStep = ({
   autoExpand = false,
   autoCollapse = false,
   isActive = false,
+  liveBody = false,
 }: TraceStepProps) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [keepsWindow, setKeepsWindow] = useState(liveBody);
+
+  useEffect(() => {
+    if (liveBody) {
+      setKeepsWindow(true);
+    }
+  }, [liveBody]);
+
+  const toggle = () => {
+    if (!isOpen && !liveBody) {
+      setKeepsWindow(false);
+    }
+    setIsOpen((prev) => !prev);
+  };
 
   useEffect(() => {
     if (autoExpand) {
@@ -169,7 +236,7 @@ export const TraceStep = ({
             <button
               type="button"
               aria-expanded={isOpen}
-              onClick={() => setIsOpen((prev) => !prev)}
+              onClick={toggle}
               className={clsx(
                 "flex flex-1 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary",
                 "cursor-pointer transition-colors hover:text-theme-fg-primary",
@@ -197,9 +264,11 @@ export const TraceStep = ({
           <div className="pb-1 pl-2.5 text-sm">{detailSlot}</div>
         )}
         {children != null && (
-          <TraceCollapse isOpen={isOpen}>
+          <TraceCollapse isOpen={isOpen} instantWhenTall>
             <div className="pl-2.5 pt-0.5 text-sm text-theme-fg-primary">
-              {children}
+              <BodyWindow isWindowed={liveBody || keepsWindow}>
+                {children}
+              </BodyWindow>
             </div>
           </TraceCollapse>
         )}

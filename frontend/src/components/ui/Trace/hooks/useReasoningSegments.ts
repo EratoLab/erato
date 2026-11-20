@@ -26,13 +26,17 @@ interface HeaderMatch {
  * A `**Bold**` is a section header iff what follows it in the source is
  * either:
  *   - a paragraph break (`\n\n`), or
- *   - only whitespace until end of text (streaming case where the body
- *     hasn't arrived yet).
+ *   - only whitespace until end of text, when nothing precedes it (streaming
+ *     case where the first header arrived before its body).
  *
  * Anything else (period, single newline + indent for list items, space) means
  * it's inline emphasis, not a header. This rule reliably distinguishes
  * Anthropic-style multi-summary reasoning (`**H**\n\nbody`) from bolded
  * list-item labels (`1. **Label:**\n   - sub`).
+ *
+ * A closed bold at the end of a longer text waits for its paragraph break:
+ * `This is **important**` may continue as inline emphasis, and splitting it
+ * off for one chunk would fold the section that is still being written.
  */
 const findHeaders = (text: string): HeaderMatch[] => {
   const matches: HeaderMatch[] = [];
@@ -43,7 +47,8 @@ const findHeaders = (text: string): HeaderMatch[] => {
     const after = text.slice(end);
     if (
       FOLLOWED_BY_PARAGRAPH_BREAK.test(after) ||
-      ALL_WHITESPACE_TO_END.test(after)
+      (ALL_WHITESPACE_TO_END.test(after) &&
+        text.slice(0, m.index).trim() === "")
     ) {
       matches.push({ start: m.index, end, text: m[1] });
     }

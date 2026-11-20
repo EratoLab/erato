@@ -70,7 +70,8 @@
     "deploy/0068_add_user_time_zone_and_language.sql",
     "deploy/0069_add_scheduled_items.sql",
     "deploy/0070_add_excel_and_powerpoint_created_via.sql",
-    "deploy/0071_add_approval_speech_preferences.sql"
+    "deploy/0071_add_approval_speech_preferences.sql",
+    "deploy/0072_add_wait_lines_preference.sql"
   ],
-  "latest_change": "7b5aaa70dc0161d5349687baaf9ad96d9d7616bd"
+  "latest_change": "d94a9e8b86f163ffb0e3e0674a42b17a92b1a840"
 }

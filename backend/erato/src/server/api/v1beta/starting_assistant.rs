@@ -471,6 +471,7 @@ mod tests {
             expires_at: None,
             provenance: None,
             approval_speech: None,
+            wait_lines: None,
         }
     }
 
@@ -816,6 +817,7 @@ mod tests {
             expires_at: None,
             provenance: None,
             approval_speech: None,
+            wait_lines: None,
         };
         let policy = policy_with(
             vec![

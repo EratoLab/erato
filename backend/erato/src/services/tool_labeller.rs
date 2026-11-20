@@ -658,6 +658,7 @@ mod tests {
                 ..generic_label(&json!({"status": "Rejected"}))
             }),
             read_only: false,
+            closed_world: false,
         }
     }
 

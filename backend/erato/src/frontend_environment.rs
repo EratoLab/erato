@@ -732,6 +732,14 @@ fn build_frontend_environment(
             serde_json::to_value(&config.approval_speech.sentences).unwrap_or(Value::Null),
         );
     }
+    // The deployment's number words, so that the voice can tell a number or
+    // date a person said in words.
+    if !config.spoken_number_words.is_empty() {
+        env.additional_environment.insert(
+            "SPOKEN_NUMBER_WORDS".to_string(),
+            serde_json::to_value(&config.spoken_number_words).unwrap_or(Value::Null),
+        );
+    }
     env.additional_environment.insert(
         "READ_ALOUD_ENABLED".to_string(),
         Value::Bool(config.read_aloud_speech_provider().is_some()),
@@ -1606,6 +1614,29 @@ mod tests {
             get(&config),
             Some(serde_json::json!({"de": {"changed": "{field} geht {from} {to}."}}))
         );
+    }
+
+    #[test]
+    fn spoken_number_words_reach_the_frontend_when_set() {
+        let mut config = AppConfig::default();
+        let get = |config: &AppConfig| {
+            build_frontend_environment(config, FrontendKind::Web)
+                .additional_environment
+                .get("SPOKEN_NUMBER_WORDS")
+                .cloned()
+        };
+        assert_eq!(get(&config), None);
+        config.spoken_number_words = std::collections::HashMap::from([(
+            "de".to_string(),
+            erato_config::config::SpokenNumberWordsConfig {
+                numbers: std::collections::HashMap::from([("zwanzig".to_string(), 20)]),
+                joiners: vec!["und".to_string()],
+                ..Default::default()
+            },
+        )]);
+        let words = get(&config).expect("number words");
+        assert_eq!(words["de"]["numbers"], serde_json::json!({"zwanzig": 20}));
+        assert_eq!(words["de"]["joiners"], serde_json::json!(["und"]));
     }
 
     #[test]
