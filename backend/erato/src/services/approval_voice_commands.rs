@@ -457,6 +457,8 @@ fn guarded(
 #[cfg(test)]
 mod eval;
 #[cfg(test)]
+mod phrase_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod words_tests;

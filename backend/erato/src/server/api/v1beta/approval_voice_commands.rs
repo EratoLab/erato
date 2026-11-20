@@ -212,7 +212,7 @@ async fn decide(
     request: &ApprovalVoiceCommandRequest,
     language: &str,
     command: &VoiceCommand,
-    phrase: Option<&PhraseMatch>,
+    phrase: Option<&PhraseMatch<'_>>,
 ) -> Decided {
     let outcome = match command.meaning {
         VoiceMeaning::Approve => VoiceDecisionOutcome::Approved,
@@ -242,7 +242,15 @@ async fn decide(
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     let item = &decidable[0];
-    if outcome == VoiceDecisionOutcome::Approved && approval_is_screen_only(item) {
+    // A card in a language without a phrase of its own approves on screen.
+    if outcome == VoiceDecisionOutcome::Approved
+        && (approval_is_screen_only(item)
+            || app_state
+                .voice_command_words
+                .for_language(language)
+                .phrase_of(language)
+                .is_none())
+    {
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     if !card_asked(&request.pieces, outcome) {
@@ -295,7 +303,7 @@ async fn decide(
         item,
         language,
         pieces: &request.pieces,
-        required_phrase: matched.map(|matched| matched.phrase.id),
+        required_phrase: matched.map(|matched| matched.phrase.id.as_str()),
         matched_words,
         match_kind: matched.map(|matched| matched.kind),
         signals,

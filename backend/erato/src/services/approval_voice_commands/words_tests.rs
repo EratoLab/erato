@@ -33,7 +33,7 @@ fn configured(languages: &[(&str, VoiceCommandWordLists)]) -> CommandWordsByLang
         .iter()
         .map(|(language, lists)| (language.to_string(), lists.clone()))
         .collect();
-    CommandWordsByLanguage::from_config(&config)
+    CommandWordsByLanguage::from_config(&config, &Default::default())
 }
 
 /// The card has asked; its pieces are those of the German test card.
@@ -390,6 +390,7 @@ fn a_hostile_package_cannot_make_an_attack_with_a_guard_word_decide() {
 fn loaded(words: serde_json::Value) -> CommandWordsByLanguage {
     CommandWordsByLanguage::from_config(
         &erato_config::voice_command_words::deserialize_voice_command_words(words).unwrap(),
+        &Default::default(),
     )
 }
 

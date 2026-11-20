@@ -1594,6 +1594,7 @@ impl AppConfig {
         warn_misshaped_number_words(&schema);
         warn_misshaped_voice_command_words(&schema);
         warn_misshaped_spoken_readings(&schema);
+        warn_misshaped_confirmation_phrases(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1618,6 +1619,7 @@ impl AppConfig {
         warn_misshaped_number_words(&schema);
         warn_misshaped_voice_command_words(&schema);
         warn_misshaped_spoken_readings(&schema);
+        warn_misshaped_confirmation_phrases(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -4127,6 +4129,16 @@ pub struct ApprovalVoiceDecisionsConfig {
     /// How long an accepted decision by voice may take to arrive, in
     /// seconds. Defaults to `120`; allowed from `5` to `600`.
     pub receipt_ttl_seconds: u32,
+    /// The confirmation phrase per language tag, usually from a content
+    /// package. A configured `de` or `en` phrase replaces the built-in one;
+    /// a card in another language approves by voice only with a phrase of
+    /// its own. Each phrase is checked at startup and dropped with a
+    /// warning when it could be heard by mistake.
+    #[serde(deserialize_with = "crate::confirmation_phrases::deserialize_confirmation_phrases")]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub phrases: crate::confirmation_phrases::ConfirmationPhrasesByLanguage,
 }
 
 impl Default for ApprovalVoiceDecisionsConfig {
@@ -4136,6 +4148,7 @@ impl Default for ApprovalVoiceDecisionsConfig {
             echo_tail_ms: 300,
             min_speech_ms_per_syllable: 80,
             receipt_ttl_seconds: 120,
+            phrases: Default::default(),
         }
     }
 }
@@ -9221,6 +9234,12 @@ fn warn_misshaped_number_words(schema: &Config) {
 fn warn_misshaped_voice_command_words(schema: &Config) {
     for dropped in crate::voice_command_words::misshaped_voice_command_words(schema) {
         tracing::warn!("Voice-command word dropped: {dropped}.");
+    }
+}
+
+fn warn_misshaped_confirmation_phrases(schema: &Config) {
+    for dropped in crate::confirmation_phrases::misshaped_confirmation_phrases(schema) {
+        tracing::warn!("Confirmation phrase dropped: {dropped}.");
     }
 }
 

@@ -1,3 +1,4 @@
+import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +21,7 @@ import {
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
+import { deploymentConfirmationPhrase } from "@/hooks/audio/confirmationPhrases";
 import { userTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
@@ -835,6 +837,7 @@ export const McpToolApprovalCard = ({
   const phraseShown =
     useApprovalListening((state) => state.listening === spokenCard.key) &&
     spokenCard.approves;
+  const phrase = deploymentConfirmationPhrase(i18n.locale) ?? "";
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.
@@ -998,7 +1001,7 @@ export const McpToolApprovalCard = ({
         >
           {t({
             id: "toolApproval.voicePhrase",
-            message: "By voice: “I confirm”",
+            message: `By voice: “${phrase}”`,
           })}
         </p>
       )}

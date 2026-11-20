@@ -730,6 +730,18 @@ fn build_frontend_environment(
             config.approval_voice_commands.enabled && config.approval_voice_decisions.enabled,
         ),
     );
+    // The confirmation phrase each language approves with, as shown, once a
+    // deployment configures one; the web app ships the built-in ones.
+    if !config.approval_voice_decisions.phrases.is_empty() {
+        let (words, _) = crate::services::approval_voice_commands::CommandWordsByLanguage::build(
+            &config.approval_voice_commands.words,
+            &config.approval_voice_decisions.phrases,
+        );
+        env.additional_environment.insert(
+            "APPROVAL_VOICE_PHRASES".to_string(),
+            serde_json::to_value(words.shown_phrases()).unwrap_or(Value::Null),
+        );
+    }
     // The deployment's natural sentence variants for approval cards read
     // aloud; how much is said and how it is worded is asked per user.
     if !config.approval_speech.sentences.is_empty() {
@@ -1679,6 +1691,36 @@ mod tests {
             assert_eq!(words["fr"]["locale"], serde_json::json!("fr"));
             assert_eq!(words["fr"]["numbers"], serde_json::json!(["zéro", "un"]));
             assert_eq!(words["de"], built_in["de"]);
+        }
+    }
+
+    #[test]
+    fn confirmation_phrases_reach_web_and_office_addin_checked_when_set() {
+        let mut config = AppConfig::default();
+        let get = |config: &AppConfig, kind| {
+            build_frontend_environment(config, kind)
+                .additional_environment
+                .get("APPROVAL_VOICE_PHRASES")
+                .cloned()
+        };
+        assert_eq!(get(&config, FrontendKind::Web), None);
+        let phrase = |phrase: &str| erato_config::confirmation_phrases::ConfirmationPhraseConfig {
+            phrase: phrase.to_string(),
+            ..Default::default()
+        };
+        config.approval_voice_decisions.phrases = std::collections::HashMap::from([
+            ("fr".to_string(), phrase("Je confirme")),
+            ("es".to_string(), phrase("Sí")),
+        ]);
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            assert_eq!(
+                get(&config, kind),
+                Some(serde_json::json!({
+                    "de": "Ich bestätige",
+                    "en": "I confirm",
+                    "fr": "Je confirme",
+                }))
+            );
         }
     }
 

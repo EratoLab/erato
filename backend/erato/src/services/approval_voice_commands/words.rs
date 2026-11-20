@@ -6,10 +6,12 @@
 //! fill a list: "ne"/"noe"/"doch", "aber"/"but", "take", the copula words,
 //! "nicht ändern", a final "so"/"then", "rest", "ueberspr"/"skip" and "um".
 
+use super::phrase::{ConfirmationPhrase, built_in_phrases};
 use super::rules::{self, drop_fillers, words_of};
+use erato_config::confirmation_phrases::{ConfirmationPhraseConfig, ConfirmationPhrasesByLanguage};
 use erato_config::language_words::{WordLists, merge_word_list};
 use erato_config::voice_command_words::{VoiceCommandWordLists, VoiceCommandWordsByLanguage};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, LazyLock};
 
 /// The languages whose words count on every card.
@@ -159,6 +161,9 @@ pub struct CommandWords {
     pub(super) agreeing: HashSet<String>,
     pub(super) refusal: HashSet<String>,
     pub(super) refusing: HashSet<String>,
+    /// The confirmation phrases tried: German, English, then the card
+    /// language's.
+    pub(super) phrases: Vec<ConfirmationPhrase>,
 }
 
 /// Merges the configured entries of each list into its base, and notes each
@@ -274,6 +279,20 @@ impl CommandWords {
                 || self.conditions.contains(word)
                 || self.wh_words.contains(word)
         })
+    }
+
+    /// The phrase of `language` ("fr", "fr-CA", …) itself, if it has one.
+    pub fn phrase_of(&self, language: &str) -> Option<&ConfirmationPhrase> {
+        let tag = language.trim().to_ascii_lowercase().replace('_', "-");
+        let primary = tag.split('-').next().unwrap_or_default();
+        self.phrases
+            .iter()
+            .find(|phrase| phrase.language == tag)
+            .or_else(|| {
+                self.phrases
+                    .iter()
+                    .find(|phrase| phrase.language == primary)
+            })
     }
 
     /// The built-in German and English lists alone.
@@ -474,6 +493,7 @@ impl CommandWords {
             agreeing,
             refusal,
             refusing,
+            phrases: built_in_phrases().to_vec(),
         };
         let mut notes = builder.notes;
         notes.sort();
@@ -491,50 +511,128 @@ pub struct CommandWordsByLanguage {
 
 impl Default for CommandWordsByLanguage {
     fn default() -> Self {
-        Self::from_config(&VoiceCommandWordsByLanguage::new())
+        Self::from_config(
+            &VoiceCommandWordsByLanguage::new(),
+            &ConfirmationPhrasesByLanguage::new(),
+        )
     }
 }
 
 impl CommandWordsByLanguage {
     /// Builds every language's lists once, warning for each configured entry
-    /// that cannot be used and logging what each language adds or removes.
-    pub fn from_config(config: &VoiceCommandWordsByLanguage) -> Self {
-        let mut languages: Vec<(&String, &VoiceCommandWordLists)> = config.iter().collect();
-        languages.sort_by(|a, b| a.0.cmp(b.0));
-        for (language, lists) in &languages {
+    /// or phrase that cannot be used and logging what each language adds or
+    /// removes and the phrases it approves with.
+    pub fn from_config(
+        config: &VoiceCommandWordsByLanguage,
+        phrases: &ConfirmationPhrasesByLanguage,
+    ) -> Self {
+        let mut languages: Vec<&String> = config.keys().collect();
+        languages.sort();
+        for language in languages {
             crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
                 "Voice-command words",
                 language,
             );
-            if let Some(summary) = summary(lists) {
+            if let Some(summary) = summary(&config[language]) {
                 tracing::info!("Voice-command words for `{language}`: {summary}.");
             }
         }
+        let mut phrase_languages: Vec<&String> = phrases.keys().collect();
+        phrase_languages.sort();
+        for language in phrase_languages {
+            crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+                "Confirmation phrase",
+                language,
+            );
+        }
+        let (built, notes) = Self::build(config, phrases);
+        warn_unused(notes);
+        if !phrases.is_empty() {
+            for (language, phrases) in built.shown_phrases_by_card_language() {
+                tracing::info!("Confirmation phrases on `{language}` cards: {phrases}.");
+            }
+        }
+        built
+    }
+
+    /// [`Self::from_config`] without logging: the lists, and a note for each
+    /// entry or phrase that cannot be used.
+    pub fn build(
+        config: &VoiceCommandWordsByLanguage,
+        phrases: &ConfirmationPhrasesByLanguage,
+    ) -> (Self, Vec<String>) {
+        let mut languages: Vec<(&String, &VoiceCommandWordLists)> = config.iter().collect();
+        languages.sort_by(|a, b| a.0.cmp(b.0));
         let shared_languages: Vec<(&str, &VoiceCommandWordLists, bool)> = languages
             .iter()
             .filter(|(language, _)| SHARED_LANGUAGES.contains(&language.as_str()))
             .map(|(language, lists)| (language.as_str(), *lists, true))
             .collect();
-        let (shared, notes) = CommandWords::build(&shared_languages);
-        warn_unused(notes);
-        let mut by_language = HashMap::new();
-        for (language, lists) in languages
+        let (mut shared, mut all_notes) = CommandWords::build(&shared_languages);
+        // A configured German or English phrase replaces the built-in one;
+        // one that fails the check leaves the built-in one in place.
+        let replacing: Vec<(usize, ConfirmationPhrase)> = shared
+            .phrases
+            .iter()
+            .enumerate()
+            .filter_map(|(at, phrase)| {
+                let configured = phrases.get(&phrase.language)?;
+                ConfirmationPhrase::checked(&phrase.language, configured, &shared, &mut all_notes)
+                    .map(|checked| (at, checked))
+            })
+            .collect();
+        for (at, phrase) in replacing {
+            shared.phrases[at] = phrase;
+        }
+        let shared_phrases = shared.phrases.clone();
+        let empty = VoiceCommandWordLists::default();
+        let mut own: Vec<(
+            &str,
+            &VoiceCommandWordLists,
+            Option<&ConfirmationPhraseConfig>,
+        )> = languages
             .iter()
             .filter(|(language, _)| !SHARED_LANGUAGES.contains(&language.as_str()))
-        {
+            .map(|(language, lists)| (language.as_str(), *lists, phrases.get(*language)))
+            .collect();
+        let mut phrase_only: Vec<&String> = phrases
+            .keys()
+            .filter(|language| {
+                !SHARED_LANGUAGES.contains(&language.as_str()) && !config.contains_key(*language)
+            })
+            .collect();
+        phrase_only.sort();
+        own.extend(
+            phrase_only
+                .into_iter()
+                .map(|language| (language.as_str(), &empty, phrases.get(language))),
+        );
+        let mut by_language = HashMap::new();
+        for (language, lists, phrase) in own {
             let mut active: Vec<(&str, &VoiceCommandWordLists, bool)> = shared_languages
                 .iter()
                 .map(|(language, lists, _)| (*language, *lists, false))
                 .collect();
-            active.push((language.as_str(), lists, true));
-            let (words, notes) = CommandWords::build(&active);
-            warn_unused(notes);
-            by_language.insert((*language).clone(), Arc::new(words));
+            active.push((language, lists, true));
+            let (mut words, notes) = CommandWords::build(&active);
+            all_notes.extend(notes);
+            words.phrases = shared_phrases.clone();
+            if let Some(phrase) = phrase.and_then(|phrase| {
+                ConfirmationPhrase::checked(language, phrase, &words, &mut all_notes)
+            }) {
+                words.phrases.push(phrase);
+            }
+            by_language.insert(language.to_string(), Arc::new(words));
         }
-        Self {
-            shared: Arc::new(shared),
-            by_language,
-        }
+        all_notes.sort();
+        all_notes.dedup();
+        (
+            Self {
+                shared: Arc::new(shared),
+                by_language,
+            },
+            all_notes,
+        )
     }
 
     /// The lists for a card in `language` ("fr", "fr-CA", …).
@@ -545,6 +643,38 @@ impl CommandWordsByLanguage {
             .get(&tag)
             .or_else(|| self.by_language.get(primary))
             .unwrap_or(&self.shared)
+    }
+
+    /// The phrase each language approves with, as shown: German, English
+    /// and each configured language that has one.
+    pub fn shown_phrases(&self) -> BTreeMap<String, String> {
+        self.shared
+            .phrases
+            .iter()
+            .chain(self.by_language.values().flat_map(|words| &words.phrases))
+            .map(|phrase| (phrase.language.clone(), phrase.shown.clone()))
+            .collect()
+    }
+
+    /// "„Ich bestätige“ (de), …" by card language, for the startup log.
+    fn shown_phrases_by_card_language(&self) -> Vec<(String, String)> {
+        let said = |words: &CommandWords| {
+            words
+                .phrases
+                .iter()
+                .map(|phrase| format!("'{}' ({})", phrase.shown, phrase.language))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let mut lines = vec![("de/en".to_string(), said(&self.shared))];
+        let mut languages: Vec<_> = self.by_language.iter().collect();
+        languages.sort_by(|a, b| a.0.cmp(b.0));
+        lines.extend(
+            languages
+                .into_iter()
+                .map(|(language, words)| (language.clone(), said(words))),
+        );
+        lines
     }
 }
 

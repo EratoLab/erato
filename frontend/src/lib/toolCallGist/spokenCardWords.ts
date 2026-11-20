@@ -4,6 +4,7 @@ import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
 import {
+  confirmationPhraseOf,
   intlLocale,
   primaryLanguage,
   spokenCardLanguage,
@@ -24,6 +25,7 @@ import type {
 import type { SpokenNotice } from "./spokenCardFlow";
 import type { DictationRelation } from "./spokenDictation";
 import type {
+  ConfirmationPhrases,
   SpokenCardLanguage,
   SpokenCardLanguages,
 } from "./spokenLanguageData";
@@ -54,6 +56,8 @@ interface WordOptions {
   sentences?: SentenceSet;
   /** The words of every language; the built-in ones when not given. */
   spokenCardLanguages?: SpokenCardLanguages;
+  /** The phrase of every language; the built-in ones when not given. */
+  confirmationPhrases?: ConfirmationPhrases;
 }
 
 interface CalendarDay {
@@ -966,10 +970,10 @@ const requestSentence = (): string =>
  * The request where the card is approved by voice: it names the phrase, never
  * as its last words, so an echo of the voice's end is not the phrase.
  */
-const requestPhraseSentence = (): string =>
+const requestPhraseSentence = (phrase: string): string =>
   t({
     id: "spokenCard.requestPhrase",
-    message: "Say “I confirm” to go ahead.",
+    message: `Say “${phrase}” to go ahead.`,
   });
 
 const cutMark = (): string =>
@@ -993,7 +997,11 @@ const textCutSentence = (): string =>
     message: "The rest of the text is on screen.",
   });
 
-const noticeSentence = (notice: SpokenNotice, locale: string): string => {
+const noticeSentence = (
+  notice: SpokenNotice,
+  locale: string,
+  phrase: string,
+): string => {
   switch (notice.kind) {
     case "confirm_on_screen":
       return requestSentence();
@@ -1005,7 +1013,7 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
     case "say_phrase":
       return t({
         id: "spokenCard.notice.sayPhrase",
-        message: "Please say “I confirm” to go ahead.",
+        message: `Please say “${phrase}” to go ahead.`,
       });
     case "say_again":
       return t({
@@ -1015,7 +1023,7 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
     case "say_phrase_again":
       return t({
         id: "spokenCard.notice.sayPhraseAgain",
-        message: "Please say “I confirm” once more.",
+        message: `Please say “${phrase}” once more.`,
       });
     case "phrase_on_screen":
       return t({
@@ -1329,6 +1337,13 @@ const words = (
   language: string,
 ): LanguageWords => {
   const natural = options.wording === "natural";
+  // A card without a phrase of its own is approved on screen; its notices
+  // name the English phrase, which every card takes.
+  const confirmationPhrase =
+    confirmationPhraseOf(language, options.confirmationPhrases) ??
+    confirmationPhraseOf("en", options.confirmationPhrases) ??
+    confirmationPhraseOf("en") ??
+    "";
   /** The natural variant for `key`, or `undefined` for the precise sentence. */
   const variant = (key: string, oneField?: string): string | undefined =>
     natural
@@ -1793,7 +1808,8 @@ const words = (
         .map((consequence) => consequenceSentence(consequence, subject))
         .join(" ");
     },
-    request: (phrase) => (phrase ? requestPhraseSentence() : requestSentence()),
+    request: (phrase) =>
+      phrase ? requestPhraseSentence(confirmationPhrase) : requestSentence(),
     generic: (toolTitle, server) =>
       genericSentence(
         spokenToolTitle(toolTitle),
@@ -1804,7 +1820,7 @@ const words = (
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
     dictatedReadLead: dictatedReadLeadSentence,
-    notice: (notice) => noticeSentence(notice, code.locale),
+    notice: (notice) => noticeSentence(notice, code.locale, confirmationPhrase),
     difference: {
       intro: differenceIntro,
       differs: differenceEntry,

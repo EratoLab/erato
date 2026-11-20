@@ -899,6 +899,24 @@
     "security_relevance": "medium",
     "stability": "alpha"
   },
+  "approval_voice_decisions.phrases.<language>.leading.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
+  "approval_voice_decisions.phrases.<language>.phrase": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
+  "approval_voice_decisions.phrases.<language>.trailing.[]": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
   "approval_voice_decisions.receipt_ttl_seconds": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",

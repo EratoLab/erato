@@ -7,6 +7,7 @@ import {
 } from "@/lib/toolCallGist/spokenCardFlow";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
+import { deploymentConfirmationPhrases } from "./confirmationPhrases";
 import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
 import { useSpeechPlayback } from "./speechPlayback";
 import { afterWaitLine, waitLinePlaying } from "./waitLines";
@@ -511,6 +512,7 @@ const noticeText = (notice: SpokenNotice, language: string) =>
   spokenUtteranceSentences({ type: "notice", notice }, [], {
     language,
     now: new Date(),
+    confirmationPhrases: deploymentConfirmationPhrases(),
   }).join(" ");
 
 const noticeKey = (messageId: string, notice: SpokenNotice) =>

@@ -215,5 +215,9 @@
         "now"
       ]
     }
+  },
+  "confirmation_phrases": {
+    "de": "Ich bestätige",
+    "en": "I confirm"
   }
 }

@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { deploymentConfirmationPhrases } from "@/hooks/audio/confirmationPhrases";
 import { deploymentSpokenCardLanguages } from "@/hooks/audio/spokenStyle";
 import languageBase from "@/lib/generated/languageBase.json";
 
 import { spokenWordsFor } from "./spokenCardWords";
 import { dictationOf } from "./spokenDictation";
-import { languagesHeard, spokenCardLanguage } from "./spokenLanguageData";
+import {
+  confirmationPhraseOf,
+  languagesHeard,
+  spokenCardLanguage,
+} from "./spokenLanguageData";
 import { earValue } from "./spokenValues";
 
 import type { SpokenFacts } from "./spokenCard";
@@ -46,6 +51,7 @@ const WITH_FRENCH: SpokenCardLanguages = {
 
 afterEach(() => {
   window.APPROVAL_SPEECH_WORDS = undefined;
+  window.APPROVAL_VOICE_PHRASES = undefined;
 });
 
 const dateDetail = (
@@ -152,5 +158,37 @@ describe("language data for spoken cards", () => {
         fr: { ...FRENCH, locale: "fr-ab1" },
       }),
     ).not.toThrow();
+  });
+
+  it("names the confirmation phrase of the card's language, else the English one", () => {
+    expect(deploymentConfirmationPhrases()).toEqual(
+      languageBase.confirmation_phrases,
+    );
+    expect(confirmationPhraseOf("de-AT")).toBe("Ich bestätige");
+    expect(confirmationPhraseOf("fr")).toBeUndefined();
+    const phrases = {
+      ...languageBase.confirmation_phrases,
+      fr: "Je confirme",
+    };
+    window.APPROVAL_VOICE_PHRASES = phrases;
+    expect(deploymentConfirmationPhrases()).toBe(phrases);
+    expect(confirmationPhraseOf("fr_CA", phrases)).toBe("Je confirme");
+    const said = (language: string) => {
+      const words = spokenWordsFor(language, {
+        now: NOW,
+        spokenCardLanguages: WITH_FRENCH,
+        confirmationPhrases: phrases,
+      });
+      return [
+        words.request(true),
+        words.notice({ kind: "say_phrase" }),
+        words.notice({ kind: "say_phrase_again" }),
+      ].join(" ");
+    };
+    expect(said("fr")).toContain("Je confirme");
+    expect(said("fr")).not.toContain("I confirm");
+    expect(said("en")).toContain("I confirm");
+    expect(said("es")).toContain("I confirm");
+    expect(said("es")).not.toContain("{phrase}");
   });
 });

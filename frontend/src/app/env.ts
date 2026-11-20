@@ -7,7 +7,10 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
-import type { SpokenCardLanguage } from "@/lib/toolCallGist/spokenLanguageData";
+import type {
+  ConfirmationPhrases,
+  SpokenCardLanguage,
+} from "@/lib/toolCallGist/spokenLanguageData";
 import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
 
 // The `[delegation.tasks.approval] mode` the backend is running, as its config
@@ -108,6 +111,11 @@ export type Env = {
    * deployment's.
    */
   approvalSpeechWords?: Partial<Record<string, SpokenCardLanguage>>;
+  /**
+   * The confirmation phrase each language approves a card with, as shown,
+   * when the deployment configures one; the built-in ones otherwise.
+   */
+  approvalVoicePhrases?: ConfirmationPhrases;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   audioConversationalCardEndOfTurnSilenceMs?: number;
@@ -220,6 +228,7 @@ declare global {
     >;
     SPOKEN_NUMBER_WORDS?: Partial<Record<string, NumberWords>>;
     APPROVAL_SPEECH_WORDS?: Partial<Record<string, SpokenCardLanguage>>;
+    APPROVAL_VOICE_PHRASES?: ConfirmationPhrases;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS?: number;
@@ -754,6 +763,7 @@ export const env = (): Env => {
     approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     spokenNumberWords: window.SPOKEN_NUMBER_WORDS,
     approvalSpeechWords: window.APPROVAL_SPEECH_WORDS,
+    approvalVoicePhrases: window.APPROVAL_VOICE_PHRASES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     audioConversationalCardEndOfTurnSilenceMs,

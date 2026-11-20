@@ -5914,7 +5914,7 @@ Decide waiting cards by voice. **Default:** `false`.
 
 Only one phrase approves: „Ich bestätige“ in German, "I confirm" in English. It may start with „ja“ / "yes" and end with „das“ or „bitte“ / "this" or "please", and nothing else may be said with it. A plain „ja“, „okay“ or „mach das“ never approves, and neither does the phrase inside a longer sentence, with a negation or condition, or as a question. The phrase is matched by rule, never by the model, and never given to the transcriber as a hint. When it is on, the card's last sentence names the phrase („Zum Ausführen bitte „Ich bestätige“ sagen.“) and the card shows it under the buttons while it listens. A near miss gets one line naming the phrase; after two, the voice points to the screen. „Nein“ and the other refusals of the rules refuse. A transcript that ends unfinished („Ich bestätige …“) never approves.
 
-A decision by voice also needs: the card's request heard in full, and before it a loss, consequences and outside recipients, and for an approval what the call does and on which record (on a card that names the phrase, skipping one has the voice say it again before the request; a refusal runs nothing, so it does not wait for those two); a recording that started after the voice stopped and not while it spoke, whose first speech comes after `echo_tail_ms`; and at least `min_speech_ms_per_syllable` of speech per syllable, as the web app's speech detector measured it (five for „Ich bestätige“, three for "I confirm", one for „nein“ or "no"). A decision whose recording fails these is asked for once more, an approval or a refusal alike. Only the turn's own single call is decided by voice, and only on a card read in German or English, the languages with a built-in phrase. SQL statements (also plain reads) and other statements, calls with a label warning, more than 20 items and calls the card cannot describe are approved on screen; a refusal by voice still counts for them.
+A decision by voice also needs: the card's request heard in full, and before it a loss, consequences and outside recipients, and for an approval what the call does and on which record (on a card that names the phrase, skipping one has the voice say it again before the request; a refusal runs nothing, so it does not wait for those two); a recording that started after the voice stopped and not while it spoke, whose first speech comes after `echo_tail_ms`; and at least `min_speech_ms_per_syllable` of speech per syllable, as the web app's speech detector measured it (five for „Ich bestätige“, three for "I confirm", one for „nein“ or "no"). A decision whose recording fails these is asked for once more, an approval or a refusal alike. Only the turn's own single call is decided by voice, and only on a card read in German, in English or in a language with a phrase in [`phrases`](#approval_voice_decisionsphrases). SQL statements (also plain reads) and other statements, calls with a label warning, more than 20 items and calls the card cannot describe are approved on screen; a refusal by voice still counts for them.
 
 An accepted decision gets a receipt bound to the user, the approval and a digest of the call's arguments. The web app sends the decision with it; the backend takes it once and refuses a decision whose receipt is unknown, expired, or for another card or decision. A decision without a receipt counts as a tap, so it is the web app that holds back an approval said without the phrase. Each decision by voice keeps a record with the decision part of the message: who, the card digest, which pieces were heard, the phrase and the matched words, the times (request heard, voice stopped, recording start and end), speech duration, the share of speech frames and the time from request to answer. No audio is kept, and the log never names the words.
 
@@ -5937,6 +5937,28 @@ Speech the detector must have heard per syllable of the words, in milliseconds: 
 {/* erato_toml_config_key: approval_voice_decisions.receipt_ttl_seconds */}
 
 How long an accepted decision by voice may take to arrive, in seconds. **Default:** `120`. **Range:** `5–600`.
+
+#### `approval_voice_decisions.phrases`
+
+{/* erato_toml_config_key: approval_voice_decisions.phrases */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.phrase */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.leading.[] */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.trailing.[] */}
+
+The confirmation phrase per language, usually from a content package. `phrase` is the phrase as the card shows it and the voice names it; `leading` and `trailing` are single words of which one may come before or after it, as „ja“ before and „das“ or „bitte“ after „Ich bestätige“. Words are compared as transcripts are: case, punctuation and apostrophes are ignored, umlauts count as „ae“, accents are kept.
+
+```toml
+[approval_voice_decisions.phrases.fr]
+phrase = "Je confirme"
+leading = ["oui"]
+trailing = ["svp"]
+```
+
+A card tries the German and English phrases, which people mix with any language, and the phrase of its own language. A configured `de` or `en` phrase replaces the built-in one of that language. A card in a language without a phrase is approved on screen; a refusal by voice still counts when that language's [voice-command words](#approval_voice_commandswords) refuse. The web app names the phrase of the card's language in the request, the near-miss lines and under the buttons (`{phrase}` in those catalog texts).
+
+Each phrase is checked at startup with the voice-command words of its language, and dropped with a warning (the built-in one stays for German and English) when it has fewer than three syllables, holds a negation, condition or question word, holds a digit, is only noise or hesitation words, or a refusal starts with it. At exactly three syllables it is kept with a warning. A leading or trailing word that is not one word, holds a digit or is a negation, condition or question word is dropped on its own. The startup log names the phrases each card language approves with. Syllables are groups of vowels, accented ones included (also „å“, „æ“, „ø“, „œ“); a word without Latin letters counts one per letter. [`min_speech_ms_per_syllable`](#approval_voice_decisionsmin_speech_ms_per_syllable) uses the same count.
+
+**Type:** table of tables by language tag. **Default:** none (the built-in „Ich bestätige“ and "I confirm").
 
 ### `approval_speech`
 

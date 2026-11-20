@@ -554,11 +554,14 @@ pub(crate) fn shaped_approval_speech_words(
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LanguageBase {
     pub approval_speech_words: BTreeMap<String, SpokenCardLanguage>,
+    /// The built-in confirmation phrases as shown, by language.
+    pub confirmation_phrases: BTreeMap<String, String>,
 }
 
 pub fn language_base() -> LanguageBase {
     LanguageBase {
         approval_speech_words: base_spoken_card_languages(),
+        confirmation_phrases: crate::confirmation_phrases::built_in_shown_phrases(),
     }
 }
 

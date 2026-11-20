@@ -355,6 +355,7 @@ impl AppState {
         let voice_command_words = Arc::new(
             crate::services::approval_voice_commands::CommandWordsByLanguage::from_config(
                 &config.approval_voice_commands.words,
+                &config.approval_voice_decisions.phrases,
             ),
         );
         let speech_readings = Arc::new(

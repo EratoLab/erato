@@ -5,6 +5,7 @@ pub mod client_tool_schema;
 pub mod config;
 pub mod config_facet_attrs;
 pub mod config_reference;
+pub mod confirmation_phrases;
 pub mod language_words;
 pub mod spoken;
 pub mod spoken_readings;

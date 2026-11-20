@@ -35,6 +35,13 @@ export type SpokenCardLanguages = Partial<Record<string, SpokenCardLanguage>>;
 export const BUILT_IN_SPOKEN_CARD_LANGUAGES: SpokenCardLanguages =
   languageBase.approval_speech_words;
 
+/** The phrase that approves a card by voice, as shown, by language. */
+export type ConfirmationPhrases = Partial<Record<string, string>>;
+
+/** The built-in German and English phrases. */
+export const BUILT_IN_CONFIRMATION_PHRASES: ConfirmationPhrases =
+  languageBase.confirmation_phrases;
+
 /** "de-DE" or "de_DE" as "de". */
 export const primaryLanguage = (language: string): string =>
   language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
@@ -46,6 +53,17 @@ export const spokenCardLanguage = (
 ): SpokenCardLanguage | undefined =>
   languages[language.toLowerCase().replace(/_/g, "-")] ??
   languages[primaryLanguage(language)];
+
+/**
+ * The phrase a card in `language` approves with ("fr-CA" first, then "fr"),
+ * if the language has one; a card without one is approved on screen.
+ */
+export const confirmationPhraseOf = (
+  language: string,
+  phrases: ConfirmationPhrases = BUILT_IN_CONFIRMATION_PHRASES,
+): string | undefined =>
+  phrases[language.toLowerCase().replace(/_/g, "-")] ??
+  phrases[primaryLanguage(language)];
 
 /**
  * The languages whose words read what a user said about a card: German and

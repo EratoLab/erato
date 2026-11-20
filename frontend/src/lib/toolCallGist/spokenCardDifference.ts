@@ -1098,6 +1098,7 @@ export const spokenDifference = (
     withDictation(
       spokenFactsOf(oldCard.gist, before.server, timeZone, true, oldNames),
       given.userTurns,
+      options.language,
       options.spokenCardLanguages,
     ),
     words,
@@ -1110,6 +1111,7 @@ export const spokenDifference = (
     withDictation(
       spokenFactsOf(newCard.gist, next.server, timeZone, true, newNames),
       options.userTurns,
+      options.language,
       options.spokenCardLanguages,
     ),
     words,
