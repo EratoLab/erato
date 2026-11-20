@@ -349,6 +349,33 @@ describe("powerpoint_view_slide", () => {
       ok: false,
       error: "No picture was made: the turn was stopped.",
     });
+    expect(host.runs).toBe(0);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("renders nothing when the turn is stopped while the render waits behind another PowerPoint call", async () => {
+    const host = installFakePowerPoint(
+      deck({ slideExports: { "256#": "hang" } }),
+    );
+    const stuck = runPowerPoint(async (ctx) => {
+      ctx.presentation.slides.getItem("256#").exportAsBase64();
+      await ctx.sync();
+    });
+    const stop = new AbortController();
+    const { upload } = uploads();
+    const pending = slidePictureTool(upload)(
+      { slideId: "257#" },
+      context({ signal: stop.signal }),
+      LIMITS,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    stop.abort();
+    host.releaseHang();
+    await stuck.catch(() => undefined);
+    await expect(pending).resolves.toEqual({
+      ok: false,
+      error: "No picture was made: the turn was stopped.",
+    });
     expect(host.pictureRequests).toEqual([]);
     expect(upload).not.toHaveBeenCalled();
   });
@@ -373,12 +400,15 @@ describe("powerpoint_view_slide", () => {
     installFakePowerPoint(deck());
     await expect(
       slidePictureTool(async () => {
-        throw { status: 413, payload: "Unexpected error (body too large)" };
+        throw {
+          status: 413,
+          payload: "Unexpected error (Unexpected end of JSON input)",
+        };
       })({ slideId: "257#" }, context(), LIMITS),
     ).resolves.toEqual({
       ok: false,
       error:
-        "No picture was added: the picture of slide 257# could not be uploaded to the chat (HTTP 413: Unexpected error (body too large)).",
+        "No picture was added: the picture of slide 257# could not be uploaded to the chat (HTTP 413, too large).",
     });
   });
 
@@ -419,17 +449,39 @@ describe("uploadSlidePicture", () => {
 });
 
 describe("uploadErrorText", () => {
-  it("reads what the files API throws", () => {
-    expect(uploadErrorText(new Error("Network error (offline)"))).toBe(
-      "Network error (offline)",
+  it("gives the status and a reason that reads the same in every browser", () => {
+    const parser = (status: number) => ({
+      status,
+      payload: "Unexpected error (JSON.parse: unexpected end of data)",
+    });
+    expect(uploadErrorText(parser(413))).toBe("HTTP 413, too large");
+    expect(uploadErrorText(parser(403))).toBe("HTTP 403, not allowed");
+    expect(uploadErrorText(parser(400))).toBe("HTTP 400, not accepted");
+    expect(uploadErrorText(parser(503))).toBe("HTTP 503, server error");
+    expect(uploadErrorText(parser(302))).toBe("HTTP 302, refused");
+    expect(
+      uploadErrorText({
+        name: "unknown",
+        message: "Network error (Failed to fetch)",
+      }),
+    ).toBe("network error");
+    expect(uploadErrorText(new Error("Network error (Load failed)"))).toBe(
+      "network error",
     );
-    expect(uploadErrorText({ status: 400, payload: "bad file" })).toBe(
-      "HTTP 400: bad file",
-    );
-    expect(uploadErrorText({ message: "File type not allowed" })).toBe(
-      "File type not allowed",
+    expect(
+      uploadErrorText(
+        new DOMException("The user aborted a request.", "AbortError"),
+      ),
+    ).toBe("cancelled");
+    expect(uploadErrorText(new Error("the server took no file"))).toBe(
+      "the server took no file",
     );
     expect(uploadErrorText({})).toBe("unknown error");
+  });
+
+  it("never hands the model an object's default text", () => {
+    for (const error of [{}, { status: "x" }, null, 42])
+      expect(uploadErrorText(error)).not.toContain("[object");
   });
 });
 

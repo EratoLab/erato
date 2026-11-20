@@ -44,12 +44,15 @@ export function PowerPointChatInput({
   chatInputProps,
   support: supportOverride,
   onSlidePictureBusyChange,
+  rerunRef,
 }: {
   chatInputProps: AddinChatInputRenderProps;
   /** For tests; the pane reads the host once. */
   support?: PowerPointReadSupport;
   /** So the pane's drop target holds still while a slide picture is made. */
   onSlidePictureBusyChange?: (busy: boolean) => void;
+  /** True while the turn is a regenerate or an edit, until the next send from this composer. */
+  rerunRef?: { current: boolean };
 }) {
   const [support] = useState(
     () => supportOverride ?? currentPowerPointReadSupport(),
@@ -96,11 +99,13 @@ export function PowerPointChatInput({
         readEnabled: () => readEnabledRef.current,
         listed: () => lastSendIncludedRef.current || readEnabledRef.current,
         view: {
-          listed: () => lastSendViewRef.current || viewEnabledRef.current,
+          listed: () =>
+            !rerunRef?.current &&
+            (lastSendViewRef.current || viewEnabledRef.current),
           limits: () => uploadLimitsRef.current,
         },
       }),
-    [support],
+    [support, rerunRef],
   );
 
   const controls = useChatInputControls();
@@ -193,6 +198,7 @@ export function PowerPointChatInput({
       const sendsPresentation = readEnabledRef.current;
       lastSendIncludedRef.current = sendsPresentation;
       lastSendViewRef.current = viewEnabledRef.current;
+      if (rerunRef) rerunRef.current = false;
       const prepare: AddinSendPreparation | undefined = sendsPresentation
         ? {
             run: async () => {
@@ -227,7 +233,7 @@ export function PowerPointChatInput({
         prepare,
       );
     },
-    [onSendMessage, support, clearNotice, describeFiles],
+    [onSendMessage, support, clearNotice, describeFiles, rerunRef],
   );
 
   return (

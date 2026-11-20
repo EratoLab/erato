@@ -70,13 +70,16 @@ implement the seams listed below, and never modify the core itself.
   A fourth tool, `powerpoint_view_slide`, lets the model ask for a picture of
   one slide by id during a turn (`utils/powerpointViewSlide.ts`). It is
   registered at the full tier only and listed like the reads, but only while
-  the selected model also takes images and uploads are on. The pane renders
+  the selected model also takes images and uploads are on. It is not offered for
+  a regenerate or an edit: they run on the earlier answer's model, which the
+  pane does not know. The pane renders
   that slide, selected or not, through `runPowerPoint` (20 s, waiting behind
   other PowerPoint calls included), uploads it into the turn's chat with
   `fetchUploadFile` and returns the slide's id, position and slide count, the
   file name and pixel size, and the file id in `fileUploadIds`; never picture
   bytes. The server attaches the file to the answer and passes the image after
-  the result. A turn may ask for at most three pictures (fewer if the message
+  the result, but not when the turn pauses before its next request (another
+  tool's approval card, the tool-call limit prompt; ERMAIN-1246). A turn may ask for at most three pictures (fewer if the message
   takes fewer files), counted by the turn's message id; every render attempt
   counts, an unknown slide id does not. A replayed call gets its first answer
   instead of a second upload. A refusal, a stopped turn, a failed or late

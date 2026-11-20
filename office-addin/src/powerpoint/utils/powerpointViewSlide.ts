@@ -42,20 +42,37 @@ export async function uploadSlidePicture(
   return id;
 }
 
-/** The files API throws the parsed error body or `{status, payload}`, not an Error. */
+const STATUS_REASONS: [number, number, string][] = [
+  [401, 403, "not allowed"],
+  [413, 413, "too large"],
+  [400, 499, "not accepted"],
+  [500, 599, "server error"],
+];
+
+/**
+ * The files API throws `{status, payload}` with the browser's JSON parser message in it, or
+ * `{message: "Network error (…)"}`; the model gets the status and a reason that reads the same in
+ * every browser.
+ */
 export function uploadErrorText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object") {
-    const fields = error as Record<string, unknown>;
-    const text = ["message", "error", "detail", "payload"]
-      .map((key) => fields[key])
-      .find((value): value is string => typeof value === "string");
-    const status =
-      typeof fields.status === "number" ? `HTTP ${fields.status}` : undefined;
-    const parts = [status, text].filter(Boolean);
-    if (parts.length > 0) return parts.join(": ");
+  if (error instanceof DOMException && error.name === "AbortError")
+    return "cancelled";
+  if (error && typeof error === "object" && "status" in error) {
+    const status = error.status;
+    if (typeof status === "number") {
+      const reason =
+        STATUS_REASONS.find(
+          ([from, to]) => status >= from && status <= to,
+        )?.[2] ?? "refused";
+      return `HTTP ${status}, ${reason}`;
+    }
   }
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? error.message
+      : undefined;
+  if (typeof message === "string")
+    return message.startsWith("Network error") ? "network error" : message;
   return "unknown error";
 }
 

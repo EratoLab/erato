@@ -188,6 +188,7 @@ interface InputOptions {
   /** The chat's composer lock: archived, or a delegated run still writing. */
   disabled?: boolean;
   onSlidePictureBusyChange?: (busy: boolean) => void;
+  rerunRef?: { current: boolean };
 }
 
 function renderInput(set = "1.10", options: InputOptions = {}) {
@@ -200,6 +201,7 @@ function renderInput(set = "1.10", options: InputOptions = {}) {
     chatId = null,
     disabled = false,
     onSlidePictureBusyChange,
+    rerunRef,
   }: InputOptions) => {
     const props = {
       chatId,
@@ -217,6 +219,7 @@ function renderInput(set = "1.10", options: InputOptions = {}) {
         chatInputProps={props}
         support={support}
         onSlidePictureBusyChange={onSlidePictureBusyChange}
+        rerunRef={rerunRef}
       />
     );
   };
@@ -364,6 +367,27 @@ describe("slide picture tool", () => {
     mocks.facets = [];
     renderInput();
     expect(viewListed()).toBe(false);
+  });
+
+  it("is not listed for a regenerate or an edit, which run on the earlier answer's model, while the reads stay listed", () => {
+    mocks.capabilities = VISION;
+    const rerunRef = { current: false };
+    renderInput("1.10", { rerunRef });
+    send();
+    expect(viewListed()).toBe(true);
+    rerunRef.current = true;
+    expect(viewListed()).toBe(false);
+    expect(readTools().every((isAvailable) => isAvailable())).toBe(true);
+  });
+
+  it("is listed again for the next send from the composer after a regenerate", () => {
+    mocks.capabilities = VISION;
+    const rerunRef = { current: true };
+    renderInput("1.10", { rerunRef });
+    expect(viewListed()).toBe(false);
+    send();
+    expect(rerunRef.current).toBe(false);
+    expect(viewListed()).toBe(true);
   });
 
   it("stays listed for the turn when the model is switched after the send", () => {
