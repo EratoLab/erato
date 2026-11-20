@@ -49,6 +49,7 @@ const spies = vi.hoisted(() => ({
   sendMessage: vi.fn(async () => undefined),
   uploadedFiles: [] as { id: string; filename: string }[],
   controller: { current: null as AddinChatController | null },
+  regenerate: { current: null as ((messageId: string) => void) | null },
   inputProps: {
     current: null as null | {
       onSendMessage: (
@@ -159,6 +160,14 @@ vi.mock("@erato/frontend/library", async () => {
     },
     useInfiniteRecentChats: spies.useInfiniteRecentChats,
     useUpdateChatTitle: () => spies.updateChatTitle,
+    useStandardMessageActions: (options: {
+      handleRegenerate: (messageId: string) => void;
+    }) => {
+      spies.regenerate.current = options.handleRegenerate;
+      return async () => false;
+    },
+    extractTextFromContent: (content?: { text?: string }[]) =>
+      (content ?? []).map((part) => part.text ?? "").join(""),
     useFileUploadStore: Object.assign(vi.fn(), {
       getState: () => ({
         silentChatId: null,
@@ -1013,5 +1022,224 @@ describe("AddinChatCore prepared sends", () => {
 
     expect(await lastPreparation()!.run(aborted.signal)).toBeNull();
     expect(beforeSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("AddinChatCore reruns", () => {
+  const CaptureHost = ({ controller }: AddinChatHostProps) => {
+    spies.controller.current = controller;
+    return null;
+  };
+  const DOCUMENT_FACET = {
+    id: "word_document_authoring",
+    args: { document_text: "now" },
+  };
+  const editMessage = vi.fn(async () => undefined);
+  const regenerateMessage = vi.fn(async () => undefined);
+  const order: string[] = [];
+  const beforeRegenerate = vi.fn(() => order.push("beforeRegenerate"));
+  const beforeEdit = vi.fn(() => order.push("beforeEdit"));
+  const messages = {
+    u1: {
+      id: "u1",
+      role: "user",
+      content: [{ content_type: "text", text: "Rewrite it" }],
+      input_files_ids: ["file-1"],
+      action_facet_id: "word_document_authoring",
+      createdAt: "2026-11-19T09:00:00Z",
+    },
+    a1: {
+      id: "a1",
+      role: "assistant",
+      content: [],
+      previous_message_id: "u1",
+      createdAt: "2026-11-19T09:00:01Z",
+    },
+  };
+
+  const messaging = spies.useChatMessaging.getMockImplementation()!;
+  const renderCore = (extra: Record<string, unknown> = {}) => {
+    spies.useChatMessaging.mockImplementation(() => ({
+      ...messaging(),
+      messages,
+      editMessage,
+      regenerateMessage,
+      ...extra,
+    }));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AddinChatProviderCore platform="addin-neutral">
+          <AddinChatCore Host={CaptureHost} />
+        </AddinChatProviderCore>
+      </QueryClientProvider>,
+    );
+    const controller = spies.controller.current!;
+    controller.hostCallbacksRef.current = { beforeRegenerate, beforeEdit };
+    return controller;
+  };
+  const step = (
+    prepared: { actionFacet?: typeof DOCUMENT_FACET } | null,
+    onAbandoned = vi.fn(),
+  ) => ({
+    run: vi.fn(async () => {
+      order.push("run");
+      return prepared && { ...prepared, hostContextIdentity: "doc-1" };
+    }),
+    onAbandoned,
+  });
+
+  beforeEach(() => {
+    i18n.activate("en");
+    order.length = 0;
+    editMessage.mockClear();
+    regenerateMessage.mockClear();
+    beforeRegenerate.mockClear();
+    beforeEdit.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    spies.useChatMessaging.mockImplementation(messaging);
+  });
+
+  it("regenerates with the context stored on the message when the host prepares nothing", () => {
+    renderCore();
+    act(() => spies.regenerate.current!("a1"));
+
+    expect(beforeRegenerate).toHaveBeenCalledWith("a1");
+    expect(regenerateMessage).toHaveBeenCalledWith("a1", [], undefined);
+  });
+
+  it("regenerates with the context the host's step took now, from the message it answers", async () => {
+    const controller = renderCore();
+    const prepare = step({ actionFacet: DOCUMENT_FACET });
+    const preparer = vi.fn(() => prepare);
+    controller.rerunPreparationRef.current = preparer;
+
+    await act(async () => spies.regenerate.current!("a1"));
+
+    expect(preparer).toHaveBeenCalledWith({
+      message: "Rewrite it",
+      inputFileIds: ["file-1"],
+      actionFacetId: "word_document_authoring",
+    });
+    expect(order).toEqual(["beforeRegenerate", "run"]);
+    expect(regenerateMessage).toHaveBeenCalledWith("a1", [], DOCUMENT_FACET);
+  });
+
+  it("does not regenerate when the host's step is dropped", async () => {
+    const controller = renderCore();
+    const onAbandoned = vi.fn();
+    controller.rerunPreparationRef.current = () => step(null, onAbandoned);
+
+    await act(async () => spies.regenerate.current!("a1"));
+
+    expect(onAbandoned).toHaveBeenCalledTimes(1);
+    expect(regenerateMessage).not.toHaveBeenCalled();
+  });
+
+  it("ignores a regenerate while the host is still preparing", async () => {
+    const controller = renderCore();
+    controller.rerunPreparationRef.current = () => "busy";
+
+    await act(async () => spies.regenerate.current!("a1"));
+
+    expect(beforeRegenerate).not.toHaveBeenCalled();
+    expect(regenerateMessage).not.toHaveBeenCalled();
+  });
+
+  it("holds the composer while the host's step reads, and takes no second rerun meanwhile", async () => {
+    const controller = renderCore();
+    let finish!: (value: { actionFacet: typeof DOCUMENT_FACET }) => void;
+    const pending = new Promise<{ actionFacet: typeof DOCUMENT_FACET }>(
+      (resolve) => {
+        finish = resolve;
+      },
+    );
+    const preparer = vi.fn(() => ({
+      run: () =>
+        pending.then((prepared) => ({
+          ...prepared,
+          hostContextIdentity: "doc-1",
+        })),
+    }));
+    controller.rerunPreparationRef.current = preparer;
+
+    act(() => spies.regenerate.current!("a1"));
+    expect(spies.controller.current!.composerLocked).toBe(true);
+    act(() => spies.regenerate.current!("a1"));
+    expect(preparer).toHaveBeenCalledTimes(1);
+
+    await act(async () => finish({ actionFacet: DOCUMENT_FACET }));
+    expect(spies.controller.current!.composerLocked).toBe(false);
+    expect(regenerateMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes no regenerate while a reply is still coming in", () => {
+    const controller = renderCore({ isPendingResponse: true });
+    const preparer = vi.fn(() => step({ actionFacet: DOCUMENT_FACET }));
+    controller.rerunPreparationRef.current = preparer;
+
+    act(() => spies.regenerate.current!("a1"));
+
+    expect(preparer).not.toHaveBeenCalled();
+    expect(regenerateMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps an edit open when the host's step is dropped, and closes it once the edit goes out", async () => {
+    const controller = renderCore();
+    act(() => controller.setEditingMessageId("u1"));
+    controller.rerunPreparationRef.current = () => step(null);
+
+    await act(async () =>
+      spies.controller.current!.messageEditValue.submitEdit(
+        "u1",
+        "Shorter",
+        [],
+      ),
+    );
+    expect(spies.controller.current!.editingMessageId).toBe("u1");
+    expect(editMessage).not.toHaveBeenCalled();
+
+    controller.rerunPreparationRef.current = () =>
+      step({ actionFacet: DOCUMENT_FACET });
+    await act(async () =>
+      spies.controller.current!.messageEditValue.submitEdit(
+        "u1",
+        "Shorter",
+        [],
+      ),
+    );
+    expect(spies.controller.current!.editingMessageId).toBeNull();
+    expect(editMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the host's step on the edited text and files", async () => {
+    const controller = renderCore();
+    const preparer = vi.fn(() => step({ actionFacet: DOCUMENT_FACET }));
+    controller.rerunPreparationRef.current = preparer;
+
+    await act(async () =>
+      controller.messageEditValue.submitEdit("u1", "Rewrite it shorter", [
+        "file-2",
+      ]),
+    );
+
+    expect(preparer).toHaveBeenCalledWith({
+      message: "Rewrite it shorter",
+      inputFileIds: ["file-2"],
+      actionFacetId: "word_document_authoring",
+    });
+    expect(order).toEqual(["beforeEdit", "run"]);
+    expect(editMessage).toHaveBeenCalledWith(
+      "u1",
+      "Rewrite it shorter",
+      ["file-2"],
+      [],
+      DOCUMENT_FACET,
+    );
   });
 });

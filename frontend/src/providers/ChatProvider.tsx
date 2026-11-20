@@ -113,10 +113,12 @@ export interface ChatContextValue {
     newContent: string,
     replaceInputFileIds?: string[],
     selectedFacetIds?: string[],
+    actionFacet?: { id: string; args?: Record<string, string> },
   ) => Promise<void>;
   regenerateMessage: (
     currentMessageId: string,
     selectedFacetIds?: string[],
+    actionFacet?: { id: string; args?: Record<string, string> },
   ) => Promise<void>;
   cancelMessage: () => void;
   /**

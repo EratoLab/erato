@@ -20,7 +20,11 @@ import {
   WordChatInput,
 } from "../WordChatInput";
 
-import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
+import type {
+  AddinChatInputRenderProps,
+  AddinRerunPreparer,
+  AddinSendPreparation,
+} from "../../../core/AddinChatCore";
 import type { WordDocumentPreview } from "../../hooks/useWordDocumentSource";
 import type { WordDocumentBuild } from "../../utils/buildWordDocumentArgs";
 import type * as wordActionFacetModule from "../../utils/wordActionFacet";
@@ -319,6 +323,113 @@ describe("WordChatInput prepared send", () => {
       { capture: { changes: build.changes, ordinalMap: build.ordinalMap } },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
+  });
+
+  describe("a regenerate or edit", () => {
+    const rerun = { current: null as AddinRerunPreparer | null };
+    const renderRerun = () =>
+      renderInput(IDENTITY, { rerunPreparationRef: rerun });
+    const request = (actionFacetId?: string) => ({
+      message: "Rewrite it",
+      inputFileIds: [],
+      actionFacetId,
+    });
+
+    it("reads the document again for a message sent with it", async () => {
+      const build = authoringBuild({ token: "snapshot-2" });
+      host.capture.mockResolvedValue(build);
+      renderRerun();
+
+      let step: ReturnType<AddinRerunPreparer>;
+      act(() => {
+        step = rerun.current!(request("word_document_authoring"));
+      });
+      expect(handedOver).toEqual([]);
+      let prepared = null as Prepared;
+      await act(async () => {
+        prepared = await (step as AddinSendPreparation).run(
+          new AbortController().signal,
+        );
+      });
+
+      expect(host.capture).toHaveBeenCalledTimes(1);
+      expect(prepared?.actionFacet?.id).toBe("word_document_authoring");
+      expect(host.budget).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({ message: "Rewrite it" }),
+      );
+      expect(host.session.activate).toHaveBeenCalledWith(
+        build.authoring,
+        undefined,
+        expect.any(Function),
+        expect.anything(),
+      );
+      expect(staged.at(-1)?.identity).toBe(IDENTITY);
+    });
+
+    it.each([
+      ["a selection", "word_selection"],
+      ["no Word context", undefined],
+    ])("keeps the stored context of a message sent with %s", (_name, facet) => {
+      renderRerun();
+      expect(rerun.current!(request(facet))).toBeUndefined();
+      expect(host.capture).not.toHaveBeenCalled();
+    });
+
+    const runStep = () => {
+      let step: ReturnType<AddinRerunPreparer>;
+      act(() => {
+        step = rerun.current!(request("word_document_authoring"));
+      });
+      let result!: Promise<Prepared>;
+      act(() => {
+        result = (step as AddinSendPreparation).run(
+          new AbortController().signal,
+        );
+      });
+      return result;
+    };
+    const NOT_RUN =
+      "Erato did not get the document from Word, so it did not run your request again. Keep Word open and try again.";
+
+    it("does not run again when Word cannot hand the document over, and says so", async () => {
+      host.capture.mockRejectedValue(new Error("GeneralException"));
+      renderRerun();
+
+      expect(await settle(runStep())).toBeNull();
+      expect(noticeTexts()).toEqual([NOT_RUN]);
+      expect(staged).toEqual([]);
+    });
+
+    it("does not run again on Send without document, which would reuse the earlier document", async () => {
+      vi.useFakeTimers();
+      host.capture.mockReturnValue(neverSettles());
+      host.preview = { ...host.readyPreview, reading: true };
+      renderRerun();
+      const result = runStep();
+      await advance(WORD_SEND_SKIP_OFFER_MS);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send without document" }),
+      );
+
+      expect(await settle(result)).toBeNull();
+      expect(noticeTexts()).toEqual([NOT_RUN]);
+    });
+
+    it("takes no rerun while a send is still being prepared", () => {
+      host.capture.mockReturnValue(neverSettles());
+      renderRerun();
+      send();
+      expect(rerun.current!(request("word_document_authoring"))).toBe("busy");
+    });
+
+    it("withdraws its step when the composer goes", () => {
+      const { unmount } = renderRerun();
+      expect(rerun.current).not.toBeNull();
+      unmount();
+      expect(rerun.current).toBeNull();
+    });
   });
 
   it("still sends after a budget refusal, reporting it as the authoring status", async () => {

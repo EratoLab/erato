@@ -7006,6 +7006,11 @@ msgstr "Lecture de la sélection…"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordComposerNotice.ts
+msgid "officeAddin.word.send.rerunNotIncluded"
+msgstr "Erato n’a pas reçu le document de Word et n’a donc pas relancé votre demande. Gardez Word ouvert et réessayez."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordComposerNotice.ts
 msgid "officeAddin.word.send.stillReading"
 msgstr "Word est encore en train de transmettre le document."
 
