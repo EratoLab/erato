@@ -196,6 +196,9 @@ export const PAUSE_FRAMES = 2;
 /** Below this the detector hears no speech in a frame (Silero v5 default). */
 export const SILENT_FRAME_PROBABILITY = 0.25;
 
+/** From this the detector hears speech in a frame (Silero v5 default). */
+export const SPEECH_FRAME_PROBABILITY = 0.5;
+
 /** The transcription connection is tried once more after this, the audio kept. */
 export const SESSION_RETRY_DELAY_MS = 1_000;
 

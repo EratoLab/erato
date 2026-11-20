@@ -8,15 +8,17 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { ChatContext } from "@/providers/ChatProvider";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
 import type { McpToolApprovalRequestPart } from "./McpToolApprovalCard";
-import type { VoiceChange } from "@/hooks/audio/approvalChanges";
+import type { VoiceChange, VoiceDecision } from "@/hooks/audio/approvalChanges";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 
 vi.mock("@/auth/tokenStore", () => ({ getIdToken: () => null }));
@@ -29,11 +31,16 @@ vi.mock("@/hooks/chat/useChatArchived", () => ({
 const spoken: {
   items: readonly { approvalId: string; replaces: string | null }[];
   change?: (approvalId: string) => VoiceChange | undefined;
-} = { items: [] };
+  decide?: (approvalId: string) => Omit<VoiceDecision, "approves"> | undefined;
+  /** What the voice answers: whether the card's request names the phrase. */
+  approves: boolean;
+} = { items: [], approves: false };
 vi.mock("@/hooks/audio/useSpokenApprovalCard", () => ({
   useSpokenApprovalCard: (props: typeof spoken) => {
     spoken.items = props.items;
     spoken.change = props.change;
+    spoken.decide = props.decide;
+    return { key: "spoken-key", approves: spoken.approves };
   },
 }));
 
@@ -72,6 +79,7 @@ const corrected = {
 const renderCard = (
   part: McpToolApprovalRequestPart,
   continueToolApproval: ChatContextValue["continueToolApproval"],
+  voiceDecisionsEnabled = false,
 ) =>
   render(
     <QueryClientProvider
@@ -79,21 +87,27 @@ const renderCard = (
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <ChatContext.Provider
-        value={
-          {
-            currentChatId: "chat-1",
-            refetchMessages: async () => undefined,
-            continueToolApproval,
-          } as unknown as ChatContextValue
-        }
+      <StaticFeatureConfigProvider
+        config={{
+          audioConversational: { enabled: true, voiceDecisionsEnabled },
+        }}
       >
-        <McpToolApprovalCard
-          messageId="message-1"
-          request={part}
-          resolution={null}
-        />
-      </ChatContext.Provider>
+        <ChatContext.Provider
+          value={
+            {
+              currentChatId: "chat-1",
+              refetchMessages: async () => undefined,
+              continueToolApproval,
+            } as unknown as ChatContextValue
+          }
+        >
+          <McpToolApprovalCard
+            messageId="message-1"
+            request={part}
+            resolution={null}
+          />
+        </ChatContext.Provider>
+      </StaticFeatureConfigProvider>
     </QueryClientProvider>,
   );
 
@@ -113,6 +127,9 @@ const conflict = (code: string) =>
 afterEach(() => {
   spoken.items = [];
   spoken.change = undefined;
+  spoken.decide = undefined;
+  spoken.approves = false;
+  useApprovalListening.setState({ listening: null });
   useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
   useGenerationStatusStore.getState().reset();
 });
@@ -295,4 +312,73 @@ describe("changing a card by voice", () => {
       expect(spoken.change?.("call-1")).toBeUndefined();
     },
   );
+});
+
+describe("ERMAIN-1259: deciding a card by voice", () => {
+  it("sends the decision for the approval listened to, with its receipt", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(request, continueToolApproval, true);
+    const decision = spoken.decide?.("call-1");
+    expect(decision?.approvalId).toBe("call-1");
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await decision?.send("approve", "receipt-1");
+    });
+    expect(outcome).toBe("sent");
+    expect(continueToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: "approve",
+        itemDecisions: [
+          {
+            approvalId: "call-1",
+            decision: "approve",
+            voiceReceipt: "receipt-1",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("is not offered while deciding by voice is off, nor for another approval", () => {
+    renderCard(request, vi.fn());
+    expect(spoken.decide?.("call-1")).toBeUndefined();
+    renderCard(request, vi.fn(), true);
+    expect(spoken.decide?.("call-9")).toBeUndefined();
+  });
+
+  it.each(["tool_call_limit", "task_plan", "builtin_tool"])(
+    "a %s card is decided on screen",
+    (kind) => {
+      renderCard(
+        { ...request, kind } as unknown as McpToolApprovalRequestPart,
+        vi.fn(),
+        true,
+      );
+      expect(spoken.decide?.("call-1")).toBeUndefined();
+    },
+  );
+
+  it("a stop with several approvals is decided on screen", () => {
+    const several = {
+      ...request,
+      approvals: ["call-1", "call-2"].map((id) => ({
+        approval_id: id,
+        tool_call_id: id,
+        tool_name: "update_record",
+        input: request.input,
+      })),
+    } as unknown as McpToolApprovalRequestPart;
+    renderCard(several, vi.fn(), true);
+    expect(spoken.decide?.("call-1")).toBeUndefined();
+  });
+
+  it("shows the phrase under the buttons only while a card that names it listens", () => {
+    spoken.approves = true;
+    renderCard(request, vi.fn(), true);
+    expect(screen.queryByTestId("approval-voice-phrase")).toBeNull();
+    act(() => useApprovalListening.setState({ listening: "spoken-key" }));
+    expect(screen.getByTestId("approval-voice-phrase")).toHaveTextContent(
+      "I confirm",
+    );
+  });
 });

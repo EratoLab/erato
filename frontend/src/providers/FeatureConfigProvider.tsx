@@ -79,6 +79,8 @@ interface AudioConversationalFeatureConfig {
   speechEnabled?: boolean;
   /** Whether a waiting approval card listens for what the user says about it. */
   voiceCommandsEnabled?: boolean;
+  /** Whether such a card may be decided by voice; only the phrase approves. */
+  voiceDecisionsEnabled?: boolean;
   /** Whether conversational audio mode is enabled */
   enabled: boolean;
   /** Maximum recording duration in seconds for conversational audio captures */
@@ -493,6 +495,9 @@ function createFeatureConfig(
     audioConversational: {
       speechEnabled: environment.speechEnabled ?? false,
       voiceCommandsEnabled: environment.approvalVoiceCommandsEnabled ?? false,
+      voiceDecisionsEnabled:
+        (environment.approvalVoiceCommandsEnabled ?? false) &&
+        (environment.approvalVoiceDecisionsEnabled ?? false),
       enabled: Boolean(environment.audioConversationalEnabled),
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,

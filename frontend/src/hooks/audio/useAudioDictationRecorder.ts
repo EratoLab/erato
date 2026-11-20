@@ -55,6 +55,7 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import { recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
@@ -65,6 +66,7 @@ import {
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
+import type { RecordingSignals } from "./recordingSignals";
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
@@ -423,6 +425,7 @@ export function useAudioDictationRecorder({
   const onVoiceLoweredRef = useRef(onVoiceLowered);
   /** The current recording's wait over the voice, from its start. */
   const holdRef = useRef<OverVoiceHold | null>(null);
+  const recordingSignalsRef = useRef<RecordingSignals | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
    * the component is mounted and flips to `false` exactly once during
@@ -1054,11 +1057,18 @@ export function useAudioDictationRecorder({
     tearDownCaptureGraph,
   ]);
 
+  /** What the detector heard in the last recording. */
+  const readRecordingSignals = useCallback(
+    (): RecordingSignals | null => recordingSignalsRef.current,
+    [],
+  );
+
   /**
    * Ends the recording and drops what it heard: nothing more is sent for
    * transcription and no words arrive. For a recording whose words are no
    * longer wanted, such as one for a card that was decided.
    */
+
   const cancelDictation = useCallback(() => {
     finishWhenOpenRef.current = false;
     const session = liveSessionRef.current;
@@ -1109,6 +1119,9 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      // Taken before the microphone opens, so a first speech counted from
+      // here is never later than it was.
+      recordingSignalsRef.current = recordingSignals(Date.now(), hold !== null);
       if (hold === null) microphoneOpened();
 
       const mediaDevices =
@@ -1487,13 +1500,21 @@ export function useAudioDictationRecorder({
                   event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
                     ? gate.quietFrames + 1
                     : 0;
+                const frameMs =
+                  (event.frame.samples.length / event.frame.sampleRate) * 1000;
+                if (recordingSignalsRef.current)
+                  recordingSignalsRef.current = withFrame(
+                    recordingSignalsRef.current,
+                    frameMs,
+                    event.probabilities.isSpeech,
+                  );
                 if (gate.heard) cutAtPause(gate);
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
                   current.gate,
                   event.probabilities.isSpeech,
-                  (event.frame.samples.length / event.frame.sampleRate) * 1000,
+                  frameMs,
                   overVoiceMinSpeechMsRef.current,
                 );
                 current.gate = step.gate;
@@ -1683,6 +1704,9 @@ export function useAudioDictationRecorder({
             preSessionSamplesRef.current = [...primerSamples];
             preDroppedRef.current = 0;
             vadEngineRef.current?.reset?.();
+            // Nothing was said over the voice: the recording counts as one
+            // that opened after it, and may approve by voice.
+            recordingSignalsRef.current = recordingSignals(Date.now(), false);
             if (gate) {
               gate.speaking = false;
               gate.realStarted = false;
@@ -1903,6 +1927,7 @@ export function useAudioDictationRecorder({
     heldHesitation,
     toggleDictation,
     cancelDictation,
+    readRecordingSignals,
   };
 }
 

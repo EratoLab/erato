@@ -222,6 +222,7 @@ mod tests {
             child_chat_id: None,
             reason: reason.map(str::to_string),
             change_request: reason.map(|_| "nimm den 22.".to_string()),
+            voice: None,
         })
     }
 
@@ -348,6 +349,7 @@ mod tests {
                 child_chat_id: None,
                 covers: None,
                 scope_approval_id: None,
+                voice: None,
             }),
             ContentPart::ToolUse(settled("new", "update_record")),
         ]);

@@ -886,6 +886,7 @@ export const ChatInput = ({
     heldHesitation,
     toggleDictation,
     cancelDictation,
+    readRecordingSignals,
   } = useAudioDictationRecorder({
     enabled: audioDictationEnabled || audioConversationalEnabled,
     mode: isAudioMode ? "conversational" : "dictation",
@@ -1070,10 +1071,12 @@ export const ChatInput = ({
   const closeCardListening = useCallback(() => {
     if (isDictating || isDictationStarting) cancelDictation();
   }, [cancelDictation, isDictating, isDictationStarting]);
-  const readCardTurn = useCallback(
-    () => dictationTargetRef.current?.card ?? { words: "", ended: false },
-    [],
-  );
+  const readCardTurn = useCallback(() => {
+    const card = dictationTargetRef.current?.card;
+    if (!card) return { words: "", ended: false };
+    const recording = readRecordingSignals();
+    return recording ? { ...card, recording } : card;
+  }, [readRecordingSignals]);
   useApprovalCardListening({
     overVoice: overVoiceAllowed,
     recorderLive: isDictating,

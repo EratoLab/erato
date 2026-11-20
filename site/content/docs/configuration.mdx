@@ -5656,7 +5656,7 @@ allow_other_provider = true
 
 {/* erato_toml_config_key: approval_voice_commands */}
 
-While an approval card waits in conversational audio mode, the user may say something: "weiter", "hab ich, was wird sonst noch geändert?", "wie war das Datum?", "lies mir die Beschreibung vor", "stopp", or "nimm den 22.". This section turns those words into one meaning from a closed list, through `POST /api/v1beta/me/messages/{message_id}/approval-voice-command`, which only answers for a message of the user's own chat with an approval waiting. The meanings are: skip the current piece, say the rest, repeat a piece, read a long text, stop, change the call, a new unrelated request, approve, reject, listening noise, and unclear. The answer is the meaning and, for repeat and read text, the piece meant; it carries no text to speak, decides nothing, and nothing is stored. Approve and reject are only reported, so the caller can say that decisions are made on screen.
+While an approval card waits in conversational audio mode, the user may say something: "weiter", "hab ich, was wird sonst noch geändert?", "wie war das Datum?", "lies mir die Beschreibung vor", "stopp", or "nimm den 22.". This section turns those words into one meaning from a closed list, through `POST /api/v1beta/me/messages/{message_id}/approval-voice-command`, which only answers for a message of the user's own chat with an approval waiting. The meanings are: skip the current piece, say the rest, repeat a piece, read a long text, stop, change the call, a new unrelated request, approve, reject, listening noise, and unclear. The answer is the meaning and, for repeat and read text, the piece meant; it carries no text to speak, and nothing is stored. Approve and reject are only reported, so the caller can say that decisions are made on screen, unless [`approval_voice_decisions`](#approval_voice_decisions) is on.
 
 Built-in rules match the plain words and short phrases in German and English without a model. Words the rules do not match go to the configured model, if any. The model answers with one meaning and one piece id from closed lists; any other answer, an error, or an answer after `model_timeout_ms` gives "unclear". Approve or reject is only reported once the card's request to decide has been heard (or the card has none): a "ja" while the card is still being read, or beside a backchannel ("mhm, ja", "ja ja"), is listening noise. It also needs a short sentence made only of words of agreement or of refusal, without a question (also without a question mark: "passt das"), a condition, a change, a number or a field of the card ("ja, aber nimm den 22." is a change; "ja nee" and "danke" are no approval). A change that breaks off before it says what to change ("nimm lieber den") is "unclear", and words that could be a change are never reported as a new request.
 
@@ -5674,7 +5674,7 @@ chat_provider_id = "gpt-4o-mini"
 
 Offer the endpoint, and let the web app listen while a spoken card waits. **Default:** `false`.
 
-When on, conversational audio mode opens the microphone once the voice has said the card and is silent, and never while it speaks. What the user says goes to this endpoint, never into a chat message. Skip, the rest, repeat, read a long text and stop steer the voice; approve, reject, change and a new request are answered with a sentence that they are done on screen for now, and the card keeps waiting. When the endpoint fails or does not answer, the voice says so once and the card waits on screen. When off, the microphone stays closed while a card waits, as before.
+When on, conversational audio mode opens the microphone once the voice has said the card and is silent, and never while it speaks. What the user says goes to this endpoint, never into a chat message. Skip, the rest, repeat, read a long text and stop steer the voice; a change is sent as a change request; approve, reject and a new request are answered with a sentence that they are done on screen, and the card keeps waiting, unless [`approval_voice_decisions`](#approval_voice_decisions) is on. When the endpoint fails or does not answer, the voice says so once and the card waits on screen. When off, the microphone stays closed while a card waits, as before.
 
 #### `approval_voice_commands.chat_provider_id`
 
@@ -5695,6 +5695,49 @@ How long the model may take before the answer is "unclear", in milliseconds. **D
 Replaces the model's built-in instruction, for example from subscription content. Unset or blank, the built-in one applies. The answer is checked against the closed lists whatever the instruction says.
 
 **Type:** `string`
+
+### `approval_voice_decisions`
+
+{/* erato_toml_config_key: approval_voice_decisions */}
+
+Lets the user decide a waiting approval card by voice in conversational audio mode. Needs [`approval_voice_commands`](#approval_voice_commands) enabled, which understands the words; the server does not start with this section on and that one off.
+
+```toml
+[approval_voice_decisions]
+enabled = true
+```
+
+#### `approval_voice_decisions.enabled`
+
+{/* erato_toml_config_key: approval_voice_decisions.enabled */}
+
+Decide waiting cards by voice. **Default:** `false`.
+
+Only one phrase approves: „Ich bestätige“ in German, "I confirm" in English. It may start with „ja“ / "yes" and end with „das“ or „bitte“ / "this" or "please", and nothing else may be said with it. A plain „ja“, „okay“ or „mach das“ never approves, and neither does the phrase inside a longer sentence, with a negation or condition, or as a question. The phrase is matched by rule, never by the model, and never given to the transcriber as a hint. When it is on, the card's last sentence names the phrase („Zum Ausführen bitte „Ich bestätige“ sagen.“) and the card shows it under the buttons while it listens. A near miss gets one line naming the phrase; after two, the voice points to the screen. „Nein“ and the other refusals of the rules refuse.
+
+An approval by voice also needs: the card's request heard in full, with no loss, consequence or outside recipients still unsaid; a recording that started after the voice stopped, whose first speech comes after `echo_tail_ms`; and at least `min_speech_ms_per_syllable` of speech per syllable of the phrase, as the web app's speech detector measured it. Only the turn's own single call is decided by voice, and only on a card read in German or English, the languages with a built-in phrase. SQL and other statements, calls with a label warning, more than 20 items and calls the card cannot describe are approved on screen; a refusal by voice still counts for them.
+
+An accepted decision gets a receipt bound to the user, the approval and a digest of the call's arguments. The web app sends the decision with it; the backend takes it once and refuses a decision whose receipt is unknown, expired, or for another card or decision. A decision without a receipt counts as a tap, so it is the web app that holds back an approval said without the phrase. Each decision by voice keeps a record with the decision part of the message: who, the card digest, which pieces were heard, the phrase and the matched words, the times (request heard, voice stopped, recording start and end), speech duration, the share of speech frames and the time from request to answer. No audio is kept, and the log never names the words.
+
+Receipts are kept in the memory of the replica that issued them. With several replicas, a decision must reach the same one (sticky sessions), or it is refused and the user decides on screen.
+
+#### `approval_voice_decisions.echo_tail_ms`
+
+{/* erato_toml_config_key: approval_voice_decisions.echo_tail_ms */}
+
+How long after the voice stops speech still counts as its echo and cannot approve, in milliseconds. **Default:** `300`. **Range:** `100–2000`.
+
+#### `approval_voice_decisions.min_speech_ms_per_syllable`
+
+{/* erato_toml_config_key: approval_voice_decisions.min_speech_ms_per_syllable */}
+
+Speech the detector must have heard per syllable of the phrase, in milliseconds: with `80`, „Ich bestätige“ (five syllables) needs 400 ms. **Default:** `80`. **Range:** `20–400`.
+
+#### `approval_voice_decisions.receipt_ttl_seconds`
+
+{/* erato_toml_config_key: approval_voice_decisions.receipt_ttl_seconds */}
+
+How long an accepted decision by voice may take to arrive, in seconds. **Default:** `120`. **Range:** `5–600`.
 
 ### `approval_speech`
 

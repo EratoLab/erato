@@ -93,6 +93,8 @@ export type Env = {
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
   approvalVoiceCommandsEnabled?: boolean;
+  /** A waiting card may be decided by voice; only the phrase approves. */
+  approvalVoiceDecisionsEnabled?: boolean;
   /** The deployment's natural sentence variants for spoken approval cards, by language. */
   approvalSpeechSentences?: Partial<
     Record<string, Partial<Record<string, string>>>
@@ -205,6 +207,7 @@ declare global {
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
     APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
+    APPROVAL_VOICE_DECISIONS_ENABLED?: boolean;
     APPROVAL_SPEECH_SENTENCES?: Partial<
       Record<string, Partial<Record<string, string>>>
     >;
@@ -736,6 +739,10 @@ export const env = (): Env => {
       import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
         ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
         : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
+    approvalVoiceDecisionsEnabled:
+      import.meta.env.VITE_APPROVAL_VOICE_DECISIONS_ENABLED !== undefined
+        ? import.meta.env.VITE_APPROVAL_VOICE_DECISIONS_ENABLED === "true"
+        : (window.APPROVAL_VOICE_DECISIONS_ENABLED ?? false),
     approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     spokenNumberWords: window.SPOKEN_NUMBER_WORDS,
     audioConversationalMaxRecordingDurationSeconds,

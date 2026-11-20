@@ -140,6 +140,7 @@ vi.mock("@/hooks/ui", () => ({
 
 // A recording that is dropped goes through `cancelDictation`; mocks that give
 // only `toggleDictation` see it there, so "the microphone closes" still counts.
+// Mocks measure nothing about a recording.
 vi.mock("@/hooks/audio/useAudioDictationRecorder", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("@/hooks/audio/useAudioDictationRecorder")
@@ -148,10 +149,15 @@ vi.mock("@/hooks/audio/useAudioDictationRecorder", async (importOriginal) => ({
     const recorder = mockUseAudioDictationRecorder(...args) as {
       toggleDictation?: () => void;
       cancelDictation?: () => void;
+      readRecordingSignals?: () => null;
     } | null;
-    return recorder && !recorder.cancelDictation
-      ? { ...recorder, cancelDictation: recorder.toggleDictation }
-      : recorder;
+    return (
+      recorder && {
+        ...recorder,
+        cancelDictation: recorder.cancelDictation ?? recorder.toggleDictation,
+        readRecordingSignals: recorder.readRecordingSignals ?? (() => null),
+      }
+    );
   },
 }));
 
@@ -9127,7 +9133,11 @@ describe("ChatInput", () => {
         rerender(ui(true));
 
         await waitFor(() =>
-          expect(mockHeardApprovalWords).toHaveBeenCalledWith(KEY, "ja"),
+          expect(mockHeardApprovalWords).toHaveBeenCalledWith(
+            KEY,
+            "ja",
+            undefined,
+          ),
         );
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 20));
@@ -9590,6 +9600,7 @@ describe("ChatInput", () => {
           expect(mockHeardApprovalWords).toHaveBeenCalledWith(
             KEY,
             "ja, mach das",
+            undefined,
           ),
         );
         await act(async () => {

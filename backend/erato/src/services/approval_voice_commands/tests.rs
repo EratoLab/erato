@@ -279,6 +279,7 @@ async fn the_model_is_asked_only_when_the_rules_do_not_match() {
             meaning: VoiceMeaning::Rest,
             piece_id: None,
             source: VoiceCommandSource::Model,
+            decision: None,
         }
     );
     assert_eq!(model.calls.load(Ordering::SeqCst), 1);
@@ -338,6 +339,7 @@ async fn a_late_failing_or_off_list_model_gives_unclear() {
                 meaning: VoiceMeaning::Unclear,
                 piece_id: None,
                 source: VoiceCommandSource::None,
+                decision: None,
             },
             "{outcome}"
         );
@@ -983,6 +985,7 @@ fn requests_keep_their_limits() {
             role: CardPieceRole::Detail,
             field: None,
             state: CardPieceState::NotSaid,
+            must_say: false,
         })
         .collect();
     assert_eq!(checked("weiter", &many, None), Err(InputProblem::TooLarge));
@@ -998,24 +1001,28 @@ fn naming_a_text_answers_which_text() {
             role: CardPieceRole::What,
             field: None,
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "text:summary".into(),
             role: CardPieceRole::Text,
             field: Some("Zusammenfassung".into()),
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "text:need".into(),
             role: CardPieceRole::Text,
             field: Some("Kundenbedarf".into()),
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "request".into(),
             role: CardPieceRole::Request,
             field: None,
             state: CardPieceState::Heard,
+            must_say: false,
         },
     ];
     let rules = |words: &str, language: &str, question: Option<VoiceQuestion>| {
@@ -1068,6 +1075,7 @@ fn the_model_hears_that_the_voice_asked_which_text() {
         role: CardPieceRole::Text,
         field: Some("Summary".into()),
         state: CardPieceState::Heard,
+        must_say: false,
     }];
     let input = |question| VoiceCommandInput {
         transcript: "the first one",
@@ -1085,4 +1093,535 @@ fn the_model_hears_that_the_voice_asked_which_text() {
     };
     assert!(said(Some(VoiceQuestion::WhichText)).contains("THE VOICE JUST ASKED"));
     assert!(!said(None).contains("THE VOICE JUST ASKED"));
+}
+
+mod deciding_by_voice {
+    use super::super::decision::*;
+    use super::super::phrase::*;
+    use super::*;
+    use crate::models::message::{
+        ApprovalItem, ToolApprovalKind, ToolCallAction, ToolCallLabel, ToolDisplayMetadata,
+        VoiceDecisionOutcome,
+    };
+    use serde_json::json;
+    use std::time::Duration;
+    use uuid::Uuid;
+
+    fn approves(words: &str) -> bool {
+        match_phrase(words, &[]).is_some()
+    }
+
+    #[test]
+    fn the_phrase_alone_or_with_its_listed_words_approves() {
+        for words in [
+            "Ich bestätige.",
+            "ich bestätige",
+            "Ich bestaetige!",
+            "Ja, ich bestätige.",
+            "Ich bestätige das.",
+            "Ich bestätige, bitte.",
+            "Äh, ich bestätige.",
+            "I confirm.",
+            "I confirm this.",
+            "Yes, I confirm.",
+            "I confirm, please.",
+        ] {
+            assert!(approves(words), "{words}");
+        }
+        assert_eq!(
+            match_phrase("Ich bestätige.", &[]).unwrap().kind,
+            PhraseMatchKind::Exact
+        );
+        assert_eq!(
+            match_phrase("Ja, ich bestätige das", &[]).unwrap().kind,
+            PhraseMatchKind::Variant
+        );
+        assert_eq!(
+            match_phrase("I confirm this", &[]).unwrap().phrase.id,
+            "en.i_confirm"
+        );
+    }
+
+    #[test]
+    fn near_misses_never_approve() {
+        for words in [
+            "ja",
+            "Ja.",
+            "ja, mach das",
+            "Mach das.",
+            "okay",
+            "yes",
+            "go ahead",
+            "ich bestätige nicht",
+            "Ich bestätige nicht.",
+            "ich bestätige, aber morgen",
+            "Ich bestätige das später.",
+            "ich bestätige das nicht",
+            "nein, ich bestätige",
+            "ich bestätige?",
+            "Bestätige.",
+            "bestätigen",
+            "ich bestätige es",
+            "ja ja ich bestätige",
+            "ich bestätige das bitte",
+            "bitte ich bestätige",
+            "I don't confirm",
+            "I do not confirm.",
+            "I confirm, but only tomorrow",
+            "I confirm it",
+            "confirm",
+            "I can confirm",
+            "Zum Ausführen bitte „Ich bestätige“ sagen.",
+            "To go ahead, say: I confirm.",
+            "Say I confirm to go ahead.",
+            "Bitte noch einmal Ich bestätige sagen.",
+            "„Ich bestätige“",
+            "\"I confirm\"",
+            "Ich bestätige？",
+            "¿I confirm?",
+            "Ich bestätige‽",
+        ] {
+            assert!(!approves(words), "{words}");
+        }
+    }
+
+    #[test]
+    fn no_sentence_of_either_set_says_the_phrase() {
+        let mut checked = 0;
+        for set in [sentence_set(), heldout_set()] {
+            for sentence in &set.sentences {
+                assert!(!approves(&sentence.text), "{}", sentence.id);
+                checked += 1;
+            }
+        }
+        assert!(checked > 600, "{checked}");
+    }
+
+    #[test]
+    fn the_deployments_hesitation_words_are_trimmed_too() {
+        assert!(match_phrase("Euh, ich bestätige", &["euh".to_string()]).is_some());
+        assert!(match_phrase("Euh, ich bestätige", &[]).is_none());
+        assert!(match_phrase("ich euh bestätige", &["euh".to_string()]).is_none());
+    }
+
+    #[test]
+    fn the_phrase_needs_speech_for_its_syllables() {
+        assert_eq!(syllables(phrase_for("de-DE").unwrap()), 5);
+        assert_eq!(syllables(phrase_for("en").unwrap()), 3);
+        assert!(phrase_for("fr").is_none());
+    }
+
+    fn signals() -> VoiceSignals {
+        VoiceSignals {
+            voice_stopped_at_ms: 10_000,
+            request_heard_at_ms: Some(9_000),
+            recording_started_at_ms: 10_050,
+            recording_ended_at_ms: 12_500,
+            first_speech_at_ms: Some(10_600),
+            speech_ms: 900,
+            recorded_ms: 2_400,
+            over_voice: false,
+        }
+    }
+
+    #[test]
+    fn only_a_recording_after_the_voice_with_enough_speech_approves() {
+        let matched = match_phrase("Ich bestätige", &[]).unwrap();
+        let check =
+            |signals: Option<VoiceSignals>| check_signals(signals.as_ref(), &matched, 300, 80);
+        assert_eq!(check(Some(signals())), Ok(()));
+        assert_eq!(check(None), Err(SignalProblem::Missing));
+        let over = VoiceSignals {
+            over_voice: true,
+            ..signals()
+        };
+        assert_eq!(check(Some(over)), Err(SignalProblem::OverVoice));
+        let early = VoiceSignals {
+            recording_started_at_ms: 9_900,
+            ..signals()
+        };
+        assert_eq!(check(Some(early)), Err(SignalProblem::BeforeVoiceStopped));
+        let echo = VoiceSignals {
+            first_speech_at_ms: Some(10_200),
+            ..signals()
+        };
+        assert_eq!(check(Some(echo)), Err(SignalProblem::InEchoTail));
+        let short = VoiceSignals {
+            speech_ms: 399,
+            ..signals()
+        };
+        assert_eq!(check(Some(short)), Err(SignalProblem::TooLittleSpeech));
+        let silent = VoiceSignals {
+            first_speech_at_ms: None,
+            ..signals()
+        };
+        assert_eq!(check(Some(silent)), Err(SignalProblem::TooLittleSpeech));
+    }
+
+    fn piece(id: &str, role: CardPieceRole, state: CardPieceState) -> CardPiece {
+        CardPiece {
+            id: id.to_string(),
+            role,
+            field: None,
+            state,
+            must_say: false,
+        }
+    }
+
+    #[test]
+    fn the_card_must_have_asked_with_nothing_owed() {
+        use CardPieceRole::*;
+        use CardPieceState::*;
+        let heard = [
+            piece("w", What, Heard),
+            piece("c", Consequence, Heard),
+            piece("r", Request, Heard),
+        ];
+        assert!(card_asked(&heard));
+        let not_asked = [piece("w", What, Heard), piece("r", Request, CutShort)];
+        assert!(!card_asked(&not_asked));
+        let owed = [
+            piece("w", What, Heard),
+            piece("c", Consequence, NotSaid),
+            piece("r", Request, Heard),
+        ];
+        assert!(!card_asked(&owed));
+        assert!(super::super::request_heard(&owed) && only_points(&[piece("p", Pointer, Heard)]));
+        let outside = [piece("o", Outside, CutShort), piece("r", Request, Heard)];
+        assert!(!card_asked(&outside));
+        assert!(!card_asked(&[piece("p", Pointer, Heard)]));
+        assert!(!card_asked(&[piece("w", What, Heard)]));
+        let loss = CardPiece {
+            must_say: true,
+            ..piece("w", What, CutShort)
+        };
+        assert!(!card_asked(&[loss, piece("r", Request, Heard)]));
+        // A detail skipped is not owed.
+        assert!(card_asked(&[
+            piece("d", Detail, NotSaid),
+            piece("r", Request, Heard)
+        ]));
+    }
+
+    fn label(action: ToolCallAction) -> ToolCallLabel {
+        serde_json::from_value(json!({
+            "action": serde_json::to_value(action).unwrap(),
+            "object_kind": "task",
+            "source": "rules",
+        }))
+        .unwrap()
+    }
+
+    fn item(approval_id: &str, label: Option<ToolCallLabel>) -> ApprovalItem {
+        ApprovalItem {
+            approval_id: approval_id.to_string(),
+            tool_call_id: format!("call_{approval_id}"),
+            tool_name: "update_task".to_string(),
+            display: label.map(|label| ToolDisplayMetadata {
+                label: Some(label),
+                ..serde_json::from_value(
+                    json!({"title": "Update task", "description_truncated": false}),
+                )
+                .unwrap()
+            }),
+            input: json!({"id": 7, "status": "done"}),
+            child: None,
+            replaces_approval_id: None,
+        }
+    }
+
+    #[test]
+    fn only_the_turns_single_own_call_is_decided_by_voice() {
+        let one = [item("a1", Some(label(ToolCallAction::Update)))];
+        assert!(!stop_is_screen_only(
+            ToolApprovalKind::McpTool,
+            &one,
+            Some("a1")
+        ));
+        assert!(!stop_is_screen_only(
+            ToolApprovalKind::ClientTool,
+            &one,
+            Some("a1")
+        ));
+        assert!(stop_is_screen_only(
+            ToolApprovalKind::McpTool,
+            &one,
+            Some("a2")
+        ));
+        assert!(stop_is_screen_only(ToolApprovalKind::McpTool, &one, None));
+        assert!(stop_is_screen_only(
+            ToolApprovalKind::ToolCallLimit,
+            &one,
+            Some("a1")
+        ));
+        assert!(stop_is_screen_only(
+            ToolApprovalKind::BuiltinTool,
+            &one,
+            Some("a1")
+        ));
+        let two = [one[0].clone(), item("a2", None)];
+        assert!(stop_is_screen_only(
+            ToolApprovalKind::McpTool,
+            &two,
+            Some("a1")
+        ));
+    }
+
+    #[test]
+    fn statements_warnings_big_batches_and_unlabelled_calls_are_approved_on_screen() {
+        assert!(!approval_is_screen_only(&item(
+            "a",
+            Some(label(ToolCallAction::Update))
+        )));
+        assert!(!approval_is_screen_only(&item(
+            "a",
+            Some(label(ToolCallAction::Delete))
+        )));
+        assert!(approval_is_screen_only(&item("a", None)));
+        assert!(approval_is_screen_only(&item(
+            "a",
+            Some(label(ToolCallAction::Run))
+        )));
+        assert!(approval_is_screen_only(&item(
+            "a",
+            Some(label(ToolCallAction::Other))
+        )));
+        let mut generic = label(ToolCallAction::Update);
+        generic.source = crate::models::message::ToolCallLabelSource::Generic;
+        assert!(label_is_screen_only(&generic));
+        let mut omitted = label(ToolCallAction::Update);
+        omitted.change = Some(crate::models::message::ToolCallChange {
+            opaque_omitted: 1,
+            ..Default::default()
+        });
+        assert!(label_is_screen_only(&omitted));
+        let mut warned = label(ToolCallAction::Update);
+        warned.warnings = serde_json::from_value(json!(["hidden_characters"])).unwrap();
+        assert!(label_is_screen_only(&warned));
+        let mut opaque = label(ToolCallAction::Update);
+        opaque.change = Some(crate::models::message::ToolCallChange {
+            opaque: vec![
+                serde_json::from_value(json!({
+                    "kind": "sql", "name": "Query", "raw_name": "query", "path": "query",
+                    "text": "UPDATE t SET x = 1", "lines": 1,
+                }))
+                .unwrap(),
+            ],
+            ..Default::default()
+        });
+        assert!(label_is_screen_only(&opaque));
+        let batch = |total: u32| -> ToolCallLabel {
+            let mut batched = label(ToolCallAction::Delete);
+            batched.change = Some(crate::models::message::ToolCallChange {
+                batch: Some(
+                    serde_json::from_value(json!({
+                        "path": "ids", "name": "ids", "total": total,
+                    }))
+                    .unwrap(),
+                ),
+                ..Default::default()
+            });
+            batched
+        };
+        assert!(!label_is_screen_only(&batch(20)));
+        assert!(label_is_screen_only(&batch(21)));
+        let ids = |count: usize| -> ToolCallLabel {
+            let mut many = label(ToolCallAction::Delete);
+            many.items = vec![
+                serde_json::from_value(json!({
+                    "id": {
+                        "pointer": "/ids/*",
+                        "values": (0..count).map(|n| json!({"path": format!("/ids/{n}"), "text": format!("id-{n}"), "truncated": false})).collect::<Vec<_>>(),
+                    },
+                }))
+                .unwrap(),
+            ];
+            many
+        };
+        assert!(!label_is_screen_only(&ids(20)));
+        assert!(label_is_screen_only(&ids(21)));
+    }
+
+    fn receipt(item: &ApprovalItem, outcome: VoiceDecisionOutcome) -> VoiceReceipt {
+        let pieces = [piece("r", CardPieceRole::Request, CardPieceState::Heard)];
+        VoiceReceipt {
+            user_id: "user".to_string(),
+            message_id: Uuid::nil(),
+            approval_id: item.approval_id.clone(),
+            card_digest: card_digest(item),
+            outcome,
+            issued: std::time::Instant::now(),
+            record: record(RecordInput {
+                user_id: "user",
+                item,
+                language: "de",
+                pieces: &pieces,
+                required_phrase: Some("de.ich_bestaetige"),
+                matched_words: "ich bestaetige",
+                match_kind: Some(PhraseMatchKind::Exact),
+                signals: &signals(),
+                outcome,
+            }),
+        }
+    }
+
+    #[test]
+    fn a_receipt_lets_through_only_its_own_decision_on_the_card_as_heard() {
+        let card = item("a1", Some(label(ToolCallAction::Update)));
+        let approved = receipt(&card, VoiceDecisionOutcome::Approved);
+        let ttl = Duration::from_secs(120);
+        let check = |receipt: Option<&VoiceReceipt>, user: &str, item: &ApprovalItem, outcome| {
+            check_receipt(receipt, user, Uuid::nil(), item, outcome, ttl)
+        };
+        assert_eq!(
+            check(
+                Some(&approved),
+                "user",
+                &card,
+                VoiceDecisionOutcome::Approved
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            check(None, "user", &card, VoiceDecisionOutcome::Approved),
+            Err(ReceiptProblem::Unknown)
+        );
+        assert_eq!(
+            check(
+                Some(&approved),
+                "other",
+                &card,
+                VoiceDecisionOutcome::Approved
+            ),
+            Err(ReceiptProblem::OtherCard)
+        );
+        let changed = ApprovalItem {
+            input: json!({"id": 8, "status": "done"}),
+            ..card.clone()
+        };
+        assert_eq!(
+            check(
+                Some(&approved),
+                "user",
+                &changed,
+                VoiceDecisionOutcome::Approved
+            ),
+            Err(ReceiptProblem::OtherCard)
+        );
+        let refused = receipt(&card, VoiceDecisionOutcome::Refused);
+        assert_eq!(
+            check(
+                Some(&refused),
+                "user",
+                &card,
+                VoiceDecisionOutcome::Approved
+            ),
+            Err(ReceiptProblem::OtherDecision)
+        );
+        let old = VoiceReceipt {
+            issued: std::time::Instant::now() - Duration::from_secs(121),
+            ..approved.clone()
+        };
+        assert_eq!(
+            check(Some(&old), "user", &card, VoiceDecisionOutcome::Approved),
+            Err(ReceiptProblem::Expired)
+        );
+        assert_eq!(
+            check_receipt(
+                Some(&approved),
+                "user",
+                Uuid::new_v4(),
+                &card,
+                VoiceDecisionOutcome::Approved,
+                ttl
+            ),
+            Err(ReceiptProblem::OtherCard)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_receipt_is_taken_once() {
+        let receipts = VoiceReceipts::default();
+        let card = item("a1", Some(label(ToolCallAction::Update)));
+        let id = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Approved))
+            .await;
+        assert!(receipts.take(&id).await.is_some());
+        assert!(receipts.take(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_new_receipt_for_the_same_card_replaces_the_last() {
+        let receipts = VoiceReceipts::default();
+        let card = item("a1", Some(label(ToolCallAction::Update)));
+        let first = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
+            .await;
+        let second = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
+            .await;
+        assert!(receipts.take(&first).await.is_none());
+        assert!(receipts.take(&second).await.is_some());
+        let other = item("a2", Some(label(ToolCallAction::Update)));
+        let kept = receipts
+            .issue(receipt(&card, VoiceDecisionOutcome::Approved))
+            .await;
+        receipts
+            .issue(receipt(&other, VoiceDecisionOutcome::Approved))
+            .await;
+        assert!(receipts.take(&kept).await.is_some());
+    }
+
+    #[test]
+    fn the_record_keeps_the_signals_for_a_later_decision_model() {
+        let card = item("a1", Some(label(ToolCallAction::Update)));
+        let kept = receipt(&card, VoiceDecisionOutcome::Approved).record;
+        assert_eq!(kept.speech_ms, 900);
+        assert_eq!(kept.speech_frames_permille, 375);
+        assert_eq!(kept.answer_latency_ms, Some(1_600));
+        assert_eq!(kept.card_digest, card_digest(&card));
+        assert_eq!(kept.pieces[0].role, CardPieceRole::Request);
+        assert_eq!(kept.pieces[0].state, CardPieceState::Heard);
+        assert_eq!(kept.required_phrase.as_deref(), Some("de.ich_bestaetige"));
+        assert!(kept.voice_stopped_at.starts_with("1970-01-01T00:00:10"));
+    }
+}
+
+/// The web app decides from the same label whether a card names the phrase
+/// (`voiceApprovable` in spokenCard.ts); both check this table, made from the
+/// labelled call set the spoken cards are written against.
+///
+/// Regenerate with `VOICE_APPROVAL_TABLE_WRITE=1 cargo nextest run -p erato voice_approval_table`.
+#[test]
+fn voice_approval_table_matches_the_labelled_call_set() {
+    use crate::models::message::ToolCallLabel;
+    const CALLS: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/calls.json"
+    ));
+    const TABLE_PATH: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/voiceApprovals.json"
+    );
+    let calls: serde_json::Value = serde_json::from_str(CALLS).unwrap();
+    let table: BTreeMap<String, bool> = calls["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            let label: Option<ToolCallLabel> =
+                serde_json::from_value(call["display"]["label"].clone()).ok();
+            let approvable = label.is_some_and(|label| !decision::label_is_screen_only(&label));
+            (call["id"].as_str().unwrap().to_string(), approvable)
+        })
+        .collect();
+    let written = serde_json::to_string_pretty(&table).unwrap() + "\n";
+    if std::env::var_os("VOICE_APPROVAL_TABLE_WRITE").is_some() {
+        std::fs::write(TABLE_PATH, &written).unwrap();
+    }
+    assert_eq!(
+        std::fs::read_to_string(TABLE_PATH).unwrap_or_default(),
+        written,
+        "regenerate with VOICE_APPROVAL_TABLE_WRITE=1"
+    );
 }

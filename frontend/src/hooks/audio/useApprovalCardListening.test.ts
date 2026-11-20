@@ -126,6 +126,7 @@ describe("listening while a spoken card waits", () => {
       expect(heardApprovalWords).toHaveBeenCalledWith(
         KEY,
         "hab ich, was noch?",
+        undefined,
       );
       expect(mic.open).toHaveBeenCalledTimes(1);
       // While the words are understood the card does not listen.
@@ -215,6 +216,38 @@ describe("listening while a spoken card waits", () => {
   });
 });
 
+describe("ERMAIN-1259: what deciding by voice needs from the turn", () => {
+  it("says which card the microphone is open for, and hands on what the recorder measured", () => {
+    const mic = recorder();
+    cardSaid(false);
+    const { rerender } = render(mic);
+    rerender({ on: true });
+    expect(useApprovalListening.getState().listening).toBe(KEY);
+    const recording = {
+      startedAt: 1_000,
+      endedAt: 3_000,
+      firstSpeechAt: 1_600,
+      speechMs: 900,
+      recordedMs: 2_000,
+      overVoice: false,
+    };
+    mic.state.turn = {
+      ended: true,
+      words: "Ich bestätige.",
+      recording,
+    } as typeof mic.state.turn;
+    mic.state.open = false;
+    mic.state.idle = true;
+    rerender({ on: true });
+    expect(heardApprovalWords).toHaveBeenCalledWith(
+      KEY,
+      "Ich bestätige.",
+      recording,
+    );
+    expect(useApprovalListening.getState().listening).toBeNull();
+  });
+});
+
 describe("listening over the voice of a spoken card", () => {
   it("opens while the voice speaks, and keeps waiting there", () => {
     const mic = recorder();
@@ -240,7 +273,11 @@ describe("listening over the voice of a spoken card", () => {
     mic.state.live = false;
     mic.state.idle = true;
     rerender({ on: true });
-    expect(heardApprovalWords).toHaveBeenCalledWith(KEY, "hab ich, was noch?");
+    expect(heardApprovalWords).toHaveBeenCalledWith(
+      KEY,
+      "hab ich, was noch?",
+      undefined,
+    );
     expect(resumeTalkedOverCard).not.toHaveBeenCalled();
   });
 

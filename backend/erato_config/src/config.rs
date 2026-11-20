@@ -904,6 +904,15 @@ pub struct AppConfig {
     #[facet(erato_config::default_value_security(level = "more_secure"))]
     pub approval_voice_commands: ApprovalVoiceCommandsConfig,
 
+    /// Deciding a waiting approval card by voice in conversational audio
+    /// mode.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub approval_voice_decisions: ApprovalVoiceDecisionsConfig,
+
     /// What the model is told when the user asks for a waiting tool call to
     /// be changed instead of allowing or denying it, and how far that goes.
     #[serde(default)]
@@ -1766,6 +1775,10 @@ impl AppConfig {
 
         if let Err(e) = config.validate_approval_voice_commands() {
             panic!("Invalid approval voice commands configuration: {}", e);
+        }
+
+        if let Err(e) = config.validate_approval_voice_decisions() {
+            panic!("Invalid approval voice decisions configuration: {}", e);
         }
 
         warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
@@ -2874,6 +2887,44 @@ impl AppConfig {
                 .filter(|id| !id.trim().is_empty())
                 .ok_or_else(|| eyre!("tool_labels.chat_provider_id is required when enabled"))?;
             self.resolve_chat_provider_id(id)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_approval_voice_decisions(&self) -> Result<(), eyre::Report> {
+        let decisions = &self.approval_voice_decisions;
+        if !decisions.enabled {
+            return Ok(());
+        }
+        if !self.approval_voice_commands.enabled {
+            return Err(eyre!(
+                "approval_voice_decisions needs approval_voice_commands.enabled"
+            ));
+        }
+        for (key, value, range) in [
+            (
+                "echo_tail_ms",
+                decisions.echo_tail_ms,
+                APPROVAL_VOICE_ECHO_TAIL_MS_RANGE,
+            ),
+            (
+                "min_speech_ms_per_syllable",
+                decisions.min_speech_ms_per_syllable,
+                APPROVAL_VOICE_MIN_SPEECH_MS_PER_SYLLABLE_RANGE,
+            ),
+            (
+                "receipt_ttl_seconds",
+                decisions.receipt_ttl_seconds,
+                APPROVAL_VOICE_RECEIPT_TTL_SECONDS_RANGE,
+            ),
+        ] {
+            if !range.contains(&value) {
+                return Err(eyre!(
+                    "approval_voice_decisions.{key} must be from {} to {}",
+                    range.start(),
+                    range.end()
+                ));
+            }
         }
         Ok(())
     }
@@ -4020,7 +4071,44 @@ pub struct ApprovalVoiceCommandsConfig {
     pub prompt: Option<String>,
 }
 
+/// Off by default. Lets the user decide a waiting card by voice: "nein"
+/// refuses, and only the confirmation phrase ("Ich bestätige" / "I confirm")
+/// approves, never a plain "ja" or a model's judgement. Needs
+/// `[approval_voice_commands]`, which understands the words.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ApprovalVoiceDecisionsConfig {
+    #[facet(erato_config::security_relevance(level = "high"))]
+    pub enabled: bool,
+    /// How long after the voice stops speech still counts as its echo and
+    /// cannot approve, in milliseconds. Defaults to `300`; allowed from
+    /// `100` to `2000`.
+    #[facet(erato_config::security_relevance(level = "high"))]
+    pub echo_tail_ms: u32,
+    /// Speech the detector must have heard per syllable of the phrase, in
+    /// milliseconds. Defaults to `80`; allowed from `20` to `400`.
+    #[facet(erato_config::security_relevance(level = "medium"))]
+    pub min_speech_ms_per_syllable: u32,
+    /// How long an accepted decision by voice may take to arrive, in
+    /// seconds. Defaults to `120`; allowed from `5` to `600`.
+    pub receipt_ttl_seconds: u32,
+}
+
+impl Default for ApprovalVoiceDecisionsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            echo_tail_ms: 300,
+            min_speech_ms_per_syllable: 80,
+            receipt_ttl_seconds: 120,
+        }
+    }
+}
+
 pub const APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=10_000;
+pub const APPROVAL_VOICE_ECHO_TAIL_MS_RANGE: std::ops::RangeInclusive<u32> = 100..=2_000;
+pub const APPROVAL_VOICE_MIN_SPEECH_MS_PER_SYLLABLE_RANGE: std::ops::RangeInclusive<u32> = 20..=400;
+pub const APPROVAL_VOICE_RECEIPT_TTL_SECONDS_RANGE: std::ops::RangeInclusive<u32> = 5..=600;
 
 impl Default for ApprovalVoiceCommandsConfig {
     fn default() -> Self {
@@ -4043,7 +4131,7 @@ mod approval_voice_commands_tests {
                 enabled,
                 chat_provider_id: provider.map(str::to_string),
                 model_timeout_ms: timeout_ms,
-                prompt: None,
+                ..ApprovalVoiceCommandsConfig::default()
             },
             ..AppConfig::default()
         };
@@ -4058,6 +4146,48 @@ mod approval_voice_commands_tests {
         assert!(check(true, None, 2500).is_ok());
         assert!(check(true, Some("removed"), 2500).is_err());
         assert!(check(true, None, 0).is_err());
+    }
+
+    #[test]
+    fn deciding_by_voice_needs_voice_commands_and_checks_its_timings_only_when_on() {
+        let config = |commands: bool, enabled: bool, echo_tail_ms: u32| AppConfig {
+            approval_voice_commands: ApprovalVoiceCommandsConfig {
+                enabled: commands,
+                ..ApprovalVoiceCommandsConfig::default()
+            },
+            approval_voice_decisions: ApprovalVoiceDecisionsConfig {
+                enabled,
+                echo_tail_ms,
+                ..ApprovalVoiceDecisionsConfig::default()
+            },
+            ..AppConfig::default()
+        };
+        assert!(!ApprovalVoiceDecisionsConfig::default().enabled);
+        assert!(
+            config(true, true, 300)
+                .validate_approval_voice_decisions()
+                .is_ok()
+        );
+        assert!(
+            config(false, true, 300)
+                .validate_approval_voice_decisions()
+                .is_err()
+        );
+        assert!(
+            config(true, true, 0)
+                .validate_approval_voice_decisions()
+                .is_err()
+        );
+        assert!(
+            config(true, true, 5000)
+                .validate_approval_voice_decisions()
+                .is_err()
+        );
+        assert!(
+            config(false, false, 0)
+                .validate_approval_voice_decisions()
+                .is_ok()
+        );
     }
 }
 

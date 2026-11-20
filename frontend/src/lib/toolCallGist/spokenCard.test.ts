@@ -13,15 +13,19 @@ import { changeLayout } from "./change";
 import { changeNoteLabel } from "./changeLabels";
 import data from "./fixtures/spokenCards/calls.json";
 import expectedPieces from "./fixtures/spokenCards/expected.json";
+import voiceApprovals from "./fixtures/spokenCards/voiceApprovals.json";
 import { toolCallCardOf } from "./gist";
 import { gistPlainLine } from "./gistLabels";
 import {
   MAX_READ_WORDS,
   MAX_SPOKEN_DETAILS,
+  MAX_VOICE_ITEMS,
   sameSpokenKind,
   spokenApprovalFor,
   spokenApprovalPieces,
   spokenUtteranceSentences,
+  voiceApprovable,
+  voiceApprovalOffered,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
@@ -1385,5 +1389,64 @@ describe("what the voice says besides the pieces", () => {
     expect(say("en", { type: "text", index }, held).at(-1)).toBe(
       "The rest of the text is on screen.",
     );
+  });
+});
+
+describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
+  const request = (id: string, language: string, voiceApproval: boolean) =>
+    inLanguage(language, () =>
+      spokenApprovalPieces(approvalOf(callOf(id)), {
+        language,
+        now: NOW,
+        timeZone: ZONE,
+        voiceApproval,
+      }),
+    ).find((piece) => piece.role === "request")?.text;
+
+  it("says the phrase as the card's last sentence, in German and English", () => {
+    expect(request("update-01-date-and-probability", "de", true)).toBe(
+      "Zum Ausführen bitte „Ich bestätige“ sagen.",
+    );
+    expect(request("update-01-date-and-probability", "en", true)).toBe(
+      "Say “I confirm” to go ahead.",
+    );
+    expect(request("update-01-date-and-probability", "de", false)).toBe(
+      "Bitte auf dem Bildschirm bestätigen.",
+    );
+  });
+
+  it("decides from the label as the backend does, for every call of the set", () => {
+    for (const call of calls) {
+      const label = call.display.label as ToolCallLabel | undefined;
+      expect(voiceApprovable(label), call.id).toBe(
+        (voiceApprovals as Record<string, boolean>)[call.id],
+      );
+    }
+    expect(Object.keys(voiceApprovals)).toHaveLength(calls.length);
+  });
+
+  it("asks for the phrase only where the label allows it and the voice can say the call", () => {
+    const offered = (id: string) =>
+      voiceApprovalOffered(approvalOf(callOf(id)));
+    expect(offered("update-01-date-and-probability")).toBe(true);
+    expect(offered("read-01-search")).toBe(true);
+    expect(offered("run-01-sql")).toBe(false);
+    expect(offered("create-12-hidden-characters")).toBe(false);
+    expect(voiceApprovalOffered({ type: "pointer" })).toBe(false);
+    expect(request("run-01-sql", "de", true)).toBe(
+      "Bitte auf dem Bildschirm bestätigen.",
+    );
+    const update = approvalOf(callOf("update-01-date-and-probability"));
+    if (update.type !== "call" || !update.label) throw new Error("a label");
+    const batch = (total: number) =>
+      voiceApprovable({
+        ...update.label,
+        change: {
+          ...update.label?.change,
+          batch: { ...update.label?.change?.batch, total },
+        },
+      } as ToolCallLabel);
+    expect(batch(MAX_VOICE_ITEMS)).toBe(true);
+    expect(batch(MAX_VOICE_ITEMS + 1)).toBe(false);
   });
 });

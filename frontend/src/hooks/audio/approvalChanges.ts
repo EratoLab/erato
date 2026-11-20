@@ -29,6 +29,21 @@ export interface VoiceChange {
  */
 export type VoiceChangeOutcome = "sent" | "conflict" | "failed";
 
+/**
+ * What a card's screen offers the voice for deciding it: only the turn's
+ * own single call, and only while deciding by voice is on.
+ */
+export interface VoiceDecision {
+  approvalId: string;
+  /** The request names the phrase: the card may be approved by voice. */
+  approves: boolean;
+  /** Sends the decision, with the receipt the voice command endpoint gave. */
+  send: (
+    decision: "approve" | "reject",
+    receipt: string | undefined,
+  ) => Promise<VoiceChangeOutcome>;
+}
+
 export interface ChangeRecord extends WithdrawnCard {
   messageId: string;
   approvalId: string;

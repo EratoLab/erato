@@ -8851,6 +8851,21 @@ msgstr "{decision, select, approve {Zustimmen geht im Moment nur auf dem Bildsch
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decisionFailed"
+msgstr "Das ging nicht durch. Bitte auf dem Bildschirm entscheiden."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.declined"
+msgstr "Gut, ich mache nichts."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.declineOnScreen"
+msgstr "Ablehnen geht bei dieser Karte nur auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.newRequest"
 msgstr "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach die neue Bitte einfach noch einmal sagen."
 
@@ -8858,6 +8873,21 @@ msgstr "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was ander
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.noText"
 msgstr "Diese Karte hat keinen langen Text."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.phraseOnScreen"
+msgstr "Dann bitte auf dem Bildschirm bestätigen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhrase"
+msgstr "Bitte „Ich bestätige“ sagen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhraseAgain"
+msgstr "Bitte noch einmal „Ich bestätige“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8963,6 +8993,11 @@ msgstr "{shape, select, unnamed {{total, plural, one {einen Empfänger} other {{
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.request"
 msgstr "Bitte auf dem Bildschirm bestätigen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.requestPhrase"
+msgstr "Zum Ausführen bitte „Ich bestätige“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9371,6 +9406,11 @@ msgstr ""
 #: src/components/ui/Message/ApprovalDecisionActions.tsx
 msgid "toolApproval.staged.denied"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.voicePhrase"
+msgstr "Per Sprache: „Ich bestätige“"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

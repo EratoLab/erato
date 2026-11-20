@@ -546,6 +546,18 @@ describe("while the voice is quiet and listens", () => {
     const closed = spokenCardStep(CARD, heard, { type: "closed" });
     expect(voiceDecisionGate(CARD, closed).ready).toBe(false);
   });
+
+  it("a card without a request is never decided by voice", () => {
+    const pointer = CARD.filter((piece) => piece.role !== "request").map(
+      (piece) => ({ ...piece, mustSay: false }),
+    );
+    const heard = run(pointer, [
+      { type: "start" },
+      ...finished(pointer.length),
+    ]).flow;
+    expect(heard.owed).toEqual([]);
+    expect(voiceDecisionGate(pointer, heard).ready).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
