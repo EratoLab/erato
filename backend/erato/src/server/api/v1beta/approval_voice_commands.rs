@@ -12,11 +12,11 @@ use crate::services::approval_voice_commands::decision::{
     RecordInput, SignalProblem, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked,
     card_digest, check_signals, issue_receipt, only_points, record, stop_is_screen_only,
 };
-use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase_with, syllables};
+use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase, syllables};
 use crate::services::approval_voice_commands::{
     CardPiece, Classified, CommandWords, DEFAULT_PROMPT, InputProblem, VoiceCommand,
     VoiceCommandInput, VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning,
-    VoiceModel, VoiceQuestion, check_input, classify_by_model_with, classify_by_rules_with,
+    VoiceModel, VoiceQuestion, check_input, classify_by_model, classify_by_rules,
     classify_without_model, request_heard,
 };
 use crate::services::delegation::TaskModelPermissions;
@@ -128,7 +128,7 @@ pub async fn interpret_approval_voice_command(
     let deciding = app_state.config.approval_voice_decisions.enabled;
     let phrase = deciding
         .then(|| {
-            match_phrase_with(
+            match_phrase(
                 &request.transcript,
                 &app_state
                     .config
@@ -158,7 +158,7 @@ pub async fn interpret_approval_voice_command(
             },
             outcome: "phrase",
         },
-        None => match classify_by_rules_with(&input, words) {
+        None => match classify_by_rules(&input, words) {
             Some(classified) => classified,
             None => {
                 let deadline = tokio::time::Instant::now()
@@ -388,5 +388,5 @@ async fn ask_model(
         prompt,
         timeout: deadline.saturating_duration_since(tokio::time::Instant::now()),
     };
-    Ok(classify_by_model_with(input, words, &model).await)
+    Ok(classify_by_model(input, words, &model).await)
 }

@@ -78,13 +78,9 @@ const NEVER_IN_PHRASE: &[char] = &[
 /// longer sentence.
 ///
 /// `hesitations` are the deployment's own besides the built-in ones, as the
-/// web app drops them from a turn.
-pub fn match_phrase(transcript: &str, hesitations: &[String]) -> Option<PhraseMatch> {
-    match_phrase_with(transcript, hesitations, CommandWords::base())
-}
-
-/// [`match_phrase`] with the lists of the card's language.
-pub fn match_phrase_with(
+/// web app drops them from a turn. `lists` are those of the card's
+/// language; a word the guards look for is never trimmed as a hesitation.
+pub fn match_phrase(
     transcript: &str,
     hesitations: &[String],
     lists: &CommandWords,

@@ -5703,6 +5703,7 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.agreement_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.already.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.approve.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.approve_helpers.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.backchannels.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.change_anywhere.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.change_first.[] */}
@@ -5718,7 +5719,7 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.hesitations.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.keep_endings.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.keep_verbs.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.known_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.known_cues.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.known_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.leading.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.leading_no.[] */}
@@ -5731,16 +5732,18 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.noise_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.not_like_that.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.not_like_that_alone.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.not_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.onward_first.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.onward_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.personal_subjects.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.pronouns.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.question_first.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.question_verbs.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.rather.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.rather_not.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.read_cues.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.refusal_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.reject.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.reject_helpers.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.again.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.agreement_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.already.[] */}
@@ -5756,21 +5759,21 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.hesitations.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.keep_endings.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.keep_verbs.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.known_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.known_cues.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.known_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.leading.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.make_first.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.make_object.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.negations_before.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.noise_phrases.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.noise_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_like_that.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_like_that_alone.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.not_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.onward_first.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.onward_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.personal_subjects.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.pronouns.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rather.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.rather_not.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.read_cues.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.refusal_words.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.reject.[] */}
@@ -5782,7 +5785,6 @@ Replaces the model's built-in instruction, for example from subscription content
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.skip.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.stop.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.stop_first.[] */}
-{/* erato_toml_config_key: approval_voice_commands.words.<language>.remove.subjects.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.repeat.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.repeat_cues.[] */}
 {/* erato_toml_config_key: approval_voice_commands.words.<language>.rest_ask.[] */}
@@ -5801,75 +5803,81 @@ A card uses the built-in lists, the words configured for `de` and `en` (people m
 
 The guards cannot be weakened by data:
 
-- The lists whose words only hold a decision back cannot be shortened: a `remove` entry for them is ignored with a warning.
-- An entry that holds a negation or condition is not added to `approve`, `agreement_words`, `noise_words`, `noise_phrases`, `yes_particles`, `doubled_yes`, `leading_yes`, `hesitations` or `fillers`, nor one that holds a condition to `leading`.
-- A word the guards look for (a negation, condition, continuation, question word or yes/no word) is never added to `hesitations` or `fillers`, which are dropped before the guards look. The confirmation phrase of [`approval_voice_decisions`](#approval_voice_decisions) is checked with the card language's negations and conditions, and `audio_conversational.hesitation_words` never trims a negation, condition or question word before it.
+- The lists the guards rely on cannot be shortened: a `remove` entry for them is ignored with a warning.
+- An entry that holds a negation, condition or question word (`wh_words`, `question_first`) is not added to `approve`, `agreement_words`, `noise_words`, `noise_phrases`, `yes_particles`, `doubled_yes`, `leading_yes`, `hesitations` or `fillers`, nor one that holds a condition or question word to `leading`.
+- `hesitations` and `fillers` are dropped before the guards look, so they never take a word the guards or decisions rely on: a word of a protected list, of `reject`, `refusal_words` or `stop`. A filler "das" would otherwise turn "passt das" into an approval. The confirmation phrase of [`approval_voice_decisions`](#approval_voice_decisions) is checked with the card language's negations and conditions, and `audio_conversational.hesitation_words` never trims a negation, condition or question word before it.
+- A word of `approve_helpers` or `reject_helpers` never decides on its own: an approval or refusal must hold one of its phrase's other words. A package that adds "das will ich nicht" as a refusal therefore cannot make "will" alone refuse.
 - A transcript in a script written without spaces between words (Chinese, Japanese, Thai, …) is never matched by the rules and never decides a card, whatever the lists hold: the model may still steer the voice, and decisions are made on screen.
 
-Lists whose words only hold a decision back; they can be added to, not shortened:
+Lists the guards rely on; they can be added to, not shortened:
 
-| List | What it holds |
-|---|---|
-| `negations` | Words that negate: a sentence with one is never an approval. |
-| `conditions` | Words that make a sentence conditional: it never decides. |
-| `continuations` | A sentence ending in one of these goes on and does not decide. |
-| `question_verbs` | Verbs that open a question when a subject follows ("passt das"). |
-| `wh_words` | Question words that open a question. |
-| `question_first` | First words of a segment that make the utterance a question. |
-| `backchannels` | Sounds that, heard before a yes, make it listening. |
-| `yes_particles` | Words of a bare yes, which alone or doubled is listening. |
-| `doubled_yes` | A yes said twice in a row ("ja ja") is listening. |
-| `leading_yes` | Leading words that are a yes: they make a following no unclear. |
-| `leading_no` | Leading words that are a no: they make a following yes unclear. |
+| List | What it holds | Built-in examples |
+|---|---|---|
+| `negations` | Words that negate: a sentence with one is never an approval. | "nicht", "noe", "niemand" |
+| `conditions` | Words that make a sentence conditional: it never decides. | "aber", "ausser", "or" |
+| `continuations` | A sentence ending in one of these goes on and does not decide. | "so", "well", "naja" |
+| `question_verbs` | Verbs that open a question when a subject follows ("passt das"). | "passt", "gibt", "has" |
+| `wh_words` | Question words that open a question. | "was", "welches", "how" |
+| `question_first` | First words of a segment that make the utterance a question. | "was", "what", "will" |
+| `backchannels` | Sounds that, heard before a yes, make it listening. | "mhm", "hmm", "huh" |
+| `yes_particles` | Words of a bare yes, which alone or doubled is listening. | "ja", "yes", "yep" |
+| `doubled_yes` | A yes said twice in a row ("ja ja") is listening. | "ja" |
+| `leading_yes` | Leading words that are a yes: they make a following no unclear. | "ja", "yes", "yep" |
+| `leading_no` | Leading words that are a no: they make a following yes unclear. | "nein", "no", "nope" |
+| `subjects` | Subjects after a question verb ("kannst du"). | "das", "it", "there" |
+| `noise_words` | A segment made only of these is listening noise. | "okay", "right", "thanks" |
+| `approve_helpers` | Words of an approving phrase that do not approve on their own ("bin" of "bin einverstanden"). | "bin", "s", "gehts" |
+| `reject_helpers` | Words of a refusing phrase that do not refuse on their own ("mach" of "mach das nicht", "will" of "das will ich nicht"). | "mach", "fall", "run" |
 
 Lists that can be added to and shortened under `remove`:
 
-| List | What it holds |
-|---|---|
-| `hesitations` | Hesitation sounds, dropped wherever they stand. |
-| `fillers` | Fillers dropped wherever they stand. |
-| `noise_words` | A segment made only of these is listening noise. |
-| `noise_phrases` | Phrases that are listening noise. |
-| `leading` | Words dropped from the start of a segment when something follows. |
-| `approve` | Phrases that approve. |
-| `agreement_words` | Besides the words of `approve`, the words an approval may hold. |
-| `refusal_words` | Besides the words of `reject` and the negations, the words a refusal may hold. |
-| `reject` | Phrases that refuse. |
-| `stop` | Phrases that stop the voice. |
-| `stop_first` | First words that stop the voice whatever follows. |
-| `skip` | Phrases that skip to the next piece. |
-| `known_first` | Verbs of "hab ich", "kenn ich": the user knows this piece. |
-| `repeat` | Phrases that ask to repeat. |
-| `personal_subjects` | Words that open a sentence about the speaker, not the card. |
-| `subjects` | Subjects after a question verb ("kannst du"). |
-| `corrections` | Words that say something on the card is wrong: maybe a change. |
-| `dangling` | A change ending on one of these has not said what to change. |
-| `rest_words` | Besides the question for the rest, the words it may hold. |
-| `known_words` | Besides "hab ich", the words a skip of a known piece may hold. |
-| `onward_words` | Besides "weiter", the words a "weiter …" skip may hold. |
-| `not_like_that_alone` | "Not like that" said alone: a wish for a different call. |
-| `not_like_that` | "Not like that" anywhere: the call, but different. |
-| `change_anywhere` | Words that ask for a different call wherever they stand. |
-| `change_first` | Verbs that ask for a different call at the start of a segment. |
-| `make_first` | Verbs that ask for a change only with a date, number or one of `make_object` after them. |
-| `make_object` | What after a `make_first` verb makes it a change. |
-| `keep_verbs` | Verbs that keep or drop a part ("lass X weg"). |
-| `keep_endings` | What after a `keep_verbs` verb says the part is kept or dropped. |
-| `pronouns` | Pronouns, which name no part of the card. |
-| `date_prepositions` | Prepositions before a date. |
-| `date_words` | Weekday and month names. |
-| `repeat_cues` | Phrases that ask to repeat wherever they stand. |
-| `read_cues` | Words that ask to read a text aloud. |
-| `rest_ask` | Words that, with one of `rest_what`, ask for the rest. |
-| `rest_what` | Words that, with one of `rest_ask`, ask for the rest. |
-| `generic` | Words that name no piece of the card. |
-| `rather` | "Lieber", "rather": a wish for something else, unless a word of `not_words` follows. |
-| `not_words` | The word "not" after `rather` ("lieber nicht"): a refusal. |
-| `already` | "Schon", "already": a read cue with it is a skip. |
-| `again` | Phrases meaning "again" ("noch mal"): their words are no fillers. |
-| `negations_before` | Negations that stand before the word they negate ("nicht machen"). |
+| List | What it holds | Built-in examples |
+|---|---|---|
+| `hesitations` | Hesitation sounds, dropped wherever they stand. | "aeh", "hmmm", "erm" |
+| `fillers` | Fillers dropped wherever they stand. | "bitte", "doch", "kurz" |
+| `noise_phrases` | Phrases that are listening noise. | "in ordnung", "ach ja", "vielen dank" |
+| `leading` | Words dropped from the start of a segment when something follows. | "okay", "so", "nope" |
+| `approve` | Phrases that approve. | "ja", "ich bestaetige", "fine" |
+| `agreement_words` | Besides the words of `approve`, the words an approval may hold. | "das", "prima", "natuerlich" |
+| `refusal_words` | Besides the words of `reject` and the negations, the words a refusal may hold. | "das", "this", "now" |
+| `reject` | Phrases that refuse. | "nein", "abgelehnt", "absolutely not" |
+| `stop` | Phrases that stop the voice. | "stopp", "hoer auf", "silence" |
+| `stop_first` | First words that stop the voice whatever follows. | "stopp", "halt", "ruhe" |
+| `skip` | Phrases that skip to the next piece. | "weiter", "skip", "continue" |
+| `known_cues` | Two words in a row that say the user knows this piece ("hab ich", "i know"). | "hab ich", "ich habe", "i heard" |
+| `repeat` | Phrases that ask to repeat. | "nochmal", "was hast du gesagt", "one more time" |
+| `personal_subjects` | Words that open a sentence about the speaker, not the card. | "ich", "ive", "you" |
+| `corrections` | Words that say something on the card is wrong: maybe a change. | "falsch", "weg", "should" |
+| `dangling` | A change ending on one of these has not said what to change. | "den", "zur", "without" |
+| `rest_words` | Besides the question for the rest, the words it may hold. | "geaendert", "things", "uebrig" |
+| `known_words` | Besides a known cue, the words a skip of a known piece may hold. | "schon", "hab", "weiter" |
+| `onward_first` | First words of a skip ("weiter …") that `onward_words` may follow. | "weiter" |
+| `onward_words` | Besides an onward first word, the words such a skip may hold. | "zum", "text", "weiter" |
+| `not_like_that_alone` | "Not like that" said alone: a wish for a different call. | "nicht so", "mach es nicht so", "dont do it like that" |
+| `not_like_that` | "Not like that" anywhere: the call, but different. | "nicht so", "so nicht", "not like that" |
+| `change_anywhere` | Words that ask for a different call wherever they stand. | "ohne", "weglassen", "ersetzen" |
+| `change_first` | Verbs that ask for a different call at the start of a segment. | "nimm", "fuege", "put" |
+| `make_first` | Verbs that ask for a change only with a date, number or one of `make_object` after them. | "mach", "make" |
+| `make_object` | What after a `make_first` verb makes it a change. | "am", "daraus", "earlier" |
+| `keep_verbs` | Verbs that keep or drop a part ("lass X weg"). | "lass", "leave", "behalt" |
+| `keep_endings` | What after a `keep_verbs` verb says the part is kept or dropped. | "weg", "gleich", "same" |
+| `pronouns` | Pronouns, which name no part of the card. | "es", "ihn", "mal" |
+| `date_prepositions` | Prepositions before a date. | "am", "bis", "by" |
+| `date_words` | Weekday and month names. | "montag", "oktober", "december" |
+| `repeat_cues` | Phrases that ask to repeat wherever they stand. | "nochmal", "repeat", "didnt hear" |
+| `read_cues` | Words that ask to read a text aloud. | "vorlesen", "lese", "read" |
+| `rest_ask` | Words that, with one of `rest_what`, ask for the rest. | "was", "anything", "und" |
+| `rest_what` | Words that, with one of `rest_ask`, ask for the rest. | "noch", "uebrig", "ausserdem" |
+| `generic` | Words that name no piece of the card. | "der", "vorlest", "habe" |
+| `rather` | "Lieber", "rather": a wish for something else, unless a word of `rather_not` follows. | "lieber", "rather" |
+| `rather_not` | The word "not" after `rather` ("lieber nicht"): a refusal. | "nicht", "not" |
+| `already` | "Schon", "already": a read cue said with one is not a request to read. | "already", "schon" |
+| `again` | Phrases meaning "again" ("noch mal"): their words are no fillers. | "noch mal", "noch einmal" |
+| `negations_before` | Negations that stand before the word they negate ("nicht machen"). | "nicht", "dont", "nie" |
 
-Entries are checked at startup, each list on its own: a language that is not a lowercase tag, a list name the backend does not know, a value of the wrong kind, a blank entry, one longer than 128 bytes or with hidden characters, and entries past 500 in one list are ignored with a warning, so one bad entry of a content package never stops the server or drops the rest of its language. The startup log names, per configured language, how many words each list adds and removes. The card's language is the one the endpoint resolves (`language`, else the user's), so today only `fr`, `es` and `pl` tables are used besides `de` and `en`.
+A few words stay in the rules' code because they shape a rule rather than fill a list, such as "doch" after a no, "rest", "skip" and "um" before a time.
+
+Entries are checked at startup, each list on its own: a language that is not a lowercase tag, a list name the backend does not know, a value of the wrong kind, a blank entry, one longer than 128 bytes or with hidden characters, and entries past 500 in one list are ignored with a warning, so one bad entry of a content package never stops the server or drops the rest of its language. A language key in capitals (`FR`, `pt-BR`) is ignored with a warning: tags are compared in lower case. A card in a regional language ("fr-CA") uses the table of its tag, else that of its primary language ("fr"). The startup log names, per configured language, how many words each list adds and removes. The card's language is the one the endpoint resolves (`language`, else the user's), so today only `fr`, `es` and `pl` tables are used besides `de` and `en`; a table for another language is kept with a startup warning until that language is supported.
 
 ```toml
 [approval_voice_commands.words.fr]
@@ -6012,13 +6020,13 @@ Per lowercase language tag, the words a spoken card says as code rather than as 
 
 - `locale`: the locale dates, numbers and lists are formatted in (`fr-FR`). Unset keeps the built-in one (`de-DE`, `en-GB`), else the language tag itself.
 - `full_card`: whether the voice says the whole card in this language. Without it, only the pointer sentence ("A decision is waiting on screen.") is said, and voice commands on the card are not listened for. On for German and English; a language should get it only after a native speaker has judged the full card in it, with the card sentences translated in the web app's catalog.
-- `numbers`: number words for 0 to 12, in order ("null", "eins", …); larger numbers are said as digits. `ordinals`: the first to the tenth, in order, for a queue of cards. One wrong entry would move every later one, so a list with a wrong entry, or with more than 13 or 10 entries, is ignored as a whole.
+- `numbers`: number words for 0 to 12, in order ("null", "eins", …); larger numbers are said as digits. `ordinals`: the first to the tenth, in order, for a queue of cards. One wrong entry would move every later one, so a list with a wrong entry, or with more than 13 or 10 entries, is ignored as a whole. These are what the voice says; [`spoken_number_words`](#spoken_number_words) are what it hears.
 - `time_full_hour` (slot `{hour}`) and `time` (slots `{hour}` and `{minute}`, the minute said with two digits): a time of day, `"{hour} Uhr"` and `"{hour}:{minute} Uhr"` in German. A full hour uses `time` when `time_full_hour` is unset; without both, the locale's own format is used, as in English.
 - `from` and `to` (slot `{value}`): an old and a new value in a [sentence variant](#approval_speechsentences), for a language whose value carries no direction of its own: `"from {value}"`, `"to {value}"` in English. German has none: its values say "vom", "auf den" already.
 - `dictation_verbs` and `dictation_words`: an instruction before a dictated text ("Schreib dem Kunden:") is not part of the dictation when every word of it is a word of one language and one of them is a verb.
 - `difference_fillers`: words that say nothing about a value on their own when telling which differences of a corrected card a [change request](#approval_change_requests) named ("und", "bitte", "instead").
 
-Values replace the built-in ones of their language; `dictation_verbs`, `dictation_words` and `difference_fillers` add to them, without the words under `remove`. A change request is read with the fillers of German, English and the card's language, and with weekday and month names in the locales of these three; an instruction before a dictation is read in every language with words. Entries are checked at startup: a template without exactly its slots, a locale of the wrong shape, an entry that is blank, longer than 128 bytes or holds hidden characters, and an unknown key are ignored with a warning; the rest of the language is kept.
+Values replace the built-in ones of their language; `dictation_verbs`, `dictation_words` and `difference_fillers` add to them, without the words under `remove`. A card in a regional language ("fr-CA") uses the words of its tag, else those of its primary language ("fr"). The startup log names, per configured language, what it sets, adds and removes. A change request is read with the fillers of German, English and the card's language, and with weekday and month names in the locales of these three; an instruction before a dictation is read in every language with words. Entries are checked at startup: a template without exactly its slots, a locale of the wrong shape, an entry that is blank, longer than 128 bytes or holds hidden characters, and an unknown key are ignored with a warning; the rest of the language is kept.
 
 ```toml
 [approval_speech.words.fr]
@@ -6131,7 +6139,7 @@ Per lowercase language tag, written forms a voice may not say well, such as abbr
 
 A reading is the spoken text alone, or a table with `spoken` and `sentence_final`. `sentence_final` marks a form that usually ends its sentence ("usw."): when a capital letter follows, its full stop is kept so the sentence still ends there. A form matches as a whole word only, not inside a word, an address or a file name; a space after one of its full stops is optional ("z. B." also matches "z.B."), and a form starting in lower case also matches with a capital and is then read with one. The longest form wins, and a replaced text is not read again.
 
-Entries are checked at startup: a form or reading that is blank, longer than 128 bytes or holds hidden characters, a reading of the wrong shape, a language that is not a lowercase tag and a language with more than 500 readings are ignored with a warning; the rest of the language is kept.
+Entries are checked at startup: a form or reading that is blank, longer than 128 bytes or holds hidden characters, a reading of the wrong shape, a language that is not a lowercase tag and a language with more than 500 readings are ignored with a warning; the rest of the language is kept. If a language's forms together cannot be matched, its configured readings are ignored with a warning and the built-in ones apply. A user in a regional language ("de-AT") gets the readings of its tag, else those of its primary language ("de"). The startup log names, per configured language, how many readings it adds and how many built-in ones it overrides.
 
 ```toml
 [spoken_readings.fr]

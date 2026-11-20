@@ -14,7 +14,11 @@ import {
   withDictation,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
-import { intlLocale, languagesHeard } from "./spokenLanguageData";
+import {
+  BUILT_IN_SPOKEN_CARD_LANGUAGES,
+  intlLocale,
+  languagesHeard,
+} from "./spokenLanguageData";
 import { spokenFieldName, spokenNamesFor } from "./spokenNames";
 import { numbersSaid, readableNumberWords } from "./spokenNumbers";
 import { spokenReadFactsOf } from "./spokenRead";
@@ -33,6 +37,7 @@ import type {
   SpokenSource,
 } from "./spokenCard";
 import type { Asked, DifferenceIntro, LanguageWords } from "./spokenCardWords";
+import type { SpokenCardLanguages } from "./spokenLanguageData";
 import type { SpokenNames } from "./spokenNames";
 import type { NumberWords, NumbersSaid } from "./spokenNumbers";
 import type { EarValue } from "./spokenValues";
@@ -776,7 +781,10 @@ const tokensOf = (text: string): string[] =>
  */
 interface HeardLanguage {
   fillers: ReadonlySet<string>;
-  locales: readonly string[];
+  /** Weekday names in every locale, by UTC day (0 is Sunday). */
+  weekdays: readonly (readonly string[])[];
+  /** Month names in every locale, by UTC month (0 is January). */
+  monthNames: readonly (readonly string[])[];
   months: ReadonlySet<string>;
 }
 
@@ -791,20 +799,40 @@ const calendarNames = (
       .toLowerCase(),
   );
 
-const heardLanguage = (language: string): HeardLanguage => {
-  const languages = languagesHeard(language);
+const heardLanguages = new WeakMap<
+  SpokenCardLanguages,
+  Map<string, HeardLanguage>
+>();
+
+const heardLanguage = (
+  language: string,
+  all: SpokenCardLanguages = BUILT_IN_SPOKEN_CARD_LANGUAGES,
+): HeardLanguage => {
+  let byLanguage = heardLanguages.get(all);
+  if (!byLanguage) {
+    byLanguage = new Map();
+    heardLanguages.set(all, byLanguage);
+  }
+  const known = byLanguage.get(language);
+  if (known) return known;
+  const languages = languagesHeard(language, all);
   const locales = [
     ...new Set(languages.flatMap((words) => intlLocale(words.locale) ?? [])),
   ];
-  return {
+  const monthNames = Array.from({ length: 12 }, (_, month) =>
+    calendarNames(locales, "month", new Date(Date.UTC(2000, month, 1))),
+  );
+  const heard = {
     fillers: new Set(languages.flatMap((words) => words.difference_fillers)),
-    locales,
-    months: new Set(
-      Array.from({ length: 12 }, (_, month) =>
-        calendarNames(locales, "month", new Date(Date.UTC(2000, month, 1))),
-      ).flat(),
+    // 2 January 2000 was a Sunday.
+    weekdays: Array.from({ length: 7 }, (_, day) =>
+      calendarNames(locales, "weekday", new Date(Date.UTC(2000, 0, 2 + day))),
     ),
+    monthNames,
+    months: new Set(monthNames.flat()),
   };
+  byLanguage.set(language, heard);
+  return heard;
 };
 
 const wordMatches = (
@@ -842,12 +870,13 @@ const heardOf = (
   words: string,
   numberWords: NumberWords | undefined,
   language: string,
+  languages: SpokenCardLanguages | undefined,
 ): Heard => {
   const tokens = tokensOf(words);
   return {
     tokens,
     numbers: numbersSaid(tokens, numberWords),
-    language: heardLanguage(language),
+    language: heardLanguage(language, languages),
     wordsUnread: readableNumberWords(numberWords) === undefined,
   };
 };
@@ -888,14 +917,10 @@ const names = (heard: Heard, value: EarValue): Naming => {
     case "date":
     case "datetime": {
       const date = new Date(Date.UTC(value.year, value.month - 1, value.day));
-      const { locales, months } = heard.language;
-      if (
-        calendarNames(locales, "weekday", date).some((day) =>
-          said.includes(day),
-        )
-      )
+      const { weekdays, monthNames, months } = heard.language;
+      if (weekdays[date.getUTCDay()]?.some((day) => said.includes(day)))
         return "yes";
-      const month = calendarNames(locales, "month", date);
+      const month = monthNames[date.getUTCMonth()] ?? [];
       const otherMonth = said.some(
         (token) => months.has(token) && !month.includes(token),
       );
@@ -1073,6 +1098,7 @@ export const spokenDifference = (
     withDictation(
       spokenFactsOf(oldCard.gist, before.server, timeZone, true, oldNames),
       given.userTurns,
+      options.spokenCardLanguages,
     ),
     words,
     timeZone,
@@ -1084,12 +1110,18 @@ export const spokenDifference = (
     withDictation(
       spokenFactsOf(newCard.gist, next.server, timeZone, true, newNames),
       options.userTurns,
+      options.spokenCardLanguages,
     ),
     words,
     timeZone,
     newNames,
   );
-  const said = heardOf(previous.words, options.numberWords, options.language);
+  const said = heardOf(
+    previous.words,
+    options.numberWords,
+    options.language,
+    options.spokenCardLanguages,
+  );
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
   const newKeys = new Set(newEntries.map((entry) => entry.key));
   const siblings = [

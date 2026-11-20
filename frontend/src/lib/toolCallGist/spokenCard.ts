@@ -23,6 +23,7 @@ import type {
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
 import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
 import type { DictationRelation, UserTurn } from "./spokenDictation";
+import type { SpokenCardLanguages } from "./spokenLanguageData";
 import type { SpokenNames } from "./spokenNames";
 import type { NumberWords } from "./spokenNumbers";
 import type { SentenceSet } from "./spokenSentences";
@@ -324,6 +325,8 @@ export interface SpokenOptions {
    * user said in words. Without them only digits are read.
    */
   numberWords?: NumberWords;
+  /** The spoken-card words of every language; the built-in ones when not given. */
+  spokenCardLanguages?: SpokenCardLanguages;
   /** Dates in the current year are said without it. */
   now: Date;
   /** The zone times with an offset are said in. */
@@ -926,6 +929,7 @@ const withDestructiveMark = (
 export const withDictation = (
   facts: SpokenFacts,
   turns: readonly UserTurn[] | undefined,
+  languages?: SpokenCardLanguages,
 ): SpokenFacts => {
   if (!turns || turns.length === 0) return facts;
   return {
@@ -934,7 +938,12 @@ export const withDictation = (
       if (spoken.read !== undefined || !spoken.full || spoken.full.cut) {
         return spoken;
       }
-      const dictated = dictationOf(spoken.full.text, turns);
+      const dictated = dictationOf(
+        spoken.full.text,
+        turns,
+        undefined,
+        languages,
+      );
       return dictated
         ? { ...spoken, dictated, full: { ...spoken.full, dictated } }
         : spoken;
@@ -1268,6 +1277,7 @@ const composedPieces = (
   const facts = withDictation(
     spokenFactsOf(card.gist, approval.server, options.timeZone, false, names),
     options.userTurns,
+    options.spokenCardLanguages,
   );
   const loss = facts.action === "delete";
   const item = words.item(facts, position);

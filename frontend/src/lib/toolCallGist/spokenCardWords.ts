@@ -4,7 +4,6 @@ import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
 import {
-  filledTemplate,
   intlLocale,
   primaryLanguage,
   spokenCardLanguage,
@@ -24,7 +23,10 @@ import type {
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
 import type { DictationRelation } from "./spokenDictation";
-import type { SpokenCardLanguage } from "./spokenLanguageData";
+import type {
+  SpokenCardLanguage,
+  SpokenCardLanguages,
+} from "./spokenLanguageData";
 import type {
   SpokenCondition,
   SpokenReadFacts,
@@ -50,6 +52,8 @@ interface WordOptions {
   wording?: "precise" | "natural";
   /** The deployment's sentence variants for this language. */
   sentences?: SentenceSet;
+  /** The words of every language; the built-in ones when not given. */
+  spokenCardLanguages?: SpokenCardLanguages;
 }
 
 interface CalendarDay {
@@ -157,8 +161,11 @@ interface LanguageCode {
 }
 
 /** The code parts of a language from its words (`languageBase.json`, `[approval_speech.words]`). */
-const codeOf = (words: SpokenCardLanguage): LanguageCode => ({
-  locale: intlLocale(words.locale) ?? withoutWords().locale,
+const codeOf = (
+  words: SpokenCardLanguage,
+  languages: SpokenCardLanguages | undefined,
+): LanguageCode => ({
+  locale: intlLocale(words.locale) ?? withoutWords(languages).locale,
   numbers: words.numbers,
   ordinals: words.ordinals,
   time: (hour, minute) => {
@@ -166,21 +173,23 @@ const codeOf = (words: SpokenCardLanguage): LanguageCode => ({
       minute === 0 ? (words.time_full_hour ?? words.time) : words.time;
     return template === undefined
       ? undefined
-      : filledTemplate(template, {
+      : fillVariant(template, {
           hour: String(hour),
           minute: String(minute).padStart(2, "0"),
         });
   },
   directed: (role, value) => {
     const template = role === "from" ? words.from : words.to;
-    return template === undefined ? value : filledTemplate(template, { value });
+    return template === undefined ? value : fillVariant(template, { value });
   },
 });
 
 /** A language without words says only the pointer, formatted as English is. */
-const withoutWords = (): LanguageCode => ({
+const withoutWords = (
+  languages: SpokenCardLanguages | undefined,
+): LanguageCode => ({
   // eslint-disable-next-line lingui/no-unlocalized-strings -- a locale
-  locale: spokenCardLanguage("en")?.locale ?? "en-GB",
+  locale: spokenCardLanguage("en", languages)?.locale ?? "en-GB",
   numbers: [],
   ordinals: [],
 });
@@ -1834,7 +1843,12 @@ export const spokenWordsFor = (
   options: WordOptions,
 ): LanguageWords => {
   const code = primaryLanguage(language);
-  const own = spokenCardLanguage(code);
-  const said = words(own ? codeOf(own) : withoutWords(), options, code);
+  const languages = options.spokenCardLanguages;
+  const own = spokenCardLanguage(language, languages);
+  const said = words(
+    own ? codeOf(own, languages) : withoutWords(languages),
+    options,
+    code,
+  );
   return own?.full_card === true ? said : { ...said, full: false };
 };

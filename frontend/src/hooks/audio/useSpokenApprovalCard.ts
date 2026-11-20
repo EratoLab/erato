@@ -20,6 +20,7 @@ import { useSpeechPlayback } from "./speechPlayback";
 import {
   deploymentNumberWords,
   deploymentSentences,
+  deploymentSpokenCardLanguages,
   useSpokenStyle,
 } from "./spokenStyle";
 
@@ -99,7 +100,10 @@ export function useSpokenApprovalCard({
     approvalId !== undefined &&
     decide?.(approvalId) !== undefined &&
     approval !== undefined &&
-    spokenWordsFor(i18n.locale, { now: new Date() }).full &&
+    spokenWordsFor(i18n.locale, {
+      now: new Date(),
+      spokenCardLanguages: deploymentSpokenCardLanguages(),
+    }).full &&
     voiceApprovalOffered(approval);
 
   useEffect(() => {
@@ -123,6 +127,7 @@ export function useSpokenApprovalCard({
           : undefined,
       userTurns,
       numberWords: deploymentNumberWords(i18n.locale),
+      spokenCardLanguages: deploymentSpokenCardLanguages(),
       voiceApproval: approves,
     };
     const withdrawn =

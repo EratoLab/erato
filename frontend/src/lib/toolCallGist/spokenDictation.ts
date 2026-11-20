@@ -2,6 +2,8 @@
 import { isInvisibleFormatChar } from "./serverText";
 import { languagesHeard } from "./spokenLanguageData";
 
+import type { SpokenCardLanguages } from "./spokenLanguageData";
+
 /**
  * Whether a long text on an approval card is what the user dictated in this
  * chat, and how it relates to it. Only words that came from transcription
@@ -112,8 +114,11 @@ interface InstructionSet {
   all: ReadonlySet<string>;
 }
 
-const instructionSets = (language?: string): InstructionSet[] =>
-  languagesHeard(language)
+const instructionSets = (
+  language: string | undefined,
+  languages: SpokenCardLanguages | undefined,
+): InstructionSet[] =>
+  languagesHeard(language, languages)
     .filter((words) => words.dictation_verbs.length > 0)
     .map(({ dictation_verbs: verbs, dictation_words: others }) => ({
       verbs: new Set(verbs),
@@ -229,16 +234,18 @@ const comparePassage = (
  * something else, so the text is named by its size instead. A text changed
  * from an earlier dictation is still "changed": that claims no sameness.
  * An instruction before the dictation is read in German, English and the
- * card's `language`; without one, in every language with words.
+ * card's `language`; without one, in every language of `languages` (the
+ * built-in ones when not given).
  */
 export const dictationOf = (
   text: string,
   turns: readonly UserTurn[],
   language?: string,
+  languages?: SpokenCardLanguages,
 ): DictationRelation | undefined => {
   const card = wordsOf(text).keys;
   if (card.length < MIN_DICTATED_WORDS) return undefined;
-  const sets = instructionSets(language);
+  const sets = instructionSets(language, languages);
   for (const [index, turn] of turns.entries()) {
     let best: DictationRelation | undefined;
     for (const passage of turn.passages) {

@@ -6,12 +6,10 @@
 
 use std::collections::HashMap;
 
-use crate::spoken::{Written, is_language_tag, shown, usable, written_table};
+use crate::spoken::{MAX_ENTRY_BYTES, Written, is_language_tag, shown, usable, written_table};
 
 /// Entries one list may hold in one language.
 pub const MAX_LIST_ENTRIES: usize = 500;
-/// A word or phrase longer than this is not something a person says.
-pub const MAX_ENTRY_BYTES: usize = 128;
 
 /// Named lists of words for one language, as one table of a section holds
 /// them.
@@ -23,8 +21,8 @@ pub trait WordLists: Default {
 }
 
 /// The tables of `place` by language. A key that is not a lowercase
-/// language tag, or a language that is not a table, is dropped with a
-/// warning.
+/// language tag (`pt-br`, not `pt-BR`), or a language that is not a table,
+/// is dropped with a warning: lookups compare lowercase tags.
 pub(crate) fn language_tables(
     place: &str,
     written: Written,
@@ -32,7 +30,7 @@ pub(crate) fn language_tables(
 ) -> Vec<(String, HashMap<String, Written>)> {
     let mut tables = Vec::new();
     for (language, value) in written_table(place, written, dropped) {
-        if !is_language_tag(&language) {
+        if !is_language_tag(&language) || language != language.to_ascii_lowercase() {
             dropped.push(format!(
                 "{place}: '{}' is not a lowercase language tag such as `de` and is ignored",
                 shown(&language)
@@ -176,7 +174,7 @@ mod tests {
     #[test]
     fn each_wrong_part_is_dropped_on_its_own() {
         let (languages, dropped) = load(
-            "[section]\nFR = { yes = [\"oui\"] }\nit = \"si\"\n\
+            "[section]\nFR = { yes = [\"oui\"] }\nit = \"si\"\npt-BR = { yes = [\"sim\"] }\n\
              [section.fr]\nyes = [\"oui\", \" \", 3, \"ouais\"]\nmaybe = [\"bof\"]\nno = [\"non\"]\n\
              [section.es]\nyes = \"si\"\n",
         );
@@ -203,6 +201,7 @@ mod tests {
                 "section.fr.yes: an entry is not a text and is ignored",
                 "section.it is not a table and is ignored",
                 "section: 'FR' is not a lowercase language tag such as `de` and is ignored",
+                "section: 'pt-BR' is not a lowercase language tag such as `de` and is ignored",
             ]
         );
     }

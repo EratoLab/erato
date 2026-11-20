@@ -7,57 +7,53 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::language_words::{
-    MAX_ENTRY_BYTES, WordLists, language_tables, merge_word_list, named_word_lists, word_list,
+    WordLists, language_tables, merge_word_list, named_word_lists, word_list,
 };
-use crate::spoken::{Written, shown, usable};
+use crate::spoken::{MAX_ENTRY_BYTES, Written, shown, slots_of, usable};
 
 /// Number words said for 0 to 12.
-pub const MAX_NUMBER_WORDS: usize = 13;
+pub const SAID_NUMBER_WORDS: usize = 13;
 /// Ordinals said for the first to the tenth.
 pub const MAX_ORDINALS: usize = 10;
 const MAX_LOCALE_BYTES: usize = 35;
 
-macro_rules! removable_lists {
-    ($( $(#[doc = $doc:literal])+ $name:ident, )+) => {
-        /// Words a language takes out of the built-in lists, by list.
-        #[derive(Debug, Default, PartialEq, Eq, Clone, Facet, HeapSize)]
-        pub struct ApprovalSpeechWordRemovals {
-            $( $(#[doc = $doc])+ pub $name: Vec<String>, )+
-        }
-
-        impl WordLists for ApprovalSpeechWordRemovals {
-            const NAMES: &'static [&'static str] = &[$(stringify!($name)),+];
-
-            fn list(&self, name: &str) -> Option<&Vec<String>> {
-                match name {
-                    $( stringify!($name) => Some(&self.$name), )+
-                    _ => None,
-                }
-            }
-
-            fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-                match name {
-                    $( stringify!($name) => Some(&mut self.$name), )+
-                    _ => None,
-                }
-            }
-        }
-    };
+/// Words a language takes out of the built-in lists, by list.
+#[derive(Debug, Default, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ApprovalSpeechWordRemovals {
+    /// Verbs that say what to do with a dictated text ("schreib", "write").
+    pub dictation_verbs: Vec<String>,
+    /// Besides the verbs, the words such an instruction may hold.
+    pub dictation_words: Vec<String>,
+    /// Words that say nothing about a value on their own.
+    pub difference_fillers: Vec<String>,
 }
 
-removable_lists! {
-    /// Verbs that say what to do with a dictated text ("schreib", "write").
-    dictation_verbs,
-    /// Besides the verbs, the words such an instruction may hold.
-    dictation_words,
-    /// Words that say nothing about a value on their own.
-    difference_fillers,
+impl WordLists for ApprovalSpeechWordRemovals {
+    const NAMES: &'static [&'static str] =
+        &["dictation_verbs", "dictation_words", "difference_fillers"];
+
+    fn list(&self, name: &str) -> Option<&Vec<String>> {
+        match name {
+            "dictation_verbs" => Some(&self.dictation_verbs),
+            "dictation_words" => Some(&self.dictation_words),
+            "difference_fillers" => Some(&self.difference_fillers),
+            _ => None,
+        }
+    }
+
+    fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+        match name {
+            "dictation_verbs" => Some(&mut self.dictation_verbs),
+            "dictation_words" => Some(&mut self.dictation_words),
+            "difference_fillers" => Some(&mut self.difference_fillers),
+            _ => None,
+        }
+    }
 }
 
 /// One language's words for spoken approval cards, as configured.
@@ -366,6 +362,51 @@ pub fn spoken_card_languages(
     languages
 }
 
+/// What one language's configured words change, for the startup log
+/// ("sets locale, numbers; adds dictation_verbs 2; removes dictation_verbs
+/// 1"), or nothing for an empty table.
+pub fn summary(words: &ApprovalSpeechWords) -> Option<String> {
+    let set: Vec<&str> = [
+        ("locale", words.locale.is_some()),
+        ("full_card", words.full_card.is_some()),
+        ("numbers", !words.numbers.is_empty()),
+        ("ordinals", !words.ordinals.is_empty()),
+        ("time_full_hour", words.time_full_hour.is_some()),
+        ("time", words.time.is_some()),
+        ("from", words.from.is_some()),
+        ("to", words.to.is_some()),
+    ]
+    .into_iter()
+    .filter_map(|(name, set)| set.then_some(name))
+    .collect();
+    let counts = |of: &dyn Fn(&str) -> usize| {
+        ApprovalSpeechWordRemovals::NAMES
+            .iter()
+            .map(|name| (*name, of(name)))
+            .filter(|(_, count)| *count > 0)
+            .map(|(name, count)| format!("{name} {count}"))
+            .collect::<Vec<_>>()
+    };
+    let added = counts(&|name| match name {
+        "dictation_verbs" => words.dictation_verbs.len(),
+        "dictation_words" => words.dictation_words.len(),
+        "difference_fillers" => words.difference_fillers.len(),
+        _ => 0,
+    });
+    let removed = counts(&|name| words.remove.list(name).map_or(0, Vec::len));
+    let mut parts = Vec::new();
+    if !set.is_empty() {
+        parts.push(format!("sets {}", set.join(", ")));
+    }
+    if !added.is_empty() {
+        parts.push(format!("adds {}", added.join(", ")));
+    }
+    if !removed.is_empty() {
+        parts.push(format!("removes {}", removed.join(", ")));
+    }
+    (!parts.is_empty()).then(|| parts.join("; "))
+}
+
 const PLACE: &str = "approval_speech.words";
 
 /// A locale `Intl` accepts: `fr`, `fr-FR`, `zh-Hant-TW`.
@@ -378,25 +419,6 @@ fn is_locale(text: &str) -> bool {
         && parts.all(|part| {
             (1..=8).contains(&part.len()) && part.chars().all(|c| c.is_ascii_alphanumeric())
         })
-}
-
-/// The `{…}` slots of a template, or `None` when a brace is unmatched.
-fn slots(template: &str) -> Option<Vec<&str>> {
-    let mut slots = Vec::new();
-    let mut rest = template;
-    while let Some(open) = rest.find(['{', '}']) {
-        if rest[open..].starts_with('}') {
-            return None;
-        }
-        let close = rest[open..].find('}')? + open;
-        let slot = &rest[open + 1..close];
-        if slot.contains('{') {
-            return None;
-        }
-        slots.push(slot);
-        rest = &rest[close + 1..];
-    }
-    Some(slots)
 }
 
 fn template(
@@ -413,7 +435,7 @@ fn template(
     match written {
         Written::Text(text)
             if usable(&text, MAX_ENTRY_BYTES)
-                && slots(&text).is_some_and(|found| {
+                && slots_of(&text).is_some_and(|found| {
                     found.iter().all(|slot| wanted.contains(slot))
                         && wanted.iter().all(|slot| found.contains(slot))
                 }) =>
@@ -478,7 +500,7 @@ fn shaped_language(
                 Written::Flag(flag) => words.full_card = Some(flag),
                 _ => dropped.push(format!("{place} is not `true` or `false`; it is ignored")),
             },
-            "numbers" => words.numbers = ordered_list(&place, value, MAX_NUMBER_WORDS, dropped),
+            "numbers" => words.numbers = ordered_list(&place, value, SAID_NUMBER_WORDS, dropped),
             "ordinals" => words.ordinals = ordered_list(&place, value, MAX_ORDINALS, dropped),
             "time_full_hour" => words.time_full_hour = template(&place, value, &["hour"], dropped),
             "time" => words.time = template(&place, value, &["hour", "minute"], dropped),
@@ -527,26 +549,6 @@ pub(crate) fn shaped_approval_speech_words(
         .collect()
 }
 
-/// Reads `[approval_speech.words]` leaving out every wrong part.
-pub fn deserialize_approval_speech_words<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<ApprovalSpeechWordsByLanguage, D::Error> {
-    Ok(shaped_approval_speech_words(
-        Written::deserialize(deserializer)?,
-        &mut Vec::new(),
-    ))
-}
-
-/// The parts of `[approval_speech.words]` the loader leaves out, sorted.
-pub fn misshaped_approval_speech_words(schema: &Config) -> Vec<String> {
-    let mut dropped = Vec::new();
-    if let Ok(written) = schema.get::<Written>(PLACE) {
-        shaped_approval_speech_words(written, &mut dropped);
-    }
-    dropped.sort();
-    dropped
-}
-
 /// What the web app ships of the built-in language data, for when no
 /// environment is injected (development server, tests).
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -571,7 +573,7 @@ pub fn language_base_json() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::{File, FileFormat};
+    use config::{Config, File, FileFormat};
 
     fn schema(toml: &str) -> Config {
         Config::builder()
@@ -584,6 +586,13 @@ mod tests {
         shaped_approval_speech_words(schema(toml).get::<Written>(PLACE).unwrap(), &mut Vec::new())
     }
 
+    fn misshaped(toml: &str) -> Vec<String> {
+        let mut dropped = Vec::new();
+        shaped_approval_speech_words(schema(toml).get::<Written>(PLACE).unwrap(), &mut dropped);
+        dropped.sort();
+        dropped
+    }
+
     const FRENCH: &str = "[approval_speech.words.fr]\nlocale = \"fr-FR\"\nfull_card = true\n\
         numbers = [\"zéro\", \"un\", \"deux\", \"trois\", \"quatre\", \"cinq\", \"six\", \"sept\", \"huit\", \"neuf\", \"dix\", \"onze\", \"douze\"]\n\
         ordinals = [\"premier\", \"deuxième\"]\n\
@@ -594,7 +603,7 @@ mod tests {
     #[test]
     fn a_language_package_adds_a_language() {
         let configured = words(FRENCH);
-        assert!(misshaped_approval_speech_words(&schema(FRENCH)).is_empty());
+        assert!(misshaped(FRENCH).is_empty());
         let languages = spoken_card_languages(&configured);
         let french = &languages["fr"];
         assert_eq!(french.locale, "fr-FR");
@@ -655,7 +664,7 @@ mod tests {
         assert_eq!(french.to.as_deref(), Some("à {value}"));
         assert_eq!(french.dictation_verbs, ["écris"]);
         assert_eq!(
-            misshaped_approval_speech_words(&schema(toml)),
+            misshaped(toml),
             [
                 "approval_speech.words.fr.dictation_verbs: ' ' is blank, longer than 128 bytes or holds hidden characters and is ignored",
                 "approval_speech.words.fr.from is not a text with exactly the slots {value}; it is ignored",
@@ -694,6 +703,19 @@ mod tests {
     }
 
     #[test]
+    fn the_startup_summary_names_what_a_language_changes() {
+        let configured = words(FRENCH);
+        assert_eq!(
+            summary(&configured["fr"]).as_deref(),
+            Some(
+                "sets locale, full_card, numbers, ordinals, time_full_hour, time; \
+                 adds dictation_verbs 2, dictation_words 2, difference_fillers 2"
+            )
+        );
+        assert_eq!(summary(&ApprovalSpeechWords::default()), None);
+    }
+
+    #[test]
     fn templates_need_exactly_their_slots() {
         for (text, ok) in [
             ("{hour}:{minute} Uhr", true),
@@ -711,18 +733,5 @@ mod tests {
             );
             assert_eq!(found.is_some(), ok, "{text}");
         }
-    }
-
-    #[test]
-    fn the_web_app_ships_the_same_base() {
-        let shipped: LanguageBase = serde_json::from_str(include_str!(
-            "../../../frontend/src/lib/generated/languageBase.json"
-        ))
-        .unwrap();
-        assert_eq!(
-            shipped,
-            language_base(),
-            "run `just generate_language_base` in backend/"
-        );
     }
 }

@@ -2,7 +2,7 @@
 //! can never weaken the guards.
 
 use super::model::Answer;
-use super::phrase::match_phrase_with;
+use super::phrase::match_phrase;
 use super::tests::{SentenceSet, heldout_set, sentence_set};
 use super::*;
 use erato_config::voice_command_words::{
@@ -53,7 +53,7 @@ fn on_card<'a>(
 }
 
 fn by_rules(input: &VoiceCommandInput<'_>, words: &CommandWords) -> Option<VoiceMeaning> {
-    classify_by_rules_with(input, words).map(|classified| classified.command.meaning)
+    classify_by_rules(input, words).map(|classified| classified.command.meaning)
 }
 
 /// What a model answering `meaning` becomes once the guard has seen it.
@@ -104,7 +104,6 @@ fn a_french_package_lets_a_french_card_approve_and_refuse() {
             "{said}"
         );
     }
-    // German and English still work on the French card.
     assert_eq!(
         by_rules(&on_card(&set, "nein", "fr"), fr),
         Some(VoiceMeaning::Reject)
@@ -152,7 +151,6 @@ fn removals_shorten_a_list_but_never_a_negation() {
     let fr = words.for_language("fr");
     assert!(!fr.reject.contains("ne"));
     assert!(fr.negations.contains("ne") && fr.negations.contains("nein"));
-    // "nein" no longer refuses alone here, but still negates.
     assert_ne!(
         by_rules(&on_card(&set, "nein", "fr"), fr),
         Some(VoiceMeaning::Reject)
@@ -166,7 +164,6 @@ fn removals_shorten_a_list_but_never_a_negation() {
             "{said}"
         );
     }
-    // A removal for French leaves German and English cards alone.
     assert!(words.for_language("de").reject.contains("ne"));
 }
 
@@ -221,8 +218,8 @@ fn added_words_never_make_a_negation_condition_or_question_agree() {
 fn the_phrase_check_never_trims_a_guard_word() {
     let words = configured(&[("fr", french()), ("de", hostile())]);
     let fr = words.for_language("fr");
-    assert!(match_phrase_with("Euh, ich bestätige.", &[], fr).is_some());
-    assert!(match_phrase_with("Euh, ich bestätige.", &[], CommandWords::base()).is_none());
+    assert!(match_phrase("Euh, ich bestätige.", &[], fr).is_some());
+    assert!(match_phrase("Euh, ich bestätige.", &[], CommandWords::base()).is_none());
     let deployment = strings(&["nicht", "aber", "warum", "wenn", "never"]);
     for said in [
         "nicht ich bestätige",
@@ -235,9 +232,9 @@ fn the_phrase_check_never_trims_a_guard_word() {
         "ich bestätige mais",
         "ich bestätige das jetzt",
     ] {
-        assert!(match_phrase_with(said, &deployment, fr).is_none(), "{said}");
+        assert!(match_phrase(said, &deployment, fr).is_none(), "{said}");
         assert!(
-            match_phrase_with(said, &deployment, words.for_language("de")).is_none(),
+            match_phrase(said, &deployment, words.for_language("de")).is_none(),
             "{said}"
         );
     }
@@ -385,5 +382,168 @@ fn a_hostile_package_cannot_make_an_attack_with_a_guard_word_decide() {
                 assert_ne!(rejected, VoiceMeaning::Reject, "{said}");
             }
         }
+    }
+}
+
+/// The lists as a deployment's configuration writes them, wrong parts
+/// dropped as at startup.
+fn loaded(words: serde_json::Value) -> CommandWordsByLanguage {
+    CommandWordsByLanguage::from_config(
+        &erato_config::voice_command_words::deserialize_voice_command_words(words).unwrap(),
+    )
+}
+
+fn never_approves(said: &str, language: &str, lists: &CommandWords) {
+    let set = sentence_set();
+    let input = on_card(&set, said, language);
+    assert_ne!(
+        by_rules(&input, lists),
+        Some(VoiceMeaning::Approve),
+        "{said}"
+    );
+    assert_ne!(
+        by_model(&input, lists, VoiceMeaning::Approve),
+        VoiceMeaning::Approve,
+        "{said}"
+    );
+}
+
+fn never_refuses(said: &str, language: &str, lists: &CommandWords) {
+    let set = sentence_set();
+    let input = on_card(&set, said, language);
+    assert_ne!(
+        by_rules(&input, lists),
+        Some(VoiceMeaning::Reject),
+        "{said}"
+    );
+    assert_ne!(
+        by_model(&input, lists, VoiceMeaning::Reject),
+        VoiceMeaning::Reject,
+        "{said}"
+    );
+}
+
+#[test]
+fn subjects_and_noise_words_cannot_be_removed() {
+    let words = loaded(serde_json::json!({"de": {"remove": {
+        "subjects": ["das", "du"],
+        "noise_words": ["okay"],
+        "reject_helpers": ["will"],
+    }}}));
+    let de = words.for_language("de");
+    assert!(de.subjects.contains("das") && de.subjects.contains("du"));
+    assert!(de.noise_words.contains("okay"));
+    for said in ["passt das", "kannst du das", "mhm, ja okay"] {
+        never_approves(said, "de", de);
+    }
+}
+
+#[test]
+fn a_filler_never_takes_a_subject_or_a_refusal_word() {
+    let words = configured(&[(
+        "de",
+        VoiceCommandWordLists {
+            fillers: strings(&["das", "abbrechen", "stopp", "lieber", "mal"]),
+            hesitations: strings(&["du", "nein"]),
+            ..Default::default()
+        },
+    )]);
+    let de = words.for_language("de");
+    for word in ["das", "abbrechen", "stopp", "du", "nein"] {
+        assert!(!de.fillers.contains(word), "{word}");
+    }
+    for said in ["passt das", "ja, abbrechen", "kannst du das machen"] {
+        never_approves(said, "de", de);
+    }
+}
+
+#[test]
+fn an_added_agreement_never_holds_a_question_word() {
+    let words = configured(&[(
+        "de",
+        VoiceCommandWordLists {
+            agreement_words: strings(&["warum", "wieso"]),
+            noise_words: strings(&["was"]),
+            approve: strings(&["ja warum"]),
+            yes_particles: strings(&["wie"]),
+            leading: strings(&["warum"]),
+            ..Default::default()
+        },
+    )]);
+    let de = words.for_language("de");
+    assert!(!de.agreement.contains("warum") && !de.noise_words.contains("was"));
+    for said in ["ja warum", "ja wieso", "warum ja", "ja was", "wie ja"] {
+        never_approves(said, "de", de);
+    }
+}
+
+#[test]
+fn helper_words_never_decide_alone() {
+    let set = sentence_set();
+    let french = configured(&[(
+        "fr",
+        VoiceCommandWordLists {
+            approve: strings(&["c'est bon"]),
+            approve_helpers: strings(&["bon"]),
+            ..Default::default()
+        },
+    )]);
+    let fr = french.for_language("fr");
+    let input = on_card(&set, "c'est bon", "fr");
+    assert_eq!(by_rules(&input, fr), Some(VoiceMeaning::Approve));
+    never_approves("bon", "fr", fr);
+
+    let german = configured(&[(
+        "de",
+        VoiceCommandWordLists {
+            reject: strings(&[
+                "das will ich nicht",
+                "nicht ausführen",
+                "I don't want that",
+                "don't run it",
+            ]),
+            ..Default::default()
+        },
+    )]);
+    let de = german.for_language("de");
+    for said in ["das will ich nicht", "nicht ausführen", "don't run it"] {
+        let input = on_card(&set, said, "de");
+        assert_eq!(by_rules(&input, de), Some(VoiceMeaning::Reject), "{said}");
+    }
+    for said in ["will", "ausführen", "want", "run", "Ausführen."] {
+        never_refuses(said, "de", de);
+    }
+}
+
+#[test]
+fn a_language_table_serves_its_regions_and_a_region_table_its_tag() {
+    let set = sentence_set();
+    let words = configured(&[
+        ("fr", french()),
+        (
+            "pt-br",
+            VoiceCommandWordLists {
+                approve: strings(&["sim"]),
+                ..Default::default()
+            },
+        ),
+    ]);
+    for language in ["fr", "fr-FR", "fr-CA", "fr_BE", "FR"] {
+        let input = on_card(&set, "oui", language);
+        let lists = words.for_language(language);
+        assert_eq!(
+            by_rules(&input, lists),
+            Some(VoiceMeaning::Approve),
+            "{language}"
+        );
+    }
+    let input = on_card(&set, "sim", "pt-BR");
+    assert_eq!(
+        by_rules(&input, words.for_language("pt-BR")),
+        Some(VoiceMeaning::Approve)
+    );
+    for language in ["pt", "pt-PT"] {
+        let input = on_card(&set, "sim", language);
+        assert_eq!(by_rules(&input, words.for_language(language)), None);
     }
 }

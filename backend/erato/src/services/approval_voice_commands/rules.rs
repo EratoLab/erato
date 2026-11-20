@@ -281,6 +281,36 @@ pub(super) const REJECT: &[&str] = &[
     "absolutely not",
 ];
 
+/// Words of an [`APPROVE`] phrase that do not approve on their own.
+pub(super) const APPROVE_HELPERS: &[&str] = &["bin", "s", "gehts"];
+/// Words of a [`REJECT`] phrase that do not refuse on their own. "will",
+/// "ausfuehren", "want" and "run" stand in refusals a package may add ("das
+/// will ich nicht", "don't run it").
+pub(super) const REJECT_HELPERS: &[&str] = &[
+    "mach",
+    "machen",
+    "do",
+    "sein",
+    "gut",
+    "danke",
+    "thanks",
+    "thank",
+    "besser",
+    "lieber",
+    "auf",
+    "fall",
+    "way",
+    "absolutely",
+    "mal",
+    "bitte",
+    "please",
+    "ab",
+    "will",
+    "ausfuehren",
+    "want",
+    "run",
+];
+
 pub(super) const STOP: &[&str] = &[
     "stopp",
     "stop",
@@ -354,8 +384,22 @@ pub(super) const SKIP: &[&str] = &[
     "keep going",
     "continue",
 ];
-/// "hab ich", "kenn ich (schon)": the user knows this piece.
-pub(super) const KNOWN_FIRST: &[&str] = &["hab", "habe", "kenn", "kenne", "weiss"];
+/// "hab ich", "kenn ich (schon)", "I know": the user knows this piece.
+pub(super) const KNOWN_CUES: &[&[&str]] = &[
+    &["hab", "ich"],
+    &["habe", "ich"],
+    &["kenn", "ich"],
+    &["kenne", "ich"],
+    &["weiss", "ich"],
+    &["ich", "hab"],
+    &["ich", "habe"],
+    &["ich", "kenn"],
+    &["ich", "kenne"],
+    &["ich", "weiss"],
+    &["i", "know"],
+    &["i", "already"],
+    &["i", "heard"],
+];
 
 pub(super) const REPEAT: &[&str] = &[
     "nochmal",
@@ -525,8 +569,7 @@ pub(super) const REST_WORDS: &[&str] = &[
     "are",
     "uebrig",
 ];
-/// Besides "hab ich", "kenn ich", "I know", the only words a skip of a known
-/// piece may have.
+/// Besides [`KNOWN_CUES`], the only words a skip of a known piece may have.
 pub(super) const KNOWN_WORDS: &[&str] = &[
     "schon",
     "bereits",
@@ -556,7 +599,9 @@ pub(super) const KNOWN_WORDS: &[&str] = &[
     "read",
     "weiter",
 ];
-/// Besides "weiter", the only words a "weiter …" skip may have.
+/// A skip that starts with one of these may hold [`ONWARD_WORDS`] after it.
+pub(super) const ONWARD_FIRST: &[&str] = &["weiter"];
+/// Besides [`ONWARD_FIRST`], the only words a "weiter …" skip may have.
 pub(super) const ONWARD_WORDS: &[&str] = &[
     "zum",
     "naechsten",
@@ -942,7 +987,7 @@ pub(super) const GENERIC: &[&str] = &[
 /// "lieber", "rather": a wish for something else, unless "not" follows.
 pub(super) const RATHER: &[&str] = &["lieber", "rather"];
 /// "not" after [`RATHER`]: "lieber nicht" refuses.
-pub(super) const NOT_WORDS: &[&str] = &["nicht", "not"];
+pub(super) const RATHER_NOT: &[&str] = &["nicht", "not"];
 /// A read cue said with one of these ("das hab ich schon gelesen") is no
 /// wish to hear the text.
 pub(super) const ALREADY: &[&str] = &["already", "schon"];
@@ -1226,7 +1271,7 @@ impl<'l> Words<'l> {
                 lists.rather.contains(segment[at].as_str())
                     && segment
                         .get(at + 1)
-                        .is_none_or(|next| lists.not_words.contains(next.as_str()))
+                        .is_none_or(|next| lists.rather_not.contains(next.as_str()))
             };
             if segment
                 .iter()
@@ -1678,12 +1723,8 @@ fn pattern(
             extra.contains(word) || lists.pronouns.contains(word) || lists.subjects.contains(word)
         })
     };
-    let knows = segment.windows(2).any(|pair| {
-        (lists.known_first.contains(pair[0].as_str()) && pair[1] == "ich")
-            || (pair[0] == "ich" && lists.known_first.contains(pair[1].as_str()))
-            || (pair[0] == "i" && matches!(pair[1].as_str(), "know" | "already" | "heard"))
-    });
-    if first == "weiter" && only(&lists.onward_words)
+    let knows = has_cue(segment, &lists.known_cues);
+    if lists.onward_first.contains(first) && only(&lists.onward_words)
         || segment
             .iter()
             .any(|word| word.starts_with("ueberspr") || word == "skip")

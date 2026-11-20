@@ -120,7 +120,7 @@ async fn score<'a>(
         .map(|sentence| {
             let input = set.input(sentence);
             async move {
-                let rules = classify_by_rules(&input)
+                let rules = classify_by_rules(&input, CommandWords::base())
                     .map(|found| (found.command.meaning, found.command.piece_id));
                 let model = VoiceModel {
                     client,

@@ -100,8 +100,8 @@ pub fn decides_meaning_in(word: &str, listed: impl Fn(&str) -> bool) -> bool {
 
 /// Entries one vocabulary holds in one language.
 const MAX_VOCABULARY_ENTRIES: usize = 5_000;
-/// A name or value longer than this is not something a voice says as a name.
-const MAX_ENTRY_BYTES: usize = 128;
+/// A word, name or value longer than this is not something a voice says.
+pub(crate) const MAX_ENTRY_BYTES: usize = 128;
 /// A spoken name longer than this is a sentence, not a name.
 pub const MAX_SPOKEN_NAME_CHARS: usize = 64;
 
@@ -152,7 +152,7 @@ const SENTENCE_TYPES: &[(&str, &[&str])] = &[
 const MAX_VARIANT_CHARS: usize = 300;
 
 /// The slots of `template` in order, or `None` when a brace stands alone.
-fn slots_of(template: &str) -> Option<Vec<&str>> {
+pub(crate) fn slots_of(template: &str) -> Option<Vec<&str>> {
     let mut found = Vec::new();
     let mut rest = template;
     while let Some(open) = rest.find(['{', '}']) {
@@ -965,7 +965,7 @@ pub struct ApprovalSpeechConfig {
     /// words, ordinals, times, a value's direction) and reads the user's
     /// words with, added to the built-in German and English ones. A
     /// language says the whole card only with `full_card = true`.
-    #[serde(deserialize_with = "crate::approval_speech_words::deserialize_approval_speech_words")]
+    #[serde(skip)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub words: crate::approval_speech_words::ApprovalSpeechWordsByLanguage,
 }

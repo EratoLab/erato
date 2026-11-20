@@ -26,8 +26,8 @@ macro_rules! voice_command_lists {
             $( $(#[doc = $protected_doc])+ pub $protected: Vec<String>, )+
             $( $(#[doc = $removable_doc])+ pub $removable: Vec<String>, )+
             /// Words and phrases taken out of the built-in lists, by list.
-            /// The lists whose words only hold a decision back (negations,
-            /// conditions, question words, …) cannot be shortened.
+            /// The lists the guards rely on (negations, conditions, question
+            /// words, subjects, noise, helper words, …) cannot be shortened.
             pub remove: VoiceCommandWordRemovals,
         }
 
@@ -37,8 +37,7 @@ macro_rules! voice_command_lists {
             $( $(#[doc = $removable_doc])+ pub $removable: Vec<String>, )+
         }
 
-        /// Lists whose words only ever hold a decision back: nothing can be
-        /// removed from them.
+        /// Lists the guards rely on: nothing can be removed from them.
         pub const PROTECTED_VOICE_COMMAND_LISTS: &[&str] = &[$(stringify!($protected)),+];
 
         impl WordLists for VoiceCommandWordLists {
@@ -106,14 +105,22 @@ voice_command_lists! {
         leading_yes,
         /// Leading words that are a no: they make a following yes unclear.
         leading_no,
+        /// Subjects after a question verb ("kannst du").
+        subjects,
+        /// A segment made only of these is listening noise.
+        noise_words,
+        /// Words of an approving phrase that do not approve on their own
+        /// ("bin" of "bin einverstanden").
+        approve_helpers,
+        /// Words of a refusing phrase that do not refuse on their own
+        /// ("mach" of "mach das nicht", "will" of "das will ich nicht").
+        reject_helpers,
     }
     removable {
         /// Hesitation sounds, dropped wherever they stand.
         hesitations,
         /// Fillers dropped wherever they stand.
         fillers,
-        /// A segment made only of these is listening noise.
-        noise_words,
         /// Phrases that are listening noise.
         noise_phrases,
         /// Words dropped from the start of a segment when something follows.
@@ -133,23 +140,24 @@ voice_command_lists! {
         stop_first,
         /// Phrases that skip to the next piece.
         skip,
-        /// Verbs of "hab ich", "kenn ich": the user knows this piece.
-        known_first,
+        /// Two words in a row that say the user knows this piece ("hab
+        /// ich", "i know").
+        known_cues,
         /// Phrases that ask to repeat.
         repeat,
         /// Words that open a sentence about the speaker, not the card.
         personal_subjects,
-        /// Subjects after a question verb ("kannst du").
-        subjects,
         /// Words that say something on the card is wrong: maybe a change.
         corrections,
         /// A change ending on one of these has not said what to change.
         dangling,
         /// Besides the question for the rest, the words it may hold.
         rest_words,
-        /// Besides "hab ich", the words a skip of a known piece may hold.
+        /// Besides a known cue, the words a skip of a known piece may hold.
         known_words,
-        /// Besides "weiter", the words a "weiter …" skip may hold.
+        /// First words of a skip ("weiter …") that `onward_words` may follow.
+        onward_first,
+        /// Besides an onward first word, the words such a skip may hold.
         onward_words,
         /// "Not like that" said alone: a wish for a different call.
         not_like_that_alone,
@@ -185,11 +193,12 @@ voice_command_lists! {
         /// Words that name no piece of the card.
         generic,
         /// "Lieber", "rather": a wish for something else, unless a word of
-        /// `not_words` follows.
+        /// `rather_not` follows.
         rather,
         /// The word "not" after `rather` ("lieber nicht"): a refusal.
-        not_words,
-        /// "Schon", "already": a read cue with it is a skip.
+        rather_not,
+        /// "Schon", "already": a read cue said with one is not a request to
+        /// read.
         already,
         /// Phrases meaning "again" ("noch mal"): their words are no fillers.
         again,
@@ -219,7 +228,7 @@ fn shaped_voice_command_words(written: Written) -> (VoiceCommandWordsByLanguage,
                     &format!("{place}.remove"),
                     table,
                     PROTECTED_VOICE_COMMAND_LISTS,
-                    "its words only hold a decision back and cannot be removed",
+                    "the guards rely on its words, so none can be removed",
                     &mut dropped,
                 );
             }
@@ -298,15 +307,19 @@ mod tests {
     fn protected_lists_cannot_be_shortened() {
         let toml = "[approval_voice_commands.words.fr]\nnegations = [\"pas\"]\n\
                     [approval_voice_commands.words.fr.remove]\n\
-                    negations = [\"nicht\"]\nconditions = [\"aber\"]\nreject = [\"ne\"]\n";
+                    negations = [\"nicht\"]\nconditions = [\"aber\"]\nreject = [\"ne\"]\n\
+                    subjects = [\"das\"]\nnoise_words = [\"okay\"]\nreject_helpers = [\"will\"]\n";
         let words = words(toml);
         assert_eq!(words["fr"].negations, ["pas"]);
         assert_eq!(words["fr"].remove.reject, ["ne"]);
         assert_eq!(
             misshaped_voice_command_words(&schema(toml)),
             [
-                "approval_voice_commands.words.fr.remove.conditions is ignored: its words only hold a decision back and cannot be removed",
-                "approval_voice_commands.words.fr.remove.negations is ignored: its words only hold a decision back and cannot be removed",
+                "approval_voice_commands.words.fr.remove.conditions is ignored: the guards rely on its words, so none can be removed",
+                "approval_voice_commands.words.fr.remove.negations is ignored: the guards rely on its words, so none can be removed",
+                "approval_voice_commands.words.fr.remove.noise_words is ignored: the guards rely on its words, so none can be removed",
+                "approval_voice_commands.words.fr.remove.reject_helpers is ignored: the guards rely on its words, so none can be removed",
+                "approval_voice_commands.words.fr.remove.subjects is ignored: the guards rely on its words, so none can be removed",
             ]
         );
     }

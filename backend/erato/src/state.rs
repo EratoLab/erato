@@ -362,6 +362,7 @@ impl AppState {
                 &config.spoken_readings,
             ),
         );
+        report_spoken_card_words(&config.approval_speech.words);
         let mut state = Self {
             memory_reservation: None,
             db,
@@ -1481,6 +1482,23 @@ impl AppState {
             report.opaque(c, "shared.genai_override", client);
         }
         report
+    }
+}
+
+/// One startup line per language whose spoken-card words are configured.
+fn report_spoken_card_words(
+    configured: &erato_config::approval_speech_words::ApprovalSpeechWordsByLanguage,
+) {
+    let mut languages: Vec<_> = configured.iter().collect();
+    languages.sort_by(|a, b| a.0.cmp(b.0));
+    for (language, words) in languages {
+        crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+            "Spoken-card words",
+            language,
+        );
+        if let Some(summary) = erato_config::approval_speech_words::summary(words) {
+            tracing::info!("Spoken-card words for `{language}`: {summary}.");
+        }
     }
 }
 

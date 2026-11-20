@@ -9,8 +9,8 @@ use erato_memory::HeapSize;
 use facet::Facet;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::language_words::{MAX_ENTRY_BYTES, language_tables};
-use crate::spoken::{Written, shown, usable};
+use crate::language_words::language_tables;
+use crate::spoken::{MAX_ENTRY_BYTES, Written, shown, usable};
 
 /// Readings one language may hold.
 pub const MAX_READINGS: usize = 500;

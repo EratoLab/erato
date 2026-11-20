@@ -2,6 +2,9 @@
 //! built-in German and English base in `rules.rs`, with what a language
 //! package adds or removes for German, English and the card's language.
 //! People mix German and English, so their words count on every card.
+//! A few words stay in the rules' code because they shape a rule rather than
+//! fill a list: "ne"/"noe"/"doch", "aber"/"but", "take", the copula words,
+//! "nicht ändern", a final "so"/"then", "rest", "ueberspr"/"skip" and "um".
 
 use super::rules::{self, drop_fillers, words_of};
 use erato_config::language_words::{WordLists, merge_word_list};
@@ -27,11 +30,11 @@ fn base(name: &str) -> Option<(Kind, Vec<String>)> {
     use Kind::{Cue, Phrase, Word};
     use rules::*;
     let (kind, words): (Kind, &[&str]) = match name {
-        "repeat_cues" | "read_cues" => {
-            let cues = if name == "repeat_cues" {
-                REPEAT_CUES
-            } else {
-                READ_CUES
+        "repeat_cues" | "read_cues" | "known_cues" => {
+            let cues = match name {
+                "repeat_cues" => REPEAT_CUES,
+                "read_cues" => READ_CUES,
+                _ => KNOWN_CUES,
             };
             return Some((Cue, cues.iter().map(|cue| cue.join(" ")).collect()));
         }
@@ -58,7 +61,7 @@ fn base(name: &str) -> Option<(Kind, Vec<String>)> {
         "stop" => (Phrase, STOP),
         "stop_first" => (Word, STOP_FIRST),
         "skip" => (Phrase, SKIP),
-        "known_first" => (Word, KNOWN_FIRST),
+
         "repeat" => (Phrase, REPEAT),
         "personal_subjects" => (Word, PERSONAL_SUBJECTS),
         "subjects" => (Word, SUBJECTS),
@@ -66,6 +69,7 @@ fn base(name: &str) -> Option<(Kind, Vec<String>)> {
         "dangling" => (Word, DANGLING),
         "rest_words" => (Word, REST_WORDS),
         "known_words" => (Word, KNOWN_WORDS),
+        "onward_first" => (Word, ONWARD_FIRST),
         "onward_words" => (Word, ONWARD_WORDS),
         "not_like_that_alone" => (Phrase, NOT_LIKE_THAT_ALONE),
         "not_like_that" => (Cue, NOT_LIKE_THAT),
@@ -82,10 +86,12 @@ fn base(name: &str) -> Option<(Kind, Vec<String>)> {
         "rest_what" => (Word, REST_WHAT),
         "generic" => (Word, GENERIC),
         "rather" => (Word, RATHER),
-        "not_words" => (Word, NOT_WORDS),
+        "rather_not" => (Word, RATHER_NOT),
         "already" => (Word, ALREADY),
         "again" => (Cue, AGAIN),
         "negations_before" => (Word, NEGATIONS_BEFORE),
+        "approve_helpers" => (Word, APPROVE_HELPERS),
+        "reject_helpers" => (Word, REJECT_HELPERS),
         _ => return None,
     };
     Some((kind, words.iter().map(|word| word.to_string()).collect()))
@@ -107,7 +113,7 @@ pub struct CommandWords {
     pub(super) stop: HashSet<String>,
     pub(super) stop_first: HashSet<String>,
     pub(super) skip: HashSet<String>,
-    pub(super) known_first: HashSet<String>,
+    pub(super) known_cues: Vec<Vec<String>>,
     pub(super) repeat: HashSet<String>,
     pub(super) negations: HashSet<String>,
     pub(super) backchannels: HashSet<String>,
@@ -121,6 +127,7 @@ pub struct CommandWords {
     pub(super) dangling: HashSet<String>,
     pub(super) rest_words: HashSet<String>,
     pub(super) known_words: HashSet<String>,
+    pub(super) onward_first: HashSet<String>,
     pub(super) onward_words: HashSet<String>,
     pub(super) continuations: HashSet<String>,
     pub(super) conditions: HashSet<String>,
@@ -142,7 +149,7 @@ pub struct CommandWords {
     pub(super) rest_what: HashSet<String>,
     pub(super) generic: HashSet<String>,
     pub(super) rather: HashSet<String>,
-    pub(super) not_words: HashSet<String>,
+    pub(super) rather_not: HashSet<String>,
     pub(super) already: HashSet<String>,
     pub(super) again: Vec<Vec<String>>,
     pub(super) negations_before: HashSet<String>,
@@ -222,13 +229,13 @@ fn cues(list: Vec<String>) -> Vec<Vec<String>> {
 }
 
 /// The words of `phrases` that carry their meaning: without pronouns,
-/// subjects, noise and `also_not`.
+/// subjects, noise and `helpers`.
 fn carrying(
     phrases: &[String],
     noise: &HashSet<String>,
     pronouns: &HashSet<String>,
     subjects: &HashSet<String>,
-    also_not: &[&str],
+    helpers: &HashSet<String>,
 ) -> HashSet<String> {
     phrases
         .iter()
@@ -237,9 +244,16 @@ fn carrying(
             !noise.contains(word)
                 && !pronouns.contains(word)
                 && !subjects.contains(word)
-                && !also_not.contains(&word.as_str())
+                && !helpers.contains(word)
         })
         .collect()
+}
+
+fn any_in(words: &[String], set: &HashSet<String>, reason: &'static str) -> Option<&'static str> {
+    words
+        .iter()
+        .any(|word| set.contains(word))
+        .then_some(reason)
 }
 
 impl CommandWords {
@@ -275,49 +289,75 @@ impl CommandWords {
         };
         let any = |_: &[String]| -> Option<&'static str> { None };
         let mut list = |name: &str| builder.list(name, &any);
-        // The lists whose words hold a decision back come first: what is
+        // The lists the guards and decisions rely on come first: what is
         // added elsewhere is checked against them.
         let negations = list("negations");
         let conditions = list("conditions");
-        let held_back: HashSet<String> = [
+        let question = set([list("wh_words"), list("question_first")].concat());
+        let subjects = set(list("subjects"));
+        let reject = list("reject");
+        let refusal_words = list("refusal_words");
+        let stop = list("stop");
+        let approve_helpers = set(list("approve_helpers"));
+        let reject_helpers = set(list("reject_helpers"));
+        let relied_on: HashSet<String> = [
             negations.clone(),
             conditions.clone(),
             list("continuations"),
             list("question_verbs"),
-            list("wh_words"),
-            list("question_first"),
             list("leading_yes"),
             list("leading_no"),
+            list("backchannels"),
+            list("yes_particles"),
+            list("doubled_yes"),
+            list("noise_words"),
+            refusal_words.clone(),
         ]
         .into_iter()
         .flatten()
+        .chain(question.iter().cloned())
+        .chain(subjects.iter().cloned())
+        .chain(approve_helpers.iter().cloned())
+        .chain(reject_helpers.iter().cloned())
+        .chain(
+            reject
+                .iter()
+                .chain(&stop)
+                .flat_map(|phrase| words_of(phrase)),
+        )
         .collect();
-        let guard: HashSet<&str> = negations
-            .iter()
-            .chain(&conditions)
-            .map(String::as_str)
-            .collect();
-        let with_guard_word = |words: &[String]| {
-            words
-                .iter()
-                .any(|word| guard.contains(word.as_str()))
-                .then_some("a negation or condition never counts as agreement or noise")
+        let guard: HashSet<String> = negations.iter().chain(&conditions).cloned().collect();
+        let conditions = set(conditions);
+        let agreeing_problem = |words: &[String]| {
+            any_in(
+                words,
+                &guard,
+                "a negation or condition never counts as agreement or noise",
+            )
+            .or_else(|| {
+                any_in(
+                    words,
+                    &question,
+                    "a question word never counts as agreement or noise",
+                )
+            })
         };
-        let with_condition = |words: &[String]| {
-            words
-                .iter()
-                .any(|word| conditions.contains(word))
-                .then_some("a condition never leads a decision")
+        let leading_problem = |words: &[String]| {
+            any_in(words, &conditions, "a condition never leads a decision")
+                .or_else(|| any_in(words, &question, "a question word never leads a decision"))
         };
-        // Dropped words are invisible to every guard, so none of theirs may
-        // become one.
-        let with_held_back_word = |words: &[String]| {
-            words
-                .iter()
-                .any(|word| held_back.contains(word))
-                .then_some("a word the guards look for is never dropped as a filler")
+        // Dropped words are invisible to every guard and decision, so none
+        // of theirs may become one.
+        let filler_problem = |words: &[String]| {
+            agreeing_problem(words).or_else(|| {
+                any_in(
+                    words,
+                    &relied_on,
+                    "a word the guards or decisions rely on is never dropped as a filler",
+                )
+            })
         };
-        let mut agreeing_list = |name: &str| builder.list(name, &with_guard_word);
+        let mut agreeing_list = |name: &str| builder.list(name, &agreeing_problem);
         let yes_particles = agreeing_list("yes_particles");
         let doubled_yes = agreeing_list("doubled_yes");
         let leading_yes = agreeing_list("leading_yes");
@@ -325,13 +365,9 @@ impl CommandWords {
         let agreement_words = agreeing_list("agreement_words");
         let noise_words = agreeing_list("noise_words");
         let noise_phrases = agreeing_list("noise_phrases");
-        let hesitations = builder.list("hesitations", &|words: &[String]| {
-            with_guard_word(words).or_else(|| with_held_back_word(words))
-        });
-        let filler_words = builder.list("fillers", &|words: &[String]| {
-            with_guard_word(words).or_else(|| with_held_back_word(words))
-        });
-        let leading = builder.list("leading", &with_condition);
+        let hesitations = builder.list("hesitations", &filler_problem);
+        let filler_words = builder.list("fillers", &filler_problem);
+        let leading = builder.list("leading", &leading_problem);
         let mut list = |name: &str| builder.list(name, &any);
         let leading_no = list("leading_no");
         let again = cues(list("again"));
@@ -347,9 +383,6 @@ impl CommandWords {
         let yes_particles = set(yes_particles);
         let negations = set(negations);
         let pronouns = set(list("pronouns"));
-        let subjects = set(list("subjects"));
-        let reject = list("reject");
-        let refusal_words = list("refusal_words");
         let agreement = approve
             .iter()
             .flat_map(|phrase| words_of(phrase))
@@ -381,39 +414,14 @@ impl CommandWords {
             &noise_words,
             &pronouns,
             &subjects,
-            &["bin", "s", "gehts"],
+            &approve_helpers,
         );
-        let refusing = carrying(
-            &reject,
-            &noise_words,
-            &pronouns,
-            &subjects,
-            &[
-                "mach",
-                "machen",
-                "do",
-                "sein",
-                "gut",
-                "danke",
-                "thanks",
-                "thank",
-                "besser",
-                "lieber",
-                "auf",
-                "fall",
-                "way",
-                "absolutely",
-                "mal",
-                "bitte",
-                "please",
-                "ab",
-            ],
-        );
+        let refusing = carrying(&reject, &noise_words, &pronouns, &subjects, &reject_helpers);
         let words = CommandWords {
             noise_phrases: phrases(&noise_phrases),
             approve: phrases(&approve),
             reject: phrases(&reject),
-            stop: phrases(&list("stop")),
+            stop: phrases(&stop),
             skip: phrases(&list("skip")),
             repeat: phrases(&list("repeat")),
             not_like_that_alone: phrases(&list("not_like_that_alone")),
@@ -424,7 +432,7 @@ impl CommandWords {
             leading_yes: leading_yes_set,
             leading_no: leading_no_set,
             stop_first: set(list("stop_first")),
-            known_first: set(list("known_first")),
+            known_cues: cues(list("known_cues")),
             negations,
             backchannels: set(list("backchannels")),
             yes_particles,
@@ -437,9 +445,10 @@ impl CommandWords {
             dangling: set(list("dangling")),
             rest_words: set(list("rest_words")),
             known_words: set(list("known_words")),
+            onward_first: set(list("onward_first")),
             onward_words: set(list("onward_words")),
             continuations: set(list("continuations")),
-            conditions: set(conditions),
+            conditions,
             not_like_that: cues(list("not_like_that")),
             change_anywhere: set(list("change_anywhere")),
             change_first: set(list("change_first")),
@@ -457,7 +466,7 @@ impl CommandWords {
             rest_what: set(list("rest_what")),
             generic: set(list("generic")),
             rather: set(list("rather")),
-            not_words: set(list("not_words")),
+            rather_not: set(list("rather_not")),
             already: set(list("already")),
             again,
             negations_before: set(list("negations_before")),
@@ -493,6 +502,10 @@ impl CommandWordsByLanguage {
         let mut languages: Vec<(&String, &VoiceCommandWordLists)> = config.iter().collect();
         languages.sort_by(|a, b| a.0.cmp(b.0));
         for (language, lists) in &languages {
+            crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+                "Voice-command words",
+                language,
+            );
             if let Some(summary) = summary(lists) {
                 tracing::info!("Voice-command words for `{language}`: {summary}.");
             }

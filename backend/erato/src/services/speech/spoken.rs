@@ -16,24 +16,6 @@ pub struct SpeechLanguage {
     readings: Option<Arc<Readings>>,
 }
 
-impl std::fmt::Debug for SpeechLanguage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("SpeechLanguage").field(&self.code).finish()
-    }
-}
-
-impl PartialEq for SpeechLanguage {
-    fn eq(&self, other: &Self) -> bool {
-        self.code == other.code
-            && match (&self.readings, &other.readings) {
-                (Some(a), Some(b)) => Arc::ptr_eq(a, b),
-                (a, b) => a.is_none() && b.is_none(),
-            }
-    }
-}
-
-impl Eq for SpeechLanguage {}
-
 impl SpeechLanguage {
     /// Reduces "de-DE" or "de_DE" to "de". Callers pass the language the screen shows when it is
     /// supported, else the profile's resolved language, as Explain does. Uses the built-in
@@ -50,7 +32,7 @@ impl SpeechLanguage {
             .unwrap_or_default()
             .trim()
             .to_ascii_lowercase();
-        let readings = readings.get(&code);
+        let readings = readings.get(language);
         Self { code, readings }
     }
 
@@ -58,6 +40,7 @@ impl SpeechLanguage {
         &self.code
     }
 
+    #[cfg(test)]
     pub(super) fn readings(&self) -> Option<Arc<Readings>> {
         self.readings.clone()
     }

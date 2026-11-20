@@ -261,33 +261,23 @@ pub struct Classified {
     pub outcome: &'static str,
 }
 
-/// With the built-in lists only; [`classify_with`] takes a language's.
-pub async fn classify(input: &VoiceCommandInput<'_>, model: Option<VoiceModel<'_>>) -> Classified {
-    classify_with(input, CommandWords::base(), model).await
-}
-
-pub async fn classify_with(
+/// `words` are the lists of the card's language.
+pub async fn classify(
     input: &VoiceCommandInput<'_>,
     words: &CommandWords,
     model: Option<VoiceModel<'_>>,
 ) -> Classified {
-    if let Some(classified) = classify_by_rules_with(input, words) {
+    if let Some(classified) = classify_by_rules(input, words) {
         return classified;
     }
     match model {
-        Some(model) => classify_by_model_with(input, words, &model).await,
+        Some(model) => classify_by_model(input, words, &model).await,
         None => classify_without_model("no_model"),
     }
 }
 
-/// With the built-in lists only; [`classify_by_rules_with`] takes a
-/// language's.
-pub fn classify_by_rules(input: &VoiceCommandInput<'_>) -> Option<Classified> {
-    classify_by_rules_with(input, CommandWords::base())
-}
-
 /// The rules' answer, or `None` when they are not sure.
-pub fn classify_by_rules_with(
+pub fn classify_by_rules(
     input: &VoiceCommandInput<'_>,
     words: &CommandWords,
 ) -> Option<Classified> {
@@ -304,16 +294,7 @@ pub fn classify_by_rules_with(
     })
 }
 
-/// With the built-in lists only; [`classify_by_model_with`] takes a
-/// language's.
 pub async fn classify_by_model(
-    input: &VoiceCommandInput<'_>,
-    model: &VoiceModel<'_>,
-) -> Classified {
-    classify_by_model_with(input, CommandWords::base(), model).await
-}
-
-pub async fn classify_by_model_with(
     input: &VoiceCommandInput<'_>,
     words: &CommandWords,
     model: &VoiceModel<'_>,
