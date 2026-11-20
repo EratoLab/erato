@@ -13,6 +13,58 @@ use utoipa::ToSchema;
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
 
+/// Words that decide what a sentence means, in German and English, folded
+/// (lower case, umlauts as "ae", no apostrophes): an utterance with one of
+/// them never approves a card by voice, and none of them is ever a
+/// hesitation sound.
+pub const NEGATIONS: &[&str] = &[
+    "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
+    "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
+    "niemand",
+];
+pub const CONDITIONS: &[&str] = &[
+    "aber",
+    "but",
+    "wenn",
+    "falls",
+    "if",
+    "unless",
+    "sofern",
+    "nur",
+    "only",
+    "ausser",
+    "except",
+    "though",
+    "however",
+    "jedoch",
+    "allerdings",
+    "vorausgesetzt",
+    "provided",
+    "oder",
+    "or",
+];
+pub const WH_WORDS: &[&str] = &[
+    "was", "wer", "wie", "wann", "wo", "warum", "wieso", "welche", "welcher", "welches", "what",
+    "whats", "who", "whos", "when", "where", "why", "which", "how",
+];
+
+/// Folds a word as the voice-command rules do: lower case, umlauts and ß
+/// spelled out.
+pub fn fold_word(word: &str) -> String {
+    word.to_lowercase()
+        .replace('ä', "ae")
+        .replace('ö', "oe")
+        .replace('ü', "ue")
+        .replace('ß', "ss")
+}
+
+/// Whether `word` decides what a sentence means.
+pub fn decides_meaning(word: &str) -> bool {
+    let word = fold_word(word);
+    let word = word.as_str();
+    NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+}
+
 /// Entries one vocabulary holds in one language.
 const MAX_VOCABULARY_ENTRIES: usize = 5_000;
 /// A name or value longer than this is not something a voice says as a name.

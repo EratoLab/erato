@@ -277,7 +277,8 @@ export const stepForMeaning = (
             : listen({ type: "notice", notice: { kind: "decline_on_screen" } });
         case "say_again":
           // The words were right; the recording could not carry them.
-          if (!approve) return onScreen;
+          if (!approve)
+            return listen({ type: "notice", notice: { kind: "say_again" } });
           if (!byVoice.approves) return confirmOnScreen;
           return listen({
             type: "notice",

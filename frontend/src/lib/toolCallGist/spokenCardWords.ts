@@ -1032,6 +1032,11 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
         id: "spokenCard.notice.sayPhrase",
         message: "Please say “I confirm” to go ahead.",
       });
+    case "say_again":
+      return t({
+        id: "spokenCard.notice.sayAgain",
+        message: "I didn't catch that clearly. Please say it again.",
+      });
     case "say_phrase_again":
       return t({
         id: "spokenCard.notice.sayPhraseAgain",

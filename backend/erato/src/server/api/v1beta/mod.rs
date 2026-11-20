@@ -96,9 +96,9 @@ use crate::server::api::v1beta::message_streaming::{
     ClientToolResultRequest, ClientToolResultResponse, CoveredByParentError, EditMessageRequest,
     EditMessageStreamingResponseMessage, GenerationRunningError, MessageSubmitRequest,
     MessageSubmitStreamingResponseMessage, NothingToReactError, ReactToTaskResultRequest,
-    ResumeStreamRequest, abort_message_stream, client_tool_park, client_tool_result,
-    continue_message_sse, edit_message_sse, message_submit_sse, platform_from_headers,
-    react_to_task_result_sse, regenerate_message_sse, resume_message_sse,
+    ResumeStreamRequest, VoiceReceiptRefusedError, abort_message_stream, client_tool_park,
+    client_tool_result, continue_message_sse, edit_message_sse, message_submit_sse,
+    platform_from_headers, react_to_task_result_sse, regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -687,6 +687,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         GenerationRunningError,
         AlreadyContinuedError,
         CardChangedError,
+        VoiceReceiptRefusedError,
         ChildrenWaitingError,
         CoveredByParentError,
         ReactToTaskResultRequest,

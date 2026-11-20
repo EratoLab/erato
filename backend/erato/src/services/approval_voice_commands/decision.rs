@@ -2,25 +2,24 @@
 //! must show, and the short-lived receipt that lets the decision through.
 //! An approval needs the phrase; a refusal needs only a plain "nein".
 
-use super::phrase::{PhraseMatch, PhraseMatchKind, syllables};
+use super::phrase::PhraseMatchKind;
 use super::{CardPiece, CardPieceRole, CardPieceState, request_heard};
 use crate::models::message::{
     ApprovalItem, ToolApprovalKind, ToolCallAction, ToolCallLabel, ToolCallLabelSource,
     VoiceDecisionOutcome, VoiceDecisionPiece, VoiceDecisionRecord,
 };
+use crate::query_metrics::named_statement_from_sql_and_values;
 use chrono::{DateTime, Utc};
-use moka::future::Cache;
+use eyre::{Report, eyre};
+use sea_orm::{ConnectionTrait, DatabaseConnection};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// More items than this stay a decision on screen.
 pub const MAX_VOICE_ITEMS: u32 = 20;
-/// The longest a receipt is kept, whatever the setting says.
-pub const MAX_RECEIPT_TTL: Duration = Duration::from_secs(600);
 
 /// What the device measured about the recording the words came from. Times
 /// are milliseconds since the Unix epoch on the device's clock.
@@ -74,12 +73,11 @@ impl SignalProblem {
 /// the voice stopped, its first speech after the echo tail, and enough
 /// speech for the phrase's syllables.
 pub fn check_signals(
-    signals: Option<&VoiceSignals>,
-    matched: &PhraseMatch,
+    signals: &VoiceSignals,
+    syllables: u32,
     echo_tail_ms: u32,
     min_speech_ms_per_syllable: u32,
 ) -> Result<(), SignalProblem> {
-    let signals = signals.ok_or(SignalProblem::Missing)?;
     if signals.over_voice {
         return Err(SignalProblem::OverVoice);
     }
@@ -96,7 +94,7 @@ pub fn check_signals(
     {
         return Err(SignalProblem::InEchoTail);
     }
-    if signals.speech_ms < syllables(matched.phrase) * min_speech_ms_per_syllable {
+    if signals.speech_ms < syllables.saturating_mul(min_speech_ms_per_syllable) {
         return Err(SignalProblem::TooLittleSpeech);
     }
     Ok(())
@@ -110,7 +108,8 @@ pub fn only_points(pieces: &[CardPiece]) -> bool {
 }
 
 /// Whether the card's request was heard and every piece that must be said
-/// before a decision (a loss, a consequence, recipients outside) was too.
+/// before a decision was too: what the call does and on which record, a
+/// loss, a consequence, recipients outside.
 /// The device's own gate checks the same; this keeps an older device honest.
 pub fn card_asked(pieces: &[CardPiece]) -> bool {
     let asks = pieces
@@ -120,7 +119,10 @@ pub fn card_asked(pieces: &[CardPiece]) -> bool {
         (piece.must_say
             || matches!(
                 piece.role,
-                CardPieceRole::Consequence | CardPieceRole::Outside
+                CardPieceRole::What
+                    | CardPieceRole::Item
+                    | CardPieceRole::Consequence
+                    | CardPieceRole::Outside
             ))
             && piece.state != CardPieceState::Heard
     });
@@ -145,9 +147,9 @@ pub fn stop_is_screen_only(
 }
 
 /// Whether an approval of this call is given on screen only: no label to
-/// read from, a statement the card cannot read (SQL, code), a label
-/// warning, or more than [`MAX_VOICE_ITEMS`] items. A refusal is still
-/// taken by voice.
+/// read from, a statement (SQL, also a plain read; code), a label warning,
+/// or more than [`MAX_VOICE_ITEMS`] items. A refusal is still taken by
+/// voice.
 pub fn approval_is_screen_only(item: &ApprovalItem) -> bool {
     let Some(label) = item
         .display
@@ -164,7 +166,9 @@ pub fn label_is_screen_only(label: &ToolCallLabel) -> bool {
     let generic = label.read.is_none()
         && (label.source == ToolCallLabelSource::Generic || label.action == ToolCallAction::Other);
     let change = label.change.as_ref();
+    let statement = label.read.as_ref().is_some_and(|read| read.query.is_some());
     generic
+        || statement
         || !label.warnings.is_empty()
         || label.action == ToolCallAction::Run
         || change.is_some_and(|change| !change.opaque.is_empty() || change.opaque_omitted > 0)
@@ -276,57 +280,113 @@ pub fn record(input: RecordInput<'_>) -> VoiceDecisionRecord {
 /// arrive with its id.
 #[derive(Debug, Clone)]
 pub struct VoiceReceipt {
-    pub user_id: String,
+    pub user_id: Uuid,
     pub message_id: Uuid,
     pub approval_id: String,
     pub card_digest: String,
     pub outcome: VoiceDecisionOutcome,
-    pub issued: Instant,
     pub record: VoiceDecisionRecord,
 }
 
-/// Receipts by id, on this replica. Each is taken once, and a card has at
-/// most one: a new one for the same user and approval replaces the last.
-#[derive(Clone)]
-pub struct VoiceReceipts {
-    receipts: Cache<String, Arc<VoiceReceipt>>,
-    latest: Cache<(String, Uuid, String), String>,
+/// A receipt as it was taken: still valid, or past its time.
+#[derive(Debug, Clone)]
+pub struct TakenReceipt {
+    pub receipt: VoiceReceipt,
+    pub expired: bool,
 }
 
-impl Default for VoiceReceipts {
-    fn default() -> Self {
-        Self {
-            receipts: Cache::builder()
-                .max_capacity(10_000)
-                .time_to_live(MAX_RECEIPT_TTL)
-                .build(),
-            latest: Cache::builder()
-                .max_capacity(10_000)
-                .time_to_live(MAX_RECEIPT_TTL)
-                .build(),
-        }
+fn outcome_name(outcome: VoiceDecisionOutcome) -> &'static str {
+    match outcome {
+        VoiceDecisionOutcome::Approved => "approved",
+        VoiceDecisionOutcome::Refused => "refused",
     }
 }
 
-impl VoiceReceipts {
-    pub async fn issue(&self, receipt: VoiceReceipt) -> String {
-        let id = Uuid::new_v4().to_string();
-        let card = (
-            receipt.user_id.clone(),
-            receipt.message_id,
-            receipt.approval_id.clone(),
-        );
-        if let Some(previous) = self.latest.get(&card).await {
-            self.receipts.remove(&previous).await;
-        }
-        self.receipts.insert(id.clone(), Arc::new(receipt)).await;
-        self.latest.insert(card, id.clone()).await;
-        id
-    }
+/// Stores `receipt` for `ttl` and returns its id. A card has at most one: a
+/// newer receipt for the same user and approval replaces the last. Receipts
+/// past their time are cleared on the way.
+pub async fn issue_receipt(
+    db: &DatabaseConnection,
+    receipt: &VoiceReceipt,
+    ttl: Duration,
+) -> Result<String, Report> {
+    db.execute_raw(named_statement_from_sql_and_values(
+        db.get_database_backend(),
+        "voice_decision_receipts.clear_expired",
+        "DELETE FROM voice_decision_receipts WHERE expires_at < now()",
+        [],
+    ))
+    .await?;
+    let row = db
+        .query_one_raw(named_statement_from_sql_and_values(
+            db.get_database_backend(),
+            "voice_decision_receipts.issue",
+            r#"INSERT INTO voice_decision_receipts
+                   (user_id, message_id, approval_id, card_digest, outcome, record, expires_at)
+               VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7))
+               ON CONFLICT (user_id, message_id, approval_id) DO UPDATE SET
+                   id = public.uuidv7(),
+                   card_digest = EXCLUDED.card_digest,
+                   outcome = EXCLUDED.outcome,
+                   record = EXCLUDED.record,
+                   created_at = now(),
+                   expires_at = EXCLUDED.expires_at
+               RETURNING id"#,
+            [
+                receipt.user_id.into(),
+                receipt.message_id.into(),
+                receipt.approval_id.clone().into(),
+                receipt.card_digest.clone().into(),
+                outcome_name(receipt.outcome).into(),
+                serde_json::to_value(&receipt.record)?.into(),
+                (ttl.as_secs_f64()).into(),
+            ],
+        ))
+        .await?
+        .ok_or_else(|| eyre!("Storing a voice receipt returned no row"))?;
+    let id: Uuid = row.try_get("", "id")?;
+    Ok(id.to_string())
+}
 
-    pub async fn take(&self, id: &str) -> Option<Arc<VoiceReceipt>> {
-        self.receipts.remove(id).await
-    }
+/// Takes the receipt with `id`, whoever stored it: it is gone afterwards.
+/// `None` for an id that is no receipt.
+pub async fn take_receipt(
+    db: &DatabaseConnection,
+    id: &str,
+) -> Result<Option<TakenReceipt>, Report> {
+    let Ok(id) = Uuid::parse_str(id) else {
+        return Ok(None);
+    };
+    let Some(row) = db
+        .query_one_raw(named_statement_from_sql_and_values(
+            db.get_database_backend(),
+            "voice_decision_receipts.take",
+            r#"DELETE FROM voice_decision_receipts WHERE id = $1
+               RETURNING user_id, message_id, approval_id, card_digest, outcome, record,
+                   expires_at < now() AS expired"#,
+            [id.into()],
+        ))
+        .await?
+    else {
+        return Ok(None);
+    };
+    let outcome: String = row.try_get("", "outcome")?;
+    let record: serde_json::Value = row.try_get("", "record")?;
+    Ok(Some(TakenReceipt {
+        receipt: VoiceReceipt {
+            user_id: row.try_get("", "user_id")?,
+            message_id: row.try_get("", "message_id")?,
+            approval_id: row.try_get("", "approval_id")?,
+            card_digest: row.try_get("", "card_digest")?,
+            outcome: if outcome == "approved" {
+                VoiceDecisionOutcome::Approved
+            } else {
+                VoiceDecisionOutcome::Refused
+            },
+            record: serde_json::from_value(record)?,
+        },
+        expired: row.try_get("", "expired")?,
+    }))
 }
 
 /// Why a receipt does not let a decision through.
@@ -338,20 +398,20 @@ pub enum ReceiptProblem {
     OtherDecision,
 }
 
-/// Whether `receipt` was issued to this user for this card, as it is now,
-/// for this decision, and not longer ago than `ttl`.
+/// Whether the taken receipt was issued to this user for this card, as it is
+/// now, for this decision, and is not past its time.
 pub fn check_receipt(
-    receipt: Option<&VoiceReceipt>,
-    user_id: &str,
+    taken: Option<&TakenReceipt>,
+    user_id: Uuid,
     message_id: Uuid,
     item: &ApprovalItem,
     outcome: VoiceDecisionOutcome,
-    ttl: Duration,
 ) -> Result<(), ReceiptProblem> {
-    let receipt = receipt.ok_or(ReceiptProblem::Unknown)?;
-    if receipt.issued.elapsed() > ttl.min(MAX_RECEIPT_TTL) {
+    let taken = taken.ok_or(ReceiptProblem::Unknown)?;
+    if taken.expired {
         return Err(ReceiptProblem::Expired);
     }
+    let receipt = &taken.receipt;
     if receipt.user_id != user_id
         || receipt.message_id != message_id
         || receipt.approval_id != item.approval_id

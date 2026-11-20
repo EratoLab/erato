@@ -5,6 +5,7 @@
 use super::{
     CardPiece, CardPieceRole, VoiceCommandInput, VoiceMeaning, VoiceQuestion, default_text_piece,
 };
+pub(super) use erato_config::spoken::{CONDITIONS, NEGATIONS, WH_WORDS};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use unicode_normalization::UnicodeNormalization;
@@ -397,11 +398,6 @@ const REPEAT: &[&str] = &[
     "one more time",
 ];
 
-pub(super) const NEGATIONS: &[&str] = &[
-    "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
-    "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
-    "niemand",
-];
 /// Heard before a yes, these make it a listening "mhm, ja", not agreement.
 const BACKCHANNELS: &[&str] = &["mhm", "mhmm", "mh", "hm", "hmm", "hmmm", "aha", "huh"];
 const YES_PARTICLES: &[&str] = &["ja", "jo", "yes", "yeah", "yep"];
@@ -444,10 +440,6 @@ const QUESTION_VERBS: &[&str] = &[
 const SUBJECTS: &[&str] = &[
     "das", "es", "du", "ihr", "sie", "wir", "ich", "man", "you", "it", "that", "this", "we", "i",
     "he", "she", "they", "there",
-];
-const WH_WORDS: &[&str] = &[
-    "was", "wer", "wie", "wann", "wo", "warum", "wieso", "welche", "welcher", "welches", "what",
-    "whats", "who", "whos", "when", "where", "why", "which", "how",
 ];
 /// A sentence that starts with its own subject ("ich möchte lieber …") is
 /// about the speaker, not obviously about the card.
@@ -591,27 +583,6 @@ const ONWARD_WORDS: &[&str] = &[
 const CONTINUATIONS: &[&str] = &[
     "so", "also", "und", "and", "aber", "but", "dann", "then", "well", "weil", "because", "wenn",
     "if", "ich", "i", "naja",
-];
-pub(super) const CONDITIONS: &[&str] = &[
-    "aber",
-    "but",
-    "wenn",
-    "falls",
-    "if",
-    "unless",
-    "sofern",
-    "nur",
-    "only",
-    "ausser",
-    "except",
-    "though",
-    "however",
-    "jedoch",
-    "allerdings",
-    "vorausgesetzt",
-    "provided",
-    "oder",
-    "or",
 ];
 
 /// "Not like that" said on its own: a wish for a different call.

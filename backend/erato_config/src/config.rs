@@ -3586,6 +3586,18 @@ mod audio_config_tests {
         );
 
         let mut settings = load_conversational(
+            "hesitation_words = [\"ne\", \"Nicht\", \"aber\", \"wie\", \"nö\", \"euh\"]",
+        );
+        let warnings = settings.drop_unusable_hesitation_words();
+        assert_eq!(warnings.len(), 5, "{warnings:?}");
+        assert!(
+            warnings
+                .iter()
+                .all(|warning| warning.contains("never only a hesitation"))
+        );
+        assert_eq!(settings.hesitation_words, ["euh"]);
+
+        let mut settings = load_conversational(
             "hesitation_words = [\"euh\"]\nhesitation_words_replace_base = true",
         );
         assert!(settings.drop_unusable_hesitation_words().is_empty());
@@ -9005,8 +9017,15 @@ impl AudioConversationalConfig {
                 warnings.push(format!(
                     "`audio_conversational.hesitation_words` entry {word:?} dropped: it must be one word of letters."
                 ));
+                return false;
             }
-            usable
+            if crate::spoken::decides_meaning(word.trim()) {
+                warnings.push(format!(
+                    "`audio_conversational.hesitation_words` entry {word:?} dropped: it is a negation, condition or question word, which is never only a hesitation."
+                ));
+                return false;
+            }
+            true
         });
         for word in &mut self.hesitation_words {
             *word = word.trim().to_lowercase();

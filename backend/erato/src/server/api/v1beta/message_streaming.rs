@@ -2837,6 +2837,18 @@ pub struct CardChangedError {
 
 pub(crate) const CARD_CHANGED_CODE: &str = "card_changed";
 
+/// Body of the `409` `continuestream` answers to a decision by voice whose
+/// `voice_receipt` is unknown, used, expired, or for another card or
+/// decision. Nothing was decided; the card waits on screen.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct VoiceReceiptRefusedError {
+    /// Always `voice_receipt_refused`.
+    pub code: String,
+}
+
+pub(crate) const VOICE_RECEIPT_REFUSED_CODE: &str = "voice_receipt_refused";
+
 /// Body of the `409` `continuestream` answers on a delegated child whose
 /// request is currently being asked about in the chat that started it.
 ///
@@ -2904,6 +2916,9 @@ pub enum StreamRouteError {
     /// `continuestream` only: a decision that names no approval, while the
     /// open card replaces one the user asked to change.
     CardChanged(Box<CardChangedError>),
+    /// `continuestream` only: a decision by voice whose receipt does not let
+    /// it through.
+    VoiceReceiptRefused(Box<VoiceReceiptRefusedError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -2944,6 +2959,9 @@ impl axum::response::IntoResponse for StreamRouteError {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
             StreamRouteError::CardChanged(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            StreamRouteError::VoiceReceiptRefused(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -21564,15 +21582,10 @@ async fn voice_receipts_taken(
     message_id: Uuid,
     open: &[ApprovalItem],
     request: &ContinueStreamRequest,
-) -> Result<HashMap<String, crate::models::message::VoiceDecisionRecord>, String> {
+) -> Result<HashMap<String, crate::models::message::VoiceDecisionRecord>, StreamRouteError> {
     use crate::models::message::VoiceDecisionOutcome;
-    use crate::services::approval_voice_commands::decision::check_receipt;
-    let ttl = Duration::from_secs(u64::from(
-        app_state
-            .config
-            .approval_voice_decisions
-            .receipt_ttl_seconds,
-    ));
+    use crate::services::approval_voice_commands::decision::{check_receipt, take_receipt};
+    let user_id = Uuid::parse_str(&me_user.id).ok();
     let mut records = HashMap::new();
     for item in &request.decisions {
         let Some(id) = item.voice_receipt.as_deref() else {
@@ -21581,35 +21594,39 @@ async fn voice_receipts_taken(
         let outcome = match item.decision {
             ToolApprovalDecision::Approve => VoiceDecisionOutcome::Approved,
             ToolApprovalDecision::Reject => VoiceDecisionOutcome::Refused,
-            _ => return Err("`voice_receipt` belongs to `approve` or `reject` only".to_string()),
+            _ => {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "`voice_receipt` belongs to `approve` or `reject` only".to_string(),
+                )
+                    .into());
+            }
         };
-        let receipt = app_state.voice_receipts.take(id).await;
+        let taken = take_receipt(&app_state.db, id)
+            .await
+            .map_err(crate::services::sentry::log_internal_server_error)
+            .map_err(|status| (status, "Reading the voice receipt failed".to_string()))?;
         let checked = open
             .iter()
             .find(|open| open.approval_id == item.approval_id)
-            .map(|open| {
-                check_receipt(
-                    receipt.as_deref(),
-                    &me_user.id,
-                    message_id,
-                    open,
-                    outcome,
-                    ttl,
-                )
+            .zip(user_id)
+            .map(|(open, user_id)| {
+                check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
             });
-        match (checked, receipt) {
-            (Some(Ok(())), Some(receipt)) => {
-                records.insert(item.approval_id.clone(), receipt.record.clone());
+        match (checked, taken) {
+            (Some(Ok(())), Some(taken)) => {
+                records.insert(item.approval_id.clone(), taken.receipt.record);
             }
             (checked, _) => {
                 tracing::info!(
                     problem = ?checked,
                     "Refused a decision by voice: its receipt does not match the card"
                 );
-                return Err(
-                    "The decision by voice no longer matches this card. Please decide on screen."
-                        .to_string(),
-                );
+                return Err(StreamRouteError::VoiceReceiptRefused(Box::new(
+                    VoiceReceiptRefusedError {
+                        code: VOICE_RECEIPT_REFUSED_CODE.to_string(),
+                    },
+                )));
             }
         }
     }
@@ -22058,9 +22075,7 @@ pub(crate) async fn start_continuation(
                 return Err((axum::http::StatusCode::BAD_REQUEST, refusal).into());
             }
             voice_records =
-                voice_receipts_taken(app_state, me_user, message.id, &decidable, &request)
-                    .await
-                    .map_err(|refusal| (axum::http::StatusCode::CONFLICT, refusal))?;
+                voice_receipts_taken(app_state, me_user, message.id, &decidable, &request).await?;
             if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
@@ -22201,7 +22216,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), a decision by voice carries a `voice_receipt` that is unknown, used, expired or for another card or decision (JSON, code = voice_receipt_refused, body = VoiceReceiptRefusedError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),

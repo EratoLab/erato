@@ -730,11 +730,11 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         &["updated to"],
         update("call_update", "Done"),
     );
-    let app_state = records_app_state_with(pool, mocks, |config| {
+    let deciding = |config: &mut erato::config::AppConfig| {
         config.approval_voice_commands.enabled = true;
         config.approval_voice_decisions.enabled = true;
-    })
-    .await;
+    };
+    let app_state = records_app_state_with(pool.clone(), mocks, deciding).await;
     let server = app_server(app_state.clone());
     let (_chat_id, message_id) = park(&server).await;
     let stop = stops(&message_content(&app_state, message_id).await)[0].clone();
@@ -837,14 +837,51 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         "echo tail"
     );
 
+    // A refusal gets the same recording checks, with one syllable of speech.
+    let nein = |signals: Value| say_to("Nein.", pieces.clone(), signals);
+    let mut unsigned = nein(Value::Null).await;
+    assert_eq!(unsigned["meaning"], "reject", "{unsigned}");
+    assert_eq!(unsigned["decision"].take(), json!({"status": "say_again"}));
+    let mut echo = signals.clone();
+    echo["first_speech_at_ms"] = json!(1_700_000_000_100u64);
+    assert_eq!(nein(echo).await["decision"], json!({"status": "say_again"}));
+    let mut short = signals.clone();
+    short["speech_ms"] = json!(90);
+    assert_eq!(nein(short).await["decision"]["status"], "accepted");
+
     let confirmed = say("Ich bestätige.", signals.clone()).await;
     assert_eq!(confirmed["meaning"], "approve");
     assert_eq!(confirmed["decision"]["status"], "accepted", "{confirmed}");
     let receipt = confirmed["decision"]["receipt"].clone();
-    decide(json!("not-a-receipt"))
+    let refused = decide(json!("not-a-receipt")).await;
+    refused.assert_status(axum::http::StatusCode::CONFLICT);
+    assert_eq!(
+        refused.json::<Value>(),
+        json!({"code": "voice_receipt_refused"})
+    );
+    // Another server on the same database takes the receipt: another
+    // replica, or this one after a restart.
+    let mut other_mocks = MockSet::new();
+    answers_with(
+        &mut other_mocks,
+        &["updated to"],
+        &[],
+        build_openai_text_streaming_response(&["DONE"]),
+    );
+    let other = app_server(records_app_state_with(pool, other_mocks, deciding).await);
+    other
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{
+                "approval_id": approval_id,
+                "decision": "approve",
+                "voice_receipt": receipt.clone(),
+            }],
+        }))
         .await
-        .assert_status(axum::http::StatusCode::CONFLICT);
-    decide(receipt.clone()).await.assert_status_ok();
+        .assert_status_ok();
     let content = message_content(&app_state, message_id).await;
     let approval = content
         .iter()

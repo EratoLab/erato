@@ -9,10 +9,10 @@ use super::message_streaming::ParkedApprovalState;
 use crate::models::message::VoiceDecisionOutcome;
 use crate::policy::engine::PolicyEngine;
 use crate::services::approval_voice_commands::decision::{
-    RecordInput, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked, card_digest,
-    check_signals, only_points, record, stop_is_screen_only,
+    RecordInput, SignalProblem, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked,
+    card_digest, check_signals, issue_receipt, only_points, record, stop_is_screen_only,
 };
-use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase};
+use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase, syllables};
 use crate::services::approval_voice_commands::{
     CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
     VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning, VoiceModel,
@@ -246,30 +246,35 @@ async fn decide(
         return answer(VoiceDecisionStatus::NotYet);
     }
     let config = &app_state.config.approval_voice_decisions;
-    let matched = match (outcome, phrase) {
+    // A refusal is one syllable ("nein"), the phrase several; both need a
+    // recording that can carry a decision, so the voice's own "nein" in a
+    // repeated detail cannot refuse either.
+    let (needed_syllables, matched) = match (outcome, phrase) {
         (VoiceDecisionOutcome::Approved, None) => {
             return answer(VoiceDecisionStatus::PhraseNeeded);
         }
         (VoiceDecisionOutcome::Approved, Some(matched)) => {
-            if let Err(problem) = check_signals(
-                request.signals.as_ref(),
-                matched,
-                config.echo_tail_ms,
-                config.min_speech_ms_per_syllable,
-            ) {
-                return Decided {
-                    problem: Some(problem.name()),
-                    ..answer(VoiceDecisionStatus::SayAgain)
-                };
-            }
-            Some(matched)
+            (syllables(matched.phrase), Some(matched))
         }
-        (VoiceDecisionOutcome::Refused, _) => None,
+        (VoiceDecisionOutcome::Refused, _) => (1, None),
     };
-    // A refusal from an older device without signals still refuses; it
-    // is only not recorded.
+    let say_again = |problem: SignalProblem| Decided {
+        problem: Some(problem.name()),
+        ..answer(VoiceDecisionStatus::SayAgain)
+    };
     let Some(signals) = request.signals.as_ref() else {
-        return answer(VoiceDecisionStatus::Accepted);
+        return say_again(SignalProblem::Missing);
+    };
+    if let Err(problem) = check_signals(
+        signals,
+        needed_syllables,
+        config.echo_tail_ms,
+        config.min_speech_ms_per_syllable,
+    ) {
+        return say_again(problem);
+    }
+    let Ok(user_id) = Uuid::parse_str(&me_user.id) else {
+        return answer(VoiceDecisionStatus::ScreenOnly);
     };
     // A refusal keeps its words only when a rule matched them, so they are
     // a short refusal and nothing else the user said.
@@ -293,18 +298,26 @@ async fn decide(
         signals,
         outcome,
     });
-    let receipt = app_state
-        .voice_receipts
-        .issue(VoiceReceipt {
-            user_id: me_user.id.clone(),
+    let stored = issue_receipt(
+        &app_state.db,
+        &VoiceReceipt {
+            user_id,
             message_id,
             approval_id: item.approval_id.clone(),
             card_digest: card_digest(item),
             outcome,
-            issued: Instant::now(),
             record,
-        })
-        .await;
+        },
+        Duration::from_secs(u64::from(config.receipt_ttl_seconds)),
+    )
+    .await;
+    let receipt = match stored {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            tracing::error!(%error, "Storing a voice receipt failed; the card is decided on screen");
+            return answer(VoiceDecisionStatus::ScreenOnly);
+        }
+    };
     Decided {
         answer: Some(VoiceDecisionAnswer {
             status: VoiceDecisionStatus::Accepted,

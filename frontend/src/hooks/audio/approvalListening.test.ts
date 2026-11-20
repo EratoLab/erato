@@ -1568,6 +1568,17 @@ describe("listening against the endpoint", () => {
       expect(send).not.toHaveBeenCalled();
     });
 
+    it("a 'nein' from a recording that cannot decide is asked for again, not taken", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("reject", { status: "say_again" });
+      await heardApprovalWords(KEY, "Nein.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Das habe ich nicht sicher gehört. Bitte noch einmal sagen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
     it("the phrase from a recording that could not carry it is no miss", async () => {
       const { decision } = deciding();
       const { heardApprovalWords, useApprovalListening } = await heardCard(

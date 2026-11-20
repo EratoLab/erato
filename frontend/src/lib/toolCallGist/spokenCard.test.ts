@@ -27,10 +27,16 @@ import {
   voiceApprovable,
   voiceApprovalOffered,
 } from "./spokenCard";
+import {
+  spokenCardFlow,
+  spokenCardStep,
+  voiceDecisionGate,
+} from "./spokenCardFlow";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
 
 import type { SpokenApproval, SpokenFacts, SpokenPiece } from "./spokenCard";
+import type { SpokenCardEvent } from "./spokenCardFlow";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -1425,11 +1431,63 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
     expect(Object.keys(voiceApprovals)).toHaveLength(calls.length);
   });
 
+  /**
+   * The listener skips every piece the first time it plays ("weiter"), then
+   * lets the voice go on; the request is heard in the end.
+   */
+  const skippedThenHeard = (pieces: SpokenPiece[]) => {
+    let flow = spokenCardStep(pieces, spokenCardFlow(pieces), {
+      type: "start",
+    });
+    const skipped = new Set<number>();
+    for (let step = 0; step < 50 && !flow.closed; step += 1) {
+      const playing = flow.playing;
+      if (playing?.type !== "piece") break;
+      const event: SpokenCardEvent =
+        pieces[playing.index].role !== "request" && !skipped.has(playing.index)
+          ? { type: "skip" }
+          : { type: "finished" };
+      if (event.type === "skip") skipped.add(playing.index);
+      flow = spokenCardStep(pieces, flow, event);
+    }
+    return flow;
+  };
+
+  it.each([
+    ["update-01-date-and-probability", "what"],
+    ["create-03-contact", "item"],
+  ] as const)(
+    "%s: the %s skipped is said again before the phrase can count",
+    (id, role) => {
+      const card = (voiceApproval: boolean) =>
+        inLanguage("de", () =>
+          spokenApprovalPieces(approvalOf(callOf(id)), {
+            language: "de",
+            now: NOW,
+            timeZone: ZONE,
+            voiceApproval,
+          }),
+        );
+      const pieces = card(true);
+      const at = pieces.findIndex((piece) => piece.role === role);
+      expect(at).not.toBe(-1);
+      const flow = skippedThenHeard(pieces);
+      expect(voiceDecisionGate(pieces, flow).ready).toBe(true);
+      expect(flow.heard[at]).toBe(true);
+      // Without deciding by voice the card is as before: nothing owed.
+      const plain = card(false);
+      expect(plain.every((piece) => !piece.mustSay)).toBe(true);
+      expect(skippedThenHeard(plain).heard[at]).toBe(false);
+    },
+  );
+
   it("asks for the phrase only where the label allows it and the voice can say the call", () => {
     const offered = (id: string) =>
       voiceApprovalOffered(approvalOf(callOf(id)));
     expect(offered("update-01-date-and-probability")).toBe(true);
     expect(offered("read-01-search")).toBe(true);
+    // SQL stays on screen, a plain read included.
+    expect(offered("read-03-sql-several-filters")).toBe(false);
     expect(offered("run-01-sql")).toBe(false);
     expect(offered("create-12-hidden-characters")).toBe(false);
     expect(voiceApprovalOffered({ type: "pointer" })).toBe(false);

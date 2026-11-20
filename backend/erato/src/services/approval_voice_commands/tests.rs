@@ -1104,7 +1104,6 @@ mod deciding_by_voice {
         VoiceDecisionOutcome,
     };
     use serde_json::json;
-    use std::time::Duration;
     use uuid::Uuid;
 
     fn approves(words: &str) -> bool {
@@ -1198,6 +1197,26 @@ mod deciding_by_voice {
     }
 
     #[test]
+    fn a_hesitation_word_never_hides_a_negation_condition_or_question() {
+        let deployment = ["ne".to_string(), "nicht".to_string(), "aber".to_string()];
+        for words in [
+            "Ich bestätige, ne",
+            "ich bestätige nicht",
+            "aber ich bestätige",
+            "Wie, ich bestätige",
+        ] {
+            assert!(match_phrase(words, &deployment).is_none(), "{words}");
+        }
+    }
+
+    #[test]
+    fn a_transcript_marked_as_unfinished_never_matches() {
+        for words in ["Ich bestätige…", "ich bestätige ...", "I confirm..."] {
+            assert!(match_phrase(words, &[]).is_none(), "{words}");
+        }
+    }
+
+    #[test]
     fn the_deployments_hesitation_words_are_trimmed_too() {
         assert!(match_phrase("Euh, ich bestätige", &["euh".to_string()]).is_some());
         assert!(match_phrase("Euh, ich bestätige", &[]).is_none());
@@ -1225,12 +1244,42 @@ mod deciding_by_voice {
     }
 
     #[test]
-    fn only_a_recording_after_the_voice_with_enough_speech_approves() {
-        let matched = match_phrase("Ich bestätige", &[]).unwrap();
+    fn only_a_recording_after_the_voice_with_enough_speech_decides() {
+        let phrase = syllables(match_phrase("Ich bestätige", &[]).unwrap().phrase);
         let check =
-            |signals: Option<VoiceSignals>| check_signals(signals.as_ref(), &matched, 300, 80);
+            |signals: Option<VoiceSignals>| check_signals(&signals.unwrap(), phrase, 300, 80);
         assert_eq!(check(Some(signals())), Ok(()));
-        assert_eq!(check(None), Err(SignalProblem::Missing));
+        // A refusal is one syllable: less speech is enough, the timing checks
+        // are the same.
+        let nein = VoiceSignals {
+            speech_ms: 100,
+            ..signals()
+        };
+        assert_eq!(check_signals(&nein, 1, 300, 80), Ok(()));
+        assert_eq!(
+            check_signals(
+                &VoiceSignals {
+                    speech_ms: 79,
+                    ..nein
+                },
+                1,
+                300,
+                80
+            ),
+            Err(SignalProblem::TooLittleSpeech)
+        );
+        assert_eq!(
+            check_signals(
+                &VoiceSignals {
+                    first_speech_at_ms: Some(10_100),
+                    ..nein
+                },
+                1,
+                300,
+                80
+            ),
+            Err(SignalProblem::InEchoTail)
+        );
         let over = VoiceSignals {
             over_voice: true,
             ..signals()
@@ -1293,9 +1342,21 @@ mod deciding_by_voice {
         assert!(!card_asked(&[piece("w", What, Heard)]));
         let loss = CardPiece {
             must_say: true,
-            ..piece("w", What, CutShort)
+            ..piece("d", Detail, CutShort)
         };
         assert!(!card_asked(&[loss, piece("r", Request, Heard)]));
+        // What the call does and on which record is owed on every card, so a
+        // device that skipped it cannot have the phrase count.
+        assert!(!card_asked(&[
+            piece("w", What, CutShort),
+            piece("d", Detail, Heard),
+            piece("r", Request, Heard)
+        ]));
+        assert!(!card_asked(&[
+            piece("w", What, Heard),
+            piece("i", Item, NotSaid),
+            piece("r", Request, Heard)
+        ]));
         // A detail skipped is not owed.
         assert!(card_asked(&[
             piece("d", Detail, NotSaid),
@@ -1442,57 +1503,47 @@ mod deciding_by_voice {
         assert!(label_is_screen_only(&ids(21)));
     }
 
-    fn receipt(item: &ApprovalItem, outcome: VoiceDecisionOutcome) -> VoiceReceipt {
+    fn receipt(item: &ApprovalItem, outcome: VoiceDecisionOutcome) -> TakenReceipt {
         let pieces = [piece("r", CardPieceRole::Request, CardPieceState::Heard)];
-        VoiceReceipt {
-            user_id: "user".to_string(),
-            message_id: Uuid::nil(),
-            approval_id: item.approval_id.clone(),
-            card_digest: card_digest(item),
-            outcome,
-            issued: std::time::Instant::now(),
-            record: record(RecordInput {
-                user_id: "user",
-                item,
-                language: "de",
-                pieces: &pieces,
-                required_phrase: Some("de.ich_bestaetige"),
-                matched_words: "ich bestaetige",
-                match_kind: Some(PhraseMatchKind::Exact),
-                signals: &signals(),
+        TakenReceipt {
+            receipt: VoiceReceipt {
+                user_id: Uuid::from_u128(1),
+                message_id: Uuid::nil(),
+                approval_id: item.approval_id.clone(),
+                card_digest: card_digest(item),
                 outcome,
-            }),
+                record: record(RecordInput {
+                    user_id: "user",
+                    item,
+                    language: "de",
+                    pieces: &pieces,
+                    required_phrase: Some("de.ich_bestaetige"),
+                    matched_words: "ich bestaetige",
+                    match_kind: Some(PhraseMatchKind::Exact),
+                    signals: &signals(),
+                    outcome,
+                }),
+            },
+            expired: false,
         }
     }
 
     #[test]
     fn a_receipt_lets_through_only_its_own_decision_on_the_card_as_heard() {
+        let user = Uuid::from_u128(1);
         let card = item("a1", Some(label(ToolCallAction::Update)));
         let approved = receipt(&card, VoiceDecisionOutcome::Approved);
-        let ttl = Duration::from_secs(120);
-        let check = |receipt: Option<&VoiceReceipt>, user: &str, item: &ApprovalItem, outcome| {
-            check_receipt(receipt, user, Uuid::nil(), item, outcome, ttl)
+        let check = |taken: Option<&TakenReceipt>, user: Uuid, item: &ApprovalItem, outcome| {
+            check_receipt(taken, user, Uuid::nil(), item, outcome)
         };
+        let approve = VoiceDecisionOutcome::Approved;
+        assert_eq!(check(Some(&approved), user, &card, approve), Ok(()));
         assert_eq!(
-            check(
-                Some(&approved),
-                "user",
-                &card,
-                VoiceDecisionOutcome::Approved
-            ),
-            Ok(())
-        );
-        assert_eq!(
-            check(None, "user", &card, VoiceDecisionOutcome::Approved),
+            check(None, user, &card, approve),
             Err(ReceiptProblem::Unknown)
         );
         assert_eq!(
-            check(
-                Some(&approved),
-                "other",
-                &card,
-                VoiceDecisionOutcome::Approved
-            ),
+            check(Some(&approved), Uuid::from_u128(2), &card, approve),
             Err(ReceiptProblem::OtherCard)
         );
         let changed = ApprovalItem {
@@ -1500,82 +1551,34 @@ mod deciding_by_voice {
             ..card.clone()
         };
         assert_eq!(
-            check(
-                Some(&approved),
-                "user",
-                &changed,
-                VoiceDecisionOutcome::Approved
-            ),
+            check(Some(&approved), user, &changed, approve),
             Err(ReceiptProblem::OtherCard)
         );
         let refused = receipt(&card, VoiceDecisionOutcome::Refused);
         assert_eq!(
-            check(
-                Some(&refused),
-                "user",
-                &card,
-                VoiceDecisionOutcome::Approved
-            ),
+            check(Some(&refused), user, &card, approve),
             Err(ReceiptProblem::OtherDecision)
         );
-        let old = VoiceReceipt {
-            issued: std::time::Instant::now() - Duration::from_secs(121),
+        let old = TakenReceipt {
+            expired: true,
             ..approved.clone()
         };
         assert_eq!(
-            check(Some(&old), "user", &card, VoiceDecisionOutcome::Approved),
+            check(Some(&old), user, &card, approve),
             Err(ReceiptProblem::Expired)
         );
         assert_eq!(
-            check_receipt(
-                Some(&approved),
-                "user",
-                Uuid::new_v4(),
-                &card,
-                VoiceDecisionOutcome::Approved,
-                ttl
-            ),
+            check_receipt(Some(&approved), user, Uuid::new_v4(), &card, approve),
             Err(ReceiptProblem::OtherCard)
         );
-    }
-
-    #[tokio::test]
-    async fn a_receipt_is_taken_once() {
-        let receipts = VoiceReceipts::default();
-        let card = item("a1", Some(label(ToolCallAction::Update)));
-        let id = receipts
-            .issue(receipt(&card, VoiceDecisionOutcome::Approved))
-            .await;
-        assert!(receipts.take(&id).await.is_some());
-        assert!(receipts.take(&id).await.is_none());
-    }
-
-    #[tokio::test]
-    async fn a_new_receipt_for_the_same_card_replaces_the_last() {
-        let receipts = VoiceReceipts::default();
-        let card = item("a1", Some(label(ToolCallAction::Update)));
-        let first = receipts
-            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
-            .await;
-        let second = receipts
-            .issue(receipt(&card, VoiceDecisionOutcome::Refused))
-            .await;
-        assert!(receipts.take(&first).await.is_none());
-        assert!(receipts.take(&second).await.is_some());
-        let other = item("a2", Some(label(ToolCallAction::Update)));
-        let kept = receipts
-            .issue(receipt(&card, VoiceDecisionOutcome::Approved))
-            .await;
-        receipts
-            .issue(receipt(&other, VoiceDecisionOutcome::Approved))
-            .await;
-        assert!(receipts.take(&kept).await.is_some());
     }
 
     #[test]
     fn the_record_keeps_the_signals_for_a_later_decision_model() {
         let card = item("a1", Some(label(ToolCallAction::Update)));
-        let kept = receipt(&card, VoiceDecisionOutcome::Approved).record;
+        let kept = receipt(&card, VoiceDecisionOutcome::Approved)
+            .receipt
+            .record;
         assert_eq!(kept.speech_ms, 900);
         assert_eq!(kept.speech_frames_permille, 375);
         assert_eq!(kept.answer_latency_ms, Some(1_600));
