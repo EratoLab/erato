@@ -5685,6 +5685,24 @@
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
+  "spoken_readings.<language>.<written-form>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_readings.<language>.<written-form>.sentence_final": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "spoken_readings.<language>.<written-form>.spoken": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value>": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",

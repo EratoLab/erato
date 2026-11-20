@@ -1042,6 +1042,18 @@ pub struct AppConfig {
     #[facet(erato_config::stability(level = "alpha"))]
     pub spoken_number_words: SpokenNumberWordsByLanguage,
 
+    /// Readings by language tag for written forms a voice may not say well,
+    /// such as abbreviations (`"z. B." = "zum Beispiel"`), applied only to
+    /// the text sent to the voice. They add to or override the built-in
+    /// German readings.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken_readings::deserialize_spoken_readings"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_readings: crate::spoken_readings::SpokenReadingsByLanguage,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -1581,6 +1593,7 @@ impl AppConfig {
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
         warn_misshaped_voice_command_words(&schema);
+        warn_misshaped_spoken_readings(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1604,6 +1617,7 @@ impl AppConfig {
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_number_words(&schema);
         warn_misshaped_voice_command_words(&schema);
+        warn_misshaped_spoken_readings(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -9207,6 +9221,12 @@ fn warn_misshaped_number_words(schema: &Config) {
 fn warn_misshaped_voice_command_words(schema: &Config) {
     for dropped in crate::voice_command_words::misshaped_voice_command_words(schema) {
         tracing::warn!("Voice-command word dropped: {dropped}.");
+    }
+}
+
+fn warn_misshaped_spoken_readings(schema: &Config) {
+    for dropped in crate::spoken_readings::misshaped_spoken_readings(schema) {
+        tracing::warn!("Spoken reading dropped: {dropped}.");
     }
 }
 

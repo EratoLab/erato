@@ -6077,6 +6077,25 @@ zwanzigst = 20
 acht = 8
 ```
 
+### `spoken_readings`
+
+{/* erato_toml_config_key: spoken_readings */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form> */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form>.spoken */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form>.sentence_final */}
+
+Per lowercase language tag, written forms a voice may not say well, such as abbreviations, each with the one reading the voice says instead. Only the text sent to the voice changes (read aloud and replies spoken in conversational audio mode); the chat keeps the text as written. German has built-in readings ("z. B." as "zum Beispiel", "bzw." as "beziehungsweise", "usw.", "MwSt.", …); a configured reading adds to them or replaces the built-in one of the same written form. The readings of the user's language are used.
+
+A reading is the spoken text alone, or a table with `spoken` and `sentence_final`. `sentence_final` marks a form that usually ends its sentence ("usw."): when a capital letter follows, its full stop is kept so the sentence still ends there. A form matches as a whole word only, not inside a word, an address or a file name; a space after one of its full stops is optional ("z. B." also matches "z.B."), and a form starting in lower case also matches with a capital and is then read with one. The longest form wins, and a replaced text is not read again.
+
+Entries are checked at startup: a form or reading that is blank, longer than 128 bytes or holds hidden characters, a reading of the wrong shape, a language that is not a lowercase tag and a language with more than 500 readings are ignored with a warning; the rest of the language is kept.
+
+```toml
+[spoken_readings.fr]
+"p. ex." = "par exemple"
+"etc." = { spoken = "et cetera", sentence_final = true }
+```
+
 ### `approval_change_requests`
 
 {/* erato_toml_config_key: approval_change_requests */}

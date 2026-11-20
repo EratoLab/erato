@@ -777,6 +777,7 @@ mod tests {
             file_contents_cache: moka::future::Cache::new(0),
             token_count_cache: moka::future::Cache::new(0),
             voice_command_words: Default::default(),
+            speech_readings: Default::default(),
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(

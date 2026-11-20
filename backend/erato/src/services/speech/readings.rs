@@ -1,11 +1,12 @@
 //! Written forms a voice may not say well, each with one fixed reading. Applied only to the text
 //! sent to the voice. The built-in rows are German abbreviations whose reading never depends on
-//! the context; other rows (product names, English terms) can be added through `Readings::new`.
+//! the context; `[spoken_readings.<language>]` adds rows or overrides them by written form.
 
 use super::spoken::SpeechLanguage;
+use erato_config::spoken_readings::SpokenReadingsByLanguage;
 use regex::{Captures, Regex};
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Clone, Debug)]
 pub struct Reading {
@@ -51,9 +52,63 @@ const GERMAN: &[(&str, &str, bool)] = &[
     ("Fa.", "Firma", false),
 ];
 
+#[derive(Debug)]
 pub struct Readings {
     pattern: Option<Regex>,
     by_key: HashMap<String, Reading>,
+}
+
+/// The readings of every language that has any, built once from the configuration.
+#[derive(Debug, Default)]
+pub struct ReadingsByLanguage(HashMap<String, Arc<Readings>>);
+
+impl ReadingsByLanguage {
+    /// The built-in rows with the configured ones; a configured row replaces a built-in one with
+    /// the same written form.
+    pub fn from_config(configured: &SpokenReadingsByLanguage) -> Self {
+        let mut languages: Vec<&str> = configured.keys().map(String::as_str).collect();
+        languages.push("de");
+        languages.sort_unstable();
+        languages.dedup();
+        let mut by_language = HashMap::new();
+        for language in languages {
+            let mut rows: Vec<Reading> = configured
+                .get(language)
+                .map(|readings| {
+                    let mut rows: Vec<Reading> = readings
+                        .iter()
+                        .map(|(written, reading)| {
+                            Reading::new(written, &reading.spoken, reading.sentence_final)
+                        })
+                        .collect();
+                    rows.sort_by(|a, b| a.written.cmp(&b.written));
+                    rows
+                })
+                .unwrap_or_default();
+            if language == "de" {
+                // Configured rows come first: `Readings::new` keeps the first row of a form.
+                rows.extend(GERMAN.iter().map(|&(written, spoken, sentence_final)| {
+                    Reading::new(written, spoken, sentence_final)
+                }));
+            }
+            if !rows.is_empty() {
+                by_language.insert(language.to_string(), Arc::new(Readings::new(rows)));
+            }
+        }
+        Self(by_language)
+    }
+
+    /// The built-in readings alone.
+    pub fn built_in() -> &'static Self {
+        static BUILT_IN: LazyLock<ReadingsByLanguage> =
+            LazyLock::new(|| ReadingsByLanguage::from_config(&SpokenReadingsByLanguage::new()));
+        &BUILT_IN
+    }
+
+    /// The readings for a bare language code ("de").
+    pub fn get(&self, code: &str) -> Option<Arc<Readings>> {
+        self.0.get(code).cloned()
+    }
 }
 
 impl Readings {
@@ -85,13 +140,8 @@ impl Readings {
         Self { pattern, by_key }
     }
 
-    pub fn for_language(language: &SpeechLanguage) -> Option<&'static Readings> {
-        static GERMAN_READINGS: LazyLock<Readings> = LazyLock::new(|| {
-            Readings::new(GERMAN.iter().map(|&(written, spoken, sentence_final)| {
-                Reading::new(written, spoken, sentence_final)
-            }))
-        });
-        (language.code() == "de").then(|| &*GERMAN_READINGS)
+    pub fn for_language(language: &SpeechLanguage) -> Option<Arc<Readings>> {
+        language.readings()
     }
 
     /// One pass, longest written form first; replaced text is not read again. `piece_ends`: the
@@ -149,6 +199,11 @@ fn pattern(written: &str) -> String {
                 r"\s+"
             });
         } else {
+            // A full stop inside a form written without a space ("z.B.") also takes one, as
+            // its key does.
+            if previous == Some('.') {
+                pattern.push_str(r"\s*");
+            }
             pattern.push_str(&regex::escape(c.encode_utf8(&mut [0; 4])));
         }
         previous = Some(c);
@@ -218,6 +273,56 @@ mod tests {
         assert_eq!(
             readings.apply("Das klären wir ggf.", false),
             "Das klären wir gegebenenfalls"
+        );
+    }
+
+    fn configured(readings: serde_json::Value) -> ReadingsByLanguage {
+        ReadingsByLanguage::from_config(
+            &erato_config::spoken_readings::deserialize_spoken_readings(readings).unwrap(),
+        )
+    }
+
+    #[test]
+    fn configured_readings_are_applied_in_their_language() {
+        let readings = configured(serde_json::json!({"fr": {
+            "p. ex.": "par exemple",
+            "etc.": {"spoken": "et cetera", "sentence_final": true},
+            "cf.": 3,
+        }}));
+        let french = SpeechLanguage::with_readings("fr-FR", &readings);
+        assert_eq!(
+            Readings::for_language(&french)
+                .unwrap()
+                .apply("Des fruits, p.ex. des pommes, etc. Ensuite", true),
+            "Des fruits, par exemple des pommes, et cetera. Ensuite"
+        );
+        assert!(
+            SpeechLanguage::with_readings("en", &readings)
+                .readings()
+                .is_none()
+        );
+        let german = SpeechLanguage::with_readings("de", &readings);
+        assert_eq!(
+            Readings::for_language(&german)
+                .unwrap()
+                .apply("z. B. ggf.", true),
+            "zum Beispiel gegebenenfalls."
+        );
+    }
+
+    #[test]
+    fn a_configured_reading_overrides_the_built_in_one_of_its_form() {
+        let readings = configured(serde_json::json!({"de": {
+            "ca.": "zirka",
+            "z.B.": "beispielsweise",
+            "Kfz": "Kraftfahrzeug",
+        }}));
+        let german = SpeechLanguage::with_readings("de", &readings);
+        assert_eq!(
+            Readings::for_language(&german)
+                .unwrap()
+                .apply("Ca. 3 Kfz, z. B. Busse, bzw. ca. 4", true),
+            "Zirka 3 Kraftfahrzeug, beispielsweise Busse, beziehungsweise zirka 4"
         );
     }
 

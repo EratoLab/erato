@@ -136,6 +136,8 @@ pub struct AppState {
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
     /// The voice-command words per card language, built once from the config.
     pub voice_command_words: Arc<crate::services::approval_voice_commands::CommandWordsByLanguage>,
+    /// The readings the voice uses per language, built once from the config.
+    pub speech_readings: Arc<crate::services::speech::readings::ReadingsByLanguage>,
     /// Model label mappings per user, tool and argument shape.
     pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// How long one labeller request may take; tests shorten it.
@@ -355,6 +357,11 @@ impl AppState {
                 &config.approval_voice_commands.words,
             ),
         );
+        let speech_readings = Arc::new(
+            crate::services::speech::readings::ReadingsByLanguage::from_config(
+                &config.spoken_readings,
+            ),
+        );
         let mut state = Self {
             memory_reservation: None,
             db,
@@ -379,6 +386,7 @@ impl AppState {
             file_contents_cache,
             token_count_cache,
             voice_command_words,
+            speech_readings,
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: Arc::new(Semaphore::new(
@@ -1369,6 +1377,7 @@ impl Clone for AppState {
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
             voice_command_words: self.voice_command_words.clone(),
+            speech_readings: self.speech_readings.clone(),
             tool_label_cache: self.tool_label_cache.clone(),
             tool_label_timeout: self.tool_label_timeout,
             tool_label_permits: self.tool_label_permits.clone(),
