@@ -166,7 +166,9 @@ export const approvalItem = (
       openWorld: !closedWorld,
     }),
     emphasis: allowOnceEmphasisOf(card),
-    details: details.errors.length > 0 ? [] : details.elements,
+    // As on the web, a part of the details that failed is left out and the
+    // rest, the raw input among it, still shows.
+    details: details.elements,
     allowOnce: t({ id: "actionConfirmation.allowOnce", message: "Allow once" }),
     deny: toolDenyLabel(),
     locale,
@@ -201,7 +203,9 @@ export const resultRow = (request: ResultRowRequest): ResultRow => {
     />,
     locale,
     request.idPrefix ?? "r",
-    false,
+    // Opens the row's own disclosures, such as a long failure message; the
+    // row's title toggle names no region, so its raw input stays out.
+    true,
   );
   return {
     elements: row.errors.length > 0 ? [] : row.elements,

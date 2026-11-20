@@ -22,7 +22,9 @@ const THREAD_STACK_BYTES: usize = 16 * 1024 * 1024;
 const RENDER_TIME_LIMIT: Duration = Duration::from_secs(2);
 const WAIT_LIMIT: Duration = Duration::from_secs(5);
 const QUEUE_LENGTH: usize = 32;
-const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+/// Ten times what a whole Teams card may hold; a larger call keeps the card
+/// the surface had before.
+const MAX_REQUEST_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CardError {
@@ -173,23 +175,42 @@ fn worker() -> Option<&'static SyncSender<Job>> {
 fn serve(jobs: Receiver<Job>) {
     let mut engine: Option<Engine> = None;
     for job in jobs {
-        if engine.is_none() {
-            engine = Engine::load()
-                .inspect_err(|error| tracing::warn!(%error, "Adaptive card bundle did not load"))
-                .ok();
+        // Its caller stopped waiting.
+        if job.reply.is_closed() {
+            continue;
         }
-        let result = engine
-            .as_ref()
-            .map_or(Err(CardError::Unavailable), |engine| {
-                engine.call(job.function, &job.request)
-            });
-        // A run that failed may have left the engine half way through a
-        // render; the next one starts from a fresh load.
-        if result.is_err() {
+        let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            if engine.is_none() {
+                engine = Engine::load()
+                    .inspect_err(
+                        |error| tracing::warn!(%error, "Adaptive card bundle did not load"),
+                    )
+                    .ok();
+            }
+            engine
+                .as_ref()
+                .map_or(Err(CardError::Unavailable), |engine| {
+                    engine.call(job.function, &job.request)
+                })
+        }));
+        let result = ran.unwrap_or_else(|_| Err(CardError::Script("renderer panicked".into())));
+        // A run that failed, or that React caught failing, may have left the
+        // engine half way through a render; the next one starts afresh.
+        if result.as_deref().map_or(true, reported_errors) {
             engine = None;
         }
         let _ = job.reply.send(result);
     }
+}
+
+/// Whether a render's answer lists errors React caught.
+fn reported_errors(answer: &str) -> bool {
+    #[derive(Deserialize)]
+    struct Reported {
+        #[serde(default)]
+        errors: Vec<Value>,
+    }
+    serde_json::from_str::<Reported>(answer).map_or(true, |reported| !reported.errors.is_empty())
 }
 
 struct Engine {

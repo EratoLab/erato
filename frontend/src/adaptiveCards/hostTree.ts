@@ -154,6 +154,11 @@ export interface Toggle {
   label: HostNode[];
   /** What showed beside the toggle only while it was closed. */
   hint: HostNode[];
+  /**
+   * What the region itself showed while closed, when it was on screen then,
+   * such as the first lines of a long text.
+   */
+  closed?: HostNode[];
 }
 
 export interface RenderedTree {
@@ -197,6 +202,36 @@ const hintOf = (
       .map((node) => structuredCopy(node));
   }
   return [];
+};
+
+/** Whether an element takes no room on screen, as a closed `Collapse` does. */
+const takesNoRoom = (element: HostElement) => {
+  const style = element.props.style as Record<string, unknown> | undefined;
+  const classes =
+    typeof element.props.className === "string"
+      ? element.props.className.split(/\s+/)
+      : [];
+  return (
+    element.props.hidden === true ||
+    style?.display === "none" ||
+    style?.gridTemplateRows === "0fr" ||
+    classes.includes("hidden") ||
+    classes.includes("sr-only")
+  );
+};
+
+/** The region's content as shown, or nothing when it is not on screen. */
+const shownRegion = (
+  nodes: HostNode[],
+  region: string,
+): HostNode[] | undefined => {
+  for (const node of nodes) {
+    if (node.kind !== "element" || takesNoRoom(node)) continue;
+    if (node.props.id === region) return node.children.map(structuredCopy);
+    const inner = shownRegion(node.children, region);
+    if (inner) return inner;
+  }
+  return undefined;
 };
 
 const structuredCopy = (node: HostNode): HostNode =>
@@ -253,6 +288,7 @@ export const renderTree = (
         region,
         label: toggle.children.map(structuredCopy),
         hint: hintOf(container.children, toggle, region),
+        closed: shownRegion(container.children, region),
       });
     }
     for (const toggle of closed) {

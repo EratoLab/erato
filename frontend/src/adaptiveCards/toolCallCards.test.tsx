@@ -12,7 +12,7 @@ import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { renderTree } from "./hostTree";
-import { formatNumber } from "./polyfills";
+import { AbsoluteUrl, formatNumber } from "./polyfills";
 import { toAdaptiveElements } from "./toAdaptiveCard";
 import { approvalItem, loadCatalogs, resultRow } from "./toolCallCards";
 
@@ -34,13 +34,25 @@ interface FixtureCall {
 
 const fixtureCalls = (calls as unknown as { calls: FixtureCall[] }).calls;
 
-/** What a reader sees on the web, with every disclosure opened. */
-const visibleText = (node: Node): string => {
+/**
+ * What a reader sees on the web, clamped lines cut as the browser draws
+ * them. `withToggles: false` leaves out the disclosure buttons' labels, which
+ * the web changes once open and a Teams toggle cannot.
+ */
+const visibleText = (node: Node, withToggles = true): string => {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
   if (node.tagName === "svg" || node.classList.contains("sr-only")) return "";
   if (node.style.gridTemplateRows === "0fr") return "";
-  return [...node.childNodes].map(visibleText).join("");
+  if (!withToggles && node.matches("button[aria-controls]")) return "";
+  const text = [...node.childNodes]
+    .map((child) => visibleText(child, withToggles))
+    .join("");
+  const clamp = /(?:^|\s)line-clamp-(\d+)(?:\s|$)/.exec(node.className);
+  const lines = text.split("\n");
+  return clamp && lines.length > Number(clamp[1])
+    ? lines.slice(0, Number(clamp[1])).join("\n")
+    : text;
 };
 
 const openAll = async (container: HTMLElement) => {
@@ -59,16 +71,21 @@ const openAll = async (container: HTMLElement) => {
   }
 };
 
-const isHint = (element: AcElement) =>
+/** Hints show only while closed; a closed region's preview gives way to the whole. */
+const closedOnly = (element: AcElement) =>
   element.type === "Container" &&
   typeof element.id === "string" &&
-  /h\d+$/.test(element.id);
+  /(h\d+|r\d+c)$/.test(element.id);
 
-/** What the card says, in order, leaving out hints a web reader no longer sees once open. */
-const cardText = (elements: AcElement[]): string =>
+/**
+ * What the card says, in order: `shown` before any toggle is pressed, `open`
+ * with every toggle pressed.
+ */
+const cardText = (elements: AcElement[], state: "shown" | "open"): string =>
   elements
     .map((element): string => {
-      if (isHint(element)) return "";
+      if (state === "open" && closedOnly(element)) return "";
+      if (state === "shown" && element.isVisible === false) return "";
       switch (element.type) {
         case "RichTextBlock":
           return (element.inlines as { text: string }[])
@@ -76,12 +93,16 @@ const cardText = (elements: AcElement[]): string =>
             .join("");
         case "ColumnSet":
           return (element.columns as { items: AcElement[] }[])
-            .map((column) => cardText(column.items))
+            .map((column) => cardText(column.items, state))
             .join("");
         case "Container":
-          return cardText(element.items as AcElement[]);
+          return cardText(element.items as AcElement[], state);
         case "ActionSet":
-          return (element.actions as { title: string }[])
+          return (element.actions as { type: string; title: string }[])
+            .filter(
+              (action) =>
+                state === "shown" || action.type !== "Action.ToggleVisibility",
+            )
             .map((action) => action.title)
             .join("");
         default:
@@ -95,7 +116,25 @@ const cardText = (elements: AcElement[]): string =>
  * bullets), differ by surface, not the words.
  */
 const comparable = (text: string) =>
-  text.replace(/[\s\u201c\u201d\u201e\u00ab\u00bb\u2022]/g, "");
+  text.replace(/[\s\u201c\u201d\u201e\u00ab\u00bb\u2022\u2026]/g, "");
+
+/** The web's text closed and with every disclosure opened. */
+const webText = async (element: React.ReactElement) => {
+  const view = render(element);
+  const shown = visibleText(view.container);
+  await openAll(view.container);
+  const open = visibleText(view.container, false);
+  view.unmount();
+  return { shown, open };
+};
+
+const expectSameText = (
+  elements: AcElement[],
+  web: { shown: string; open: string },
+) => {
+  expect(comparable(cardText(elements, "shown"))).toBe(comparable(web.shown));
+  expect(comparable(cardText(elements, "open"))).toBe(comparable(web.open));
+};
 
 const itemProps = (call: FixtureCall) => ({
   toolName: call.tool_name,
@@ -105,16 +144,98 @@ const itemProps = (call: FixtureCall) => ({
   isClientTool: false,
 });
 
-const part = (call: FixtureCall, status: "success" | "error"): ToolUse =>
+interface Outcome {
+  output?: unknown;
+  resultDetails?: unknown;
+}
+
+const part = (
+  call: FixtureCall,
+  status: "success" | "error",
+  outcome: Outcome = {},
+): ToolUse =>
   ({
     tool_call_id: `call-${call.id}`,
     tool_name: call.tool_name,
     status,
     input: call.input,
     output:
-      status === "error" ? { error: "The record is locked." } : { ok: true },
+      outcome.output ??
+      (status === "error" ? { error: "The record is locked." } : { ok: true }),
+    result_details: outcome.resultDetails,
     display: call.display,
   }) as unknown as ToolUse;
+
+const expectSameAsWeb = async (
+  call: FixtureCall,
+  locale: string,
+  outcome: Outcome = {},
+) => {
+  const card = approvalItem({
+    locale,
+    toolName: call.tool_name,
+    display: call.display,
+    input: call.input,
+    serverId: call.server_id,
+  });
+  expect(card.errors).toEqual([]);
+  expect(card.kind).not.toBe("legacy");
+  i18n.activate(locale);
+  expectSameText(
+    card.referent,
+    await webText(<ApprovalReferent {...itemProps(call)} />),
+  );
+  expectSameText(
+    card.details,
+    await webText(<ApprovalTechnicalDetails {...itemProps(call)} />),
+  );
+  for (const status of ["success", "error"] as const) {
+    const row = resultRow({ locale, part: part(call, status, outcome) });
+    expect(row.errors).toEqual([]);
+    i18n.activate(locale);
+    expectSameText(
+      row.elements,
+      await webText(
+        <ToolUseStep
+          part={{ ...part(call, status, outcome), content_type: "tool_use" }}
+          status={status === "success" ? "done" : "error"}
+          isStreaming={false}
+          isCollapsed
+          isLastStep
+        />,
+      ),
+    );
+  }
+  return card;
+};
+
+const fixture = (id: string): FixtureCall => {
+  const call = fixtureCalls.find((candidate) => candidate.id === id);
+  if (!call) throw new Error(`fixture ${id} missing`);
+  return JSON.parse(JSON.stringify(call)) as FixtureCall;
+};
+
+/** A note of twelve lines: the web shows six until "See the full text". */
+const longNote = (): FixtureCall => {
+  const call = fixture("create-09-note-very-long");
+  const text = Array.from(
+    { length: 12 },
+    (_, line) => `Line ${line + 1} of the visit note.`,
+  ).join("\n");
+  (call.input as { item: { notetext: string } }).item.notetext = text;
+  const label = (
+    call.display as {
+      label: { change: { texts: Record<string, unknown>[] } };
+    }
+  ).label;
+  label.change.texts[0] = {
+    ...label.change.texts[0],
+    text,
+    lines: 12,
+    chars: text.length,
+  };
+  return call;
+};
 
 beforeAll(() => {
   loadCatalogs({
@@ -128,53 +249,49 @@ describe("tool call cards for Adaptive Card surfaces", () => {
     it.each(fixtureCalls.map((call) => [call.id, call] as const))(
       "%s",
       async (_id, call) => {
-        const card = approvalItem({
-          locale,
-          toolName: call.tool_name,
-          display: call.display,
-          input: call.input,
-          serverId: call.server_id,
-        });
-        expect(card.errors).toEqual([]);
-        expect(card.kind).not.toBe("legacy");
-
-        i18n.activate(locale);
-        const referent = render(<ApprovalReferent {...itemProps(call)} />);
-        await openAll(referent.container);
-        expect(comparable(cardText(card.referent))).toBe(
-          comparable(visibleText(referent.container)),
-        );
-        referent.unmount();
-
-        const details = render(
-          <ApprovalTechnicalDetails {...itemProps(call)} />,
-        );
-        await openAll(details.container);
-        expect(comparable(cardText(card.details))).toBe(
-          comparable(visibleText(details.container)),
-        );
-        details.unmount();
-
-        for (const status of ["success", "error"] as const) {
-          const row = resultRow({ locale, part: part(call, status) });
-          expect(row.errors).toEqual([]);
-          i18n.activate(locale);
-          const web = render(
-            <ToolUseStep
-              part={{ ...part(call, status), content_type: "tool_use" }}
-              status={status === "success" ? "done" : "error"}
-              isStreaming={false}
-              isCollapsed
-              isLastStep
-            />,
-          );
-          expect(comparable(cardText(row.elements))).toBe(
-            comparable(visibleText(web.container)),
-          );
-          web.unmount();
-        }
+        await expectSameAsWeb(call, locale);
       },
     );
+
+    it("a long text shows its first lines until the toggle shows the whole", async () => {
+      const card = await expectSameAsWeb(longNote(), locale);
+      const shown = cardText(card.referent, "shown");
+      expect(shown).toContain("Line 1 of the visit note.");
+      expect(shown).not.toContain("Line 12 of the visit note.");
+      expect(cardText(card.referent, "open")).toContain(
+        "Line 12 of the visit note.",
+      );
+    });
+
+    it("a finished call keeps its result link, and a long failure its toggle", async () => {
+      const call = fixture("create-01-task-long-description");
+      await expectSameAsWeb(call, locale, {
+        resultDetails: {
+          links: [
+            {
+              uri: "https://example.com/tasks/1",
+              title: "Technisches Layout abstimmen",
+            },
+          ],
+        },
+        output: Array.from(
+          { length: 30 },
+          (_, line) =>
+            `Line ${line + 1}: the record is locked by another user.`,
+        ).join("\n"),
+      });
+      const row = resultRow({
+        locale,
+        part: part(call, "success", {
+          resultDetails: {
+            links: [{ uri: "https://example.com/tasks/1" }],
+          },
+        }),
+      });
+      expect(JSON.stringify(row.elements)).toContain(
+        '"url":"https://example.com/tasks/1"',
+      );
+    });
   });
 
   it("puts the question, the facts and the decision words in the card's language", () => {
@@ -276,6 +393,53 @@ describe("toAdaptiveElements", () => {
       { type: "TextRun", text: " → " },
       { type: "TextRun", text: "new", color: "Good" },
     ]);
+  });
+});
+
+describe("URLs without a URL of the engine's own", () => {
+  it("reads an https link as a browser does", () => {
+    const url = new AbsoluteUrl("https://CRM.example.com:443/a/b?x=1#top");
+    expect([
+      url.protocol,
+      url.hostname,
+      url.host,
+      url.pathname,
+      url.search,
+      url.hash,
+    ]).toEqual([
+      "https:",
+      "crm.example.com",
+      "crm.example.com",
+      "/a/b",
+      "?x=1",
+      "#top",
+    ]);
+    expect(url.href).toBe("https://crm.example.com/a/b?x=1#top");
+    expect(new AbsoluteUrl("https://crm.example.com:8443").host).toBe(
+      "crm.example.com:8443",
+    );
+  });
+
+  it("reports user info, and ends the host at a backslash", () => {
+    const withUser = new AbsoluteUrl("https://user:pw@evil.example/x");
+    expect([withUser.username, withUser.password, withUser.hostname]).toEqual([
+      "user",
+      "pw",
+      "evil.example",
+    ]);
+    expect(
+      new AbsoluteUrl("https://evil.example\\@good.example/").hostname,
+    ).toBe("evil.example");
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "https://exa mple.com",
+    "https://",
+    "https://ex%61mple.com",
+    "/relative/path",
+  ])("refuses %s", (input) => {
+    expect(() => new AbsoluteUrl(input)).toThrow();
   });
 });
 

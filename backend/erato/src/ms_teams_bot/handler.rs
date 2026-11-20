@@ -382,12 +382,25 @@ async fn on_approval(
     let request = host.request_for_assistant(message_id).await?;
     // Keep the turn's completion to show on the decided card how each
     // approved call ended, as the web's trace rows do.
-    let wanted = decided.is_some()
-        && submit
-            .tool_call_ids
-            .iter()
-            .zip(&decisions)
-            .any(|(id, (_, choice))| !id.is_empty() && *choice == cards::ApprovalChoice::Approve);
+    // An MCP call's approval id is its call id, which Erato just checked
+    // against the open approvals; the card's list only marks which items are
+    // such calls.
+    let approved: Vec<String> = decisions
+        .iter()
+        .enumerate()
+        .map(|(index, (approval_id, choice))| {
+            let call = submit
+                .tool_call_ids
+                .get(index)
+                .is_some_and(|id| id == approval_id);
+            if call && *choice == cards::ApprovalChoice::Approve {
+                approval_id.clone()
+            } else {
+                String::new()
+            }
+        })
+        .collect();
+    let wanted = decided.is_some() && approved.iter().any(|id| !id.is_empty());
     let (updates, completion) = if wanted {
         keep_completion(updates)
     } else {
@@ -399,18 +412,6 @@ async fn on_approval(
     if let (Some((card_activity_id, named, decided_by, summary)), Some(completion)) =
         (decided, completion)
     {
-        let approved: Vec<String> = submit
-            .tool_call_ids
-            .iter()
-            .zip(&decisions)
-            .map(|(id, (_, choice))| {
-                if *choice == cards::ApprovalChoice::Approve {
-                    id.clone()
-                } else {
-                    String::new()
-                }
-            })
-            .collect();
         let results = Box::pin(cards::render_results(
             &completion.tool_uses,
             &approved,

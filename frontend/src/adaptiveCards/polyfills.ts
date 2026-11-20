@@ -74,6 +74,94 @@ if (typeof scope.navigator === "undefined") {
     languages: ["en"],
   };
 }
+/** A space or control character anywhere, which no link this reads may hold. */
+const hasControlOrSpace = (text: string) =>
+  [...text].some((char) => {
+    const code = char.charCodeAt(0);
+    return code <= 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+
+/**
+ * Absolute URLs only, read strictly: anything this cannot read cleanly throws,
+ * so a link it doubts is dropped rather than made. A backslash ends the host,
+ * as in a browser.
+ */
+class AbsoluteUrl {
+  readonly protocol: string;
+  readonly username: string;
+  readonly password: string;
+  readonly hostname: string;
+  readonly port: string;
+  readonly pathname: string;
+  readonly search: string;
+  readonly hash: string;
+
+  constructor(input: unknown, base?: unknown) {
+    const text = String(input);
+    if (base !== undefined || hasControlOrSpace(text)) {
+      throw new TypeError("Invalid URL");
+    }
+    const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//.exec(text);
+    if (!scheme) throw new TypeError("Invalid URL");
+    this.protocol = `${scheme[1].toLowerCase()}:`;
+    const rest = text.slice(scheme[0].length);
+    const end = rest.search(/[/?#\\]/);
+    const authority = end < 0 ? rest : rest.slice(0, end);
+    const tail = (end < 0 ? "" : rest.slice(end)).replace(/\\/g, "/");
+    const at = authority.lastIndexOf("@");
+    const userinfo = at < 0 ? "" : authority.slice(0, at);
+    const colon = userinfo.indexOf(":");
+    this.username = colon < 0 ? userinfo : userinfo.slice(0, colon);
+    this.password = colon < 0 ? "" : userinfo.slice(colon + 1);
+    const host = /^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d*))?$/.exec(
+      authority.slice(at + 1),
+    );
+    if (!host) throw new TypeError("Invalid URL");
+    this.hostname = host[1].toLowerCase();
+    const defaultPort =
+      this.protocol === "https:"
+        ? "443"
+        : this.protocol === "http:"
+          ? "80"
+          : "";
+    const port = host.at(2) ?? "";
+    this.port = port === defaultPort ? "" : port;
+    const hashAt = tail.indexOf("#");
+    const beforeHash = hashAt < 0 ? tail : tail.slice(0, hashAt);
+    this.hash =
+      hashAt < 0 || hashAt === tail.length - 1 ? "" : tail.slice(hashAt);
+    const queryAt = beforeHash.indexOf("?");
+    const path = queryAt < 0 ? beforeHash : beforeHash.slice(0, queryAt);
+    this.search =
+      queryAt < 0 || queryAt === beforeHash.length - 1
+        ? ""
+        : beforeHash.slice(queryAt);
+    this.pathname = path.length > 0 ? path : "/";
+  }
+
+  get host() {
+    return this.port ? `${this.hostname}:${this.port}` : this.hostname;
+  }
+
+  get origin() {
+    return `${this.protocol}//${this.host}`;
+  }
+
+  get href() {
+    const userinfo =
+      this.username || this.password
+        ? `${this.username}${this.password ? `:${this.password}` : ""}@`
+        : "";
+    return `${this.protocol}//${userinfo}${this.host}${this.pathname}${this.search}${this.hash}`;
+  }
+
+  toString() {
+    return this.href;
+  }
+}
+if (typeof scope.URL !== "function") scope.URL = AbsoluteUrl;
+export { AbsoluteUrl };
+
 if (typeof scope.ResizeObserver === "undefined") {
   scope.ResizeObserver = class {
     observe() {}

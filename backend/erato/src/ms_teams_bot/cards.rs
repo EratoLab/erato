@@ -29,6 +29,10 @@ const MAX_NAME_BYTES: usize = 1_600;
 const MAX_DESCRIPTION_BYTES: usize = 4_000;
 const MAX_INPUT_PREVIEW_BYTES: usize = 6_000;
 const MAX_ITEM_PREVIEW_BYTES: usize = 1_500;
+/// How long one card may wait for its items' web cards; later items keep
+/// the card they had before.
+const MAX_SUMMARY_BYTES: usize = 300;
+const RENDER_BUDGET: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// What the turn is waiting on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,8 +132,13 @@ pub async fn render_cards(set: &mut PendingApprovalSet, lang: Lang) {
     if set.kind == ApprovalKind::TaskPlan {
         return;
     }
+    let deadline = std::time::Instant::now() + RENDER_BUDGET;
     for (index, item) in set.items.iter_mut().enumerate() {
         if item.own_tool || item.budget {
+            continue;
+        }
+        if std::time::Instant::now() > deadline {
+            tracing::warn!(tool = %item.tool_name, "Teams approval card fell back: no time left");
             continue;
         }
         let id_prefix = format!("i{index}");
@@ -162,8 +171,13 @@ pub async fn render_results(
     tool_call_ids: &[String],
     lang: Lang,
 ) -> Vec<Option<ResultRow>> {
+    let deadline = std::time::Instant::now() + RENDER_BUDGET;
     let mut rows = Vec::with_capacity(tool_call_ids.len());
     for (index, id) in tool_call_ids.iter().enumerate() {
+        if std::time::Instant::now() > deadline {
+            rows.push(None);
+            continue;
+        }
         let part = tool_uses.iter().find(|part| {
             !id.is_empty()
                 && part.tool_call_id == *id
@@ -500,7 +514,11 @@ fn push_web_card(body: &mut Vec<Value>, card: &ApprovalItemCard, detail: Detail)
     match detail {
         Detail::Full | Detail::NoDescriptions => body.extend(card.referent.iter().cloned()),
         Detail::NoArguments => body.extend(without_disclosures(&card.referent)),
-        Detail::Minimal => {}
+        // Even the smallest card names what each decision is about.
+        Detail::Minimal => body.push(plain_text(
+            &bounded_text(&card.summary, MAX_SUMMARY_BYTES),
+            json!({"weight": "Bolder"}),
+        )),
     }
     body.push(plain_text(&card.question, json!({"weight": "Bolder"})));
     if let Some(facts) = card.facts.as_deref() {
@@ -1316,7 +1334,12 @@ mod tests {
         assert!(text.contains("Run this action in Dynamics 365?"));
         let mut minimal = Vec::new();
         push_web_card(&mut minimal, card, Detail::Minimal);
-        assert!(!json!(minimal).to_string().contains("Dynamics 365\""));
+        let minimal = json!(minimal).to_string();
+        assert!(!minimal.contains("hidden row"), "{minimal}");
+        assert!(
+            minimal.contains("Update record Line 4 Retrofit"),
+            "the smallest card still names the call: {minimal}"
+        );
     }
 
     #[test]

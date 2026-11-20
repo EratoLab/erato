@@ -387,6 +387,11 @@ class Mapper {
     return `${this.options.idPrefix}${kind}${this.ids}`;
   }
 
+  /** The container of what a region shows while closed. */
+  private closedId(region: string) {
+    return `${this.regionId(region)}c`;
+  }
+
   private regionId(region: string) {
     let id = this.regionIds.get(region);
     if (!id) {
@@ -422,8 +427,9 @@ class Mapper {
     const region = element.props["aria-controls"];
 
     if (element.type === "button") {
-      if (typeof region === "string" && this.tree.toggles.has(region)) {
-        this.toggle(region, style, blocks);
+      if (typeof region === "string") {
+        // A disclosure this render did not open has nothing to show.
+        if (this.tree.toggles.has(region)) this.toggle(region, style, blocks);
       } else if (element.props["aria-expanded"] !== undefined) {
         // A row whose title is its own toggle: the title is the content.
         this.block(element, style, classes, blocks);
@@ -435,7 +441,17 @@ class Mapper {
       typeof element.props.id === "string" &&
       this.tree.toggles.has(element.props.id)
     ) {
+      const toggle = this.tree.toggles.get(element.props.id);
       blocks.flush();
+      // A region on screen while closed, such as a long text's first lines,
+      // shows that part until the toggle swaps in the whole.
+      if (toggle?.closed && textOf(toggle.closed).length > 0) {
+        blocks.push({
+          type: "Container",
+          id: this.closedId(element.props.id),
+          items: this.sub(toggle.closed, style, childSpacingOf(classes)),
+        });
+      }
       blocks.push({
         type: "Container",
         id: this.regionId(element.props.id),
@@ -489,6 +505,23 @@ class Mapper {
         blocks.flush();
         blocks.gap(ownSpacingOf(classes));
         this.row([name], [value], style, blocks);
+        return;
+      }
+    }
+
+    // Teams cannot clamp lines, so a clamped text that runs longer shows its
+    // first lines and an ellipsis, as the web does until it is opened.
+    const clamp = lineClampOf(classes);
+    if (clamp !== undefined) {
+      const lines = rawTextOf(element.children).split("\n");
+      if (lines.length > clamp) {
+        blocks.flush();
+        blocks.gap(ownSpacingOf(classes));
+        blocks.text(`${lines.slice(0, clamp).join("\n")}\u2026`, {
+          ...style,
+          pre: true,
+        });
+        blocks.flush();
         return;
       }
     }
@@ -586,6 +619,10 @@ class Mapper {
     const regionId = this.regionId(region);
     const hint = this.sub(toggle.hint, style);
     const hintId = hint.length > 0 ? this.nextId("h") : undefined;
+    const closedId =
+      toggle.closed && textOf(toggle.closed).length > 0
+        ? this.closedId(region)
+        : undefined;
     blocks.flush();
     blocks.push({
       type: "ActionSet",
@@ -593,7 +630,11 @@ class Mapper {
         {
           type: "Action.ToggleVisibility",
           title: textOf(toggle.label),
-          targetElements: [regionId, ...(hintId ? [hintId] : [])],
+          targetElements: [
+            regionId,
+            ...(closedId ? [closedId] : []),
+            ...(hintId ? [hintId] : []),
+          ],
         },
       ],
     });
@@ -624,6 +665,23 @@ const definitionPairs = (
   }
   return pairs.length > 0 ? pairs : undefined;
 };
+
+const lineClampOf = (classes: Set<string>): number | undefined => {
+  for (const name of classes) {
+    const match = /^line-clamp-(\d+)$/.exec(name);
+    if (match) return Number(match[1]);
+  }
+  return undefined;
+};
+
+/** The visible text of a few nodes as written, line breaks included. */
+const rawTextOf = (nodes: HostNode[]): string =>
+  nodes
+    .map((node) => {
+      if (node.kind === "text") return node.text;
+      return isHidden(node, classesOf(node)) ? "" : rawTextOf(node.children);
+    })
+    .join("");
 
 /** The visible text of a few nodes on one line, for button titles. */
 export const textOf = (nodes: HostNode[]): string =>

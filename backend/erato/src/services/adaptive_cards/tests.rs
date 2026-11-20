@@ -143,6 +143,12 @@ async fn a_finished_call_reads_as_the_web_trace_row() {
         "progress_message": null,
         "input": call.input,
         "output": {"ok": true},
+        "result_details": {"links": [{
+            "uri": "https://crm.example.com/tasks/1",
+            "host": "crm.example.com",
+            "matches_server_host": true,
+            "title": "Technisches Layout abstimmen",
+        }]},
     }))
     .unwrap();
     assert_eq!(part.status, ToolCallStatus::Success);
@@ -156,6 +162,12 @@ async fn a_finished_call_reads_as_the_web_trace_row() {
     assert_eq!(row.errors, Vec::<String>::new());
     let text = serde_json::to_string(&row.elements).unwrap();
     assert!(text.contains("Created task"), "{text}");
+    // The engine has no URL of its own; the bundle's keeps the link.
+    assert!(
+        text.contains(r#""type":"Action.OpenUrl""#)
+            && text.contains("https://crm.example.com/tasks/1"),
+        "{text}"
+    );
     assert_inert(&json!(row.elements), "row");
 }
 
