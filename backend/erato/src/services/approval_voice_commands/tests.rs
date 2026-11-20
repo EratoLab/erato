@@ -985,6 +985,7 @@ fn requests_keep_their_limits() {
             role: CardPieceRole::Detail,
             field: None,
             state: CardPieceState::NotSaid,
+            must_say: false,
         })
         .collect();
     assert_eq!(checked("weiter", &many, None), Err(InputProblem::TooLarge));
@@ -1000,24 +1001,28 @@ fn naming_a_text_answers_which_text() {
             role: CardPieceRole::What,
             field: None,
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "text:summary".into(),
             role: CardPieceRole::Text,
             field: Some("Zusammenfassung".into()),
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "text:need".into(),
             role: CardPieceRole::Text,
             field: Some("Kundenbedarf".into()),
             state: CardPieceState::Heard,
+            must_say: false,
         },
         CardPiece {
             id: "request".into(),
             role: CardPieceRole::Request,
             field: None,
             state: CardPieceState::Heard,
+            must_say: false,
         },
     ];
     let rules = |words: &str, language: &str, question: Option<VoiceQuestion>| {
@@ -1070,6 +1075,7 @@ fn the_model_hears_that_the_voice_asked_which_text() {
         role: CardPieceRole::Text,
         field: Some("Summary".into()),
         state: CardPieceState::Heard,
+        must_say: false,
     }];
     let input = |question| VoiceCommandInput {
         transcript: "the first one",
@@ -1102,7 +1108,7 @@ mod deciding_by_voice {
     use uuid::Uuid;
 
     fn approves(words: &str) -> bool {
-        match_phrase(words).is_some()
+        match_phrase(words, &[]).is_some()
     }
 
     #[test]
@@ -1123,15 +1129,15 @@ mod deciding_by_voice {
             assert!(approves(words), "{words}");
         }
         assert_eq!(
-            match_phrase("Ich bestätige.").unwrap().kind,
+            match_phrase("Ich bestätige.", &[]).unwrap().kind,
             PhraseMatchKind::Exact
         );
         assert_eq!(
-            match_phrase("Ja, ich bestätige das").unwrap().kind,
+            match_phrase("Ja, ich bestätige das", &[]).unwrap().kind,
             PhraseMatchKind::Variant
         );
         assert_eq!(
-            match_phrase("I confirm this").unwrap().phrase.id,
+            match_phrase("I confirm this", &[]).unwrap().phrase.id,
             "en.i_confirm"
         );
     }
@@ -1192,6 +1198,13 @@ mod deciding_by_voice {
     }
 
     #[test]
+    fn the_deployments_hesitation_words_are_trimmed_too() {
+        assert!(match_phrase("Euh, ich bestätige", &["euh".to_string()]).is_some());
+        assert!(match_phrase("Euh, ich bestätige", &[]).is_none());
+        assert!(match_phrase("ich euh bestätige", &["euh".to_string()]).is_none());
+    }
+
+    #[test]
     fn the_phrase_needs_speech_for_its_syllables() {
         assert_eq!(syllables(phrase_for("de-DE").unwrap()), 5);
         assert_eq!(syllables(phrase_for("en").unwrap()), 3);
@@ -1213,7 +1226,7 @@ mod deciding_by_voice {
 
     #[test]
     fn only_a_recording_after_the_voice_with_enough_speech_approves() {
-        let matched = match_phrase("Ich bestätige").unwrap();
+        let matched = match_phrase("Ich bestätige", &[]).unwrap();
         let check =
             |signals: Option<VoiceSignals>| check_signals(signals.as_ref(), &matched, 300, 80);
         assert_eq!(check(Some(signals())), Ok(()));
@@ -1251,6 +1264,7 @@ mod deciding_by_voice {
             role,
             field: None,
             state,
+            must_say: false,
         }
     }
 
@@ -1272,14 +1286,16 @@ mod deciding_by_voice {
             piece("r", Request, Heard),
         ];
         assert!(!card_asked(&owed));
-        assert!(
-            super::super::decision::request_heard(&owed)
-                && only_points(&[piece("p", Pointer, Heard)])
-        );
+        assert!(super::super::request_heard(&owed) && only_points(&[piece("p", Pointer, Heard)]));
         let outside = [piece("o", Outside, CutShort), piece("r", Request, Heard)];
         assert!(!card_asked(&outside));
         assert!(!card_asked(&[piece("p", Pointer, Heard)]));
         assert!(!card_asked(&[piece("w", What, Heard)]));
+        let loss = CardPiece {
+            must_say: true,
+            ..piece("w", What, CutShort)
+        };
+        assert!(!card_asked(&[loss, piece("r", Request, Heard)]));
         // A detail skipped is not owed.
         assert!(card_asked(&[
             piece("d", Detail, NotSaid),
@@ -1370,6 +1386,15 @@ mod deciding_by_voice {
             "a",
             Some(label(ToolCallAction::Other))
         )));
+        let mut generic = label(ToolCallAction::Update);
+        generic.source = crate::models::message::ToolCallLabelSource::Generic;
+        assert!(label_is_screen_only(&generic));
+        let mut omitted = label(ToolCallAction::Update);
+        omitted.change = Some(crate::models::message::ToolCallChange {
+            opaque_omitted: 1,
+            ..Default::default()
+        });
+        assert!(label_is_screen_only(&omitted));
         let mut warned = label(ToolCallAction::Update);
         warned.warnings = serde_json::from_value(json!(["hidden_characters"])).unwrap();
         assert!(label_is_screen_only(&warned));
@@ -1555,9 +1580,48 @@ mod deciding_by_voice {
         assert_eq!(kept.speech_frames_permille, 375);
         assert_eq!(kept.answer_latency_ms, Some(1_600));
         assert_eq!(kept.card_digest, card_digest(&card));
-        assert_eq!(kept.pieces[0].role, "request");
-        assert_eq!(kept.pieces[0].state, "heard");
+        assert_eq!(kept.pieces[0].role, CardPieceRole::Request);
+        assert_eq!(kept.pieces[0].state, CardPieceState::Heard);
         assert_eq!(kept.required_phrase.as_deref(), Some("de.ich_bestaetige"));
         assert!(kept.voice_stopped_at.starts_with("1970-01-01T00:00:10"));
     }
+}
+
+/// The web app decides from the same label whether a card names the phrase
+/// (`voiceApprovable` in spokenCard.ts); both check this table, made from the
+/// labelled call set the spoken cards are written against.
+///
+/// Regenerate with `VOICE_APPROVAL_TABLE_WRITE=1 cargo nextest run -p erato voice_approval_table`.
+#[test]
+fn voice_approval_table_matches_the_labelled_call_set() {
+    use crate::models::message::ToolCallLabel;
+    const CALLS: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/calls.json"
+    ));
+    const TABLE_PATH: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/voiceApprovals.json"
+    );
+    let calls: serde_json::Value = serde_json::from_str(CALLS).unwrap();
+    let table: BTreeMap<String, bool> = calls["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|call| {
+            let label: Option<ToolCallLabel> =
+                serde_json::from_value(call["display"]["label"].clone()).ok();
+            let approvable = label.is_some_and(|label| !decision::label_is_screen_only(&label));
+            (call["id"].as_str().unwrap().to_string(), approvable)
+        })
+        .collect();
+    let written = serde_json::to_string_pretty(&table).unwrap() + "\n";
+    if std::env::var_os("VOICE_APPROVAL_TABLE_WRITE").is_some() {
+        std::fs::write(TABLE_PATH, &written).unwrap();
+    }
+    assert_eq!(
+        std::fs::read_to_string(TABLE_PATH).unwrap_or_default(),
+        written,
+        "regenerate with VOICE_APPROVAL_TABLE_WRITE=1"
+    );
 }

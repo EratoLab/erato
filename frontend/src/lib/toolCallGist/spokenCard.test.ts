@@ -13,6 +13,7 @@ import { changeLayout } from "./change";
 import { changeNoteLabel } from "./changeLabels";
 import data from "./fixtures/spokenCards/calls.json";
 import expectedPieces from "./fixtures/spokenCards/expected.json";
+import voiceApprovals from "./fixtures/spokenCards/voiceApprovals.json";
 import { toolCallCardOf } from "./gist";
 import { gistPlainLine } from "./gistLabels";
 import {
@@ -23,6 +24,7 @@ import {
   spokenApprovalFor,
   spokenApprovalPieces,
   spokenUtteranceSentences,
+  voiceApprovable,
   voiceApprovalOffered,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
@@ -1413,11 +1415,20 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
     );
   });
 
-  it("keeps statements, label warnings, big batches and pointer cards on screen", () => {
+  it("decides from the label as the backend does, for every call of the set", () => {
+    for (const call of calls) {
+      const label = call.display.label as ToolCallLabel | undefined;
+      expect(voiceApprovable(label), call.id).toBe(
+        (voiceApprovals as Record<string, boolean>)[call.id],
+      );
+    }
+    expect(Object.keys(voiceApprovals)).toHaveLength(calls.length);
+  });
+
+  it("asks for the phrase only where the label allows it and the voice can say the call", () => {
     const offered = (id: string) =>
       voiceApprovalOffered(approvalOf(callOf(id)));
     expect(offered("update-01-date-and-probability")).toBe(true);
-    expect(offered("delete-01-task-created-earlier")).toBe(true);
     expect(offered("read-01-search")).toBe(true);
     expect(offered("run-01-sql")).toBe(false);
     expect(offered("create-12-hidden-characters")).toBe(false);
@@ -1425,22 +1436,17 @@ describe("ERMAIN-1259: a card approved by voice names the phrase", () => {
     expect(request("run-01-sql", "de", true)).toBe(
       "Bitte auf dem Bildschirm bestätigen.",
     );
-    const batch = approvalOf(callOf("delete-06-batch-pages"));
-    if (batch.type !== "call") throw new Error("a call");
-    const card = toolCallCardOf(batch.label, batch.input);
-    if (card.kind !== "gist") throw new Error("a gist card");
-    const total = card.gist.change?.batch?.total ?? card.gist.items[0].count;
-    expect(voiceApprovalOffered(batch)).toBe(total <= MAX_VOICE_ITEMS);
-    const big = {
-      ...batch,
-      label: {
-        ...batch.label,
+    const update = approvalOf(callOf("update-01-date-and-probability"));
+    if (update.type !== "call" || !update.label) throw new Error("a label");
+    const batch = (total: number) =>
+      voiceApprovable({
+        ...update.label,
         change: {
-          ...batch.label?.change,
-          batch: { ...batch.label?.change?.batch, total: MAX_VOICE_ITEMS + 1 },
+          ...update.label?.change,
+          batch: { ...update.label?.change?.batch, total },
         },
-      } as ToolCallLabel,
-    };
-    expect(voiceApprovalOffered(big)).toBe(false);
+      } as ToolCallLabel);
+    expect(batch(MAX_VOICE_ITEMS)).toBe(true);
+    expect(batch(MAX_VOICE_ITEMS + 1)).toBe(false);
   });
 });

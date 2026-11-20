@@ -1022,6 +1022,11 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
   switch (notice.kind) {
     case "confirm_on_screen":
       return requestSentence();
+    case "decline_on_screen":
+      return t({
+        id: "spokenCard.notice.declineOnScreen",
+        message: "This card is declined on screen.",
+      });
     case "say_phrase":
       return t({
         id: "spokenCard.notice.sayPhrase",

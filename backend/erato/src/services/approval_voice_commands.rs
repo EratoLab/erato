@@ -88,7 +88,9 @@ impl VoiceMeaning {
 }
 
 /// What a piece of the spoken card is, as the card that speaks it names it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, erato_memory::HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = ApprovalCardPieceRole)]
 pub enum CardPieceRole {
@@ -104,7 +106,9 @@ pub enum CardPieceRole {
     Pointer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, erato_memory::HeapSize,
+)]
 #[serde(rename_all = "snake_case")]
 #[schema(as = ApprovalCardPieceState)]
 pub enum CardPieceState {
@@ -123,6 +127,10 @@ pub struct CardPiece {
     #[serde(default)]
     pub field: Option<String>,
     pub state: CardPieceState,
+    /// The card must say this piece before a decision counts: a loss, a
+    /// consequence, recipients outside.
+    #[serde(default)]
+    pub must_say: bool,
 }
 
 /// What the voice just asked about the card, when the user's words may
@@ -369,7 +377,7 @@ fn default_text_piece(input: &VoiceCommandInput<'_>) -> Option<String> {
 
 /// Whether the card has asked for a decision: its request piece was heard,
 /// or it has none.
-fn request_heard(pieces: &[CardPiece]) -> bool {
+pub fn request_heard(pieces: &[CardPiece]) -> bool {
     pieces
         .iter()
         .filter(|piece| piece.role == CardPieceRole::Request)

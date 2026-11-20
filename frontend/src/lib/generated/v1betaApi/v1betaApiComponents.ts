@@ -6598,7 +6598,7 @@ export type InterpretApprovalVoiceCommandVariables = {
  * the card's request piece was heard (or the card has none): a yes or no
  * before that, or beside a backchannel ("mhm, ja"), is `noise`.
  *
- * With `decide_by_voice` on, `decision` says whether the words decide the
+ * With `[approval_voice_decisions]` on, `decision` says whether the words decide the
  * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
  * confirm"), checked before any rule or model and never by a model; a
  * refusal by the rules or the model refuses. Either needs the turn's own
@@ -6632,7 +6632,7 @@ export const fetchInterpretApprovalVoiceCommand = (
  * the card's request piece was heard (or the card has none): a yes or no
  * before that, or beside a backchannel ("mhm, ja"), is `noise`.
  *
- * With `decide_by_voice` on, `decision` says whether the words decide the
+ * With `[approval_voice_decisions]` on, `decision` says whether the words decide the
  * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
  * confirm"), checked before any rule or model and never by a model; a
  * refusal by the rules or the model refuses. Either needs the turn's own

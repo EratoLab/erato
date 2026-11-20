@@ -1417,29 +1417,47 @@ export const spokenApprovalFor = (
 /** More items than this are approved on screen. */
 export const MAX_VOICE_ITEMS = 20;
 
+/** The things a label acts on: a batch's total, else the first item's names. */
+const labelItemCount = (label: ToolCallLabel): number => {
+  const total = label.change?.batch?.total;
+  if (total !== undefined) return total;
+  const item = label.items?.[0];
+  const slot = (item?.title?.values?.length ?? 0) > 0 ? item?.title : item?.id;
+  return Math.max((slot?.values?.length ?? 0) + (slot?.omitted ?? 0), 1);
+};
+
 /**
- * Whether a call may be approved by voice, as far as the card can tell: a
- * read, or a card that describes the call. A statement it cannot read (SQL,
- * code), a label warning or more than `MAX_VOICE_ITEMS` items are approved
- * on screen; so is a call the card cannot describe. The backend checks the
- * same before it accepts the phrase.
+ * Whether a call's label lets it be approved by voice. The backend decides
+ * from the same fields before it accepts the phrase (`label_is_screen_only`);
+ * both are checked against `fixtures/spokenCards/voiceApprovals.json`.
  */
-export const voiceApprovalOffered = (approval: SpokenApproval): boolean => {
-  if (approval.type !== "call") return false;
-  const { label } = approval;
-  if ((label?.warnings ?? []).length > 0 || label?.action === "run")
-    return false;
-  if (spokenReadFactsOf(label) !== undefined) return true;
-  const card = toolCallCardOf(label, approval.input);
-  if (card.kind !== "gist") return false;
-  const { gist } = card;
-  const count = gist.change?.batch?.total ?? gist.items[0].count;
+export const voiceApprovable = (
+  label: ToolCallLabel | null | undefined,
+): boolean => {
+  if (!label) return false;
+  // A read keeps a generic label but says what it looks at.
+  const generic =
+    !label.read && (label.source === "generic" || label.action === "other");
+  const { change } = label;
   return (
-    gist.warnings.length === 0 &&
-    (gist.change?.opaque.length ?? 0) === 0 &&
-    count <= MAX_VOICE_ITEMS
+    !generic &&
+    (label.warnings ?? []).length === 0 &&
+    label.action !== "run" &&
+    (change?.opaque ?? []).length === 0 &&
+    (change?.opaque_omitted ?? 0) === 0 &&
+    labelItemCount(label) <= MAX_VOICE_ITEMS
   );
 };
+
+/**
+ * Whether the card asks for the phrase: the label allows it, and the voice
+ * can say the call, as a read or as the card's own description.
+ */
+export const voiceApprovalOffered = (approval: SpokenApproval): boolean =>
+  approval.type === "call" &&
+  voiceApprovable(approval.label) &&
+  (spokenReadFactsOf(approval.label) !== undefined ||
+    toolCallCardOf(approval.label, approval.input).kind === "gist");
 
 /** Whether two approvals said one after another are of the same kind. */
 export const sameSpokenKind = (

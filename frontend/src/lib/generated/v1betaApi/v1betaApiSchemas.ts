@@ -110,6 +110,11 @@ export type ApprovalCardPiece = {
    */
   field?: null | undefined;
   id: string;
+  /**
+   * The card must say this piece before a decision counts: a loss, a
+   * consequence, recipients outside.
+   */
+  must_say?: boolean;
   role: ApprovalCardPieceRole;
   state: ApprovalCardPieceState;
 };
@@ -6302,14 +6307,14 @@ export type VoiceDecisionOutcome = "approved" | "refused";
  */
 export type VoiceDecisionPiece = {
   id: string;
-  role: string;
-  state: string;
+  role: ApprovalCardPieceRole;
+  state: ApprovalCardPieceState;
 };
 
 /**
  * How a decision was given by voice, kept with the decision for audits and
- * for tuning. Never the audio; times are RFC 3339 as the device measured
- * them.
+ * for tuning. Never the audio. Times are RFC 3339: `matched_at` by the
+ * server's clock, the others by the device's.
  */
 export type VoiceDecisionRecord = {
   /**
@@ -6326,12 +6331,10 @@ export type VoiceDecisionRecord = {
   card_digest: string;
   language: string;
   match_kind?: PhraseMatchKind;
-  /**
-   * When the words were matched.
-   */
   matched_at: string;
   /**
-   * The words as matched, folded; at most 100 characters.
+   * The words as matched: the phrase folded, a refusal in lower case,
+   * at most 100 characters.
    */
   matched_words: string;
   outcome: VoiceDecisionOutcome;

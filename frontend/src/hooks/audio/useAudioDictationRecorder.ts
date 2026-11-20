@@ -50,12 +50,12 @@ import {
   resolveMinSpeechMs,
   SESSION_RETRY_DELAY_MS,
   SILENT_FRAME_PROBABILITY,
-  SPEECH_FRAME_PROBABILITY,
 } from "./audioTuning";
 import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import { recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
@@ -66,6 +66,7 @@ import {
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
+import type { RecordingSignals } from "./recordingSignals";
 import type { VoiceVadEngine } from "@/lib/voice-runtime";
 
 const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
@@ -179,20 +180,6 @@ type LiveAudioDictationSession = {
   firstChunkIndex: number;
   pendingSourceSamples: number[];
   sourceSampleRate: number;
-};
-
-/**
- * What the detector heard in one recording, for deciding by voice: when it
- * started on the device's clock, and its speech by sample time from there.
- */
-export type RecordingSignals = {
-  startedAt: number;
-  endedAt: number;
-  firstSpeechAt: number | null;
-  speechMs: number;
-  recordedMs: number;
-  /** Opened while the voice spoke. */
-  overVoice: boolean;
 };
 
 export type AudioDictationTranscriptChunk = {
@@ -1070,17 +1057,17 @@ export function useAudioDictationRecorder({
     tearDownCaptureGraph,
   ]);
 
+  /** What the detector heard in the last recording. */
+  const readRecordingSignals = useCallback(
+    (): RecordingSignals | null => recordingSignalsRef.current,
+    [],
+  );
+
   /**
    * Ends the recording and drops what it heard: nothing more is sent for
    * transcription and no words arrive. For a recording whose words are no
    * longer wanted, such as one for a card that was decided.
    */
-  /** What the detector heard in the last recording, as a copy. */
-  const readRecordingSignals = useCallback(
-    (): RecordingSignals | null =>
-      recordingSignalsRef.current ? { ...recordingSignalsRef.current } : null,
-    [],
-  );
 
   const cancelDictation = useCallback(() => {
     finishWhenOpenRef.current = false;
@@ -1134,14 +1121,7 @@ export function useAudioDictationRecorder({
       holdRef.current = hold;
       // Taken before the microphone opens, so a first speech counted from
       // here is never later than it was.
-      recordingSignalsRef.current = {
-        startedAt: Date.now(),
-        endedAt: 0,
-        firstSpeechAt: null,
-        speechMs: 0,
-        recordedMs: 0,
-        overVoice: hold !== null,
-      };
+      recordingSignalsRef.current = recordingSignals(Date.now(), hold !== null);
       if (hold === null) microphoneOpened();
 
       const mediaDevices =
@@ -1520,28 +1500,21 @@ export function useAudioDictationRecorder({
                   event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
                     ? gate.quietFrames + 1
                     : 0;
-                const signals = recordingSignalsRef.current;
-                if (signals) {
-                  const frameMs =
-                    (event.frame.samples.length / event.frame.sampleRate) *
-                    1000;
-                  signals.recordedMs += frameMs;
-                  if (
-                    event.probabilities.isSpeech >= SPEECH_FRAME_PROBABILITY
-                  ) {
-                    signals.firstSpeechAt ??=
-                      signals.startedAt + signals.recordedMs - frameMs;
-                    signals.speechMs += frameMs;
-                  }
-                  signals.endedAt = signals.startedAt + signals.recordedMs;
-                }
+                const frameMs =
+                  (event.frame.samples.length / event.frame.sampleRate) * 1000;
+                if (recordingSignalsRef.current)
+                  recordingSignalsRef.current = withFrame(
+                    recordingSignalsRef.current,
+                    frameMs,
+                    event.probabilities.isSpeech,
+                  );
                 if (gate.heard) cutAtPause(gate);
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
                   current.gate,
                   event.probabilities.isSpeech,
-                  (event.frame.samples.length / event.frame.sampleRate) * 1000,
+                  frameMs,
                   overVoiceMinSpeechMsRef.current,
                 );
                 current.gate = step.gate;
@@ -1733,14 +1706,7 @@ export function useAudioDictationRecorder({
             vadEngineRef.current?.reset?.();
             // Nothing was said over the voice: the recording counts as one
             // that opened after it, and may approve by voice.
-            recordingSignalsRef.current = {
-              startedAt: Date.now(),
-              endedAt: 0,
-              firstSpeechAt: null,
-              speechMs: 0,
-              recordedMs: 0,
-              overVoice: false,
-            };
+            recordingSignalsRef.current = recordingSignals(Date.now(), false);
             if (gate) {
               gate.speaking = false;
               gate.realStarted = false;

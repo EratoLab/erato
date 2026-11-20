@@ -7,6 +7,7 @@ import {
   voiceApprovalOffered,
 } from "@/lib/toolCallGist/spokenCard";
 import { spokenDifference } from "@/lib/toolCallGist/spokenCardDifference";
+import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 
 import { takeWithdrawnCard } from "./approvalChanges";
 import {
@@ -33,6 +34,9 @@ import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
  * the screen shows them. After a stop the card waits to be asked for. A card
  * that corrects one the user asked to change by voice is said as the
  * difference to that one. A long text the user dictated is named as theirs.
+ *
+ * Returns the key the card on screen is spoken under, and whether its
+ * request names the phrase that approves it by voice.
  */
 export function useSpokenApprovalCard({
   chatId,
@@ -71,7 +75,7 @@ export function useSpokenApprovalCard({
   responding: boolean;
   /** The user's messages before this card, the latest first, with what of them was dictated. */
   userTurns?: readonly UserTurn[];
-}) {
+}): { key: string; approves: boolean } {
   const spokenTurn = useSpeechPlayback(
     (state) =>
       chatId !== null &&
@@ -89,6 +93,14 @@ export function useSpokenApprovalCard({
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
   const style = useSpokenStyle(spokenTurn);
+  const approvalId = items.at(index)?.approvalId;
+  // Only a card said in full names the phrase: other languages have none.
+  const approves =
+    approvalId !== undefined &&
+    decide?.(approvalId) !== undefined &&
+    approval !== undefined &&
+    spokenWordsFor(i18n.locale, { now: new Date() }).full &&
+    voiceApprovalOffered(approval);
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
@@ -97,7 +109,6 @@ export function useSpokenApprovalCard({
     const total = approvals.length;
     const item = items.at(index);
     const decision = item ? decide?.(item.approvalId) : undefined;
-    const approves = decision !== undefined && voiceApprovalOffered(approval);
     const options = {
       language: i18n.locale,
       now: new Date(),
@@ -146,6 +157,7 @@ export function useSpokenApprovalCard({
     active,
     approval,
     approvals,
+    approves,
     change,
     decide,
     index,
@@ -169,4 +181,6 @@ export function useSpokenApprovalCard({
     if (!active) forgetApprovalCards(cardKeys.split("\n"));
   }, [active, cardKeys]);
   useEffect(() => () => forgetApprovalCards(cardKeys.split("\n")), [cardKeys]);
+
+  return { key, approves };
 }

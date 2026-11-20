@@ -732,7 +732,7 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     );
     let app_state = records_app_state_with(pool, mocks, |config| {
         config.approval_voice_commands.enabled = true;
-        config.approval_voice_commands.decide_by_voice = true;
+        config.approval_voice_decisions.enabled = true;
     })
     .await;
     let server = app_server(app_state.clone());
@@ -752,10 +752,9 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         "speech_ms": 900,
         "recorded_ms": 1_900,
     });
-    let say = |transcript: &'static str, signals: Value| {
+    let say_to = |transcript: &'static str, pieces: Value, signals: Value| {
         let server = &server;
         let approval_id = approval_id.clone();
-        let pieces = pieces.clone();
         async move {
             let response = server
                 .post(&format!(
@@ -774,6 +773,8 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
             response.json::<Value>()
         }
     };
+    let say =
+        |transcript: &'static str, signals: Value| say_to(transcript, pieces.clone(), signals);
     let decide = |receipt: Value| {
         let server = &server;
         let approval_id = approval_id.clone();
@@ -800,38 +801,23 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     over["over_voice"] = json!(true);
     let over_voice = say("Ich bestätige.", over).await;
     assert_eq!(over_voice["decision"], json!({"status": "say_again"}));
-    let not_asked = server
-        .post(&format!(
-            "/api/v1beta/me/messages/{message_id}/approval-voice-command"
-        ))
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({
-            "transcript": "Ich bestätige.",
-            "pieces": [{"id": "request", "role": "request", "state": "cut_short"}],
-            "approval_id": approval_id,
-            "signals": signals,
-        }))
-        .await
-        .json::<Value>();
-    // Before the card asked, the phrase is listening, as any yes.
+    let not_asked = say_to(
+        "Ich bestätige.",
+        json!([{"id": "request", "role": "request", "state": "cut_short"}]),
+        signals.clone(),
+    )
+    .await;
     assert_eq!(not_asked["meaning"], "noise", "{not_asked}");
     assert!(not_asked.get("decision").is_none());
-    let owed = server
-        .post(&format!(
-            "/api/v1beta/me/messages/{message_id}/approval-voice-command"
-        ))
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({
-            "transcript": "Ich bestätige.",
-            "pieces": [
-                {"id": "loss", "role": "consequence", "state": "cut_short"},
-                {"id": "request", "role": "request", "state": "heard"},
-            ],
-            "approval_id": approval_id,
-            "signals": signals,
-        }))
-        .await
-        .json::<Value>();
+    let owed = say_to(
+        "Ich bestätige.",
+        json!([
+            {"id": "what", "role": "what", "state": "cut_short", "must_say": true},
+            {"id": "request", "role": "request", "state": "heard"},
+        ]),
+        signals.clone(),
+    )
+    .await;
     assert_eq!(owed["decision"], json!({"status": "not_yet"}));
     let early = say(
         "Ich bestätige.",
@@ -855,7 +841,6 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     assert_eq!(confirmed["meaning"], "approve");
     assert_eq!(confirmed["decision"]["status"], "accepted", "{confirmed}");
     let receipt = confirmed["decision"]["receipt"].clone();
-    // A made-up receipt, or one used up, is refused, and nothing runs.
     decide(json!("not-a-receipt"))
         .await
         .assert_status(axum::http::StatusCode::CONFLICT);
@@ -877,7 +862,6 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         voice["pieces"][1],
         json!({"id": "request", "role": "request", "state": "heard"})
     );
-    // The receipt was taken.
     decide(receipt)
         .await
         .assert_status(axum::http::StatusCode::CONFLICT);

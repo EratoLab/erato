@@ -197,25 +197,7 @@
     "security_relevance": "medium",
     "stability": "alpha"
   },
-  "approval_voice_commands.decide_by_voice": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "high",
-    "stability": "alpha"
-  },
-  "approval_voice_commands.echo_tail_ms": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
   "approval_voice_commands.enabled": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_voice_commands.min_speech_ms_per_syllable": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",
     "security_relevance": "medium",
@@ -233,10 +215,28 @@
     "security_relevance": "medium",
     "stability": "alpha"
   },
-  "approval_voice_commands.receipt_ttl_seconds": {
+  "approval_voice_decisions.echo_tail_ms": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
+  "approval_voice_decisions.enabled": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
+  "approval_voice_decisions.min_speech_ms_per_syllable": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",
     "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_decisions.receipt_ttl_seconds": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
     "stability": "alpha"
   },
   "assistant_hub.categories.<key>.display_name": {

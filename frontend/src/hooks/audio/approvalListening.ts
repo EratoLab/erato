@@ -29,7 +29,8 @@ import {
   useApprovalSpeech,
 } from "./approvalSpeech";
 
-import type { RecordingSignals } from "./useAudioDictationRecorder";
+import type { SpeakableCard } from "./approvalSpeech";
+import type { RecordingSignals } from "./recordingSignals";
 import type {
   ApprovalCardPiece,
   ApprovalVoiceDecision,
@@ -271,18 +272,25 @@ export const stepForMeaning = (
           // What the card still owes, and the request after it.
           return listen({ type: "rest" });
         case "screen_only":
-          return approve ? confirmOnScreen : onScreen;
-        case "phrase_needed":
-        case "say_again": {
+          return approve
+            ? confirmOnScreen
+            : listen({ type: "notice", notice: { kind: "decline_on_screen" } });
+        case "say_again":
+          // The words were right; the recording could not carry them.
+          if (!approve) return onScreen;
+          if (!byVoice.approves) return confirmOnScreen;
+          return listen({
+            type: "notice",
+            notice: { kind: "say_phrase_again" },
+          });
+        case "phrase_needed": {
           if (!approve) return onScreen;
           if (!byVoice.approves) return confirmOnScreen;
           const second = (context.misses ?? 0) >= 1;
-          const teach =
-            decision.status === "say_again" ? "say_phrase_again" : "say_phrase";
           return {
             ...listen({
               type: "notice",
-              notice: { kind: second ? "phrase_on_screen" : teach },
+              notice: { kind: second ? "phrase_on_screen" : "say_phrase" },
             }),
             missed: true,
           };
@@ -337,6 +345,7 @@ export const commandPieces = (
       role: piece.role,
       ...(field ? { field: Array.from(field).slice(0, 100).join("") } : {}),
       state: states[index],
+      ...(piece.mustSay ? { must_say: true } : {}),
     };
   });
 };
@@ -565,23 +574,21 @@ async function decideByVoice(
   const now = spokenApprovalCardNow();
   if (now?.card.key !== key || now.flow.closed) return;
   const { card, pieces, flow } = now;
+  const notice = cardNotice(key, card);
   const voice = card.decision;
   if (!voice || !voiceDecisionGate(pieces, flow).ready) {
-    steerApprovalCard(key, {
-      type: "notice",
-      notice:
-        decision === "approve"
-          ? { kind: "confirm_on_screen" }
-          : { kind: "decide_on_screen", decision },
-    });
+    notice(
+      decision === "approve"
+        ? { kind: "confirm_on_screen" }
+        : { kind: "decline_on_screen" },
+    );
     return;
   }
   useApprovalListening.setState({ quiet: key });
   if (decision === "reject") {
-    steerApprovalCard(key, { type: "notice", notice: { kind: "declined" } });
+    notice({ kind: "declined" });
     await untilSilent(key, CONFIRMATION_WAIT_MS);
-    const still = spokenApprovalCardNow();
-    if (still?.card.key !== key || still.flow.closed) return;
+    if (!stillOpen(key)) return;
   }
   let outcome: Awaited<ReturnType<typeof voice.send>>;
   try {
@@ -590,13 +597,29 @@ async function decideByVoice(
     outcome = "failed";
   }
   if (outcome === "sent") return;
-  const said: SpokenNotice = { kind: "decision_failed" };
-  const current = spokenApprovalCardNow();
-  if (current?.card.key === key && !current.flow.closed)
-    steerApprovalCard(key, { type: "notice", notice: said });
-  else announceApprovalNotice(card.messageId, said, card.language ?? "en");
+  notice({ kind: "decision_failed" });
   useApprovalListening.setState({ quiet: key });
 }
+
+/**
+ * Says `notice` about the card under `key`: on the card while it waits, or
+ * for its message once it was decided or replaced meanwhile.
+ */
+const cardNotice =
+  (key: string, card: SpeakableCard) => (said: SpokenNotice) => {
+    const current = spokenApprovalCardNow();
+    if (current?.card.key === key && !current.flow.closed)
+      steerApprovalCard(key, { type: "notice", notice: said });
+    else announceApprovalNotice(card.messageId, said, card.language ?? "en");
+  };
+
+/** The card under `key` still waits, and audio mode still speaks. */
+const stillOpen = (key: string): boolean => {
+  const still = spokenApprovalCardNow();
+  return (
+    still?.card.key === key && !still.flow.closed && approvalSpeechAllowed()
+  );
+};
 
 /** Resolves once the voice is silent about `key`, or after `ms`. */
 const untilSilent = (key: string, ms: number): Promise<void> =>
@@ -627,13 +650,7 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
   const now = spokenApprovalCardNow();
   if (now?.card.key !== key) return;
   const { card, pieces, flow } = now;
-  // A card that was decided or replaced meanwhile cannot say it any more.
-  const notice = (said: SpokenNotice) => {
-    const current = spokenApprovalCardNow();
-    if (current?.card.key === key && !current.flow.closed)
-      steerApprovalCard(key, { type: "notice", notice: said });
-    else announceApprovalNotice(card.messageId, said, card.language ?? "en");
-  };
+  const notice = cardNotice(key, card);
   if (!card.change) {
     notice({ kind: "change_on_screen", reason: "card" });
     return;
@@ -659,12 +676,7 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
   notice({ kind: "changing" });
   useApprovalListening.setState({ quiet: key });
   await untilSilent(key, CONFIRMATION_WAIT_MS);
-  const still = spokenApprovalCardNow();
-  if (
-    still?.card.key !== key ||
-    still.flow.closed ||
-    !approvalSpeechAllowed()
-  ) {
+  if (!stillOpen(key)) {
     prepared?.close();
     return;
   }
@@ -702,7 +714,7 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
 export const quietApprovalListening = (key: string) =>
   useApprovalListening.setState({ quiet: key });
 
-// When the voice stops, and when a card's request was first heard: an
+// When the voice stops, and when a card's request was last heard: an
 // approval by voice counts only from a recording after both.
 useApprovalSpeech.subscribe((state, previous) => {
   if (state.speaking || !previous.speaking) return;

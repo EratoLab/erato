@@ -727,8 +727,7 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         "APPROVAL_VOICE_DECISIONS_ENABLED".to_string(),
         Value::Bool(
-            config.approval_voice_commands.enabled
-                && config.approval_voice_commands.decide_by_voice,
+            config.approval_voice_commands.enabled && config.approval_voice_decisions.enabled,
         ),
     );
     // The deployment's natural sentence variants for approval cards read
@@ -1602,14 +1601,14 @@ mod tests {
 
     #[test]
     fn deciding_by_voice_reaches_the_web_only_with_voice_commands_on() {
-        for (enabled, decide_by_voice, expected) in [
+        for (enabled, decisions, expected) in [
             (false, true, false),
             (true, false, false),
             (true, true, true),
         ] {
             let mut config = AppConfig::default();
             config.approval_voice_commands.enabled = enabled;
-            config.approval_voice_commands.decide_by_voice = decide_by_voice;
+            config.approval_voice_decisions.enabled = decisions;
             let environment = build_frontend_environment(&config, FrontendKind::Web);
             assert_eq!(
                 environment

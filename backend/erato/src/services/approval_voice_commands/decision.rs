@@ -3,10 +3,10 @@
 //! An approval needs the phrase; a refusal needs only a plain "nein".
 
 use super::phrase::{PhraseMatch, PhraseMatchKind, syllables};
-use super::{CardPiece, CardPieceRole, CardPieceState};
+use super::{CardPiece, CardPieceRole, CardPieceState, request_heard};
 use crate::models::message::{
-    ApprovalItem, ToolApprovalKind, ToolCallAction, ToolCallLabel, VoiceDecisionOutcome,
-    VoiceDecisionPiece, VoiceDecisionRecord,
+    ApprovalItem, ToolApprovalKind, ToolCallAction, ToolCallLabel, ToolCallLabelSource,
+    VoiceDecisionOutcome, VoiceDecisionPiece, VoiceDecisionRecord,
 };
 use chrono::{DateTime, Utc};
 use moka::future::Cache;
@@ -102,13 +102,6 @@ pub fn check_signals(
     Ok(())
 }
 
-/// Whether the card's request was heard in full.
-pub fn request_heard(pieces: &[CardPiece]) -> bool {
-    pieces
-        .iter()
-        .any(|piece| piece.role == CardPieceRole::Request && piece.state == CardPieceState::Heard)
-}
-
 /// Whether the voice only points to the screen for this card.
 pub fn only_points(pieces: &[CardPiece]) -> bool {
     pieces
@@ -120,13 +113,18 @@ pub fn only_points(pieces: &[CardPiece]) -> bool {
 /// before a decision (a loss, a consequence, recipients outside) was too.
 /// The device's own gate checks the same; this keeps an older device honest.
 pub fn card_asked(pieces: &[CardPiece]) -> bool {
+    let asks = pieces
+        .iter()
+        .any(|piece| piece.role == CardPieceRole::Request);
     let owed = pieces.iter().any(|piece| {
-        matches!(
-            piece.role,
-            CardPieceRole::Consequence | CardPieceRole::Outside
-        ) && piece.state != CardPieceState::Heard
+        (piece.must_say
+            || matches!(
+                piece.role,
+                CardPieceRole::Consequence | CardPieceRole::Outside
+            ))
+            && piece.state != CardPieceState::Heard
     });
-    request_heard(pieces) && !owed && !only_points(pieces)
+    asks && request_heard(pieces) && !owed && !only_points(pieces)
 }
 
 /// Why a stop is decided on screen only, for any decision by voice: it is
@@ -162,12 +160,14 @@ pub fn approval_is_screen_only(item: &ApprovalItem) -> bool {
 }
 
 pub fn label_is_screen_only(label: &ToolCallLabel) -> bool {
-    let generic = label.action == ToolCallAction::Other && label.read.is_none();
+    // A read keeps a generic label but says what it looks at.
+    let generic = label.read.is_none()
+        && (label.source == ToolCallLabelSource::Generic || label.action == ToolCallAction::Other);
     let change = label.change.as_ref();
     generic
         || !label.warnings.is_empty()
         || label.action == ToolCallAction::Run
-        || change.is_some_and(|change| !change.opaque.is_empty())
+        || change.is_some_and(|change| !change.opaque.is_empty() || change.opaque_omitted > 0)
         || item_count(label) > MAX_VOICE_ITEMS
 }
 
@@ -244,8 +244,8 @@ pub fn record(input: RecordInput<'_>) -> VoiceDecisionRecord {
             .iter()
             .map(|piece| VoiceDecisionPiece {
                 id: piece.id.clone(),
-                role: wire(&piece.role),
-                state: wire(&piece.state),
+                role: piece.role,
+                state: piece.state,
             })
             .collect(),
         required_phrase: input.required_phrase.map(str::to_string),
@@ -270,13 +270,6 @@ pub fn record(input: RecordInput<'_>) -> VoiceDecisionRecord {
             .map(|ms| u32::try_from(ms).unwrap_or(u32::MAX)),
         outcome: input.outcome,
     }
-}
-
-fn wire<T: Serialize>(value: &T) -> String {
-    serde_json::to_value(value)
-        .ok()
-        .and_then(|value| value.as_str().map(str::to_string))
-        .unwrap_or_default()
 }
 
 /// A decision by voice the backend accepted, waiting for the decision to

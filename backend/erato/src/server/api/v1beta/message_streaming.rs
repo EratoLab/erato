@@ -21568,7 +21568,10 @@ async fn voice_receipts_taken(
     use crate::models::message::VoiceDecisionOutcome;
     use crate::services::approval_voice_commands::decision::check_receipt;
     let ttl = Duration::from_secs(u64::from(
-        app_state.config.approval_voice_commands.receipt_ttl_seconds,
+        app_state
+            .config
+            .approval_voice_decisions
+            .receipt_ttl_seconds,
     ));
     let mut records = HashMap::new();
     for item in &request.decisions {

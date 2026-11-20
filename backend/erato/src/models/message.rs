@@ -1809,13 +1809,13 @@ pub enum VoiceDecisionOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct VoiceDecisionPiece {
     pub id: String,
-    pub role: String,
-    pub state: String,
+    pub role: crate::services::approval_voice_commands::CardPieceRole,
+    pub state: crate::services::approval_voice_commands::CardPieceState,
 }
 
 /// How a decision was given by voice, kept with the decision for audits and
-/// for tuning. Never the audio; times are RFC 3339 as the device measured
-/// them.
+/// for tuning. Never the audio. Times are RFC 3339: `matched_at` by the
+/// server's clock, the others by the device's.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct VoiceDecisionRecord {
     pub user_id: String,
@@ -1828,7 +1828,8 @@ pub struct VoiceDecisionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub required_phrase: Option<String>,
-    /// The words as matched, folded; at most 100 characters.
+    /// The words as matched: the phrase folded, a refusal in lower case,
+    /// at most 100 characters.
     pub matched_words: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -1839,7 +1840,6 @@ pub struct VoiceDecisionRecord {
     pub voice_stopped_at: String,
     pub recording_started_at: String,
     pub recording_ended_at: String,
-    /// When the words were matched.
     pub matched_at: String,
     /// How long the speech detector heard speech in the recording.
     pub speech_ms: u32,

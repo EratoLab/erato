@@ -1557,6 +1557,29 @@ describe("listening against the endpoint", () => {
       }
     });
 
+    it("a refusal on a card decided on screen says so, without 'for now'", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("reject", { status: "screen_only" });
+      await heardApprovalWords(KEY, "Nein.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Ablehnen geht bei dieser Karte nur auf dem Bildschirm.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("the phrase from a recording that could not carry it is no miss", async () => {
+      const { decision } = deciding();
+      const { heardApprovalWords, useApprovalListening } = await heardCard(
+        undefined,
+        CARD,
+        decision,
+      );
+      answer("approve", { status: "say_again" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(useApprovalListening.getState().misses[KEY] ?? 0).toBe(0);
+    });
+
     it("words before the card asked bring the rest of it, not a decision", async () => {
       const { decision, send } = deciding();
       const { heardApprovalWords } = await heardCard(undefined, CARD, decision);

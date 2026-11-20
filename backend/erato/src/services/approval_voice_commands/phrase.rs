@@ -74,17 +74,18 @@ const NEVER_IN_PHRASE: &[char] = &[
 /// every built-in phrase is tried. A question, a quotation, a negation or a
 /// condition anywhere is never a match, and neither is a phrase inside a
 /// longer sentence.
-pub fn match_phrase(transcript: &str) -> Option<PhraseMatch> {
+///
+/// `hesitations` are the deployment's own besides the built-in ones, as the
+/// web app drops them from a turn.
+pub fn match_phrase(transcript: &str, hesitations: &[String]) -> Option<PhraseMatch> {
     if transcript.contains(NEVER_IN_PHRASE) {
         return None;
     }
+    let extra: Vec<String> = hesitations.iter().flat_map(|word| words_of(word)).collect();
+    let hesitation = |word: &String| HESITATIONS.contains(&word.as_str()) || extra.contains(word);
     let words = words_of(transcript);
-    let start = words
-        .iter()
-        .position(|word| !HESITATIONS.contains(&word.as_str()))?;
-    let end = words
-        .iter()
-        .rposition(|word| !HESITATIONS.contains(&word.as_str()))?;
+    let start = words.iter().position(|word| !hesitation(word))?;
+    let end = words.iter().rposition(|word| !hesitation(word))?;
     let words: Vec<&str> = words[start..=end].iter().map(String::as_str).collect();
     if words
         .iter()

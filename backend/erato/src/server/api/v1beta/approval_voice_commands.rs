@@ -10,13 +10,14 @@ use crate::models::message::VoiceDecisionOutcome;
 use crate::policy::engine::PolicyEngine;
 use crate::services::approval_voice_commands::decision::{
     RecordInput, VoiceReceipt, VoiceSignals, approval_is_screen_only, card_asked, card_digest,
-    check_signals, only_points, record, request_heard, stop_is_screen_only,
+    check_signals, only_points, record, stop_is_screen_only,
 };
 use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase};
 use crate::services::approval_voice_commands::{
     CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
     VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning, VoiceModel,
     VoiceQuestion, check_input, classify_by_model, classify_by_rules, classify_without_model,
+    request_heard,
 };
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::sentry::log_internal_server_error;
@@ -69,7 +70,7 @@ pub struct ApprovalVoiceCommandRequest {
 /// the card's request piece was heard (or the card has none): a yes or no
 /// before that, or beside a backchannel ("mhm, ja"), is `noise`.
 ///
-/// With `decide_by_voice` on, `decision` says whether the words decide the
+/// With `[approval_voice_decisions]` on, `decision` says whether the words decide the
 /// card. Only the whole confirmation phrase approves ("Ich bestätige", "I
 /// confirm"), checked before any rule or model and never by a model; a
 /// refusal by the rules or the model refuses. Either needs the turn's own
@@ -122,9 +123,17 @@ pub async fn interpret_approval_voice_command(
         check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     let start = Instant::now();
-    let phrase = config
-        .decide_by_voice
-        .then(|| match_phrase(&request.transcript))
+    let deciding = app_state.config.approval_voice_decisions.enabled;
+    let phrase = deciding
+        .then(|| {
+            match_phrase(
+                &request.transcript,
+                &app_state
+                    .config
+                    .audio_conversational
+                    .effective_hesitation_words(),
+            )
+        })
         .flatten();
     let mut classified = match &phrase {
         // As any yes said before the card asked: listening.
@@ -156,7 +165,7 @@ pub async fn interpret_approval_voice_command(
         },
     };
     let mut refused_by = None;
-    if config.decide_by_voice {
+    if deciding {
         let decided = decide(
             &app_state,
             &me_user,
@@ -236,7 +245,7 @@ async fn decide(
     if !card_asked(&request.pieces) {
         return answer(VoiceDecisionStatus::NotYet);
     }
-    let config = &app_state.config.approval_voice_commands;
+    let config = &app_state.config.approval_voice_decisions;
     let matched = match (outcome, phrase) {
         (VoiceDecisionOutcome::Approved, None) => {
             return answer(VoiceDecisionStatus::PhraseNeeded);

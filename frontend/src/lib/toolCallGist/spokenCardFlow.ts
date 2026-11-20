@@ -49,6 +49,8 @@ export type SpokenNotice =
   | { kind: "decide_on_screen"; decision: "approve" | "reject" }
   /** Deciding by voice is on, but this card is approved on screen. */
   | { kind: "confirm_on_screen" }
+  /** Deciding by voice is on, but this card is declined on screen. */
+  | { kind: "decline_on_screen" }
   /** A near miss: the phrase that approves. */
   | { kind: "say_phrase" }
   /** The phrase, but not from a recording that may approve: once more. */

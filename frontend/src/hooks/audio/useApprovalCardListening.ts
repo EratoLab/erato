@@ -11,7 +11,7 @@ import {
 } from "./approvalListening";
 import { useApprovalSpeech } from "./approvalSpeech";
 
-import type { RecordingSignals } from "./useAudioDictationRecorder";
+import type { RecordingSignals } from "./recordingSignals";
 
 /**
  * Opens the microphone for a spoken approval card once the voice has said
