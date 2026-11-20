@@ -1,11 +1,12 @@
 import { t } from "@lingui/core/macro";
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import {
   isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
+import { shallowEqual } from "@/utils/chat/stableValues";
 
 import { TraceClusterHeader } from "./TraceClusterHeader";
 import { TraceCollapse } from "./TraceCollapse";
@@ -92,6 +93,14 @@ export type ToolDecision =
       /** Not run because the user asked for the call to be different. */
       changeRequested?: boolean;
     };
+
+/** Each chunk builds a new decision object per step; comparing its fields lets every finished step skip. */
+const TraceToolUseStep = memo(
+  ToolUseStep,
+  (previous, next) =>
+    shallowEqual(previous.decision, next.decision) &&
+    shallowEqual({ ...previous, decision: null }, { ...next, decision: null }),
+);
 
 /**
  * Vertical timeline of reasoning + tool-call steps. Renders the rail-with-line
@@ -437,7 +446,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
       );
     case "tool_use":
       return (
-        <ToolUseStep
+        <TraceToolUseStep
           part={args.step.part}
           status={args.status}
           isStreaming={args.isStreaming}

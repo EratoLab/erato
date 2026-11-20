@@ -1758,25 +1758,34 @@ export const MessageContent = memo(function MessageContent({
       shown.has(toolCallId) ? shown : new Set(shown).add(toolCallId),
     );
   }, []);
-  const viewFileIds = React.useMemo(() => {
-    const byCall = new Map<string, string[]>();
+  // Keyed by value: the chipped set below feeds the markdown context, so a new
+  // map on every streamed chunk would re-render every finished markdown block.
+  const viewFileIdsKey = React.useMemo(() => {
+    const byCall: [string, string[]][] = [];
     content.forEach((part) => {
       if (
         part.content_type === "tool_use" &&
         part.tool_call_id &&
         part.result_details?.view
       ) {
-        byCall.set(part.tool_call_id, [
-          ...new Set(
-            eratoFileIdsIn(part.output).filter((fileId) =>
-              generatedImageFileIds.has(fileId),
+        byCall.push([
+          part.tool_call_id,
+          [
+            ...new Set(
+              eratoFileIdsIn(part.output).filter((fileId) =>
+                generatedImageFileIds.has(fileId),
+              ),
             ),
-          ),
+          ],
         ]);
       }
     });
-    return byCall;
+    return JSON.stringify(byCall);
   }, [content, generatedImageFileIds]);
+  const viewFileIds = React.useMemo(
+    () => new Map(JSON.parse(viewFileIdsKey) as [string, string[]][]),
+    [viewFileIdsKey],
+  );
   const chippedFileIds = React.useMemo(
     () =>
       new Set(
