@@ -11,7 +11,7 @@ import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
 import { useSpeechPlayback } from "./speechPlayback";
 import { afterWaitLine, waitLinePlaying } from "./waitLines";
 
-import type { VoiceChange } from "./approvalChanges";
+import type { VoiceChange, VoiceDecision } from "./approvalChanges";
 import type { ReadAloudStreamEvent } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   SpokenApproval,
@@ -55,6 +55,8 @@ export interface SpeakableCard {
   approval?: SpokenApproval;
   /** How the card is changed by voice; absent where it cannot be. */
   change?: VoiceChange;
+  /** How the card is decided by voice; absent where it is decided on screen. */
+  decision?: VoiceDecision;
   /** A notice about a card, not a card: a failure to say it shows nothing. */
   notice?: true;
 }

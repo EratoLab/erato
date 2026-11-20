@@ -18,7 +18,11 @@ import { messages as deMessages } from "@/locales/de/messages.json";
 
 import { commandPieces, stepForMeaning } from "./approvalListening";
 
-import type { VoiceChange, VoiceChangeOutcome } from "./approvalChanges";
+import type {
+  VoiceChange,
+  VoiceChangeOutcome,
+  VoiceDecision,
+} from "./approvalChanges";
 import type { ApprovalVoiceMeaning } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type {
@@ -559,7 +563,11 @@ const KEY = "message-1:stop-1";
 const CARD = expected["update-08-long-text"].de[0];
 
 /** A card read to its end; the voice is quiet and the microphone would open. */
-async function heardCard(change?: VoiceChange, pieces: SpokenPiece[] = CARD) {
+async function heardCard(
+  change?: VoiceChange,
+  pieces: SpokenPiece[] = CARD,
+  decision?: VoiceDecision,
+) {
   const speech = await import("./approvalSpeech");
   const listening = await import("./approvalListening");
   const changes = await import("./approvalChanges");
@@ -572,6 +580,7 @@ async function heardCard(change?: VoiceChange, pieces: SpokenPiece[] = CARD) {
     language: "de",
     approval: { type: "pointer" },
     ...(change ? { change } : {}),
+    ...(decision ? { decision } : {}),
   });
   await vi.waitFor(() => expect(connections).toHaveLength(1));
   pieces.forEach((_, index) => {
@@ -1400,6 +1409,206 @@ describe("listening against the endpoint", () => {
         expect(send).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe("ERMAIN-1259: deciding by voice", () => {
+    const RECORDING = {
+      startedAt: Date.now() + 50,
+      endedAt: Date.now() + 2_000,
+      firstSpeechAt: Date.now() + 600,
+      speechMs: 900,
+      recordedMs: 1_950,
+      overVoice: false,
+    };
+    const deciding = (
+      approves = true,
+      outcome: VoiceChangeOutcome = "sent",
+    ) => {
+      const send = vi.fn(
+        (_decision: "approve" | "reject", _receipt: string | undefined) =>
+          Promise.resolve(outcome),
+      );
+      const decision: VoiceDecision = { approvalId: "call-7", approves, send };
+      return { decision, send };
+    };
+    const answer = (
+      meaning: ApprovalVoiceMeaning,
+      decision?: { status: string; receipt?: string },
+    ) =>
+      fetchCommand.mockResolvedValueOnce({
+        meaning,
+        piece_id: null,
+        source: "rules",
+        ...(decision ? { decision } : {}),
+      });
+    const body = (call = 0) =>
+      (
+        fetchCommand.mock.calls[call] as [
+          {
+            body: Record<string, unknown> & {
+              signals?: Record<string, unknown>;
+            };
+          },
+        ]
+      )[0].body;
+
+    it("the phrase approves with its receipt; the voice says nothing more", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords, useApprovalListening } = await heardCard(
+        undefined,
+        CARD,
+        decision,
+      );
+      answer("approve", { status: "accepted", receipt: "receipt-1" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(body().approval_id).toBe("call-7");
+      expect(body().signals).toMatchObject({
+        recording_started_at_ms: RECORDING.startedAt,
+        first_speech_at_ms: RECORDING.firstSpeechAt,
+        speech_ms: 900,
+        recorded_ms: 1_950,
+        over_voice: false,
+      });
+      expect(body().signals?.request_heard_at_ms).toEqual(expect.any(Number));
+      expect(send).toHaveBeenCalledWith("approve", "receipt-1");
+      expect(connections).toHaveLength(1);
+      expect(useApprovalListening.getState().quiet).toBe(KEY);
+    });
+
+    it("a plain yes teaches the phrase once, then points to the screen", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords, useApprovalListening } = await heardCard(
+        undefined,
+        CARD,
+        decision,
+      );
+      answer("approve", { status: "phrase_needed" });
+      await heardApprovalWords(KEY, "Ja, mach das.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte „Ich bestätige“ sagen.",
+      ]);
+      audio(connections[1], 0);
+      playOut();
+      answer("approve", { status: "phrase_needed" });
+      await heardApprovalWords(KEY, "okay ja", RECORDING);
+      expect(sentences(connections[2])).toEqual([
+        "Dann bitte auf dem Bildschirm bestätigen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+      expect(useApprovalListening.getState().misses[KEY]).toBe(2);
+    });
+
+    it("the phrase from a recording that cannot approve is asked for once more", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "say_again" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte noch einmal „Ich bestätige“ sagen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("an accepted approval without a receipt is decided on screen", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "accepted" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte auf dem Bildschirm bestätigen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("'nein' is confirmed, then refused with its receipt", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("reject", { status: "accepted", receipt: "receipt-2" });
+      const heard = heardApprovalWords(KEY, "Nein.", RECORDING);
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      expect(sentences(connections[1])).toEqual(["Gut, ich mache nichts."]);
+      expect(send).not.toHaveBeenCalled();
+      audio(connections[1], 0);
+      playOut();
+      await heard;
+      expect(send).toHaveBeenCalledWith("reject", "receipt-2");
+    });
+
+    it("a card approved on screen says so, whatever the words", async () => {
+      for (const [approves, status] of [
+        [true, "screen_only"],
+        [false, "phrase_needed"],
+        [false, "accepted"],
+      ] as const) {
+        connections.length = 0;
+        vi.resetModules();
+        const { decision, send } = deciding(approves);
+        const { heardApprovalWords } = await heardCard(
+          undefined,
+          CARD,
+          decision,
+        );
+        answer("approve", { status, receipt: "receipt-3" });
+        await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+        expect(sentences(connections[1]), status).toEqual([
+          "Bitte auf dem Bildschirm bestätigen.",
+        ]);
+        expect(send).not.toHaveBeenCalled();
+      }
+    });
+
+    it("a refusal on a card decided on screen says so, without 'for now'", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("reject", { status: "screen_only" });
+      await heardApprovalWords(KEY, "Nein.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Ablehnen geht bei dieser Karte nur auf dem Bildschirm.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("the phrase from a recording that could not carry it is no miss", async () => {
+      const { decision } = deciding();
+      const { heardApprovalWords, useApprovalListening } = await heardCard(
+        undefined,
+        CARD,
+        decision,
+      );
+      answer("approve", { status: "say_again" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(useApprovalListening.getState().misses[KEY] ?? 0).toBe(0);
+    });
+
+    it("words before the card asked bring the rest of it, not a decision", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "not_yet" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual(["Das war alles."]);
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("a decision that does not go through is said once", async () => {
+      const { decision } = deciding(true, "failed");
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "accepted", receipt: "receipt-4" });
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Das ging nicht durch. Bitte auf dem Bildschirm entscheiden.",
+      ]);
+    });
+
+    it("without deciding by voice nothing about it is sent, and decisions stay on screen", async () => {
+      const { heardApprovalWords } = await heardCard();
+      answer("approve");
+      await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(body().approval_id).toBeUndefined();
+      expect(body().signals).toBeUndefined();
+      expect(sentences(connections[1])).toEqual([
+        "Zustimmen geht im Moment nur auf dem Bildschirm.",
+      ]);
+    });
   });
 
   it("words for another card do nothing", async () => {

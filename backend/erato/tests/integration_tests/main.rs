@@ -232,6 +232,7 @@ async fn test_app_state_internal(
         file_bytes_cache,
         file_contents_cache,
         token_count_cache,
+        voice_receipts: Default::default(),
         tool_label_cache: Default::default(),
         tool_label_timeout: erato::services::tool_labeller::LABEL_TIMEOUT,
         tool_label_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(

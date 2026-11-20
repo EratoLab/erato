@@ -39,13 +39,28 @@ export type SpokenUtterance =
   | { type: "notice"; notice: SpokenNotice };
 
 /**
- * What the voice says instead of acting: a decision asked for by voice,
- * which is made on screen for now; a change it is making, or cannot make;
- * what came of a change; words it did not understand; a long text asked for
- * on a card without one; listening that is not available.
+ * What the voice says instead of acting: a decision asked for by voice that
+ * is made on screen; the words that approve by voice, after a near miss; a
+ * refusal by voice; a change it is making, or cannot make; what came of a
+ * change; words it did not understand; a long text asked for on a card
+ * without one; listening that is not available.
  */
 export type SpokenNotice =
   | { kind: "decide_on_screen"; decision: "approve" | "reject" }
+  /** Deciding by voice is on, but this card is approved on screen. */
+  | { kind: "confirm_on_screen" }
+  /** Deciding by voice is on, but this card is declined on screen. */
+  | { kind: "decline_on_screen" }
+  /** A near miss: the phrase that approves. */
+  | { kind: "say_phrase" }
+  /** The phrase, but not from a recording that may approve: once more. */
+  | { kind: "say_phrase_again" }
+  /** Near misses again: the screen, without teaching further. */
+  | { kind: "phrase_on_screen" }
+  /** Refused by voice; said before the refusal goes out. */
+  | { kind: "declined" }
+  /** A decision by voice did not go through; the card waits on screen. */
+  | { kind: "decision_failed" }
   /** `others`: other approvals of the stop are still open on screen. */
   | { kind: "change_on_screen"; reason: "card" | "others" }
   | { kind: "changing" }
@@ -537,15 +552,15 @@ export const currentPiece = (flow: SpokenCardFlow): number | null =>
 /**
  * Whether a decision said by voice may count: the card is waiting, its
  * request to decide was heard, and no loss or consequence is owed. `owed`
- * lists what must be said first. Nothing decides by voice yet; this is the
- * gate that step plugs into.
+ * lists what must be said first. A card without a request (the pointer
+ * sentence) is decided on screen.
  */
 export const voiceDecisionGate = (
   pieces: readonly SpokenPiece[],
   flow: SpokenCardFlow,
 ): { ready: boolean; owed: number[] } => {
   const request = requestOf(pieces);
-  const asked = request === -1 || flow.heard[request];
+  const asked = request !== -1 && flow.heard[request];
   return {
     ready: !flow.closed && asked && flow.owed.length === 0,
     owed: flow.owed,

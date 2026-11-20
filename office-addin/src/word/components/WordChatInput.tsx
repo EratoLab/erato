@@ -108,6 +108,7 @@ import {
 
 import type {
   AddinChatInputRenderProps,
+  AddinRerunPreparer,
   AddinSendPreparation,
 } from "../../core/AddinChatCore";
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
@@ -155,6 +156,11 @@ type CaptureOutcome =
 type CaptureNotice = WordCaptureNotice;
 
 const NO_DISMISSED_NOTICES: ReadonlySet<string> = new Set();
+const WORD_DOCUMENT_FACET_IDS: ReadonlySet<string> = new Set([
+  WORD_DOCUMENT_REVIEW_FACET_ID,
+  WORD_AUTHORING_FACET_ID,
+  WORD_COMPOSE_FACET_ID,
+]);
 
 /** The chip that carries each facet the Send can build. */
 const WORD_CARRIER_CHIP_IDS: Partial<Record<WordSendCarrier, string>> = {
@@ -635,60 +641,46 @@ export function WordChatInput({
     }
   }, [chipEnabled, chatId, documentIdentity, clearReadSession]);
 
-  const handleSendMessage = useCallback<
-    AddinChatInputCoreProps["onSendMessage"]
-  >(
+  /** A send's Word step, handed to `send`; a rerun takes the document only. False while another
+   * send is still preparing. */
+  const startWordSend = useCallback(
     (
-      message,
-      inputFileIds,
-      modelId,
-      selectedFacetIds,
-      mentionedAssistants,
-      delegationRunMode,
-      mcpWriteToolsEnabled,
-      disabledMcpServerIds,
-      disabledMcpTools,
-    ) => {
-      if (preparingRef.current) return;
+      message: string,
+      inputFileIds: string[] | undefined,
+      modelId: string | undefined,
+      send: (
+        actionFacet: ReturnType<typeof resolveWordActionFacet>,
+        hostContextIdentity: string | null,
+        prepare?: AddinSendPreparation,
+      ) => void,
+      documentOnly = false,
+    ): boolean => {
+      if (preparingRef.current) return false;
+      const passageDue = selectionDue && !documentOnly;
       clearReadSession();
       clearCommentSession();
       setSelectionReadFailed(false);
       setSelectionFailedKey(null);
       setCaptureNotice(null);
       setDismissedNotices(NO_DISMISSED_NOTICES);
-      const send = (
-        actionFacet: ReturnType<typeof resolveWordActionFacet>,
-        hostContextIdentity: string | null,
-        prepare?: AddinSendPreparation,
-      ) => {
-        chatInputProps.onSendMessage(
-          message,
-          inputFileIds,
-          modelId,
-          selectedFacetIds,
-          actionFacet,
-          hostContextIdentity,
-          mentionedAssistants,
-          delegationRunMode,
-          mcpWriteToolsEnabled,
-          disabledMcpServerIds,
-          disabledMcpTools,
-          prepare,
-        );
-      };
 
-      // Nothing advertised means no comment API call at all.
-      const commentsDue = wordCommentsDue({
-        advertised: commentAdvertised,
-        withoutComments,
-        selectionDue,
-        documentIncluded: chipEnabled,
-      });
-      const spentGestures = wordCommentGestureStore.sent();
-      if (!chipEnabled && !selectionDue && !commentsDue) {
+      // Nothing advertised means no comment API call at all. A rerun takes the document alone: the
+      // caret's comments and the next message's comment choices are not the earlier message's.
+      const commentsDue =
+        !documentOnly &&
+        wordCommentsDue({
+          advertised: commentAdvertised,
+          withoutComments,
+          selectionDue: passageDue,
+          documentIncluded: chipEnabled,
+        });
+      const spentGestures = documentOnly
+        ? null
+        : wordCommentGestureStore.sent();
+      if (!chipEnabled && !passageDue && !commentsDue) {
         stagePendingCapture(null);
         send(undefined, null);
-        return;
+        return true;
       }
 
       const contextChanged = () =>
@@ -876,11 +868,17 @@ export function WordChatInput({
         stagePendingCapture(null);
         return { actionFacet: undefined, hostContextIdentity: null };
       };
-      /** The document did not go after all; the comments go as they would without it. */
+      /** The document did not go after all; the comments go as they would without it. A rerun
+       * without a fresh document does not run: the server would reuse the earlier one. */
       const withoutDocument = (
         signal: AbortSignal,
         withheld = false,
       ): ReturnType<AddinSendPreparation["run"]> => {
+        if (documentOnly) {
+          clearReadSession();
+          setCaptureNotice("rerun-not-included");
+          return Promise.resolve(null);
+        }
         if (
           !withheld &&
           wordCommentsDue({
@@ -1045,6 +1043,8 @@ export function WordChatInput({
                 : {}),
             }),
           );
+          if (!actionFacet && documentOnly)
+            return await withoutDocument(signal);
           if (actionFacet) markSent(build);
           else clearReadSession();
           const staged = actionFacet
@@ -1169,7 +1169,7 @@ export function WordChatInput({
 
       preparingRef.current = true;
       send(undefined, null, {
-        label: selectionDue
+        label: passageDue
           ? t({
               id: "officeAddin.word.send.readingSelection",
               message: "Reading selection…",
@@ -1188,7 +1188,7 @@ export function WordChatInput({
         run: async (signal) => {
           markWordSend("prepare-start");
           try {
-            return await (selectionDue
+            return await (passageDue
               ? prepareSelection(signal)
               : chipEnabled
                 ? prepareDocument(signal)
@@ -1199,7 +1199,7 @@ export function WordChatInput({
           }
         },
         onAbandoned: () => {
-          wordCommentGestureStore.unspend(spentGestures);
+          if (spentGestures) wordCommentGestureStore.unspend(spentGestures);
           decideCommentsRef.current?.({ kind: "abort" });
           clearReadSession();
           clearCommentSession();
@@ -1207,6 +1207,7 @@ export function WordChatInput({
           finishPreparing();
         },
       });
+      return true;
     },
     [
       authoringAvailable,
@@ -1234,6 +1235,75 @@ export function WordChatInput({
       stagePendingCapture,
     ],
   );
+
+  const handleSendMessage = useCallback<
+    AddinChatInputCoreProps["onSendMessage"]
+  >(
+    (
+      message,
+      inputFileIds,
+      modelId,
+      selectedFacetIds,
+      mentionedAssistants,
+      delegationRunMode,
+      mcpWriteToolsEnabled,
+      disabledMcpServerIds,
+      disabledMcpTools,
+    ) => {
+      startWordSend(
+        message,
+        inputFileIds,
+        modelId,
+        (actionFacet, hostContextIdentity, prepare) =>
+          chatInputProps.onSendMessage(
+            message,
+            inputFileIds,
+            modelId,
+            selectedFacetIds,
+            actionFacet,
+            hostContextIdentity,
+            mentionedAssistants,
+            delegationRunMode,
+            mcpWriteToolsEnabled,
+            disabledMcpServerIds,
+            disabledMcpTools,
+            prepare,
+          ),
+      );
+    },
+    [chatInputProps, startWordSend],
+  );
+
+  // A regenerate or edit of a message sent with the document reads the document as it is now; the
+  // copy stored with the message is older and its read session is gone.
+  const { rerunPreparationRef } = chatInputProps;
+  useEffect(() => {
+    if (!rerunPreparationRef) return;
+    const prepare: AddinRerunPreparer = ({
+      message,
+      inputFileIds,
+      actionFacetId,
+    }) => {
+      if (!chipEnabled || !WORD_DOCUMENT_FACET_IDS.has(actionFacetId ?? ""))
+        return undefined;
+      let step: AddinSendPreparation | undefined;
+      const started = startWordSend(
+        message,
+        inputFileIds,
+        undefined,
+        (_actionFacet, _hostContextIdentity, preparation) => {
+          step = preparation;
+        },
+        true,
+      );
+      return started ? step : "busy";
+    };
+    rerunPreparationRef.current = prepare;
+    return () => {
+      if (rerunPreparationRef.current === prepare)
+        rerunPreparationRef.current = null;
+    };
+  }, [chipEnabled, rerunPreparationRef, startWordSend]);
 
   const readReport = useMemo(
     () =>

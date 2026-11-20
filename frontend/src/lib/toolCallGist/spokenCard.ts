@@ -335,6 +335,11 @@ export interface SpokenOptions {
    * named as such.
    */
   userTurns?: readonly UserTurn[];
+  /**
+   * The card may be approved by voice: its request names the phrase, where
+   * `voiceApprovalOffered` allows it for the call.
+   */
+  voiceApproval?: boolean;
 }
 
 export interface SpokenWords {
@@ -353,7 +358,8 @@ export interface SpokenWords {
   more(count: number): string;
   text(text: SpokenText): string;
   consequence(consequences: SpokenConsequence[], facts: SpokenFacts): string;
-  request(): string;
+  /** The request to decide; with `phrase`, naming the phrase that approves. */
+  request(phrase?: boolean): string;
   /** A call the card has no verb for: the tool's title and its server. */
   generic(toolTitle: string, server?: string): string;
   /** Before the rest of the card: how many pieces follow. */
@@ -1203,7 +1209,9 @@ const composedPieces = (
   }
   const request: ComposedPiece = {
     role: "request",
-    text: words.request(),
+    text: words.request(
+      options.voiceApproval === true && voiceApprovalOffered(approval),
+    ),
     mustSay: false,
     values: [],
   };
@@ -1405,6 +1413,51 @@ export const spokenApprovalFor = (
     server: call.display?.server_name ?? undefined,
   };
 };
+
+/** More items than this are approved on screen. */
+export const MAX_VOICE_ITEMS = 20;
+
+/** The things a label acts on: a batch's total, else the first item's names. */
+const labelItemCount = (label: ToolCallLabel): number => {
+  const total = label.change?.batch?.total;
+  if (total !== undefined) return total;
+  const item = label.items?.[0];
+  const slot = (item?.title?.values?.length ?? 0) > 0 ? item?.title : item?.id;
+  return Math.max((slot?.values?.length ?? 0) + (slot?.omitted ?? 0), 1);
+};
+
+/**
+ * Whether a call's label lets it be approved by voice. The backend decides
+ * from the same fields before it accepts the phrase (`label_is_screen_only`);
+ * both are checked against `fixtures/spokenCards/voiceApprovals.json`.
+ */
+export const voiceApprovable = (
+  label: ToolCallLabel | null | undefined,
+): boolean => {
+  if (!label) return false;
+  // A read keeps a generic label but says what it looks at.
+  const generic =
+    !label.read && (label.source === "generic" || label.action === "other");
+  const { change } = label;
+  return (
+    !generic &&
+    (label.warnings ?? []).length === 0 &&
+    label.action !== "run" &&
+    (change?.opaque ?? []).length === 0 &&
+    (change?.opaque_omitted ?? 0) === 0 &&
+    labelItemCount(label) <= MAX_VOICE_ITEMS
+  );
+};
+
+/**
+ * Whether the card asks for the phrase: the label allows it, and the voice
+ * can say the call, as a read or as the card's own description.
+ */
+export const voiceApprovalOffered = (approval: SpokenApproval): boolean =>
+  approval.type === "call" &&
+  voiceApprovable(approval.label) &&
+  (spokenReadFactsOf(approval.label) !== undefined ||
+    toolCallCardOf(approval.label, approval.input).kind === "gist");
 
 /** Whether two approvals said one after another are of the same kind. */
 export const sameSpokenKind = (

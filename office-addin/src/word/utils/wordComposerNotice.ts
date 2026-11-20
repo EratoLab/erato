@@ -11,7 +11,10 @@ import {
 import type { WordCommentBlock } from "./wordCommentSend";
 import type { ComposerNotice } from "@erato/frontend/library";
 
-export type WordCaptureNotice = "previous-capture" | "not-included";
+export type WordCaptureNotice =
+  | "previous-capture"
+  | "not-included"
+  | "rerun-not-included";
 export type WordBudgetNotice = "model-budget" | "budget-unavailable";
 
 export interface WordComposerNoticeState {
@@ -147,7 +150,9 @@ export function wordComposerNotice(
     const id =
       state.captureNotice === "previous-capture"
         ? "word.send.previousCapture"
-        : "word.send.notIncluded";
+        : state.captureNotice === "rerun-not-included"
+          ? "word.send.rerunNotIncluded"
+          : "word.send.notIncluded";
     if (!state.dismissed.has(id))
       return {
         id,
@@ -159,11 +164,17 @@ export function wordComposerNotice(
                 message:
                   "Reading the document took too long, so Erato used an earlier copy. Recent edits may be missing.",
               })
-            : t({
-                id: "officeAddin.word.send.notIncluded",
-                message:
-                  "Reading the document took too long, so this message was sent without it.",
-              }),
+            : state.captureNotice === "rerun-not-included"
+              ? t({
+                  id: "officeAddin.word.send.rerunNotIncluded",
+                  message:
+                    "Erato did not get the document from Word, so it did not run your request again. Keep Word open and try again.",
+                })
+              : t({
+                  id: "officeAddin.word.send.notIncluded",
+                  message:
+                    "Reading the document took too long, so this message was sent without it.",
+                }),
         onDismiss: () => handlers.dismiss(id),
       };
   }

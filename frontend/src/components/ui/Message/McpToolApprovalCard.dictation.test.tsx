@@ -28,6 +28,7 @@ const spoken: { userTurns?: readonly UserTurn[] } = {};
 vi.mock("@/hooks/audio/useSpokenApprovalCard", () => ({
   useSpokenApprovalCard: (props: typeof spoken) => {
     spoken.userTurns = props.userTurns;
+    return { key: "spoken-key", approves: false };
   },
 }));
 

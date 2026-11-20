@@ -14,12 +14,17 @@ pub(super) struct RuleMatch {
     pub piece_id: Option<String>,
 }
 
-/// Fillers dropped wherever they stand.
-const FILLERS: &[&str] = &[
+/// Hesitation sounds, dropped wherever they stand.
+pub(super) const HESITATIONS: &[&str] = &[
     "aeh", "aehm", "aehh", "aehhm", "oeh", "oehm", "eh", "ehm", "hm", "hmm", "hmmm", "mh", "mhm",
-    "mhmm", "uh", "uhm", "uhh", "um", "umm", "erm", "bitte", "please", "mal", "doch", "einfach",
-    "eben", "kurz",
+    "mhmm", "uh", "uhm", "uhh", "um", "umm", "erm",
 ];
+/// Fillers dropped wherever they stand, besides the hesitation sounds.
+const FILLER_WORDS: &[&str] = &["bitte", "please", "mal", "doch", "einfach", "eben", "kurz"];
+
+fn fillers() -> HashSet<&'static str> {
+    HESITATIONS.iter().chain(FILLER_WORDS).copied().collect()
+}
 
 /// A segment made only of these is listening noise.
 const NOISE_WORDS: &[&str] = &[
@@ -392,7 +397,7 @@ const REPEAT: &[&str] = &[
     "one more time",
 ];
 
-const NEGATIONS: &[&str] = &[
+pub(super) const NEGATIONS: &[&str] = &[
     "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
     "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
     "niemand",
@@ -587,7 +592,7 @@ const CONTINUATIONS: &[&str] = &[
     "so", "also", "und", "and", "aber", "but", "dann", "then", "well", "weil", "because", "wenn",
     "if", "ich", "i", "naja",
 ];
-const CONDITIONS: &[&str] = &[
+pub(super) const CONDITIONS: &[&str] = &[
     "aber",
     "but",
     "wenn",
@@ -972,7 +977,7 @@ fn set(words: &[&'static str]) -> HashSet<&'static str> {
 
 fn phrases(list: &[&str]) -> HashSet<String> {
     list.iter()
-        .map(|phrase| drop_fillers(&words_of(phrase), &set(FILLERS)).join(" "))
+        .map(|phrase| drop_fillers(&words_of(phrase), &fillers()).join(" "))
         .collect()
 }
 
@@ -1028,7 +1033,7 @@ fn carrying(phrases: &[&str], also_not: &[&str]) -> HashSet<String> {
 }
 
 static LISTS: LazyLock<Lists> = LazyLock::new(|| Lists {
-    fillers: set(FILLERS),
+    fillers: fillers(),
     noise_words: set(NOISE_WORDS),
     noise_phrases: phrases(NOISE_PHRASES),
     leading: set(LEADING),
@@ -1114,7 +1119,7 @@ fn fold(text: &str) -> String {
     out
 }
 
-fn words_of(text: &str) -> Vec<String> {
+pub(super) fn words_of(text: &str) -> Vec<String> {
     fold(text)
         .split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())

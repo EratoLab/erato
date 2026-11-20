@@ -14,6 +14,8 @@ export interface DecidedApproval {
   scopePosition?: unknown;
   /** For `request_change`: what the user wants different, in their words. */
   changeRequest?: string;
+  /** For `approve` or `reject` said by voice: the endpoint's receipt. */
+  voiceReceipt?: string;
 }
 
 /**
@@ -53,7 +55,8 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * when the turn that stopped was spoken.
  *
  * A change request is always enumerated: it names its approval and carries
- * the user's words.
+ * the user's words. So is a decision said by voice, which carries its
+ * receipt.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -81,7 +84,8 @@ export const buildContinueStreamBody = ({
     decided.some(
       (item) =>
         item.decision === "approve_context" ||
-        item.decision === "request_change",
+        item.decision === "request_change" ||
+        item.voiceReceipt !== undefined,
     )
   ) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
@@ -97,6 +101,7 @@ export const buildContinueStreamBody = ({
       ...(item.decision === "request_change" && item.changeRequest
         ? { change_request: item.changeRequest }
         : {}),
+      ...(item.voiceReceipt ? { voice_receipt: item.voiceReceipt } : {}),
     }));
     return {
       message_id: messageId,

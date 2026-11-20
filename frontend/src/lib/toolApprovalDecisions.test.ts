@@ -251,4 +251,23 @@ describe("buildContinueStreamBody", () => {
       },
     ]);
   });
+
+  it("names a single decision said by voice, with its receipt", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        itemDecisions: [
+          { approvalId: "call-a", decision: "approve", voiceReceipt: "r-1" },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        { approval_id: "call-a", decision: "approve", voice_receipt: "r-1" },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
 });

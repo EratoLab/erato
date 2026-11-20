@@ -711,3 +711,158 @@ fn extract_full_text_from_content(content: &[Value]) -> String {
         .filter_map(|part| part["text"].as_str())
         .collect()
 }
+
+/// Deciding by voice: the phrase gets a receipt, the decision carries it and
+/// the record is kept with the decision; a plain "ja" gets none, and a
+/// receipt counts once and only for its card.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgres>) {
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &["updated to"],
+        &[],
+        build_openai_text_streaming_response(&["DONE"]),
+    );
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &["updated to"],
+        update("call_update", "Done"),
+    );
+    let app_state = records_app_state_with(pool, mocks, |config| {
+        config.approval_voice_commands.enabled = true;
+        config.approval_voice_decisions.enabled = true;
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let (_chat_id, message_id) = park(&server).await;
+    let stop = stops(&message_content(&app_state, message_id).await)[0].clone();
+    let approval_id = own_item(&stop)["approval_id"].as_str().unwrap().to_string();
+    let pieces = json!([
+        {"id": "what", "role": "what", "state": "heard"},
+        {"id": "request", "role": "request", "state": "heard"},
+    ]);
+    let signals = json!({
+        "voice_stopped_at_ms": 1_700_000_000_000u64,
+        "request_heard_at_ms": 1_699_999_999_000u64,
+        "recording_started_at_ms": 1_700_000_000_050u64,
+        "recording_ended_at_ms": 1_700_000_002_000u64,
+        "first_speech_at_ms": 1_700_000_000_600u64,
+        "speech_ms": 900,
+        "recorded_ms": 1_900,
+    });
+    let say_to = |transcript: &'static str, pieces: Value, signals: Value| {
+        let server = &server;
+        let approval_id = approval_id.clone();
+        async move {
+            let response = server
+                .post(&format!(
+                    "/api/v1beta/me/messages/{message_id}/approval-voice-command"
+                ))
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "transcript": transcript,
+                    "language": "de",
+                    "pieces": pieces,
+                    "approval_id": approval_id,
+                    "signals": signals,
+                }))
+                .await;
+            response.assert_status_ok();
+            response.json::<Value>()
+        }
+    };
+    let say =
+        |transcript: &'static str, signals: Value| say_to(transcript, pieces.clone(), signals);
+    let decide = |receipt: Value| {
+        let server = &server;
+        let approval_id = approval_id.clone();
+        async move {
+            server
+                .post("/api/v1beta/me/messages/continuestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "message_id": message_id,
+                    "decisions": [{
+                        "approval_id": approval_id,
+                        "decision": "approve",
+                        "voice_receipt": receipt,
+                    }],
+                }))
+                .await
+        }
+    };
+
+    let yes = say("Ja, mach das.", signals.clone()).await;
+    assert_eq!(yes["meaning"], "approve", "{yes}");
+    assert_eq!(yes["decision"], json!({"status": "phrase_needed"}));
+    let mut over = signals.clone();
+    over["over_voice"] = json!(true);
+    let over_voice = say("Ich bestätige.", over).await;
+    assert_eq!(over_voice["decision"], json!({"status": "say_again"}));
+    let not_asked = say_to(
+        "Ich bestätige.",
+        json!([{"id": "request", "role": "request", "state": "cut_short"}]),
+        signals.clone(),
+    )
+    .await;
+    assert_eq!(not_asked["meaning"], "noise", "{not_asked}");
+    assert!(not_asked.get("decision").is_none());
+    let owed = say_to(
+        "Ich bestätige.",
+        json!([
+            {"id": "what", "role": "what", "state": "cut_short", "must_say": true},
+            {"id": "request", "role": "request", "state": "heard"},
+        ]),
+        signals.clone(),
+    )
+    .await;
+    assert_eq!(owed["decision"], json!({"status": "not_yet"}));
+    let early = say(
+        "Ich bestätige.",
+        json!({
+            "voice_stopped_at_ms": 1_700_000_000_000u64,
+            "recording_started_at_ms": 1_700_000_000_050u64,
+            "recording_ended_at_ms": 1_700_000_002_000u64,
+            "first_speech_at_ms": 1_700_000_000_100u64,
+            "speech_ms": 900,
+            "recorded_ms": 1_900,
+        }),
+    )
+    .await;
+    assert_eq!(
+        early["decision"],
+        json!({"status": "say_again"}),
+        "echo tail"
+    );
+
+    let confirmed = say("Ich bestätige.", signals.clone()).await;
+    assert_eq!(confirmed["meaning"], "approve");
+    assert_eq!(confirmed["decision"]["status"], "accepted", "{confirmed}");
+    let receipt = confirmed["decision"]["receipt"].clone();
+    decide(json!("not-a-receipt"))
+        .await
+        .assert_status(axum::http::StatusCode::CONFLICT);
+    decide(receipt.clone()).await.assert_status_ok();
+    let content = message_content(&app_state, message_id).await;
+    let approval = content
+        .iter()
+        .find(|part| part["content_type"] == "tool_approval")
+        .expect("approved");
+    let voice = &approval["voice"];
+    assert_eq!(voice["outcome"], "approved", "{approval}");
+    assert_eq!(voice["required_phrase"], "de.ich_bestaetige");
+    assert_eq!(voice["matched_words"], "ich bestaetige");
+    assert_eq!(voice["match_kind"], "exact");
+    assert_eq!(voice["approval_id"], approval_id.as_str());
+    assert_eq!(voice["speech_ms"], 900);
+    assert_eq!(voice["answer_latency_ms"], 1_600);
+    assert_eq!(
+        voice["pieces"][1],
+        json!({"id": "request", "role": "request", "state": "heard"})
+    );
+    decide(receipt)
+        .await
+        .assert_status(axum::http::StatusCode::CONFLICT);
+}

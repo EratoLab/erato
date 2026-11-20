@@ -725,6 +725,50 @@ describe("in-place writes around later edits", { timeout: 30_000 }, () => {
     ]);
   });
 
+  describe("on the import route, after Word's AutoRecovery save", () => {
+    const editSettings =
+      (edit: (settings: Element, doc: Document) => void) => (xml: string) =>
+        editWordPackage(xml, (doc) =>
+          edit(doc.getElementsByTagNameNS(W, "settings")[0], doc),
+        );
+    const importStatus = async (
+      edit: (settings: Element, doc: Document) => void,
+    ) => {
+      window.WORD_FORCE_IMPORT_APPLY = true;
+      const host = installWordOoxmlHost(realisticWordPackageXml(), {
+        profile: "word-pc-16.0.20326",
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const snapshot = await captureRealisticSnapshot();
+      host.userEdit(editSettings(edit));
+      return apply(statusRewritePlan(snapshot, "Status: rewritten."), snapshot);
+    };
+
+    it("applies a capture taken before the save added its zoom", async () => {
+      const applied = await importStatus((settings, doc) => {
+        const zoom = doc.createElementNS(W, "w:zoom");
+        zoom.setAttributeNS(W, "w:percent", "140");
+        settings.insertBefore(zoom, settings.firstChild);
+      });
+      expect(applied.status, report(applied)).toBe("applied");
+      expect(applied.outcome).toMatchObject({ route: "import" });
+    });
+
+    it("still stops before writing when a setting really changed", async () => {
+      const result = await importStatus((settings) =>
+        settings
+          .getElementsByTagNameNS(W, "defaultTabStop")[0]
+          .setAttributeNS(W, "w:val", "1440"),
+      );
+      expect(result.status).toBe("stale");
+      expect(result.diagnostic).toMatchObject({
+        stage: "preflight",
+        reason: "source-changed",
+        details: { route: "import", parts: ["/word/settings.xml"] },
+      });
+    });
+  });
+
   it("keeps the strict whole-document check on the import route", async () => {
     window.WORD_FORCE_IMPORT_APPLY = true;
     const host = installWordOoxmlHost(realisticWordPackageXml(), {

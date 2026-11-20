@@ -1761,6 +1761,10 @@ pub struct ContentPartToolApproval {
     /// The approval row that decision made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_approval_id: Option<Uuid>,
+    /// Set when the user approved by voice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub voice: Option<VoiceDecisionRecord>,
 }
 
 /// Records a user rejection in the assistant message lifecycle.
@@ -1786,6 +1790,67 @@ pub struct ContentPartToolRejection {
     /// The user's words when `reason` is `change_requested`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_request: Option<String>,
+    /// Set when the user refused by voice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub voice: Option<VoiceDecisionRecord>,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceDecisionOutcome {
+    Approved,
+    Refused,
+}
+
+/// A piece of the spoken card and what the user had heard of it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct VoiceDecisionPiece {
+    pub id: String,
+    pub role: crate::services::approval_voice_commands::CardPieceRole,
+    pub state: crate::services::approval_voice_commands::CardPieceState,
+}
+
+/// How a decision was given by voice, kept with the decision for audits and
+/// for tuning. Never the audio. Times are RFC 3339: `matched_at` by the
+/// server's clock, the others by the device's.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct VoiceDecisionRecord {
+    pub user_id: String,
+    pub approval_id: String,
+    /// What the card asked about: the call's tool and arguments, hashed.
+    pub card_digest: String,
+    pub language: String,
+    pub pieces: Vec<VoiceDecisionPiece>,
+    /// The phrase an approval needed, by its id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub required_phrase: Option<String>,
+    /// The words as matched: the phrase folded, a refusal in lower case,
+    /// at most 100 characters.
+    pub matched_words: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub match_kind: Option<crate::services::approval_voice_commands::PhraseMatchKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub request_heard_at: Option<String>,
+    pub voice_stopped_at: String,
+    pub recording_started_at: String,
+    pub recording_ended_at: String,
+    pub matched_at: String,
+    /// How long the speech detector heard speech in the recording.
+    pub speech_ms: u32,
+    /// The share of the recording's detector frames heard as speech, in
+    /// thousandths.
+    pub speech_frames_permille: u16,
+    /// From the request heard to the first speech of the answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub answer_latency_ms: Option<u32>,
+    pub outcome: VoiceDecisionOutcome,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
