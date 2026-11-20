@@ -273,6 +273,47 @@ test(
 );
 
 test(
+  "An MCP Apps view shows again when its own frame reloads, never the sandbox page in the view's frame",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    // What the sandbox page throws where it refuses to run.
+    const refusals: string[] = [];
+    const recordRefusal = (text: string) => {
+      if (text.includes("only runs in the frame")) refusals.push(text);
+    };
+    page.on("pageerror", (error) => recordRefusal(error.message));
+    page.on("console", (entry) => recordRefusal(entry.text()));
+    try {
+      const message = await callCounterTool(page);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+
+      const sandbox = message.frameLocator('[data-testid="mcp-app-view"]');
+      const viewRoot = sandbox.frameLocator("iframe").locator("html");
+      // Marks the view's document, which the reload replaces.
+      await viewRoot.evaluate((root) => {
+        root.dataset.reloaded = "no";
+      });
+      await sandbox.locator("iframe").evaluate((frame) => {
+        (frame as HTMLIFrameElement).contentWindow?.location.reload();
+      });
+
+      await expect(viewRoot).not.toHaveAttribute("data-reloaded", "no", {
+        timeout: 15000,
+      });
+      // The view initializes again and is sent the call once more.
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      expect(refusals).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
   "In dark mode, an MCP Apps view sits on the message's background too, with no backdrop behind it",
   { tag: TAG_CI },
   async ({ browser }) => {
