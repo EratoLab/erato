@@ -1815,6 +1815,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.replay.max_input_field_bytes": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.7.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.replay.mode": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",

@@ -18,6 +18,17 @@ import type { WordCaptureSections } from "./wordDocumentOutline";
 import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
+export const WORD_SECTION_READ_KEYS: readonly string[] = [
+  "snapshot",
+  "documentIdentity",
+  "section",
+];
+export const WORD_SECTION_KEYS: readonly string[] = [
+  "ref",
+  "throughRef",
+  "cursor",
+];
+
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const reference = (v: unknown): v is string =>
@@ -116,13 +127,9 @@ export function readWordSection(
     );
   const section = input.section;
   if (
-    Object.keys(input).some(
-      (k) => !["snapshot", "documentIdentity", "section"].includes(k),
-    ) ||
+    Object.keys(input).some((k) => !WORD_SECTION_READ_KEYS.includes(k)) ||
     !object(section) ||
-    Object.keys(section).some(
-      (k) => !["ref", "throughRef", "cursor"].includes(k),
-    ) ||
+    Object.keys(section).some((k) => !WORD_SECTION_KEYS.includes(k)) ||
     !reference(section.ref) ||
     (section.throughRef !== undefined && !reference(section.throughRef)) ||
     (section.cursor !== undefined &&

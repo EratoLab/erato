@@ -349,7 +349,13 @@ describe("section pages", () => {
       ),
     ).toMatchObject({
       ok: false,
-      validationErrors: [{ code: "snapshot-mismatch" }],
+      validationErrors: [
+        { code: "snapshot-mismatch" },
+        {
+          code: "snapshot-mismatch",
+          message: `A correct call: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity, section: { ref: "b1" } })}`,
+        },
+      ],
     });
     expect(
       await session.execute(

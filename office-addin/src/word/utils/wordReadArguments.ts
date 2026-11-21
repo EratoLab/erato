@@ -3,8 +3,10 @@ import {
   wordDocumentOutline,
   wordDocumentOutlineText,
 } from "./wordDocumentOutline";
+import { WORD_SECTION_KEYS, WORD_SECTION_READ_KEYS } from "./wordSectionRead";
+import { WORD_TABLE_CELL_READ_KEYS } from "./wordTableCellRead";
+import { WORD_TARGET_READ_KEYS } from "./wordTargetRead";
 
-import type { WordReadAccess } from "./wordReadAccess";
 import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
@@ -16,32 +18,40 @@ const MAX_ISSUE_CHARS = 512;
 const MAX_NAMED_FIELDS = 8;
 const MAX_FIELD_NAME_CHARS = 64;
 
+export const WORD_PLAIN_READ_KEYS: readonly string[] = ["snapshot", "cursor"];
+
 type ReadForm = "plain" | "section" | "target" | "table_cell";
-const FORM_FIELDS: Record<ReadForm, readonly string[]> = {
-  plain: ["snapshot", "cursor"],
-  section: ["snapshot", "documentIdentity", "section"],
-  target: ["snapshot", "documentIdentity", "target", "include"],
-  table_cell: ["snapshot", "documentIdentity", "table_cell"],
+const FORM_KEYS: Record<ReadForm, readonly string[]> = {
+  plain: WORD_PLAIN_READ_KEYS,
+  section: WORD_SECTION_READ_KEYS,
+  target: WORD_TARGET_READ_KEYS,
+  table_cell: WORD_TABLE_CELL_READ_KEYS,
 };
-const SECTION_FIELDS = ["ref", "throughRef", "cursor"];
 
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 
 /** The form executeRead dispatches on. */
-const readForm = (args: Record<string, unknown>): ReadForm =>
-  "section" in args
-    ? "section"
-    : "target" in args
-      ? "target"
-      : "table_cell" in args
-        ? "table_cell"
-        : "plain";
+const readForm = (args: unknown): ReadForm =>
+  !object(args)
+    ? "plain"
+    : "section" in args
+      ? "section"
+      : "target" in args
+        ? "target"
+        : "table_cell" in args
+          ? "table_cell"
+          : "plain";
+
+/** Whether the refusal's correct call would be the complete read, which then has to be available. */
+export const wordRefusalOffersPlainRead = (args: unknown) =>
+  readForm(args) === "plain";
 
 /**
  * A model that copies the form earlier calls replay in sends the read under `kept`. Running that
  * read gives the result it asked for, so only the wrapper is dropped (ERMAIN-1274, the ERMAIN-1194
- * rule); anything else beside the wrapper stays and is refused.
+ * rule); anything else beside the wrapper stays and is refused. The backend replays such a call
+ * by the same rule (replay_policy.rs copied_receipt).
  */
 export function wordReplayRecordRead(input: unknown): {
   call: unknown;
@@ -59,12 +69,12 @@ export function wordReplayRecordRead(input: unknown): {
 }
 
 function unexpectedFields(args: Record<string, unknown>): string[] {
-  const allowed = FORM_FIELDS[readForm(args)];
+  const allowed = FORM_KEYS[readForm(args)];
   const fields = Object.keys(args).filter((key) => !allowed.includes(key));
   if ("section" in args && object(args.section))
     fields.push(
       ...Object.keys(args.section)
-        .filter((key) => !SECTION_FIELDS.includes(key))
+        .filter((key) => !WORD_SECTION_KEYS.includes(key))
         .map((key) => `section.${key}`),
     );
   return fields;
@@ -90,42 +100,67 @@ function sectionCall(snapshot: WordAuthoringSnapshot, ref: string) {
   };
 }
 
-/** One read this capture accepts now: the complete read while this access may page it, otherwise a
- * section read of the part the call named or of the outline's first part. */
+/** One read this capture accepts now: the complete read when the caller found it available,
+ * otherwise a section read of the part the call named or of the outline's first part. */
 function exampleRead(
   snapshot: WordAuthoringSnapshot,
   args: unknown,
-  access: WordReadAccess,
+  plainAvailable: boolean,
 ): Record<string, unknown> {
   const section = object(args) && object(args.section) ? args.section : null;
-  const plain =
-    access !== "read-only" && !snapshot.issue && !snapshot.completeReadIssue;
   const index = wordBlockIndex(snapshot);
   const ref =
     typeof section?.ref === "string" && index.has(section.ref)
       ? section.ref
       : firstSectionRef(snapshot);
-  if ((plain && !section) || !ref)
+  if ((plainAvailable && !section) || !ref)
     return { snapshot: snapshot.token, cursor: null };
   return sectionCall(snapshot, ref);
 }
 
+/** What fixes the call: a whole call for plain and section reads; for target and table_cell reads,
+ * whose selectors only the model knows, this request's snapshot and documentIdentity. */
+function fix(
+  snapshot: WordAuthoringSnapshot,
+  args: unknown,
+  plainAvailable: boolean,
+): string {
+  const form = readForm(args);
+  if (form === "target" || form === "table_cell")
+    return `This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity })}`;
+  const example = exampleRead(snapshot, args, plainAvailable);
+  const correct = `A correct call: ${JSON.stringify(example)}`;
+  // Only a long documentIdentity makes it longer; a cut call would be copied as it is.
+  return correct.length <= MAX_ISSUE_CHARS
+    ? correct
+    : `A correct call sends this request's snapshot and documentIdentity with ${JSON.stringify({ section: example.section })}.`;
+}
+
 /**
  * A refusal of read arguments that says what to send instead: the fields the form does not take,
- * whether the arguments were a replay record, and one call that works for this capture. The call
- * has an issue of its own, so the backend's bound on the first one never cuts it.
+ * whether the arguments were a replay record, the reader's own reason, and what fixes the call.
+ * The fix is an issue of its own, so the backend's bound on the first one never cuts it, and the
+ * replay of earlier turns keeps only the first.
  */
 export function wordReadArgumentsRefusal(
   snapshot: WordAuthoringSnapshot,
   args: unknown,
-  access: WordReadAccess,
-  options: { replayRecord: boolean; expected: string; path: string },
+  options: {
+    plainAvailable: boolean;
+    replayRecord: boolean;
+    issue: { path: string; code: string; message: string };
+  },
 ): WordReadOutcome {
+  const { issue } = options;
   const unexpected = (object(args) ? unexpectedFields(args) : []).filter(
     (field) =>
       !options.replayRecord ||
       ![REPLAY_NOTE_KEY, REPLAY_KEPT_KEY].includes(field),
   );
+  const plainUnavailable =
+    readForm(args) === "plain" &&
+    issue.code === "read-arguments" &&
+    !options.plainAvailable;
   const message = [
     options.replayRecord
       ? "These arguments are a replay record of an earlier call (omitted_from_replay, kept), not a call. Send a read's own arguments."
@@ -133,41 +168,60 @@ export function wordReadArgumentsRefusal(
     unexpected.length
       ? `Unexpected ${unexpected.length === 1 ? "field" : "fields"}: ${named(unexpected)}.`
       : "",
-    options.expected,
+    plainUnavailable
+      ? "The complete read is unavailable for this request; read the parts it needs with section:{ref}."
+      : issue.message,
   ]
     .filter(Boolean)
     .join(" ");
-  const example = exampleRead(snapshot, args, access);
-  const correct = `A correct call: ${JSON.stringify(example)}`;
-  // Only a long documentIdentity makes it longer; a cut call would be copied as it is.
-  const call =
-    correct.length <= MAX_ISSUE_CHARS
-      ? correct
-      : `A correct call sends this request's snapshot and documentIdentity with ${JSON.stringify({ section: example.section })}.`;
   return {
     result: {
       ok: false,
       error: message,
       validationErrors: [
-        { path: options.path, code: "read-arguments", message },
-        { path: "", code: "read-arguments", message: call },
+        { path: issue.path, code: issue.code, message },
+        {
+          path: "",
+          code: issue.code,
+          message: fix(snapshot, args, options.plainAvailable),
+        },
       ],
     },
   };
 }
 
-const TOO_LARGE_NEXT =
-  "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the sections the request needs with section:{ref} using a ref from this outline (a heading's part includes its subsections), as exampleCall does, and repeat it with section.cursor set to nextCursor until complete=true. Use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.";
+const NEXT_STEPS =
+  "Read the sections the request needs with section:{ref} using a ref from this outline (a heading's part includes its subsections), as exampleCall does, and repeat it with section.cursor set to nextCursor until complete=true. Use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.";
+const FALLBACK_STEPS =
+  "Read the sections the request needs with section:{ref} pages from the Outline, following nextCursor; use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.";
 
-/** A plain read of a capture too large for one answers with the outline its section reads go by and
- * a ready section call, so the model meets the rule when it applies. The outline keeps the
- * heading_outline budget, well under a read page. */
-export function wordTooLargeOutlineRead(
+/**
+ * A plain read the complete read is unavailable for, because the capture is too large or the
+ * request's model budget is too small, answers with the outline its section reads go by and a
+ * ready section call, so the model meets the rule when it applies. The outline keeps the
+ * heading_outline budget, well under a read page.
+ */
+export function wordCompleteReadUnavailable(
   snapshot: WordAuthoringSnapshot,
-): WordReadOutcome | undefined {
+  reason: string,
+): WordReadOutcome {
+  const lead = `${
+    snapshot.completeReadIssue
+      ? "This document is too large for a complete read"
+      : "The complete read is unavailable within this request's model budget"
+  }, so whole-document plans and repairs are unavailable.`;
   const outline = wordDocumentOutlineText(snapshot);
   const ref = firstSectionRef(snapshot);
-  if (!outline || !ref || !snapshot.completeReadIssue) return undefined;
+  if (!outline || !ref) {
+    const error = `${lead} ${FALLBACK_STEPS}`;
+    return {
+      result: {
+        ok: false,
+        error,
+        validationErrors: [{ path: "/snapshot", code: reason, message: error }],
+      },
+    };
+  }
   return {
     scope: { kind: "document" },
     result: {
@@ -176,9 +230,9 @@ export function wordTooLargeOutlineRead(
         snapshot: snapshot.token,
         documentIdentity: snapshot.identity,
         completeRead: "unavailable",
-        reason: snapshot.completeReadIssue,
+        reason,
         complete: false,
-        next: TOO_LARGE_NEXT,
+        next: `${lead} ${NEXT_STEPS}`,
         outline,
         exampleCall: sectionCall(snapshot, ref),
       },
