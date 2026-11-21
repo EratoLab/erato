@@ -1,4 +1,5 @@
 import {
+  wordBodyRef,
   applyWordParagraphFormatting,
   applyWordRunFormatting,
   readWordParagraphFormatting,
@@ -271,7 +272,7 @@ export function captureWordAuthoringSnapshot(
         const wrapper = body.cloneNode(false) as Element;
         nodes.forEach((n) => wrapper.append(cloneWordMediaNode(n)));
         return {
-          ref: `b${i + 1}`,
+          ref: wordBodyRef(i),
           type: "native",
           protected: false,
           nativeKind: sectionBoundary
@@ -342,7 +343,7 @@ export function captureWordAuthoringSnapshot(
       const directFormat = readWordParagraphFormatting(pPr);
 
       return {
-        ref: `b${i + 1}`,
+        ref: wordBodyRef(i),
         text: paragraphText(p),
         type: isList
           ? "list-item"

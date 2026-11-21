@@ -1,9 +1,14 @@
+import { wordBodyRefIndex } from "./wordBodyRef";
 import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
 } from "./wordDocumentPlan";
 import { WORD_READ_TOOL, WORD_SUBMIT_PLAN_TOOL } from "./wordHistoryNames";
 import { isAcceptedWordSubmission } from "./wordHistoryParts";
+import {
+  parseWordOutline,
+  WORD_OUTLINE_TITLE_CHARS,
+} from "./wordOutlineFormat";
 
 import type {
   WordAuthoringSnapshot,
@@ -13,6 +18,7 @@ import type {
 } from "./wordDocumentPlan";
 import type { WordEdit } from "./wordEditPlan";
 import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssetData";
+import type { WordParsedOutline } from "./wordOutlineFormat";
 import type { WordSectionSource, WordStorySource } from "./wordStories";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -41,9 +47,17 @@ export {
 export interface WordHistoryCoverage {
   /** Every body ref the plan, the reads and the request's outline name, in document order. */
   order: readonly string[];
-  /** The headings that start a section of the review, by ref. */
+  /** Where each section of the review starts, by ref, and the heading that titles it. */
   headings: ReadonlyMap<string, { text: string; level?: number }>;
+  /** Row and column titles of the cells read one by one, by `wordCellKey`. */
+  cells?: ReadonlyMap<string, { rowLabel: string; header: string }>;
 }
+
+export const wordCellKey = (
+  sourceRef: string,
+  rowIndex: number,
+  cellIndex: number,
+) => `${sourceRef}:${rowIndex}:${cellIndex}`;
 
 /**
  * A snapshot rebuilt from stored read outputs. It reviews what the model read,
@@ -374,12 +388,6 @@ export function wordSnapshotFromHistory(
   };
 }
 
-/** Body refs number the capture's blocks in document order: b1, b2, … */
-const bodyPosition = (ref: string) => {
-  const match = /^b(\d+)$/u.exec(ref);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-};
-
 const isReadBlock = (
   value: unknown,
 ): value is Omit<WordSourceBlock, "xml"> & Record<string, unknown> =>
@@ -388,30 +396,83 @@ const isReadBlock = (
   typeof value.type === "string" &&
   typeof value.text === "string";
 
-const OUTLINE_ENTRY = /^\[[^|\]]+\|(?:H[1-9]|S|P)\|[^\]]*\] /u;
-const OUTLINE_HEADING = /^\[([^|\]]+)\|H([1-9])\|[^\]]*\] (.+)$/u;
-/** How the outline lists the part before the first heading; it is no heading. */
-const OUTLINE_START = "(start of document)";
-
-/** The headings the request's outline lists, and whether it had to leave entries out. */
-function outlineHeadings(
+function requestOutline(
   messages: readonly HistoryMessage[],
   snapshotId: string,
-) {
-  const outline =
-    messages.findLast(
-      (m) => m.action_facet_args?.document_snapshot === snapshotId,
-    )?.action_facet_args?.heading_outline ?? "";
-  const headings = new Map<string, { text: string; level: number }>();
-  let shortened = false;
-  const [, ...lines] = outline.split("\n");
-  for (const line of lines) {
-    const heading = OUTLINE_HEADING.exec(line);
-    if (heading && heading[3] !== OUTLINE_START)
-      headings.set(heading[1], { text: heading[3], level: Number(heading[2]) });
-    else if (line.trim() && !OUTLINE_ENTRY.test(line)) shortened = true;
+): WordParsedOutline | undefined {
+  const text = messages.findLast(
+    (m) => m.action_facet_args?.document_snapshot === snapshotId,
+  )?.action_facet_args?.heading_outline;
+  return text ? parseWordOutline(text) : undefined;
+}
+
+interface ReviewHeading {
+  text: string;
+  level: number;
+}
+
+const outlineTitle = (title: string) =>
+  Array.from(title).length >= WORD_OUTLINE_TITLE_CHARS ? `${title}…` : title;
+
+/**
+ * Where each section of a partly read review starts, by ref. An unread block may be a heading
+ * below the levels the outline lists in full, so blocks after it go under the nearest heading they
+ * surely belong to; empty when some block has none, rather than titling it wrongly.
+ */
+function reviewSections(
+  order: readonly string[],
+  known: ReadonlyMap<string, WordSourceBlock | undefined>,
+  outline: WordParsedOutline | undefined,
+): Map<string, ReviewHeading> {
+  const sections = new Map<string, ReviewHeading>();
+  const positions = order.map(wordBodyRefIndex);
+  const endsBefore = outline?.endsBefore
+    ? (wordBodyRefIndex(outline.endsBefore) ?? -1)
+    : Infinity;
+  const listedCap = !outline
+    ? 1
+    : outline.shortened
+      ? Math.max(0, ...[...outline.headings.values()].map((h) => h.level)) + 1
+      : Infinity;
+  /** The shallowest level an unread block at this index could be a heading at. */
+  const capAt = (at: number) => (at < endsBefore ? listedCap : 1);
+  const headingOf = (ref: string): ReviewHeading | undefined => {
+    const block = known.get(ref);
+    const listed = outline?.headings.get(ref);
+    if (listed)
+      return {
+        text: block?.text.trim() ? block.text : outlineTitle(listed.title),
+        level: listed.level,
+      };
+    return block?.type === "heading"
+      ? { text: block.text, level: block.level ?? 1 }
+      : undefined;
+  };
+  const open: ReviewHeading[] = [];
+  let opening = true;
+  const unread = (cap: number) => {
+    while ((open.at(-1)?.level ?? 0) >= cap) open.pop();
+    if (cap <= 1) opening = false;
+  };
+  let previous = -1;
+  let current: ReviewHeading | undefined;
+  for (const [k, ref] of order.entries()) {
+    const at = positions[k];
+    if (at === undefined) return new Map();
+    if (at > previous + 1) unread(capAt(at - 1));
+    previous = at;
+    const heading = headingOf(ref);
+    if (heading) {
+      while ((open.at(-1)?.level ?? 0) >= heading.level) open.pop();
+      open.push(heading);
+      opening = false;
+    } else if (!known.has(ref)) unread(capAt(at));
+    const title = open.at(-1);
+    if (!title && !opening) return new Map();
+    if (title && title !== current) sections.set(ref, title);
+    current = title;
   }
-  return { headings, shortened };
+  return sections;
 }
 
 /**
@@ -431,7 +492,39 @@ function wordPartialSnapshotFromHistory(
   const blocks = new Map<string, WordSourceBlock>();
   const fragments = new Map<string, Map<number, Fragment>>();
   const styles = new Map<string, WordAuthoringSnapshot["styles"][number]>();
+  /** Tables read only through a cell: not headings, though their blocks were not read. */
+  const cellTables = new Set<string>();
+  const cells = new Map<string, { rowLabel: string; header: string }>();
   for (const { input, result } of reads) {
+    const cell = object(result.target) ? result.target : result.cell;
+    if (
+      "table_cell" in input &&
+      result.status === "ready" &&
+      object(cell) &&
+      typeof cell.sourceRef === "string"
+    ) {
+      cellTables.add(cell.sourceRef);
+      const found = (
+        Array.isArray(result.candidates) ? (result.candidates as unknown[]) : []
+      ).find(
+        (c) =>
+          object(c) &&
+          c.sourceRef === cell.sourceRef &&
+          c.rowIndex === cell.rowIndex &&
+          c.cellIndex === cell.cellIndex,
+      );
+      if (
+        object(found) &&
+        typeof found.rowLabel === "string" &&
+        typeof found.header === "string" &&
+        typeof cell.rowIndex === "number" &&
+        typeof cell.cellIndex === "number"
+      )
+        cells.set(wordCellKey(cell.sourceRef, cell.rowIndex, cell.cellIndex), {
+          rowLabel: found.rowLabel,
+          header: found.header,
+        });
+    }
     if ("section" in input && Array.isArray(result.blocks))
       for (const value of result.blocks as unknown[]) {
         if (isFragment(value)) {
@@ -475,7 +568,9 @@ function wordPartialSnapshotFromHistory(
       : reassemble([...parts.values()]);
     if (record) blocks.set(ref, bodyBlock(record));
   }
-  const outline = outlineHeadings(messages, plan.snapshot);
+  const outline = requestOutline(messages, plan.snapshot);
+  const position = (ref: string) =>
+    wordBodyRefIndex(ref) ?? Number.MAX_SAFE_INTEGER;
   const order = [
     ...new Set([
       ...plan.entries.flatMap((entry) =>
@@ -483,25 +578,13 @@ function wordPartialSnapshotFromHistory(
       ),
       ...plan.deleted.flatMap((deletion) => deletion.source),
       ...blocks.keys(),
-      ...outline.headings.keys(),
+      ...(outline?.headings.keys() ?? []),
     ]),
-  ].sort((a, b) => bodyPosition(a) - bodyPosition(b));
-  // A shortened outline drops its deepest levels first, so only the levels it
-  // kept are known in full; a deeper heading could hide unread siblings.
-  const deepest = outline.shortened
-    ? Math.max(0, ...[...outline.headings.values()].map((h) => h.level))
-    : Infinity;
-  const headings = new Map<string, { text: string; level?: number }>();
-  for (const ref of order) {
-    const block = blocks.get(ref);
-    const heading = block
-      ? block.type === "heading"
-        ? { text: block.text, level: block.level }
-        : undefined
-      : outline.headings.get(ref);
-    if (heading && (heading.level ?? Infinity) <= deepest)
-      headings.set(ref, heading);
-  }
+  ].sort((a, b) => position(a) - position(b));
+  const known = new Map<string, WordSourceBlock | undefined>([
+    ...[...cellTables].map((ref) => [ref, undefined] as const),
+    ...blocks,
+  ]);
   return {
     source: "history",
     token: plan.snapshot,
@@ -515,7 +598,11 @@ function wordPartialSnapshotFromHistory(
     read: new Set(blocks.keys()),
     revoked: true,
     used: true,
-    partial: { order, headings },
+    partial: {
+      order,
+      headings: reviewSections(order, known, outline),
+      cells,
+    },
   };
 }
 

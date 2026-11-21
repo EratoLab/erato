@@ -5228,6 +5228,11 @@ msgstr "Poprzednie wartości nie zostały odczytane; widoczne są tylko nowe ust
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.blockCount"
+msgstr "{n, plural, one {# blok} few {# bloki} many {# bloków} other {# bloku}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.cellsChanged"
 msgstr "{n, plural, one {zmieniono # komórkę} few {zmieniono # komórki} many {zmieniono # komórek} other {zmieniono # komórki}}"
 
@@ -5294,7 +5299,7 @@ msgstr "{n, plural, one {# inny element} few {# inne elementy} many {# innych el
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.originalUnread"
-msgstr "Oryginalny tekst nie został odczytany w tym czacie, dlatego widoczny jest tylko nowy tekst. Porównaj go w Wordzie."
+msgstr "Oryginalny tekst nie został odczytany w tym czacie, dlatego widoczny jest tylko nowy tekst. Sprawdź ten fragment w Wordzie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
@@ -5315,6 +5320,11 @@ msgstr "{n, plural, one {# akapit} few {# akapity} many {# akapitów} other {# a
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.removed"
 msgstr "Usunięte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removedUnread"
+msgstr "Usunięty tekst nie został odczytany w tym czacie, dlatego nie można go tu pokazać. Sprawdź ten fragment w Wordzie."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx

@@ -5228,6 +5228,11 @@ msgstr "Previous values were not captured; only the new settings are shown."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.blockCount"
+msgstr "{n, plural, one {# block} other {# blocks}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.cellsChanged"
 msgstr "{n, plural, one {# cell changed} other {# cells changed}}"
 
@@ -5294,7 +5299,7 @@ msgstr "{n, plural, one {# other item} other {# other items}}"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.originalUnread"
-msgstr "The original text was not read in this chat, so only the new text is shown. Compare it in Word."
+msgstr "The original text was not read in this chat, so only the new text is shown. Check the passage in Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
@@ -5315,6 +5320,11 @@ msgstr "{n, plural, one {# paragraph} other {# paragraphs}}"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.removed"
 msgstr "Removed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removedUnread"
+msgstr "The removed text was not read in this chat, so it cannot be shown here. Check the passage in Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx

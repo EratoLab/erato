@@ -5228,6 +5228,11 @@ msgstr "Les valeurs précédentes n’ont pas été enregistrées ; seuls les no
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.blockCount"
+msgstr "{n, plural, one {# bloc} other {# blocs}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planRow.cellsChanged"
 msgstr "{n, plural, one {# cellule modifiée} other {# cellules modifiées}}"
 
@@ -5294,7 +5299,7 @@ msgstr "{n, plural, one {# autre élément} other {# autres éléments}}"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.originalUnread"
-msgstr "Le texte d’origine n’a pas été lu dans cette conversation : seul le nouveau texte est affiché. Comparez-le dans Word."
+msgstr "Le texte d’origine n’a pas été lu dans cette conversation : seul le nouveau texte est affiché. Vérifiez le passage dans Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
@@ -5315,6 +5320,11 @@ msgstr "{n, plural, one {# paragraphe} other {# paragraphes}}"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.removed"
 msgstr "Supprimé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removedUnread"
+msgstr "Le texte supprimé n’a pas été lu dans cette conversation : il ne peut pas être affiché ici. Vérifiez le passage dans Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx

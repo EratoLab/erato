@@ -1,5 +1,5 @@
 import { wordPlanOutput } from "./wordDocumentPlan";
-import { wordHistoryCoverage } from "./wordHistory";
+import { wordCellKey, wordHistoryCoverage } from "./wordHistory";
 import {
   parseWordNestedRef,
   resolveWordSource,
@@ -15,6 +15,7 @@ import type {
   WordPlanBlock,
   WordSourceBlock,
 } from "./wordDocumentPlan";
+import type { WordHistoryCoverage } from "./wordHistory";
 import type {
   WordPageLayout,
   WordSectionPlan,
@@ -22,7 +23,11 @@ import type {
   WordSectionStories,
   WordStoryType,
 } from "./wordStories";
-import type { WordTableBlock, WordTableContent } from "./wordTableContent";
+import type {
+  WordTableBlock,
+  WordTableCell,
+  WordTableContent,
+} from "./wordTableContent";
 
 export const SMALL_MAX_CHANGED_BLOCKS = 5;
 export const LARGE_MIN_TOUCHED_SECTIONS = 3;
@@ -70,6 +75,8 @@ export interface WordPlanChangedCell {
   col: number;
   before: string;
   after: string;
+  /** The cell's row and column titles, where the table itself was never shown. */
+  label?: string;
 }
 export type WordLayoutProperty =
   | "boundary"
@@ -165,6 +172,8 @@ export type WordPlanRow = WordPlanRowBase &
         paragraphs: number;
         tables: number;
         objects: number;
+        /** Blocks the chat never read, so of no known kind. */
+        unreadBlocks?: number;
       }
   );
 export type WordPlanRowOf<F extends WordPlanRow["family"]> = Extract<
@@ -419,6 +428,18 @@ function insertedObjectName(block: WordPlanBlock): string | undefined {
   }
 }
 
+/** A cell's text before and after the plan, given the text it keeps from its source cell. */
+function cellTextChange(cell: WordTableCell<WordPlanBlock>, retained: string) {
+  return {
+    before: cell.textEdit ? (cell.textEdit.expectedText ?? retained) : retained,
+    after: cell.textEdit
+      ? cell.textEdit.text
+      : cell.blocks
+        ? cell.blocks.map(blockText).join("\n")
+        : retained,
+  };
+}
+
 function tableRow(
   key: string,
   status: WordPlanRowStatus,
@@ -478,15 +499,7 @@ function tableRow(
             ? undefined
             : sourceRow.cells.find((o) => o.sourceIndex === cell.sourceIndex)
           : sourceRow.cells[c];
-      const retained = sourceCell?.text ?? "";
-      const after = cell.textEdit
-        ? cell.textEdit.text
-        : cell.blocks
-          ? cell.blocks.map(blockText).join("\n")
-          : retained;
-      const before = cell.textEdit
-        ? (cell.textEdit.expectedText ?? retained)
-        : retained;
+      const { before, after } = cellTextChange(cell, sourceCell?.text ?? "");
       texts.push(after);
       if (sourceRow && (!sourceCell || before !== after)) {
         changedCells.push({ row: r, col: c, before, after });
@@ -524,7 +537,20 @@ function unreadTableRow(
   key: string,
   block: WordTableBlock<WordPlanBlock>,
   locateRef: string | undefined,
+  labels: WordHistoryCoverage["cells"],
 ): WordPlanRowOf<"table"> {
+  const labelOf = (rowIndex?: number, cellIndex?: number) => {
+    const titles =
+      block.sourceRef !== undefined &&
+      rowIndex !== undefined &&
+      cellIndex !== undefined
+        ? labels?.get(wordCellKey(block.sourceRef, rowIndex, cellIndex))
+        : undefined;
+    const label = [titles?.rowLabel, titles?.header]
+      .filter((title) => title?.trim())
+      .join(" · ");
+    return label ? { label } : {};
+  };
   const changedCells = block.rows.flatMap((row, r) =>
     row.cells.flatMap((cell, c) =>
       cell.textEdit
@@ -532,8 +558,8 @@ function unreadTableRow(
             {
               row: r,
               col: c,
-              before: cell.textEdit.expectedText,
-              after: cell.textEdit.text,
+              ...cellTextChange(cell, ""),
+              ...labelOf(row.sourceIndex, cell.sourceIndex),
             },
           ]
         : [],
@@ -802,6 +828,8 @@ export function buildWordPlanReview(
   let hasInsert = false;
   let largeInsert = false;
   let checkInWord = false;
+  // A change to a block the chat never read could remove headings or objects the checks cannot see.
+  let unreadChanged = false;
   let current: GroupDraft = ranges[0];
 
   const push = (group: GroupDraft, row: WordPlanRow) => {
@@ -811,6 +839,8 @@ export function buildWordPlanReview(
       last.paragraphs += row.paragraphs;
       last.tables += row.tables;
       last.objects += row.objects;
+      if (row.unreadBlocks)
+        last.unreadBlocks = (last.unreadBlocks ?? 0) + row.unreadBlocks;
     } else group.rows.push(row);
   };
   const groupFor = (ref: string | undefined) =>
@@ -943,7 +973,7 @@ export function buildWordPlanReview(
             : undefined);
         const row =
           !original && unread
-            ? unreadTableRow(key, block, locateRef)
+            ? unreadTableRow(key, block, locateRef, partial?.cells)
             : tableRow(
                 key,
                 original ? "changed" : "new",
@@ -1038,6 +1068,7 @@ export function buildWordPlanReview(
     if (entry.kind === "keep") {
       for (const ref of entry.source) {
         const source = sources.get(ref);
+        const unread = !!partial && !source;
         current = groupFor(ref);
         push(current, {
           key: `keep:${ref}`,
@@ -1045,10 +1076,11 @@ export function buildWordPlanReview(
           status: "unchanged",
           locateRef: ref,
           count: 1,
-          paragraphs: source?.type !== "native" ? 1 : 0,
+          paragraphs: !unread && source?.type !== "native" ? 1 : 0,
           tables: source?.nativeKind === "table" ? 1 : 0,
           objects:
             source?.type === "native" && source.nativeKind !== "table" ? 1 : 0,
+          ...(unread ? { unreadBlocks: 1 } : {}),
         });
         previousRef = ref;
         inPlace.push(ref);
@@ -1074,6 +1106,10 @@ export function buildWordPlanReview(
         inPlace.push(...entry.source);
         continue;
       }
+      // A cell edit keeps its table, so only other unread changes escape the checks.
+      unreadChanged ||=
+        unread &&
+        rows.some((r) => r.family !== "table" || !r.unread || !r.sameShape);
       changedBlocks += entry.blocks.length - kept;
       hasReplace = true;
       current.replaced = true;
@@ -1119,6 +1155,7 @@ export function buildWordPlanReview(
       const group = groupFor(ref);
       touched.add(group.key);
       const source = sources.get(ref);
+      unreadChanged ||= !!partial && !source;
       const row: WordPlanRow = source
         ? removedSourceRow(source, `deleted:${ref}`)
         : {
@@ -1126,6 +1163,7 @@ export function buildWordPlanReview(
             family: "text",
             status: "removed",
             blockType: "paragraph",
+            ...(partial ? { unread: true } : {}),
           };
       rowKeyByRef.set(ref, row.key);
       push(group, row);
@@ -1371,7 +1409,7 @@ export function buildWordPlanReview(
     title,
     scope: { wholeFile: !!snapshot?.fullDocument, unchanged },
     risks,
-    riskUnknown: !snapshot,
+    riskUnknown: !snapshot || unreadChanged,
     noChange,
     groups: finalGroups,
     rows,

@@ -45,6 +45,7 @@ import {
 } from "../../../test/mocks/word/commentFixtures";
 import { ooxmlHostCommentStates } from "../../../test/mocks/word/commentStates";
 import { storedWordReads } from "../../../test/mocks/word/historyReads";
+import { largeDocumentTurn } from "../../../test/mocks/word/largeDocumentTurn";
 import {
   editWordPackage,
   installWordOoxmlHost,
@@ -118,6 +119,7 @@ const mock = vi.hoisted(() => {
     messageStatus: "completed",
     content: [] as unknown[],
     request: "",
+    requestArgs: undefined as Record<string, unknown> | undefined,
     restoreRequest: vi.fn(),
     pendingConfirmations,
     registerConfirmation: (chatId: string, id: string) =>
@@ -136,6 +138,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
         id: "request",
         role: "user",
         content: [{ content_type: "text", text: mock.request }],
+        action_facet_args: mock.requestArgs,
       },
       [String(mock.artifact.messageId)]: {
         id: String(mock.artifact.messageId),
@@ -198,12 +201,22 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
 function Conversation({ children }: { children: ReactNode }) {
   const id = String(mock.artifact.messageId);
   const [messages] = useState(() => ({
+    ...(mock.requestArgs && {
+      request: {
+        id: "request",
+        role: "user",
+        content: [],
+        action_facet_args: mock.requestArgs,
+        createdAt: "2026-10-01T00:00:00Z",
+      } as unknown as EratoLibrary.Message,
+    }),
     [id]: {
       id,
       status: mock.messageStatus,
       role: "assistant",
       content: mock.content,
       createdAt: "2026-10-01T00:00:00Z",
+      ...(mock.requestArgs && { previous_message_id: "request" }),
     } as EratoLibrary.Message,
   }));
   return (
@@ -401,6 +414,7 @@ beforeEach(() => {
   mock.messageStatus = "completed";
   mock.content = [];
   mock.request = "";
+  mock.requestArgs = undefined;
   mock.restoreRequest.mockClear();
   mock.pendingConfirmations.clear();
   mock.artifact = {
@@ -558,6 +572,65 @@ describe("structural document review", () => {
     expect(apply).toBeDisabled();
     fireEvent.click(apply);
     expect(state.insert).not.toHaveBeenCalled();
+  });
+
+  it("reviews a reloaded plan on a document too large for a complete read from the parts the chat read", async () => {
+    const titles = ["2.1 Section 2.1", "4.2 Section 4.2", "6.3 Section 6.3"];
+    const turn = await largeDocumentTurn({ sections: [titles[0]] });
+    const unreadTarget = turn.reads.slice(0, -1);
+    mock.content = [...unreadTarget, turn.submission];
+    mock.requestArgs = turn.user.action_facet_args;
+    const content = JSON.stringify(turn.plan);
+    mock.artifact.submittedCard = {
+      toolCallId: "saved",
+      language: "erato-word-document-plan",
+      content,
+    };
+    mock.artifact.isFreshCompletion = false;
+    delete mock.artifact.itemIdentity;
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map()}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={content}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+
+    expect(
+      screen.getByText(/original document is not available in this session/),
+    ).toBeVisible();
+    for (const title of titles) {
+      const group = screen.getByRole("button", {
+        name: new RegExp(`^${title}`),
+      });
+      if (group.getAttribute("aria-expanded") !== "true")
+        fireEvent.click(group);
+    }
+    const rows = [
+      ...document.querySelectorAll<HTMLElement>("[data-row-key^='output:']"),
+    ];
+    expect(rows).toHaveLength(3);
+    for (const row of rows)
+      fireEvent.click(within(row).getAllByRole("button")[0]);
+    const [read, unread] = rows;
+    fireEvent.click(within(read).getByRole("tab", { name: "Original" }));
+    expect(within(read).getByRole("tabpanel")).toHaveTextContent(
+      turn.changed[0].text,
+    );
+    expect(
+      within(unread).getByText(
+        "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
+      ),
+    ).toBeVisible();
+    expect(within(unread).getAllByText("Revised 1.")[0]).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Apply changes" }),
+    ).toBeDisabled();
   });
 
   it("applies through the live capture even when the chat also holds the read", async () => {

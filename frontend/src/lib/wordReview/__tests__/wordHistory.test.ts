@@ -14,6 +14,11 @@ import {
   wordSnapshotFromHistory,
   WORD_READ_TOOL,
 } from "../wordHistory";
+import {
+  WORD_OUTLINE_HEADER,
+  wordOutlineLine,
+  wordOutlineOmission,
+} from "../wordOutlineFormat";
 import { buildWordPlanReview, wordPlanText } from "../wordPlanReview";
 import earlierMessage from "./fixtures/history-earlier-message.json";
 import edits from "./fixtures/history-edits.json";
@@ -576,10 +581,7 @@ describe("Word plans restored from the parts a turn read", () => {
   ];
   const byRef = new Map(document.map((b) => [b.ref, b]));
   const outline = (lines: string[]) =>
-    [
-      "Each line: [ref|H<level> heading, S numbered section or P part|size|paragraphs] title",
-      ...lines,
-    ].join("\n");
+    [WORD_OUTLINE_HEADER, ...lines].join("\n");
   const fullOutline = outline([
     "[b1|H1|0.1 KiB|1 ¶] (start of document)",
     "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
@@ -670,6 +672,17 @@ describe("Word plans restored from the parts a turn read", () => {
       scope: "table-cell",
       status: "ready",
       readToken: "cell-1",
+      totalMatches: 1,
+      candidates: [
+        {
+          sourceRef: "b11",
+          rowIndex: 1,
+          cellIndex: 1,
+          text: "99.5 %",
+          header: "Level",
+          rowLabel: "Hosting",
+        },
+      ],
       target: { sourceRef: "b11", rowIndex: 1, cellIndex: 1 },
     },
   );
@@ -721,23 +734,47 @@ describe("Word plans restored from the parts a turn read", () => {
     ),
     deleted: [],
   };
-  const submission = tool(
-    "submit_document_plan",
-    {
-      readToken: "scope-1",
-      scoped_edit: { body: [] },
-    },
-    {
-      submission: { status: "accepted", attempts_remaining: 2 },
-      result: {
-        draft_id: `call-${JSON.stringify({ readToken: "scope-1", scoped_edit: { body: [] } })}`,
-        snapshot: "snap",
-        action: "word.apply_document_plan",
-        plan,
+  const submit = (submitted: WordDocumentPlan) =>
+    tool(
+      "submit_document_plan",
+      {
+        readToken: "scope-1",
+        scoped_edit: { body: [] },
       },
-    },
-  );
-  const turn = (reads: ContentPart[], headingOutline = fullOutline) => {
+      {
+        submission: { status: "accepted", attempts_remaining: 2 },
+        result: {
+          draft_id: `call-${JSON.stringify({ readToken: "scope-1", scoped_edit: { body: [] } })}`,
+          snapshot: "snap",
+          action: "word.apply_document_plan",
+          plan: submitted,
+        },
+      },
+    );
+  const targets = (
+    refs: string[],
+    content: (ref: string) => unknown = (ref) => byRef.get(ref),
+  ) =>
+    read(
+      { target: { refs } },
+      {
+        scope: "objects",
+        status: "ready",
+        readToken: "scope-1",
+        targets: refs.map((ref) => ({
+          ref,
+          kind: "paragraph",
+          text: byRef.get(ref)!.text,
+          bodyRef: ref,
+          content: content(ref),
+        })),
+      },
+    );
+  const turn = (
+    reads: ContentPart[],
+    headingOutline = fullOutline,
+    submitted = plan,
+  ) => {
     const user = {
       id: "user-1",
       role: "user",
@@ -750,7 +787,7 @@ describe("Word plans restored from the parts a turn read", () => {
     const answer = {
       id: "answer-1",
       role: "assistant",
-      content: [...reads, submission],
+      content: [...reads, submit(submitted)],
     } as unknown as Message;
     return wordHistoryProposal([user, answer], answer.content)!;
   };
@@ -835,7 +872,15 @@ describe("Word plans restored from the parts a turn read", () => {
             unread: false,
           },
           {
-            cells: [{ row: 1, col: 1, before: "99.5 %", after: "99.9 %" }],
+            cells: [
+              {
+                row: 1,
+                col: 1,
+                before: "99.5 %",
+                after: "99.9 %",
+                label: "Hosting · Level",
+              },
+            ],
             unread: true,
             sameShape: true,
           },
@@ -869,22 +914,165 @@ describe("Word plans restored from the parts a turn read", () => {
     ).toBe("changed");
   });
 
-  it("starts sections only at the levels a shortened outline kept", () => {
-    const proposal = turn(
-      [sectionRead, targetRead],
-      outline([
-        "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
-        "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
-        "[b9|H1|0.2 KiB|3 ¶] 3 Liability",
-        "1 more entry is left out; section:{ref, throughRef} reads any range of blocks.",
-      ]),
-    );
+  const shortened = outline([
+    "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
+    "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
+    "[b9|H1|0.2 KiB|3 ¶] 3 Liability",
+    wordOutlineOmission(1),
+  ]);
+  const headingsOf = (proposal: ReturnType<typeof turn>) =>
+    changed(proposal).map((g) => g.heading);
 
-    expect(changed(proposal).map((g) => g.heading)).toEqual([
+  it("keeps a heading a section read returned below the levels a shortened outline kept", () => {
+    expect(headingsOf(turn([sectionRead, targetRead], shortened))).toEqual([
       "1 Scope",
+      "2.1 Rates",
+      "3 Liability",
+    ]);
+  });
+
+  it("puts a change under its chapter where a shortened outline left its section out and nobody read it", () => {
+    expect(
+      headingsOf(turn([targets(["b3", "b7", "b10"]), cellRead], shortened)),
+    ).toEqual(["1 Scope", "2 Fees", "3 Liability"]);
+  });
+
+  it("goes back to the chapter after a section read ends", () => {
+    const deeper = document.map((b) =>
+      b.ref === "b8" ? heading("b8", "2.2 Terms", 2) : b,
+    );
+    const words = new Map(deeper.map((b) => [b.ref, b]));
+    const proposal = turn(
+      [
+        read(
+          { section: { ref: "b6" } },
+          {
+            blocks: ["b6", "b7"].map((ref) => words.get(ref)),
+            nextCursor: null,
+          },
+        ),
+        targets(["b3", "b10"]),
+        cellRead,
+      ],
+      shortened,
+      {
+        ...plan,
+        entries: plan.entries.map((entry) =>
+          entry.kind === "replace" && ["b10", "b11"].includes(entry.source[0])
+            ? { kind: "keep", source: entry.source }
+            : entry,
+        ),
+        deleted: [],
+      },
+    );
+    const review = buildWordPlanReview(proposal.plan, proposal.snapshot);
+
+    expect(review.groups.map((g) => g.heading?.text)).toEqual([
+      undefined,
+      "1 Scope",
+      "2 Fees",
+      "2.1 Rates",
       "2 Fees",
       "3 Liability",
     ]);
+    expect(headingsOf(proposal)).toEqual(["1 Scope", "2.1 Rates"]);
+  });
+
+  it("starts a section at a numbered heading the outline lists, read or not", () => {
+    const numbered = (ref: string) =>
+      ref === "b9"
+        ? {
+            ...byRef.get(ref),
+            type: "list-item",
+            level: 0,
+            list: "existing-7",
+            ordered: true,
+          }
+        : byRef.get(ref);
+    const proposal = turn([
+      targets(["b9", "b10"], numbered),
+      targets(["b3", "b7"]),
+      cellRead,
+    ]);
+
+    expect(headingsOf(proposal)).toEqual([
+      "1 Scope",
+      "2.1 Rates",
+      "3 Liability",
+    ]);
+  });
+
+  it("lists changes without section titles where the reads cannot show which section holds them", () => {
+    const cut = outline([
+      "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
+      "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
+      wordOutlineOmission(2, "b9"),
+    ]);
+    const reads = [sectionRead, targets(["b3", "b10"]), cellRead];
+    for (const proposal of [
+      turn(reads, cut),
+      turn(reads, ""),
+      turn(reads, outline(["b2 H1 1 Scope"])),
+    ]) {
+      expect(proposal.snapshot?.partial?.headings.size).toBe(0);
+      expect(headingsOf(proposal)).toEqual([undefined]);
+    }
+    expect(
+      headingsOf(
+        turn([sectionRead, targets(["b3", "b9", "b10", "b12"]), cellRead], cut),
+      ),
+    ).toEqual(["1 Scope", "2.1 Rates", "3 Liability"]);
+  });
+
+  it("titles an unread section by its outline title and marks one the outline cut", () => {
+    const long = "A".repeat(80);
+    const proposal = turn(
+      [targets(["b3", "b7", "b10"]), cellRead],
+      outline([
+        "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
+        wordOutlineLine({
+          ref: "b5",
+          level: 1,
+          tag: "H",
+          title: long,
+          kib: 0.3,
+          paragraphs: 4,
+        }),
+        "[b6|H2|0.2 KiB|3 ¶] 2.1 Rates",
+        "[b9|H1|0.2 KiB|3 ¶] 3 Liability",
+      ]),
+    );
+
+    expect(
+      buildWordPlanReview(proposal.plan, proposal.snapshot).groups.find(
+        (g) => g.heading?.level === 1 && g.heading.text.startsWith("A"),
+      )?.heading?.text,
+    ).toBe(`${long}…`);
+  });
+
+  it("marks a removed block nobody read, says the checks could not see it and counts unread kept blocks as blocks", () => {
+    const proposal = turn([targets(["b3", "b7"])], fullOutline, {
+      ...plan,
+      entries: plan.entries.filter(
+        (e) => e.kind === "insert" || !["b10", "b11"].includes(e.source[0]),
+      ),
+      deleted: [{ source: ["b10", "b11"], reason: "Moved to the annex." }],
+    });
+    const review = buildWordPlanReview(proposal.plan, proposal.snapshot);
+
+    expect(review.riskUnknown).toBe(true);
+    expect(
+      review.rows.filter((r) => r.status === "removed").map((r) => r.unread),
+    ).toEqual([true, true]);
+    expect(
+      review.rows.find((r) => r.family === "unchanged" && r.key === "keep:b1"),
+    ).toMatchObject({ count: 1, paragraphs: 0, unreadBlocks: 1 });
+    expect(
+      buildWordPlanReview(
+        plan,
+        turn([sectionRead, targetRead, cellRead]).snapshot,
+      ).riskUnknown,
+    ).toBe(false);
   });
 
   it("keeps the complete read when the turn also read a section", () => {

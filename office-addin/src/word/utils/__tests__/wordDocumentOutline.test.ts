@@ -1,3 +1,4 @@
+import { parseWordOutline, wordOutlineLine } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { packageXml } from "../../../test/mocks/word/authoringFixtures";
@@ -16,7 +17,6 @@ import {
   wordCaptureSections,
   wordDocumentOutline,
   wordDocumentOutlineText,
-  wordOutlineLine,
 } from "../wordDocumentOutline";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
@@ -325,6 +325,7 @@ describe("outline text", () => {
     expect(lines[lines.length - 1]).toBe(
       "360 more entries are left out; section:{ref, throughRef} reads any range of blocks.",
     );
+    expect(parseWordOutline(text)?.headings.size).toBe(12);
   });
 
   it("cuts the tail when one level alone is too long", () => {
@@ -340,8 +341,12 @@ describe("outline text", () => {
     expect(entries.length).toBeGreaterThan(200);
     expect(entries[entries.length - 1]).toContain(`Chapter ${entries.length}`);
     expect(lines[lines.length - 1]).toBe(
-      `${400 - entries.length} more entries are left out; section:{ref, throughRef} reads any range of blocks.`,
+      `${400 - entries.length} more entries are left out and the outline ends before b${entries.length + 1}; section:{ref, throughRef} reads any range of blocks.`,
     );
+    expect(parseWordOutline(text)).toMatchObject({
+      shortened: true,
+      endsBefore: `b${entries.length + 1}`,
+    });
   });
 
   it("goes into heading_outline only for a capture too large for a complete read", () => {

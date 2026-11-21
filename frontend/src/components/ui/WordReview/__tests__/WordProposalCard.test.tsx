@@ -100,7 +100,7 @@ describe("WordProposalCard", () => {
     expect(screen.getByText(/^Saved draft:/)).toBeInTheDocument();
   });
 
-  it("says which original a partly read chat never read, and copies only the new text", async () => {
+  it("says which original a partly read chat never read, that its checks could not see it, and copies only the new text", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", { clipboard: { writeText } });
     const partlyRead: WordHistorySnapshot = {
@@ -116,11 +116,11 @@ describe("WordProposalCard", () => {
       wrapper,
     });
 
-    expect(screen.queryByText(/^Saved draft:/)).toBeNull();
+    expect(screen.getByText(/^Saved draft:/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /Paragraph/ }));
     expect(
       screen.getByText(
-        "The original text was not read in this chat, so only the new text is shown. Compare it in Word.",
+        "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
       ),
     ).toBeVisible();
     expect(screen.queryByTestId("text-comparison-diff")).toBeNull();
@@ -128,6 +128,37 @@ describe("WordProposalCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy text" }));
     expect(writeText).toHaveBeenCalledWith("New ending.");
     expect(await screen.findByText("Text copied.")).toBeInTheDocument();
+  });
+
+  it("says a removed block was never read instead of showing it as empty", () => {
+    const partlyRead: WordHistorySnapshot = {
+      ...snapshot(),
+      blocks: [paragraph("b1", "Context")],
+      read: new Set(["b1"]),
+      revoked: true,
+      used: true,
+      source: "history",
+      partial: { order: ["b1", "b2"], headings: new Map() },
+    };
+    render(
+      <WordProposalCard
+        plan={{
+          ...plan,
+          entries: [{ kind: "keep", source: ["b1"] }],
+          deleted: [{ source: ["b2"], reason: "Duplicate." }],
+        }}
+        snapshot={partlyRead}
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Paragraph/ }));
+    expect(
+      screen.getByText(
+        "The removed text was not read in this chat, so it cannot be shown here. Check the passage in Word.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByTestId("text-comparison-diff")).toBeNull();
   });
 
   it("hands the footer and status to an adapter", () => {

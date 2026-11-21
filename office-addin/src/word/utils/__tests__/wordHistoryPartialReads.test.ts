@@ -1,140 +1,40 @@
 import {
   buildWordPlanReview,
   normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
-  WORD_READ_TOOL,
-  WORD_SUBMIT_PLAN_TOOL,
+  parseWordOutline,
   wordHistoryProposal,
 } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
+import { largeDocumentTurn } from "../../../test/mocks/word/largeDocumentTurn";
 import {
   body,
   chapter,
-  readContext,
-  sectionPackageXml,
+  clauseText,
+  heading,
 } from "../../../test/mocks/word/sectionFixtures";
-import { wordDocumentOutlineText } from "../wordDocumentOutline";
-import { WordDocumentReadSession } from "../wordDocumentReadTool";
-import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
-import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
-import type { SectionBlock } from "../../../test/mocks/word/sectionFixtures";
+import type { LargeDocumentTurn } from "../../../test/mocks/word/largeDocumentTurn";
 import type { ContentPart, Message } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
+  WordDocumentPlan,
   WordPlanReview,
 } from "@erato/frontend/word-review";
 
-const blocks: SectionBlock[] = [
-  body("Master Services Agreement"),
-  ...[47, 40, 30, 30, 30, 30].flatMap((kib, k) => chapter(k + 1, kib)),
-];
-
-const stored = (
-  toolName: string,
-  toolCallId: string,
-  input: Record<string, unknown>,
-  output: Record<string, unknown>,
-) =>
-  JSON.parse(
-    JSON.stringify({
-      content_type: "tool_use",
-      tool_name: toolName,
-      tool_call_id: toolCallId,
-      status: "success",
-      input,
-      output,
-    }),
-  ) as ContentPart;
-
-/** A turn on a document too large for a complete read, stored as chat history stores it. */
-async function largeDocumentTurn() {
-  const snapshot = captureWordAuthoringSnapshot(
-    sectionPackageXml(blocks),
-    "doc-A",
-    "Off",
-  );
-  expect(snapshot.completeReadIssue).toBe("too-large");
-  const session = new WordDocumentReadSession();
-  session.activate(snapshot, readContext);
-  const reads: ContentPart[] = [];
-  const read = async (extra: Record<string, unknown>) => {
-    const input = {
-      snapshot: snapshot.token,
-      documentIdentity: snapshot.identity,
-      ...extra,
-    };
-    const toolCallId = `read-${reads.length + 1}`;
-    const response = await session.execute(input, {
-      ...readContext,
-      toolCallId,
-    });
-    if (!response.ok) throw new Error(response.error);
-    reads.push(
-      stored(WORD_READ_TOOL, toolCallId, input, {
-        status: "success",
-        result: response.result,
-      }),
-    );
-    return response.result as Record<string, unknown>;
+async function storedAndLive(turn: LargeDocumentTurn) {
+  const { snapshot, reads, submission, user, plan, changed } =
+    await largeDocumentTurn(turn);
+  const answer = assistant([...reads, submission]);
+  const proposal = wordHistoryProposal([user, answer], answer.content)!;
+  return {
+    snapshot,
+    user,
+    changed,
+    proposal,
+    history: buildWordPlanReview(proposal.plan, proposal.snapshot),
+    live: liveReview(plan, snapshot),
   };
-  const after = (title: string) =>
-    snapshot.blocks[snapshot.blocks.findIndex((b) => b.text === title) + 1];
-  const heading = snapshot.blocks.find((b) => b.text === "2.1 Section 2.1")!;
-  let cursor: unknown = null;
-  do
-    cursor = (
-      await read({
-        section: { ref: heading.ref, ...(cursor ? { cursor } : {}) },
-      })
-    ).nextCursor;
-  while (cursor);
-  const changed = [
-    after("2.1 Section 2.1"),
-    after("4.2 Section 4.2"),
-    after("6.3 Section 6.3"),
-  ];
-  const { readToken } = await read({
-    target: { refs: changed.map((b) => b.ref) },
-  });
-  const input = {
-    snapshot: snapshot.token,
-    readToken,
-    scoped_edit: {
-      body: changed.map((b, k) => ({
-        operation: "replace",
-        source: [b.ref],
-        blocks: [{ id: `n${k}`, type: "paragraph", text: `Revised ${k}.` }],
-      })),
-    },
-  };
-  const submitted = await createWordDocumentSubmissionExecutor(session)(input, {
-    ...readContext,
-    toolCallId: "submit-1",
-  });
-  if (!submitted.ok) throw new Error(submitted.error);
-  const submission = stored(WORD_SUBMIT_PLAN_TOOL, "submit-1", input, {
-    status: "success",
-    submission: { status: "accepted", attempts_remaining: 2 },
-    result: submitted.result,
-  });
-  const user = {
-    id: "user-1",
-    role: "user",
-    content: [],
-    action_facet_id: "word_document_authoring",
-    action_facet_args: {
-      document_name: "MSA.docx",
-      document_snapshot: snapshot.token,
-      heading_outline: wordDocumentOutlineText(snapshot),
-      paragraphs_sent: "0",
-    },
-  } as unknown as Message;
-  const plan = parseWordDocumentPlan(
-    JSON.stringify((submitted.result as { plan: unknown }).plan),
-  )!;
-  return { snapshot, reads, submission, user, changed, plan };
 }
 
 const assistant = (content: ContentPart[]) =>
@@ -160,10 +60,8 @@ const changedGroups = (review: WordPlanReview) =>
         })),
     }));
 
-const liveReview = (
-  plan: ReturnType<typeof parseWordDocumentPlan>,
-  snapshot: WordAuthoringSnapshot,
-) => buildWordPlanReview(normalizeWordDocumentPlan(plan!, snapshot), snapshot);
+const liveReview = (plan: WordDocumentPlan, snapshot: WordAuthoringSnapshot) =>
+  buildWordPlanReview(normalizeWordDocumentPlan(plan, snapshot), snapshot);
 
 describe("a stored plan on a document too large for a complete read", () => {
   it("shows before and after per changed block, grouped by heading, as the live card does", async () => {
@@ -239,6 +137,126 @@ describe("a stored plan on a document too large for a complete read", () => {
         after: "Revised 2.",
         unread: true,
       },
+    ]);
+  });
+
+  it("titles each change by its numbered heading, though Erato read those headings as list items", async () => {
+    const { snapshot, history, live, changed } = await storedAndLive({
+      numberedHeadings: true,
+      sections: ["3. Chapter 3"],
+      replaced: [
+        "2.1 Section 2.1",
+        "3.1 Section 3.1",
+        "4.2 Section 4.2",
+        "5.3 Section 5.3",
+      ],
+      deleted: ["6.1 Section 6.1"],
+    });
+    expect(
+      snapshot.blocks.find((b) => b.text === "3. Chapter 3"),
+    ).toMatchObject({ type: "list-item", outlineLevel: 1 });
+
+    expect(changedGroups(history)).toEqual([
+      ...[
+        "2.1 Section 2.1",
+        "3.1 Section 3.1",
+        "4.2 Section 4.2",
+        "5.3 Section 5.3",
+      ].map((heading, k) => ({
+        heading,
+        rows: [
+          {
+            status: "changed",
+            before: changed[k].text,
+            after: `Revised ${k}.`,
+            unread: false,
+          },
+        ],
+      })),
+      {
+        heading: "6.1 Section 6.1",
+        rows: [
+          {
+            status: "removed",
+            before:
+              snapshot.blocks[
+                snapshot.blocks.findIndex((b) => b.text === "6.1 Section 6.1") +
+                  1
+              ].text,
+            after: undefined,
+            unread: false,
+          },
+        ],
+      },
+    ]);
+    expect(history.riskUnknown).toBe(false);
+    // The live card starts sections only at heading blocks, so it lists these flat.
+    expect(live.groups.map((g) => g.heading)).toEqual([undefined]);
+  });
+
+  it("keeps the sections Erato read when the outline dropped their level, and the chapter elsewhere", async () => {
+    const blocks = [
+      body("Framework Agreement"),
+      ...Array.from({ length: 50 }, (_, k) => chapter(k + 1, 5, 4)).flat(),
+    ];
+    const { user, history, live } = await storedAndLive({
+      blocks,
+      sections: ["7. Chapter 7"],
+      replaced: ["7.1 Section 7.1", "7.2 Section 7.2", "9.2 Section 9.2"],
+    });
+    const outline = parseWordOutline(
+      String(user.action_facet_args?.heading_outline),
+    );
+    expect(outline?.shortened).toBe(true);
+    expect([...outline!.headings.values()].every((h) => h.level === 1)).toBe(
+      true,
+    );
+
+    expect(changedGroups(history).map((g) => g.heading)).toEqual([
+      "7.1 Section 7.1",
+      "7.2 Section 7.2",
+      "9. Chapter 9",
+    ]);
+    expect(changedGroups(live).map((g) => g.heading)).toEqual([
+      "7.1 Section 7.1",
+      "7.2 Section 7.2",
+      "9.2 Section 9.2",
+    ]);
+  });
+
+  it("lists changes without section titles past the end of a cut outline", async () => {
+    const title = (k: number) =>
+      `Clause ${k}: obligations of the parties under this agreement`;
+    const blocks = Array.from({ length: 130 }, (_, k) => [
+      heading(1, title(k + 1)),
+      ...[0, 1, 2, 3].map((p) => body(clauseText(k * 4 + p, 400))),
+    ]).flat();
+    const { user, proposal, history, live, changed } = await storedAndLive({
+      blocks,
+      sections: [],
+      replaced: [title(3), title(125)],
+    });
+    const outline = parseWordOutline(
+      String(user.action_facet_args?.heading_outline),
+    );
+    expect(outline?.endsBefore).toBeDefined();
+    expect(outline?.headings.size).toBeLessThan(125);
+
+    expect(proposal.snapshot?.partial?.headings.size).toBe(0);
+    expect(changedGroups(history)).toEqual([
+      {
+        heading: undefined,
+        rows: changed.map((b, k) => ({
+          status: "changed",
+          before: b.text,
+          after: `Revised ${k}.`,
+          unread: false,
+        })),
+      },
+    ]);
+    expect(changedGroups(live).map((g) => g.heading)).toEqual([
+      title(3),
+      title(125),
     ]);
   });
 });

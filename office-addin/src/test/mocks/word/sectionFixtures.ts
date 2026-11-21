@@ -116,14 +116,22 @@ export function sectionSnapshot(
   };
 }
 
-/** The same blocks as a Word package, for captures that must accept a plan. Tables become paragraphs. */
-export function sectionPackageXml(blocks: SectionBlock[]): string {
+/** The same blocks as a Word package, for captures that must accept a plan. Tables become paragraphs.
+ * Numbered headings carry list numbering, as numbered contract headings do. */
+export function sectionPackageXml(
+  blocks: SectionBlock[],
+  { numberedHeadings = false } = {},
+): string {
   return packageXml(
     blocks
       .map((b) => {
+        const numbering =
+          numberedHeadings && b.level
+            ? `<w:numPr><w:ilvl w:val="${b.level - 1}"/><w:numId w:val="7"/></w:numPr>`
+            : "";
         const style =
           b.type === "heading"
-            ? `<w:pPr><w:pStyle w:val="Heading${b.level}"/></w:pPr>`
+            ? `<w:pPr><w:pStyle w:val="Heading${b.level}"/>${numbering}</w:pPr>`
             : "";
         return `<w:p>${style}<w:r><w:t xml:space="preserve">${escapeXml(b.text.replace(/\n/g, " "))}</w:t></w:r></w:p>`;
       })

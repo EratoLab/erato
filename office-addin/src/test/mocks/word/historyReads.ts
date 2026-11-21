@@ -5,6 +5,24 @@ import { WordDocumentReadSession } from "../../../word/utils/wordDocumentReadToo
 import type { ContentPart } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
+/** A successful tool call as chat history stores it: plain JSON. */
+export const storedWordToolPart = (
+  toolName: string,
+  toolCallId: string,
+  input: Record<string, unknown>,
+  output: Record<string, unknown>,
+) =>
+  JSON.parse(
+    JSON.stringify({
+      content_type: "tool_use",
+      tool_name: toolName,
+      tool_call_id: toolCallId,
+      status: "success",
+      input,
+      output,
+    }),
+  ) as ContentPart;
+
 /** Pages a capture through the real reader and stores each page as chat history does. */
 export async function storedWordReads(
   snapshot: WordAuthoringSnapshot,
@@ -23,16 +41,10 @@ export async function storedWordReads(
     });
     if (!page.ok) throw new Error(page.error);
     parts.push(
-      JSON.parse(
-        JSON.stringify({
-          content_type: "tool_use",
-          tool_name: WORD_READ_TOOL,
-          tool_call_id: `read-${parts.length + 1}`,
-          status: "success",
-          input,
-          output: { status: "success", result: page.result },
-        }),
-      ) as ContentPart,
+      storedWordToolPart(WORD_READ_TOOL, `read-${parts.length + 1}`, input, {
+        status: "success",
+        result: page.result,
+      }),
     );
     cursor = (page.result as { nextCursor: string | null }).nextCursor;
   } while (cursor);
