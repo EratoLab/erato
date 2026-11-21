@@ -3713,6 +3713,20 @@ parameters = '{"type":"object","properties":{"title":{"type":"typo"}}}'
     );
 }
 
+#[test]
+#[should_panic(expected = "lead back to it through the same property")]
+fn submission_config_rejects_alternatives_that_recurse_through_the_same_property() {
+    migrate_config_with_action_facets(
+        r##"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object","properties":{"blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}},"$defs":{"block":{"anyOf":[{"type":"object","properties":{"type":{"const":"list"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}},{"type":"object","properties":{"type":{"const":"table"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}}]}}}'
+[client_tools.tools.submit.submission]
+"##,
+    );
+}
+
 fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"
