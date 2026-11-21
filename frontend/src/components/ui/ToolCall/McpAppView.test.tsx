@@ -702,7 +702,7 @@ describe("McpAppView", () => {
     expect(screen.queryByTestId("mcp-app-view")).not.toBeInTheDocument();
   });
 
-  it("loads the sandbox page from the server's sandbox origin in a sandboxed frame, hidden until the view initializes", async () => {
+  it("loads the sandbox page from the server's sandbox origin in a sandboxed frame, out of sight until the view shows", async () => {
     renderView(call());
 
     const { frame } = await loadedFrame();

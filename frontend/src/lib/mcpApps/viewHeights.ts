@@ -13,7 +13,10 @@ const STORAGE_KEY = "erato.mcpApps.viewHeights";
 /** The most heights kept; the oldest go first. */
 const MAX_ENTRIES = 200;
 
-/** Widths that differ by less than this share a view's height. */
+/**
+ * Widths are grouped in steps of this size; views in the same step share a
+ * height.
+ */
 const WIDTH_STEP_PX = 40;
 
 /** Which view, and where, a height belongs to. */

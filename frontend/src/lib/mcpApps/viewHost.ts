@@ -1,5 +1,9 @@
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
-import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
+import {
+  AppBridge,
+  INITIALIZE_METHOD,
+  SANDBOX_PROXY_READY_METHOD,
+} from "@modelcontextprotocol/ext-apps/app-bridge";
 
 import { viewDownloadOf } from "./download";
 import { MAX_VIEW_HEIGHT } from "./hostContext";
@@ -15,15 +19,12 @@ import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge
 // eslint-disable-next-line lingui/no-unlocalized-strings -- protocol identity, not UI text
 const HOST_INFO = { name: "Erato", version: "1.0.0" };
 
-/* eslint-disable lingui/no-unlocalized-strings -- protocol methods */
-const INITIALIZE = "ui/initialize";
-const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 /**
  * Not in the spec: the sandbox page sends it when the view's document has
  * loaded in its frame.
  */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- protocol method
 const RESOURCE_LOADED = "ui/notifications/sandbox-resource-loaded";
-/* eslint-enable lingui/no-unlocalized-strings */
 
 /**
  * How long after the frame has loaded a page the page may take to announce
@@ -230,9 +231,9 @@ export function connectView(
   // As each message comes in, before the bridge handles it.
   transport.onreceive = (message) => {
     if (!("method" in message)) return;
-    if (message.method === PROXY_READY) {
+    if (message.method === SANDBOX_PROXY_READY_METHOD) {
       pageReady = true;
-    } else if (message.method === INITIALIZE) {
+    } else if (message.method === INITIALIZE_METHOD) {
       viewStarted = true;
     } else if (message.method === RESOURCE_LOADED && !viewStarted) {
       stallUnless(() => viewStarted, VIEW_INITIALIZE_GRACE_MS);

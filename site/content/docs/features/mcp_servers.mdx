@@ -343,7 +343,7 @@ In production, the sandbox origin must be on another site than Erato: another re
 
 Give each MCP server its own `sandbox_origin`, for example a subdomain per server such as `https://charts.mcp-apps.example.net`. Views that share an origin can read and script one another, so with one origin for several servers, one server's view could read another server's call input and result.
 
-For local development, `just dev` in `frontend` serves the app on `http://localhost:4180` and the development server on `http://localhost:3000`, which serves the sandbox page too, so `sandbox_origin = "http://localhost:3000"` works without anything else. Another port on `localhost` is the same site as the app, so the browser sends the app's cookies with the view's requests and lets the view read the app's cookies that are not `HttpOnly`: use it only with MCP servers you trust.
+For local development, `just dev` in `frontend` serves the app on `http://localhost:4180` and the development server on `http://localhost:3000`, which serves the sandbox page too, with the same `Origin-Agent-Cluster` header, so `sandbox_origin = "http://localhost:3000"` works without anything else. Another port on `localhost` is the same site as the app, so the browser sends the app's cookies with the view's requests and lets the view read the app's cookies that are not `HttpOnly`: use it only with MCP servers you trust.
 
 #### What a view can and cannot do
 
