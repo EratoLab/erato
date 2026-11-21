@@ -5569,7 +5569,12 @@ msgstr "Pas dans cette proposition : {listed}"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.notInProposalMore"
-msgstr "Pas dans cette proposition : {listed} et d'autres sections"
+msgstr "Pas dans cette proposition : {listed}, ainsi que d'autres parties"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "une partie sans texte"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx

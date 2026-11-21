@@ -120,7 +120,18 @@ describe("WordProposalCard", () => {
       />,
     );
     expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
-      /^Not in this proposal: § 1, § 2, § 3, § 4, § 5 and other sections$/,
+      /^Not in this proposal: § 1, § 2, § 3, § 4, § 5 and other parts$/,
+    );
+
+    view.rerender(
+      <WordProposalCard
+        plan={plan}
+        snapshot={snapshot()}
+        notInProposal={["", "§ 2"]}
+      />,
+    );
+    expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
+      /^Not in this proposal: a part without text, § 2$/,
     );
 
     view.rerender(<WordProposalCard plan={plan} snapshot={snapshot()} />);

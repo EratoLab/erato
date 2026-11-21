@@ -338,6 +338,22 @@ export interface WordHistoryPlan {
   /** The materialized plan as JSON, as the plan fence carries it. */
   content: string;
   plan: WordDocumentPlan;
+  /** See {@link wordPlanNotInProposal}. */
+  notInProposal: string[];
+}
+
+/** How many left-out parts the card and the model's note name before "and other parts". */
+export const MAX_NOT_IN_PROPOSAL_NAMES = 5;
+
+/** The one accepted `submit_document_plan` call of a message and its receipt. */
+function acceptedSubmission(content: readonly ContentPart[] | undefined) {
+  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
+  const part = accepted.length === 1 ? accepted[0] : undefined;
+  if (part?.content_type !== "tool_use") return undefined;
+  const output = part.output;
+  return object(output) && object(output.result)
+    ? { part, result: output.result }
+    : undefined;
 }
 
 /**
@@ -348,48 +364,47 @@ export interface WordHistoryPlan {
 export function acceptedWordPlanFromHistory(
   content: readonly ContentPart[] | undefined,
 ): WordHistoryPlan | undefined {
-  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
-  if (accepted.length !== 1) return undefined;
-  const part = accepted[0];
-  if (part.content_type !== "tool_use" || !part.tool_call_id) return undefined;
-  const output = part.output;
-  if (!object(output) || !object(output.result)) return undefined;
+  const accepted = acceptedSubmission(content);
+  const toolCallId = accepted?.part.tool_call_id;
+  if (!accepted || !toolCallId) return undefined;
+  const { part, result } = accepted;
   const plan =
     object(part.input) &&
     ("draft_id" in part.input ||
       "table_cell" in part.input ||
       "scoped_edit" in part.input)
-      ? output.result.plan
+      ? result.plan
       : part.input;
   if (
     !object(plan) ||
-    plan.snapshot !== output.result.snapshot ||
+    plan.snapshot !== result.snapshot ||
     (object(part.input) && plan.readToken !== part.input.readToken)
   )
     return undefined;
   const contentJson = JSON.stringify(plan);
   const parsed = parseWordDocumentPlan(contentJson);
   if (!parsed) return undefined;
-  return { toolCallId: part.tool_call_id, content: contentJson, plan: parsed };
+  return {
+    toolCallId,
+    content: contentJson,
+    plan: parsed,
+    notInProposal: wordPlanNotInProposal(content),
+  };
 }
 
 /**
  * The parts an earlier attempt of the request changed that its accepted plan leaves out, by their
- * own titles, as the add-in returned them on acceptance. Empty for a plan accepted at once.
+ * own titles, as the add-in returned them on acceptance. An empty name stands for a part without
+ * text. Empty for a plan accepted at once.
  */
 export function wordPlanNotInProposal(
   content: readonly ContentPart[] | undefined,
 ): string[] {
-  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
-  const part = accepted.length === 1 ? accepted[0] : undefined;
-  const output = part?.content_type === "tool_use" ? part.output : undefined;
-  const names =
-    object(output) && object(output.result)
-      ? output.result.notInProposal
-      : undefined;
+  const names = acceptedSubmission(content)?.result.notInProposal;
   return Array.isArray(names)
     ? names.filter(
-        (name): name is string => typeof name === "string" && !!name.trim(),
+        (name): name is string =>
+          typeof name === "string" && (name === "" || !!name.trim()),
       )
     : [];
 }
@@ -492,6 +507,8 @@ export interface WordHistoryProposal {
   plan: WordDocumentPlan;
   snapshot?: WordHistorySnapshot;
   documentName?: string;
+  /** See {@link wordPlanNotInProposal}; only for a proposal read from a message's content. */
+  notInProposal?: string[];
 }
 
 /**
@@ -503,10 +520,14 @@ export function wordHistoryProposal(
   lineage: readonly HistoryMessage[],
   submitted: readonly ContentPart[] | string,
 ): WordHistoryProposal | undefined {
+  const accepted =
+    typeof submitted === "string"
+      ? undefined
+      : acceptedWordPlanFromHistory(submitted);
   const plan =
     typeof submitted === "string"
       ? parseWordDocumentPlan(submitted)
-      : acceptedWordPlanFromHistory(submitted)?.plan;
+      : accepted?.plan;
   if (!plan) return undefined;
   const snapshot = wordSnapshotFromHistory(lineage, plan.snapshot);
   const documentName = lineage.findLast(
@@ -516,6 +537,9 @@ export function wordHistoryProposal(
     plan: normalizeWordDocumentPlan(plan, snapshot),
     ...(snapshot ? { snapshot } : {}),
     ...(documentName ? { documentName } : {}),
+    ...(accepted?.notInProposal.length
+      ? { notInProposal: accepted.notInProposal }
+      : {}),
   };
 }
 

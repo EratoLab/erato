@@ -117,6 +117,16 @@ export class WordDocumentReadSession {
       ? session.snapshot
       : undefined;
   }
+  /** Why this request cannot make a complete read, if it cannot; the budget is checked once. */
+  async completeReadIssue(): Promise<string | undefined> {
+    if (this.session?.snapshot.completeReadIssue)
+      return this.session.snapshot.completeReadIssue;
+    if (!this.completeBudgetCheck) return undefined;
+    this.completeBudget ??= this.completeBudgetCheck().catch(
+      () => "budget-unavailable",
+    );
+    return this.completeBudget;
+  }
   clear(): void {
     this.access = "write";
     this.readCapture = undefined;
@@ -396,10 +406,7 @@ export class WordDocumentReadSession {
         snapshot.completeReadIssue,
       );
     if (this.completeBudgetCheck) {
-      this.completeBudget ??= this.completeBudgetCheck().catch(
-        () => "budget-unavailable",
-      );
-      const issue = await this.completeBudget;
+      const issue = await this.completeReadIssue();
       if (
         this.session !== session ||
         snapshot.revoked ||

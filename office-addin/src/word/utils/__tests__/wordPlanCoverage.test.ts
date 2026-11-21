@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  heading,
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
-import { escapeXml } from "../../../utils/escapeXml";
+import { okResult } from "../../../test/mocks/word/sectionFixtures";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
@@ -14,7 +15,6 @@ import {
   wordSubmissionBlocks,
 } from "../wordPlanCoverage";
 
-import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordAuthoringSnapshot,
   WordPlanBlock,
@@ -22,29 +22,62 @@ import type {
 
 const context = { chatId: "chat-A", messageId: "message-A", toolCallId: "c" };
 
-const heading = (text: string) =>
-  `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+const capture = (xml: string[]) =>
+  captureWordAuthoringSnapshot(packageXml(xml.join("")), "doc-A", "Off");
 
 function contract() {
-  return captureWordAuthoringSnapshot(
-    packageXml(
-      [
-        paragraph("This contract is made between the Supplier and the Buyer."),
-        heading("§ 5 Haftung"),
-        paragraph("Liability is limited to the annual fee."),
-        paragraph("Neither party is liable for indirect loss."),
-        heading("§ 6 Lieferung"),
-        paragraph("Goods are delivered to the Buyer's warehouse."),
-        heading("§ 7 Zahlung"),
-        paragraph("Invoices are due within 30 days."),
-        heading("§ 11 Kündigung"),
-        paragraph("Either party may terminate with three months' notice."),
-      ].join(""),
-    ),
-    "doc-A",
-    "Off",
-  );
+  return capture([
+    paragraph("This contract is made between the Supplier and the Buyer."),
+    heading("§ 5 Haftung"),
+    paragraph("Liability is limited to the annual fee."),
+    paragraph("Neither party is liable for indirect loss."),
+    heading("§ 6 Lieferung"),
+    paragraph("Goods are delivered to the Buyer's warehouse."),
+    heading("§ 7 Zahlung"),
+    paragraph("Invoices are due within 30 days."),
+    heading("§ 11 Kündigung"),
+    paragraph("Either party may terminate with three months' notice."),
+  ]);
 }
+
+/** Shaped like the probe's contract D1: every section has subsections. */
+const NESTED: [string, [string, string][]][] = [
+  [
+    "§ 5 Haftung",
+    [
+      ["5.1 Haftungsgrenzen", "Liability is limited to the annual fee."],
+      ["5.2 Ausschlüsse", "Neither party is liable for indirect loss."],
+      ["5.3 Verjährung", "Claims lapse after one year."],
+    ],
+  ],
+  [
+    "§ 6 Lieferung und Logistik",
+    [
+      ["6.1 Lieferzeiten", "Goods are delivered within ten days."],
+      ["6.2 Verpackung und Kennzeichnung", "Goods are packed for transport."],
+      ["6.3 Gefahrübergang", "Risk passes on delivery."],
+    ],
+  ],
+  [
+    "§ 11 Datenschutz",
+    [
+      ["11.1 Datenschutz", "Personal data is processed lawfully."],
+      ["11.2 Informationssicherheit", "Systems are kept secure."],
+      ["11.3 Meldepflichten", "Incidents are reported within a day."],
+    ],
+  ],
+];
+const nested = (wrapper?: string) =>
+  capture([
+    ...(wrapper ? [heading(wrapper)] : []),
+    ...NESTED.flatMap(([title, subsections]) => [
+      heading(title, wrapper ? 2 : 1),
+      ...subsections.flatMap(([subtitle, text]) => [
+        heading(subtitle, wrapper ? 3 : 2),
+        paragraph(text),
+      ]),
+    ]),
+  ]);
 
 const refOf = (snapshot: WordAuthoringSnapshot, text: string) =>
   snapshot.blocks.find((b) => b.text === text)!.ref;
@@ -65,28 +98,48 @@ const rewrite = (
   })),
 });
 
-/** A target read of the whole contract, then submissions under its token. */
-async function targetRead(snapshot = contract()) {
+/** A target read from `from` through `through` (the whole document by default), then
+ * submissions under its token or a later complete read's. */
+async function targetRead(
+  snapshot = contract(),
+  from = snapshot.blocks[0].ref,
+  through = snapshot.blocks.at(-1)!.ref,
+) {
   const session = new WordDocumentReadSession();
   session.activate(snapshot, context);
-  const read = await session.execute(
-    {
-      snapshot: snapshot.token,
-      documentIdentity: snapshot.identity,
-      target: {
-        ref: snapshot.blocks[0].ref,
-        throughRef: snapshot.blocks.at(-1)!.ref,
+  const read = okResult<{ readToken: string }>(
+    await session.execute(
+      {
+        snapshot: snapshot.token,
+        documentIdentity: snapshot.identity,
+        target: { ref: from, throughRef: through },
       },
-    },
-    context,
+      context,
+    ),
   );
-  if (!read.ok) throw new Error(read.error);
-  const readToken = (read.result as { readToken: string }).readToken;
   const execute = createWordDocumentSubmissionExecutor(session);
   let calls = 0;
   return {
     snapshot,
-    sparse: (scoped_edit: Record<string, unknown>) =>
+    async completeRead(): Promise<string> {
+      type Page = {
+        complete: boolean;
+        nextCursor: string | null;
+        readToken?: string;
+      };
+      let cursor: string | null = null;
+      for (;;) {
+        const page: Page = okResult<Page>(
+          await session.execute({ snapshot: snapshot.token, cursor }, context),
+        );
+        if (page.complete) return page.readToken!;
+        cursor = page.nextCursor;
+      }
+    },
+    sparse: (
+      scoped_edit: Record<string, unknown>,
+      readToken = read.readToken,
+    ) =>
       execute(
         { snapshot: snapshot.token, readToken, scoped_edit },
         { ...context, toolCallId: `submit-${++calls}` },
@@ -94,10 +147,7 @@ async function targetRead(snapshot = contract()) {
   };
 }
 
-const receipt = (result: ClientToolExecutionResult) => {
-  expect(result.ok, JSON.stringify(result)).toBe(true);
-  return (result as { result: Record<string, unknown> }).result;
-};
+const TODAYS_RECEIPT = ["action", "draft_id", "plan", "snapshot"];
 
 describe("a smaller retry that leaves out parts", () => {
   it.each([
@@ -120,7 +170,7 @@ describe("a smaller retry that leaves out parts", () => {
         validationErrors: [{ code: tooLarge ? "scoped-shape" : "too-large" }],
       });
 
-      const result = receipt(
+      const result = okResult(
         await s.sparse(rewrite(s.snapshot, sections.slice(0, 1))),
       );
       expect(result.notInProposal).toEqual(["§ 6 Lieferung", "§ 11 Kündigung"]);
@@ -132,17 +182,32 @@ describe("a smaller retry that leaves out parts", () => {
 
   it("returns today's receipt for a plan accepted at the first attempt", async () => {
     const s = await targetRead();
-    const result = receipt(
+    const result = okResult(
       await s.sparse(
         rewrite(s.snapshot, ["Liability is limited to the annual fee."]),
       ),
     );
-    expect(Object.keys(result).sort()).toEqual([
-      "action",
-      "draft_id",
-      "plan",
-      "snapshot",
-    ]);
+    expect(Object.keys(result).sort()).toEqual(TODAYS_RECEIPT);
+  });
+
+  it("returns today's receipt when the oversized change is resubmitted whole after the complete read", async () => {
+    const s = await targetRead();
+    const change = rewrite(
+      s.snapshot,
+      [
+        "Liability is limited to the annual fee.",
+        "Goods are delivered to the Buyer's warehouse.",
+        "Either party may terminate with three months' notice.",
+      ],
+      9000,
+    );
+    expect(await s.sparse(change)).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "too-large" }],
+      submissionFeedback: { recovery: "read_current_context" },
+    });
+    const result = okResult(await s.sparse(change, await s.completeRead()));
+    expect(Object.keys(result).sort()).toEqual(TODAYS_RECEIPT);
   });
 
   it("names nothing when the retry keeps every part of the refused attempt", async () => {
@@ -166,7 +231,7 @@ describe("a smaller retry that leaves out parts", () => {
       ],
     });
     expect(refused.ok).toBe(false);
-    const result = receipt(
+    const result = okResult(
       await s.sparse(
         rewrite(s.snapshot, [
           "Liability is limited to the annual fee.",
@@ -174,8 +239,33 @@ describe("a smaller retry that leaves out parts", () => {
         ]),
       ),
     );
-    expect(result).not.toHaveProperty("notInProposal");
-    expect(result).not.toHaveProperty("notInProposalNote");
+    expect(Object.keys(result).sort()).toEqual(TODAYS_RECEIPT);
+  });
+
+  it("names nothing for a refused ref the request never read", async () => {
+    const snapshot = contract();
+    const s = await targetRead(
+      snapshot,
+      refOf(snapshot, "§ 5 Haftung"),
+      refOf(snapshot, "Neither party is liable for indirect loss."),
+    );
+    expect(
+      await s.sparse(
+        rewrite(s.snapshot, [
+          "Liability is limited to the annual fee.",
+          "Invoices are due within 30 days.",
+        ]),
+      ),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "outside-read-scope" }],
+    });
+    const result = okResult(
+      await s.sparse(
+        rewrite(s.snapshot, ["Liability is limited to the annual fee."]),
+      ),
+    );
+    expect(Object.keys(result).sort()).toEqual(TODAYS_RECEIPT);
   });
 });
 
@@ -184,25 +274,129 @@ describe("wordPartsNotInProposal", () => {
     new Set(
       texts.map((text) => snapshot.blocks.findIndex((b) => b.text === text)),
     );
+  const readAll = (snapshot: WordAuthoringSnapshot) => {
+    snapshot.blocks.forEach((b) => snapshot.read.add(b.ref));
+    return snapshot;
+  };
+  const cardNames = (
+    snapshot: WordAuthoringSnapshot,
+    earlier: Set<number>,
+    accepted: Set<number>,
+  ) =>
+    wordNotInProposalReceipt(
+      wordPartsNotInProposal(snapshot, [earlier], accepted),
+    );
+
+  it.each([
+    ["section headings", undefined],
+    ["section headings under one title heading", "Rahmenvertrag"],
+  ])(
+    "names whole sections, not their subsections, under %s",
+    (_case, wrapper) => {
+      const snapshot = readAll(nested(wrapper));
+      const body = snapshot.blocks.flatMap((b, i) =>
+        b.type === "heading" ? [] : [i],
+      );
+      const accepted = blocksOf(snapshot, [
+        "Liability is limited to the annual fee.",
+        "Neither party is liable for indirect loss.",
+        "Claims lapse after one year.",
+      ]);
+      const expected = {
+        notInProposal: ["§ 6 Lieferung und Logistik", "§ 11 Datenschutz"],
+        notInProposalNote:
+          'Not in this proposal: "§ 6 Lieferung und Logistik" and "§ 11 Datenschutz", which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.',
+      };
+      expect(cardNames(snapshot, new Set(body), accepted)).toEqual(expected);
+      expect(
+        cardNames(
+          snapshot,
+          new Set(snapshot.blocks.map((_, i) => i)),
+          accepted,
+        ),
+      ).toEqual(expected);
+      expect(
+        cardNames(
+          snapshot,
+          blocksOf(snapshot, [
+            "Goods are delivered within ten days.",
+            "Personal data is processed lawfully.",
+          ]),
+          accepted,
+        )?.notInProposal,
+      ).toEqual(["§ 6 Lieferung und Logistik", "§ 11 Datenschutz"]);
+    },
+  );
+
+  it("names a subsection the retry left out of a section it still changes", () => {
+    const snapshot = readAll(nested());
+    expect(
+      cardNames(
+        snapshot,
+        blocksOf(snapshot, [
+          "Goods are delivered within ten days.",
+          "Goods are packed for transport.",
+        ]),
+        blocksOf(snapshot, ["Goods are delivered within ten days."]),
+      )?.notInProposal,
+    ).toEqual(["6.2 Verpackung und Kennzeichnung"]);
+  });
 
   it("names text before the first heading by its first words", () => {
-    const snapshot = contract();
+    const snapshot = readAll(contract());
     expect(
-      wordPartsNotInProposal(
+      cardNames(
         snapshot,
-        [
-          blocksOf(snapshot, [
-            "This contract is made between the Supplier and the Buyer.",
-            "Invoices are due within 30 days.",
-          ]),
-        ],
+        blocksOf(snapshot, [
+          "This contract is made between the Supplier and the Buyer.",
+          "Invoices are due within 30 days.",
+        ]),
         new Set(),
-      ),
-    ).toEqual(["This contract is made between the Suppli…", "§ 7 Zahlung"]);
+      )?.notInProposal,
+    ).toEqual(["“This contract is made between the Suppli…”", "§ 7 Zahlung"]);
+  });
+
+  it("names an untitled part by its first text when the changed block has none", () => {
+    const snapshot = readAll(
+      capture([
+        paragraph(""),
+        paragraph("Intro text that matters."),
+        heading("§ 1 A"),
+        paragraph("a1"),
+        heading("§ 2 B"),
+        paragraph("b1"),
+      ]),
+    );
+    expect(
+      cardNames(snapshot, new Set([0, 3, 5]), blocksOf(snapshot, ["a1"])),
+    ).toEqual({
+      notInProposal: ["“Intro text that matters.”", "§ 2 B"],
+      notInProposalNote:
+        'Not in this proposal: the passage beginning "Intro text that matters." and "§ 2 B", which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.',
+    });
+  });
+
+  it("still names a part without text", () => {
+    const snapshot = readAll(
+      capture([
+        paragraph(""),
+        heading("§ 1 A"),
+        paragraph("a1"),
+        heading("§ 2 B"),
+        paragraph("b1"),
+      ]),
+    );
+    expect(
+      cardNames(snapshot, new Set([0, 2, 4]), blocksOf(snapshot, ["a1"])),
+    ).toEqual({
+      notInProposal: ["", "§ 2 B"],
+      notInProposalNote:
+        'Not in this proposal: a part without text and "§ 2 B", which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.',
+    });
   });
 
   it("counts an earlier attempt only when it changed more parts than the accepted plan", () => {
-    const snapshot = contract();
+    const snapshot = readAll(contract());
     const earlier = blocksOf(snapshot, [
       "Liability is limited to the annual fee.",
       "Goods are delivered to the Buyer's warehouse.",
@@ -218,15 +412,16 @@ describe("wordPartsNotInProposal", () => {
         [earlier],
         blocksOf(snapshot, ["Neither party is liable for indirect loss."]),
       ),
-    ).toEqual(["§ 6 Lieferung"]);
+    ).toEqual([{ title: "§ 6 Lieferung" }]);
   });
 
-  it("reads a full plan's changes, placing an insert by the source before it", () => {
+  it("reads a full plan's changes, placing an insert by the source before it and counting no implied move", () => {
     const snapshot = contract();
     const delivery = refOf(
       snapshot,
       "Goods are delivered to the Buyer's warehouse.",
     );
+    const invoices = refOf(snapshot, "Invoices are due within 30 days.");
     const plan = {
       entries: snapshot.blocks.flatMap((b) =>
         b.ref === delivery
@@ -234,7 +429,12 @@ describe("wordPartsNotInProposal", () => {
               { kind: "keep", source: [b.ref] },
               { kind: "insert", blocks: [block("n", "Added")] },
             ]
-          : [{ kind: "keep", source: [b.ref] }],
+          : b.ref === invoices
+            ? [
+                { kind: "keep", source: [b.ref] },
+                { kind: "keep", source: [b.ref] },
+              ]
+            : [{ kind: "keep", source: [b.ref] }],
       ),
       deleted: [],
     };
@@ -250,15 +450,27 @@ describe("wordNotInProposalReceipt", () => {
   });
 
   it("keeps the model's note within what a replayed receipt keeps", () => {
-    const names = Array.from(
+    const titles = Array.from(
       { length: 6 },
       (_, i) => `§ ${i + 1} ${"Gewährleistung und Mängelhaftung ".repeat(3)}`,
     );
-    const note = wordNotInProposalReceipt(names)!.notInProposalNote;
+    const receipt = wordNotInProposalReceipt(
+      titles.map((title) => ({ title })),
+    )!;
     expect(
-      new TextEncoder().encode(JSON.stringify(note)).length,
+      new TextEncoder().encode(JSON.stringify(receipt.notInProposalNote))
+        .length,
     ).toBeLessThanOrEqual(512);
-    expect(note).toContain("and other parts");
-    expect(wordNotInProposalReceipt(names)!.notInProposal).toEqual(names);
+    expect(receipt.notInProposalNote).toContain("and other parts");
+    expect(receipt.notInProposal).toEqual(titles);
+  });
+
+  it("names as many parts for the model as the card shows", () => {
+    const receipt = wordNotInProposalReceipt(
+      ["§ 1", "§ 2", "§ 3", "§ 4", "§ 5", "§ 6"].map((title) => ({ title })),
+    )!;
+    expect(receipt.notInProposalNote).toMatch(
+      /^Not in this proposal: "§ 1", "§ 2", "§ 3", "§ 4", "§ 5" and other parts, /,
+    );
   });
 });

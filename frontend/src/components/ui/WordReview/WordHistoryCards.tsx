@@ -19,7 +19,6 @@ import {
   wordEditWindow,
   wordHistoryProposal,
   wordHistoryProposalKey,
-  wordPlanNotInProposal,
 } from "@/lib/wordReview/wordHistory";
 import {
   WORD_EDITS_FENCE,
@@ -85,7 +84,7 @@ export function WordHistoryPlanCard({
         snapshot={proposal.snapshot}
         documentName={documentName ?? proposal.documentName}
         testId="word-history-plan"
-        notInProposal={wordPlanNotInProposal(content)}
+        notInProposal={proposal.notInProposal}
       />
     );
   if (isStreaming || !content.some(isRejectedWordSubmission)) return null;

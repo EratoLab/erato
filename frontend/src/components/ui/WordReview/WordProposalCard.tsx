@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { MAX_NOT_IN_PROPOSAL_NAMES } from "@/lib/wordReview/wordHistory";
 import {
   buildWordPlanReview,
   wordPlanText,
@@ -9,6 +10,7 @@ import {
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import { WordReviewCard, WordReviewDetailsToggle } from "./WordReviewCardParts";
+import { formatList } from "./wordPlanLabels";
 
 import type {
   WordAuthoringSnapshot,
@@ -67,15 +69,22 @@ export interface WordProposalCardProps {
   adapter?: WordProposalAdapter;
 }
 
-const NAMED_PARTS = 5;
-
 /** One plain line naming the parts a smaller retry left out; never refs. */
 function wordNotInProposalText(names: readonly string[]): string {
-  const listed = names.slice(0, NAMED_PARTS).join(", ");
-  return names.length > NAMED_PARTS
+  const listed = formatList(
+    names.slice(0, MAX_NOT_IN_PROPOSAL_NAMES).map(
+      (name) =>
+        name ||
+        t({
+          id: "officeAddin.word.proposal.notInProposalNoText",
+          message: "a part without text",
+        }),
+    ),
+  );
+  return names.length > MAX_NOT_IN_PROPOSAL_NAMES
     ? t({
         id: "officeAddin.word.proposal.notInProposalMore",
-        message: `Not in this proposal: ${listed} and other sections`,
+        message: `Not in this proposal: ${listed} and other parts`,
       })
     : t({
         id: "officeAddin.word.proposal.notInProposal",

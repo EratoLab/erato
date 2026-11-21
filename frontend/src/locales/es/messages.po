@@ -5569,7 +5569,12 @@ msgstr "No incluido en esta propuesta: {listed}"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.notInProposalMore"
-msgstr "No incluido en esta propuesta: {listed} y otras secciones"
+msgstr "No incluido en esta propuesta: {listed} y otras partes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "una parte sin texto"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx

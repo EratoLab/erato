@@ -1,6 +1,7 @@
 import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
+  MAX_PLAN_BYTES,
   MAX_WORD_SCOPE_BYTES,
   canonicalWordPlan,
   wordReadScope,
@@ -11,10 +12,13 @@ import {
 import {
   MAX_WORD_SCOPED_CHANGES,
   MAX_WORD_SCOPED_SOURCES,
+  WORD_SCOPED_EXPANDED_TOO_LARGE,
   WORD_SCOPED_NEEDS_COMPLETE_READ,
+  WORD_SCOPED_OVER_COMPLETE_READ_BUDGET,
   WORD_SCOPED_SIZE,
   WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN,
 } from "./wordAuthoringContract";
+import { wordBlockIndex } from "./wordDocumentOutline";
 import { wordTargetInventory } from "./wordTargetRead";
 
 import type {
@@ -51,8 +55,8 @@ const only = (v: Record<string, unknown>, keys: string[]) =>
 const fail = (path: string, message: string): never => {
   throw new WordScopedSubmissionError(path, "scoped-shape", message);
 };
-/** Only a token, ref, anchor, object, story or section the read did not return
- * needs a new read; its code makes the model read again. */
+/** A token, ref, anchor, object, story or section the read did not return needs a new read; its
+ * code makes the model read again. */
 const unread = (path: string, message: string): never => {
   throw new WordScopedSubmissionError(path, "outside-read-scope", message);
 };
@@ -172,11 +176,48 @@ function completeReadTargets(
     : undefined;
 }
 
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/**
+ * The body blocks a scoped_edit names, read as sent and leniently, so that a refused change counts
+ * like an accepted one: the sources it replaces, deletes or moves, its insertion anchors, the blocks
+ * holding the objects it edits and the anchors of its new notes.
+ */
+export function wordScopedEditBlocks(
+  edit: Record<string, unknown>,
+  snapshot: WordAuthoringSnapshot,
+): Set<number> {
+  const index = wordBlockIndex(snapshot);
+  const blocks = new Set<number>();
+  const add = (ref: unknown) => {
+    const at = typeof ref === "string" ? index.get(ref) : undefined;
+    if (at !== undefined) blocks.add(at);
+  };
+  for (const change of list(edit.body)) {
+    if (!object(change)) continue;
+    list(change.source).forEach(add);
+    if (String(change.operation).startsWith("insert-")) add(change.anchor);
+  }
+  const objects = list(edit.objects).filter(object);
+  if (objects.length) {
+    const inventory = wordTargetInventory(snapshot);
+    for (const change of objects)
+      add(
+        inventory.find((t) => t.objectTarget && t.ref === change.ref)?.bodyRef,
+      );
+  }
+  for (const story of list(edit.stories))
+    if (object(story) && object(story.anchor)) add(story.anchor.block);
+  return blocks;
+}
+
 /** Materialize a sparse change set. The caller never supplies keep entries or a
- * complete output document. Source ownership and all non-target keeps are host-owned. */
+ * complete output document. Source ownership and all non-target keeps are host-owned.
+ * `completeReadIssue` is why this request cannot make a complete read, when the host knows. */
 export function expandWordScopedSubmission(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
+  completeReadIssue?: string,
 ): WordScopedExpansion {
   const read = wordReadScope(snapshot, input.readToken);
   const scope = read?.kind === "objects" ? read : undefined;
@@ -185,16 +226,20 @@ export function expandWordScopedSubmission(
     (read ? undefined : completeReadTargets(snapshot, input.readToken));
   if (input.snapshot !== snapshot.token || !targets)
     return unread("/readToken", WORD_SCOPED_TOKEN_MESSAGE);
-  // After a complete read the caller's maxPlanBytes check is the limit, as for a full plan.
+  // After a complete read the expanded plan's maxPlanBytes check below is the limit.
   if (
     scope &&
     new TextEncoder().encode(JSON.stringify(input)).length >
       MAX_WORD_SCOPE_BYTES
   ) {
-    if (snapshot.completeReadIssue)
+    if (snapshot.completeReadIssue || completeReadIssue)
       return fail(
         "/scoped_edit",
-        `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN}`,
+        `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${
+          snapshot.completeReadIssue
+            ? WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN
+            : WORD_SCOPED_OVER_COMPLETE_READ_BUDGET
+        }`,
       );
     // too-large asks for a read, so the complete read uses the recovery read allowance.
     throw new WordScopedSubmissionError(
@@ -788,8 +833,12 @@ export function expandWordScopedSubmission(
     ...(stories.length ? { stories } : {}),
     ...(sections ? { sections } : {}),
   };
+  const json = JSON.stringify(value);
+  // The host's keeps count too; refused here, the model splits the change instead of reading again.
+  if (new TextEncoder().encode(json).length > MAX_PLAN_BYTES)
+    return fail("/scoped_edit", WORD_SCOPED_EXPANDED_TOO_LARGE);
   const parseIssues: WordPlanDiagnostics = [];
-  const parsed = parseWordDocumentPlan(JSON.stringify(value), parseIssues);
+  const parsed = parseWordDocumentPlan(json, parseIssues);
   if (!parsed) {
     const issues = wordScopedIssues(parseIssues, origins);
     const [first] = issues;

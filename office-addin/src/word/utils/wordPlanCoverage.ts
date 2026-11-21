@@ -1,22 +1,31 @@
-import { wordBlockIndex, wordCaptureSections } from "./wordDocumentOutline";
+import { MAX_NOT_IN_PROPOSAL_NAMES } from "@erato/frontend/word-review";
+
 import {
-  wordListedNames,
+  START_OF_DOCUMENT,
+  wordBlockIndex,
+  wordCaptureSections,
+} from "./wordDocumentOutline";
+import {
+  wordNamedParts,
+  wordPassageName,
   wordPassageStart,
   wordPlanWrittenBlocks,
-  wordTitledPart,
 } from "./wordPlanDocumentChanges";
+import { MAX_WORD_RECEIPT_FIELD_BYTES } from "./wordReadFreshness";
+import { wordScopedEditBlocks } from "./wordScopedSubmission";
+import { utf8ByteLength } from "../../core/clientActions/actionFacetArgs";
 
-import type { WordCaptureSections } from "./wordDocumentOutline";
+import type {
+  WordCaptureSections,
+  WordOutlineEntry,
+} from "./wordDocumentOutline";
 import type {
   WordAuthoringSnapshot,
   WordPlanEntry,
 } from "@erato/frontend/word-review";
 
-/** Bounds what a receipt stores; the card names the first few. */
+/** Bounds what a receipt stores. */
 const MAX_LISTED = 20;
-const MAX_NOTE_NAMES = 3;
-/** A replay receipt keeps a field only up to 512 bytes of JSON (MAX_RECEIPT_FIELD_BYTES). */
-const MAX_NOTE_BYTES = 480;
 
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
@@ -27,38 +36,21 @@ const strings = (v: unknown): string[] =>
 /**
  * The body blocks a submission changes, read leniently from its arguments so that an attempt
  * refused before parsing (for its size, say) still counts. A sparse change is read as sent, never
- * as the plan it expands to, so a refused and an accepted sparse change name blocks alike: moves
- * count their sources, insertions their anchor.
+ * as the plan it expands to, so a refused and an accepted sparse change name blocks alike. Moves a
+ * full plan implies are left out: a refused plan's duplicated keep would read as one.
  */
 export function wordSubmissionBlocks(
   input: unknown,
   snapshot: WordAuthoringSnapshot,
 ): Set<number> {
-  const index = wordBlockIndex(snapshot);
-  const blocks = new Set<number>();
-  const add = (ref: unknown) => {
-    if (typeof ref !== "string") return;
-    // After a complete read an object ref is its block's ref, "__" and the object's target.
-    const at = index.get(ref) ?? index.get(ref.split("__")[0]);
-    if (at !== undefined) blocks.add(at);
-  };
-  if (!object(input)) return blocks;
-  const edit = input.scoped_edit;
-  if (object(edit)) {
-    for (const change of items(edit.body)) {
-      if (!object(change)) continue;
-      strings(change.source).forEach(add);
-      if (String(change.operation).startsWith("insert-")) add(change.anchor);
-    }
-    for (const change of items(edit.objects))
-      if (object(change)) add(change.ref);
-    for (const story of items(edit.stories))
-      if (object(story) && object(story.anchor)) add(story.anchor.block);
-    return blocks;
-  }
+  if (!object(input)) return new Set();
+  if (object(input.scoped_edit))
+    return wordScopedEditBlocks(input.scoped_edit, snapshot);
   if (object(input.table_cell)) {
-    add(input.table_cell.sourceRef);
-    return blocks;
+    const ref = input.table_cell.sourceRef;
+    const at =
+      typeof ref === "string" ? wordBlockIndex(snapshot).get(ref) : undefined;
+    return new Set(at === undefined ? [] : [at]);
   }
   return wordPlanWrittenBlocks(
     {
@@ -89,85 +81,173 @@ export function wordSubmissionBlocks(
       ),
     },
     snapshot,
+    { moves: false },
   );
 }
 
-/** A part is the innermost heading or numbered section; text outside any is its own part. */
-function partKey(sections: WordCaptureSections, block: number): string {
-  const titled = wordTitledPart(sections, block);
-  if (titled) return `t${titled.index}`;
-  const entry = sections.entryOf[block];
-  return entry >= 0 ? `p${entry}` : `b${block}`;
+/** The body blocks this request read for writing: its complete read's and every scoped read's. */
+function readBlocks(snapshot: WordAuthoringSnapshot): Set<number> {
+  const refs = new Set(snapshot.read);
+  for (const scope of snapshot.readScopes?.values() ?? [])
+    if (scope.kind === "objects")
+      for (const target of scope.targets) {
+        if (target.bodyRef) refs.add(target.bodyRef);
+      }
+    else refs.add(scope.sourceRef);
+  const index = wordBlockIndex(snapshot);
+  return new Set(
+    [...refs].flatMap((ref) => {
+      const at = index.get(ref);
+      return at === undefined ? [] : [at];
+    }),
+  );
 }
 
-/** Each part the blocks lie in, with its first block in document order. */
-function partsOf(
-  sections: WordCaptureSections,
-  blocks: ReadonlySet<number>,
-): Map<string, number> {
-  const parts = new Map<string, number>();
-  for (const block of [...blocks].sort((a, b) => a - b)) {
-    const key = partKey(sections, block);
-    if (!parts.has(key)) parts.set(key, block);
+const titled = (entry: WordOutlineEntry | undefined) =>
+  !!entry &&
+  entry.tag !== "P" &&
+  !!entry.title &&
+  entry.title !== START_OF_DOCUMENT;
+
+/**
+ * The parts that hold a block, outermost first: each heading or numbered section with a title of
+ * its own. A block outside all of them is in one untitled part, keyed by its outline entry.
+ */
+function partChain(sections: WordCaptureSections, block: number): string[] {
+  const chain = sections.outline
+    .map((entry, k) => ({ entry, k }))
+    .filter(
+      ({ entry }) => titled(entry) && entry.from <= block && block < entry.to,
+    )
+    .sort((a, b) => a.entry.level - b.entry.level)
+    .map(({ k }) => String(k));
+  if (chain.length) return chain;
+  const entry = sections.entryOf[block];
+  return [entry >= 0 ? String(entry) : "start"];
+}
+
+/** For each part the blocks change, and "" for the whole document, the parts directly under it
+ * that they change. */
+function partTree(
+  chainOf: (block: number) => string[],
+  blocks: Iterable<number>,
+): Map<string, Set<string>> {
+  const tree = new Map<string, Set<string>>([["", new Set()]]);
+  for (const block of blocks) {
+    let parent = "";
+    for (const key of chainOf(block)) {
+      tree.get(parent)!.add(key);
+      if (!tree.has(key)) tree.set(key, new Set());
+      parent = key;
+    }
   }
-  return parts;
+  return tree;
+}
+
+/** A left-out part by its own title, else by the first words of its text; neither when it has none. */
+export interface WordLeftOutPart {
+  title?: string;
+  passage?: string;
+}
+
+function leftOutPart(
+  snapshot: WordAuthoringSnapshot,
+  sections: WordCaptureSections,
+  key: string,
+  changed: readonly number[],
+): WordLeftOutPart {
+  const entry = key === "start" ? undefined : sections.outline[Number(key)];
+  if (titled(entry)) return { title: entry!.title };
+  const span = entry
+    ? Array.from({ length: entry.to - entry.from }, (_, i) => entry.from + i)
+    : [];
+  for (const block of [...changed, ...span]) {
+    const passage = wordPassageStart(snapshot, block);
+    if (passage) return { passage };
+  }
+  return {};
 }
 
 /**
- * The parts an earlier attempt of the same request changed that the accepted plan leaves out, by
- * their own titles (or first words), in document order. Only an earlier attempt that changed more
- * parts than the accepted plan counts, so a plan accepted at the first attempt, or a retry that
- * keeps every part, names none.
+ * The parts an earlier attempt of the same request changed that the accepted plan leaves out, in
+ * document order. An attempt counts only when it changed more parts than the accepted plan under
+ * the document or under a part both changed, so a retry that moves a change from one part to
+ * another names none. A left-out part is named at its outermost level: a whole section, not its
+ * subsections. Only blocks the request read count, so a mistyped ref the host refused names none.
  */
 export function wordPartsNotInProposal(
   snapshot: WordAuthoringSnapshot,
   earlier: readonly ReadonlySet<number>[],
   accepted: ReadonlySet<number>,
-): string[] {
+): WordLeftOutPart[] {
   if (!earlier.length) return [];
   const sections = wordCaptureSections(snapshot);
-  const kept = partsOf(sections, accepted);
-  const missing = new Map<string, number>();
+  const chains = new Map<number, string[]>();
+  const chainOf = (block: number) => {
+    let chain = chains.get(block);
+    if (!chain) chains.set(block, (chain = partChain(sections, block)));
+    return chain;
+  };
+  const kept = partTree(chainOf, accepted);
+  const read = readBlocks(snapshot);
+  const missing = new Map<string, number[]>();
   for (const attempt of earlier) {
-    const changed = partsOf(sections, attempt);
-    if (changed.size <= kept.size) continue;
-    for (const [key, block] of changed)
-      if (!kept.has(key) && block < (missing.get(key) ?? Infinity))
-        missing.set(key, block);
+    const blocks = [...attempt]
+      .filter((b) => read.has(b))
+      .sort((a, b) => a - b);
+    const fewer = [...partTree(chainOf, blocks)].some(
+      ([parent, children]) =>
+        children.size > (kept.get(parent)?.size ?? Infinity),
+    );
+    if (!fewer) continue;
+    for (const block of blocks) {
+      const key = chainOf(block).find((k) => !kept.has(k));
+      if (key) missing.set(key, [...(missing.get(key) ?? []), block]);
+    }
   }
-  const names: string[] = [];
-  for (const block of [...missing.values()].sort((a, b) => a - b)) {
-    const name =
-      wordTitledPart(sections, block)?.title ??
-      wordPassageStart(snapshot, block);
-    if (name && !names.includes(name)) names.push(name);
+  const parts: WordLeftOutPart[] = [];
+  const seen = new Set<string>();
+  for (const [key, changed] of [...missing]
+    .map(([key, changed]) => [key, changed.sort((a, b) => a - b)] as const)
+    .sort(([, a], [, b]) => a[0] - b[0])) {
+    const part = leftOutPart(snapshot, sections, key, changed);
+    const name = JSON.stringify(part);
+    if (seen.has(name)) continue;
+    seen.add(name);
+    parts.push(part);
   }
-  return names;
+  return parts;
 }
 
-const encoder = new TextEncoder();
-
 /** What an accepted receipt adds when the plan leaves out parts an earlier attempt changed: the
- * card shows the names, and the note tells the model when a later turn replays the call. */
+ * card shows `notInProposal`, and the note tells the model when a later turn replays the call. An
+ * empty card name stands for a part without text. */
 export function wordNotInProposalReceipt(
-  names: readonly string[],
+  parts: readonly WordLeftOutPart[],
 ): { notInProposal: string[]; notInProposalNote: string } | undefined {
-  if (!names.length) return undefined;
-  const quoted = names.map((name) => `"${name}"`);
+  if (!parts.length) return undefined;
+  const spoken = parts.map((part) =>
+    part.title !== undefined
+      ? `"${part.title}"`
+      : part.passage !== undefined
+        ? wordPassageName(part.passage)
+        : "a part without text",
+  );
   const note = (count: number) =>
-    `Not in this proposal: ${
-      quoted.length > count
-        ? `${quoted.slice(0, count).join(", ")} and other parts`
-        : wordListedNames(quoted)
-    }, which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.`;
-  let count = Math.min(MAX_NOTE_NAMES, quoted.length);
+    `Not in this proposal: ${wordNamedParts(spoken, count)}, which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.`;
+  let count = Math.min(MAX_NOT_IN_PROPOSAL_NAMES, spoken.length);
   while (
     count > 1 &&
-    encoder.encode(JSON.stringify(note(count))).length > MAX_NOTE_BYTES
+    utf8ByteLength(JSON.stringify(note(count))) > MAX_WORD_RECEIPT_FIELD_BYTES
   )
     count--;
   return {
-    notInProposal: names.slice(0, MAX_LISTED),
+    notInProposal: parts
+      .slice(0, MAX_LISTED)
+      .map(
+        (part) =>
+          part.title ?? (part.passage !== undefined ? `“${part.passage}”` : ""),
+      ),
     notInProposalNote: note(count),
   };
 }

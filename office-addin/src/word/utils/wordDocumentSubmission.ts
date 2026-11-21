@@ -1,5 +1,6 @@
 import {
   MAX_PLAN_BYTES,
+  MAX_WORD_SCOPE_BYTES,
   wordSourceReadRefs,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
@@ -247,9 +248,22 @@ function createSubmissionExecutor(
           : "table_cell" in submitted
             ? "table_cell"
             : undefined;
+      // The budget check is a backend call, so only an oversized scoped_edit after a target read asks.
+      const completeReadIssue =
+        kind === "scoped_edit" &&
+        scoped?.kind === "objects" &&
+        new TextEncoder().encode(serialized).length > MAX_WORD_SCOPE_BYTES
+          ? await session.completeReadIssue()
+          : undefined;
+      if (
+        context.signal?.aborted ||
+        session.snapshotForSubmission(context) !== snapshot ||
+        snapshot.revoked
+      )
+        return { ok: false, error: "Document submission stopped." };
       const expansion =
         kind === "scoped_edit"
-          ? expandWordScopedSubmission(submitted, snapshot)
+          ? expandWordScopedSubmission(submitted, snapshot, completeReadIssue)
           : undefined;
       const value =
         expansion?.plan ??
@@ -285,7 +299,7 @@ function createSubmissionExecutor(
           "draft_id" in input ||
           "table_cell" in input ||
           "scoped_edit" in input;
-        // A smaller retry must not drop parts silently (ERMAIN-1287).
+        // A retry that changes fewer parts than an earlier attempt names what it left out (ERMAIN-1287).
         const notInProposal = wordNotInProposalReceipt(
           wordPartsNotInProposal(
             snapshot,

@@ -39,12 +39,13 @@ function inOrder(values: readonly number[]): Set<number> {
 
 /** The blocks a plan writes: the sources it replaces, deletes or moves, and the blocks its
  * insertions and new notes are anchored to. A kept source counts as moved when it is out
- * of the longest run the plan keeps in the captured order. */
+ * of the longest run the plan keeps in the captured order, unless `moves` is off. */
 export function wordPlanWrittenBlocks(
   plan: Pick<WordDocumentPlan, "entries" | "deleted"> & {
     stories?: readonly { anchor?: { block: string } }[];
   },
   snapshot: WordAuthoringSnapshot,
+  { moves = true }: { moves?: boolean } = {},
 ): Set<number> {
   const index = wordBlockIndex(snapshot);
   const written = new Set<number>();
@@ -75,6 +76,7 @@ export function wordPlanWrittenBlocks(
   for (const { source } of plan.deleted) source.forEach(add);
   for (const story of plan.stories ?? [])
     if (story.anchor) add(story.anchor.block);
+  if (!moves) return written;
   const kept = inOrder(placed.map((p) => p.at));
   placed.forEach((p, k) => {
     if (!kept.has(k)) p.source.forEach(add);
@@ -82,26 +84,22 @@ export function wordPlanWrittenBlocks(
   return written;
 }
 
-/** The innermost heading or numbered section that holds a block, when it has a title of its own. */
-export function wordTitledPart(
+/** The title of the innermost heading or numbered section that holds a block, if it has one. */
+function titleOf(
   sections: WordCaptureSections,
   block: number,
-): { index: number; title: string } | undefined {
-  let innermost: number | undefined;
-  sections.outline.forEach((entry, k) => {
+): string | undefined {
+  let innermost: WordCaptureSections["outline"][number] | undefined;
+  for (const entry of sections.outline)
     if (
       entry.tag !== "P" &&
       entry.from <= block &&
       block < entry.to &&
-      (innermost === undefined ||
-        entry.level >= sections.outline[innermost].level)
+      (!innermost || entry.level >= innermost.level)
     )
-      innermost = k;
-  });
-  const title =
-    innermost === undefined ? undefined : sections.outline[innermost].title;
-  return innermost !== undefined && title && title !== START_OF_DOCUMENT
-    ? { index: innermost, title }
+      innermost = entry;
+  return innermost?.title && innermost.title !== START_OF_DOCUMENT
+    ? innermost.title
     : undefined;
 }
 
@@ -116,23 +114,30 @@ export function wordPassageStart(
   return `${start}${text.length > PASSAGE_START_CHARS ? "…" : ""}`;
 }
 
+export const wordPassageName = (start: string) =>
+  `the passage beginning "${start}"`;
+
 /** The document's own name for the part a block lies in: the title of the innermost heading or
  * numbered section that holds it, else the start of the block's text. Never a ref or outline tag. */
-export function wordPartName(
+function partName(
   snapshot: WordAuthoringSnapshot,
   sections: WordCaptureSections,
   block: number,
 ): string | undefined {
-  const titled = wordTitledPart(sections, block);
-  if (titled) return `"${titled.title}"`;
+  const title = titleOf(sections, block);
+  if (title) return `"${title}"`;
   const start = wordPassageStart(snapshot, block);
-  return start && `the passage beginning "${start}"`;
+  return start && wordPassageName(start);
 }
 
-export const wordListedNames = (names: readonly string[]) =>
-  names.length < 2
+/** Part names for a sentence: all of them, or the first `max` and "other parts". */
+export function wordNamedParts(names: readonly string[], max: number): string {
+  if (names.length > max)
+    return `${names.slice(0, max).join(", ")} and other parts`;
+  return names.length < 2
     ? (names[0] ?? "")
     : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
 
 /**
  * Refuses a plan Apply would refuse: a local or remote change since the capture lies in a block a
@@ -154,15 +159,13 @@ export function wordDocumentChangedRefusal(
   const sections = wordCaptureSections(snapshot);
   const names: string[] = [];
   for (const block of changes.blocks) {
-    const name = wordPartName(snapshot, sections, block);
+    const name = partName(snapshot, sections, block);
     if (name && !names.includes(name)) names.push(name);
     if (names.length > MAX_NAMED_PARTS) break;
   }
-  const parts = !names.length
-    ? "the document"
-    : names.length > MAX_NAMED_PARTS
-      ? `${names.slice(0, MAX_NAMED_PARTS).join(", ")} and other parts`
-      : wordListedNames(names);
+  const parts = names.length
+    ? wordNamedParts(names, MAX_NAMED_PARTS)
+    : "the document";
   const error = `${changes.local ? "The user" : "A co-author"} changed ${parts} in Word while you were working, so Apply would refuse this plan.`;
   return {
     ok: false,

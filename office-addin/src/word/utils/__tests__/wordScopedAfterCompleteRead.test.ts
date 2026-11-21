@@ -337,6 +337,21 @@ describe("sparse changes after a complete read", () => {
           }),
       ],
       [
+        "a change that exceeds 256 KiB with the blocks it keeps",
+        "scoped-shape",
+        (s, token) => {
+          const args = (text: string) => ({
+            snapshot: s.snapshot.token,
+            readToken: token,
+            scoped_edit: {
+              body: [{ ...insert, blocks: [block("big", text)] }],
+            },
+          });
+          const fill = 256 * 1024 - 400 - JSON.stringify(args("")).length;
+          return s.submit(args("x".repeat(fill)));
+        },
+      ],
+      [
         "a revoked capture",
         "expired",
         (s, token) => {

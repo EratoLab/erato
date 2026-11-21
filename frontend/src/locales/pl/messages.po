@@ -5569,7 +5569,12 @@ msgstr "Poza tą propozycją: {listed}"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.notInProposalMore"
-msgstr "Poza tą propozycją: {listed} i inne sekcje"
+msgstr "Poza tą propozycją: {listed} oraz inne części"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "część bez tekstu"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  heading,
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -9,7 +10,6 @@ import {
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
 import { okResult } from "../../../test/mocks/word/sectionFixtures";
-import { escapeXml } from "../../../utils/escapeXml";
 import {
   beginWordOwnWrite,
   nameWordOwnWriteIds,
@@ -30,8 +30,6 @@ import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
 const context = { chatId: "chat-A", messageId: "message-A", toolCallId: "c" };
 
-const heading = (text: string) =>
-  `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 const cell = (text: string) => `<w:tc><w:tcPr/>${paragraph(text)}</w:tc>`;
 const TABLE = `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Service")}${cell("Level")}</w:tr><w:tr>${cell("Hosting")}${cell("99.5 %")}</w:tr></w:tbl>`;
 

@@ -46,14 +46,17 @@ this protocol does not make every Word feature editable.
 contains optional `body`, `objects`, `stories` and `sections` collections, each
 limited to 16 changes, with at most 16 `source` refs per change. After a target
 read a submission is limited to 24 KiB (about 24,000 characters of JSON); after a
-complete read it may be as large as a full plan (256 KiB), since the host expands
-it into one anyway. Blocks per change have no count limit, so a long list stays
-one change; a longer source range is split into consecutive changes. A change
+complete read the full plan the host expands it into, kept blocks included, may
+be as large as any full plan (256 KiB). Blocks per change have no count limit,
+so a long list stays one change; a longer source range is split into
+consecutive changes. A change
 over 24 KiB after a target read is resubmitted after a complete read; when the
-document is too large for a complete read, the model submits what fits and
-continues in the next turn. When an accepted change leaves out parts that an
-earlier, larger attempt of the same request changed, the card and the accepted
-receipt name them by their titles. The host materializes
+document is too large for a complete read, or the request's model budget has no
+room for one, the model submits what fits and continues in the next turn. Size
+alone never calls for a full plan. When an accepted change touches fewer parts
+than an earlier attempt of the same request did, the card and the accepted
+receipt name the parts it leaves out by their titles, whole sections rather
+than their subsections. The host materializes
 all unchanged keeps and untouched sections. Overlapping writes and reuse of
 unread source references are rejected. Scope capabilities bind document identity,
 snapshot fingerprint and request ownership. Review and Apply accept only the
