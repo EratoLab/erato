@@ -9,10 +9,10 @@
 
 use super::me_profile_middleware::MeProfile;
 use super::read_aloud::{speech_language, speech_response};
-use super::starting_assistant::{AudienceIdentity, subject_matches};
+use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::config::SpeechProviderConfig;
 use crate::distribution::experience_policy::{
-    AudienceWaitLines, ExperiencePolicyDocument, WAIT_LINES_SETTING, resolution_order_for,
+    AudienceWaitLines, ExperiencePolicyDocument, WAIT_LINES_SETTING,
 };
 use crate::models::chat::get_chat_by_message_id;
 use crate::policy::engine::PolicyEngine;
@@ -133,17 +133,13 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceWaitLines)> {
-    resolution_order_for(policy, WAIT_LINES_SETTING)
-        .filter_map(|(name, audience)| {
-            let lines = audience.wait_lines.as_ref()?;
-            (audience.is_active_at(now)
-                && audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity)))
-            .then_some((name, lines))
-        })
-        .collect()
+    matching_blocks(
+        policy,
+        WAIT_LINES_SETTING,
+        |audience| audience.wait_lines.as_ref(),
+        identity,
+        now,
+    )
 }
 
 /// The amount in resolution order: deployment, audiences, the user's own
@@ -157,10 +153,10 @@ pub fn resolve(
         .iter()
         .find_map(|(_, set)| set.amount)
         .unwrap_or(config.amount);
-    let user_choice = audiences
-        .iter()
-        .find_map(|(_, set)| set.user_choice)
-        .unwrap_or(config.user_choice);
+    let user_choice = user_choice_open(
+        config.user_choice,
+        audiences.iter().map(|(_, set)| set.user_choice),
+    );
     let (mut source, audience) = match audiences.first() {
         Some((name, _)) => (WaitLinesSource::Audience, Some((*name).to_string())),
         None => (WaitLinesSource::Deployment, None),
@@ -314,7 +310,10 @@ pub async fn wait_lines(
     Extension(me_user): Extension<MeProfile>,
     Query(query): Query<WaitLinesQuery>,
 ) -> Result<Json<WaitLinesResponse>, StatusCode> {
-    let Some((provider_id, provider_config)) = app_state.config.conversational_speech_provider()
+    let Some((provider_id, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .conversational_speech_provider(&app_state.config)
     else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -429,7 +428,11 @@ pub async fn progress_speech(
     Path(message_id): Path<Uuid>,
     Json(request): Json<ProgressSpeechRequest>,
 ) -> Result<Response, StatusCode> {
-    let Some((_, provider_config)) = app_state.config.conversational_speech_provider() else {
+    let Some((_, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .conversational_speech_provider(&app_state.config)
+    else {
         return Err(StatusCode::NOT_FOUND);
     };
     let text = request.text.trim();

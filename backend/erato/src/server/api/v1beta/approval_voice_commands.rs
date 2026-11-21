@@ -100,8 +100,8 @@ pub async fn interpret_approval_voice_command(
     Path(message_id): Path<Uuid>,
     Json(request): Json<ApprovalVoiceCommandRequest>,
 ) -> Result<Json<VoiceCommand>, StatusCode> {
-    let config = &app_state.config.approval_voice_commands;
-    if !config.enabled {
+    let switches = app_state.voice_switches().await;
+    if !switches.voice_commands {
         return Err(StatusCode::NOT_FOUND);
     }
     let language = normalize_supported_language(request.language.as_deref())
@@ -125,7 +125,7 @@ pub async fn interpret_approval_voice_command(
 
     let start = Instant::now();
     let words = app_state.voice_command_words.for_language(&language);
-    let deciding = app_state.config.approval_voice_decisions.enabled;
+    let deciding = switches.voice_decisions;
     let phrase = deciding
         .then(|| match_phrase(&request.transcript, words))
         .flatten();
@@ -153,7 +153,9 @@ pub async fn interpret_approval_voice_command(
             Some(classified) => classified,
             None => {
                 let deadline = tokio::time::Instant::now()
-                    + Duration::from_millis(u64::from(config.model_timeout_ms));
+                    + Duration::from_millis(u64::from(
+                        app_state.config.approval_voice_commands.model_timeout_ms,
+                    ));
                 ask_model(&app_state, &policy, &me_user, &input, words, deadline).await?
             }
         },

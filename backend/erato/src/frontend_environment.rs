@@ -1,6 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy};
+use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, VoiceSwitches};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
 use crate::distribution::frontend_bundles::{
@@ -325,6 +325,36 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
         HeaderValue::from_str(&content_security_policy)
             .expect("generated Content-Security-Policy header should be valid"),
     )
+}
+
+/// The page's voice switches. Injected per request from the live switches,
+/// so the admin panel switches a voice feature without a restart.
+fn voice_switch_environment(
+    config: &AppConfig,
+    switches: VoiceSwitches,
+) -> [(&'static str, Value); 5] {
+    [
+        (
+            FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED,
+            Value::Bool(switches.conversational),
+        ),
+        (
+            "SPEECH_ENABLED",
+            Value::Bool(switches.conversational_speech_provider(config).is_some()),
+        ),
+        (
+            "APPROVAL_VOICE_COMMANDS_ENABLED",
+            Value::Bool(switches.voice_commands),
+        ),
+        (
+            "APPROVAL_VOICE_DECISIONS_ENABLED",
+            Value::Bool(switches.voice_decisions),
+        ),
+        (
+            "READ_ALOUD_ENABLED",
+            Value::Bool(switches.read_aloud_speech_provider(config).is_some()),
+        ),
+    ]
 }
 
 /// The confirmation phrase each language approves with, as shown, once a
@@ -677,10 +707,9 @@ fn build_frontend_environment_with(
         FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(config.audio_dictation.max_recording_duration_seconds.into()),
     );
-    env.additional_environment.insert(
-        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED.to_string(),
-        Value::Bool(config.audio_conversational.transcription.enabled),
-    );
+    for (key, value) in voice_switch_environment(config, VoiceSwitches::from_app_config(config)) {
+        env.additional_environment.insert(key.to_string(), value);
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(
@@ -764,27 +793,6 @@ fn build_frontend_environment_with(
                 .into(),
         ),
     );
-    env.additional_environment.insert(
-        "SPEECH_ENABLED".to_string(),
-        Value::Bool(
-            config.audio_conversational.transcription.enabled
-                && config
-                    .audio_conversational
-                    .speech_provider
-                    .as_ref()
-                    .is_some_and(|id| config.resolve_speech_provider_id(id).is_ok()),
-        ),
-    );
-    env.additional_environment.insert(
-        "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
-        Value::Bool(config.approval_voice_commands.enabled),
-    );
-    env.additional_environment.insert(
-        "APPROVAL_VOICE_DECISIONS_ENABLED".to_string(),
-        Value::Bool(
-            config.approval_voice_commands.enabled && config.approval_voice_decisions.enabled,
-        ),
-    );
     if let Some(phrases) = approval_voice_phrases {
         env.additional_environment
             .insert("APPROVAL_VOICE_PHRASES".to_string(), phrases.clone());
@@ -814,10 +822,6 @@ fn build_frontend_environment_with(
             serde_json::to_value(&config.spoken_number_words).unwrap_or(Value::Null),
         );
     }
-    env.additional_environment.insert(
-        "READ_ALOUD_ENABLED".to_string(),
-        Value::Bool(config.read_aloud_speech_provider().is_some()),
-    );
     // Always inject max upload size (use configured value or default)
     let max_upload_size = config
         .max_upload_size_bytes()
@@ -1310,6 +1314,7 @@ pub mod axum {
     pub async fn serve_files_with_script(
         Extension(frontend_registry): Extension<Arc<FrontendRegistry>>,
         Extension(deployment_version): Extension<DeploymentVersion>,
+        live: Option<Extension<crate::state::AppState>>,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
         let request_path = req.uri().path().to_string();
@@ -1356,7 +1361,17 @@ pub mod axum {
             return Ok(response);
         }
 
-        let frontend_environment = frontend.environment.clone();
+        let mut frontend_environment = frontend.environment.clone();
+        if frontend.inject_environment
+            && let Some(Extension(app_state)) = live
+        {
+            let switches = app_state.voice_switches().await;
+            for (key, value) in voice_switch_environment(&app_state.config, switches) {
+                frontend_environment
+                    .additional_environment
+                    .insert(key.to_string(), value);
+            }
+        }
         let component_kits = frontend.component_kits.clone();
         let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
@@ -1712,6 +1727,35 @@ mod tests {
     }
 
     #[test]
+    fn the_page_gets_the_live_voice_switches_not_the_startup_ones() {
+        let config = AppConfig::default();
+        let live = VoiceSwitches {
+            conversational: true,
+            read_aloud: true,
+            voice_commands: true,
+            voice_decisions: false,
+        };
+        let environment: std::collections::HashMap<_, _> = voice_switch_environment(&config, live)
+            .into_iter()
+            .collect();
+        assert_eq!(
+            environment[FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            environment["APPROVAL_VOICE_COMMANDS_ENABLED"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            environment["APPROVAL_VOICE_DECISIONS_ENABLED"],
+            Value::Bool(false)
+        );
+        // Without a voice configured, switching speech on speaks nothing.
+        assert_eq!(environment["SPEECH_ENABLED"], Value::Bool(false));
+        assert_eq!(environment["READ_ALOUD_ENABLED"], Value::Bool(false));
+    }
+
+    #[test]
     fn approval_speech_sentences_reach_the_frontend_when_set() {
         let mut config = AppConfig::default();
         let get = |config: &AppConfig| {
@@ -1907,6 +1951,7 @@ mod tests {
             let response = serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
+                None,
                 Request::builder()
                     .uri(format!("/public/common/custom-theme/acme/{asset}"))
                     .body(Body::empty())
@@ -1939,6 +1984,7 @@ mod tests {
                 let response = serve_files_with_script(
                     Extension(registry.clone()),
                     Extension(DeploymentVersion(None)),
+                    None,
                     Request::builder()
                         .uri(format!("{mount}/{asset}"))
                         .body(Body::empty())
@@ -2845,6 +2891,7 @@ mod tests {
             serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
+                None,
                 request.body(Body::empty()).unwrap(),
             )
         };

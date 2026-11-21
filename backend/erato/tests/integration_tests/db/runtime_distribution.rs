@@ -11,7 +11,7 @@ use erato::distribution::experience_policy::{
 };
 use erato::distribution::runtime::{ADMIN_PANEL_SOURCE_SERVICE, ReloadableAppState};
 use erato::models::runtime_configuration::{
-    EXPERIENCE_POLICY_SOURCE_TYPE, TRANSLATION_PO_SOURCE_TYPE,
+    ERATO_TOML_SOURCE_TYPE, EXPERIENCE_POLICY_SOURCE_TYPE, TRANSLATION_PO_SOURCE_TYPE,
 };
 use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use sqlx::types::Uuid;
@@ -376,4 +376,50 @@ async fn translation_reload_replaces_cached_json_and_removes_deleted_locales(poo
             .is_none()
     );
     assert!(deleted.distribution_bundle.translation_locales().is_empty());
+}
+
+/// The admin panel's `erato.toml` row switches voice features on reload;
+/// deciding by voice only off, and a switch that cannot work keeps the
+/// previous switches.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn voice_switches_follow_the_admin_panel_override(pool: Pool<Postgres>) {
+    let app_state = app_state_with_encryption(pool).await;
+    let set_override = |toml: &'static str| {
+        let app_state = app_state.clone();
+        async move {
+            RuntimeConfiguration::delete_many()
+                .filter(runtime_configuration::Column::SourceType.eq(ERATO_TOML_SOURCE_TYPE))
+                .exec(&app_state.db)
+                .await
+                .unwrap();
+            insert_rows(
+                &app_state,
+                [admin_panel_row(
+                    ERATO_TOML_SOURCE_TYPE,
+                    Some("erato.toml"),
+                    app_state.encrypt(toml).unwrap(),
+                )],
+            )
+            .await;
+            let loaded = ReloadableAppState::load(&app_state).await.unwrap();
+            let switches = loaded.voice_switches;
+            *app_state.reloadable.write().await = loaded;
+            switches
+        }
+    };
+    assert!(!app_state.voice_switches().await.voice_commands);
+
+    let on = set_override(
+        "[approval_voice_commands]\nenabled = true\n[approval_voice_decisions]\nenabled = true\n",
+    )
+    .await;
+    assert!(on.voice_commands);
+    assert!(!on.voice_decisions, "never switched on by an override");
+    assert!(app_state.voice_switches().await.voice_commands);
+
+    let kept = set_override("[audio_read_aloud]\nenabled = true\n").await;
+    assert_eq!(
+        kept, on,
+        "read aloud without a voice keeps the previous switches"
+    );
 }

@@ -228,6 +228,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
                     server::mcp_apps_sandbox_page::on_sandbox_hosts_only,
                 ))
                 .layer(Extension(frontend_registry))
+                .layer(Extension(state.clone()))
                 .layer(Extension(DeploymentVersion::from_env()))
                 .layer(CorsLayer::very_permissive())
                 .layer(SetResponseHeaderLayer::overriding(

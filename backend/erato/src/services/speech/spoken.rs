@@ -26,12 +26,7 @@ impl SpeechLanguage {
 
     /// Like [`SpeechLanguage::new`], with the readings the configuration built.
     pub fn with_readings(language: &str, readings: &ReadingsByLanguage) -> Self {
-        let code = language
-            .split(['-', '_'])
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_ascii_lowercase();
+        let code = erato_config::language_words::primary_subtag(language);
         let readings = readings.get(language);
         Self { code, readings }
     }
@@ -94,6 +89,25 @@ pub fn speakable(markdown: &str, language: &SpeechLanguage) -> String {
     read(markdown, language, false, Replaced::default())
         .text
         .replace(BREAK, "")
+}
+
+/// Plain text as markdown that reads back as exactly that text: every ASCII
+/// punctuation mark escaped and the whitespace collapsed to single spaces, so
+/// no mark, table, list, heading or code block is parsed out of it.
+pub fn plain_as_markdown(plain: &str) -> String {
+    let mut escaped = String::with_capacity(plain.len() + 8);
+    for word in plain.split_whitespace() {
+        if !escaped.is_empty() {
+            escaped.push(' ');
+        }
+        for c in word.chars() {
+            if c.is_ascii_punctuation() {
+                escaped.push('\\');
+            }
+            escaped.push(c);
+        }
+    }
+    escaped
 }
 
 /// Which replacement sentences were said since the last spoken text.
@@ -343,6 +357,30 @@ fn strip_www(host: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn plain_text_is_spoken_as_shown() {
+        let language = super::SpeechLanguage::new("de");
+        let spoken = |plain: &str| super::speakable(&super::plain_as_markdown(plain), &language);
+        for (plain, words) in [
+            ("Betreff: ~~alt~~ neu", &["Betreff", "alt", "neu"][..]),
+            ("Preis **50 € _netto", &["Preis", "50", "netto"]),
+            ("[Entwurf", &["Entwurf"]),
+            ("# 1. Punkt", &["1", "Punkt"]),
+            ("    eingerückt\n\n  Zeile", &["eingerückt Zeile"]),
+        ] {
+            let said = spoken(plain);
+            for word in words {
+                assert!(said.contains(word), "{plain:?} -> {said:?}");
+            }
+        }
+        let table = spoken("| a | b |\n|---|---|\n| 1 | 2 |");
+        assert!(
+            !table.contains("Tabelle") && table.contains('a'),
+            "{table:?}"
+        );
+        assert!(super::speakable("~~alt~~ neu", &language).trim() == "neu.");
+    }
+
     use super::*;
 
     fn de(markdown: &str) -> String {

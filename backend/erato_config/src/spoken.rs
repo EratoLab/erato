@@ -266,7 +266,7 @@ pub fn usable_variant(key: &str, template: &str, for_one_field: bool) -> bool {
 /// backend has samples for it, so whoever wrote it sees at startup what the
 /// voice will say. Old and new carry their direction, as on the voice.
 pub fn sample_sentence(language: &str, key: &str, template: &str) -> String {
-    let german = language.split('-').next() == Some("de");
+    let german = crate::language_words::primary_subtag(language) == "de";
     let samples: &[(&str, &str)] = match (german, key) {
         (true, "changed") => &[
             ("field", "Priorität"),
@@ -986,8 +986,9 @@ pub struct ApprovalSpeechConfig {
     /// The deployment's wording: `precise` or `natural`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub wording: ApprovalSpeechWording,
-    /// Whether a user may choose their own amount and wording, unless a
-    /// supervisor's audience setting says otherwise.
+    /// Whether a user may choose their own amount and wording. `false` is a
+    /// lock no audience reopens; with `true`, a supervisor's audience may
+    /// still close it.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
     /// Per language tag, natural sentence variants by sentence type

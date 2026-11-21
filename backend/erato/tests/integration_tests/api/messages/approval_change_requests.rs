@@ -871,6 +871,27 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
     .unwrap();
     refused_receipt(decide(newer).await);
 
+    // Switched off while the process runs, deciding by voice refuses a
+    // receipt it issued before, which is then spent.
+    let before_off = receipt_of(say("Ich bestätige.", signals.clone()).await);
+    let switch = |decisions: bool| {
+        let app_state = app_state.clone();
+        async move {
+            app_state
+                .reloadable
+                .write()
+                .await
+                .voice_switches
+                .voice_decisions = decisions;
+        }
+    };
+    switch(false).await;
+    let off = say("Ich bestätige.", signals.clone()).await;
+    assert!(off.get("decision").is_none(), "{off}");
+    refused_receipt(decide(before_off.clone()).await);
+    switch(true).await;
+    refused_receipt(decide(before_off).await);
+
     let confirmed = say("Ich bestätige.", signals.clone()).await;
     assert_eq!(confirmed["meaning"], "approve");
     let receipt = receipt_of(confirmed);

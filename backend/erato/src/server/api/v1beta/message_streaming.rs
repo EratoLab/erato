@@ -6967,7 +6967,15 @@ async fn stream_generate_chat_completion<'a>(
                 .load(std::sync::atomic::Ordering::Relaxed)
         })
         .and_then(|task| {
-            let (id, config) = app_state.config.conversational_speech_provider()?;
+            // `speech_enabled` was decided with the live switch when the turn
+            // started; a reply already being read back finishes.
+            let (id, config) = app_state.config.speech_provider(
+                app_state
+                    .config
+                    .audio_conversational
+                    .speech_provider
+                    .as_deref(),
+            )?;
             Some(crate::services::speech::session::SpeechSession::start(
                 config.clone(),
                 id.to_string(),
@@ -18339,10 +18347,14 @@ pub(crate) async fn run_generation_after_user_message(
 fn read_back_reply(
     task: &StreamingTask,
     app_state: &AppState,
+    switches: crate::config::VoiceSwitches,
     me_user: &MeProfile,
     requested: bool,
 ) -> bool {
-    let read_back = requested && app_state.config.conversational_speech_provider().is_some();
+    let read_back = requested
+        && switches
+            .conversational_speech_provider(&app_state.config)
+            .is_some();
     task.speech_enabled
         .store(read_back, std::sync::atomic::Ordering::Relaxed);
     let _ = task.speech_language.set(
@@ -18371,8 +18383,13 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
-    let reply_is_read_back =
-        read_back_reply(task, app_state, me_user, request.conversational_audio_back);
+    let reply_is_read_back = read_back_reply(
+        task,
+        app_state,
+        app_state.voice_switches().await,
+        me_user,
+        request.conversational_audio_back,
+    );
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -21587,6 +21604,9 @@ async fn voice_receipts_taken(
     use crate::models::message::VoiceDecisionOutcome;
     use crate::services::approval_voice_commands::decision::{check_receipt, take_receipt};
     let user_id = Uuid::parse_str(&me_user.id).ok();
+    // A receipt issued before deciding by voice was switched off is still
+    // taken, so it cannot count once deciding is back on.
+    let deciding = app_state.voice_switches().await.voice_decisions;
     let mut records = HashMap::new();
     for item in &request.decisions {
         let Some(id) = item.voice_receipt.as_deref() else {
@@ -21618,13 +21638,14 @@ async fn voice_receipts_taken(
                 check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
             });
         match (checked, taken) {
-            (Some(Ok(())), Some(taken)) => {
+            (Some(Ok(())), Some(taken)) if deciding => {
                 records.insert(item.approval_id.clone(), taken.receipt.record);
             }
             (checked, _) => {
                 tracing::info!(
                     problem = ?checked,
-                    "Refused a decision by voice: its receipt does not match the card"
+                    switched_off = !deciding,
+                    "Refused a decision by voice: its receipt does not match the card, or deciding by voice is off"
                 );
                 return Err(StreamRouteError::VoiceReceiptRefused(Box::new(
                     VoiceReceiptRefusedError {
@@ -22152,7 +22173,13 @@ pub(crate) async fn start_continuation(
     let client_stream_guard = task.client_stream_guard();
     // The turn instruction for a spoken reply is in the stored prompt the
     // continuation reuses, so only the speech itself is decided here.
-    read_back_reply(&task, app_state, me_user, request.conversational_audio_back);
+    read_back_reply(
+        &task,
+        app_state,
+        app_state.voice_switches().await,
+        me_user,
+        request.conversational_audio_back,
+    );
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(

@@ -2711,6 +2711,8 @@ different speech provider.
 - `speech_provider`: ID from `speech_providers.provider`. Required while `enabled`
   is `true`.
 
+With [`runtime_configuration`](#runtime_configuration) enabled, the switches `audio_conversational.enabled`, `audio_read_aloud.enabled`, `approval_voice_commands.enabled` and `approval_voice_decisions.enabled` can be changed while Erato runs, for example from the admin panel: they are reloaded with the other runtime sources, and the API and the next page load use them. `approval_voice_decisions.enabled` can only be switched off this way, never on, and is off whenever `approval_voice_commands.enabled` is. A switch that turns a feature on without what it needs (a speech provider, an audio-capable chat provider) is refused, and the previous switches stay. Everything else in these sections is read at startup only.
+
 ```toml
 [audio_read_aloud]
 enabled = true
@@ -3184,7 +3186,7 @@ What the voice says while the user waits for an answer, when Audio-back is on. A
 
 The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute; a browser whose lines came back incomplete asks for all of them again at its next turn. The opener is left out when the lines are confirmed more than 3 s after it was due.
 
-Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
+Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A line or tool line that is a confirmation phrase, or that the voice-command rules would hear as an approval or refusal on a waiting card („Passt.“, „Nein.“), is dropped with a warning at startup: the voice never says what decides a card. A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
 
 **Type:** `object`
 
@@ -3280,7 +3282,7 @@ After this many turns with an opener in one session, the opener comes from the s
 
 {/* erato_toml_config_key: audio_conversational.wait_lines.user_choice */}
 
-Whether a user may choose their own amount, unless a supervisor's audience setting says otherwise.
+Whether a user may choose their own amount. `false` is a lock no audience reopens; with `true`, a supervisor's audience may still close it.
 
 **Type:** `boolean` · **Default:** `true`
 
@@ -5765,6 +5767,7 @@ The guards cannot be weakened by data:
 - `hesitations` and `fillers` are dropped before the guards look, so they never take a word the guards or decisions rely on, nor a date, time or correction word („später“, „Montag“, „falsch“). A filler "das" would otherwise turn "passt das" into an approval.
 - A no beside a skip or repeat („Nein, sorry“) is never taken as the skip or repeat: it refuses, or stays unclear.
 - A transcript in a script written without spaces between words (Chinese, Japanese, Thai, …) is never matched by the rules and never decides a card, whatever the lists hold.
+- At startup, the built-in sentence sets and attack phrasings (about a thousand) are heard again with the configured words of every language, on cards before and after they asked. A configured entry with which a phrasing loses the refusal or stop the built-in words hear, or reaches a decision they do not, is dropped with a warning („Voice-command startup check“), even when each entry passes the checks above on its own. The same holds for a configured [confirmation phrase](#approval_voice_decisionsphrases) that accepts any of these phrasings. The startup log gives the time the check took; without configured words or phrases it does not run.
 
 Entries are checked at startup, each list on its own: a language that is not a lowercase tag, a list name the backend does not know, a value of the wrong kind, a blank entry, one longer than 128 bytes or with hidden characters, and entries past 500 in one list are ignored with a warning, so one bad entry of a content package never stops the server or drops the rest of its language. A card in a regional language ("fr-CA") uses the table of its tag, else that of its primary language ("fr"). The startup log names, per configured language, how many words each list adds. The card's language is the one the endpoint resolves (`language`, else the user's), so today only `fr`, `es` and `pl` tables are used besides `de` and `en`; a table for another language is kept with a startup warning until that language is supported.
 
@@ -5797,7 +5800,7 @@ enabled = true
 
 {/* erato_toml_config_key: approval_voice_decisions.enabled */}
 
-Decide waiting cards by voice. **Default:** `false`.
+Decide waiting cards by voice. **Default:** `false`. A runtime override can switch it off without a restart, never on (see [Read aloud](#read-aloud)); a receipt issued before it was switched off is then refused.
 
 Only the confirmation phrase approves (built in: „Ich bestätige“ in German, "I confirm" in English; see [`phrases`](#approval_voice_decisionsphrases)). It may start with „ja“ / "yes" and end with „das“ or „bitte“ / "this" or "please", and nothing else may be said with it. A plain „ja“, „okay“ or „mach das“ never approves, and neither does the phrase inside a longer sentence, with a negation or condition, or as a question. The phrase is matched by rule, never by the model, and never given to the transcriber as a hint. When it is on, the card's last sentence names the phrase („Zum Ausführen bitte „Ich bestätige“ sagen.“) and the card shows it under the buttons while it listens. A near miss gets one line naming the phrase; after two, the voice points to the screen. „Nein“ and the other refusals of the rules refuse. A transcript that ends unfinished („Ich bestätige …“) never approves.
 
@@ -5875,7 +5878,7 @@ How much a waiting approval card says aloud in conversational audio mode, and ho
 
 In every combination the item is said, and the pieces that must be said (a loss such as an emptied field, the warning about recipients outside the organisation, what a delete removes, the consequence) and the request to decide keep their precise words and are never held back. A short reading never holds back what tells the user the card is not what they may expect either: a value or a read's condition that is a record never read in the chat or known only by its ID on screen, an addition to a list taken on the tool's word, and a dictated text the card does not take word for word. The card's pieces stay the same in every combination, so skipping, "the rest", repeating and the difference reading after a change request work alike; the difference reading is always precise. The card on screen does not change.
 
-The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. This holds for `user_choice` too: a higher audience's `user_choice` applies to a lower audience's values, so a higher audience that allows the user's choice reopens it for a lower audience that fixed a value. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
+The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. For `user_choice` the deployment value is a lock: when it is `false`, no audience reopens the user's choice; when it is `true`, the first matching audience that sets `user_choice` decides, so an audience can close it. Each field of an audience's block is read on its own, so a value that does not parse costs only that field. An audience setting without its own entry in `setting_orders` follows the starting assistant's order, with a warning at startup and reload; an audience missing from an existing entry has no effect, also with a warning. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
 
 For now the supervisor level is edited by hand in the experience policy document: the audience needs a starting-assistant pin like every audience, and it must be listed under `setting_orders.approval_speech` (there is no fallback to `priority_order`). An audience's `approval_speech` block that does not parse is ignored with a warning; the rest of the policy, including the audience and its pin, stays in force.
 
@@ -5908,7 +5911,7 @@ Details a short reading says before it holds back the rest, in the card's order.
 
 {/* erato_toml_config_key: approval_speech.user_choice */}
 
-Whether a user may choose their own amount and wording. An audience's `user_choice` overrides it for its members. **Default:** `true`.
+Whether a user may choose their own amount and wording. `false` is a lock no audience reopens; with `true`, an audience's `user_choice = false` closes it for its members. **Default:** `true`.
 
 #### `approval_speech.sentences`
 

@@ -1,7 +1,10 @@
+import { byLanguageTag } from "./spokenLanguageData";
+
 import type {
   ToolCallLabel,
   ToolCallSpokenNames,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 
 /**
  * What people call a call's fields, coded values and tables in the language
@@ -16,11 +19,7 @@ export const spokenNamesFor = (
   label: ToolCallLabel | null | undefined,
   language: string,
 ): SpokenNames | undefined => {
-  const all = label?.spoken_names;
-  if (!all) return undefined;
-  const tag = language.toLowerCase();
-  const primary = tag.split(/[-_]/)[0];
-  return all[tag] ?? all[primary];
+  return byLanguageTag(label?.spoken_names ?? undefined, language);
 };
 
 const entry = (text: string | undefined): string | undefined => {

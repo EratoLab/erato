@@ -2,44 +2,11 @@ use super::*;
 use crate::services::genai::GenAIChatStreamResponse;
 use async_trait::async_trait;
 use genai::chat::{ChatOptions, ChatRequest, ChatResponse, MessageContent};
-use serde::Deserialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct Card {
-    pub current_piece_id: String,
-    pub pieces: Vec<CardPiece>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct Sentence {
-    pub id: String,
-    pub language: String,
-    pub meaning: VoiceMeaning,
-    pub way: String,
-    pub text: String,
-    pub piece_id: Option<String>,
-    #[serde(default)]
-    pub tags: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct SentenceSet {
-    pub cards: HashMap<String, Card>,
-    pub sentences: Vec<Sentence>,
-}
-
-pub(super) fn sentence_set() -> SentenceSet {
-    serde_json::from_str(include_str!("sentences.json")).expect("the sentence set is valid")
-}
-
-/// Sentences written by a reviewer and never used to tune the rules or the
-/// instruction.
-pub(super) fn heldout_set() -> SentenceSet {
-    serde_json::from_str(include_str!("heldout_sentences.json")).expect("the held-out set is valid")
-}
+pub(super) use super::corpus::{Card, Sentence, SentenceSet, heldout_set, sentence_set};
 
 impl Sentence {
     /// The card named by a `card:` tag, else the language's example card.

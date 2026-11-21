@@ -6,9 +6,11 @@
 //! voice on, an approval needs the confirmation phrase (`phrase`), and
 //! `decision` issues the receipt the decision then carries.
 
+mod corpus;
 pub mod decision;
 mod model;
 pub mod phrase;
+pub mod recheck;
 mod rules;
 pub mod words;
 

@@ -845,6 +845,33 @@ impl CommandWordsByLanguage {
         lines
     }
 
+    /// Drops each wait line or tool line that the card rules would hear as a
+    /// decision on a card that has asked, or that is a confirmation phrase:
+    /// the voice must never say what the user says to decide.
+    pub fn check_wait_lines(
+        &self,
+        wait_lines: &mut erato_config::wait_lines::WaitLinesConfig,
+    ) -> Vec<String> {
+        wait_lines.drop_lines_where(|language, line| {
+            let words = self.for_language(language);
+            let card = super::corpus::asked_card();
+            if super::phrase::match_phrase(line, words).is_some() {
+                return Some("it is a confirmation phrase".to_string());
+            }
+            let input = super::VoiceCommandInput {
+                transcript: line,
+                language,
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+                question: None,
+            };
+            let meaning = super::classify_by_rules(&input, words)?.command.meaning;
+            meaning
+                .is_decision()
+                .then(|| format!("it sounds like a decision ({})", meaning.wire_name()))
+        })
+    }
+
     /// Drops each per-language turn-end hesitation that is not one word of
     /// letters, or that is a negation, condition or question word of German,
     /// English or that language, with a warning for each. Then notes the
@@ -935,6 +962,48 @@ mod tests {
         for (name, _, base) in CONFIGURABLE {
             assert!(!base.is_empty(), "{name}");
         }
+    }
+
+    #[test]
+    fn a_wait_line_that_sounds_like_a_decision_is_dropped() {
+        let mut wait_lines = erato_config::wait_lines::WaitLinesConfig::default();
+        wait_lines.phrases.insert(
+            "de".into(),
+            erato_config::wait_lines::WaitLinePhrasesConfig {
+                opener: Some(
+                    [
+                        "Moment …",
+                        "Ich bestätige.",
+                        "Nein.",
+                        "Passt.",
+                        "Ich schaue nach.",
+                    ]
+                    .map(String::from)
+                    .to_vec(),
+                ),
+                ..Default::default()
+            },
+        );
+        wait_lines.tools.insert(
+            "de".into(),
+            erato_config::wait_lines::WaitLineToolsConfig {
+                search: Some("Ich suche nach {search}.".into()),
+                items: Some("Ja.".into()),
+                list: None,
+            },
+        );
+        let dropped = CommandWordsByLanguage::default().check_wait_lines(&mut wait_lines);
+        assert_eq!(
+            wait_lines.phrases["de"].opener.as_deref().unwrap(),
+            ["Moment …", "Ich schaue nach."],
+            "{dropped:#?}"
+        );
+        assert_eq!(
+            wait_lines.tools["de"].search.as_deref(),
+            Some("Ich suche nach {search}.")
+        );
+        assert_eq!(wait_lines.tools["de"].items, None);
+        assert_eq!(dropped.len(), 4, "{dropped:#?}");
     }
 
     #[test]
