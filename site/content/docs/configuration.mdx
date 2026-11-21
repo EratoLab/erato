@@ -2247,7 +2247,10 @@ upload_allowed_if_supports = ["supported_operations"]
 The integrated `retrieve_file_contents` tool is enabled by default and offered when
 the conversation has file references. Set `retrieve_file_contents_enabled = false`
 to disable it. Restrictive facet tool allowlists must permit
-`erato/retrieve_file_contents`; a conflicting MCP or client tool name takes precedence.
+`erato/retrieve_file_contents`; a client tool of the same name takes precedence. While the
+tool is enabled, an MCP tool of that name is offered under a name qualified with its
+server (see [Tools with the same name](./features/mcp_servers#tools-with-the-same-name));
+with it disabled, the MCP tool keeps its name.
 The model chooses when to request an omitted document. Small files still go directly
 into context without a tool call.
 
@@ -7775,7 +7778,7 @@ tool_call_allowlist = ["web-search-mcp/*"]
 
 The `erato` namespace is reserved for tools the backend exposes itself, and no MCP server or client tool may claim it. Built-ins are selected the same way as any other tool — by an allowlist pattern — so `erato/delegate_task`, `erato/*`, a bare `erato`, or `*` all select the task-delegation tool where it is available.
 
-Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. A built-in also stands down if a real MCP tool claims its name, matching the precedence the other synthetic tools already follow.
+Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. While a built-in can be offered, an MCP tool of the same name is offered under a name qualified with its server (see [Tools with the same name](./features/mcp_servers#tools-with-the-same-name)).
 
 <Callout type="warn">
   Always pair a reserved pattern with a real MCP pattern on the same facet. Adding any pattern to a facet turns the derived MCP server filter from "no restriction" into a concrete set; if the only patterns are `erato/*` ones, that set is empty and the turn loses **every** MCP tool while the facet is selected, and so does every task it launches, whatever its `child_facet_ids` allow. Write `["erato/delegate_task", "web-search-mcp/*"]`, not `["erato/delegate_task"]`.
@@ -8140,8 +8143,11 @@ fields may only be set when `mode = "receipt"`. Client tools that share a
 model-facing name across namespaces must use the same `replay` settings.
 
 A call is compacted only when the generation that made it recorded offering a client
-tool with that name. When an MCP tool has the same name, the MCP tool is offered
-instead, so its calls always replay in full. Calls from generations without that
+tool with that name. When one MCP tool is offered under the same name, the MCP tool is
+offered instead, so its calls always replay in full. When several MCP servers offer a
+tool of that name, each is offered under a name qualified with its server and the
+client tool keeps the name (see
+[Tools with the same name](./features/mcp_servers#tools-with-the-same-name)). Calls from generations without that
 record, including all calls stored before it existed, also replay in full.
 
 A user turn is one user message and every model call, tool call, correction and

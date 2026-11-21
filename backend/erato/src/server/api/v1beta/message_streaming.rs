@@ -538,7 +538,10 @@ enum ToolCallGate {
 ///
 /// The parked request's `tool_name` is both what the card shows and the key
 /// the continuation runs the tool by, so it must survive display cleaning
-/// unchanged; a name that would not is refused instead of parked.
+/// unchanged; a name that would not is refused instead of parked. It is the
+/// server's own name for the tool, also when the model called it by a
+/// qualified one (see `mcp_tool_names`): with the server id, it names the
+/// tool for the user's standing decisions too.
 fn gate_mcp_tool_call(
     config: &McpToolApprovalConfig,
     server_id: &str,
@@ -554,6 +557,7 @@ fn gate_mcp_tool_call(
         (McpToolEffectiveState::Denied, _) => refuse_denied_tool_call(tool_call),
         (McpToolEffectiveState::Ask, _) => ask_for_tool_call(
             tool_call,
+            &tool.name,
             ToolApprovalKind::McpTool,
             server_id,
             Some(display.clone()),
@@ -589,6 +593,7 @@ fn gate_builtin_tool_call(
     }
     ask_for_tool_call(
         tool_call,
+        &tool_call.fn_name,
         ToolApprovalKind::BuiltinTool,
         "",
         Some(display),
@@ -614,10 +619,13 @@ fn refuse_denied_tool_call(tool_call: &genai::chat::ToolCall) -> ToolCallGate {
     ))
 }
 
-/// Park one tool call on an approval card. `source_id` is the MCP server id,
-/// or a client tool's namespace.
+/// Park one tool call on an approval card. `tool_name` is what the card names
+/// the tool by, and `source_id` the MCP server id, or a client tool's
+/// namespace.
+#[allow(clippy::too_many_arguments)]
 fn ask_for_tool_call(
     tool_call: &genai::chat::ToolCall,
+    tool_name: &str,
     kind: ToolApprovalKind,
     source_id: &str,
     display: Option<crate::models::message::ToolDisplayMetadata>,
@@ -625,8 +633,8 @@ fn ask_for_tool_call(
     preset: &str,
     allow_always: bool,
 ) -> ToolCallGate {
-    let display_name = sanitize_display_text(&tool_call.fn_name, MAX_DISPLAY_NAME_CHARS);
-    if display_name.truncated || display_name.text != tool_call.fn_name {
+    let display_name = sanitize_display_text(tool_name, MAX_DISPLAY_NAME_CHARS);
+    if display_name.truncated || display_name.text != tool_name {
         return ToolCallGate::Refuse(format!(
             "The tool '{}' has a name that cannot be shown for approval; the call was not executed.",
             display_name.text
@@ -648,6 +656,7 @@ fn ask_for_tool_call(
         approvals: vec![ApprovalItem {
             approval_id: tool_call.call_id.clone(),
             tool_call_id: tool_call.call_id.clone(),
+            called_as: (display_name.text != tool_call.fn_name).then(|| tool_call.fn_name.clone()),
             tool_name: display_name.text,
             display,
             input: tool_call.fn_arguments.clone(),
@@ -737,6 +746,7 @@ fn gate_client_tool_call(
         Some(ClientToolDecision::Ask) if reviewed_on_device => ToolCallGate::Run(None),
         Some(ClientToolDecision::Ask) => ask_for_tool_call(
             tool_call,
+            &tool_call.fn_name,
             ToolApprovalKind::ClientTool,
             namespace,
             None,
@@ -5158,9 +5168,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // action facet declares client actions and the chat allows writes: client
     // actions are the mutation channel, so the write toggle withholds them
     // together with non-read-only MCP tools. The tool is handled in the tool
-    // call loop instead of being dispatched to an MCP server. If an MCP tool
-    // already claims the same name, it wins — adding a duplicate tool name
-    // would be rejected by providers and ambiguous to dispatch.
+    // call loop instead of being dispatched to an MCP server. An MCP tool of
+    // the same name is offered under a qualified name (see `mcp_tool_names`);
+    // the check below only keeps a duplicate name, which providers reject and
+    // nothing could dispatch, from ever being offered.
     if !is_delegated_run
         && chat.mcp_write_tools_enabled
         && let Some(action_facet) = user_input.action_facet.as_ref()
@@ -5331,8 +5342,9 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
     // — depth stays at one even if a user mentions assistants inside a
-    // delegated chat. If an MCP tool claims either name, it wins (same
-    // precedence as the other synthetic tools).
+    // delegated chat. An MCP tool of either name is offered under a qualified
+    // name (see `mcp_tool_names`); the checks below only keep a duplicate
+    // name from being offered.
     //
     // `delegate_to_assistant` is aimed at an assistant the user mentioned;
     // `delegate_task` lets the model plan its own sub-task, scoped by facets.
@@ -5413,8 +5425,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     }
     // Offer the synthetic wait tool when waiting is enabled globally or when
     // an MCP server explicitly allows one of the discovered tools to defer a
-    // continuation. The tool is only useful alongside MCP tools, and MCP wins
-    // if a server already exposes the reserved name.
+    // continuation. The tool is only useful alongside MCP tools. An MCP tool
+    // of the same name is offered under a qualified name (see
+    // `mcp_tool_names`); the check below only keeps a duplicate name from
+    // being offered.
     let wait_tool_enabled = !generation_mcp_tools.is_empty()
         && (mcp.config.mcp_servers_global.enable_wait
             || generation_mcp_tools.iter().any(|managed_tool| {
@@ -5426,7 +5440,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     if wait_tool_enabled {
         let name_taken_by_mcp_tool = generation_mcp_tools
             .iter()
-            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME);
+            .any(|tool| tool.model_name() == crate::services::mcp_wait::WAIT_TOOL_NAME);
         if name_taken_by_mcp_tool {
             tracing::warn!(
                 "Not offering the wait tool: an MCP tool already uses the name '{}'",
@@ -6188,6 +6202,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
         approval_id: child.tool_call.call_id.clone(),
         tool_call_id: child.tool_call.call_id.clone(),
         tool_name: child.tool_call.fn_name.clone(),
+        called_as: None,
         display: None,
         input: child.tool_call.fn_arguments.clone(),
         child: Some(child_ref),
@@ -6268,6 +6283,7 @@ fn task_plan_approval_part(
             approval_id: format!("plan:{batch_id}:{position}"),
             tool_call_id: call.call_id.clone(),
             tool_name: call.fn_name.clone(),
+            called_as: None,
             display: None,
             input: call.fn_arguments.clone(),
             child: None,
@@ -7244,13 +7260,12 @@ async fn stream_generate_chat_completion<'a>(
         .unwrap_or_default();
     let mut hallucination_suppression =
         HallucinationSuppressionState::new(hallucination_suppression_config);
+    // Keyed by the name the model calls, qualified where two servers or a
+    // built-in share a bare name; the call reaches its server by `tool.name`.
     let available_mcp_tools_by_name: HashMap<
         String,
         crate::services::mcp_session_manager::ManagedTool,
-    > = available_mcp_tools
-        .into_iter()
-        .map(|tool| (tool.tool.name.to_string(), tool))
-        .collect();
+    > = crate::services::mcp_tool_names::by_model_name(available_mcp_tools);
 
     // Track cumulative usage statistics across all turns
     let mut total_prompt_tokens = 0u32;
@@ -7869,40 +7884,29 @@ async fn stream_generate_chat_completion<'a>(
                             managed.approval_argument.as_deref(),
                         )
                         .await;
-                        let display = crate::services::tool_display::mcp_tool_call_display_from(
-                            &mcp.config,
-                            &managed.server_id,
-                            &managed.tool,
-                            managed.destructive_hint_source,
-                            &unfinished_tool_call.fn_arguments,
-                            managed.approval_argument.as_deref(),
-                            &label_mapping.mapping,
-                            &tool_result_context,
-                        );
+                        let display = crate::models::message::ToolDisplayMetadata {
+                            tool_name: crate::services::tool_display::own_tool_name(managed),
+                            ..crate::services::tool_display::mcp_tool_call_display_from(
+                                &mcp.config,
+                                &managed.server_id,
+                                &managed.tool,
+                                managed.destructive_hint_source,
+                                &unfinished_tool_call.fn_arguments,
+                                managed.approval_argument.as_deref(),
+                                &label_mapping.mapping,
+                                &tool_result_context,
+                            )
+                        };
                         (Some(display), label_mapping.unlabelled)
                     }
                     None => (None, None),
                 };
             // Emit event for tool call proposed
             {
-                let unfinished_tool_call = unfinished_tool_call.clone();
                 let tool_call_start_time = now_timestamp();
                 tool_call_started_at
                     .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
-                if was_preparing {
-                    send_tool_generation_update::<GenerationStreamingMessage>(
-                        assistant_message_id,
-                        tool_index,
-                        &unfinished_tool_call,
-                        mcp_display.as_ref().map(tool_row_display),
-                        ToolCallStatus::InProgress,
-                        None,
-                        None,
-                        streaming_task,
-                        &tx,
-                    )
-                    .await?;
-                } else {
+                if !was_preparing {
                     let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
                         message_id: assistant_message_id,
                         content_index: tool_index,
@@ -7917,9 +7921,9 @@ async fn stream_generate_chat_completion<'a>(
                             StreamingEvent::ToolCallProposed {
                                 message_id: assistant_message_id,
                                 content_index: tool_index,
-                                tool_call_id: unfinished_tool_call.call_id,
-                                tool_name: unfinished_tool_call.fn_name,
-                                input: Some(unfinished_tool_call.fn_arguments),
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
                             },
                             "broadcast proposed tool call",
                         )
@@ -7927,6 +7931,26 @@ async fn stream_generate_chat_completion<'a>(
                     }
                     let message: GenerationStreamingMessage = proposed_call.into();
                     send_generation_event(&message, tx.clone()).await?;
+                }
+                // A proposed call shows the name it was called by until its
+                // display comes, so a call by a qualified name gets it at once.
+                if was_preparing
+                    || mcp_display
+                        .as_ref()
+                        .is_some_and(|display| display.tool_name.is_some())
+                {
+                    send_tool_generation_update::<GenerationStreamingMessage>(
+                        assistant_message_id,
+                        tool_index,
+                        &unfinished_tool_call,
+                        mcp_display.as_ref().map(tool_row_display),
+                        ToolCallStatus::InProgress,
+                        None,
+                        None,
+                        streaming_task,
+                        &tx,
+                    )
+                    .await?;
                 }
             }
 
@@ -9756,19 +9780,12 @@ async fn stream_generate_chat_completion<'a>(
                     return Err(error);
                 }
             };
-            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall {
-                server_id: managed_tool.server_id.clone(),
-                tool_call: unfinished_tool_call.clone(),
-                tool: managed_tool.tool.clone(),
-                // A call reaches this dispatch only when the gate let it
-                // through without asking, so no user decision exists for it.
-                approval_argument: managed_tool.approval_argument.clone().map(|name| {
-                    crate::services::mcp_manager::ApprovalArgument {
-                        name,
-                        user_approved: false,
-                    }
-                }),
-            };
+            // A call reaches this dispatch only when the gate let it through
+            // without asking, so no user decision exists for it.
+            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall::ungated(
+                &managed_tool,
+                unfinished_tool_call.clone(),
+            );
             let row_display = tool_row_display(&display);
 
             // MCP approval is a durable stop, not an in-memory park. Persist
@@ -11533,6 +11550,14 @@ async fn stream_generate_chat_completion<'a>(
                                     .into();
                                 send_generation_event(&message, tx.clone()).await?;
                             }
+                            let preparing_display = available_mcp_tools_by_name
+                                .get(chunk.tool_call.fn_name.as_str())
+                                .and_then(|tool| {
+                                    crate::services::tool_display::preparing_call_display(
+                                        &mcp.config,
+                                        tool,
+                                    )
+                                });
                             let preview_call = genai::chat::ToolCall {
                                 fn_arguments: progress.preview,
                                 ..chunk.tool_call
@@ -11541,7 +11566,7 @@ async fn stream_generate_chat_completion<'a>(
                                 assistant_message_id,
                                 progress.index,
                                 &preview_call,
-                                None,
+                                preparing_display,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
                                 None,
@@ -12935,10 +12960,11 @@ pub(crate) struct GenerationMcpToolSet {
     /// The tools offered to the model, with the assistant, facet, policy and
     /// per-user denial filters applied.
     pub tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
-    /// Tool names MCP claimed before the per-user denial. Synthetic and
-    /// client tools yield to MCP on a name clash, so a user denying an MCP
-    /// tool must not promote the same-named client tool it was shadowing —
-    /// the collision checks read this snapshot, not `tools`.
+    /// The names MCP tools are offered under (see `mcp_tool_names`), taken
+    /// before the per-user denial. Client tools yield to MCP on a name clash,
+    /// so a user denying an MCP tool must not promote the same-named client
+    /// tool it was shadowing — the collision checks read this snapshot, not
+    /// `tools`.
     pub mcp_claimed_names: HashSet<String>,
     /// `(server_id, tool_name)` pairs the user has denied for themselves.
     pub denied: HashSet<(String, String)>,
@@ -13057,11 +13083,24 @@ async fn resolve_generation_mcp_tools(
         filter_mcp_tools_by_server_ids(filtered_mcp_tools, inputs.parent_mcp_server_ids);
     let generation_mcp_tools =
         filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
-    let generation_mcp_tools =
+    let mut generation_mcp_tools =
         filter_mcp_tools_by_allowlist(generation_mcp_tools, inputs.parent_mcp_allowlist);
+    // Named on the same snapshot as `mcp_claimed_names`, before the user's own
+    // switches: turning one of two same-named tools off must not hand the
+    // other its bare name while a client tool already took it.
+    crate::services::mcp_tool_names::warn_about(
+        &crate::services::mcp_tool_names::assign_model_names(
+            &mut generation_mcp_tools,
+            &crate::services::mcp_tool_names::offered_builtin_tool_names(
+                &app_state.config,
+                &mcp.config,
+                crate::services::scheduled_items::teams_channel_available(app_state),
+            ),
+        ),
+    );
     let mcp_claimed_names: HashSet<String> = generation_mcp_tools
         .iter()
-        .map(|tool| tool.tool.name.to_string())
+        .map(|tool| tool.model_name().to_string())
         .collect();
 
     // Read even when discovery came back empty: a continuation must still
@@ -13300,57 +13339,28 @@ fn apply_assistant_server_filter(
     }
 }
 
-/// How a reserved `erato/<name>` tool came to be selected. The distinction
-/// only matters for diagnostics: an operator who spelled the tool out exactly
-/// is told loudly when an MCP tool takes the name from it, while one who
-/// selected it through a wildcard gets a plain warning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReservedSelection {
-    /// Not selected; the tool is not offered.
-    No,
-    /// Selected through a wildcard (`*`, `erato`, or `erato/*`).
-    Pattern,
-    /// Selected by its exact `erato/<name>` pattern.
-    Exact,
-}
-
-/// Whether the effective client-tool allowlist selects a reserved built-in.
+/// Whether the effective client-tool allowlist selects a reserved built-in,
+/// by its exact `erato/<name>` pattern or through `*`, `erato` or `erato/*`.
 ///
 /// Reserved tools ride the client-tool collector rather than the MCP one on
 /// purpose: `build_mcp_tool_allowlist` treats `None` as "everything allowed",
 /// so a deployment with no MCP allowlisting would offer every built-in by
 /// default. The client-tool allowlist is opt-in — empty selects nothing.
-pub(crate) fn reserved_tool_selected(
-    bare_name: &str,
-    client_tool_allowlist: &[String],
-) -> ReservedSelection {
-    if client_tool_allowlist.is_empty() {
-        return ReservedSelection::No;
-    }
-    let exact = format!(
-        "{}/{}",
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name
-    );
-    if client_tool_allowlist.contains(&exact) {
-        return ReservedSelection::Exact;
-    }
-    if is_qualified_tool_allowed(
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name,
-        client_tool_allowlist,
-    ) {
-        return ReservedSelection::Pattern;
-    }
-    ReservedSelection::No
+pub(crate) fn reserved_tool_selected(bare_name: &str, client_tool_allowlist: &[String]) -> bool {
+    !client_tool_allowlist.is_empty()
+        && is_qualified_tool_allowed(
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name,
+            client_tool_allowlist,
+        )
 }
 
 /// Decide whether a reserved built-in tool may be offered on this turn.
 ///
 /// One place holds all four rules so the tool that fills this slot does not
-/// have to re-derive them: the feature gate, allowlist selection, the
-/// MCP-wins precedence shared with the other synthetic tools, and suppression
-/// inside a delegated run (a child must not spawn its own children here).
+/// have to re-derive them: the feature gate, allowlist selection, never
+/// offering a name an MCP tool is offered under, and suppression inside a
+/// delegated run (a child must not spawn its own children here).
 pub(crate) fn synthetic_tool_offer_slot(
     bare_name: &str,
     feature_enabled: bool,
@@ -13361,27 +13371,18 @@ pub(crate) fn synthetic_tool_offer_slot(
     if !feature_enabled || is_delegated_run {
         return false;
     }
-    let selection = reserved_tool_selected(bare_name, client_tool_allowlist);
-    if selection == ReservedSelection::No {
+    if !reserved_tool_selected(bare_name, client_tool_allowlist) {
         return false;
     }
-    if mcp_tools.iter().any(|tool| tool.tool.name == bare_name) {
-        // Same precedence as the other synthetic tools: a real MCP tool that
-        // claims the name wins, and the built-in stands down.
-        if selection == ReservedSelection::Exact {
-            tracing::error!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name, but an \
-                 allowlist selects it explicitly — rename the MCP tool or drop the pattern.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        } else {
-            tracing::warn!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        }
+    // While the built-in can be offered, an MCP tool of its name is offered
+    // under a qualified name (see `mcp_tool_names`); this only keeps a
+    // duplicate name from being offered.
+    if mcp_tools.iter().any(|tool| tool.model_name() == bare_name) {
+        tracing::warn!(
+            "Not offering reserved tool '{}/{}': an MCP tool is offered under that name.",
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name
+        );
         return false;
     }
     true
@@ -13715,13 +13716,12 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, ReservedSelection,
-        StreamRouteError, ToolAllowedBy, ToolApprovalDecision, ToolCallGate,
-        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        detached_generation_event_sink, effective_client_tool_allowlist,
-        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_allowlist,
-        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, StreamRouteError,
+        ToolAllowedBy, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
+        derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
+        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
+        filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
+        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -13744,6 +13744,7 @@ mod tests {
             server_id: server_id.to_string(),
             tool,
             destructive_hint_source: Default::default(),
+            offered_as: None,
         }
     }
 
@@ -13906,41 +13907,31 @@ mod tests {
     #[test]
     fn reserved_tool_selected_by_star_namespace_and_exact() {
         let exact = vec!["erato/delegate_task".to_string()];
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &exact),
-            ReservedSelection::Exact
-        );
+        assert!(reserved_tool_selected("delegate_task", &exact));
 
         for pattern in ["*", "erato", "erato/*"] {
-            assert_eq!(
+            assert!(
                 reserved_tool_selected("delegate_task", &[pattern.to_string()]),
-                ReservedSelection::Pattern,
                 "pattern {pattern} should select the reserved tool"
             );
         }
 
         // A different reserved name is not selected by an exact pattern for
         // another one.
-        assert_eq!(
-            reserved_tool_selected("collect_tasks", &exact),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("collect_tasks", &exact));
 
         // Nor is an unrelated namespace a selector.
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &["outlook/*".to_string()]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected(
+            "delegate_task",
+            &["outlook/*".to_string()]
+        ));
     }
 
     #[test]
     fn reserved_tool_not_selected_by_empty_allowlist() {
         // The client-tool collector is opt-in: an empty allowlist selects
         // nothing, unlike the MCP allowlist whose `None` means "everything".
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &[]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("delegate_task", &[]));
     }
 
     #[test]
@@ -14206,7 +14197,10 @@ mod tests {
 
         let plain = Tool::new("publish", "publish", Map::new());
         match gate_call(&restrictive, "server", &plain, &call("publish"), None) {
-            ToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.tool_name, "publish");
+                assert_eq!(request.approvals[0].called_as, None);
+            }
             other => panic!("expected an approval request, got {other:?}"),
         }
 
@@ -14225,6 +14219,84 @@ mod tests {
         assert!(matches!(
             gate_call(&restrictive, "server", &tool, &call(&long_name), None),
             ToolCallGate::Refuse(_)
+        ));
+    }
+
+    /// A tool the model called by its qualified name parks under the server's
+    /// own name: the continuation finds it, and stores a standing decision
+    /// for it, by server id and that name.
+    #[test]
+    fn a_qualified_call_parks_under_the_servers_own_tool_name() {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let tool = Tool::new("publish", "publish", Map::new());
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "wiki_eu__publish".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        match gate_call(&restrictive, "wiki_eu", &tool, &call, None) {
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.tool_name, "publish");
+                assert_eq!(request.mcp_server_id, "wiki_eu");
+                assert_eq!(request.approvals[0].tool_name, "publish");
+                assert_eq!(request.approvals[0].tool_call_id, "call-1");
+                // The continuation stores and replays the call under this.
+                assert_eq!(
+                    request.approvals[0].called_as.as_deref(),
+                    Some("wiki_eu__publish")
+                );
+                assert_eq!(request.approvals[0].called_name(), "wiki_eu__publish");
+            }
+            other => panic!("expected an approval request, got {other:?}"),
+        }
+        match gate_call(
+            &restrictive,
+            "wiki_eu",
+            &tool,
+            &call,
+            Some(UserToolDecision::Denied),
+        ) {
+            ToolCallGate::Refuse(message) => assert!(message.contains("wiki_eu__publish")),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    /// A built-in stands down only for an MCP tool that is offered under its
+    /// name; one offered under a qualified name leaves the built-in its slot.
+    #[test]
+    fn a_qualified_mcp_tool_does_not_take_a_builtins_slot() {
+        let mut tools = vec![managed_tool(
+            "planner",
+            Tool::new(
+                erato_config::config::DELEGATE_TASK_TOOL_NAME,
+                "plan",
+                Map::new(),
+            ),
+        )];
+        let allowlist = vec!["*".to_string()];
+        assert!(!super::synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            true,
+            &allowlist,
+            &tools,
+            false,
+        ));
+        crate::services::mcp_tool_names::assign_model_names(
+            &mut tools,
+            &[erato_config::config::DELEGATE_TASK_TOOL_NAME],
+        );
+        assert_eq!(tools[0].model_name(), "planner__delegate_task");
+        assert!(super::synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            true,
+            &allowlist,
+            &tools,
+            false,
         ));
     }
 
@@ -14320,6 +14392,7 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "publish".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child: None,
@@ -14690,6 +14763,7 @@ mod tests {
                 description: Some("Friday, 13 Nov, 10:00".into()),
                 description_truncated: false,
                 server_name: None,
+                tool_name: None,
                 label: None,
                 read_only: false,
                 closed_world: false,
@@ -15334,6 +15408,7 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "delegate_task".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child,
@@ -23631,6 +23706,10 @@ pub(crate) async fn run_continuation(
             .iter()
             .find(|tool| tool.server_id == server_id && tool.tool.name == item.tool_name)
             .cloned();
+        // The card names the server's own tool; the row and the model's replay
+        // keep the name the model called it by, qualified or not, even when
+        // the tools that share the name changed since the turn parked.
+        let call_name = item.called_name().to_string();
         // A grant is only written for a call that actually runs: "always allow"
         // on a stale card must not overwrite a denial stored in the meantime.
         let always_allow_setting =
@@ -23701,7 +23780,7 @@ pub(crate) async fn run_continuation(
             ToolUse {
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
-                tool_name: item.tool_name.clone(),
+                tool_name: call_name.clone(),
                 display: item.display.as_ref().map(tool_row_display),
                 input: Some(item.input.clone()),
                 progress_message: None,
@@ -23724,7 +23803,7 @@ pub(crate) async fn run_continuation(
         } else if let Some(managed_tool) = approved_tool {
             let call = genai::chat::ToolCall {
                 call_id: item.tool_call_id.clone(),
-                fn_name: item.tool_name.clone(),
+                fn_name: call_name.clone(),
                 fn_arguments: item.input.clone(),
                 thought_signatures: None,
             };
@@ -23761,7 +23840,7 @@ pub(crate) async fn run_continuation(
                     message_id: message.id,
                     content_index: parsed.content.len(),
                     tool_call_id: item.tool_call_id.clone(),
-                    tool_name: item.tool_name.clone(),
+                    tool_name: call_name.clone(),
                     display: item.display.as_ref().map(tool_row_display),
                     input: None,
                     status: ToolCallStatus::InProgress,
@@ -23846,7 +23925,7 @@ pub(crate) async fn run_continuation(
                     ToolUse {
                         tool_call_id: item.tool_call_id.clone(),
                         status,
-                        tool_name: item.tool_name.clone(),
+                        tool_name: call_name.clone(),
                         display: item.display.as_ref().map(tool_row_display),
                         input: Some(item.input.clone()),
                         progress_message: None,
@@ -23864,7 +23943,7 @@ pub(crate) async fn run_continuation(
                     ToolUse {
                         tool_call_id: item.tool_call_id.clone(),
                         status: MessageToolCallStatus::Error,
-                        tool_name: item.tool_name.clone(),
+                        tool_name: call_name.clone(),
                         display: item.display.as_ref().map(tool_row_display),
                         input: Some(item.input.clone()),
                         progress_message: None,
@@ -23893,7 +23972,7 @@ pub(crate) async fn run_continuation(
             ToolUse {
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
-                tool_name: item.tool_name.clone(),
+                tool_name: call_name.clone(),
                 display: item.display.as_ref().map(tool_row_display),
                 input: Some(item.input.clone()),
                 progress_message: None,
@@ -24915,7 +24994,7 @@ async fn resume_parked_generation(
     if wait_tool_enabled
         && !available_mcp_tools
             .iter()
-            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME)
+            .any(|tool| tool.model_name() == crate::services::mcp_wait::WAIT_TOOL_NAME)
     {
         continuation_tools.push(crate::services::mcp_wait::build_wait_tool(
             mcp.config.mcp_servers_global.max_wait_seconds,

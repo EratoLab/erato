@@ -1472,4 +1472,87 @@ describe("ToolUseStep plain line", () => {
       /^Charts · You allowed this once$/,
     );
   });
+
+  it("names a call made by a qualified name by the tool's own name in its details", () => {
+    step(
+      { ...READ_DISPLAY, tool_name: "render_chart" },
+      { tool_name: "charts__render_chart" },
+    );
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      /^Create chart$/,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Create chart/ }));
+    const identity = screen.getByTestId("tool-call-identity");
+    expect(identity).toHaveTextContent("render_chart");
+    expect(identity).not.toHaveTextContent("charts__render_chart");
+  });
+});
+
+/**
+ * The model calls a tool by a name qualified with its server when another
+ * server has a tool of the same name; the row still shows the tool's own.
+ */
+describe("ToolUseStep with a qualified tool name", () => {
+  const qualified = (display: Record<string, unknown>) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-search",
+          tool_name: "crm_eu__search",
+          status: "success",
+          input: { query: "invoices" } as unknown as ToolUse["input"],
+          output: { results: [] } as unknown as ToolUse["output"],
+          display: {
+            description_truncated: false,
+            server_name: "CRM EU",
+            tool_name: "search",
+            ...display,
+          } as ToolUse["display"],
+        }}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+
+  it("shows an unlabelled call by the tool's own name and its server", () => {
+    qualified({ title: "Search records" });
+
+    const toggle = screen.getByRole("button", { name: /search/ });
+    expect(toggle).toHaveTextContent(/^search\s*CRM EU/);
+    expect(toggle).not.toHaveTextContent("crm_eu__search");
+    // The test handle keeps the name the call was made by.
+    expect(screen.getByTestId("tool-call-item")).toHaveAttribute(
+      "data-tool-name",
+      "crm_eu__search",
+    );
+  });
+
+  it("keeps the row's own line for a read-only, closed-world tool without a title", () => {
+    qualified({ title: "search", read_only: true, closed_world: true });
+
+    expect(screen.queryByTestId("tool-call-plain-line")).toBeNull();
+    expect(screen.getByRole("button", { name: /search/ })).toHaveTextContent(
+      /^search\s*CRM EU/,
+    );
+  });
+
+  it("keeps the tool's own name when the label cannot be read at all", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const label = { action: "read", object_kind: "record", source: "rules" };
+    Object.defineProperty(label, "items", {
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+    qualified({ title: "Search records", label });
+
+    const toggle = screen.getByRole("button", { name: /search/ });
+    expect(toggle).toHaveTextContent(/^search\s*CRM EU/);
+    expect(toggle).not.toHaveTextContent("crm_eu__search");
+    vi.restoreAllMocks();
+  });
 });

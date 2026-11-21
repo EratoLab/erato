@@ -252,7 +252,7 @@ pub struct TurnReminders {
 /// is not the turn's last part were followed up when the turn stopped there,
 /// so a continuation does not repeat them.
 pub fn turn_reminders(content: &[crate::models::message::ContentPart]) -> TurnReminders {
-    use crate::models::message::{ContentPart, ToolCallStatus};
+    use crate::models::message::{ContentPart, ToolApprovalKind, ToolCallStatus};
     let mut turn = TurnReminders::default();
     let mut writes = false;
     for part in super::host::since_earlier_stop(content) {
@@ -274,10 +274,20 @@ pub fn turn_reminders(content: &[crate::models::message::ContentPart]) -> TurnRe
                     _ => {}
                 }
             }
-            // A write still waiting for its approval counts as one.
-            ContentPart::ToolApprovalRequest(request) => {
+            // A write still waiting for its approval counts as one. Only
+            // Erato's own: an MCP tool's card names it by the server's name,
+            // which can be the same.
+            ContentPart::ToolApprovalRequest(request)
+                if request.kind == ToolApprovalKind::BuiltinTool =>
+            {
                 writes |= std::iter::once(request.tool_name.as_str())
-                    .chain(request.approvals.iter().map(|item| item.tool_name.as_str()))
+                    .chain(
+                        request
+                            .approvals
+                            .iter()
+                            .filter(|item| item.child.is_none())
+                            .map(|item| item.tool_name.as_str()),
+                    )
                     .any(|name| matches!(name, CREATE_REMINDER | CANCEL_REMINDER));
             }
             _ => {}
@@ -410,6 +420,12 @@ mod tests {
             unreachable!()
         };
         cancel.tool_name = CANCEL_REMINDER.into();
+        // An MCP tool of the same name is no reminder write.
+        assert!(
+            turn_reminders(&[listed(), ContentPart::ToolApprovalRequest(cancel.clone())]).listed
+        );
+        cancel.kind = ToolApprovalKind::BuiltinTool;
+        cancel.mcp_server_id = String::new();
         assert!(
             !turn_reminders(&[listed(), ContentPart::ToolApprovalRequest(cancel)]).listed,
             "the cancel waits for its approval"

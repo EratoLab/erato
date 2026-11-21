@@ -149,6 +149,7 @@ pub async fn approval_display(
             description: Some(description),
             description_truncated: false,
             server_name: None,
+            tool_name: None,
             label: None,
             read_only: false,
             closed_world: false,
