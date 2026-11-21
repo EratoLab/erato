@@ -20,6 +20,44 @@ pub trait WordLists: Default {
     fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>>;
 }
 
+/// A struct of named word lists and its [`WordLists`], each list named once.
+/// Fields under `with` are kept as they are and are not lists.
+macro_rules! word_lists {
+    (
+        $(#[doc = $doc:literal])*
+        pub struct $name:ident {
+            $( $(#[doc = $list_doc:literal])+ $list:ident, )+
+        }
+        $( with { $( $(#[doc = $extra_doc:literal])+ $extra:ident: $extra_ty:ty, )+ } )?
+    ) => {
+        $(#[doc = $doc])*
+        #[derive(Debug, Default, PartialEq, Eq, Clone, ::facet::Facet, ::erato_memory::HeapSize)]
+        pub struct $name {
+            $( $(#[doc = $list_doc])+ pub $list: Vec<String>, )+
+            $($( $(#[doc = $extra_doc])+ pub $extra: $extra_ty, )+)?
+        }
+
+        impl $crate::language_words::WordLists for $name {
+            const NAMES: &'static [&'static str] = &[$(stringify!($list)),+];
+
+            fn list(&self, name: &str) -> Option<&Vec<String>> {
+                match name {
+                    $( stringify!($list) => Some(&self.$list), )+
+                    _ => None,
+                }
+            }
+
+            fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
+                match name {
+                    $( stringify!($list) => Some(&mut self.$list), )+
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+pub(crate) use word_lists;
+
 /// The entries of `place` by language. A key that is not a lowercase
 /// language tag (`pt-br`, not `pt-BR`) is dropped with a warning: lookups
 /// compare lowercase tags.
@@ -180,27 +218,12 @@ pub fn merge_word_list<'a>(
 mod tests {
     use super::*;
 
-    #[derive(Debug, Default, PartialEq)]
-    struct Lists {
-        yes: Vec<String>,
-        no: Vec<String>,
-    }
-
-    impl WordLists for Lists {
-        const NAMES: &'static [&'static str] = &["yes", "no"];
-        fn list(&self, name: &str) -> Option<&Vec<String>> {
-            match name {
-                "yes" => Some(&self.yes),
-                "no" => Some(&self.no),
-                _ => None,
-            }
-        }
-        fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-            match name {
-                "yes" => Some(&mut self.yes),
-                "no" => Some(&mut self.no),
-                _ => None,
-            }
+    word_lists! {
+        pub struct Lists {
+            /// Yes.
+            yes,
+            /// No.
+            no,
         }
     }
 

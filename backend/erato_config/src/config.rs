@@ -8989,8 +8989,11 @@ pub struct AudioConversationalConfig {
     /// conversational turn whose words are all hesitation sounds does not
     /// end: nothing is sent, and the microphone listens on for what the
     /// speaker goes on to say. Each entry is one word of letters; others are
-    /// dropped with a warning. Defaults to none.
+    /// dropped with a warning. Before a confirmation phrase only the
+    /// voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
     #[serde(default)]
+    #[facet(erato_config::security_relevance(level = "high"))]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words: Vec<String>,
     /// Whether `hesitation_words` replaces the built-in base instead of
@@ -9001,11 +9004,11 @@ pub struct AudioConversationalConfig {
     pub hesitation_words_replace_base: bool,
     /// Hesitation sounds per language tag, usually from a content package,
     /// added to the list above for a user whose interface is in that
-    /// language and for a card in it. Each entry is one word of letters, and
-    /// never a negation, condition or question word of German, English or
-    /// that language; others are dropped with a warning. A word the voice
-    /// commands rely on ("halt") is never trimmed before a confirmation
-    /// phrase, with a warning. Defaults to none.
+    /// language. Each entry is one word of letters, and never a negation,
+    /// condition or question word of German, English or that language;
+    /// others are dropped with a warning. Before a confirmation phrase only
+    /// the voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
     #[serde(
         default,
         deserialize_with = "crate::language_words::deserialize_hesitations"
@@ -9120,9 +9123,9 @@ impl AudioConversationalConfig {
         words
     }
 
-    /// The hesitation sounds in use for a user or card in `language` ("fr",
-    /// "fr-CA", …): [`Self::effective_hesitation_words`] and the language's
-    /// own.
+    /// The hesitation sounds that hold a turn for a user in `language`
+    /// ("fr", "fr-CA", …): [`Self::effective_hesitation_words`] and the
+    /// language's own.
     pub fn effective_hesitation_words_for(&self, language: &str) -> Vec<String> {
         let mut words = self.effective_hesitation_words();
         let tag = language.trim().to_ascii_lowercase().replace('_', "-");

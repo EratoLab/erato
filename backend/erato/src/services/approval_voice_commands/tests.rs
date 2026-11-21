@@ -1125,7 +1125,7 @@ mod deciding_by_voice {
     use uuid::Uuid;
 
     fn approves(words: &str) -> bool {
-        match_phrase(words, &[], CommandWords::base()).is_some()
+        match_phrase(words, CommandWords::base()).is_some()
     }
 
     #[test]
@@ -1146,19 +1146,19 @@ mod deciding_by_voice {
             assert!(approves(words), "{words}");
         }
         assert_eq!(
-            match_phrase("Ich bestätige.", &[], CommandWords::base())
+            match_phrase("Ich bestätige.", CommandWords::base())
                 .unwrap()
                 .kind,
             PhraseMatchKind::Exact
         );
         assert_eq!(
-            match_phrase("Ja, ich bestätige das", &[], CommandWords::base())
+            match_phrase("Ja, ich bestätige das", CommandWords::base())
                 .unwrap()
                 .kind,
             PhraseMatchKind::Variant
         );
         assert_eq!(
-            match_phrase("I confirm this", &[], CommandWords::base())
+            match_phrase("I confirm this", CommandWords::base())
                 .unwrap()
                 .phrase
                 .id,
@@ -1223,13 +1223,16 @@ mod deciding_by_voice {
 
     #[test]
     fn a_hesitation_word_never_hides_a_negation_condition_or_question() {
-        let deployment = [
-            "ne".to_string(),
-            "nicht".to_string(),
-            "aber".to_string(),
-            "neee".to_string(),
-        ];
-        for words in [
+        let lists = erato_config::voice_command_words::VoiceCommandWordLists {
+            hesitations: ["ne", "nicht", "aber", "neee"].map(String::from).to_vec(),
+            ..Default::default()
+        };
+        let configured = CommandWordsByLanguage::build(
+            &[("de".to_string(), lists)].into_iter().collect(),
+            &Default::default(),
+        )
+        .0;
+        for said in [
             "Ich bestätige, ne",
             "Ich bestätige, neee",
             "ich bestätige nichtt",
@@ -1237,10 +1240,9 @@ mod deciding_by_voice {
             "aber ich bestätige",
             "Wie, ich bestätige",
         ] {
-            assert!(
-                match_phrase(words, &deployment, CommandWords::base()).is_none(),
-                "{words}"
-            );
+            for lists in [CommandWords::base(), configured.for_language("de")] {
+                assert!(match_phrase(said, lists).is_none(), "{said}");
+            }
         }
     }
 
@@ -1257,31 +1259,27 @@ mod deciding_by_voice {
             "Äh… ich bestätige",
         ] {
             assert!(
-                match_phrase(words, &[], CommandWords::base()).is_none(),
+                match_phrase(words, CommandWords::base()).is_none(),
                 "{words}"
             );
         }
     }
 
     #[test]
-    fn the_deployments_hesitation_words_are_trimmed_too() {
-        assert!(
-            match_phrase(
-                "Euh, ich bestätige",
-                &["euh".to_string()],
-                CommandWords::base()
-            )
-            .is_some()
-        );
-        assert!(match_phrase("Euh, ich bestätige", &[], CommandWords::base()).is_none());
-        assert!(
-            match_phrase(
-                "ich euh bestätige",
-                &["euh".to_string()],
-                CommandWords::base()
-            )
-            .is_none()
-        );
+    fn only_the_cards_checked_hesitation_sounds_are_trimmed() {
+        let lists = erato_config::voice_command_words::VoiceCommandWordLists {
+            hesitations: vec!["euh".to_string()],
+            ..Default::default()
+        };
+        let configured = CommandWordsByLanguage::build(
+            &[("de".to_string(), lists)].into_iter().collect(),
+            &Default::default(),
+        )
+        .0;
+        let de = configured.for_language("de");
+        assert!(match_phrase("Euh, ich bestätige", de).is_some());
+        assert!(match_phrase("Euh, ich bestätige", CommandWords::base()).is_none());
+        assert!(match_phrase("ich euh bestätige", de).is_none());
     }
 
     #[test]
@@ -1307,7 +1305,7 @@ mod deciding_by_voice {
     #[test]
     fn only_a_recording_after_the_voice_with_enough_speech_decides() {
         let phrase = syllables(
-            match_phrase("Ich bestätige", &[], CommandWords::base())
+            match_phrase("Ich bestätige", CommandWords::base())
                 .unwrap()
                 .phrase,
         );

@@ -7,12 +7,10 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use erato_memory::HeapSize;
-use facet::Facet;
 use serde::{Deserialize, Serialize};
 
 use crate::language_words::{
-    WordLists, language_tables, merge_word_list, named_word_lists, word_list,
+    WordLists, language_tables, merge_word_list, named_word_lists, word_list, word_lists,
 };
 use crate::spoken::{MAX_ENTRY_BYTES, Written, shown, slots_of, usable};
 
@@ -22,76 +20,57 @@ pub const SAID_NUMBER_WORDS: usize = 13;
 pub const MAX_ORDINALS: usize = 10;
 const MAX_LOCALE_BYTES: usize = 35;
 
-/// Words a language takes out of the built-in lists, by list.
-#[derive(Debug, Default, PartialEq, Eq, Clone, Facet, HeapSize)]
-pub struct ApprovalSpeechWordRemovals {
-    /// Verbs that say what to do with a dictated text ("schreib", "write").
-    pub dictation_verbs: Vec<String>,
-    /// Besides the verbs, the words such an instruction may hold.
-    pub dictation_words: Vec<String>,
-    /// Words that say nothing about a value on their own.
-    pub difference_fillers: Vec<String>,
-}
-
-impl WordLists for ApprovalSpeechWordRemovals {
-    const NAMES: &'static [&'static str] =
-        &["dictation_verbs", "dictation_words", "difference_fillers"];
-
-    fn list(&self, name: &str) -> Option<&Vec<String>> {
-        match name {
-            "dictation_verbs" => Some(&self.dictation_verbs),
-            "dictation_words" => Some(&self.dictation_words),
-            "difference_fillers" => Some(&self.difference_fillers),
-            _ => None,
-        }
-    }
-
-    fn list_mut(&mut self, name: &str) -> Option<&mut Vec<String>> {
-        match name {
-            "dictation_verbs" => Some(&mut self.dictation_verbs),
-            "dictation_words" => Some(&mut self.dictation_words),
-            "difference_fillers" => Some(&mut self.difference_fillers),
-            _ => None,
-        }
+word_lists! {
+    /// Words a language takes out of the built-in lists, by list.
+    pub struct ApprovalSpeechWordRemovals {
+        /// Verbs that say what to do with a dictated text ("schreib", "write").
+        dictation_verbs,
+        /// Besides the verbs, the words such an instruction may hold.
+        dictation_words,
+        /// Words that say nothing about a value on their own.
+        difference_fillers,
     }
 }
 
-/// One language's words for spoken approval cards, as configured.
-#[derive(Debug, Default, PartialEq, Eq, Clone, Facet, HeapSize)]
-pub struct ApprovalSpeechWords {
-    /// The locale dates, numbers and lists are formatted in (`fr-FR`).
-    /// Unset keeps the built-in one, else the language tag itself.
-    pub locale: Option<String>,
-    /// Whether the voice says the whole card in this language. Off, it only
-    /// says that a decision waits on screen. On for German and English.
-    pub full_card: Option<bool>,
-    /// Number words for 0 to 12 as said, in order; larger numbers are said
-    /// as digits.
-    pub numbers: Vec<String>,
-    /// Ordinals for the first to the tenth as said, in order.
-    pub ordinals: Vec<String>,
-    /// A full hour, with `{hour}` (`{hour} Uhr`). Unset uses `time`, else
-    /// the locale's own format.
-    pub time_full_hour: Option<String>,
-    /// A time of day, with `{hour}` and `{minute}` (`{hour}:{minute} Uhr`);
-    /// the minute is said with two digits. Unset uses the locale's own
-    /// format.
-    pub time: Option<String>,
-    /// An old value in a sentence variant, with `{value}` (`from {value}`),
-    /// for a language whose value carries no direction of its own.
-    pub from: Option<String>,
-    /// A new value in a sentence variant, with `{value}` (`to {value}`).
-    pub to: Option<String>,
-    /// Verbs that say what to do with a dictated text ("schreib", "write").
-    pub dictation_verbs: Vec<String>,
-    /// Besides the verbs, the words an instruction before a dictated text
-    /// may hold ("bitte", "dem", "Kunden").
-    pub dictation_words: Vec<String>,
-    /// Words that say nothing about a value on their own, when telling what
-    /// a change request named ("und", "bitte", "instead").
-    pub difference_fillers: Vec<String>,
-    /// Words taken out of the built-in lists, by list.
-    pub remove: ApprovalSpeechWordRemovals,
+word_lists! {
+    /// One language's words for spoken approval cards, as configured.
+    pub struct ApprovalSpeechWords {
+        /// Verbs that say what to do with a dictated text ("schreib", "write").
+        dictation_verbs,
+        /// Besides the verbs, the words an instruction before a dictated text
+        /// may hold ("bitte", "dem", "Kunden").
+        dictation_words,
+        /// Words that say nothing about a value on their own, when telling what
+        /// a change request named ("und", "bitte", "instead").
+        difference_fillers,
+    }
+    with {
+        /// The locale dates, numbers and lists are formatted in (`fr-FR`).
+        /// Unset keeps the built-in one, else the language tag itself.
+        locale: Option<String>,
+        /// Whether the voice says the whole card in this language. Off, it only
+        /// says that a decision waits on screen. On for German and English.
+        full_card: Option<bool>,
+        /// Number words for 0 to 12 as said, in order; larger numbers are said
+        /// as digits.
+        numbers: Vec<String>,
+        /// Ordinals for the first to the tenth as said, in order.
+        ordinals: Vec<String>,
+        /// A full hour, with `{hour}` (`{hour} Uhr`). Unset uses `time`, else
+        /// the locale's own format.
+        time_full_hour: Option<String>,
+        /// A time of day, with `{hour}` and `{minute}` (`{hour}:{minute} Uhr`);
+        /// the minute is said with two digits. Unset uses the locale's own
+        /// format.
+        time: Option<String>,
+        /// An old value in a sentence variant, with `{value}` (`from {value}`),
+        /// for a language whose value carries no direction of its own.
+        from: Option<String>,
+        /// A new value in a sentence variant, with `{value}` (`to {value}`).
+        to: Option<String>,
+        /// Words taken out of the built-in lists, by list.
+        remove: ApprovalSpeechWordRemovals,
+    }
 }
 
 /// `[approval_speech.words.<language>]`, by lowercase language tag.
@@ -387,12 +366,7 @@ pub fn summary(words: &ApprovalSpeechWords) -> Option<String> {
             .map(|(name, count)| format!("{name} {count}"))
             .collect::<Vec<_>>()
     };
-    let added = counts(&|name| match name {
-        "dictation_verbs" => words.dictation_verbs.len(),
-        "dictation_words" => words.dictation_words.len(),
-        "difference_fillers" => words.difference_fillers.len(),
-        _ => 0,
-    });
+    let added = counts(&|name| words.list(name).map_or(0, Vec::len));
     let removed = counts(&|name| words.remove.list(name).map_or(0, Vec::len));
     let mut parts = Vec::new();
     if !set.is_empty() {
@@ -512,25 +486,13 @@ fn shaped_language(
                 }
                 _ => dropped.push(format!("{place} is not a table and is ignored")),
             },
-            name => match words_list_mut(&mut words, name) {
+            name => match words.list_mut(name) {
                 Some(list) => *list = word_list(&place, value, dropped),
                 None => dropped.push(format!("{place} is not a known setting; it is ignored")),
             },
         }
     }
     words
-}
-
-fn words_list_mut<'a>(
-    words: &'a mut ApprovalSpeechWords,
-    name: &str,
-) -> Option<&'a mut Vec<String>> {
-    match name {
-        "dictation_verbs" => Some(&mut words.dictation_verbs),
-        "dictation_words" => Some(&mut words.dictation_words),
-        "difference_fillers" => Some(&mut words.difference_fillers),
-        _ => None,
-    }
 }
 
 /// `[approval_speech.words]` as written, with each wrong part dropped and

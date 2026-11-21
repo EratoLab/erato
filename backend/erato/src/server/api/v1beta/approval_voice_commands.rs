@@ -127,16 +127,7 @@ pub async fn interpret_approval_voice_command(
     let words = app_state.voice_command_words.for_language(&language);
     let deciding = app_state.config.approval_voice_decisions.enabled;
     let phrase = deciding
-        .then(|| {
-            match_phrase(
-                &request.transcript,
-                &app_state
-                    .config
-                    .audio_conversational
-                    .effective_hesitation_words_for(&language),
-                words,
-            )
-        })
+        .then(|| match_phrase(&request.transcript, words))
         .flatten();
     let mut classified = match &phrase {
         // As any yes said before the card asked: listening.

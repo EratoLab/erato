@@ -48,8 +48,17 @@ fn built(
     CommandWordsByLanguage::build(&words, &phrases)
 }
 
+/// French words with the yes and filler a phrase may stand beside.
+fn quiet_french_words() -> VoiceCommandWordLists {
+    VoiceCommandWordLists {
+        yes_particles: strings(&["oui"]),
+        fillers: strings(&["svp"]),
+        ..french_words()
+    }
+}
+
 fn french(fr: ConfirmationPhraseConfig) -> (CommandWordsByLanguage, Vec<String>) {
-    built(&[("fr", french_words())], &[("fr", fr)])
+    built(&[("fr", quiet_french_words())], &[("fr", fr)])
 }
 
 #[test]
@@ -66,16 +75,16 @@ fn a_french_phrase_approves_a_french_card_beside_german_and_english() {
         "Ich bestätige.",
         "I confirm.",
     ] {
-        assert!(match_phrase(said, &[], fr).is_some(), "{said}");
+        assert!(match_phrase(said, fr).is_some(), "{said}");
     }
-    let matched = match_phrase("Oui, je confirme", &[], fr).unwrap();
+    let matched = match_phrase("Oui, je confirme", fr).unwrap();
     assert_eq!(matched.phrase.id, "fr.je_confirme");
     assert_eq!(matched.kind, PhraseMatchKind::Variant);
     assert_eq!(syllables(matched.phrase), 3);
     assert_eq!(fr.phrase_of("fr").unwrap().shown, "Je confirme");
     // Other cards do not take it.
-    assert!(match_phrase("Je confirme", &[], words.for_language("de")).is_none());
-    assert!(match_phrase("Je confirme", &[], words.for_language("es")).is_none());
+    assert!(match_phrase("Je confirme", words.for_language("de")).is_none());
+    assert!(match_phrase("Je confirme", words.for_language("es")).is_none());
 }
 
 #[test]
@@ -98,26 +107,22 @@ fn a_configured_phrase_never_approves_a_negated_or_longer_sentence() {
         "Je confirme, nicht",
         "Comment je confirme",
     ] {
-        assert!(match_phrase(said, &[], fr).is_none(), "{said}");
-        assert!(
-            match_phrase(said, &strings(&["ne", "pas", "mais"]), fr).is_none(),
-            "{said}"
-        );
+        assert!(match_phrase(said, fr).is_none(), "{said}");
     }
-    let (words, notes) = built(&[], &[("de", phrase("Ich stimme zu", &["ja"], &[]))]);
+    let (words, notes) = built(&[], &[("de", phrase("Ich gebe das frei", &["ja"], &[]))]);
     assert!(notes.is_empty(), "{notes:?}");
     let de = words.for_language("de");
-    assert!(match_phrase("Ja, ich stimme zu.", &[], de).is_some());
-    assert!(match_phrase("Ich bestätige.", &[], de).is_none());
-    assert!(match_phrase("I confirm.", &[], de).is_some());
+    assert!(match_phrase("Ja, ich gebe das frei.", de).is_some());
+    assert!(match_phrase("Ich bestätige.", de).is_none());
+    assert!(match_phrase("I confirm.", de).is_some());
     for said in [
-        "Ich stimme nicht zu",
-        "ich stimme zu, aber",
-        "Ich stimme zu, wenn",
-        "Wie, ich stimme zu",
-        "Ich stimme zu und gehe",
+        "Ich gebe das nicht frei",
+        "ich gebe das frei, aber",
+        "Ich gebe das frei, wenn",
+        "Wie, ich gebe das frei",
+        "Ich gebe das frei und gehe",
     ] {
-        assert!(match_phrase(said, &[], de).is_none(), "{said}");
+        assert!(match_phrase(said, de).is_none(), "{said}");
     }
 }
 
@@ -151,7 +156,7 @@ fn the_checker_drops_a_phrase_that_could_be_heard_by_mistake() {
         (phrase("Lass es sein", &[], &[]), "a refusal starts with it"),
         (phrase("?!", &[], &[]), "it holds no word"),
     ] {
-        let (words, notes) = french(fr.clone());
+        let (words, notes) = built(&[("fr", french_words())], &[("fr", fr.clone())]);
         assert_eq!(notes.len(), 1, "{notes:?}");
         assert!(
             notes[0].starts_with(&format!(
@@ -176,7 +181,7 @@ fn the_checker_drops_a_phrase_that_could_be_heard_by_mistake() {
 fn a_dropped_german_phrase_leaves_the_built_in_one() {
     let (words, notes) = built(&[], &[("de", phrase("Nein danke", &[], &[]))]);
     assert_eq!(notes.len(), 1, "{notes:?}");
-    assert!(match_phrase("Ich bestätige", &[], words.for_language("de")).is_some());
+    assert!(match_phrase("Ich bestätige", words.for_language("de")).is_some());
 }
 
 #[test]
@@ -197,16 +202,16 @@ fn leading_and_trailing_words_are_checked_one_by_one() {
         ]
     );
     let fr = words.for_language("fr");
-    assert!(match_phrase("Oui je confirme svp", &[], fr).is_some());
-    assert!(match_phrase("Si je confirme", &[], fr).is_none());
-    assert!(match_phrase("Je confirme pas", &[], fr).is_none());
+    assert!(match_phrase("Oui je confirme svp", fr).is_some());
+    assert!(match_phrase("Si je confirme", fr).is_none());
+    assert!(match_phrase("Je confirme pas", fr).is_none());
 }
 
 #[test]
 fn three_syllables_are_kept_with_a_warning() {
     let (words, notes) = french(phrase("Je confirme", &[], &[]));
     assert_eq!(notes, [JE_CONFIRME_THREE_SYLLABLES]);
-    assert!(match_phrase("Je confirme.", &[], words.for_language("fr")).is_some());
+    assert!(match_phrase("Je confirme.", words.for_language("fr")).is_some());
     let (words, notes) = french(phrase("J'approuve", &[], &[]));
     assert_eq!(
         notes,
@@ -346,7 +351,7 @@ fn a_phrase_that_holds_a_refusal_is_refused() {
         assert_eq!(notes.len(), 1, "{said}: {notes:?}");
         assert!(notes[0].contains("is ignored"), "{notes:?}");
         assert!(
-            match_phrase(said, &[], words.for_language(language)).is_none(),
+            match_phrase(said, words.for_language(language)).is_none(),
             "{said}"
         );
     }
@@ -382,16 +387,16 @@ fn leading_and_trailing_words_never_stop_refuse_ask_or_repeat_the_phrase() {
     let phrase = words.for_language("fr").phrase_of("fr").unwrap();
     assert_eq!(phrase.leading, ["oui"]);
     assert_eq!(phrase.trailing, ["svp"]);
-    assert!(match_phrase("Stopp, je confirme", &[], words.for_language("fr")).is_none());
-    assert!(match_phrase("Je je confirme", &[], words.for_language("fr")).is_none());
+    assert!(match_phrase("Stopp, je confirme", words.for_language("fr")).is_none());
+    assert!(match_phrase("Je je confirme", words.for_language("fr")).is_none());
 }
 
 #[test]
 fn quote_and_question_marks_of_other_scripts_are_never_a_phrase() {
     let words = CommandWordsByLanguage::default();
     let de = words.for_language("de");
-    assert!(match_phrase("Ich bestätige", &[], de).is_some());
-    assert!(match_phrase("Ich bestätige;", &[], de).is_some());
+    assert!(match_phrase("Ich bestätige", de).is_some());
+    assert!(match_phrase("Ich bestätige;", de).is_some());
     for said in [
         "Ich bestätige؟",
         "Ich bestätige\u{37e}",
@@ -399,40 +404,51 @@ fn quote_and_question_marks_of_other_scripts_are_never_a_phrase() {
         "Ich bestätige፧",
         "『Ich bestätige』",
     ] {
-        assert!(match_phrase(said, &[], de).is_none(), "{said}");
+        assert!(match_phrase(said, de).is_none(), "{said}");
     }
 }
 
 #[test]
-fn a_hesitation_the_decisions_rely_on_is_never_trimmed() {
+fn turn_end_hesitations_are_never_trimmed_before_a_phrase() {
     let config = erato_config::config::AudioConversationalConfig {
         hesitations: std::collections::HashMap::from([(
             "de".to_string(),
-            strings(&["halt", "ja", "nein", "euh"]),
+            strings(&["halt", "ja", "nein", "euh", "vielleicht"]),
         )]),
-        hesitation_words: strings(&["stopp", "erm"]),
+        hesitation_words: strings(&["stopp", "erm", "maybe"]),
         ..Default::default()
     };
     let words = CommandWordsByLanguage::default();
     let de = words.for_language("de");
-    let on_de = config.effective_hesitation_words_for("de");
     for said in [
         "Ich bestätige – halt!",
         "Ich bestätige, stopp",
         "Halt, ich bestätige",
         "Ich bestätige, nein",
         "Nein, ich bestätige",
+        "Euh, ich bestätige",
+        "Ich bestätige vielleicht",
+        "Maybe I confirm",
     ] {
-        assert!(match_phrase(said, &on_de, de).is_none(), "{said}");
+        assert!(match_phrase(said, de).is_none(), "{said}");
     }
-    assert!(match_phrase("Euh, ich bestätige", &on_de, de).is_some());
+    assert!(match_phrase("Erm, ich bestätige", de).is_some());
+    let add = |language: &str| {
+        format!(
+            "only hold a turn and are not trimmed before a confirmation phrase; add them to `approval_voice_commands.words.{language}.hesitations` for that"
+        )
+    };
     assert_eq!(
         words.hesitation_notes(&config),
         [
-            "audio_conversational.hesitation_words: 'stopp' is never trimmed before a confirmation phrase, since the voice commands rely on it",
-            "audio_conversational.hesitations.de: 'halt' is never trimmed before a confirmation phrase, since the voice commands rely on it",
-            "audio_conversational.hesitations.de: 'ja' is never trimmed before a confirmation phrase, since the voice commands rely on it",
-            "audio_conversational.hesitations.de: 'nein' is never trimmed before a confirmation phrase, since the voice commands rely on it",
+            format!(
+                "audio_conversational.hesitation_words: 'stopp', 'maybe' {}",
+                add("<language>")
+            ),
+            format!(
+                "audio_conversational.hesitations.de: 'halt', 'ja', 'nein', 'euh', 'vielleicht' {}",
+                add("de")
+            ),
         ]
     );
     assert!(
@@ -535,18 +551,111 @@ fn only_configured_phrases_are_handed_on_as_shown() {
 }
 
 #[test]
-fn a_french_hesitation_holds_a_french_card_but_not_an_english_one() {
-    let config = erato_config::config::AudioConversationalConfig {
-        hesitations: std::collections::HashMap::from([("fr".to_string(), strings(&["euh"]))]),
-        ..Default::default()
-    };
-    let (words, _) = built(&[], &[("fr", phrase("Je confirme", &[], &[]))]);
+fn a_french_hesitation_sound_is_trimmed_on_a_french_card_only() {
+    let (words, _) = french(phrase("Je confirme", &[], &[]));
     let fr = words.for_language("fr");
     let en = words.for_language("en");
-    let on_fr = config.effective_hesitation_words_for("fr");
-    let on_en = config.effective_hesitation_words_for("en");
-    assert!(match_phrase("Euh, je confirme", &on_fr, fr).is_some());
-    assert!(match_phrase("Euh, I confirm", &on_fr, fr).is_some());
-    assert!(match_phrase("Euh, je confirme", &[], fr).is_none());
-    assert!(match_phrase("Euh, I confirm", &on_en, en).is_none());
+    assert!(match_phrase("Euh, je confirme", fr).is_some());
+    assert!(match_phrase("Euh, I confirm", fr).is_some());
+    assert!(match_phrase("Euh, I confirm", en).is_none());
+}
+
+#[test]
+fn a_phrase_is_never_weaker_than_the_built_in_one() {
+    for (language, said, problem) in [
+        ("de", "Ja, mach das", "it holds a yes"),
+        ("en", "Yes, go ahead", "it holds a yes"),
+        ("en", "Yeah, I confirm", "it holds a yes"),
+        (
+            "de",
+            "Einverstanden",
+            "the voice commands already hear it as a plain approval",
+        ),
+        (
+            "en",
+            "I approve",
+            "the voice commands already hear it as a plain approval",
+        ),
+        (
+            "de",
+            "Ich gebe frei",
+            "it is shorter than the built-in 'Ich bestätige'",
+        ),
+        (
+            "de-at",
+            "Ich gebe frei",
+            "it is shorter than the built-in 'Ich bestätige'",
+        ),
+    ] {
+        let (words, notes) = built(&[], &[(language, phrase(said, &[], &[]))]);
+        assert_eq!(notes.len(), 1, "{said}: {notes:?}");
+        assert!(
+            notes[0].starts_with(&format!(
+                "approval_voice_decisions.phrases.{language}: '{said}' is ignored: {problem}"
+            )),
+            "{notes:?}"
+        );
+        assert!(
+            match_phrase(said, words.for_language(language)).is_none(),
+            "{said}"
+        );
+    }
+    for (language, said) in [("de", "Ich gebe das frei"), ("en", "I hereby confirm")] {
+        let (words, notes) = built(&[], &[(language, phrase(said, &[], &[]))]);
+        assert!(notes.is_empty(), "{said}: {notes:?}");
+        assert!(
+            match_phrase(said, words.for_language(language)).is_some(),
+            "{said}"
+        );
+    }
+}
+
+#[test]
+fn only_quiet_words_may_stand_before_or_after_a_phrase() {
+    let (words, notes) = built(
+        &[],
+        &[(
+            "de",
+            phrase(
+                "Ich bestätige",
+                &["vielleicht", "ja"],
+                &["vielleicht", "später", "dann", "bitte"],
+            ),
+        )],
+    );
+    for (kind, entry) in [
+        ("leading", "vielleicht"),
+        ("trailing", "vielleicht"),
+        ("trailing", "später"),
+        ("trailing", "dann"),
+    ] {
+        let note = format!(
+            "approval_voice_decisions.phrases.de.{kind}: '{entry}' is ignored: only a noise, hesitation, filler, yes or agreement word may stand there"
+        );
+        assert!(notes.contains(&note), "{note}: {notes:?}");
+    }
+    let de = words.for_language("de");
+    let phrase = de.phrase_of("de").unwrap();
+    assert_eq!(phrase.leading, ["ja"]);
+    assert_eq!(phrase.trailing, ["bitte"]);
+    for said in [
+        "Ich bestätige vielleicht",
+        "Vielleicht ich bestätige",
+        "Ich bestätige später",
+        "Ich bestätige dann",
+    ] {
+        assert!(match_phrase(said, de).is_none(), "{said}");
+    }
+    assert!(match_phrase("Ja, ich bestätige bitte", de).is_some());
+}
+
+#[test]
+fn the_startup_log_names_the_phrases_in_use_without_a_package() {
+    assert_eq!(
+        CommandWordsByLanguage::default().shown_phrases_by_card_language(),
+        [(
+            "de/en".to_string(),
+            "'Ich bestätige' (de), 'I confirm' (en)".to_string()
+        )]
+    );
 }

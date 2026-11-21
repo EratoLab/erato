@@ -60,14 +60,7 @@ impl ConfirmationPhrase {
         let place = format!("approval_voice_decisions.phrases.{language}");
         let words = words_of(&config.phrase);
         let shown = &config.phrase;
-        let quiet = |word: &String| {
-            lists.noise_words.contains(word)
-                || lists.fillers.contains(word)
-                || lists.backchannels.contains(word)
-                || lists.yes_particles.contains(word)
-                || lists.agreement_words.contains(word)
-                || lists.leading.contains(word)
-        };
+        let quiet = |word: &String| lists.is_quiet(word);
         // Compared as the lists are: without fillers.
         let core = drop_fillers(&words, &lists.fillers, &lists.again);
         let joined = core.join(" ");
@@ -108,7 +101,7 @@ impl ConfirmationPhrase {
                     "it has {}; at least {MIN_SYLLABLES} keep a short sound from approving",
                     syllables_shown(count)
                 )),
-                Some(_) => None,
+                Some(count) => weaker_than_built_in(language, &words, &joined, count, lists),
             }
         };
         if let Some(problem) = problem {
@@ -143,6 +136,8 @@ impl ConfirmationPhrase {
                         Some("it refuses")
                     } else if Some(&entry_words[0]) == first || Some(&entry_words[0]) == last {
                         Some("it is the phrase's own first or last word")
+                    } else if !lists.may_surround_phrase(&entry_words[0]) {
+                        Some("only a noise, hesitation, filler, yes or agreement word may stand there")
                     } else {
                         None
                     };
@@ -163,6 +158,34 @@ impl ConfirmationPhrase {
         };
         Some(Self::new(language, &config))
     }
+}
+
+/// Why a phrase that passed the other checks is still weaker than the
+/// built-in ones, if it is.
+fn weaker_than_built_in(
+    language: &str,
+    words: &[String],
+    joined: &str,
+    count: u32,
+    lists: &CommandWords,
+) -> Option<String> {
+    let yes =
+        |word: &String| lists.yes_particles.contains(word) || lists.leading_yes.contains(word);
+    if words.iter().any(yes) {
+        return Some("it holds a yes, which is said without meaning to approve".to_string());
+    }
+    let built_ins = built_in_phrases();
+    if lists.approve.contains(joined) && !built_ins.iter().any(|phrase| phrase.words == words) {
+        return Some("the voice commands already hear it as a plain approval".to_string());
+    }
+    let primary = language.split('-').next()?;
+    let built_in = built_ins.iter().find(|phrase| phrase.language == primary)?;
+    (count < syllables(built_in)).then(|| {
+        format!(
+            "it is shorter than the built-in '{}'; a {} phrase is never weaker than it",
+            built_in.shown, built_in.language
+        )
+    })
 }
 
 /// A startup note on a configured phrase.
@@ -250,19 +273,13 @@ const NEVER_IN_PHRASE: &[char] = &[
 ];
 
 /// Which phrase the whole utterance is, if any. People mix languages, so
-/// the German and English phrases are tried, and the card language's. A question, a quotation, a negation or a
-/// condition anywhere is never a match, and neither is a phrase inside a
-/// longer sentence.
+/// the German and English phrases are tried, and the card language's. A
+/// question, a quotation, a negation or a condition anywhere is never a
+/// match, and neither is a phrase inside a longer sentence.
 ///
-/// `hesitations` are the deployment's own besides the built-in ones, as the
-/// web app drops them from a turn. `lists` are those of the card's
-/// language; a word the guards or decisions rely on is never trimmed as a
-/// hesitation.
-pub fn match_phrase<'a>(
-    transcript: &str,
-    hesitations: &[String],
-    lists: &'a CommandWords,
-) -> Option<PhraseMatch<'a>> {
+/// `lists` are those of the card's language. Only their hesitation sounds
+/// are trimmed around the phrase, never a word outside that checked list.
+pub fn match_phrase<'a>(transcript: &str, lists: &'a CommandWords) -> Option<PhraseMatch<'a>> {
     // An ellipsis means the transcriber heard the speaker trail or break off.
     if transcript.contains(NEVER_IN_PHRASE) || transcript.contains("..") {
         return None;
@@ -273,13 +290,7 @@ pub fn match_phrase<'a>(
     if words.iter().any(|word| lists.decides_meaning(word)) {
         return None;
     }
-    let extra: Vec<String> = hesitations
-        .iter()
-        .flat_map(|word| words_of(word))
-        .filter(|word| !lists.is_guard_word(word) && !lists.relied_on.contains(word))
-        .collect();
-    let hesitation =
-        |word: &String| lists.hesitations.contains(word.as_str()) || extra.contains(word);
+    let hesitation = |word: &String| lists.hesitations.contains(word.as_str());
     let start = words.iter().position(|word| !hesitation(word))?;
     let end = words.iter().rposition(|word| !hesitation(word))?;
     let words: Vec<&str> = words[start..=end].iter().map(String::as_str).collect();

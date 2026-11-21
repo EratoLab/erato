@@ -1603,6 +1603,11 @@ fn classify_segment(
     lists: &CommandWords,
 ) -> Segment {
     let joined = segment.join(" ");
+    // A refusal or stop is heard before anything else, so no added word
+    // can turn one into noise or an approval.
+    if let Some(found) = refusal_or_stop(&joined, lists) {
+        return found;
+    }
     if segment
         .iter()
         .all(|word| lists.noise_words.contains(word.as_str()))
@@ -1616,11 +1621,13 @@ fn classify_segment(
     let (rest, yes, no) = strip_leading(segment, lists);
     let found = if rest.len() < segment.len() {
         let joined = rest.join(" ");
-        if lists.noise_phrases.contains(&joined) {
-            Some(Segment::Noise)
-        } else {
-            exact(&joined, input, lists)
-        }
+        refusal_or_stop(&joined, lists).or_else(|| {
+            if lists.noise_phrases.contains(&joined) {
+                Some(Segment::Noise)
+            } else {
+                exact(&joined, input, lists)
+            }
+        })
     } else {
         None
     };
@@ -1633,13 +1640,21 @@ fn classify_segment(
     }
 }
 
-fn exact(joined: &str, input: &VoiceCommandInput<'_>, lists: &CommandWords) -> Option<Segment> {
-    if lists.approve.contains(joined) {
-        Some(Segment::Decision(VoiceMeaning::Approve))
-    } else if lists.reject.contains(joined) {
+fn refusal_or_stop(joined: &str, lists: &CommandWords) -> Option<Segment> {
+    if lists.reject.contains(joined) {
         Some(Segment::Decision(VoiceMeaning::Reject))
     } else if lists.stop.contains(joined) {
         Some(Segment::Nav(VoiceMeaning::Stop, None))
+    } else {
+        None
+    }
+}
+
+fn exact(joined: &str, input: &VoiceCommandInput<'_>, lists: &CommandWords) -> Option<Segment> {
+    if let Some(found) = refusal_or_stop(joined, lists) {
+        Some(found)
+    } else if lists.approve.contains(joined) {
+        Some(Segment::Decision(VoiceMeaning::Approve))
     } else if lists.skip.contains(joined) {
         Some(Segment::Nav(VoiceMeaning::Skip, None))
     } else if lists.repeat.contains(joined) {
