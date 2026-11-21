@@ -208,6 +208,16 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
+    pub async fn default_language(&self) -> String {
+        self.reloadable
+            .read()
+            .await
+            .i18n
+            .language
+            .default_language
+            .clone()
+    }
+
     pub async fn new(config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
         let distribution = Arc::new(Distribution::load(&config));
@@ -241,10 +251,8 @@ impl AppState {
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
 
-        let ms_teams_bot = crate::ms_teams_bot::TeamsBot::from_config(
-            &config.integrations.ms_office.teams,
-            &config.i18n.language.default_language,
-        )?;
+        let ms_teams_bot =
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
         let mut scheduled_deliveries =
             crate::services::scheduled_deliveries::DeliveryRegistry::new();
         if let Some(bot) = &ms_teams_bot {
@@ -255,11 +263,11 @@ impl AppState {
             );
         }
         scheduled_deliveries.register_producer(Arc::new(
-            crate::services::scheduled_items::ReminderProducer::new(
+            crate::services::scheduled_items::ReminderProducer::reloadable(
                 ms_teams_bot
                     .as_ref()
                     .and_then(|bot| bot.settings.public_base_url.clone()),
-                &config.i18n.language.default_language,
+                reloadable.clone(),
             ),
         ));
         let scheduled_deliveries = Arc::new(scheduled_deliveries);
@@ -390,12 +398,14 @@ impl AppState {
         self.reloadable.read().await.mcp.clone()
     }
 
-    /// Clone the startup config with the reloadable MCP and Teams inactivity
-    /// nudge sections applied.
+    /// Clone the startup config with the active runtime settings applied.
     pub async fn effective_config(&self) -> AppConfig {
         let mut config = self.config.clone();
         let reloadable = self.reloadable.read().await;
         reloadable.mcp.config.apply_to(&mut config);
+        config.i18n.language.clone_from(&reloadable.i18n.language);
+        config.frontend.translation_po_compilation_mode =
+            reloadable.i18n.translation_po_compilation_mode;
         config
             .integrations
             .ms_office
@@ -1398,6 +1408,12 @@ impl AppState {
         let mut report = crate::metrics::owned::Snapshot::default();
         report.record(c, "shared.distribution", &self.distribution);
         if let Ok(reloadable) = self.reloadable.try_read() {
+            report.record(c, "shared.reloadable.i18n", &reloadable.i18n);
+            report.record(
+                c,
+                "shared.reloadable.translation_catalogs",
+                &reloadable.translation_catalogs,
+            );
             report.record(
                 c,
                 "shared.reloadable.distribution",
@@ -1410,6 +1426,8 @@ impl AppState {
             report.record(c, "shared.reloadable.teams_nudge", &reloadable.teams_nudge);
         } else {
             for owner in [
+                "shared.reloadable.i18n",
+                "shared.reloadable.translation_catalogs",
                 "shared.reloadable.distribution",
                 "shared.reloadable.mcp",
                 "shared.reloadable.experience_policy",

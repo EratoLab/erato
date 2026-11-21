@@ -80,7 +80,6 @@ pub fn register(
         reloadable,
         &bot.settings.app_name,
         bot.settings.public_base_url.as_deref(),
-        &bot.settings.default_language,
     )));
 }
 
@@ -195,16 +194,16 @@ enum SettingsSource {
     /// configuration reload (an admin-panel change, say) replaces.
     Reloadable(Arc<RwLock<ReloadableAppState>>),
     /// Tests and tools: one fixed section.
-    Fixed(Arc<NudgeSettings>),
+    Fixed {
+        settings: Arc<NudgeSettings>,
+        default_language: String,
+    },
 }
 
 pub struct InactivityNudgeProducer {
     settings: SettingsSource,
     app_name: String,
     public_base_url: Option<String>,
-    /// For users without a stored language. The tip itself is as the admin
-    /// entered it; only the card around it follows the user's language.
-    default_language: String,
     last_run: Mutex<Option<Instant>>,
 }
 
@@ -236,10 +235,12 @@ impl InactivityNudgeProducer {
             return Err(eyre!("the inactivity nudge needs at least one tip"));
         }
         Ok(Self::new(
-            SettingsSource::Fixed(Arc::new(NudgeSettings::from_config(config)?)),
+            SettingsSource::Fixed {
+                settings: Arc::new(NudgeSettings::from_config(config)?),
+                default_language: default_language.to_string(),
+            },
             app_name,
             public_base_url,
-            default_language,
         ))
     }
 
@@ -249,27 +250,19 @@ impl InactivityNudgeProducer {
         reloadable: Arc<RwLock<ReloadableAppState>>,
         app_name: &str,
         public_base_url: Option<&str>,
-        default_language: &str,
     ) -> Self {
         Self::new(
             SettingsSource::Reloadable(reloadable),
             app_name,
             public_base_url,
-            default_language,
         )
     }
 
-    fn new(
-        settings: SettingsSource,
-        app_name: &str,
-        public_base_url: Option<&str>,
-        default_language: &str,
-    ) -> Self {
+    fn new(settings: SettingsSource, app_name: &str, public_base_url: Option<&str>) -> Self {
         Self {
             settings,
             app_name: app_name.to_string(),
             public_base_url: public_base_url.map(|url| url.trim_end_matches('/').to_string()),
-            default_language: default_language.to_string(),
             last_run: Mutex::new(None),
         }
     }
@@ -279,7 +272,7 @@ impl InactivityNudgeProducer {
     /// than a configuration error.
     pub async fn settings(&self) -> Result<Arc<NudgeSettings>, Report> {
         match &self.settings {
-            SettingsSource::Fixed(settings) => Ok(settings.clone()),
+            SettingsSource::Fixed { settings, .. } => Ok(settings.clone()),
             SettingsSource::Reloadable(reloadable) => {
                 let section = reloadable.read().await.teams_nudge.clone();
                 Ok(Arc::new(NudgeSettings::from_config(&section)?))
@@ -506,7 +499,21 @@ impl DeliveryProducer for InactivityNudgeProducer {
             .to_string();
         let token = Uuid::new_v4();
         store_action_token(db, row, token).await?;
-        let lang = text_language::of_user(db, row.user_id, None, &self.default_language).await?;
+        // The tip stays in the language the admin wrote it in. The card
+        // follows the user's stored language or the active deployment default.
+        let default_language = match &self.settings {
+            SettingsSource::Fixed {
+                default_language, ..
+            } => default_language.clone(),
+            SettingsSource::Reloadable(reloadable) => reloadable
+                .read()
+                .await
+                .i18n
+                .language
+                .default_language
+                .clone(),
+        };
+        let lang = text_language::of_user(db, row.user_id, None, &default_language).await?;
         let app = [("app", self.app_name.as_str())];
         let links = self
             .public_base_url

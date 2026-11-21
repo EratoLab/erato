@@ -82,9 +82,6 @@ pub struct TeamsBotSettings {
     pub context_message_count: u32,
     pub streaming: bool,
     pub security_groups_only: bool,
-    /// `i18n.language.default_language`: the bot's language for users who
-    /// have none stored and whose client reports none.
-    pub default_language: String,
 }
 
 pub struct TeamsBot {
@@ -135,10 +132,7 @@ impl TeamsBot {
     }
 
     /// The bot runtime, or `None` when the bot is disabled.
-    pub fn from_config(
-        app: &MsOfficeTeamsAppConfig,
-        default_language: &str,
-    ) -> Result<Option<Arc<Self>>, Report> {
+    pub fn from_config(app: &MsOfficeTeamsAppConfig) -> Result<Option<Arc<Self>>, Report> {
         let config = &app.bot;
         if !config.enabled {
             return Ok(None);
@@ -179,7 +173,6 @@ impl TeamsBot {
                 context_message_count: config.context_message_count,
                 streaming: config.streaming,
                 security_groups_only: config.security_groups_only,
-                default_language: default_language.to_string(),
             },
             inbound: InboundAuth::new(http.clone(), app_id.clone()),
             user_tokens: UserTokenClient::new(
@@ -278,7 +271,6 @@ impl TeamsBot {
                 context_message_count: 0,
                 streaming,
                 security_groups_only: false,
-                default_language: "en".into(),
             },
             inbound: InboundAuth::with_static_keys("bot".into(), Vec::new()),
             connector: Connector::with_test_token(reqwest::Client::new()),
