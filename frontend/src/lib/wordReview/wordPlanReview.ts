@@ -1,4 +1,5 @@
 import { wordPlanOutput } from "./wordDocumentPlan";
+import { wordCellKey, wordHistoryCoverage } from "./wordHistory";
 import {
   parseWordNestedRef,
   resolveWordSource,
@@ -14,6 +15,7 @@ import type {
   WordPlanBlock,
   WordSourceBlock,
 } from "./wordDocumentPlan";
+import type { WordHistoryCoverage } from "./wordHistory";
 import type {
   WordPageLayout,
   WordSectionPlan,
@@ -21,7 +23,11 @@ import type {
   WordSectionStories,
   WordStoryType,
 } from "./wordStories";
-import type { WordTableBlock, WordTableContent } from "./wordTableContent";
+import type {
+  WordTableBlock,
+  WordTableCell,
+  WordTableContent,
+} from "./wordTableContent";
 
 export const SMALL_MAX_CHANGED_BLOCKS = 5;
 export const LARGE_MIN_TOUCHED_SECTIONS = 3;
@@ -69,6 +75,8 @@ export interface WordPlanChangedCell {
   col: number;
   before: string;
   after: string;
+  /** The cell's row and column titles, where the table itself was never shown. */
+  label?: string;
 }
 export type WordLayoutProperty =
   | "boundary"
@@ -108,6 +116,8 @@ interface WordPlanRowBase {
   key: string;
   status: WordPlanRowStatus;
   locateRef?: string;
+  /** A change to source the chat never read in full: only the plan's side is known. */
+  unread?: boolean;
 }
 export type WordPlanRow = WordPlanRowBase &
   (
@@ -162,6 +172,8 @@ export type WordPlanRow = WordPlanRowBase &
         paragraphs: number;
         tables: number;
         objects: number;
+        /** Blocks the chat never read, so of no known kind. */
+        unreadBlocks?: number;
       }
   );
 export type WordPlanRowOf<F extends WordPlanRow["family"]> = Extract<
@@ -180,8 +192,10 @@ export interface WordPlanGroupSummary {
 }
 export interface WordPlanGroup {
   key: string;
-  /** Undefined for the content before the first heading. */
+  /** Undefined for the content before the first heading, and where no heading is sure. */
   heading?: { text: string; level?: number };
+  /** A partly read document leaves no heading sure for this part, which need not be the opening. */
+  sectionUnknown?: true;
   status: WordPlanGroupStatus;
   rows: WordPlanRow[];
   summary: WordPlanGroupSummary;
@@ -289,16 +303,17 @@ export function createWordListNumbering(): (block: {
 
 /**
  * Plain text of the planned document, as Copy text offers it: tables as
- * tab-separated rows, list items after their markers. Without a snapshot, only
- * the new blocks.
+ * tab-separated rows, list items after their markers. Without a snapshot, or
+ * with one rebuilt from partial reads, only the new blocks.
  */
 export function wordPlanText(
   plan: WordDocumentPlan,
   snapshot?: WordAuthoringSnapshot,
 ): string {
-  const blocks = snapshot
-    ? wordPlanOutput(plan, snapshot).map((item) => item.block)
-    : plan.entries.flatMap((e) => (e.kind === "keep" ? [] : e.blocks));
+  const blocks =
+    snapshot && !wordHistoryCoverage(snapshot)
+      ? wordPlanOutput(plan, snapshot).map((item) => item.block)
+      : plan.entries.flatMap((e) => (e.kind === "keep" ? [] : e.blocks));
   const ordinalOf = createWordListNumbering();
   return blocks
     .map((block) => {
@@ -415,6 +430,18 @@ function insertedObjectName(block: WordPlanBlock): string | undefined {
   }
 }
 
+/** A cell's text before and after the plan, given the text it keeps from its source cell. */
+function cellTextChange(cell: WordTableCell<WordPlanBlock>, retained: string) {
+  return {
+    before: cell.textEdit ? (cell.textEdit.expectedText ?? retained) : retained,
+    after: cell.textEdit
+      ? cell.textEdit.text
+      : cell.blocks
+        ? cell.blocks.map(blockText).join("\n")
+        : retained,
+  };
+}
+
 function tableRow(
   key: string,
   status: WordPlanRowStatus,
@@ -474,15 +501,7 @@ function tableRow(
             ? undefined
             : sourceRow.cells.find((o) => o.sourceIndex === cell.sourceIndex)
           : sourceRow.cells[c];
-      const retained = sourceCell?.text ?? "";
-      const after = cell.textEdit
-        ? cell.textEdit.text
-        : cell.blocks
-          ? cell.blocks.map(blockText).join("\n")
-          : retained;
-      const before = cell.textEdit
-        ? (cell.textEdit.expectedText ?? retained)
-        : retained;
+      const { before, after } = cellTextChange(cell, sourceCell?.text ?? "");
       texts.push(after);
       if (sourceRow && (!sourceCell || before !== after)) {
         changedCells.push({ row: r, col: c, before, after });
@@ -512,6 +531,54 @@ function tableRow(
     cellTexts,
     block,
     original,
+  };
+}
+
+/** A table the chat read only cell by cell: the plan's own cell edits are all that is known. */
+function unreadTableRow(
+  key: string,
+  block: WordTableBlock<WordPlanBlock>,
+  locateRef: string | undefined,
+  labels: WordHistoryCoverage["cells"],
+): WordPlanRowOf<"table"> {
+  const labelOf = (rowIndex?: number, cellIndex?: number) => {
+    const titles =
+      block.sourceRef !== undefined &&
+      rowIndex !== undefined &&
+      cellIndex !== undefined
+        ? labels?.get(wordCellKey(block.sourceRef, rowIndex, cellIndex))
+        : undefined;
+    const label = [titles?.rowLabel, titles?.header]
+      .filter((title) => title?.trim())
+      .join(" · ");
+    return label ? { label } : {};
+  };
+  const changedCells = block.rows.flatMap((row, r) =>
+    row.cells.flatMap((cell, c) =>
+      cell.textEdit
+        ? [
+            {
+              row: r,
+              col: c,
+              ...cellTextChange(cell, ""),
+              ...labelOf(row.sourceIndex, cell.sourceIndex),
+            },
+          ]
+        : [],
+    ),
+  );
+  return {
+    ...tableRow(key, "changed", block, undefined, true, locateRef),
+    unread: true,
+    // Every row and cell kept by its source index: only the text of edited cells changes.
+    sameShape: block.rows.every(
+      (row) =>
+        row.sourceIndex !== undefined &&
+        row.cells.every((c) => c.sourceIndex !== undefined && !c.blocks),
+    ),
+    changedCells,
+    rowsAdded: 0,
+    changedRowIndexes: [...new Set(changedCells.map((cell) => cell.row))],
   };
 }
 
@@ -718,6 +785,7 @@ interface GroupDraft {
   key: string;
   order: [number, number];
   heading?: { text: string; level?: number };
+  sectionUnknown?: true;
   isNew: boolean;
   rows: WordPlanRow[];
   replaced: boolean;
@@ -728,21 +796,35 @@ export function buildWordPlanReview(
   snapshot: WordAuthoringSnapshot | undefined,
 ): WordPlanReview {
   const sources = new Map(snapshot?.blocks.map((b) => [b.ref, b]) ?? []);
+  // Only the blocks a partial rebuild read are sources; it orders every ref.
+  const partial = wordHistoryCoverage(snapshot);
   const rangeOf = new Map<string, number>();
   const ranges: GroupDraft[] = [];
-  const openRange = (heading?: WordSourceBlock) =>
+  const openRange = (heading?: { text: string; level?: number }) =>
     ranges.push({
       key: `range:${ranges.length}`,
       order: [ranges.length, 0],
       heading: heading && { text: heading.text, level: heading.level },
+      ...(ranges.length && !heading ? { sectionUnknown: true as const } : {}),
       isNew: false,
       rows: [],
       replaced: false,
     });
   openRange();
-  for (const block of snapshot?.blocks ?? []) {
-    if (block.type === "heading") openRange(block);
-    rangeOf.set(block.ref, ranges.length - 1);
+  const starts = partial
+    ? partial.order.map((ref) => ({
+        ref,
+        start: partial.headings.has(ref),
+        heading: partial.headings.get(ref),
+      }))
+    : (snapshot?.blocks ?? []).map((block) => ({
+        ref: block.ref,
+        start: block.type === "heading",
+        heading: block.type === "heading" ? block : undefined,
+      }));
+  for (const { ref, start, heading } of starts) {
+    if (start) openRange(heading);
+    rangeOf.set(ref, ranges.length - 1);
   }
   const groups = [...ranges];
   const newGroupCount = new Map<number, number>();
@@ -755,6 +837,8 @@ export function buildWordPlanReview(
   let hasInsert = false;
   let largeInsert = false;
   let checkInWord = false;
+  // A change to a block the chat never read could remove headings or objects the checks cannot see.
+  let unreadChanged = false;
   let current: GroupDraft = ranges[0];
 
   const push = (group: GroupDraft, row: WordPlanRow) => {
@@ -764,6 +848,8 @@ export function buildWordPlanReview(
       last.paragraphs += row.paragraphs;
       last.tables += row.tables;
       last.objects += row.objects;
+      if (row.unreadBlocks)
+        last.unreadBlocks = (last.unreadBlocks ?? 0) + row.unreadBlocks;
     } else group.rows.push(row);
   };
   const groupFor = (ref: string | undefined) =>
@@ -813,6 +899,7 @@ export function buildWordPlanReview(
     sourceBlocks: WordSourceBlock[],
     locateRef: string | undefined,
     replacing: boolean,
+    unread = false,
   ): WordPlanRow[] => {
     const textSources = sourceBlocks.filter((s) => s.type !== "native");
     const nativeSources = sourceBlocks.filter((s) => s.type === "native");
@@ -875,13 +962,15 @@ export function buildWordPlanReview(
         rows.push({
           key,
           family: "text",
-          status: source || (replacing && !snapshot) ? "changed" : "new",
+          status:
+            source || (replacing && (!snapshot || unread)) ? "changed" : "new",
           locateRef,
           blockType: block.type,
           level: block.level,
           before: source?.text,
           beforeLevel: source?.level,
           after: block,
+          ...(unread ? { unread } : {}),
         });
       } else if (block.type === "table") {
         const explicit = snapshot && wordSourceTable(snapshot, block.sourceRef);
@@ -891,14 +980,17 @@ export function buildWordPlanReview(
           (paired && snapshot
             ? wordSourceTable(snapshot, paired.ref)
             : undefined);
-        const row = tableRow(
-          key,
-          original ? "changed" : "new",
-          block,
-          original,
-          !!block.sourceRef,
-          locateRef,
-        );
+        const row =
+          !original && unread
+            ? unreadTableRow(key, block, locateRef, partial?.cells)
+            : tableRow(
+                key,
+                original ? "changed" : "new",
+                block,
+                original,
+                !!block.sourceRef,
+                locateRef,
+              );
         if (
           original &&
           row.sameShape &&
@@ -985,6 +1077,7 @@ export function buildWordPlanReview(
     if (entry.kind === "keep") {
       for (const ref of entry.source) {
         const source = sources.get(ref);
+        const unread = !!partial && !source;
         current = groupFor(ref);
         push(current, {
           key: `keep:${ref}`,
@@ -992,10 +1085,11 @@ export function buildWordPlanReview(
           status: "unchanged",
           locateRef: ref,
           count: 1,
-          paragraphs: source?.type !== "native" ? 1 : 0,
+          paragraphs: !unread && source?.type !== "native" ? 1 : 0,
           tables: source?.nativeKind === "table" ? 1 : 0,
           objects:
             source?.type === "native" && source.nativeKind !== "table" ? 1 : 0,
+          ...(unread ? { unreadBlocks: 1 } : {}),
         });
         previousRef = ref;
         inPlace.push(ref);
@@ -1004,11 +1098,13 @@ export function buildWordPlanReview(
     }
     if (entry.kind === "replace") {
       current = groupFor(entry.source[0]);
+      const unread = !!partial && entry.source.some((ref) => !sources.has(ref));
       const rows = outputRows(
         entry.blocks,
-        entry.source.flatMap((ref) => sources.get(ref) ?? []),
+        unread ? [] : entry.source.flatMap((ref) => sources.get(ref) ?? []),
         entry.source[0],
         true,
+        unread,
       );
       for (const row of rows) push(current, row);
       for (const ref of entry.source)
@@ -1019,12 +1115,17 @@ export function buildWordPlanReview(
         inPlace.push(...entry.source);
         continue;
       }
+      // A cell edit keeps its table, so only other unread changes escape the checks.
+      unreadChanged ||=
+        unread &&
+        rows.some((r) => r.family !== "table" || !r.unread || !r.sameShape);
       changedBlocks += entry.blocks.length - kept;
       hasReplace = true;
       current.replaced = true;
       const spanned = new Set(entry.source.map((ref) => rangeOf.get(ref) ?? 0));
       spanned.forEach((range) => touched.add(`range:${range}`));
-      if (snapshot && spanned.size >= 2) restructured = true;
+      // A restructured plan shows the whole new version, which partial reads cannot draw.
+      if (snapshot && !partial && spanned.size >= 2) restructured = true;
       continue;
     }
     changedBlocks += entry.blocks.length;
@@ -1063,6 +1164,7 @@ export function buildWordPlanReview(
       const group = groupFor(ref);
       touched.add(group.key);
       const source = sources.get(ref);
+      unreadChanged ||= !!partial && !source;
       const row: WordPlanRow = source
         ? removedSourceRow(source, `deleted:${ref}`)
         : {
@@ -1070,6 +1172,7 @@ export function buildWordPlanReview(
             family: "text",
             status: "removed",
             blockType: "paragraph",
+            ...(partial ? { unread: true } : {}),
           };
       rowKeyByRef.set(ref, row.key);
       push(group, row);
@@ -1118,15 +1221,18 @@ export function buildWordPlanReview(
       return {
         key: g.key,
         heading: g.heading,
+        ...(g.sectionUnknown ? { sectionUnknown: g.sectionUnknown } : {}),
         status,
         rows: g.rows,
         summary: summarize(changed),
       };
     });
   const rows = finalGroups.flatMap((g) => g.rows);
-  const stories = storyRows(plan, snapshot);
-  const output = snapshot && wordPlanOutput(plan, snapshot);
-  const sections = sectionRows(plan, snapshot, output ?? []);
+  // Parts and layout were never part of a partial rebuild, so they read as without a snapshot.
+  const whole = partial ? undefined : snapshot;
+  const stories = storyRows(plan, whole);
+  const output = whole && wordPlanOutput(plan, whole);
+  const sections = sectionRows(plan, whole, output ?? []);
   const partsRows: WordPlanRow[] = [
     ...stories,
     ...sections.rows,
@@ -1183,7 +1289,7 @@ export function buildWordPlanReview(
     );
     addRisk(
       "layout-changed",
-      sections.rows.map((row) => ({ rowKey: row.key })),
+      whole ? sections.rows.map((row) => ({ rowKey: row.key })) : [],
     );
   }
 
@@ -1228,11 +1334,16 @@ export function buildWordPlanReview(
         r.sameShape &&
         r.changedCells.length > 0,
     );
+  const position = new Map(partial?.order.map((ref, i) => [ref, i]));
+  const at = (ref: string) => position.get(ref) ?? -1;
   const noChange =
     !bodyChanged &&
     !partsChanged &&
     plan.entries.length > 0 &&
-    (!snapshot || inPlace.every((ref, i) => snapshot.blocks[i]?.ref === ref));
+    (!snapshot ||
+      (partial
+        ? inPlace.every((ref, i) => !i || at(inPlace[i - 1]) < at(ref))
+        : inPlace.every((ref, i) => snapshot.blocks[i]?.ref === ref)));
   const existingGroups = finalGroups.filter((g) => g.status !== "new");
   const title: WordPlanTitle = noChange
     ? { kind: "none" }
@@ -1308,7 +1419,7 @@ export function buildWordPlanReview(
     title,
     scope: { wholeFile: !!snapshot?.fullDocument, unchanged },
     risks,
-    riskUnknown: !snapshot,
+    riskUnknown: !snapshot || unreadChanged || (!whole && !!plan.sections),
     noChange,
     groups: finalGroups,
     rows,

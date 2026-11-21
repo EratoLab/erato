@@ -589,6 +589,11 @@ export const paragraphCountLabel = (n: number) =>
     id: "officeAddin.word.planRow.paragraphCount",
     message: plural(n, { one: "# paragraph", other: "# paragraphs" }),
   });
+export const blockCountLabel = (n: number) =>
+  t({
+    id: "officeAddin.word.planRow.blockCount",
+    message: plural(n, { one: "# block", other: "# blocks" }),
+  });
 export const objectCountLabel = (n: number) =>
   t({
     id: "officeAddin.word.planRow.objectCount",

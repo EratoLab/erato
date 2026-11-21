@@ -28,6 +28,7 @@ import {
 } from "./WordRichBlockPreview";
 import {
   bindingLabel,
+  blockCountLabel,
   cellsChangedLabel,
   emptyPartLabel,
   formatList,
@@ -207,6 +208,22 @@ function blockTypeLabel(row: WordPlanRowOf<"text">): string {
   return t({ id: "officeAddin.word.planRow.paragraph", message: "Paragraph" });
 }
 
+function originalUnreadText(): string {
+  return t({
+    id: "officeAddin.word.planRow.originalUnread",
+    message:
+      "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
+  });
+}
+
+function removedUnreadText(): string {
+  return t({
+    id: "officeAddin.word.planRow.removedUnread",
+    message:
+      "The removed text was not read in this chat, so it cannot be shown here. Check the passage in Word.",
+  });
+}
+
 function TextDetail({ row, snapshot }: RowProps<"text">) {
   const after = row.after?.text ?? "";
   const { beforeLevel, level } = row;
@@ -221,8 +238,20 @@ function TextDetail({ row, snapshot }: RowProps<"text">) {
         })}
       </p>
     ) : null;
-  if (row.before === undefined && row.after && snapshot)
-    return <WordRichBlockPreview block={row.after} snapshot={snapshot} />;
+  const preview =
+    row.before === undefined && row.after && snapshot ? (
+      <WordRichBlockPreview block={row.after} snapshot={snapshot} />
+    ) : null;
+  if (row.unread && row.status === "removed")
+    return <p className="word-review__hint">{removedUnreadText()}</p>;
+  if (row.unread)
+    return (
+      <>
+        <p className="word-review__hint">{originalUnreadText()}</p>
+        {preview ?? <TextComparison original={null} proposed={after} />}
+      </>
+    );
+  if (preview) return preview;
   return (
     <>
       {levelChange}
@@ -331,11 +360,29 @@ function moreRowsHint(row: WordPlanRowOf<"table">) {
 }
 
 function TableDetail({ row, snapshot }: RowProps<"table">) {
-  if (row.sameShape)
+  // The cells the plan keeps were never read, so only its own cell edits can be drawn.
+  if (row.unread && row.changedCells.length)
+    return (
+      <dl className="word-plan-row__layout">
+        {row.changedCells.map((cell) => (
+          <div key={`${cell.row}:${cell.col}`}>
+            {cell.label && <dt>{cell.label}</dt>}
+            <dd>
+              <CellTextEdit before={cell.before} after={cell.after} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  const unread = row.unread && (
+    <p className="word-review__hint">{originalUnreadText()}</p>
+  );
+  if (row.sameShape && !row.unread)
     return <CellDiffTable row={row} rowIndexes={row.changedRowIndexes} />;
   if (row.block && snapshot)
     return (
       <>
+        {unread}
         <WordTablePreview
           block={row.block}
           snapshot={snapshot}
@@ -432,11 +479,16 @@ function LayoutDetail({ row }: RowProps<"layout">) {
 }
 
 function unchangedLabel(row: WordPlanRowOf<"unchanged">): string {
-  const parts = [
-    row.paragraphs && paragraphCountLabel(row.paragraphs),
-    row.tables && tableCountLabel(row.tables),
-    row.objects && objectCountLabel(row.objects),
-  ].filter((part): part is string => !!part);
+  // Blocks the chat never read have no known kind, so the run counts them all as blocks.
+  const parts = (
+    row.unreadBlocks
+      ? [blockCountLabel(row.count)]
+      : [
+          row.paragraphs && paragraphCountLabel(row.paragraphs),
+          row.tables && tableCountLabel(row.tables),
+          row.objects && objectCountLabel(row.objects),
+        ]
+  ).filter((part): part is string => !!part);
   const list = formatList(parts);
   return t({
     id: "officeAddin.word.planRow.unchangedRun",

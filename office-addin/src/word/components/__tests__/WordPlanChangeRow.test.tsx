@@ -233,6 +233,49 @@ describe("WordPlanChangeRow", () => {
     ).toBeInTheDocument();
   });
 
+  it("names each cell of a table the chat read only cell by cell by its row and column", () => {
+    renderRow({
+      key: "output:t",
+      family: "table",
+      status: "changed",
+      unread: true,
+      rows: 3,
+      cols: 2,
+      sameShape: true,
+      changedCells: [
+        { row: 1, col: 1, before: "18", after: "20", label: "East · Hours" },
+        { row: 2, col: 1, before: "18", after: "16", label: "West · Hours" },
+      ],
+      rowsAdded: 0,
+      rowsRemoved: 0,
+      headerRow: [],
+      changedRowIndexes: [1, 2],
+      cellTexts: [
+        ["Team", "Hours"],
+        ["East", "20"],
+        ["West", "16"],
+      ],
+    });
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByText("East · Hours")).toBeVisible();
+    expect(screen.getByText("West · Hours")).toBeVisible();
+    expect(screen.getByText("16")).toBeVisible();
+  });
+
+  it("counts unchanged content as blocks when the chat never read some of it", () => {
+    renderRow({
+      key: "keep:b1",
+      family: "unchanged",
+      status: "unchanged",
+      count: 12,
+      paragraphs: 3,
+      tables: 1,
+      objects: 0,
+      unreadBlocks: 8,
+    });
+    expect(screen.getByText("12 blocks unchanged")).toBeInTheDocument();
+  });
+
   it("labels headings by level and locates the source passage in Word", () => {
     const snapshot = readySnapshot();
     const source = snapshot.blocks[0];

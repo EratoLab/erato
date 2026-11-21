@@ -5218,6 +5218,11 @@ msgstr "Sections to show"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.sectionUnknown"
+msgstr "Section not known"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.planReview.showPreview"
 msgstr "Preview the result"
 
@@ -5225,6 +5230,11 @@ msgstr "Preview the result"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.beforeUnavailable"
 msgstr "Previous values were not captured; only the new settings are shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.blockCount"
+msgstr "{n, plural, one {# block} other {# blocks}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
@@ -5293,6 +5303,11 @@ msgstr "{n, plural, one {# other item} other {# other items}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.originalUnread"
+msgstr "The original text was not read in this chat, so only the new text is shown. Check the passage in Word."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.pageLayout"
 msgstr "Page layout"
 
@@ -5310,6 +5325,11 @@ msgstr "{n, plural, one {# paragraph} other {# paragraphs}}"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.removed"
 msgstr "Removed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removedUnread"
+msgstr "The removed text was not read in this chat, so it cannot be shown here. Check the passage in Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx

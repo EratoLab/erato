@@ -1,6 +1,7 @@
 import {
   isWordMediaElementActive,
   nativeBodyGroups,
+  wordBodyRef,
   wordMainBody,
 } from "@erato/frontend/word-review";
 
@@ -136,7 +137,7 @@ export function predictWordBodyParagraphs(
         if (isW(ancestor, "tbl")) nesting++;
       const text = plainText(paragraph);
       result.push({
-        ref: `b${group + 1}`,
+        ref: wordBodyRef(group),
         index,
         nesting,
         ...(text === undefined ? {} : { text }),
