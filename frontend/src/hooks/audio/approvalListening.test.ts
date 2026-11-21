@@ -1419,6 +1419,8 @@ describe("listening against the endpoint", () => {
       speechMs: 900,
       recordedMs: 1_950,
       overVoice: false,
+      leadInMs: 300,
+      judgedMs: 2_250,
     };
     const deciding = (
       approves = true,
@@ -1579,16 +1581,55 @@ describe("listening against the endpoint", () => {
       expect(send).not.toHaveBeenCalled();
     });
 
-    it("the phrase from a recording that could not carry it is no miss", async () => {
-      const { decision } = deciding();
-      const { heardApprovalWords, useApprovalListening } = await heardCard(
-        undefined,
-        CARD,
-        decision,
-      );
+    it("asks once more for a decision the recording could not carry, then points to the screen", async () => {
+      for (const [meaning, again, screen] of [
+        [
+          "reject",
+          "Das habe ich nicht sicher gehört. Bitte noch einmal sagen.",
+          "Das ging nicht durch. Bitte auf dem Bildschirm entscheiden.",
+        ],
+        [
+          "approve",
+          "Bitte noch einmal „Ich bestätige“ sagen.",
+          "Dann bitte auf dem Bildschirm bestätigen.",
+        ],
+      ] as const) {
+        connections.length = 0;
+        vi.resetModules();
+        const { decision, send } = deciding();
+        const { heardApprovalWords } = await heardCard(
+          undefined,
+          CARD,
+          decision,
+        );
+        answer(meaning, { status: "say_again" });
+        await heardApprovalWords(KEY, "Nein.", RECORDING);
+        expect(sentences(connections[1])).toEqual([again]);
+        audio(connections[1], 0);
+        playOut();
+        answer(meaning, { status: "say_again" });
+        await heardApprovalWords(KEY, "Nein.", RECORDING);
+        expect(sentences(connections[2])).toEqual([screen]);
+        expect(send).not.toHaveBeenCalled();
+      }
+    });
+
+    it("a near miss and a recording that could not carry the words count together", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords } = await heardCard(undefined, CARD, decision);
+      answer("approve", { status: "phrase_needed" });
+      await heardApprovalWords(KEY, "Ja.", RECORDING);
+      expect(sentences(connections[1])).toEqual([
+        "Bitte „Ich bestätige“ sagen.",
+      ]);
+      audio(connections[1], 0);
+      playOut();
       answer("approve", { status: "say_again" });
       await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
-      expect(useApprovalListening.getState().misses[KEY] ?? 0).toBe(0);
+      expect(sentences(connections[2])).toEqual([
+        "Dann bitte auf dem Bildschirm bestätigen.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
     });
 
     it("words before the card asked bring the rest of it, not a decision", async () => {
