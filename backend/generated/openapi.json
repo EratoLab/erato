@@ -5947,6 +5947,10 @@
           "approval_id": {
             "type": "string"
           },
+          "called_as": {
+            "type": "string",
+            "description": "The name the model called the tool by, set only where it is not\n`tool_name`: a name qualified with the MCP server. The continued call\nis stored and replayed under it."
+          },
           "child": {
             "oneOf": [
               {
@@ -5981,7 +5985,8 @@
             "type": "string"
           },
           "tool_name": {
-            "type": "string"
+            "type": "string",
+            "description": "The tool as its MCP server or Erato names it: what the card shows and\na standing decision is stored for."
           }
         }
       },
@@ -15859,6 +15864,10 @@
           },
           "title": {
             "type": "string"
+          },
+          "tool_name": {
+            "type": "string",
+            "description": "The tool's own name on its MCP server, set only when the model calls\nit by a name qualified with the server because another server or one\nof Erato's own tools has the same name. The call's `tool_name` is then\nthat qualified name; show this one instead."
           }
         }
       },

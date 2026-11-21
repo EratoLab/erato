@@ -653,6 +653,7 @@ mod tests {
             description: Some("Updates the record.".into()),
             description_truncated: false,
             server_name: Some("Records".into()),
+            tool_name: None,
             label: Some(ToolCallLabel {
                 source,
                 ..generic_label(&json!({"status": "Rejected"}))
@@ -676,6 +677,7 @@ mod tests {
             approval_id: call_id.into(),
             tool_call_id: call_id.into(),
             tool_name: "update_record".into(),
+            called_as: None,
             display: Some(display(ToolCallLabelSource::Rules)),
             input: json!({"status": "Rejected"}),
             child,

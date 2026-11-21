@@ -99,6 +99,8 @@ interface AudioConversationalFeatureConfig {
   voiceStartMaxWaitMs?: number;
   /** Words that end no conversational turn on their own; a base when omitted. */
   hesitationWords?: string[];
+  /** The whole list of each language that has its own. */
+  hesitationsByLanguage?: Partial<Record<string, string[]>>;
   /** The user can speak over the voice, and the voice yields. */
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
@@ -509,6 +511,7 @@ function createFeatureConfig(
       voiceStartBufferMs: environment.audioConversationalVoiceStartBufferMs,
       voiceStartMaxWaitMs: environment.audioConversationalVoiceStartMaxWaitMs,
       hesitationWords: environment.audioConversationalHesitationWords,
+      hesitationsByLanguage: environment.audioConversationalHesitations,
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,

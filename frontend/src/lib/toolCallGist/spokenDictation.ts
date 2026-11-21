@@ -1,5 +1,8 @@
 /* eslint-disable lingui/no-unlocalized-strings -- words and punctuation the comparison recognises, not copy */
 import { isInvisibleFormatChar } from "./serverText";
+import { languagesHeard } from "./spokenLanguageData";
+
+import type { SpokenCardLanguages } from "./spokenLanguageData";
 
 /**
  * Whether a long text on an approval card is what the user dictated in this
@@ -103,113 +106,24 @@ export const dictationKey = (text: string): string =>
  * made of, per language: verbs that say what to do with the text, and the
  * few words around them ("Nein, schreib dem Kunden eine Mail:"). A clause
  * with any other word (a name, a negation, a verb that may be meant for the
- * recipient) is part of the dictation.
+ * recipient) is part of the dictation. The words are language data
+ * (`dictation_verbs`, `dictation_words`).
  */
-const INSTRUCTION_WORDS: Readonly<
-  Record<"de" | "en", { verbs: readonly string[]; others: readonly string[] }>
-> = {
-  de: {
-    verbs: [
-      "schreib",
-      "schreibe",
-      "notier",
-      "notiere",
-      "antworte",
-      "schick",
-      "schicke",
-      "sende",
-      "formulier",
-      "formuliere",
-      "verfass",
-      "verfasse",
-      "erstell",
-      "erstelle",
-    ],
-    others: [
-      "nein",
-      "ja",
-      "okay",
-      "ok",
-      "also",
-      "bitte",
-      "dann",
-      "jetzt",
-      "und",
-      "mal",
-      "kurz",
-      "noch",
-      "dazu",
-      "zurück",
-      "an",
-      "dem",
-      "den",
-      "der",
-      "die",
-      "das",
-      "ein",
-      "eine",
-      "einen",
-      "ihm",
-      "ihr",
-      "ihnen",
-      "kunden",
-      "kundin",
-      "team",
-      "mail",
-      "e-mail",
-      "nachricht",
-      "antwort",
-      "notiz",
-      "text",
-      "folgendes",
-      "folgende",
-      "folgenden",
-    ],
-  },
-  en: {
-    // Not "reply", "answer", "draft" or "note": alone before a colon they
-    // are labels that may be part of the dictation.
-    verbs: ["write", "send", "compose"],
-    others: [
-      "no",
-      "yes",
-      "okay",
-      "ok",
-      "so",
-      "and",
-      "then",
-      "now",
-      "please",
-      "back",
-      "to",
-      "the",
-      "a",
-      "an",
-      "them",
-      "him",
-      "her",
-      "customer",
-      "client",
-      "team",
-      "email",
-      "e-mail",
-      "mail",
-      "message",
-      "note",
-      "reply",
-      "text",
-      "following",
-      "this",
-    ],
-  },
-};
+interface InstructionSet {
+  verbs: ReadonlySet<string>;
+  all: ReadonlySet<string>;
+}
 
-const INSTRUCTION_SETS = Object.values(INSTRUCTION_WORDS).map(
-  ({ verbs, others }) => ({
-    verbs: new Set(verbs),
-    all: new Set([...verbs, ...others]),
-  }),
-);
+const instructionSets = (
+  language: string | undefined,
+  languages: SpokenCardLanguages | undefined,
+): InstructionSet[] =>
+  languagesHeard(language, languages)
+    .filter((words) => words.dictation_verbs.length > 0)
+    .map(({ dictation_verbs: verbs, dictation_words: others }) => ({
+      verbs: new Set(verbs),
+      all: new Set([...verbs, ...others]),
+    }));
 
 /**
  * How many words open the dictation as an instruction to the assistant: a
@@ -217,7 +131,10 @@ const INSTRUCTION_SETS = Object.values(INSTRUCTION_WORDS).map(
  * is an instruction word of one language, one of them a verb. Anything else
  * before a colon is part of the dictation.
  */
-const instructionWords = (dictated: Words): number => {
+const instructionWords = (
+  dictated: Words,
+  sets: readonly InstructionSet[],
+): number => {
   const end = dictated.raw
     .slice(0, MAX_LEAD_IN_WORDS)
     .findIndex((word) => /:["'\u201c\u201d\u00bb]?$/.test(word));
@@ -231,7 +148,7 @@ const instructionWords = (dictated: Words): number => {
     return 0;
   }
   const keys = dictated.keys.slice(0, end + 1);
-  return INSTRUCTION_SETS.some(
+  return sets.some(
     ({ verbs, all }) =>
       keys.every((key) => all.has(key)) && keys.some((key) => verbs.has(key)),
   )
@@ -279,9 +196,10 @@ const comparePassage = (
   card: readonly string[],
   passage: string,
   whole: boolean,
+  sets: readonly InstructionSet[],
 ): DictationRelation | undefined => {
   const dictated = wordsOf(passage);
-  const instruction = instructionWords(dictated);
+  const instruction = instructionWords(dictated, sets);
   const content = dictated.keys.slice(instruction);
   const at = indexOfRun(dictated.keys, card);
   if (at !== -1) {
@@ -315,17 +233,23 @@ const comparePassage = (
  * user's latest message: after anything said or typed since, they may want
  * something else, so the text is named by its size instead. A text changed
  * from an earlier dictation is still "changed": that claims no sameness.
+ * An instruction before the dictation is read in German, English and the
+ * card's `language`; without one, in every language of `languages` (the
+ * built-in ones when not given).
  */
 export const dictationOf = (
   text: string,
   turns: readonly UserTurn[],
+  language?: string,
+  languages?: SpokenCardLanguages,
 ): DictationRelation | undefined => {
   const card = wordsOf(text).keys;
   if (card.length < MIN_DICTATED_WORDS) return undefined;
+  const sets = instructionSets(language, languages);
   for (const [index, turn] of turns.entries()) {
     let best: DictationRelation | undefined;
     for (const passage of turn.passages) {
-      const relation = comparePassage(card, passage, turn.whole);
+      const relation = comparePassage(card, passage, turn.whole, sets);
       if (relation && (!best || RANK[relation] > RANK[best])) best = relation;
     }
     if (best) return index === 0 || best === "changed" ? best : undefined;

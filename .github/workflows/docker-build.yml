@@ -612,6 +612,9 @@ jobs:
       - name: "Validate config reference metadata and freshness"
         working-directory: backend
         run: cargo run -p erato_config --bin gen-config-reference -- --check
+      - name: "Check if the web app's language base is up to date"
+        working-directory: backend
+        run: cargo run -p erato_config --bin gen-language-base -- --check
 
   test-frontend:
     timeout-minutes: 10

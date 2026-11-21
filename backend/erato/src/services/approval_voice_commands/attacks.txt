@@ -1,0 +1,422 @@
+# Adversarial phrasings from the card-correctness review of #1605 (2026-11-18), as language|words.
+de|ich weiß nicht, ob ich das so will
+de|nicht so
+de|nicht so.
+de|warum denn so
+de|ja, mach das so, aber …
+de|in Ordnung, aber nimm den 22.
+de|passt nicht so
+de|mach das nicht so
+de|mach das nicht so.
+de|nein, nicht so
+de|nein nein, mach das so
+de|nee, mach das so
+de|nein, mach das so
+de|lass es so
+de|lass das so
+de|lass es so.
+de|nein, lass es so
+de|nein nein, lass es so
+de|so nicht
+de|ja so
+de|ja, so
+de|ach so
+de|ach so, ja
+de|ach so, mach das
+de|gut so
+de|ja gut so
+de|ja, das so
+de|das so
+de|ja ja, mach das so
+de|mach das so mach das so
+de|mach mach das so
+de|mach das, so
+de|so, mach das
+de|okay, also dann so
+de|na dann so
+de|dann so
+de|mach das dann so
+de|nicht dann
+de|dann nicht
+de|lass es dann
+de|nein, dann nicht
+de|wenn du meinst, dann so
+de|nur so
+de|ja, aber dann …
+de|ja, aber dann
+de|ja aber dann
+de|ja, und dann
+de|ja, dann
+de|ja dann
+de|in Ordnung, nein
+de|in Ordnung, mach
+de|in Ordnung mach
+de|in Ordnung, lass es
+de|in Ordnung, mach das nicht so
+de|vielen Dank, nein
+de|vielen Dank, mach das so
+de|ach ja, mach
+de|ah ja, nein
+de|aha ja, lass es so
+de|ja, mach das bitte so
+de|mach es so wie besprochen
+de|mach das so nicht
+de|ja passt, mach das so
+de|passt so nicht
+de|das passt so nicht
+de|lass das so stehen
+de|mach das so, nicht anders
+de|ja mach das so ja
+de|mach so
+de|mach doch so
+de|mach das lieber so
+de|ja, ja, so
+de|genau so nicht
+de|mach das ja so
+de|so so
+de|ja so so
+de|nimm lieber den anderen statt
+de|statt dessen
+de|Jaguar, mach das so
+de|mach das so, ja
+de|in Ordnung, mach das so
+de|in Ordnung, in Ordnung, mach
+de|nein, in Ordnung, mach
+de|nein, mach
+de|in Ordnung, nicht machen
+de|nicht so machen
+de|so nicht machen
+de|ja, das passt so, danke
+de|danke schön, das passt so
+de|so machen
+de|ja, so machen
+de|lass, so
+en|and then?
+en|and then
+en|what then
+en|so then no
+en|okay then, but first …
+en|okay then, but first
+en|I see, don't
+en|I see, go ahead
+en|I see, go ahead then
+en|got you, go ahead
+en|go ahead then
+en|go ahead, then
+en|yes then
+en|yes, then
+en|fine then
+en|not then
+en|no, not then
+en|no then
+en|don't do it then
+en|leave it then
+en|cancel then
+en|do it then
+en|ok then
+en|alright then
+en|right then
+en|then go ahead
+en|go ahead then but
+en|yes go ahead then go ahead
+en|use record 43 instead
+en|use the other one instead
+en|instead
+en|do this instead
+en|use it instead
+en|cancel that instead
+en|no, do the other one instead
+en|go ahead instead
+en|thank you, no
+en|thank you, go ahead
+en|I see, no
+en|I see, not like that
+en|not like that then
+en|don't do it like that then
+en|fine, but then …
+en|yes yes go ahead then
+en|go ahead go ahead
+en|sure then
+en|sounds good then
+en|sounds good, then
+en|then cancel
+en|no thanks then
+en|so go ahead then
+en|well then go ahead
+en|go ahead and then
+en|yes, but then …
+en|yes, but then
+en|yes but then
+en|confirm then
+en|approved then
+en|so then
+en|then
+en|so
+# voice loop phrases
+de|weiter
+de|weiter bitte
+de|hab ich
+de|kenn ich schon
+de|das weiß ich schon, weiter
+de|überspringen
+de|überspring das bitte
+de|ähm, weiter
+de|ja ja, weiter
+de|nächster Punkt
+de|können Sie bitte zum nächsten Punkt gehen
+de|das kannst du überspringen
+de|next
+de|skip that
+de|I know that already, go on
+de|okay, weiter im Text
+de|mach weiter
+de|den Teil kenne ich, bitte weiter
+de|was noch
+de|was noch?
+de|was wird sonst noch geändert
+de|und sonst?
+de|was kommt noch
+de|gibt es sonst noch was
+de|hab ich, was noch
+de|was ist der Rest
+de|sag mir nur noch den Rest
+de|können Sie mir bitte sagen, was sonst noch geändert wird
+de|ähm, und was ändert sich sonst noch
+de|what else
+de|what else is updated
+de|anything else?
+de|just tell me the rest
+de|was fehlt noch
+de|und der Rest?
+de|nochmal
+de|noch mal bitte
+de|wie bitte
+de|kannst du das wiederholen
+de|können Sie das bitte noch einmal wiederholen
+de|das habe ich nicht verstanden, nochmal bitte
+de|wie war der Status
+de|wie war das Datum nochmal
+de|was war das letzte
+de|sag das nochmal
+de|äh, wie war das gerade
+de|again
+de|say that again please
+de|what was the status again
+de|sorry, could you repeat that
+de|bitte wiederholen
+de|den Status nochmal bitte
+de|lies den Text vor
+de|lies mir die Beschreibung vor
+de|lies sie mir vor
+de|kannst du mir den Text vorlesen
+de|können Sie mir bitte die Beschreibung vorlesen
+de|was steht in der Beschreibung
+de|ich möchte den Text hören
+de|vorlesen bitte
+de|lies mal vor
+de|den ganzen Text bitte
+de|read me the text
+de|read the description
+de|can you read it out to me
+de|read it out please
+de|ähm, lies mir das bitte mal vor
+de|wie lautet die Beschreibung
+de|stopp
+de|stop
+de|halt
+de|ruhe
+de|sei still
+de|sei mal bitte kurz still
+de|stopp bitte
+de|warte mal
+de|moment
+de|einen Moment bitte
+de|hör auf
+de|hör bitte auf zu reden
+de|es reicht
+de|wait
+de|be quiet
+de|stop talking please
+de|okay stopp
+de|pause
+de|nimm den 22.
+de|nimm lieber Datensatz 43
+de|setz den Status auf offen
+de|ohne Anna
+de|das Datum passt nicht, nimm den 22.
+de|den Status lass, wie er ist
+de|ja, aber nimm den 22.
+de|nicht erledigt, sondern in Arbeit
+de|ändere das Datum auf Freitag
+de|mach daraus nächsten Montag
+de|könnten Sie bitte stattdessen den Status auf offen setzen
+de|ähm, nee, nimm doch lieber den dreiundzwanzigsten
+de|use record 43 instead
+de|change the status to open
+de|without the description
+de|make it Friday
+de|die Beschreibung bitte weglassen
+de|füge noch Anna hinzu
+de|wie wird das Wetter morgen
+de|wie spät ist es
+de|was steht heute in meinem Kalender
+de|schreib mir eine E-Mail an Peter
+de|erzähl mir einen Witz
+de|wer ist der Bundeskanzler
+de|such mir bitte ein Restaurant in Hamburg
+de|was ist die Hauptstadt von Frankreich
+de|übersetze guten Morgen ins Englische
+de|können Sie mir sagen, wie viele Einwohner Berlin hat
+de|what's the weather tomorrow
+de|tell me a joke
+de|who won the game yesterday
+de|fass mir das letzte Meeting zusammen
+de|ähm, ganz was anderes, wie lange hat der Supermarkt offen
+de|welche Aufgaben habe ich diese Woche
+de|ja
+de|ja bitte
+de|ja, mach das
+de|ja passt, mach das so
+de|mach das
+de|einverstanden
+de|okay, einverstanden
+de|passt
+de|ja genau
+de|jawohl
+de|das passt so
+de|ja, das kannst du so machen
+de|ja, bitte ausführen
+de|yes
+de|go ahead
+de|yes, do it
+de|sounds good
+de|in Ordnung, mach
+de|von mir aus
+de|ja klar, mach ruhig
+de|mach das so
+de|passt so
+de|ja passt
+de|nein
+de|nein danke
+de|nein, lass das
+de|auf keinen Fall
+de|lass es
+de|abbrechen
+de|nicht machen
+de|nee
+de|nee, lieber nicht
+de|das will ich nicht
+de|bitte nicht ausführen
+de|no
+de|cancel
+de|don't do it
+de|no thanks
+de|ablehnen
+de|vergiss es
+de|mach das nicht
+de|mhm
+de|okay
+de|äh
+de|alles klar
+de|aha
+de|hm
+de|ähm
+de|ok
+de|verstehe
+de|ach so
+de|so so
+de|uh huh
+de|I see
+de|right
+de|gut
+de|mhm, okay
+de|ah ja
+de|ich weiß nicht
+de|hm, mal sehen
+de|ja nein
+de|das ist ja interessant
+de|also ich
+de|vielleicht
+de|warum eigentlich
+de|Banane
+de|ja, nein, doch
+de|ich bin mir nicht sicher
+de|muss das sein
+de|well I don't know
+de|maybe
+de|yes no
+de|let me think
+de|das ist aber viel
+de|ich überlege noch
+# re-check attacks 2026-11-18 evening
+de|nicht so schnell
+de|nicht so schnell bitte
+de|so nicht ganz
+de|nicht so wichtig
+de|das ist nicht so wichtig
+de|ist das nicht so?
+de|ist das nicht so
+de|warum nicht so?
+de|warum nicht so
+de|ich will das nicht so
+de|ich weiß nicht, ob ich das so nicht will
+de|nicht so laut
+de|ja, nicht so schlimm
+de|ja, ist nicht so schlimm, mach
+de|passt schon, nicht so wichtig
+de|mach das so, nicht so
+de|so, nicht
+de|also so nicht
+de|nein
+de|nein danke
+de|dann nicht
+de|nein, dann nicht
+de|auf keinen Fall
+de|nein, auf keinen Fall
+de|lieber nicht
+de|nicht machen
+de|mach das nicht
+de|nein, mach das nicht
+de|lass es
+de|nein, lass es
+de|lass es sein
+de|abbrechen
+de|nein, mach
+de|nee, mach
+de|nein, das will ich so nicht
+de|das will ich so nicht
+de|so nicht, nimm den 22.
+de|Herr Sonicht soll dabei sein
+de|Firma Nichtso GmbH
+de|setz den Betreff auf nicht so dringend
+de|der Titel soll nicht so lauten
+de|nicht so, sondern am Freitag
+de|ja, aber nicht so
+en|not like that one
+en|not like that
+en|no, not like that
+en|not like that, use the other one
+en|it's not like that
+en|is it not like that?
+en|not so fast
+en|not so loud
+en|so not
+en|no
+en|no thanks
+en|no thanks then
+en|no thank you
+en|absolutely not
+en|cancel
+en|don't
+en|don't do it
+en|no, don't do it
+en|no, do it
+en|no, go ahead
+en|leave it
+en|leave it as it is
+en|leave it like that
+en|keep it like that
+en|no, leave it like that
+en|I don't like that
+en|not like that, thanks
+en|set the subject to not like that

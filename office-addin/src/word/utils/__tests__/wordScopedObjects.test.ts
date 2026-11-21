@@ -1266,8 +1266,12 @@ describe("scoped object editing", () => {
     expect(
       await s.session.execute({ snapshot: s.snapshot.token }, context),
     ).toMatchObject({
-      ok: false,
-      validationErrors: [{ code: "model-budget" }],
+      ok: true,
+      result: {
+        completeRead: "unavailable",
+        reason: "model-budget",
+        exampleCall: { snapshot: s.snapshot.token },
+      },
     });
     expect(await s.read({ ref: "b2" })).toMatchObject({
       result: { status: "ready" },

@@ -19,6 +19,7 @@ vi.mock("./approvalSpeech", () => ({
 }));
 vi.mock("./spokenStyle", () => ({
   deploymentNumberWords: () => undefined,
+  deploymentSpokenCardLanguages: () => undefined,
   useSpokenStyle: () => ({
     amount: "short",
     shortDetails: 1,

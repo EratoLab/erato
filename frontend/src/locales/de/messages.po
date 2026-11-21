@@ -5583,6 +5583,21 @@ msgstr "Vorgeschlagene Dokumentänderungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposal"
+msgstr "Nicht in diesem Vorschlag: {listed}. Bitten Sie in Ihrer nächsten Nachricht um die übrigen Änderungen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalMore"
+msgstr "Nicht in diesem Vorschlag: {listed} sowie weitere Teile. Bitten Sie in Ihrer nächsten Nachricht um die übrigen Änderungen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "ein Teil ohne Text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.openInWord"
 msgstr "Öffnen Sie diesen Chat in Word mit dem Dokument, um die Änderungen anzuwenden."
 
@@ -8908,12 +8923,12 @@ msgstr "Das habe ich nicht sicher gehört. Bitte noch einmal sagen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhrase"
-msgstr "Bitte „Ich bestätige“ sagen."
+msgstr "Bitte „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhraseAgain"
-msgstr "Bitte noch einmal „Ich bestätige“ sagen."
+msgstr "Bitte noch einmal „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9023,7 +9038,7 @@ msgstr "Bitte auf dem Bildschirm bestätigen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.requestPhrase"
-msgstr "Zum Ausführen bitte „Ich bestätige“ sagen."
+msgstr "Zum Ausführen bitte „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9436,7 +9451,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolApproval.voicePhrase"
-msgstr "Per Sprache: „Ich bestätige“"
+msgstr "Per Sprache: „{phrase}“"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

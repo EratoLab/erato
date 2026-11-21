@@ -1,5 +1,6 @@
 import {
   MAX_PLAN_BYTES,
+  MAX_WORD_SCOPE_BYTES,
   wordSourceReadRefs,
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
@@ -12,6 +13,7 @@ import {
 } from "@erato/frontend/word-review";
 
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
+import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
@@ -27,9 +29,15 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
+import {
+  wordNotInProposalReceipt,
+  wordPartsNotInProposal,
+  wordSubmissionBlocks,
+} from "./wordPlanCoverage";
 import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
 import {
   expandWordScopedSubmission,
+  wordCompleteReadToken,
   WORD_SCOPED_TOKEN_MESSAGE,
   wordScopedIssues,
   WordScopedSubmissionError,
@@ -61,6 +69,19 @@ export function createWordDocumentSubmissionExecutor(
     const result = await execute(input, context);
     if (result.ok) return result;
     const snapshot = context && session.snapshotForSubmission(context);
+    if (
+      context &&
+      snapshot &&
+      object(input) &&
+      input.snapshot === snapshot.token
+    )
+      session.drafts.refused(
+        context.toolCallId,
+        wordSubmissionBlocks(
+          "draft_id" in input ? session.drafts.latestDraft : input,
+          snapshot,
+        ),
+      );
     const unavailable =
       !snapshot ||
       snapshot.revoked ||
@@ -166,17 +187,31 @@ function createSubmissionExecutor(
       return { ok: false, error: "Expected JSON plan arguments." };
     }
     if (new TextEncoder().encode(serialized).length > MAX_PLAN_BYTES)
-      return {
-        ok: false,
-        error: "Document plan exceeds maxPlanBytes.",
-        validationErrors: [
-          {
-            path: "",
-            code: "too-large",
-            message: "Submission arguments exceed maxPlanBytes.",
-          },
-        ],
-      };
+      return "scoped_edit" in input &&
+        input.snapshot === snapshot.token &&
+        wordCompleteReadToken(snapshot, input.readToken)
+        ? sparseRejection(input, {
+            ok: false,
+            error: "Scoped edit rejected.",
+            validationErrors: [
+              {
+                path: "/scoped_edit",
+                code: "scoped-shape",
+                message: WORD_SCOPED_EXPANDED_TOO_LARGE,
+              },
+            ],
+          })
+        : {
+            ok: false,
+            error: "Document plan exceeds maxPlanBytes.",
+            validationErrors: [
+              {
+                path: "",
+                code: "too-large",
+                message: "Submission arguments exceed maxPlanBytes.",
+              },
+            ],
+          };
     try {
       const previous = session.drafts.replay(context.toolCallId, serialized);
       if (previous) return previous;
@@ -229,9 +264,22 @@ function createSubmissionExecutor(
           : "table_cell" in submitted
             ? "table_cell"
             : undefined;
+      // The budget check is a backend call, so only an oversized scoped_edit after a target read asks.
+      const completeReadIssue =
+        kind === "scoped_edit" &&
+        scoped?.kind === "objects" &&
+        new TextEncoder().encode(serialized).length > MAX_WORD_SCOPE_BYTES
+          ? await session.completeReadIssue()
+          : undefined;
+      if (
+        context.signal?.aborted ||
+        session.snapshotForSubmission(context) !== snapshot ||
+        snapshot.revoked
+      )
+        return { ok: false, error: "Document submission stopped." };
       const expansion =
         kind === "scoped_edit"
-          ? expandWordScopedSubmission(submitted, snapshot)
+          ? expandWordScopedSubmission(submitted, snapshot, completeReadIssue)
           : undefined;
       const value =
         expansion?.plan ??
@@ -263,14 +311,25 @@ function createSubmissionExecutor(
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;
-        if (
+        const expanded =
           "draft_id" in input ||
           "table_cell" in input ||
-          "scoped_edit" in input
-        )
+          "scoped_edit" in input;
+        const notInProposal = wordNotInProposalReceipt(
+          wordPartsNotInProposal(
+            snapshot,
+            session.drafts.refusedAttempts,
+            wordSubmissionBlocks(kind ? submitted : value, snapshot),
+          ),
+        );
+        if (expanded || notInProposal)
           result = {
             ...prepared,
-            result: { ...(prepared.result as object), plan: value },
+            result: {
+              ...(prepared.result as object),
+              ...(expanded ? { plan: value } : {}),
+              ...notInProposal,
+            },
           };
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the

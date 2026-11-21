@@ -7,6 +7,10 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+import type {
+  ConfirmationPhrases,
+  SpokenCardLanguage,
+} from "@/lib/toolCallGist/spokenLanguageData";
 import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
 
 // The `[delegation.tasks.approval] mode` the backend is running, as its config
@@ -101,6 +105,17 @@ export type Env = {
   >;
   /** The deployment's number words, by language, to read numbers said in words. */
   spokenNumberWords?: Partial<Record<string, NumberWords>>;
+  /**
+   * The words spoken approval cards say as code and read the user's words
+   * with, by language: the built-in German and English ones merged with the
+   * deployment's.
+   */
+  approvalSpeechWords?: Partial<Record<string, SpokenCardLanguage>>;
+  /**
+   * The confirmation phrase each language approves a card with, as shown,
+   * when the deployment configures one; the built-in ones otherwise.
+   */
+  approvalVoicePhrases?: ConfirmationPhrases;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   audioConversationalCardEndOfTurnSilenceMs?: number;
@@ -109,6 +124,11 @@ export type Env = {
   audioConversationalVoiceStartBufferMs?: number;
   audioConversationalVoiceStartMaxWaitMs?: number;
   audioConversationalHesitationWords?: string[];
+  /**
+   * The whole hesitation list of each language that has its own, for a
+   * user whose interface is in it; any other uses the list above.
+   */
+  audioConversationalHesitations?: Partial<Record<string, string[]>>;
   /** The user can speak over the voice, and the voice yields. */
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
@@ -212,6 +232,8 @@ declare global {
       Record<string, Partial<Record<string, string>>>
     >;
     SPOKEN_NUMBER_WORDS?: Partial<Record<string, NumberWords>>;
+    APPROVAL_SPEECH_WORDS?: Partial<Record<string, SpokenCardLanguage>>;
+    APPROVAL_VOICE_PHRASES?: ConfirmationPhrases;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS?: number;
@@ -220,6 +242,7 @@ declare global {
     AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS?: number;
     AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS?: number;
     AUDIO_CONVERSATIONAL_HESITATION_WORDS?: string[];
+    AUDIO_CONVERSATIONAL_HESITATIONS?: Partial<Record<string, string[]>>;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
@@ -745,6 +768,8 @@ export const env = (): Env => {
         : (window.APPROVAL_VOICE_DECISIONS_ENABLED ?? false),
     approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     spokenNumberWords: window.SPOKEN_NUMBER_WORDS,
+    approvalSpeechWords: window.APPROVAL_SPEECH_WORDS,
+    approvalVoicePhrases: window.APPROVAL_VOICE_PHRASES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     audioConversationalCardEndOfTurnSilenceMs,
@@ -753,6 +778,7 @@ export const env = (): Env => {
     audioConversationalVoiceStartBufferMs,
     audioConversationalVoiceStartMaxWaitMs,
     audioConversationalHesitationWords,
+    audioConversationalHesitations: window.AUDIO_CONVERSATIONAL_HESITATIONS,
     audioConversationalTalkOverVoice,
     audioConversationalTalkOverVoiceMinSpeechMs,
     maxUploadSizeBytes,

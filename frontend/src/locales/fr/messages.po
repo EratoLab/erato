@@ -5583,6 +5583,21 @@ msgstr "Modifications proposées du document"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposal"
+msgstr "Pas dans cette proposition : {listed}. Demandez le reste dans votre prochain message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalMore"
+msgstr "Pas dans cette proposition : {listed}, ainsi que d'autres parties. Demandez le reste dans votre prochain message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "une partie sans texte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.openInWord"
 msgstr "Ouvrez cette conversation dans Word avec le document pour appliquer les modifications."
 

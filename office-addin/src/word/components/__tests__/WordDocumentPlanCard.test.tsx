@@ -492,6 +492,82 @@ describe("structural document review", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
 
+  it("names the chapters an accepted smaller retry left out", async () => {
+    const state = setup(CHAPTERS);
+    const messageId = String(mock.artifact.messageId);
+    const context = { toolCallId: "read", messageId, chatId: "chat-A" };
+    const session = new WordDocumentReadSession();
+    session.activate(state.snapshot, context);
+    await session.execute({ snapshot: state.snapshot.token }, context);
+    const submit = createWordDocumentSubmissionExecutor(session);
+    const rewrite = (chapters: string[], id: (i: number) => string) => ({
+      snapshot: state.snapshot.token,
+      readToken: state.snapshot.readToken,
+      scoped_edit: {
+        body: chapters.map((name, i) => ({
+          operation: "replace",
+          source: [
+            state.snapshot.blocks.find((b) => b.text === `${name} body.`)!.ref,
+          ],
+          blocks: [{ id: id(i), type: "paragraph", text: `${name}, shorter.` }],
+        })),
+      },
+    });
+    const refused = await submit(
+      rewrite(["Scope", "Plan", "Notes"], () => "same"),
+      { ...context, toolCallId: "first" },
+    );
+    expect(refused.ok).toBe(false);
+    const input = rewrite(["Scope"], (i) => `r${i}`);
+    const result = await submit(input, {
+      ...context,
+      toolCallId: "submission",
+    });
+    if (!result.ok) throw new Error("Expected accepted plan");
+    const output = result.result as { plan: WordDocumentPlan };
+    mock.content = [
+      {
+        content_type: "tool_use",
+        tool_name: WORD_SUBMIT_PLAN_TOOL,
+        tool_call_id: "submission",
+        status: "success",
+        input,
+        output: {
+          status: "success",
+          result: output,
+          submission: { status: "accepted" },
+        },
+      },
+    ];
+    mock.artifact = {
+      ...buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: {
+          clientActions: ["word.apply_document_plan"],
+          alwaysAskActions: [],
+        },
+        content: mock.content as EratoLibrary.ContentPart[],
+        messageId,
+        capture: state.capture,
+      }),
+    };
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map([[messageId, state.capture]])}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={JSON.stringify(output.plan)}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    expect(
+      await screen.findByTestId("word-plan-not-in-proposal"),
+    ).toHaveTextContent("Not in this proposal: Plan, Notes");
+  });
+
   it("restores a saved submission for inspection after a pane reload without enabling Apply", async () => {
     const state = setup();
     mock.artifact.submittedCard = {
@@ -525,6 +601,7 @@ describe("structural document review", () => {
     ).toBeVisible();
     expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
+    expect(screen.queryByTestId("word-plan-not-in-proposal")).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
 
