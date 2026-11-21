@@ -19,6 +19,7 @@ export * from "./wordPlanDiagnostics";
 export * from "./wordPlanComments";
 export * from "./wordPlanReview";
 export * from "./wordReadScope";
+export * from "./wordReplayRecord";
 export * from "./wordRichContent";
 export * from "./wordRichPlan";
 export * from "./wordStories";

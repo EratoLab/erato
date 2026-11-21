@@ -99,6 +99,45 @@ describe("WordProposalCard", () => {
     expect(screen.getByText(/^Saved draft:/)).toBeInTheDocument();
   });
 
+  it("names the sections a smaller retry left out in one line", () => {
+    const view = render(
+      <WordProposalCard
+        plan={plan}
+        snapshot={snapshot()}
+        notInProposal={["§ 6 Lieferung", "§ 11 Kündigung"]}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
+      /^Not in this proposal: § 6 Lieferung, § 11 Kündigung\. Ask for the rest in your next message\.$/,
+    );
+
+    view.rerender(
+      <WordProposalCard
+        plan={plan}
+        snapshot={snapshot()}
+        notInProposal={["§ 1", "§ 2", "§ 3", "§ 4", "§ 5", "§ 6"]}
+      />,
+    );
+    expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
+      /^Not in this proposal: § 1, § 2, § 3, § 4, § 5 and other parts\. Ask for the rest/,
+    );
+
+    view.rerender(
+      <WordProposalCard
+        plan={plan}
+        snapshot={snapshot()}
+        notInProposal={["", "§ 2"]}
+      />,
+    );
+    expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
+      /^Not in this proposal: a part without text, § 2\. /,
+    );
+
+    view.rerender(<WordProposalCard plan={plan} snapshot={snapshot()} />);
+    expect(screen.queryByTestId("word-plan-not-in-proposal")).toBeNull();
+  });
+
   it("hands the footer and status to an adapter", () => {
     const onToggleDetails = vi.fn();
     const view = render(

@@ -14,10 +14,10 @@ use crate::services::approval_voice_commands::decision::{
 };
 use crate::services::approval_voice_commands::phrase::{PhraseMatch, match_phrase, syllables};
 use crate::services::approval_voice_commands::{
-    CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
-    VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning, VoiceModel,
-    VoiceQuestion, check_input, classify_by_model, classify_by_rules, classify_without_model,
-    request_heard,
+    CardPiece, Classified, CommandWords, DEFAULT_PROMPT, InputProblem, VoiceCommand,
+    VoiceCommandInput, VoiceCommandSource, VoiceDecisionAnswer, VoiceDecisionStatus, VoiceMeaning,
+    VoiceModel, VoiceQuestion, check_input, classify_by_model, classify_by_rules,
+    classify_without_model, request_heard,
 };
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::sentry::log_internal_server_error;
@@ -100,8 +100,8 @@ pub async fn interpret_approval_voice_command(
     Path(message_id): Path<Uuid>,
     Json(request): Json<ApprovalVoiceCommandRequest>,
 ) -> Result<Json<VoiceCommand>, StatusCode> {
-    let config = &app_state.config.approval_voice_commands;
-    if !config.enabled {
+    let switches = app_state.voice_switches().await;
+    if !switches.voice_commands {
         return Err(StatusCode::NOT_FOUND);
     }
     let language = normalize_supported_language(request.language.as_deref())
@@ -124,17 +124,10 @@ pub async fn interpret_approval_voice_command(
         check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     let start = Instant::now();
-    let deciding = app_state.config.approval_voice_decisions.enabled;
+    let words = app_state.voice_command_words.for_language(&language);
+    let deciding = switches.voice_decisions;
     let phrase = deciding
-        .then(|| {
-            match_phrase(
-                &request.transcript,
-                &app_state
-                    .config
-                    .audio_conversational
-                    .effective_hesitation_words(),
-            )
-        })
+        .then(|| match_phrase(&request.transcript, words))
         .flatten();
     let mut classified = match &phrase {
         // As any yes said before the card asked: listening.
@@ -156,12 +149,14 @@ pub async fn interpret_approval_voice_command(
             },
             outcome: "phrase",
         },
-        None => match classify_by_rules(&input) {
+        None => match classify_by_rules(&input, words) {
             Some(classified) => classified,
             None => {
                 let deadline = tokio::time::Instant::now()
-                    + Duration::from_millis(u64::from(config.model_timeout_ms));
-                ask_model(&app_state, &policy, &me_user, &input, deadline).await?
+                    + Duration::from_millis(u64::from(
+                        app_state.config.approval_voice_commands.model_timeout_ms,
+                    ));
+                ask_model(&app_state, &policy, &me_user, &input, words, deadline).await?
             }
         },
     };
@@ -210,7 +205,7 @@ async fn decide(
     request: &ApprovalVoiceCommandRequest,
     language: &str,
     command: &VoiceCommand,
-    phrase: Option<&PhraseMatch>,
+    phrase: Option<&PhraseMatch<'_>>,
 ) -> Decided {
     let outcome = match command.meaning {
         VoiceMeaning::Approve => VoiceDecisionOutcome::Approved,
@@ -240,7 +235,14 @@ async fn decide(
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     let item = &decidable[0];
-    if outcome == VoiceDecisionOutcome::Approved && approval_is_screen_only(item) {
+    if outcome == VoiceDecisionOutcome::Approved
+        && (approval_is_screen_only(item)
+            || app_state
+                .voice_command_words
+                .for_language(language)
+                .phrase_of(language)
+                .is_none())
+    {
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     if !card_asked(&request.pieces, outcome) {
@@ -293,7 +295,7 @@ async fn decide(
         item,
         language,
         pieces: &request.pieces,
-        required_phrase: matched.map(|matched| matched.phrase.id),
+        required_phrase: matched.map(|matched| matched.phrase.id.as_str()),
         matched_words,
         match_kind: matched.map(|matched| matched.kind),
         signals,
@@ -335,6 +337,7 @@ async fn ask_model(
     policy: &PolicyEngine,
     me_user: &MeProfile,
     input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
     deadline: tokio::time::Instant,
 ) -> Result<Classified, StatusCode> {
     let provider = match app_state.chat_provider_for_approval_voice_commands() {
@@ -385,5 +388,5 @@ async fn ask_model(
         prompt,
         timeout: deadline.saturating_duration_since(tokio::time::Instant::now()),
     };
-    Ok(classify_by_model(input, &model).await)
+    Ok(classify_by_model(input, words, &model).await)
 }

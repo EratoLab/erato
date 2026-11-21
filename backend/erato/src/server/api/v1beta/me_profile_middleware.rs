@@ -362,7 +362,7 @@ pub(crate) async fn complete_user_profile(
 ) -> Result<UserProfile, StatusCode> {
     user_profile.determine_final_language_with_config(
         accept_language_header,
-        &app_state.config.i18n.language,
+        &app_state.reloadable.read().await.i18n.language,
         id_token_xms_pl,
         id_token_xms_tpl,
     );
@@ -429,6 +429,17 @@ pub(crate) async fn user_profile_middleware(
 }
 
 const SUPPORTED_LANGUAGES: [&str; 5] = ["en", "de", "fr", "pl", "es"];
+
+/// Warns at startup for language data no card or voice can reach today:
+/// their language always passes [`normalize_supported_language`].
+pub(crate) fn warn_unreachable_voice_language(what: &str, language: &str) {
+    if !SUPPORTED_LANGUAGES.contains(&language) {
+        tracing::warn!(
+            "{what} for `{language}` are kept but unused until that language is supported; the voice uses only {}.",
+            SUPPORTED_LANGUAGES.join(", ")
+        );
+    }
+}
 
 pub(super) fn normalize_supported_language(raw_language: Option<&str>) -> Option<&str> {
     let raw_language = raw_language?;

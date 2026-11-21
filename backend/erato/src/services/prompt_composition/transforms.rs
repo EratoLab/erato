@@ -709,9 +709,11 @@ pub async fn resolve_sequence(
                                 }
                                 // Snapshot messages carry no record of which
                                 // generation made them, so the replay policy is
-                                // not applied here: receipts written when their
+                                // not applied here: calls shortened when their
                                 // row was replayed pass through, and older full
                                 // payloads stay full — see `replay_policy`.
+                                // Receipts from before ERMAIN-1274 become real
+                                // calls again.
                                 let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
@@ -852,7 +854,7 @@ pub(crate) fn replay_assistant_content(
 }
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
-    input_msg
+    super::replay_policy::upgrade_legacy_receipt(input_msg)
 }
 
 /// True when an `InputMessage` carries a per-turn directive emitted by a
@@ -919,6 +921,7 @@ fn strip_ui_only_tool_output(
             description: None,
             description_truncated: false,
             server_name: display.server_name,
+            tool_name: None,
             read_only: false,
             closed_world: false,
             label: display

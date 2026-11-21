@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hesitationMatcher } from "./hesitations";
+import { hesitationMatcher, hesitationWordsFor } from "./hesitations";
 
 describe("hesitation sounds", () => {
   const only = hesitationMatcher(undefined);
@@ -61,5 +61,21 @@ describe("hesitation sounds", () => {
     expect(odd("Äh.")).toBe(true);
     // An empty list holds nothing back.
     expect(hesitationMatcher([])("Äh.")).toBe(false);
+  });
+
+  it("a French hesitation holds a French turn but not an English one", () => {
+    const shared = ["äh", "um"];
+    const byLanguage = { fr: ["äh", "um", "euh"] };
+    const french = hesitationMatcher(
+      hesitationWordsFor("fr-FR", shared, byLanguage),
+    );
+    const english = hesitationMatcher(
+      hesitationWordsFor("en", shared, byLanguage),
+    );
+    expect(french("Euh…")).toBe(true);
+    expect(french("Um.")).toBe(true);
+    expect(english("Euh…")).toBe(false);
+    expect(english("Um.")).toBe(true);
+    expect(hesitationWordsFor("de", undefined, byLanguage)).toBeUndefined();
   });
 });

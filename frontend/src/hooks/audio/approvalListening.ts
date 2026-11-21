@@ -28,6 +28,7 @@ import {
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "./approvalSpeech";
+import { deploymentSpokenCardLanguages } from "./spokenStyle";
 
 import type { SpeakableCard } from "./approvalSpeech";
 import type { RecordingSignals } from "./recordingSignals";
@@ -353,7 +354,11 @@ export const commandPieces = (
 
 /** Whether the card's language has the sentences the listener answers with. */
 export const listensIn = (language: string | undefined): boolean =>
-  language !== undefined && spokenWordsFor(language, { now: new Date() }).full;
+  language !== undefined &&
+  spokenWordsFor(language, {
+    now: new Date(),
+    spokenCardLanguages: deploymentSpokenCardLanguages(),
+  }).full;
 
 const statusOf = (error: unknown): number | undefined => {
   if (typeof error !== "object" || error === null || !("status" in error))

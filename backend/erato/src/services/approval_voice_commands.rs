@@ -6,10 +6,13 @@
 //! voice on, an approval needs the confirmation phrase (`phrase`), and
 //! `decision` issues the receipt the decision then carries.
 
+mod corpus;
 pub mod decision;
 mod model;
 pub mod phrase;
+pub mod recheck;
 mod rules;
+pub mod words;
 
 use crate::config::ChatProviderConfig;
 use crate::services::genai::GenAIClient;
@@ -19,6 +22,7 @@ use utoipa::ToSchema;
 
 pub use model::DEFAULT_PROMPT;
 pub use phrase::PhraseMatchKind;
+pub use words::{CommandWords, CommandWordsByLanguage};
 
 pub const MAX_TRANSCRIPT_CHARS: usize = 300;
 pub const MAX_PIECES: usize = 16;
@@ -259,22 +263,31 @@ pub struct Classified {
     pub outcome: &'static str,
 }
 
-pub async fn classify(input: &VoiceCommandInput<'_>, model: Option<VoiceModel<'_>>) -> Classified {
-    if let Some(classified) = classify_by_rules(input) {
+/// `words` are the lists of the card's language.
+pub async fn classify(
+    input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
+    model: Option<VoiceModel<'_>>,
+) -> Classified {
+    if let Some(classified) = classify_by_rules(input, words) {
         return classified;
     }
     match model {
-        Some(model) => classify_by_model(input, &model).await,
+        Some(model) => classify_by_model(input, words, &model).await,
         None => classify_without_model("no_model"),
     }
 }
 
 /// The rules' answer, or `None` when they are not sure.
-pub fn classify_by_rules(input: &VoiceCommandInput<'_>) -> Option<Classified> {
-    let found = rules::match_rules(input)?;
+pub fn classify_by_rules(
+    input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
+) -> Option<Classified> {
+    let found = rules::match_rules(input, words)?;
     Some(Classified {
         command: guarded(
             input,
+            words,
             found.meaning,
             found.piece_id,
             VoiceCommandSource::Rules,
@@ -285,10 +298,11 @@ pub fn classify_by_rules(input: &VoiceCommandInput<'_>) -> Option<Classified> {
 
 pub async fn classify_by_model(
     input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
     model: &VoiceModel<'_>,
 ) -> Classified {
     match model::ask(model, input).await {
-        Ok(answer) => from_answer(input, &answer),
+        Ok(answer) => from_answer(input, words, &answer),
         Err(outcome) => classify_without_model(outcome),
     }
 }
@@ -302,10 +316,20 @@ pub fn classify_without_model(outcome: &'static str) -> Classified {
 }
 
 /// The model's answer once its piece is on the card and the guards let it pass.
-fn from_answer(input: &VoiceCommandInput<'_>, answer: &model::Answer) -> Classified {
+fn from_answer(
+    input: &VoiceCommandInput<'_>,
+    words: &CommandWords,
+    answer: &model::Answer,
+) -> Classified {
     match resolve_piece(input, answer.meaning, answer.piece_id.as_deref()) {
         Some(piece_id) => {
-            let command = guarded(input, answer.meaning, piece_id, VoiceCommandSource::Model);
+            let command = guarded(
+                input,
+                words,
+                answer.meaning,
+                piece_id,
+                VoiceCommandSource::Model,
+            );
             let outcome = if command.meaning == answer.meaning {
                 "model"
             } else {
@@ -387,14 +411,17 @@ pub fn request_heard(pieces: &[CardPiece]) -> bool {
 /// A decision only for a clear, short, unconditional sentence, a change only
 /// once it says what to change, and a new request only when it cannot be a
 /// change: otherwise "unclear". A yes or no said before the card asked, or
-/// beside a backchannel ("mhm, ja"), is listening noise.
+/// beside a backchannel ("mhm, ja"), is listening noise. The lists are those
+/// of the card's language, so a language without words of its own, or a
+/// script without spaces, decides on screen only.
 fn guarded(
     input: &VoiceCommandInput<'_>,
+    lists: &CommandWords,
     meaning: VoiceMeaning,
     piece_id: Option<String>,
     source: VoiceCommandSource,
 ) -> VoiceCommand {
-    let words = rules::Words::of(input.transcript);
+    let words = rules::Words::with(input.transcript, lists);
     // Before the card asked, a clear yes or no is listening, whichever
     // stage heard it. Anything else the guards refuse stays unclear, so the
     // person gets an answer ("das reicht jetzt", "ja, aber dann …").
@@ -432,4 +459,8 @@ fn guarded(
 #[cfg(test)]
 mod eval;
 #[cfg(test)]
+mod phrase_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod words_tests;

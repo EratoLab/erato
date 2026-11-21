@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { MAX_NOT_IN_PROPOSAL_NAMES } from "@/lib/wordReview/wordHistory";
 import {
   buildWordPlanReview,
   wordPlanText,
@@ -9,6 +10,7 @@ import {
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 import { WordReviewCard, WordReviewDetailsToggle } from "./WordReviewCardParts";
+import { formatList } from "./wordPlanLabels";
 
 import type {
   WordAuthoringSnapshot,
@@ -62,7 +64,32 @@ export interface WordProposalCardProps {
   cardRef?: ComponentProps<typeof WordReviewCard>["cardRef"];
   /** Whether a plan without a snapshot is drawn from its own data. */
   showSavedPlan?: boolean;
+  /** Parts an earlier attempt of the request changed that this plan leaves out, by title. */
+  notInProposal?: readonly string[];
   adapter?: WordProposalAdapter;
+}
+
+/** Names the parts a smaller retry left out, never refs; the model learns of them only next turn. */
+function wordNotInProposalText(names: readonly string[]): string {
+  const listed = formatList(
+    names.slice(0, MAX_NOT_IN_PROPOSAL_NAMES).map(
+      (name) =>
+        name ||
+        t({
+          id: "officeAddin.word.proposal.notInProposalNoText",
+          message: "a part without text",
+        }),
+    ),
+  );
+  return names.length > MAX_NOT_IN_PROPOSAL_NAMES
+    ? t({
+        id: "officeAddin.word.proposal.notInProposalMore",
+        message: `Not in this proposal: ${listed} and other parts. Ask for the rest in your next message.`,
+      })
+    : t({
+        id: "officeAddin.word.proposal.notInProposal",
+        message: `Not in this proposal: ${listed}. Ask for the rest in your next message.`,
+      });
 }
 
 export function WordProposalCard({
@@ -74,6 +101,7 @@ export function WordProposalCard({
   testId = "word-proposal-card",
   cardRef,
   showSavedPlan = true,
+  notInProposal,
   adapter,
 }: WordProposalCardProps) {
   const detailsId = useId();
@@ -135,6 +163,14 @@ export function WordProposalCard({
           review={derived}
           onLocate={snapshot ? adapter?.locate : undefined}
         />
+      )}
+      {!!notInProposal?.length && (
+        <p
+          className="word-review__hint [overflow-wrap:anywhere]"
+          data-testid="word-plan-not-in-proposal"
+        >
+          {wordNotInProposalText(notInProposal)}
+        </p>
       )}
       {status?.notice}
     </WordReviewCard>

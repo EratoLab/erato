@@ -9,6 +9,10 @@ edition = "2024"
 name = "gen-config-reference"
 path = "src/bin/gen_config_reference.rs"
 
+[[bin]]
+name = "gen-language-base"
+path = "src/bin/gen_language_base.rs"
+
 [dependencies]
 unicode-normalization = "0.1.25"
 erato-config-schema.workspace = true

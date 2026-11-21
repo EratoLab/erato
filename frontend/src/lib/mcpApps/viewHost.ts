@@ -39,6 +39,12 @@ export const PAGE_READY_GRACE_MS = 1_000;
 export const VIEW_INITIALIZE_GRACE_MS = 5_000;
 
 /**
+ * How long a view may take to answer `ui/resource-teardown` before it is
+ * disconnected anyway.
+ */
+export const VIEW_TEARDOWN_TIMEOUT_MS = 500;
+
+/**
  * The SDK's `PostMessageTransport`, bound to the frame both ways: it takes
  * messages only from the frame's window on the sandbox origin and posts only
  * to that origin, so a frame that navigated elsewhere is neither heard nor
@@ -111,8 +117,14 @@ export interface ViewConnection {
    * handshake.
    */
   setHostContext: (hostContext: McpUiHostContext) => void;
-  /** Disconnects the view. */
-  disconnect: () => void;
+  /**
+   * Tells the view it is being torn down (`ui/resource-teardown`), right
+   * away, and disconnects it once it has answered, or after
+   * VIEW_TEARDOWN_TIMEOUT_MS. A view that has not initialized is
+   * disconnected at once. Resolves once the view is disconnected; called
+   * again, it returns the same promise.
+   */
+  disconnect: () => Promise<void>;
 }
 
 export interface ViewEvents {
@@ -174,6 +186,7 @@ export function connectView(
   };
   let initialized = false;
   let closed = false;
+  let disconnected: Promise<void> | undefined;
   // A context handed over before the handshake, sent once it is done.
   let pending: McpUiHostContext | undefined;
   // What the view has shown of itself so far, for `events.onStalled`.
@@ -254,10 +267,15 @@ export function connectView(
     },
     disconnect: () => {
       closed = true;
-      if (initialized) {
-        void bridge.teardownResource({}).catch(() => undefined);
-      }
-      void bridge.close();
+      disconnected ??= (async () => {
+        if (initialized) {
+          await bridge
+            .teardownResource({}, { timeout: VIEW_TEARDOWN_TIMEOUT_MS })
+            .catch(() => undefined);
+        }
+        await bridge.close();
+      })();
+      return disconnected;
     },
   };
 }

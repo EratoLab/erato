@@ -496,6 +496,53 @@ async fn wait_lines_are_said_once_per_voice_and_follow_the_users_amount(pool: Po
     speech.server.abort();
 }
 
+/// The voice endpoints answer from the switches of the last reload, not
+/// from those of startup.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn voice_endpoints_follow_the_live_switches(pool: Pool<Postgres>) {
+    let (mut app_config, _llm) = setup_mock_llm_server(None).await;
+    let speech = mock_speech(usize::MAX).await;
+    enable_conversational_voice(&mut app_config, &speech.url);
+    let app_state = test_app_state(app_config, pool).await;
+    let server = create_test_server(app_state.clone());
+    let message_id = assistant_message(&server, TEST_JWT_TOKEN).await;
+    let statuses = || async {
+        let read = server
+            .post(&format!("/api/v1beta/me/messages/{message_id}/speech"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+        let card = server
+            .post(&format!(
+                "/api/v1beta/me/messages/{message_id}/approval-speech"
+            ))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "pieces": ["Hallo"] }))
+            .await;
+        let progress = server
+            .post(&format!(
+                "/api/v1beta/me/messages/{message_id}/progress-speech"
+            ))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "text": "Looking at the opportunities." }))
+            .await;
+        let lines = server
+            .get("/api/v1beta/me/wait-lines")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+        [read, card, progress, lines].map(|response| response.status_code().as_u16())
+    };
+    // On, the card and the progress line are refused only because nothing
+    // waits and nothing is generated.
+    assert_eq!(statuses().await, [200, 409, 409, 200]);
+
+    let mut switches = app_state.voice_switches().await;
+    switches.read_aloud = false;
+    switches.conversational = false;
+    app_state.reloadable.write().await.voice_switches = switches;
+    assert_eq!(statuses().await, [404; 4]);
+    speech.server.abort();
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn progress_speech_speaks_only_while_the_users_answer_is_generated(pool: Pool<Postgres>) {
     let (mut app_config, _llm) = setup_mock_llm_server(Some(MockLlmConfig {

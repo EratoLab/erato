@@ -392,4 +392,21 @@ describe("ERMAIN-1259: deciding a card by voice", () => {
       "I confirm",
     );
   });
+
+  it("shows the deployment's own phrase under the buttons", () => {
+    window.APPROVAL_VOICE_PHRASES = {
+      de: "Ich gebe es frei",
+      en: "I give my approval",
+    };
+    try {
+      spoken.approves = true;
+      renderCard(request, vi.fn(), true);
+      act(() => useApprovalListening.setState({ listening: "spoken-key" }));
+      const hint = screen.getByTestId("approval-voice-phrase");
+      expect(hint).toHaveTextContent("I give my approval");
+      expect(hint).not.toHaveTextContent("I confirm");
+    } finally {
+      window.APPROVAL_VOICE_PHRASES = undefined;
+    }
+  });
 });

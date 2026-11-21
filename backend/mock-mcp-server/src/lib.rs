@@ -725,6 +725,63 @@ impl ServerHandler for DeepResearchServer {
     }
 }
 
+/// What the `wait` tool of `/builtin-names` answers.
+pub const MCP_WAIT_ANSWER: &str = "The queue drained.";
+
+/// A tool named like one of Erato's own tools, `wait`.
+#[derive(Clone)]
+struct BuiltinNamesServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl BuiltinNamesServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl BuiltinNamesServer {
+    #[tool(
+        name = "wait",
+        description = "Wait until the server's queue has drained",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn queue_wait(&self) -> String {
+        MCP_WAIT_ANSWER.to_string()
+    }
+}
+
+impl ServerHandler for BuiltinNamesServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP server with a tool named like a built-in")
+    }
+}
+
 #[derive(Clone)]
 struct NoneAuthProbeServer {
     #[allow(dead_code)]
@@ -1190,7 +1247,8 @@ impl ServerHandler for UntrustedTextServer {
 pub const VIEW_MIME_TYPE: &str = "text/html;profile=mcp-app";
 /// The counter view, a minimal MCP Apps view: it shows the `start` the tool
 /// was called with and counts up on a click. Like a view built with the MCP
-/// Apps SDK, it takes the host context's theme as its color scheme.
+/// Apps SDK, it takes the host context's theme as its color scheme, and it
+/// answers `ui/resource-teardown`, logging "mock-counter-view torn down".
 pub const COUNTER_VIEW_URI: &str = "ui://mock/counter";
 /// A view served as plain `text/html`, which a host refuses.
 pub const WRONG_TYPE_VIEW_URI: &str = "ui://mock/wrong-type";
@@ -1226,6 +1284,10 @@ window.addEventListener("message", ({ data }) => {
     parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
   }
   if (data?.method === "ui/notifications/tool-input") count.value = Number(data.params?.arguments?.start ?? 0);
+  if (data?.method === "ui/resource-teardown") {
+    console.log("mock-counter-view torn down");
+    parent.postMessage({ jsonrpc: "2.0", id: data.id, result: {} }, "*");
+  }
 });
 parent.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {
   protocolVersion: "2026-01-26", appCapabilities: {}, appInfo: { name: "mock-counter", version: "1.0.0" } } }, "*");
@@ -1798,6 +1860,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             ],
         },
         MechanismSummary {
+            name: "Built-in names server",
+            description: "A tool named like Erato's own wait tool",
+            endpoint: "Streamable HTTP /mcp/builtin-names",
+            tools: &["wait"],
+        },
+        MechanismSummary {
             name: "500 simulation endpoint",
             description: "Always returns HTTP 500 to simulate an unavailable MCP server",
             endpoint: "HTTP /mcp/list-tools-500",
@@ -1892,6 +1960,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
         "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/apps".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/builtin-names".bright_yellow()
     );
     println!(
         "  {} {}",
@@ -2013,6 +2086,8 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
     let untrusted_text_service = create_streamable_http_service(mode, || Ok(UntrustedTextServer));
     let records_service = create_streamable_http_service(mode, || Ok(RecordsServer::new()));
     let apps_service = create_streamable_http_service(mode, || Ok(AppsServer));
+    let builtin_names_service =
+        create_streamable_http_service(mode, || Ok(BuiltinNamesServer::new()));
 
     let none_auth_service = create_streamable_http_service(mode, || Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service =
@@ -2042,6 +2117,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
         .nest_service("/untrusted-text", untrusted_text_service)
         .nest_service("/records", records_service)
         .nest_service("/apps", apps_service)
+        .nest_service("/builtin-names", builtin_names_service)
         .route(
             "/auth-none",
             any(move |request| {

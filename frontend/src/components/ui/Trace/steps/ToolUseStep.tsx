@@ -39,6 +39,7 @@ import {
   isRecord,
   serverFailureMessage,
 } from "@/lib/toolCallGist/serverText";
+import { shownToolName } from "@/lib/toolCallGist/toolName";
 import { toolDecisionLabel } from "@/lib/trace/toolDecisionLabel";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
@@ -139,7 +140,7 @@ const plainTitleOf = (part: ToolUse): string | undefined => {
     return undefined;
   }
   const title = textOf(display.title);
-  return title !== part.tool_name ? title : undefined;
+  return title !== shownToolName(part) ? title : undefined;
 };
 
 const hasRowValues = (item: GistItem) =>
@@ -351,7 +352,9 @@ const PlainToolUseStep = ({
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
+  // The name the call was made by; the row shows the tool's own.
   const toolName = part.tool_name ?? "";
+  const shownName = shownToolName(part);
   const toolCallId = part.tool_call_id;
   const refused = refusedWithoutDecision(part, decision);
   // A denied or refused call never ran: its decision tag says so.
@@ -469,7 +472,7 @@ const PlainToolUseStep = ({
         )}
         <ToolCallIdentity
           className="pt-2"
-          toolName={toolName}
+          toolName={shownName}
           server={serverName}
         />
         {payload}
@@ -515,7 +518,7 @@ const PlainToolUseStep = ({
                 {plainTitle}
               </span>
             ) : (
-              toolName
+              shownName
             )}
             {counts === undefined && server}
             {progress && (
@@ -588,9 +591,10 @@ const withoutLabel = (
     ...part,
     display: isRecord(display)
       ? {
-          title: textOf(display.title) ?? part.tool_name ?? "",
+          title: textOf(display.title) ?? shownToolName(part),
           description_truncated: false,
           server_name: textOf(display.server_name),
+          tool_name: textOf(display.tool_name),
           read_only:
             typeof display.read_only === "boolean"
               ? display.read_only

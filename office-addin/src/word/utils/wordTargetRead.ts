@@ -19,7 +19,7 @@ import {
   WORD_READ_ONLY_FIELDS,
   wordReadRefusedByIssue,
 } from "./wordReadAccess";
-import { MAX_WORD_FRESHNESS_BYTES } from "./wordReadFreshness";
+import { MAX_WORD_RECEIPT_FIELD_BYTES } from "./wordReadFreshness";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
@@ -300,6 +300,13 @@ function selectTargets(
   return { matches, base, ready };
 }
 
+export const WORD_TARGET_READ_KEYS: readonly string[] = [
+  "snapshot",
+  "documentIdentity",
+  "target",
+  "include",
+];
+
 /** Read-only reads return the same targets but grant no scope, carry no write contract and may
  * read a capture under Track Changes. */
 export function readWordTargets(
@@ -326,9 +333,7 @@ export function readWordTargets(
       "Use this request's exact snapshot and documentIdentity.",
     );
   if (
-    Object.keys(input).some(
-      (k) => !["snapshot", "documentIdentity", "target", "include"].includes(k),
-    ) ||
+    Object.keys(input).some((k) => !WORD_TARGET_READ_KEYS.includes(k)) ||
     (input.include !== undefined &&
       (!Array.isArray(input.include) ||
         input.include.length > WORD_SCOPED_GUIDANCE.length ||
@@ -340,7 +345,7 @@ export function readWordTargets(
   )
     return fail(
       "target-arguments",
-      "Use snapshot, documentIdentity, target and optional include guidance groups.",
+      `Use snapshot, documentIdentity, target and optional include guidance groups: ${WORD_SCOPED_GUIDANCE.join(", ")}.`,
     );
   const batch = object(input.target) && "queries" in input.target;
   if (
@@ -469,7 +474,7 @@ export function readWordTargets(
         ...(readOnly ? WORD_READ_ONLY_FIELDS : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
-        freshness: "0".repeat(MAX_WORD_FRESHNESS_BYTES - 2),
+        freshness: "0".repeat(MAX_WORD_RECEIPT_FIELD_BYTES - 2),
       }),
     ).length > MAX_WORD_SCOPE_BYTES
   )

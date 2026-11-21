@@ -203,15 +203,15 @@ describe("read-only access", () => {
     const snapshot = snapshotOf({ completeReadIssue: "too-large" });
     const { session } = openReadSession(snapshot);
 
-    const refused = await session.execute(
-      { snapshot: snapshot.token, cursor: null },
-      readContext,
+    const answer = okResult<{ next: string }>(
+      await session.execute(
+        { snapshot: snapshot.token, cursor: null },
+        readContext,
+      ),
     );
-    expect(refused).toMatchObject({
-      ok: false,
-      validationErrors: [{ code: "too-large" }],
-    });
-    expect(refused.ok ? "" : refused.error).toContain("section:{ref}");
+    expect(answer).toMatchObject({ reason: "too-large", complete: false });
+    expect(answer.next).toContain("section:{ref}");
+    expect(writeState(snapshot)).toEqual(untouchedWriteState);
   });
 
   it.each([

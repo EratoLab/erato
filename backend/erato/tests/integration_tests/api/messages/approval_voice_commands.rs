@@ -226,6 +226,18 @@ async fn voice_commands_are_off_unless_enabled(pool: Pool<Postgres>) {
     )
     .await
     .assert_status_not_found();
+
+    // The switch is read per request, so a runtime override applies at once.
+    state.reloadable.write().await.voice_switches.voice_commands = true;
+    say(
+        &server,
+        TEST_JWT_TOKEN,
+        message_id,
+        "weiter",
+        pieces("heard"),
+    )
+    .await
+    .assert_status_ok();
 }
 
 /// A provider that answers every request with an error, and counts them.

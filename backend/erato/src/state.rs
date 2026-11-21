@@ -134,6 +134,10 @@ pub struct AppState {
     pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
+    /// The voice-command words per card language, built once from the config.
+    pub voice_command_words: Arc<crate::services::approval_voice_commands::CommandWordsByLanguage>,
+    /// The readings the voice uses per language, built once from the config.
+    pub speech_readings: Arc<crate::services::speech::readings::ReadingsByLanguage>,
     /// Model label mappings per user, tool and argument shape.
     pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// How long one labeller request may take; tests shorten it.
@@ -208,7 +212,17 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
-    pub async fn new(config: AppConfig) -> Result<Self, Report> {
+    pub async fn default_language(&self) -> String {
+        self.reloadable
+            .read()
+            .await
+            .i18n
+            .language
+            .default_language
+            .clone()
+    }
+
+    pub async fn new(mut config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
@@ -241,10 +255,8 @@ impl AppState {
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
 
-        let ms_teams_bot = crate::ms_teams_bot::TeamsBot::from_config(
-            &config.integrations.ms_office.teams,
-            &config.i18n.language.default_language,
-        )?;
+        let ms_teams_bot =
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
         let mut scheduled_deliveries =
             crate::services::scheduled_deliveries::DeliveryRegistry::new();
         if let Some(bot) = &ms_teams_bot {
@@ -255,11 +267,11 @@ impl AppState {
             );
         }
         scheduled_deliveries.register_producer(Arc::new(
-            crate::services::scheduled_items::ReminderProducer::new(
+            crate::services::scheduled_items::ReminderProducer::reloadable(
                 ms_teams_bot
                     .as_ref()
                     .and_then(|bot| bot.settings.public_base_url.clone()),
-                &config.i18n.language.default_language,
+                reloadable.clone(),
             ),
         ));
         let scheduled_deliveries = Arc::new(scheduled_deliveries);
@@ -348,6 +360,42 @@ impl AppState {
                 &config.integrations.entra_id.group_overage,
             )?;
 
+        let rechecked = std::time::Instant::now();
+        for dropped in crate::services::approval_voice_commands::recheck::recheck_configured(
+            &mut config.approval_voice_commands.words,
+            &mut config.approval_voice_decisions.phrases,
+        ) {
+            tracing::warn!("Voice-command startup check: {dropped}.");
+        }
+        tracing::info!(
+            elapsed_ms = rechecked.elapsed().as_millis(),
+            "Voice-command words rechecked against the sentence and attack sets"
+        );
+        let voice_command_words = Arc::new(
+            crate::services::approval_voice_commands::CommandWordsByLanguage::from_config(
+                &config.approval_voice_commands.words,
+                &config.approval_voice_decisions.phrases,
+            ),
+        );
+        let (warnings, notes) =
+            voice_command_words.check_turn_hesitations(&mut config.audio_conversational);
+        for warning in warnings {
+            tracing::warn!("{warning}");
+        }
+        for note in notes {
+            tracing::info!("Hesitation words: {note}.");
+        }
+        for dropped in
+            voice_command_words.check_wait_lines(&mut config.audio_conversational.wait_lines)
+        {
+            tracing::warn!("Wait line dropped: {dropped}.");
+        }
+        let speech_readings = Arc::new(
+            crate::services::speech::readings::ReadingsByLanguage::from_config(
+                &config.spoken_readings,
+            ),
+        );
+        report_spoken_card_words(&config.approval_speech.words);
         let mut state = Self {
             memory_reservation: None,
             db,
@@ -371,6 +419,8 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
+            voice_command_words,
+            speech_readings,
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: Arc::new(Semaphore::new(
@@ -390,12 +440,21 @@ impl AppState {
         self.reloadable.read().await.mcp.clone()
     }
 
-    /// Clone the startup config with the reloadable MCP and Teams inactivity
-    /// nudge sections applied.
+    /// The voice features' switches as last reloaded. Read them on every
+    /// use, never from `config`: the admin panel switches them live.
+    pub async fn voice_switches(&self) -> crate::config::VoiceSwitches {
+        self.reloadable.read().await.voice_switches
+    }
+
+    /// Clone the startup config with the active runtime settings applied.
     pub async fn effective_config(&self) -> AppConfig {
         let mut config = self.config.clone();
         let reloadable = self.reloadable.read().await;
         reloadable.mcp.config.apply_to(&mut config);
+        reloadable.voice_switches.apply_to(&mut config);
+        config.i18n.language.clone_from(&reloadable.i18n.language);
+        config.frontend.translation_po_compilation_mode =
+            reloadable.i18n.translation_po_compilation_mode;
         config
             .integrations
             .ms_office
@@ -1360,6 +1419,8 @@ impl Clone for AppState {
             file_bytes_cache: self.file_bytes_cache.clone(),
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
+            voice_command_words: self.voice_command_words.clone(),
+            speech_readings: self.speech_readings.clone(),
             tool_label_cache: self.tool_label_cache.clone(),
             tool_label_timeout: self.tool_label_timeout,
             tool_label_permits: self.tool_label_permits.clone(),
@@ -1398,6 +1459,12 @@ impl AppState {
         let mut report = crate::metrics::owned::Snapshot::default();
         report.record(c, "shared.distribution", &self.distribution);
         if let Ok(reloadable) = self.reloadable.try_read() {
+            report.record(c, "shared.reloadable.i18n", &reloadable.i18n);
+            report.record(
+                c,
+                "shared.reloadable.translation_catalogs",
+                &reloadable.translation_catalogs,
+            );
             report.record(
                 c,
                 "shared.reloadable.distribution",
@@ -1410,6 +1477,8 @@ impl AppState {
             report.record(c, "shared.reloadable.teams_nudge", &reloadable.teams_nudge);
         } else {
             for owner in [
+                "shared.reloadable.i18n",
+                "shared.reloadable.translation_catalogs",
                 "shared.reloadable.distribution",
                 "shared.reloadable.mcp",
                 "shared.reloadable.experience_policy",
@@ -1463,6 +1532,23 @@ impl AppState {
             report.opaque(c, "shared.genai_override", client);
         }
         report
+    }
+}
+
+/// One startup line per language whose spoken-card words are configured.
+fn report_spoken_card_words(
+    configured: &erato_config::approval_speech_words::ApprovalSpeechWordsByLanguage,
+) {
+    let mut languages: Vec<_> = configured.iter().collect();
+    languages.sort_by(|a, b| a.0.cmp(b.0));
+    for (language, words) in languages {
+        crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+            "Spoken-card words",
+            language,
+        );
+        if let Some(summary) = erato_config::approval_speech_words::summary(words) {
+            tracing::info!("Spoken-card words for `{language}`: {summary}.");
+        }
     }
 }
 

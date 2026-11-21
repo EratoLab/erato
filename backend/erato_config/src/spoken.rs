@@ -20,8 +20,51 @@ use crate::config_facet_attrs as erato_config;
 /// them never approves a card by voice, and none of them is ever a
 /// hesitation sound.
 pub const NEGATIONS: &[&str] = &[
-    "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
-    "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
+    "nicht",
+    "nichts",
+    "nix",
+    "not",
+    "dont",
+    "kein",
+    "keine",
+    "keinen",
+    "keinem",
+    "keiner",
+    "keines",
+    "keinesfalls",
+    "never",
+    "nie",
+    "niemals",
+    "nimmer",
+    "nein",
+    "nee",
+    "ne",
+    "noe",
+    "no",
+    "nope",
+    "nah",
+    "nothing",
+    "neither",
+    "nor",
+    "none",
+    "shouldnt",
+    "wont",
+    "cant",
+    "isnt",
+    "arent",
+    "wasnt",
+    "werent",
+    "doesnt",
+    "didnt",
+    "wouldnt",
+    "couldnt",
+    "hasnt",
+    "havent",
+    "hadnt",
+    "mustnt",
+    "neednt",
+    "aint",
+    "nobody",
     "niemand",
 ];
 pub const CONDITIONS: &[&str] = &[
@@ -79,6 +122,15 @@ pub fn fold(text: &str) -> String {
 /// Whether `word` decides what a sentence means, also drawn out ("neee",
 /// "nichtt") as transcribers write a long sound.
 pub fn decides_meaning(word: &str) -> bool {
+    decides_meaning_in(word, |word| {
+        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
+    })
+}
+
+/// [`decides_meaning`] with a language's own negation, condition and
+/// question words: `listed` is asked with the folded word and its drawn-out
+/// form collapsed.
+pub fn decides_meaning_in(word: &str, listed: impl Fn(&str) -> bool) -> bool {
     let folded = fold(word);
     let mut collapsed = String::with_capacity(folded.len());
     for c in folded.chars() {
@@ -86,16 +138,13 @@ pub fn decides_meaning(word: &str) -> bool {
             collapsed.push(c);
         }
     }
-    [folded, collapsed].iter().any(|word| {
-        let word = word.as_str();
-        NEGATIONS.contains(&word) || CONDITIONS.contains(&word) || WH_WORDS.contains(&word)
-    })
+    listed(&folded) || listed(&collapsed)
 }
 
 /// Entries one vocabulary holds in one language.
 const MAX_VOCABULARY_ENTRIES: usize = 5_000;
-/// A name or value longer than this is not something a voice says as a name.
-const MAX_ENTRY_BYTES: usize = 128;
+/// A word, name or value longer than this is not something a voice says.
+pub(crate) const MAX_ENTRY_BYTES: usize = 128;
 /// A spoken name longer than this is a sentence, not a name.
 pub const MAX_SPOKEN_NAME_CHARS: usize = 64;
 
@@ -146,7 +195,7 @@ const SENTENCE_TYPES: &[(&str, &[&str])] = &[
 const MAX_VARIANT_CHARS: usize = 300;
 
 /// The slots of `template` in order, or `None` when a brace stands alone.
-fn slots_of(template: &str) -> Option<Vec<&str>> {
+pub(crate) fn slots_of(template: &str) -> Option<Vec<&str>> {
     let mut found = Vec::new();
     let mut rest = template;
     while let Some(open) = rest.find(['{', '}']) {
@@ -217,7 +266,7 @@ pub fn usable_variant(key: &str, template: &str, for_one_field: bool) -> bool {
 /// backend has samples for it, so whoever wrote it sees at startup what the
 /// voice will say. Old and new carry their direction, as on the voice.
 pub fn sample_sentence(language: &str, key: &str, template: &str) -> String {
-    let german = language.split('-').next() == Some("de");
+    let german = crate::language_words::primary_subtag(language) == "de";
     let samples: &[(&str, &str)] = match (german, key) {
         (true, "changed") => &[
             ("field", "Priorität"),
@@ -467,6 +516,10 @@ fn shaped_approval_speech(written: Written) -> (ApprovalSpeechConfig, Vec<String
             }
         }
     }
+    if let Some(words) = settings.remove("words") {
+        config.words =
+            crate::approval_speech_words::shaped_approval_speech_words(words, &mut dropped);
+    }
     dropped.sort();
     (config, dropped)
 }
@@ -564,6 +617,9 @@ fn written_numbers(
     numbers
 }
 
+/// Unlike [`crate::language_words::word_list`], keeps an empty entry: an
+/// empty ordinal ending lets a stem stand alone. `drop_unusable` checks the
+/// entries.
 fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Vec<String> {
     let Written::List(entries) = written else {
         dropped.push(format!("{place} is not a list and is ignored"));
@@ -583,13 +639,10 @@ fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Ve
 fn shaped_number_words(written: Written) -> (SpokenNumberWordsByLanguage, Vec<String>) {
     let mut dropped = Vec::new();
     let mut languages = SpokenNumberWordsByLanguage::new();
-    for (language, settings) in written_table("spoken_number_words", written, &mut dropped) {
+    for (language, mut settings) in
+        crate::language_words::language_tables("spoken_number_words", written, &mut dropped)
+    {
         let place = format!("spoken_number_words.{language}");
-        if !matches!(settings, Written::Table(_)) {
-            dropped.push(format!("{place} is not a table and is ignored"));
-            continue;
-        }
-        let mut settings = written_table(&place, settings, &mut dropped);
         let mut numbers = |setting: &str, dropped: &mut Vec<String>| {
             settings
                 .remove(setting)
@@ -724,13 +777,6 @@ impl SpokenNumberWordsConfig {
 pub fn drop_unusable_number_words(languages: &mut SpokenNumberWordsByLanguage) -> Vec<String> {
     let mut dropped = Vec::new();
     languages.retain(|language, words| {
-        if !is_language_tag(language) {
-            dropped.push(format!(
-                "spoken_number_words: '{}' is not a lowercase language tag such as `de` and is ignored",
-                shown(language)
-            ));
-            return false;
-        }
         let place = format!("spoken_number_words.{language}");
         dropped.extend(words.drop_unusable(&place));
         // Without numbers, ordinals or their endings a day said in words
@@ -770,14 +816,14 @@ pub fn is_language_tag(tag: &str) -> bool {
         })
 }
 
-fn usable(text: &str, max_bytes: usize) -> bool {
+pub(crate) fn usable(text: &str, max_bytes: usize) -> bool {
     !text.trim().is_empty()
         && text.len() <= max_bytes
         && !text.chars().any(char::is_control)
         && !has_hidden_chars(text)
 }
 
-fn shown(text: &str) -> String {
+pub(crate) fn shown(text: &str) -> String {
     text.chars().take(MAX_ENTRY_BYTES).collect()
 }
 
@@ -940,8 +986,9 @@ pub struct ApprovalSpeechConfig {
     /// The deployment's wording: `precise` or `natural`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub wording: ApprovalSpeechWording,
-    /// Whether a user may choose their own amount and wording, unless a
-    /// supervisor's audience setting says otherwise.
+    /// Whether a user may choose their own amount and wording. `false` is a
+    /// lock no audience reopens; with `true`, a supervisor's audience may
+    /// still close it.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
     /// Per language tag, natural sentence variants by sentence type
@@ -951,6 +998,13 @@ pub struct ApprovalSpeechConfig {
     /// not the meaning: the sentence is its author's responsibility.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub sentences: HashMap<String, HashMap<String, String>>,
+    /// Per language tag, the words a spoken card says as code (number
+    /// words, ordinals, times, a value's direction) and reads the user's
+    /// words with, added to the built-in German and English ones. A
+    /// language says the whole card only with `full_card = true`.
+    #[serde(skip)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub words: crate::approval_speech_words::ApprovalSpeechWordsByLanguage,
 }
 
 pub const MAX_SHORT_DETAILS: u8 = 3;
@@ -963,6 +1017,7 @@ impl Default for ApprovalSpeechConfig {
             wording: ApprovalSpeechWording::Precise,
             user_choice: true,
             sentences: HashMap::new(),
+            words: HashMap::new(),
         }
     }
 }
@@ -1010,6 +1065,7 @@ const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
     "wording",
     "user_choice",
     "sentences",
+    "words",
 ];
 
 /// The vocabularies a server names that no source defines. Warned about, not
@@ -1385,6 +1441,20 @@ mod tests {
     }
 
     #[test]
+    fn number_words_take_the_same_language_tags_as_the_other_language_data() {
+        let toml = "[spoken_number_words.DE]\nnumbers = { zwei = 2 }\n\
+                    [spoken_number_words.pt-BR]\nnumbers = { dois = 2 }\n\
+                    [spoken_number_words.pt-br]\nnumbers = { dois = 2 }\n";
+        assert_eq!(number_words(toml).keys().collect::<Vec<_>>(), ["pt-br"]);
+        assert_eq!(
+            misshaped_number_words(&schema(toml)),
+            ["DE", "pt-BR"].map(|tag| format!(
+                "spoken_number_words: '{tag}' is not a lowercase language tag such as `de` and is ignored"
+            ))
+        );
+    }
+
+    #[test]
     fn number_words_hold_one_language_each() {
         let loaded = number_words(
             r#"
@@ -1478,9 +1548,9 @@ mod tests {
                 "spoken_number_words.en has no numbers; it is ignored and only digits are read in this language",
                 "spoken_number_words.en.numbers: 'two words' is ignored",
                 "spoken_number_words.fr has no ordinals, ordinal_endings; it is ignored and only digits are read in this language",
-                "spoken_number_words: 'DE' is not a lowercase language tag such as `de` and is ignored",
             ]
         );
+        assert!(!loaded.contains_key("DE"));
         assert!(!loaded.contains_key("en"));
         assert!(!loaded.contains_key("fr"));
         let de = &loaded["de"];

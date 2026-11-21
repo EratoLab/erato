@@ -2,44 +2,11 @@ use super::*;
 use crate::services::genai::GenAIChatStreamResponse;
 use async_trait::async_trait;
 use genai::chat::{ChatOptions, ChatRequest, ChatResponse, MessageContent};
-use serde::Deserialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct Card {
-    pub current_piece_id: String,
-    pub pieces: Vec<CardPiece>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub(super) struct Sentence {
-    pub id: String,
-    pub language: String,
-    pub meaning: VoiceMeaning,
-    pub way: String,
-    pub text: String,
-    pub piece_id: Option<String>,
-    #[serde(default)]
-    pub tags: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct SentenceSet {
-    pub cards: HashMap<String, Card>,
-    pub sentences: Vec<Sentence>,
-}
-
-pub(super) fn sentence_set() -> SentenceSet {
-    serde_json::from_str(include_str!("sentences.json")).expect("the sentence set is valid")
-}
-
-/// Sentences written by a reviewer and never used to tune the rules or the
-/// instruction.
-pub(super) fn heldout_set() -> SentenceSet {
-    serde_json::from_str(include_str!("heldout_sentences.json")).expect("the held-out set is valid")
-}
+pub(super) use super::corpus::{Card, Sentence, SentenceSet, heldout_set, sentence_set};
 
 impl Sentence {
     /// The card named by a `card:` tag, else the language's example card.
@@ -107,7 +74,7 @@ fn every_plain_sentence_is_matched_by_the_rules_alone() {
     let set = sentence_set();
     let mut misses = Vec::new();
     for sentence in set.sentences.iter().filter(|s| s.way == "plain") {
-        let found = classify_by_rules(&set.input(sentence));
+        let found = classify_by_rules(&set.input(sentence), CommandWords::base());
         let got = found
             .as_ref()
             .map(|found| (found.command.meaning, found.command.piece_id.clone()));
@@ -122,7 +89,8 @@ fn every_plain_sentence_is_matched_by_the_rules_alone() {
 fn the_rules_never_report_a_decision_that_is_not_meant_in_either_set() {
     for set in [sentence_set(), heldout_set()] {
         for sentence in &set.sentences {
-            let Some(classified) = classify_by_rules(&set.input(sentence)) else {
+            let Some(classified) = classify_by_rules(&set.input(sentence), CommandWords::base())
+            else {
                 continue;
             };
             if classified.command.meaning.is_decision() {
@@ -141,7 +109,7 @@ async fn whatever_the_rules_match_they_match_right() {
     let set = sentence_set();
     let mut wrong = Vec::new();
     for sentence in &set.sentences {
-        let classified = classify(&set.input(sentence), None).await;
+        let classified = classify(&set.input(sentence), CommandWords::base(), None).await;
         if classified.command.source == VoiceCommandSource::Rules
             && (
                 classified.command.meaning,
@@ -252,6 +220,7 @@ async fn ask(client: &ScriptedModel, transcript: &str) -> Classified {
     };
     classify(
         &input,
+        CommandWords::base(),
         Some(VoiceModel {
             client,
             config: &config,
@@ -295,7 +264,7 @@ async fn without_a_model_words_the_rules_do_not_match_are_unclear() {
         current_piece_id: Some(&current),
         question: None,
     };
-    let classified = classify(&input, None).await;
+    let classified = classify(&input, CommandWords::base(), None).await;
     assert_eq!(classified.command.meaning, VoiceMeaning::Unclear);
     assert_eq!(classified.command.source, VoiceCommandSource::None);
     assert_eq!(classified.outcome, "no_model");
@@ -387,6 +356,7 @@ async fn answered_by(
     let config = provider();
     classify(
         &set.input(sentence),
+        CommandWords::base(),
         Some(VoiceModel {
             client: model,
             config: &config,
@@ -449,13 +419,16 @@ async fn the_review_cases_hold() {
     let asked = sentence_set().cards["de-asked"].clone();
     let english_fields = sentence_set().cards["de-english-fields"].clone();
     let rules = |words: &str, card: &Card| {
-        classify_by_rules(&VoiceCommandInput {
-            transcript: words,
-            language: "de",
-            pieces: &card.pieces,
-            current_piece_id: Some(&card.current_piece_id),
-            question: None,
-        })
+        classify_by_rules(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+                question: None,
+            },
+            CommandWords::base(),
+        )
         .map(|classified| classified.command.meaning)
     };
     let model_says = |meaning: VoiceMeaning, words: &'static str, card: Card| async move {
@@ -469,6 +442,7 @@ async fn the_review_cases_hold() {
                 current_piece_id: Some(&card.current_piece_id),
                 question: None,
             },
+            CommandWords::base(),
             &VoiceModel {
                 client: &model,
                 config: &config,
@@ -640,6 +614,7 @@ async fn only_a_clear_no_is_a_refusal() {
                 current_piece_id: Some(&card.current_piece_id),
                 question: None,
             },
+            CommandWords::base(),
             Some(VoiceModel {
                 client: &model,
                 config: &config,
@@ -719,13 +694,16 @@ fn not_like_that_asks_for_a_change() {
     let set = sentence_set();
     let card = &set.cards["de-asked"];
     for words in ["nicht so", "so nicht", "mach das so nicht", "not like that"] {
-        let found = classify_by_rules(&VoiceCommandInput {
-            transcript: words,
-            language: "de",
-            pieces: &card.pieces,
-            current_piece_id: Some(&card.current_piece_id),
-            question: None,
-        })
+        let found = classify_by_rules(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+                question: None,
+            },
+            CommandWords::base(),
+        )
         .map(|classified| classified.command.meaning);
         assert!(
             matches!(found, None | Some(VoiceMeaning::Change)),
@@ -742,13 +720,16 @@ fn not_like_that_is_a_change_only_on_its_own() {
     let set = sentence_set();
     let rules = |words: &str, card: &str| {
         let card = &set.cards[card];
-        classify_by_rules(&VoiceCommandInput {
-            transcript: words,
-            language: "de",
-            pieces: &card.pieces,
-            current_piece_id: Some(&card.current_piece_id),
-            question: None,
-        })
+        classify_by_rules(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+                question: None,
+            },
+            CommandWords::base(),
+        )
         .map(|classified| classified.command.meaning)
     };
     for (words, card) in [
@@ -808,6 +789,7 @@ async fn a_yes_before_the_card_asked_is_noise_whichever_stage_heard_it() {
                 current_piece_id: Some(&card.current_piece_id),
                 question: None,
             },
+            CommandWords::base(),
             Some(VoiceModel {
                 client: &model,
                 config: &config,
@@ -1026,13 +1008,16 @@ fn naming_a_text_answers_which_text() {
         },
     ];
     let rules = |words: &str, language: &str, question: Option<VoiceQuestion>| {
-        classify_by_rules(&VoiceCommandInput {
-            transcript: words,
-            language,
-            pieces: &pieces,
-            current_piece_id: Some("request"),
-            question,
-        })
+        classify_by_rules(
+            &VoiceCommandInput {
+                transcript: words,
+                language,
+                pieces: &pieces,
+                current_piece_id: Some("request"),
+                question,
+            },
+            CommandWords::base(),
+        )
         .map(|classified| (classified.command.meaning, classified.command.piece_id))
     };
     let asked = Some(VoiceQuestion::WhichText);
@@ -1107,7 +1092,7 @@ mod deciding_by_voice {
     use uuid::Uuid;
 
     fn approves(words: &str) -> bool {
-        match_phrase(words, &[]).is_some()
+        match_phrase(words, CommandWords::base()).is_some()
     }
 
     #[test]
@@ -1128,15 +1113,22 @@ mod deciding_by_voice {
             assert!(approves(words), "{words}");
         }
         assert_eq!(
-            match_phrase("Ich bestätige.", &[]).unwrap().kind,
+            match_phrase("Ich bestätige.", CommandWords::base())
+                .unwrap()
+                .kind,
             PhraseMatchKind::Exact
         );
         assert_eq!(
-            match_phrase("Ja, ich bestätige das", &[]).unwrap().kind,
+            match_phrase("Ja, ich bestätige das", CommandWords::base())
+                .unwrap()
+                .kind,
             PhraseMatchKind::Variant
         );
         assert_eq!(
-            match_phrase("I confirm this", &[]).unwrap().phrase.id,
+            match_phrase("I confirm this", CommandWords::base())
+                .unwrap()
+                .phrase
+                .id,
             "en.i_confirm"
         );
     }
@@ -1198,13 +1190,16 @@ mod deciding_by_voice {
 
     #[test]
     fn a_hesitation_word_never_hides_a_negation_condition_or_question() {
-        let deployment = [
-            "ne".to_string(),
-            "nicht".to_string(),
-            "aber".to_string(),
-            "neee".to_string(),
-        ];
-        for words in [
+        let lists = erato_config::voice_command_words::VoiceCommandWordLists {
+            hesitations: ["ne", "nicht", "aber", "neee"].map(String::from).to_vec(),
+            ..Default::default()
+        };
+        let configured = CommandWordsByLanguage::build(
+            &[("de".to_string(), lists)].into_iter().collect(),
+            &Default::default(),
+        )
+        .0;
+        for said in [
             "Ich bestätige, ne",
             "Ich bestätige, neee",
             "ich bestätige nichtt",
@@ -1212,7 +1207,9 @@ mod deciding_by_voice {
             "aber ich bestätige",
             "Wie, ich bestätige",
         ] {
-            assert!(match_phrase(words, &deployment).is_none(), "{words}");
+            for lists in [CommandWords::base(), configured.for_language("de")] {
+                assert!(match_phrase(said, lists).is_none(), "{said}");
+            }
         }
     }
 
@@ -1228,22 +1225,42 @@ mod deciding_by_voice {
             "Ich bestätige…\u{200b}",
             "Äh… ich bestätige",
         ] {
-            assert!(match_phrase(words, &[]).is_none(), "{words}");
+            assert!(
+                match_phrase(words, CommandWords::base()).is_none(),
+                "{words}"
+            );
         }
     }
 
     #[test]
-    fn the_deployments_hesitation_words_are_trimmed_too() {
-        assert!(match_phrase("Euh, ich bestätige", &["euh".to_string()]).is_some());
-        assert!(match_phrase("Euh, ich bestätige", &[]).is_none());
-        assert!(match_phrase("ich euh bestätige", &["euh".to_string()]).is_none());
+    fn only_the_cards_checked_hesitation_sounds_are_trimmed() {
+        let lists = erato_config::voice_command_words::VoiceCommandWordLists {
+            hesitations: vec!["euh".to_string()],
+            ..Default::default()
+        };
+        let configured = CommandWordsByLanguage::build(
+            &[("de".to_string(), lists)].into_iter().collect(),
+            &Default::default(),
+        )
+        .0;
+        let de = configured.for_language("de");
+        assert!(match_phrase("Euh, ich bestätige", de).is_some());
+        assert!(match_phrase("Euh, ich bestätige", CommandWords::base()).is_none());
+        assert!(match_phrase("ich euh bestätige", de).is_none());
     }
 
     #[test]
     fn the_phrase_needs_speech_for_its_syllables() {
-        assert_eq!(syllables(phrase_for("de-DE").unwrap()), 5);
-        assert_eq!(syllables(phrase_for("en").unwrap()), 3);
-        assert!(phrase_for("fr").is_none());
+        let words = CommandWordsByLanguage::default();
+        assert_eq!(
+            syllables(words.for_language("de-DE").phrase_of("de-DE").unwrap()),
+            5
+        );
+        assert_eq!(
+            syllables(words.for_language("en").phrase_of("en").unwrap()),
+            3
+        );
+        assert!(words.for_language("fr").phrase_of("fr").is_none());
     }
 
     fn signals() -> VoiceSignals {
@@ -1261,7 +1278,11 @@ mod deciding_by_voice {
 
     #[test]
     fn only_a_recording_after_the_voice_with_enough_speech_decides() {
-        let phrase = syllables(match_phrase("Ich bestätige", &[]).unwrap().phrase);
+        let phrase = syllables(
+            match_phrase("Ich bestätige", CommandWords::base())
+                .unwrap()
+                .phrase,
+        );
         let check =
             |signals: Option<VoiceSignals>| check_signals(&signals.unwrap(), phrase, 300, 80);
         assert_eq!(check(Some(signals())), Ok(()));
@@ -1399,6 +1420,7 @@ mod deciding_by_voice {
             approval_id: approval_id.to_string(),
             tool_call_id: format!("call_{approval_id}"),
             tool_name: "update_task".to_string(),
+            called_as: None,
             display: label.map(|label| ToolDisplayMetadata {
                 label: Some(label),
                 ..serde_json::from_value(

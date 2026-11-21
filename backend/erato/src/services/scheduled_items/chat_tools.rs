@@ -149,6 +149,7 @@ pub async fn approval_display(
             description: Some(description),
             description_truncated: false,
             server_name: None,
+            tool_name: None,
             label: None,
             read_only: false,
             closed_world: false,
@@ -538,13 +539,8 @@ async fn cancel(
 }
 
 async fn stored_language(app_state: &AppState, user_id: Uuid) -> Result<Lang, Report> {
-    text_language::of_user(
-        &app_state.db,
-        user_id,
-        None,
-        &app_state.config.i18n.language.default_language,
-    )
-    .await
+    let default = app_state.default_language().await;
+    text_language::of_user(&app_state.db, user_id, None, &default).await
 }
 
 async fn upcoming(app_state: &AppState, user_id: Uuid) -> Result<Value, Report> {
