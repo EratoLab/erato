@@ -493,7 +493,10 @@ const McpAppFrame = ({
 
 export interface McpAppViewProps {
   part: ToolUse;
-  /** Called once the view has initialized and shows at its height. */
+  /**
+   * Called once the view shows: it has initialized and asked for a height,
+   * or VIEW_HEIGHT_TIMEOUT_MS passed after it initialized without asking.
+   */
   onShown?: () => void;
   /**
    * Whether the call returned files, which show when the view does not.
