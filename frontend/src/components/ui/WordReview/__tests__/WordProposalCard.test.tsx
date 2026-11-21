@@ -208,4 +208,54 @@ describe("WordProposalCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(onToggleDetails).toHaveBeenCalledTimes(1);
   });
+
+  it("titles changes a partly read chat cannot place in a section as such, not as the opening", () => {
+    const blocks = ["b1", "b2", "b3", "b4", "b5", "b6"].map((ref) =>
+      paragraph(ref, `Old ${ref}.`),
+    );
+    const partlyRead: WordHistorySnapshot = {
+      ...snapshot(),
+      blocks,
+      read: new Set(blocks.map((b) => b.ref)),
+      revoked: true,
+      used: true,
+      source: "history",
+      partial: {
+        order: blocks.map((b) => b.ref),
+        headings: new Map([
+          ["b1", { text: "1 Scope", level: 1 }],
+          ["b3", { text: "2 Fees", level: 1 }],
+          ["b5", undefined],
+        ]),
+      },
+    };
+    render(
+      <WordProposalCard
+        plan={{
+          ...plan,
+          entries: blocks.map(({ ref }) =>
+            ["b2", "b4", "b6"].includes(ref)
+              ? {
+                  kind: "replace",
+                  source: [ref],
+                  blocks: [
+                    { id: `n-${ref}`, type: "paragraph", text: `New ${ref}.` },
+                  ],
+                }
+              : { kind: "keep", source: [ref] },
+          ),
+        }}
+        snapshot={partlyRead}
+      />,
+      { wrapper },
+    );
+
+    for (const title of ["1 Scope", "2 Fees", "Section not known"])
+      expect(
+        screen.getByRole("button", { name: new RegExp(`^${title}`) }),
+      ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /^Opening content/ }),
+    ).toBeNull();
+  });
 });

@@ -47,8 +47,8 @@ export {
 export interface WordHistoryCoverage {
   /** Every body ref the plan, the reads and the request's outline name, in document order. */
   order: readonly string[];
-  /** Where each section of the review starts, by ref, and the heading that titles it. */
-  headings: ReadonlyMap<string, { text: string; level?: number }>;
+  /** Where each section of the review starts, by ref, and the heading that titles it: none where no heading is sure. */
+  headings: ReadonlyMap<string, { text: string; level?: number } | undefined>;
   /** Row and column titles of the cells read one by one, by `wordCellKey`. */
   cells?: ReadonlyMap<string, { rowLabel: string; header: string }>;
 }
@@ -396,6 +396,12 @@ const isReadBlock = (
   typeof value.type === "string" &&
   typeof value.text === "string";
 
+/** A table-cell read returns a cell's titles as snippets: { text, truncated }. */
+const snippetText = (value: unknown) =>
+  object(value) && typeof value.text === "string"
+    ? `${value.text}${value.truncated === true ? "…" : ""}`
+    : undefined;
+
 function requestOutline(
   messages: readonly HistoryMessage[],
   snapshotId: string,
@@ -417,14 +423,14 @@ const outlineTitle = (title: string) =>
 /**
  * Where each section of a partly read review starts, by ref. An unread block may be a heading
  * below the levels the outline lists in full, so blocks after it go under the nearest heading they
- * surely belong to; empty when some block has none, rather than titling it wrongly.
+ * surely belong to; a block with none starts a section without a title rather than a wrong one.
  */
 function reviewSections(
   order: readonly string[],
   known: ReadonlyMap<string, WordSourceBlock | undefined>,
   outline: WordParsedOutline | undefined,
-): Map<string, ReviewHeading> {
-  const sections = new Map<string, ReviewHeading>();
+): Map<string, ReviewHeading | undefined> {
+  const sections = new Map<string, ReviewHeading | undefined>();
   const positions = order.map(wordBodyRefIndex);
   const endsBefore = outline?.endsBefore
     ? (wordBodyRefIndex(outline.endsBefore) ?? -1)
@@ -455,10 +461,11 @@ function reviewSections(
     if (cap <= 1) opening = false;
   };
   let previous = -1;
-  let current: ReviewHeading | undefined;
+  /** undefined: the opening content; null: no heading is sure. */
+  let current: ReviewHeading | null | undefined;
   for (const [k, ref] of order.entries()) {
     const at = positions[k];
-    if (at === undefined) return new Map();
+    if (at === undefined) return new Map([[order[0], undefined]]);
     if (at > previous + 1) unread(capAt(at - 1));
     previous = at;
     const heading = headingOf(ref);
@@ -467,9 +474,8 @@ function reviewSections(
       open.push(heading);
       opening = false;
     } else if (!known.has(ref)) unread(capAt(at));
-    const title = open.at(-1);
-    if (!title && !opening) return new Map();
-    if (title && title !== current) sections.set(ref, title);
+    const title = open.at(-1) ?? (opening ? undefined : null);
+    if (title !== current) sections.set(ref, title ?? undefined);
     current = title;
   }
   return sections;
@@ -513,16 +519,17 @@ function wordPartialSnapshotFromHistory(
           c.rowIndex === cell.rowIndex &&
           c.cellIndex === cell.cellIndex,
       );
+      const rowLabel = object(found) ? snippetText(found.rowLabel) : undefined;
+      const header = object(found) ? snippetText(found.header) : undefined;
       if (
-        object(found) &&
-        typeof found.rowLabel === "string" &&
-        typeof found.header === "string" &&
+        rowLabel !== undefined &&
+        header !== undefined &&
         typeof cell.rowIndex === "number" &&
         typeof cell.cellIndex === "number"
       )
         cells.set(wordCellKey(cell.sourceRef, cell.rowIndex, cell.cellIndex), {
-          rowLabel: found.rowLabel,
-          header: found.header,
+          rowLabel,
+          header,
         });
     }
     if ("section" in input && Array.isArray(result.blocks))

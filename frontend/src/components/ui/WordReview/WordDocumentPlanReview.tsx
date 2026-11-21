@@ -154,10 +154,15 @@ function groupTitle(group: WordPlanGroup): string {
   return (
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty heading falls back too
     group.heading?.text ||
-    t({
-      id: "officeAddin.word.authoring.opening",
-      message: "Opening content",
-    })
+    (group.sectionUnknown
+      ? t({
+          id: "officeAddin.word.planReview.sectionUnknown",
+          message: "Section not known",
+        })
+      : t({
+          id: "officeAddin.word.authoring.opening",
+          message: "Opening content",
+        }))
   );
 }
 

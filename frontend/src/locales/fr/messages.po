@@ -5218,6 +5218,11 @@ msgstr "Sections à afficher"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.sectionUnknown"
+msgstr "Section inconnue"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.planReview.showPreview"
 msgstr "Afficher un aperçu du résultat"
 

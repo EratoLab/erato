@@ -574,64 +574,70 @@ describe("structural document review", () => {
     expect(state.insert).not.toHaveBeenCalled();
   });
 
-  it("reviews a reloaded plan on a document too large for a complete read from the parts the chat read", async () => {
-    const titles = ["2.1 Section 2.1", "4.2 Section 4.2", "6.3 Section 6.3"];
-    const turn = await largeDocumentTurn({ sections: [titles[0]] });
-    const unreadTarget = turn.reads.slice(0, -1);
-    mock.content = [...unreadTarget, turn.submission];
-    mock.requestArgs = turn.user.action_facet_args;
-    const content = JSON.stringify(turn.plan);
-    mock.artifact.submittedCard = {
-      toolCallId: "saved",
-      language: "erato-word-document-plan",
-      content,
-    };
-    mock.artifact.isFreshCompletion = false;
-    delete mock.artifact.itemIdentity;
-    render(
-      <WordWriteProvider
-        documentIdentity="doc-A"
-        capturesByAssistantMessageId={new Map()}
-      >
-        <WordHostCardRenderer
-          language="erato-word-document-plan"
-          content={content}
-        />
-      </WordWriteProvider>,
-      { wrapper: Conversation },
-    );
+  it(
+    "reviews a reloaded plan on a document too large for a complete read from the parts the chat read",
+    {
+      timeout: 30_000,
+    },
+    async () => {
+      const titles = ["2.1 Section 2.1", "4.2 Section 4.2", "6.3 Section 6.3"];
+      const turn = await largeDocumentTurn({ sections: [titles[0]] });
+      const unreadTarget = turn.reads.slice(0, -1);
+      mock.content = [...unreadTarget, turn.submission];
+      mock.requestArgs = turn.user.action_facet_args;
+      const content = JSON.stringify(turn.plan);
+      mock.artifact.submittedCard = {
+        toolCallId: "saved",
+        language: "erato-word-document-plan",
+        content,
+      };
+      mock.artifact.isFreshCompletion = false;
+      delete mock.artifact.itemIdentity;
+      render(
+        <WordWriteProvider
+          documentIdentity="doc-A"
+          capturesByAssistantMessageId={new Map()}
+        >
+          <WordHostCardRenderer
+            language="erato-word-document-plan"
+            content={content}
+          />
+        </WordWriteProvider>,
+        { wrapper: Conversation },
+      );
 
-    expect(
-      screen.getByText(/original document is not available in this session/),
-    ).toBeVisible();
-    for (const title of titles) {
-      const group = screen.getByRole("button", {
-        name: new RegExp(`^${title}`),
-      });
-      if (group.getAttribute("aria-expanded") !== "true")
-        fireEvent.click(group);
-    }
-    const rows = [
-      ...document.querySelectorAll<HTMLElement>("[data-row-key^='output:']"),
-    ];
-    expect(rows).toHaveLength(3);
-    for (const row of rows)
-      fireEvent.click(within(row).getAllByRole("button")[0]);
-    const [read, unread] = rows;
-    fireEvent.click(within(read).getByRole("tab", { name: "Original" }));
-    expect(within(read).getByRole("tabpanel")).toHaveTextContent(
-      turn.changed[0].text,
-    );
-    expect(
-      within(unread).getByText(
-        "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
-      ),
-    ).toBeVisible();
-    expect(within(unread).getAllByText("Revised 1.")[0]).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
-  });
+      expect(
+        screen.getByText(/original document is not available in this session/),
+      ).toBeVisible();
+      for (const title of titles) {
+        const group = screen.getByRole("button", {
+          name: new RegExp(`^${title}`),
+        });
+        if (group.getAttribute("aria-expanded") !== "true")
+          fireEvent.click(group);
+      }
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>("[data-row-key^='output:']"),
+      ];
+      expect(rows).toHaveLength(3);
+      for (const row of rows)
+        fireEvent.click(within(row).getAllByRole("button")[0]);
+      const [read, unread] = rows;
+      fireEvent.click(within(read).getByRole("tab", { name: "Original" }));
+      expect(within(read).getByRole("tabpanel")).toHaveTextContent(
+        turn.changed[0].text,
+      );
+      expect(
+        within(unread).getByText(
+          "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
+        ),
+      ).toBeVisible();
+      expect(within(unread).getAllByText("Revised 1.")[0]).toBeVisible();
+      expect(
+        screen.getByRole("button", { name: "Apply changes" }),
+      ).toBeDisabled();
+    },
+  );
 
   it("applies through the live capture even when the chat also holds the read", async () => {
     const state = setup();

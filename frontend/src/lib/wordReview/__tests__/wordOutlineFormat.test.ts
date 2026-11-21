@@ -37,6 +37,9 @@ describe("heading_outline text", () => {
   });
 
   it("says when entries were left out and where a cut tail starts", () => {
+    expect(wordOutlineOmission(4)).toBe(
+      "4 more entries are left out, all deeper than the levels listed; section:{ref, throughRef} reads any range of blocks.",
+    );
     expect(
       parseWordOutline(
         text(entry("b3", "H", 1, "1 Scope"), wordOutlineOmission(4)),
@@ -47,6 +50,25 @@ describe("heading_outline text", () => {
         text(entry("b3", "H", 1, "1 Scope"), wordOutlineOmission(1, "b40")),
       ),
     ).toMatchObject({ shortened: true, endsBefore: "b40" });
+  });
+
+  it("reads an earlier release's omission line as a tail cut right after the last entry", () => {
+    const earlier = (count: number) =>
+      `${count} more entries are left out; section:{ref, throughRef} reads any range of blocks.`;
+
+    expect(
+      parseWordOutline(
+        text(
+          entry("b3", "H", 1, "1 Scope"),
+          entry("b9", "P", 2, "Part 2"),
+          earlier(4),
+        ),
+      ),
+    ).toMatchObject({ shortened: true, endsBefore: "b10" });
+    expect(parseWordOutline(text(earlier(30)))).toMatchObject({
+      shortened: true,
+      endsBefore: "b1",
+    });
   });
 
   it("refuses text in another format rather than guessing", () => {

@@ -192,8 +192,10 @@ export interface WordPlanGroupSummary {
 }
 export interface WordPlanGroup {
   key: string;
-  /** Undefined for the content before the first heading. */
+  /** Undefined for the content before the first heading, and where no heading is sure. */
   heading?: { text: string; level?: number };
+  /** A partly read document leaves no heading sure for this part, which need not be the opening. */
+  sectionUnknown?: true;
   status: WordPlanGroupStatus;
   rows: WordPlanRow[];
   summary: WordPlanGroupSummary;
@@ -783,6 +785,7 @@ interface GroupDraft {
   key: string;
   order: [number, number];
   heading?: { text: string; level?: number };
+  sectionUnknown?: true;
   isNew: boolean;
   rows: WordPlanRow[];
   replaced: boolean;
@@ -802,19 +805,25 @@ export function buildWordPlanReview(
       key: `range:${ranges.length}`,
       order: [ranges.length, 0],
       heading: heading && { text: heading.text, level: heading.level },
+      ...(ranges.length && !heading ? { sectionUnknown: true as const } : {}),
       isNew: false,
       rows: [],
       replaced: false,
     });
   openRange();
   const starts = partial
-    ? partial.order.map((ref) => ({ ref, heading: partial.headings.get(ref) }))
+    ? partial.order.map((ref) => ({
+        ref,
+        start: partial.headings.has(ref),
+        heading: partial.headings.get(ref),
+      }))
     : (snapshot?.blocks ?? []).map((block) => ({
         ref: block.ref,
+        start: block.type === "heading",
         heading: block.type === "heading" ? block : undefined,
       }));
-  for (const { ref, heading } of starts) {
-    if (heading) openRange(heading);
+  for (const { ref, start, heading } of starts) {
+    if (start) openRange(heading);
     rangeOf.set(ref, ranges.length - 1);
   }
   const groups = [...ranges];
@@ -1212,6 +1221,7 @@ export function buildWordPlanReview(
       return {
         key: g.key,
         heading: g.heading,
+        ...(g.sectionUnknown ? { sectionUnknown: g.sectionUnknown } : {}),
         status,
         rows: g.rows,
         summary: summarize(changed),
@@ -1279,7 +1289,7 @@ export function buildWordPlanReview(
     );
     addRisk(
       "layout-changed",
-      sections.rows.map((row) => ({ rowKey: row.key })),
+      whole ? sections.rows.map((row) => ({ rowKey: row.key })) : [],
     );
   }
 
@@ -1409,7 +1419,7 @@ export function buildWordPlanReview(
     title,
     scope: { wholeFile: !!snapshot?.fullDocument, unchanged },
     risks,
-    riskUnknown: !snapshot || unreadChanged,
+    riskUnknown: !snapshot || unreadChanged || (!whole && !!plan.sections),
     noChange,
     groups: finalGroups,
     rows,

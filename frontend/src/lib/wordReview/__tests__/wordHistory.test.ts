@@ -678,9 +678,9 @@ describe("Word plans restored from the parts a turn read", () => {
           sourceRef: "b11",
           rowIndex: 1,
           cellIndex: 1,
-          text: "99.5 %",
-          header: "Level",
-          rowLabel: "Hosting",
+          text: { text: "99.5 %", truncated: false },
+          header: { text: "Level", truncated: false },
+          rowLabel: { text: "Hosting", truncated: false },
         },
       ],
       target: { sourceRef: "b11", rowIndex: 1, cellIndex: 1 },
@@ -1002,21 +1002,28 @@ describe("Word plans restored from the parts a turn read", () => {
     ]);
   });
 
-  it("lists changes without section titles where the reads cannot show which section holds them", () => {
+  it("leaves a section title off only the changes the reads cannot place", () => {
     const cut = outline([
       "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
       "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
       wordOutlineOmission(2, "b9"),
     ]);
     const reads = [sectionRead, targets(["b3", "b10"]), cellRead];
+    const titlesOf = (proposal: ReturnType<typeof turn>) =>
+      buildWordPlanReview(proposal.plan, proposal.snapshot)
+        .groups.filter((g) => g.status !== "unchanged")
+        .map((g) => g.heading?.text ?? (g.sectionUnknown ? "unknown" : ""));
+
+    expect(titlesOf(turn(reads, cut))).toEqual([
+      "1 Scope",
+      "2.1 Rates",
+      "unknown",
+    ]);
     for (const proposal of [
-      turn(reads, cut),
       turn(reads, ""),
       turn(reads, outline(["b2 H1 1 Scope"])),
-    ]) {
-      expect(proposal.snapshot?.partial?.headings.size).toBe(0);
-      expect(headingsOf(proposal)).toEqual([undefined]);
-    }
+    ])
+      expect(titlesOf(proposal)).toEqual(["unknown", "2.1 Rates", "unknown"]);
     expect(
       headingsOf(
         turn([sectionRead, targets(["b3", "b9", "b10", "b12"]), cellRead], cut),
@@ -1073,6 +1080,19 @@ describe("Word plans restored from the parts a turn read", () => {
         turn([sectionRead, targetRead, cellRead]).snapshot,
       ).riskUnknown,
     ).toBe(false);
+  });
+
+  it("says a stored plan that changes section breaks could not be checked", () => {
+    const proposal = turn([sectionRead, targetRead, cellRead], fullOutline, {
+      ...plan,
+      scope: "document",
+      sections: [{ id: "s1", source: "s1" }],
+    });
+    const review = buildWordPlanReview(proposal.plan, proposal.snapshot);
+
+    expect(review.riskUnknown).toBe(true);
+    expect(review.risks).toEqual([]);
+    expect(review.partsRows).toHaveLength(1);
   });
 
   it("keeps the complete read when the turn also read a section", () => {

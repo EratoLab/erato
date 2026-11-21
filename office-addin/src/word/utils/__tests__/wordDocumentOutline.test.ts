@@ -323,7 +323,7 @@ describe("outline text", () => {
     expect(lines.filter((l) => l.startsWith("[")).length).toBe(12);
     expect(lines.some((l) => l.includes("|H2|"))).toBe(false);
     expect(lines[lines.length - 1]).toBe(
-      "360 more entries are left out; section:{ref, throughRef} reads any range of blocks.",
+      "360 more entries are left out, all deeper than the levels listed; section:{ref, throughRef} reads any range of blocks.",
     );
     expect(parseWordOutline(text)?.headings.size).toBe(12);
   });
