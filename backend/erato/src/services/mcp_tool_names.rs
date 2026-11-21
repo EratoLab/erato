@@ -24,22 +24,6 @@ pub const MAX_NAME_LEN: usize = 64;
 /// shortened, cleaned or told apart from another name.
 const DIGEST_HEX_LEN: usize = 8;
 
-/// The names Erato offers its own tools under, whether or not this deployment
-/// offers them.
-pub fn builtin_tool_names() -> Vec<&'static str> {
-    use crate::services::scheduled_items::chat_tools;
-    let mut names = vec![
-        erato_config::config::CLIENT_ACTION_TOOL_NAME,
-        erato_config::config::DELEGATE_TO_ASSISTANT_TOOL_NAME,
-        erato_config::config::DELEGATE_TASK_TOOL_NAME,
-        crate::services::mcp_wait::WAIT_TOOL_NAME,
-        crate::services::file_retrieval::TOOL_NAME,
-        crate::services::embedded_images::TOOL_NAME,
-    ];
-    names.extend(chat_tools::TOOL_NAMES);
-    names
-}
-
 /// The names of Erato's own tools this deployment can offer. An MCP tool with
 /// one of these names is offered under its qualified name, so both stay
 /// callable; a tool Erato never offers here leaves its name to the MCP tool.
@@ -300,7 +284,22 @@ fn sanitize(part: &str) -> String {
 mod tests {
     use super::*;
     use rmcp::model::Tool;
-    use std::sync::Arc;
+
+    /// The names Erato offers its own tools under, whether or not a deployment
+    /// offers them.
+    fn builtin_tool_names() -> Vec<&'static str> {
+        use crate::services::scheduled_items::chat_tools;
+        let mut names = vec![
+            erato_config::config::CLIENT_ACTION_TOOL_NAME,
+            erato_config::config::DELEGATE_TO_ASSISTANT_TOOL_NAME,
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            crate::services::mcp_wait::WAIT_TOOL_NAME,
+            crate::services::file_retrieval::TOOL_NAME,
+            crate::services::embedded_images::TOOL_NAME,
+        ];
+        names.extend(chat_tools::TOOL_NAMES);
+        names
+    }
 
     fn tool(server_id: &str, name: &str) -> ManagedTool {
         ManagedTool {
@@ -390,21 +389,6 @@ mod tests {
         assert_eq!(forward, backward);
     }
 
-    #[test]
-    fn a_tool_named_like_a_builtin_is_qualified() {
-        let mut tools = vec![tool("scheduler", "wait"), tool("scheduler", "plan")];
-        let collisions = assign_model_names(&mut tools, &builtin_tool_names());
-        assert_eq!(collisions.len(), 1);
-        assert!(collisions[0].builtin);
-        assert_eq!(
-            model_names(&tools),
-            [
-                ("scheduler", "wait", "scheduler__wait"),
-                ("scheduler", "plan", "plan")
-            ]
-        );
-    }
-
     /// Only the tools a deployment can offer take their names from MCP tools:
     /// with waiting and reminders off, an MCP `wait` or `list_reminders`
     /// keeps its name.
@@ -456,7 +440,9 @@ mod tests {
         assert!(!names.contains(&erato_config::config::CLIENT_ACTION_TOOL_NAME));
         assert!(names.iter().all(|name| builtin_tool_names().contains(name)));
 
-        assign_model_names(&mut tools, &names);
+        let collisions = assign_model_names(&mut tools, &names);
+        assert_eq!(collisions.len(), 2);
+        assert!(collisions.iter().all(|collision| collision.builtin));
         assert_eq!(
             model_names(&tools),
             [
@@ -501,6 +487,31 @@ mod tests {
         assert!(names.iter().all(|(_, _, name)| is_provider_safe(name)));
     }
 
+    /// `a__b` + `c` and `a` + `b__c` both read `a__b__c`: neither may keep it,
+    /// or one of the two tools could not be called.
+    #[test]
+    fn names_that_read_the_same_through_a_separator_stay_apart() {
+        let mut tools = vec![
+            tool("a__b", "c"),
+            tool("x", "c"),
+            tool("a", "b__c"),
+            tool("y", "b__c"),
+        ];
+        assign_model_names(&mut tools, &[]);
+        let names = model_names(&tools);
+        assert_eq!(names[1].2, "x__c");
+        assert_eq!(names[3].2, "y__b__c");
+        for (_, _, name) in [names[0], names[2]] {
+            let digest = name
+                .strip_prefix("a__b__c_")
+                .unwrap_or_else(|| panic!("{name} ends in a digest"));
+            assert_eq!(digest.len(), DIGEST_HEX_LEN);
+            assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{name}");
+        }
+        let unique: HashSet<&str> = names.iter().map(|(_, _, name)| *name).collect();
+        assert_eq!(unique.len(), names.len());
+    }
+
     #[test]
     fn long_and_odd_names_fit_every_provider() {
         let long_server = "s".repeat(60);
@@ -537,35 +548,15 @@ mod tests {
         assert_eq!(tools[1].model_name(), "crm_us__search");
     }
 
-    /// The mock MCP server in process, recording each `tools/call` as its path
-    /// and the tool name it was asked for.
-    async fn serve_mock() -> (String, Arc<Mutex<Vec<String>>>, tokio::task::JoinHandle<()>) {
-        use serde_json::Value;
-        let calls = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = calls.clone();
-        let app = mock_mcp_server::app().layer(axum::middleware::from_fn(
-            move |request: axum::extract::Request, next: axum::middleware::Next| {
-                let seen = seen.clone();
-                async move {
-                    let (parts, body) = request.into_parts();
-                    let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
-                    if let Ok(message) = serde_json::from_slice::<Value>(&bytes)
-                        && message["method"] == "tools/call"
-                    {
-                        let name = message["params"]["name"].as_str().unwrap_or_default();
-                        seen.lock()
-                            .unwrap()
-                            .push(format!("{} {name}", parts.uri.path()));
-                    }
-                    next.run(axum::extract::Request::from_parts(parts, bytes.into()))
-                        .await
-                }
-            },
-        ));
+    /// The mock MCP server in process.
+    async fn serve_mock() -> (String, tokio::task::JoinHandle<()>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
-        let mock = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        (url, calls, mock)
+        let mock =
+            tokio::spawn(
+                async move { axum::serve(listener, mock_mcp_server::app()).await.unwrap() },
+            );
+        (url, mock)
     }
 
     /// Servers at the mock's `paths`, configured in the order given.
@@ -585,90 +576,6 @@ mod tests {
         crate::services::mcp_manager::McpServers::new(&config)
     }
 
-    /// Two servers with the same tools: each call, routed through the map the
-    /// stream dispatches by, reaches the server its qualified name names, and
-    /// the server is asked for its own tool name.
-    #[tokio::test]
-    async fn a_qualified_call_reaches_its_own_server_under_the_bare_name() {
-        use crate::services::mcp_manager::{
-            McpRequestAuthContext, convert_mcp_tools_to_genai_tools,
-            convert_tool_call_to_managed_tool_call,
-        };
-        use serde_json::json;
-
-        let (url, calls, mock) = serve_mock().await;
-        // Both serve `list_files` and `read_file`; only the second one fails.
-        let servers = mock_servers(
-            &url,
-            &[("files", "/mcp/file"), ("broken_files", "/mcp/error")],
-        );
-        let auth = McpRequestAuthContext::default();
-        let chat = sea_orm::prelude::Uuid::new_v4();
-
-        let mut tools = servers.list_tools(chat, &auth).await.unwrap();
-        let collisions = assign_model_names(&mut tools, &builtin_tool_names());
-        assert_eq!(
-            collisions
-                .iter()
-                .map(|collision| collision.tool_name.as_str())
-                .collect::<Vec<_>>(),
-            ["list_files", "read_file"]
-        );
-        // The same named set is offered and dispatched by.
-        let offered_to_model: Vec<String> = convert_mcp_tools_to_genai_tools(tools.clone(), false)
-            .iter()
-            .map(|tool| tool.name.to_string())
-            .collect();
-        assert_eq!(
-            offered_to_model,
-            [
-                "broken_files__list_files",
-                "broken_files__read_file",
-                "files__list_files",
-                "files__read_file"
-            ]
-        );
-        let offered = by_model_name(tools);
-        let mut keys: Vec<&str> = offered.keys().map(String::as_str).collect();
-        keys.sort_unstable();
-        assert_eq!(keys, offered_to_model);
-
-        let call = |name: &str| genai::chat::ToolCall {
-            call_id: format!("call-{name}"),
-            fn_name: name.to_string(),
-            fn_arguments: json!({"path": "docs/readme.txt"}),
-            thought_signatures: None,
-        };
-        let read =
-            convert_tool_call_to_managed_tool_call(&offered, call("files__read_file")).unwrap();
-        assert_eq!(read.server_id, "files");
-        let result = servers.call_tool(chat, read, &auth).await.unwrap();
-        assert!(
-            format!("{result:?}").contains("This is a mock README file."),
-            "{result:?}"
-        );
-
-        let broken =
-            convert_tool_call_to_managed_tool_call(&offered, call("broken_files__read_file"))
-                .unwrap();
-        assert_eq!(broken.server_id, "broken_files");
-        let outcome = match servers.call_tool(chat, broken, &auth).await {
-            Ok(result) => format!("{result:?}"),
-            Err(error) => format!("{error:?}"),
-        };
-        assert!(outcome.contains("Simulated read_file error"), "{outcome}");
-
-        assert!(
-            convert_tool_call_to_managed_tool_call(&offered, call("read_file")).is_err(),
-            "the bare name is no longer offered, so it routes nowhere"
-        );
-        assert_eq!(
-            *calls.lock().unwrap(),
-            ["/mcp/file read_file", "/mcp/error read_file"]
-        );
-        mock.abort();
-    }
-
     /// Discovery visits the servers in sorted order, so the tools reach the
     /// model in the same order whichever order the configuration map holds
     /// them in, and so after a restart.
@@ -677,7 +584,7 @@ mod tests {
         use crate::services::mcp_manager::{
             McpRequestAuthContext, convert_mcp_tools_to_genai_tools,
         };
-        let (url, _calls, mock) = serve_mock().await;
+        let (url, mock) = serve_mock().await;
         let ids = [
             "files_f", "files_b", "files_d", "files_a", "files_e", "files_c",
         ];

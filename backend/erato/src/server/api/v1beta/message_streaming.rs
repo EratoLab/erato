@@ -5342,8 +5342,9 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
     // — depth stays at one even if a user mentions assistants inside a
-    // delegated chat. If an MCP tool claims either name, it wins (same
-    // precedence as the other synthetic tools).
+    // delegated chat. An MCP tool of either name is offered under a qualified
+    // name (see `mcp_tool_names`); the checks below only keep a duplicate
+    // name from being offered.
     //
     // `delegate_to_assistant` is aimed at an assistant the user mentioned;
     // `delegate_task` lets the model plan its own sub-task, scoped by facets.
@@ -5424,8 +5425,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     }
     // Offer the synthetic wait tool when waiting is enabled globally or when
     // an MCP server explicitly allows one of the discovered tools to defer a
-    // continuation. The tool is only useful alongside MCP tools, and MCP wins
-    // if a server already exposes the reserved name.
+    // continuation. The tool is only useful alongside MCP tools. An MCP tool
+    // of the same name is offered under a qualified name (see
+    // `mcp_tool_names`); the check below only keeps a duplicate name from
+    // being offered.
     let wait_tool_enabled = !generation_mcp_tools.is_empty()
         && (mcp.config.mcp_servers_global.enable_wait
             || generation_mcp_tools.iter().any(|managed_tool| {
@@ -13328,57 +13331,28 @@ fn apply_assistant_server_filter(
     }
 }
 
-/// How a reserved `erato/<name>` tool came to be selected. The distinction
-/// only matters for diagnostics: an operator who spelled the tool out exactly
-/// is told loudly when an MCP tool takes the name from it, while one who
-/// selected it through a wildcard gets a plain warning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReservedSelection {
-    /// Not selected; the tool is not offered.
-    No,
-    /// Selected through a wildcard (`*`, `erato`, or `erato/*`).
-    Pattern,
-    /// Selected by its exact `erato/<name>` pattern.
-    Exact,
-}
-
-/// Whether the effective client-tool allowlist selects a reserved built-in.
+/// Whether the effective client-tool allowlist selects a reserved built-in,
+/// by its exact `erato/<name>` pattern or through `*`, `erato` or `erato/*`.
 ///
 /// Reserved tools ride the client-tool collector rather than the MCP one on
 /// purpose: `build_mcp_tool_allowlist` treats `None` as "everything allowed",
 /// so a deployment with no MCP allowlisting would offer every built-in by
 /// default. The client-tool allowlist is opt-in — empty selects nothing.
-pub(crate) fn reserved_tool_selected(
-    bare_name: &str,
-    client_tool_allowlist: &[String],
-) -> ReservedSelection {
-    if client_tool_allowlist.is_empty() {
-        return ReservedSelection::No;
-    }
-    let exact = format!(
-        "{}/{}",
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name
-    );
-    if client_tool_allowlist.contains(&exact) {
-        return ReservedSelection::Exact;
-    }
-    if is_qualified_tool_allowed(
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name,
-        client_tool_allowlist,
-    ) {
-        return ReservedSelection::Pattern;
-    }
-    ReservedSelection::No
+pub(crate) fn reserved_tool_selected(bare_name: &str, client_tool_allowlist: &[String]) -> bool {
+    !client_tool_allowlist.is_empty()
+        && is_qualified_tool_allowed(
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name,
+            client_tool_allowlist,
+        )
 }
 
 /// Decide whether a reserved built-in tool may be offered on this turn.
 ///
 /// One place holds all four rules so the tool that fills this slot does not
-/// have to re-derive them: the feature gate, allowlist selection, the
-/// MCP-wins precedence shared with the other synthetic tools, and suppression
-/// inside a delegated run (a child must not spawn its own children here).
+/// have to re-derive them: the feature gate, allowlist selection, never
+/// offering a name an MCP tool is offered under, and suppression inside a
+/// delegated run (a child must not spawn its own children here).
 pub(crate) fn synthetic_tool_offer_slot(
     bare_name: &str,
     feature_enabled: bool,
@@ -13389,27 +13363,18 @@ pub(crate) fn synthetic_tool_offer_slot(
     if !feature_enabled || is_delegated_run {
         return false;
     }
-    let selection = reserved_tool_selected(bare_name, client_tool_allowlist);
-    if selection == ReservedSelection::No {
+    if !reserved_tool_selected(bare_name, client_tool_allowlist) {
         return false;
     }
+    // While the built-in can be offered, an MCP tool of its name is offered
+    // under a qualified name (see `mcp_tool_names`); this only keeps a
+    // duplicate name from being offered.
     if mcp_tools.iter().any(|tool| tool.model_name() == bare_name) {
-        // Same precedence as the other synthetic tools: a real MCP tool that
-        // claims the name wins, and the built-in stands down.
-        if selection == ReservedSelection::Exact {
-            tracing::error!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name, but an \
-                 allowlist selects it explicitly — rename the MCP tool or drop the pattern.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        } else {
-            tracing::warn!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        }
+        tracing::warn!(
+            "Not offering reserved tool '{}/{}': an MCP tool is offered under that name.",
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name
+        );
         return false;
     }
     true
@@ -13743,13 +13708,12 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, ReservedSelection,
-        StreamRouteError, ToolAllowedBy, ToolApprovalDecision, ToolCallGate,
-        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        detached_generation_event_sink, effective_client_tool_allowlist,
-        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_allowlist,
-        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, StreamRouteError,
+        ToolAllowedBy, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
+        derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
+        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
+        filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
+        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -13935,41 +13899,31 @@ mod tests {
     #[test]
     fn reserved_tool_selected_by_star_namespace_and_exact() {
         let exact = vec!["erato/delegate_task".to_string()];
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &exact),
-            ReservedSelection::Exact
-        );
+        assert!(reserved_tool_selected("delegate_task", &exact));
 
         for pattern in ["*", "erato", "erato/*"] {
-            assert_eq!(
+            assert!(
                 reserved_tool_selected("delegate_task", &[pattern.to_string()]),
-                ReservedSelection::Pattern,
                 "pattern {pattern} should select the reserved tool"
             );
         }
 
         // A different reserved name is not selected by an exact pattern for
         // another one.
-        assert_eq!(
-            reserved_tool_selected("collect_tasks", &exact),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("collect_tasks", &exact));
 
         // Nor is an unrelated namespace a selector.
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &["outlook/*".to_string()]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected(
+            "delegate_task",
+            &["outlook/*".to_string()]
+        ));
     }
 
     #[test]
     fn reserved_tool_not_selected_by_empty_allowlist() {
         // The client-tool collector is opt-in: an empty allowlist selects
         // nothing, unlike the MCP allowlist whose `None` means "everything".
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &[]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("delegate_task", &[]));
     }
 
     #[test]
@@ -14326,7 +14280,7 @@ mod tests {
         ));
         crate::services::mcp_tool_names::assign_model_names(
             &mut tools,
-            &crate::services::mcp_tool_names::builtin_tool_names(),
+            &[erato_config::config::DELEGATE_TASK_TOOL_NAME],
         );
         assert_eq!(tools[0].model_name(), "planner__delegate_task");
         assert!(super::synthetic_tool_offer_slot(

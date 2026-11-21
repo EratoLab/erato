@@ -8990,19 +8990,6 @@ async fn test_writes_off_offers_only_server_declared_read_only_mcp_tools(pool: P
     assert_eq!(offers[2], full_set, "writes back on restores the full set");
 }
 
-/// The stored parts of an assistant message.
-async fn stored_parts(app_state: &erato::state::AppState, message_id: Uuid) -> Vec<Value> {
-    Messages::find_by_id(message_id)
-        .one(&app_state.db)
-        .await
-        .unwrap()
-        .expect("Expected the assistant message")
-        .raw_message["content"]
-        .as_array()
-        .unwrap()
-        .clone()
-}
-
 /// Two servers that offer the same tools: the model sees each tool under a
 /// name qualified with its server, and a call reaches the server its name
 /// names, under the tool's own name. Only the second server's `read_file`
@@ -9102,7 +9089,7 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
     );
 
     let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
-    let parts = stored_parts(&app_state, assistant_message_id).await;
+    let parts = message_content(&app_state, assistant_message_id).await;
     let tool_use = parts
         .iter()
         .find(|part| part["content_type"] == "tool_use")
@@ -9224,7 +9211,7 @@ async fn approve_the_qualified_call(
         "QUALIFIED-APPROVED"
     );
 
-    let parts = stored_parts(app_state, assistant_message_id).await;
+    let parts = message_content(app_state, assistant_message_id).await;
     let tool_use = parts
         .iter()
         .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == approval_id)
@@ -9381,7 +9368,7 @@ async fn an_mcp_tool_named_like_the_wait_tool_is_offered_beside_it(pool: Pool<Po
     }
 
     let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
-    let parts = stored_parts(&app_state, assistant_message_id).await;
+    let parts = message_content(&app_state, assistant_message_id).await;
     // Erato keeps the model's call id after a prefix of its own.
     let is_call = |part: &Value, call_id: &str| {
         part["tool_call_id"]
