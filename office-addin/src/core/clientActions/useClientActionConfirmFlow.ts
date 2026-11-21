@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveAutoPromptBehavior } from "./clientActionPolicy";
 
 import type { ClientActionDecisionMap } from "./clientActionPolicy";
+import type { Message } from "@erato/frontend/library";
 
 /**
  * Auto-prompt fires at most once per assistant message PER SCOPE, across
@@ -18,6 +19,37 @@ import type { ClientActionDecisionMap } from "./clientActionPolicy";
  * the same message.
  */
 const firedAutoPrompts = new Set<string>();
+
+type ConversationMessages = Readonly<Record<string, Message | undefined>>;
+
+// Every client-action card asks on every streamed token; the answer depends on
+// the conversation only, so one scan per conversation serves them all.
+const latestAssistantIds = new WeakMap<
+  ConversationMessages,
+  string | undefined
+>();
+
+/**
+ * The last assistant message in the provider's order: by time, ties and
+ * missing timestamps going to the later entry, as its stable sort does.
+ */
+function latestAssistantMessageId(
+  messages: ConversationMessages,
+): string | undefined {
+  if (latestAssistantIds.has(messages)) return latestAssistantIds.get(messages);
+  let latestId: string | undefined;
+  let latestAt = Number.NEGATIVE_INFINITY;
+  for (const [id, message] of Object.entries(messages)) {
+    if (message?.role !== "assistant") continue;
+    const at = new Date(message.createdAt).getTime();
+    if (!(at < latestAt)) {
+      latestId = id;
+      latestAt = at;
+    }
+  }
+  latestAssistantIds.set(messages, latestId);
+  return latestId;
+}
 
 /**
  * `TAction` is the host's client-action id union (`OutlookClientAction`,
@@ -189,24 +221,13 @@ export function useClientActionConfirmFlow<
   ]);
 
   // A boolean selection, so tokens streamed into any message pass this card by.
-  const isLatestAssistantMessage = useConversationSelector((messages) => {
-    if (!args.messageId) {
-      return false;
-    }
-    // The last assistant message in the provider's order: by time, ties and
-    // missing timestamps going to the later entry, as its stable sort does.
-    let latestId: string | undefined;
-    let latestAt = Number.NEGATIVE_INFINITY;
-    for (const [id, message] of Object.entries(messages)) {
-      if (message?.role !== "assistant") continue;
-      const at = new Date(message.createdAt).getTime();
-      if (!(at < latestAt)) {
-        latestId = id;
-        latestAt = at;
-      }
-    }
-    return latestId === args.messageId;
-  }, Object.is);
+  const isLatestAssistantMessage = useConversationSelector(
+    (messages) =>
+      args.messageId
+        ? latestAssistantMessageId(messages) === args.messageId
+        : false,
+    Object.is,
+  );
   const autoPromptBehavior = resolveAutoPromptBehavior({
     presentation: args.presentation,
     facetId: args.facetId,

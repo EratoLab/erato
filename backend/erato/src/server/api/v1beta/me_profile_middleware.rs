@@ -362,7 +362,7 @@ pub(crate) async fn complete_user_profile(
 ) -> Result<UserProfile, StatusCode> {
     user_profile.determine_final_language_with_config(
         accept_language_header,
-        &app_state.config.i18n.language,
+        &app_state.reloadable.read().await.i18n.language,
         id_token_xms_pl,
         id_token_xms_tpl,
     );

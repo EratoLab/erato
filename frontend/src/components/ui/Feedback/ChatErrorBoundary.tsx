@@ -1,16 +1,16 @@
 "use client";
 
 import { t } from "@lingui/core/macro";
-import { ErrorBoundary } from "react-error-boundary";
+import { Component } from "react";
 
 import { Button } from "../Controls/Button";
 import { ErrorIcon } from "../icons";
 import { CopyErrorButton } from "./CopyErrorButton";
 
-import type React from "react";
+import type { ReactNode } from "react";
 
 export interface ChatErrorBoundaryProps {
-  children: React.ReactNode;
+  children: ReactNode;
   onReset?: () => void;
 }
 
@@ -43,25 +43,43 @@ const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
   );
 };
 
+type ChatErrorBoundaryState =
+  | { didCatch: false; error: null }
+  | { didCatch: true; error: unknown };
+
 /**
  * Error boundary component specifically for chat components
  *
  * This component catches errors in the chat interface and displays a
  * friendly error message with a retry button.
  */
-export function ChatErrorBoundary({
-  children,
-  onReset,
-}: ChatErrorBoundaryProps) {
-  return (
-    <ErrorBoundary
-      FallbackComponent={ChatErrorFallback}
-      onReset={() => {
-        // Optional callback when the error boundary is reset
-        onReset?.();
-      }}
-    >
-      {children}
-    </ErrorBoundary>
-  );
+// Not react-error-boundary: it provides a new context value on every render,
+// and a pane re-renders this boundary on every streamed token, so React
+// searched the whole message list below it for readers on each token.
+export class ChatErrorBoundary extends Component<
+  ChatErrorBoundaryProps,
+  ChatErrorBoundaryState
+> {
+  state: ChatErrorBoundaryState = { didCatch: false, error: null };
+
+  static getDerivedStateFromError(error: unknown): ChatErrorBoundaryState {
+    return { didCatch: true, error };
+  }
+
+  private readonly resetErrorBoundary = () => {
+    this.props.onReset?.();
+    this.setState({ didCatch: false, error: null });
+  };
+
+  render() {
+    if (this.state.didCatch) {
+      return (
+        <ChatErrorFallback
+          error={this.state.error as Error}
+          resetErrorBoundary={this.resetErrorBoundary}
+        />
+      );
+    }
+    return this.props.children;
+  }
 }

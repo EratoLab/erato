@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import {
   useConversationMessage,
@@ -75,6 +75,26 @@ export const isWordSubmitPlanPart = (part: ContentPart): boolean =>
 const sameMessages = (a: readonly Message[], b: readonly Message[]) =>
   a.length === b.length && a.every((message, i) => message === b[i]);
 
+const NO_LINEAGE: readonly Message[] = [];
+
+// Every card checks its lineage on every streamed token, and the token lands
+// in a later message, so walking the branch without rebuilding it is enough.
+const isLineageOf = (
+  lineage: readonly Message[],
+  messages: Readonly<Record<string, Message | undefined>>,
+  messageId: string | undefined,
+): boolean => {
+  let index = lineage.length - 1;
+  for (let id = messageId; id; ) {
+    const message = messages[id];
+    if (!message) break;
+    if (index < 0 || lineage[index] !== message) return false;
+    index -= 1;
+    id = message.previous_message_id;
+  }
+  return index === -1;
+};
+
 /**
  * A message and the ones before it on its branch, oldest first. Re-renders
  * only when one of those messages changes, not on tokens streamed elsewhere.
@@ -82,8 +102,11 @@ const sameMessages = (a: readonly Message[], b: readonly Message[]) =>
 export function useWordMessageLineage(
   messageId: string | undefined,
 ): readonly Message[] {
-  return useConversationSelector(
-    (messages) => wordMessageLineage(messages, messageId),
-    sameMessages,
-  );
+  const last = useRef(NO_LINEAGE);
+  return useConversationSelector((messages) => {
+    if (!isLineageOf(last.current, messages, messageId)) {
+      last.current = wordMessageLineage(messages, messageId);
+    }
+    return last.current;
+  }, sameMessages);
 }

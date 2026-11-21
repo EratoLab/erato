@@ -286,6 +286,16 @@ export type { ChatMessageRendererState } from "@/components/ui/Chat/ChatMessage"
 export { useMessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 export type { MessageAttachmentFiles } from "@/components/ui/Chat/MessageAttachments";
 
+// The chat readers a kit is pointed to (surface 1.30): the transcript ones
+// re-render on every streamed token, the session and selector ones only when
+// what they read changes.
+export {
+  useChatContext,
+  useChatSession,
+  useChatTranscript,
+  useChatTranscriptSelector,
+} from "@/providers/ChatProvider";
+
 // Disclosure and pagination for grouped attachment overrides. Item presentation
 // stays with the kit, including its existing chip and image components.
 export { useGroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -496,10 +506,14 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "messageStyles",
   "resolvePopoverViewportPadding",
   "splitFilenameForDisplay",
+  "useChatContext",
   "useChatHistoryRow",
   "useChatHistoryRowMenuItems",
   "useChatHistoryRowPresentation",
   "useChatMessageRenderer",
+  "useChatSession",
+  "useChatTranscript",
+  "useChatTranscriptSelector",
   "useFileCapabilitiesContext",
   "useGetFile",
   "useGetFilePreview",

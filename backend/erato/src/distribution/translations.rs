@@ -6,18 +6,15 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::config::{AppConfig, ConfigSourceFile, TranslationPoCompilationMode};
+use crate::config::{AppConfig, ConfigSourceFile, I18nRuntimeConfig, TranslationPoCompilationMode};
 use crate::distribution::component_kits::ComponentKitDistribution;
 use crate::distribution::frontend_bundles::FrontendBundles;
 use crate::translation_po::{CompiledMessagesJson, TranslationPoCache};
 
-/// Translation sources and runtime compilation state shared by all served
-/// bundles.
+/// Translation sources discovered at startup and mirrored to the admin panel.
 #[derive(Clone, Debug, erato_memory::HeapSize)]
 pub struct TranslationDistribution {
     sources: Vec<ConfigSourceFile>,
-    compilation_mode: TranslationPoCompilationMode,
-    cache: Arc<TranslationPoCache>,
 }
 
 impl TranslationDistribution {
@@ -83,19 +80,32 @@ impl TranslationDistribution {
                 .map(|kit| ("component kit", kit.root.clone())),
         );
 
-        let sources = discover_sources(roots);
         Self {
-            sources,
-            compilation_mode: config.frontend.translation_po_compilation_mode,
-            cache: Arc::new(TranslationPoCache::new(
-                config.i18n.language.default_language.clone(),
-            )),
+            sources: discover_sources(roots),
         }
     }
 
     #[must_use]
     pub fn sources(&self) -> &[ConfigSourceFile] {
         &self.sources
+    }
+}
+
+/// The active compilation mode and file catalog cache for all served bundles.
+#[derive(Clone, Debug, erato_memory::HeapSize)]
+pub struct TranslationCatalogs {
+    compilation_mode: TranslationPoCompilationMode,
+    cache: Arc<TranslationPoCache>,
+}
+
+impl TranslationCatalogs {
+    pub fn new(config: &I18nRuntimeConfig) -> Self {
+        Self {
+            compilation_mode: config.translation_po_compilation_mode,
+            cache: Arc::new(TranslationPoCache::new(
+                config.language.default_language.trim(),
+            )),
+        }
     }
 
     /// Compiles the PO source corresponding to a served `messages.json`
@@ -148,7 +158,7 @@ fn translation_po_path_for_messages_json(
     bundle_root: &Path,
     request_path: &str,
 ) -> Option<PathBuf> {
-    if !TranslationDistribution::is_messages_json_path(request_path) {
+    if !TranslationCatalogs::is_messages_json_path(request_path) {
         return None;
     }
 
@@ -333,13 +343,13 @@ mod tests {
 
     #[test]
     fn identifies_messages_json_paths() {
-        assert!(TranslationDistribution::is_messages_json_path(
+        assert!(TranslationCatalogs::is_messages_json_path(
             "/public/common/locales/de/messages.json"
         ));
-        assert!(TranslationDistribution::is_messages_json_path(
+        assert!(TranslationCatalogs::is_messages_json_path(
             "/public/component-kits/example/locales/en/messages.json"
         ));
-        assert!(!TranslationDistribution::is_messages_json_path(
+        assert!(!TranslationCatalogs::is_messages_json_path(
             "/public/locales/en/readme.txt"
         ));
     }

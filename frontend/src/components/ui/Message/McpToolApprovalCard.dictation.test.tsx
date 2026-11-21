@@ -9,7 +9,8 @@ import {
 } from "@/hooks/audio/dictatedTurns";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
-import { ChatContext } from "@/providers/ChatProvider";
+import { ChatContextProviders } from "@/providers/ChatProvider";
+import { testChatValue } from "@/test/chatContextValue";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
@@ -65,29 +66,27 @@ const request = {
 const renderCard = () =>
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <ChatContext.Provider
-        value={
-          {
-            currentChatId: "chat-1",
-            refetchMessages: async () => undefined,
-            messages: {
-              "user-1": {
-                id: "user-1",
-                role: "user",
-                content: [{ content_type: "text", text: SAID }],
-              },
-              "message-1": { id: "message-1", role: "assistant", content: [] },
+      <ChatContextProviders
+        value={testChatValue({
+          currentChatId: "chat-1",
+          refetchMessages: async () => undefined,
+          messages: {
+            "user-1": {
+              id: "user-1",
+              role: "user",
+              content: [{ content_type: "text", text: SAID }],
             },
-            messageOrder: ["user-1", "message-1"],
-          } as unknown as ChatContextValue
-        }
+            "message-1": { id: "message-1", role: "assistant", content: [] },
+          } as unknown as ChatContextValue["messages"],
+          messageOrder: ["user-1", "message-1"],
+        })}
       >
         <McpToolApprovalCard
           messageId="message-1"
           request={request}
           resolution={null}
         />
-      </ChatContext.Provider>
+      </ChatContextProviders>
     </QueryClientProvider>,
   );
 

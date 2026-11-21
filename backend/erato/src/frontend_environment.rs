@@ -7,7 +7,7 @@ use crate::distribution::frontend_bundles::{
     FrontendRewrite, MAIN_FRONTEND_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH,
     OFFICE_ADDIN_MOUNT_PATH,
 };
-use crate::distribution::translations::TranslationDistribution;
+use crate::distribution::translations::TranslationCatalogs;
 use crate::models::chat::ChatCreatedVia;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
@@ -187,7 +187,7 @@ pub struct ServedFrontend {
 #[derive(Debug, erato_memory::HeapSize)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
-    translations: TranslationDistribution,
+    configured_voices: ConfiguredVoices,
     branding: crate::distribution::branding::BrandingAssets,
 }
 
@@ -290,7 +290,7 @@ pub fn build_frontend_registry(
 
     FrontendRegistry {
         frontends,
-        translations: distribution.translations.clone(),
+        configured_voices: ConfiguredVoices::of(config),
         branding: distribution.branding.clone(),
     }
 }
@@ -327,10 +327,28 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
     )
 }
 
+/// Whether a voice is configured for conversational mode and for read
+/// aloud, so a feature switched on while Erato runs speaks only with one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, erato_memory::HeapSize)]
+pub struct ConfiguredVoices {
+    conversational: bool,
+    read_aloud: bool,
+}
+
+impl ConfiguredVoices {
+    fn of(config: &AppConfig) -> Self {
+        let voice = |id: &Option<String>| config.speech_provider(id.as_deref()).is_some();
+        Self {
+            conversational: voice(&config.audio_conversational.speech_provider),
+            read_aloud: voice(&config.audio_read_aloud.speech_provider),
+        }
+    }
+}
+
 /// The page's voice switches. Injected per request from the live switches,
 /// so the admin panel switches a voice feature without a restart.
 fn voice_switch_environment(
-    config: &AppConfig,
+    voices: ConfiguredVoices,
     switches: VoiceSwitches,
 ) -> [(&'static str, Value); 5] {
     [
@@ -340,7 +358,7 @@ fn voice_switch_environment(
         ),
         (
             "SPEECH_ENABLED",
-            Value::Bool(switches.conversational_speech_provider(config).is_some()),
+            Value::Bool(switches.conversational && voices.conversational),
         ),
         (
             "APPROVAL_VOICE_COMMANDS_ENABLED",
@@ -352,7 +370,7 @@ fn voice_switch_environment(
         ),
         (
             "READ_ALOUD_ENABLED",
-            Value::Bool(switches.read_aloud_speech_provider(config).is_some()),
+            Value::Bool(switches.read_aloud && voices.read_aloud),
         ),
     ]
 }
@@ -707,7 +725,10 @@ fn build_frontend_environment_with(
         FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(config.audio_dictation.max_recording_duration_seconds.into()),
     );
-    for (key, value) in voice_switch_environment(config, VoiceSwitches::from_app_config(config)) {
+    for (key, value) in voice_switch_environment(
+        ConfiguredVoices::of(config),
+        VoiceSwitches::from_app_config(config),
+    ) {
         env.additional_environment.insert(key.to_string(), value);
     }
     env.additional_environment.insert(
@@ -1275,7 +1296,7 @@ pub mod axum {
     }
 
     fn cache_control_for_path(request_path: &str) -> &'static str {
-        if TranslationDistribution::is_messages_json_path(request_path) {
+        if TranslationCatalogs::is_messages_json_path(request_path) {
             "no-cache"
         } else {
             "public, max-age=3600, stale-while-revalidate=604800"
@@ -1314,7 +1335,9 @@ pub mod axum {
     pub async fn serve_files_with_script(
         Extension(frontend_registry): Extension<Arc<FrontendRegistry>>,
         Extension(deployment_version): Extension<DeploymentVersion>,
-        live: Option<Extension<crate::state::AppState>>,
+        Extension(reloadable): Extension<
+            Arc<tokio::sync::RwLock<crate::distribution::runtime::ReloadableAppState>>,
+        >,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
         let request_path = req.uri().path().to_string();
@@ -1322,15 +1345,18 @@ pub mod axum {
             return Ok(not_found_response());
         };
 
-        if request_path.starts_with("/public/common/custom-theme/")
-            && TranslationDistribution::is_messages_json_path(&request_path)
+        let translation_catalogs = if TranslationCatalogs::is_messages_json_path(&request_path) {
+            Some(reloadable.read().await.translation_catalogs.clone())
+        } else {
+            None
+        };
+        if let Some(catalogs) = &translation_catalogs
+            && request_path.starts_with("/public/common/custom-theme/")
             && let Ok(source) = frontend_registry.branding.resolve_source(
                 &request_path.replace("/messages.json", "/messages.po"),
                 false,
             )
-            && let Some(compiled) = frontend_registry
-                .translations
-                .compile_messages_json_source(&source)
+            && let Some(compiled) = catalogs.compile_messages_json_source(&source)
         {
             let Ok(compiled) = compiled else {
                 return Ok(internal_server_error_response());
@@ -1362,11 +1388,11 @@ pub mod axum {
         }
 
         let mut frontend_environment = frontend.environment.clone();
-        if frontend.inject_environment
-            && let Some(Extension(app_state)) = live
-        {
-            let switches = app_state.voice_switches().await;
-            for (key, value) in voice_switch_environment(&app_state.config, switches) {
+        if frontend.inject_environment {
+            let switches = reloadable.read().await.voice_switches;
+            for (key, value) in
+                voice_switch_environment(frontend_registry.configured_voices, switches)
+            {
                 frontend_environment
                     .additional_environment
                     .insert(key.to_string(), value);
@@ -1399,9 +1425,9 @@ pub mod axum {
         let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_request_path = req.uri().path().to_string();
 
-        if let Some((po_path, compilation)) = frontend_registry
-            .translations
-            .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
+        if let Some(catalogs) = &translation_catalogs
+            && let Some((po_path, compilation)) = catalogs
+                .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
         {
             match compilation {
                 Ok(compiled) => {
@@ -1728,16 +1754,16 @@ mod tests {
 
     #[test]
     fn the_page_gets_the_live_voice_switches_not_the_startup_ones() {
-        let config = AppConfig::default();
         let live = VoiceSwitches {
             conversational: true,
             read_aloud: true,
             voice_commands: true,
             voice_decisions: false,
         };
-        let environment: std::collections::HashMap<_, _> = voice_switch_environment(&config, live)
-            .into_iter()
-            .collect();
+        let environment: std::collections::HashMap<_, _> =
+            voice_switch_environment(ConfiguredVoices::default(), live)
+                .into_iter()
+                .collect();
         assert_eq!(
             environment[FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED],
             Value::Bool(true)
@@ -1753,6 +1779,14 @@ mod tests {
         // Without a voice configured, switching speech on speaks nothing.
         assert_eq!(environment["SPEECH_ENABLED"], Value::Bool(false));
         assert_eq!(environment["READ_ALOUD_ENABLED"], Value::Bool(false));
+        let voices = ConfiguredVoices {
+            conversational: true,
+            read_aloud: true,
+        };
+        let spoken: std::collections::HashMap<_, _> =
+            voice_switch_environment(voices, live).into_iter().collect();
+        assert_eq!(spoken["SPEECH_ENABLED"], Value::Bool(true));
+        assert_eq!(spoken["READ_ALOUD_ENABLED"], Value::Bool(true));
     }
 
     #[test]
@@ -1944,6 +1978,13 @@ mod tests {
             &distribution,
             &Default::default(),
         ));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
         for (asset, content_type, expected) in [
             ("theme.json", "application/json", "Acme"),
             ("locales/en/messages.json", "application/json", "Acme"),
@@ -1951,7 +1992,7 @@ mod tests {
             let response = serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
-                None,
+                Extension(reloadable.clone()),
                 Request::builder()
                     .uri(format!("/public/common/custom-theme/acme/{asset}"))
                     .body(Body::empty())
@@ -1984,7 +2025,7 @@ mod tests {
                 let response = serve_files_with_script(
                     Extension(registry.clone()),
                     Extension(DeploymentVersion(None)),
-                    None,
+                    Extension(reloadable.clone()),
                     Request::builder()
                         .uri(format!("{mount}/{asset}"))
                         .body(Body::empty())
@@ -2627,14 +2668,13 @@ mod tests {
 
     #[test]
     fn specific_mount_path_matches_before_root() {
-        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
+            configured_voices: ConfiguredVoices::default(),
             frontends: vec![
                 served_frontend("/public/platform-office-addin", true),
                 served_frontend("/office-addin", true),
                 served_frontend("/", true),
             ],
-            translations: distribution.translations,
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
@@ -2648,13 +2688,12 @@ mod tests {
 
     #[test]
     fn disabled_specific_mount_path_does_not_fall_back_to_root() {
-        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
+            configured_voices: ConfiguredVoices::default(),
             frontends: vec![
                 served_frontend("/office-addin", false),
                 served_frontend("/", true),
             ],
-            translations: distribution.translations,
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
@@ -2883,6 +2922,13 @@ mod tests {
             &distribution,
             &Default::default(),
         ));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
         let request = |if_none_match: Option<&str>| {
             let mut request = Request::builder().uri("/public/common/locales/de/messages.json");
             if let Some(etag) = if_none_match {
@@ -2891,7 +2937,7 @@ mod tests {
             serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
-                None,
+                Extension(reloadable.clone()),
                 request.body(Body::empty()).unwrap(),
             )
         };

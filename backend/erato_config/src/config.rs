@@ -528,17 +528,23 @@ fn warn_missing_vocabularies(
 }
 
 /// The runtime configuration sources layered for one of the sections that
-/// can be replaced at runtime (`McpRuntimeConfig`,
-/// `TeamsInactivityNudgeConfig::from_toml_sources`): each TOML source in
+/// can be replaced at runtime: each TOML source in
 /// order, so a later one (the admin panel's) wins, then the environment.
 fn runtime_sources(sources: &[ConfigSourceFile]) -> Result<Config, Report> {
+    runtime_sources_with_environment(sources, app_environment_source())
+}
+
+fn runtime_sources_with_environment(
+    sources: &[ConfigSourceFile],
+    environment: Environment,
+) -> Result<Config, Report> {
     let mut builder = Config::builder();
     for source in sources {
         builder = builder.add_source(File::from_str(&source.contents, FileFormat::Toml));
     }
     // Environment variables have the same final precedence as they do for
     // the startup configuration.
-    builder = builder.add_source(app_environment_source());
+    builder = builder.add_source(environment);
     Ok(builder.build()?)
 }
 
@@ -587,11 +593,180 @@ pub struct I18nConfig {
 
 impl I18nConfig {
     pub fn validate(&self) -> Result<(), Report> {
-        if self.language.default_language.trim().is_empty() {
+        let language = self.language.default_language.trim();
+        if language.is_empty() {
             return Err(eyre!("i18n.language.default_language cannot be empty"));
+        }
+        if !language.split(['-', '_']).all(|subtag| {
+            !subtag.is_empty() && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        }) {
+            return Err(eyre!(
+                "i18n.language.default_language must be a language tag"
+            ));
         }
 
         Ok(())
+    }
+}
+
+/// Internationalization settings that can be replaced together at runtime.
+#[derive(Debug, Clone, PartialEq, Eq, HeapSize)]
+pub struct I18nRuntimeConfig {
+    pub language: I18nLanguageConfig,
+    pub translation_po_compilation_mode: TranslationPoCompilationMode,
+}
+
+impl I18nRuntimeConfig {
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            language: config.i18n.language.clone(),
+            translation_po_compilation_mode: config.frontend.translation_po_compilation_mode,
+        }
+    }
+
+    pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
+        Self::from_schema(&runtime_sources(sources)?)
+    }
+
+    fn from_schema(schema: &Config) -> Result<Self, Report> {
+        // The config deserializer also accepts numbers and booleans as
+        // strings. The panel setting must be a language tag.
+        match schema.get::<config::Value>("i18n.language.default_language") {
+            Ok(value) if !matches!(value.kind, config::ValueKind::String(_)) => {
+                return Err(eyre!("i18n.language.default_language must be a string"));
+            }
+            Ok(_) | Err(ConfigError::NotFound(_)) => {}
+            Err(error) => return Err(error.into()),
+        }
+        let i18n = match schema.get::<I18nConfig>("i18n") {
+            Ok(i18n) => i18n,
+            Err(ConfigError::NotFound(_)) => I18nConfig::default(),
+            Err(error) => return Err(error.into()),
+        };
+        i18n.validate()?;
+        let translation_po_compilation_mode =
+            match schema.get("frontend.translation_po_compilation_mode") {
+                Ok(mode) => mode,
+                Err(ConfigError::NotFound(_)) => TranslationPoCompilationMode::default(),
+                Err(error) => return Err(error.into()),
+            };
+        Ok(Self {
+            language: i18n.language,
+            translation_po_compilation_mode,
+        })
+    }
+}
+
+#[cfg(test)]
+mod i18n_runtime_config_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_i18n_layers_toml_and_environment_over_defaults() {
+        let deployment = ConfigSourceFile {
+            source_filename: "erato.toml".into(),
+            contents: r#"
+[frontend]
+translation_po_compilation_mode = "just_in_time"
+web_frontend_bundle_path = "/web"
+[i18n.language]
+default_language = "de"
+language_detection_priority = ["id_token_xms_tpl"]
+"#
+            .into(),
+        };
+        let admin = ConfigSourceFile {
+            source_filename: "erato.toml".into(),
+            contents: r#"
+[i18n.language]
+default_language = "fr"
+language_detection_priority = []
+"#
+            .into(),
+        };
+        let sources = [deployment, admin];
+        let load = |sources: &[ConfigSourceFile], env| {
+            let schema = runtime_sources_with_environment(
+                sources,
+                app_environment_source().source(Some(env)),
+            )
+            .unwrap();
+            I18nRuntimeConfig::from_schema(&schema)
+        };
+
+        let layered = load(&sources, Default::default()).unwrap();
+        assert_eq!(layered.language.default_language, "fr");
+        assert!(layered.language.language_detection_priority.is_empty());
+        assert_eq!(
+            layered.translation_po_compilation_mode,
+            TranslationPoCompilationMode::JustInTime
+        );
+        assert_eq!(
+            load(&sources[..1], Default::default())
+                .unwrap()
+                .language
+                .default_language,
+            "de"
+        );
+        assert_eq!(
+            load(&[], Default::default()).unwrap(),
+            I18nRuntimeConfig::from_app_config(&AppConfig::default())
+        );
+
+        let overridden = load(
+            &sources,
+            [
+                (
+                    "FRONTEND__TRANSLATION_PO_COMPILATION_MODE".into(),
+                    "precompiled".into(),
+                ),
+                ("I18N__LANGUAGE__DEFAULT_LANGUAGE".into(), "es".into()),
+                (
+                    "I18N__LANGUAGE__LANGUAGE_DETECTION_PRIORITY".into(),
+                    "browser_accept_language id_token_any".into(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+        assert_eq!(
+            overridden.translation_po_compilation_mode,
+            TranslationPoCompilationMode::Precompiled
+        );
+        assert_eq!(overridden.language.default_language, "es");
+        assert_eq!(
+            overridden.language.language_detection_priority,
+            [
+                LanguageDetectionPriority::BrowserAcceptLanguage,
+                LanguageDetectionPriority::IdTokenAny
+            ]
+        );
+    }
+
+    #[test]
+    fn runtime_i18n_rejects_invalid_values() {
+        for contents in [
+            "[frontend]\ntranslation_po_compilation_mode = 'unknown'",
+            "[i18n.language]\ndefault_language = ' '",
+            "[i18n.language]\ndefault_language = '../de'",
+            "[i18n.language]\ndefault_language = 42",
+            "[i18n.language]\nlanguage_detection_priority = ['unknown']",
+            "[i18n.language]\nlanguage_detection_priority = 'id_token_any'",
+        ] {
+            let schema = runtime_sources_with_environment(
+                &[ConfigSourceFile {
+                    source_filename: "erato.toml".into(),
+                    contents: contents.into(),
+                }],
+                app_environment_source().source(Some(Default::default())),
+            )
+            .unwrap();
+            assert!(
+                I18nRuntimeConfig::from_schema(&schema).is_err(),
+                "{contents}"
+            );
+        }
     }
 }
 

@@ -11,8 +11,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
-import { ChatContext } from "@/providers/ChatProvider";
+import { ChatContextProviders } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { testChatValue } from "@/test/chatContextValue";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -92,21 +93,19 @@ const renderCard = (
           audioConversational: { enabled: true, voiceDecisionsEnabled },
         }}
       >
-        <ChatContext.Provider
-          value={
-            {
-              currentChatId: "chat-1",
-              refetchMessages: async () => undefined,
-              continueToolApproval,
-            } as unknown as ChatContextValue
-          }
+        <ChatContextProviders
+          value={testChatValue({
+            currentChatId: "chat-1",
+            refetchMessages: async () => undefined,
+            continueToolApproval,
+          })}
         >
           <McpToolApprovalCard
             messageId="message-1"
             request={part}
             resolution={null}
           />
-        </ChatContext.Provider>
+        </ChatContextProviders>
       </StaticFeatureConfigProvider>
     </QueryClientProvider>,
   );
@@ -212,21 +211,19 @@ describe("changing a card by voice", () => {
       .mockRejectedValue(conflict("card_changed"));
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <ChatContext.Provider
-          value={
-            {
-              currentChatId: "chat-1",
-              refetchMessages,
-              continueToolApproval,
-            } as unknown as ChatContextValue
-          }
+        <ChatContextProviders
+          value={testChatValue({
+            currentChatId: "chat-1",
+            refetchMessages,
+            continueToolApproval,
+          })}
         >
           <McpToolApprovalCard
             messageId="message-1"
             request={request}
             resolution={null}
           />
-        </ChatContext.Provider>
+        </ChatContextProviders>
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByText("Allow once"));

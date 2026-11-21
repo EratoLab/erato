@@ -422,6 +422,8 @@ export {
   useChatContext,
   useChatSession,
   useChatTranscript,
+  useChatTranscriptSelector,
+  useOptionalChatSession,
   type ChatContextValue,
   type ChatSessionValue,
   type ChatTranscriptValue,
