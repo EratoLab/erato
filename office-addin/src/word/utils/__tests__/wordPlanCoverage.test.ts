@@ -6,6 +6,7 @@ import {
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
 import { okResult } from "../../../test/mocks/word/sectionFixtures";
+import { escapeXml } from "../../../utils/escapeXml";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
@@ -146,7 +147,6 @@ async function targetRead(
   };
 }
 
-/** A full plan replacing the blocks with the given texts and keeping the rest. */
 const fullPlan = (
   snapshot: WordAuthoringSnapshot,
   readToken: string,
@@ -306,6 +306,62 @@ describe("a smaller retry that leaves out parts", () => {
       ),
     );
     expect(result.notInProposal).toEqual(["§ 6 Lieferung"]);
+  });
+
+  it("names no section a refused full plan re-emitted as the read showed it, all bold or with runs Word split", async () => {
+    const run = (text: string, bold = false) =>
+      `<w:r>${bold ? "<w:rPr><w:b/></w:rPr>" : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+    const delivery = "Goods are delivered to the Buyer's warehouse.";
+    const invoices = "Invoices are due within 30 days.";
+    const notice = "Either party may terminate with three months' notice.";
+    const s = await targetRead(
+      capture([
+        heading("§ 5 Haftung"),
+        paragraph("Liability is limited to the annual fee."),
+        heading("§ 6 Lieferung"),
+        `<w:p>${run("Goods are ")}${run("delivered", true)}${run(" to the Buyer's ")}<w:proofErr w:type="spellStart"/>${run("warehouse")}<w:proofErr w:type="spellEnd"/>${run(".")}</w:p>`,
+        heading("§ 7 Zahlung"),
+        `<w:p>${run(invoices, true)}</w:p>`,
+        heading("§ 11 Kündigung"),
+        paragraph(notice),
+      ]),
+    );
+    const readToken = await s.completeRead();
+    expect(
+      await s.submit(
+        fullPlan(s.snapshot, readToken, {
+          "Liability is limited to the annual fee.": block("dup", "Capped"),
+          [delivery]: {
+            id: "split",
+            type: "paragraph",
+            text: delivery,
+            runs: [
+              { text: "Goods are " },
+              { text: "delivered", bold: true },
+              { text: " to the Buyer's warehouse." },
+            ],
+          },
+          [invoices]: {
+            id: "bold",
+            type: "paragraph",
+            text: invoices,
+            format: { font: { bold: true } },
+          },
+          [notice]: block("dup", "Ended"),
+        }),
+      ),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "duplicate-id" }],
+    });
+
+    const result = okResult(
+      await s.sparse(
+        rewrite(s.snapshot, ["Liability is limited to the annual fee."]),
+        readToken,
+      ),
+    );
+    expect(result.notInProposal).toEqual(["§ 11 Kündigung"]);
   });
 
   it("names nothing when the retry keeps every part of the refused attempt", async () => {

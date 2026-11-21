@@ -3,6 +3,7 @@ import {
   MAX_NOT_IN_PROPOSAL_NAMES,
 } from "@erato/frontend/word-review";
 
+import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 import {
   START_OF_DOCUMENT,
   wordBlockIndex,
@@ -47,7 +48,8 @@ const LOOK = [
   "format",
 ] as const;
 
-/** A full plan may re-emit untouched text as a replace; that changes nothing a retry could drop. */
+/** A full plan may re-emit untouched text as a replace; that changes nothing a retry could drop.
+ * Compared with the read the model copies; the capture keeps runs the read joins or folds into the font. */
 function unchangedReplace(
   source: string[],
   blocks: unknown[],
@@ -60,14 +62,10 @@ function unchangedReplace(
     source.every((ref, k) => {
       const at = index.get(ref);
       const block = blocks[k];
-      return (
-        at !== undefined &&
-        object(block) &&
-        LOOK.every(
-          (key) =>
-            canonicalWordPlan(block[key]) ===
-            canonicalWordPlan(snapshot.blocks[at][key]),
-        )
+      if (at === undefined || !object(block)) return false;
+      const read = wordReadableSourceBlock(snapshot.blocks[at]);
+      return LOOK.every(
+        (key) => canonicalWordPlan(block[key]) === canonicalWordPlan(read[key]),
       );
     })
   );
