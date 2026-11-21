@@ -391,25 +391,28 @@ export function WordDocumentPlanReview({
             </section>
           )}
           <PlanRows rows={bodyRows} {...rowsProps} />
-          {review.size === "medium" && !restructured && snapshot && (
-            <WordDisclosure
-              className="word-plan-review__section"
-              label={t({
-                id: "officeAddin.word.planReview.showPreview",
-                message: "Preview the result",
-              })}
-              openLabel={t({
-                id: "officeAddin.word.planReview.hidePreview",
-                message: "Hide preview",
-              })}
-            >
-              <WordPlanOutputPreview
-                output={review.output ?? []}
-                snapshot={snapshot}
-                checkInWordShown={review.checkInWord}
-              />
-            </WordDisclosure>
-          )}
+          {review.size === "medium" &&
+            !restructured &&
+            snapshot &&
+            review.output && (
+              <WordDisclosure
+                className="word-plan-review__section"
+                label={t({
+                  id: "officeAddin.word.planReview.showPreview",
+                  message: "Preview the result",
+                })}
+                openLabel={t({
+                  id: "officeAddin.word.planReview.hidePreview",
+                  message: "Hide preview",
+                })}
+              >
+                <WordPlanOutputPreview
+                  output={review.output}
+                  snapshot={snapshot}
+                  checkInWordShown={review.checkInWord}
+                />
+              </WordDisclosure>
+            )}
         </>
       )}
       {!!review.partsRows.length && (

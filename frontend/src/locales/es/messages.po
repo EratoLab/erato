@@ -5293,6 +5293,11 @@ msgstr "{n, plural, one {# elemento más} other {# elementos más}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.originalUnread"
+msgstr "El texto original no se leyó en este chat, así que solo se muestra el texto nuevo. Compáralo en Word."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.pageLayout"
 msgstr "Diseño de página"
 

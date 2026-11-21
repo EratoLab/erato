@@ -207,6 +207,14 @@ function blockTypeLabel(row: WordPlanRowOf<"text">): string {
   return t({ id: "officeAddin.word.planRow.paragraph", message: "Paragraph" });
 }
 
+function originalUnreadText(): string {
+  return t({
+    id: "officeAddin.word.planRow.originalUnread",
+    message:
+      "The original text was not read in this chat, so only the new text is shown. Compare it in Word.",
+  });
+}
+
 function TextDetail({ row, snapshot }: RowProps<"text">) {
   const after = row.after?.text ?? "";
   const { beforeLevel, level } = row;
@@ -221,8 +229,18 @@ function TextDetail({ row, snapshot }: RowProps<"text">) {
         })}
       </p>
     ) : null;
-  if (row.before === undefined && row.after && snapshot)
-    return <WordRichBlockPreview block={row.after} snapshot={snapshot} />;
+  const preview =
+    row.before === undefined && row.after && snapshot ? (
+      <WordRichBlockPreview block={row.after} snapshot={snapshot} />
+    ) : null;
+  if (row.unread)
+    return (
+      <>
+        <p className="word-review__hint">{originalUnreadText()}</p>
+        {preview ?? <TextComparison original={null} proposed={after} />}
+      </>
+    );
+  if (preview) return preview;
   return (
     <>
       {levelChange}
@@ -331,6 +349,30 @@ function moreRowsHint(row: WordPlanRowOf<"table">) {
 }
 
 function TableDetail({ row, snapshot }: RowProps<"table">) {
+  // The cells the plan keeps were never read, so only its own cell edits can be drawn.
+  if (row.unread && row.changedCells.length)
+    return (
+      <ul className="word-review__list">
+        {row.changedCells.map((cell) => (
+          <li key={`${cell.row}:${cell.col}`}>
+            <CellTextEdit before={cell.before} after={cell.after} />
+          </li>
+        ))}
+      </ul>
+    );
+  if (row.unread)
+    return (
+      <>
+        <p className="word-review__hint">{originalUnreadText()}</p>
+        {row.block && snapshot && (
+          <WordTablePreview
+            block={row.block}
+            snapshot={snapshot}
+            maxRows={PLAN_ROW_PREVIEW_ROWS}
+          />
+        )}
+      </>
+    );
   if (row.sameShape)
     return <CellDiffTable row={row} rowIndexes={row.changedRowIndexes} />;
   if (row.block && snapshot)

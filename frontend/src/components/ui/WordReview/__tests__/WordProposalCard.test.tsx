@@ -9,6 +9,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
 } from "@/lib/wordReview/wordDocumentPlan";
+import type { WordHistorySnapshot } from "@/lib/wordReview/wordHistory";
 import type { PropsWithChildren } from "react";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -97,6 +98,36 @@ describe("WordProposalCard", () => {
 
     expect(screen.getByText("From Word")).toBeInTheDocument();
     expect(screen.getByText(/^Saved draft:/)).toBeInTheDocument();
+  });
+
+  it("says which original a partly read chat never read, and copies only the new text", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    const partlyRead: WordHistorySnapshot = {
+      ...snapshot(),
+      blocks: [paragraph("b1", "Context")],
+      read: new Set(["b1"]),
+      revoked: true,
+      used: true,
+      source: "history",
+      partial: { order: ["b1", "b2"], headings: new Map() },
+    };
+    render(<WordProposalCard plan={plan} snapshot={partlyRead} />, {
+      wrapper,
+    });
+
+    expect(screen.queryByText(/^Saved draft:/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Paragraph/ }));
+    expect(
+      screen.getByText(
+        "The original text was not read in this chat, so only the new text is shown. Compare it in Word.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByTestId("text-comparison-diff")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy text" }));
+    expect(writeText).toHaveBeenCalledWith("New ending.");
+    expect(await screen.findByText("Text copied.")).toBeInTheDocument();
   });
 
   it("hands the footer and status to an adapter", () => {

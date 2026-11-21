@@ -14,7 +14,7 @@ import {
   wordSnapshotFromHistory,
   WORD_READ_TOOL,
 } from "../wordHistory";
-import { buildWordPlanReview } from "../wordPlanReview";
+import { buildWordPlanReview, wordPlanText } from "../wordPlanReview";
 import earlierMessage from "./fixtures/history-earlier-message.json";
 import edits from "./fixtures/history-edits.json";
 import multiPage from "./fixtures/history-multi-page.json";
@@ -526,5 +526,379 @@ describe("the Word history proposal", () => {
       ),
     }));
     expect(wordHistoryProposalKey(reads, assistant.content)).not.toBe(key);
+  });
+});
+
+describe("Word plans restored from the parts a turn read", () => {
+  const block = (ref: string, text: string, extra = {}) => ({
+    ref,
+    type: "paragraph",
+    protected: false,
+    text,
+    ...extra,
+  });
+  const heading = (ref: string, text: string, level: number) =>
+    block(ref, text, { type: "heading", level, styleRef: `Heading${level}` });
+  const table = (ref: string, rows: string[][]) =>
+    block(ref, rows.map((r) => r.join("\t")).join("\n"), {
+      type: "native",
+      nativeKind: "table",
+      content: {
+        columns: [2400, 2400],
+        format: {},
+        sourcePatchSupported: true,
+        rows: rows.map((cells, sourceIndex) => ({
+          sourceIndex,
+          format: {},
+          cells: cells.map((text, cellIndex) => ({
+            sourceIndex: cellIndex,
+            text,
+          })),
+        })),
+      },
+    });
+  const document = [
+    block("b1", "Master Services Agreement"),
+    heading("b2", "1 Scope", 1),
+    block("b3", "The Supplier provides the Services."),
+    block("b4", "Changes need a Change Request."),
+    heading("b5", "2 Fees", 1),
+    heading("b6", "2.1 Rates", 2),
+    block("b7", "Fees are invoiced monthly."),
+    block("b8", "Invoices fall due after thirty days."),
+    heading("b9", "3 Liability", 1),
+    block("b10", "Neither Party is liable for indirect loss."),
+    table("b11", [
+      ["Service", "Level"],
+      ["Hosting", "99.5 %"],
+    ]),
+    block("b12", "End."),
+  ];
+  const byRef = new Map(document.map((b) => [b.ref, b]));
+  const outline = (lines: string[]) =>
+    [
+      "Each line: [ref|H<level> heading, S numbered section or P part|size|paragraphs] title",
+      ...lines,
+    ].join("\n");
+  const fullOutline = outline([
+    "[b1|H1|0.1 KiB|1 ¶] (start of document)",
+    "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
+    "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
+    "[b6|H2|0.2 KiB|3 ¶] 2.1 Rates",
+    "[b9|H1|0.2 KiB|3 ¶] 3 Liability",
+  ]);
+  const tool = (
+    name: string,
+    input: Record<string, unknown>,
+    output: Record<string, unknown>,
+  ) =>
+    ({
+      content_type: "tool_use",
+      tool_name: name,
+      tool_call_id: `call-${JSON.stringify(input)}`,
+      status: "success",
+      input: { snapshot: "snap", ...input },
+      output: { status: "success", ...output },
+    }) as unknown as ContentPart;
+  const read = (
+    input: Record<string, unknown>,
+    result: Record<string, unknown>,
+  ) =>
+    tool(
+      WORD_READ_TOOL,
+      { documentIdentity: "doc", ...input },
+      { result: { snapshot: "snap", documentIdentity: "doc", ...result } },
+    );
+  const longText = byRef.get("b8")!.text.split(" ");
+  const sectionRead = read(
+    { section: { ref: "b5" } },
+    {
+      section: { ref: "b5", title: "2 Fees", level: 1, page: 1, pages: 1 },
+      blocks: [
+        byRef.get("b5"),
+        byRef.get("b6"),
+        byRef.get("b7"),
+        {
+          ...byRef.get("b8"),
+          part: 1,
+          parts: 2,
+          text: `${longText.slice(0, 2).join(" ")} `,
+        },
+        {
+          ...byRef.get("b8"),
+          part: 2,
+          parts: 2,
+          text: longText.slice(2).join(" "),
+        },
+      ],
+      nextCursor: null,
+      complete: true,
+      access: "read-only",
+    },
+  );
+  const targetRead = read(
+    { target: { refs: ["b3", "b10", "b10__field_1"] } },
+    {
+      scope: "objects",
+      status: "ready",
+      readToken: "scope-1",
+      targets: [
+        ...["b3", "b10"].map((ref) => ({
+          ref,
+          kind: "paragraph",
+          text: byRef.get(ref)!.text,
+          bodyRef: ref,
+          content: byRef.get(ref),
+        })),
+        {
+          ref: "b10__field_1",
+          kind: "field",
+          text: "PAGE",
+          bodyRef: "b10",
+          objectTarget: "field_1",
+          content: { kind: "field", target: "field_1" },
+        },
+      ],
+      styles: [{ id: "Normal", name: "Normal", type: "paragraph" }],
+    },
+  );
+  const cellRead = read(
+    {
+      table_cell: { sourceRef: "b11", rowLabel: "Hosting", header: "Level" },
+    },
+    {
+      scope: "table-cell",
+      status: "ready",
+      readToken: "cell-1",
+      target: { sourceRef: "b11", rowIndex: 1, cellIndex: 1 },
+    },
+  );
+  const replace = (ref: string, text: string) => ({
+    kind: "replace" as const,
+    source: [ref],
+    blocks: [{ id: `new-${ref}`, type: "paragraph" as const, text }],
+  });
+  const plan: WordDocumentPlan = {
+    version: 1,
+    snapshot: "snap",
+    readToken: "scope-1",
+    scope: "body",
+    entries: document.map((b) =>
+      b.ref === "b3"
+        ? replace("b3", "The Supplier provides the Services with care.")
+        : b.ref === "b7"
+          ? replace("b7", "Fees are invoiced quarterly.")
+          : b.ref === "b10"
+            ? replace("b10", "Neither Party is liable for any indirect loss.")
+            : b.ref === "b11"
+              ? {
+                  kind: "replace" as const,
+                  source: ["b11"],
+                  blocks: [
+                    {
+                      id: "cell-edit-table",
+                      type: "table" as const,
+                      text: "",
+                      sourceRef: "b11",
+                      rows: [0, 1].map((sourceIndex) => ({
+                        sourceIndex,
+                        cells: [0, 1].map((cellIndex) => ({
+                          sourceIndex: cellIndex,
+                          ...(sourceIndex === 1 && cellIndex === 1
+                            ? {
+                                textEdit: {
+                                  expectedText: "99.5 %",
+                                  text: "99.9 %",
+                                },
+                              }
+                            : {}),
+                        })),
+                      })),
+                    },
+                  ],
+                }
+              : { kind: "keep" as const, source: [b.ref] },
+    ),
+    deleted: [],
+  };
+  const submission = tool(
+    "submit_document_plan",
+    {
+      readToken: "scope-1",
+      scoped_edit: { body: [] },
+    },
+    {
+      submission: { status: "accepted", attempts_remaining: 2 },
+      result: {
+        draft_id: `call-${JSON.stringify({ readToken: "scope-1", scoped_edit: { body: [] } })}`,
+        snapshot: "snap",
+        action: "word.apply_document_plan",
+        plan,
+      },
+    },
+  );
+  const turn = (reads: ContentPart[], headingOutline = fullOutline) => {
+    const user = {
+      id: "user-1",
+      role: "user",
+      content: [],
+      action_facet_args: {
+        document_snapshot: "snap",
+        heading_outline: headingOutline,
+      },
+    } as unknown as Message;
+    const answer = {
+      id: "answer-1",
+      role: "assistant",
+      content: [...reads, submission],
+    } as unknown as Message;
+    return wordHistoryProposal([user, answer], answer.content)!;
+  };
+  const changed = (proposal: ReturnType<typeof turn>) =>
+    buildWordPlanReview(proposal.plan, proposal.snapshot)
+      .groups.filter((g) => g.status !== "unchanged")
+      .map((g) => ({
+        heading: g.heading?.text,
+        rows: g.rows.flatMap((r) =>
+          r.family === "text"
+            ? {
+                before: r.before ?? null,
+                after: r.after?.text,
+                unread: !!r.unread,
+              }
+            : r.family === "table"
+              ? {
+                  cells: r.changedCells,
+                  unread: !!r.unread,
+                  sameShape: r.sameShape,
+                }
+              : [],
+        ),
+      }));
+
+  it("rebuilds the blocks those reads returned, in document order", () => {
+    const { snapshot } = turn([cellRead, targetRead, sectionRead]);
+
+    expect(snapshot?.partial?.order).toEqual(document.map((b) => b.ref));
+    expect(snapshot!.blocks.map((b) => b.ref)).toEqual([
+      "b3",
+      "b5",
+      "b6",
+      "b7",
+      "b8",
+      "b10",
+    ]);
+    expect(snapshot!.blocks.find((b) => b.ref === "b8")).toEqual({
+      ...byRef.get("b8"),
+      xml: "",
+    });
+    expect(snapshot!.styles.map((s) => s.id)).toEqual(["Normal"]);
+    expect(wordSnapshotFromHistory([{ content: [sectionRead] }], "snap")).toBe(
+      undefined,
+    );
+  });
+
+  it("shows before and after per changed block under the headings the reads and the outline name", () => {
+    const proposal = turn([sectionRead, targetRead, cellRead]);
+    const review = buildWordPlanReview(proposal.plan, proposal.snapshot);
+
+    expect(review.size).toBe("large");
+    expect(review.riskUnknown).toBe(false);
+    expect(review.output).toBeUndefined();
+    expect(changed(proposal)).toEqual([
+      {
+        heading: "1 Scope",
+        rows: [
+          {
+            before: "The Supplier provides the Services.",
+            after: "The Supplier provides the Services with care.",
+            unread: false,
+          },
+        ],
+      },
+      {
+        heading: "2.1 Rates",
+        rows: [
+          {
+            before: "Fees are invoiced monthly.",
+            after: "Fees are invoiced quarterly.",
+            unread: false,
+          },
+        ],
+      },
+      {
+        heading: "3 Liability",
+        rows: [
+          {
+            before: "Neither Party is liable for indirect loss.",
+            after: "Neither Party is liable for any indirect loss.",
+            unread: false,
+          },
+          {
+            cells: [{ row: 1, col: 1, before: "99.5 %", after: "99.9 %" }],
+            unread: true,
+            sameShape: true,
+          },
+        ],
+      },
+    ]);
+    expect(wordPlanText(proposal.plan, proposal.snapshot)).not.toContain(
+      "Master Services Agreement",
+    );
+  });
+
+  it("says when a changed block was never read", () => {
+    const proposal = turn([sectionRead]);
+
+    expect(changed(proposal).map((g) => g.heading)).toEqual([
+      "1 Scope",
+      "2.1 Rates",
+      "3 Liability",
+    ]);
+    expect(changed(proposal)[0].rows).toEqual([
+      {
+        before: null,
+        after: "The Supplier provides the Services with care.",
+        unread: true,
+      },
+    ]);
+    expect(
+      buildWordPlanReview(proposal.plan, proposal.snapshot).rows.find(
+        (r) => r.key === "output:new-b3",
+      )?.status,
+    ).toBe("changed");
+  });
+
+  it("starts sections only at the levels a shortened outline kept", () => {
+    const proposal = turn(
+      [sectionRead, targetRead],
+      outline([
+        "[b2|H1|0.2 KiB|3 ¶] 1 Scope",
+        "[b5|H1|0.3 KiB|4 ¶] 2 Fees",
+        "[b9|H1|0.2 KiB|3 ¶] 3 Liability",
+        "1 more entry is left out; section:{ref, throughRef} reads any range of blocks.",
+      ]),
+    );
+
+    expect(changed(proposal).map((g) => g.heading)).toEqual([
+      "1 Scope",
+      "2 Fees",
+      "3 Liability",
+    ]);
+  });
+
+  it("keeps the complete read when the turn also read a section", () => {
+    const complete = readPart([{ ...byRef.get("b1"), part: 1, parts: 1 }]);
+    const snapshot = wordSnapshotFromHistory(
+      [{ content: [complete, sectionRead] }],
+      "snap",
+    );
+
+    expect(snapshot?.partial).toBeUndefined();
+    expect(snapshot?.blocks.map((b) => b.ref)).toEqual(["b1"]);
+  });
+
+  it("keeps the plan-only review when the turn read nothing", () => {
+    expect(turn([]).snapshot).toBeUndefined();
   });
 });
