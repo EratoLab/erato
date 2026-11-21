@@ -17,10 +17,13 @@ import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import { wordBlockIndex } from "./wordDocumentOutline";
 import {
+  assembleWordParts,
   finishWordParts,
   wordPartRowLabel,
   wordPartRows,
+  wordPartsChangedInWord,
   wordPartsFinishRejected,
+  wordPartsWithout,
 } from "./wordDocumentParts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
@@ -306,6 +309,24 @@ function createSubmissionExecutor(
           serialized,
           finish.result,
         );
+      // A row changed in Word while Erato wrote it is left out on its own, not the whole change.
+      const changedInWord = finish
+        ? wordPartsChangedInWord(finish.draft, snapshot, session.capture)
+        : new Set<number>();
+      if (finish && changedInWord.size) {
+        const { plan, parts } = wordPartsWithout(
+          finish.draft.plan,
+          finish.draft.parts,
+          { rows: changedInWord, structure: false },
+          snapshot,
+        );
+        finish.assembly = assembleWordParts(
+          snapshot,
+          finish.draft.readToken,
+          plan,
+          parts,
+        );
+      }
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
           ? "scoped_edit"
@@ -351,11 +372,13 @@ function createSubmissionExecutor(
         return { ok: false, error: "Document submission stopped." };
       const redelivery = session.drafts.replay(context.toolCallId, serialized);
       if (redelivery) return redelivery;
-      const changed = wordDocumentChangedRefusal(
-        snapshot,
-        session.capture,
-        kind ? (value as WordDocumentPlan) : "document",
-      );
+      const changed = finish
+        ? undefined
+        : wordDocumentChangedRefusal(
+            snapshot,
+            session.capture,
+            kind ? (value as WordDocumentPlan) : "document",
+          );
       if (changed)
         return session.drafts.remember(context.toolCallId, serialized, changed);
       let result = prepared;
@@ -371,6 +394,13 @@ function createSubmissionExecutor(
         );
         const sectionPlan = finish ? undefined : session.drafts.parts.current;
         const notInProposal = wordNotInProposalGroups([
+          {
+            parts: [...changedInWord].map((r) =>
+              wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+            ),
+            reason:
+              "which changed in Word while you were working, so the card leaves them out",
+          },
           {
             parts: (finish?.unwritten ?? []).map((r) =>
               wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
@@ -406,6 +436,7 @@ function createSubmissionExecutor(
                 ? {
                     rows: wordPartRows(finish.draft, snapshot, {
                       finished: true,
+                      changed: changedInWord,
                     }),
                   }
                 : {}),

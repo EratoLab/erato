@@ -16,11 +16,13 @@ import {
   editedParagraphCount,
   editExcerpt,
   parseWordEdits,
+  WORD_PARTS_FENCE,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import { WordCommentChangesCard } from "./WordCommentChangesCard";
+import { WordDocumentPartsCard } from "./WordDocumentPartsCard";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
@@ -73,6 +75,8 @@ export function WordHostCardRenderer({
   language,
   content,
 }: HostCardCodeBlockProps) {
+  if (language === WORD_PARTS_FENCE)
+    return <WordDocumentPartsCard key={content} callId={content} />;
   const entry = wordActionForFence(language);
   if (!entry) {
     return <RawFence content={content} />;

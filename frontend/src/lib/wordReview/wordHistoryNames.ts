@@ -10,6 +10,8 @@ export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
 export const WORD_EDITS_FENCE = "erato-word-edits";
 export const WORD_INSERT_FENCE = "erato-word-insert";
 export const WORD_PLAN_FENCE = "erato-word-document-plan";
+/** The card of a change in parts while Erato writes it; its content is the section plan's call id. */
+export const WORD_PARTS_FENCE = "erato-word-document-parts";
 export const WORD_REPLACE_FENCE = "erato-word-replace";
 
 /** The action facets a Word request is sent under. */

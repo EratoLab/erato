@@ -1,0 +1,320 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  wordPartSourceIndexes,
+  wordPartsLayout,
+  wordPartsProgress,
+  wordPartsSectionPlanCall,
+} from "../wordPartsProgress";
+
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+type Row = { source: string; action: string; title?: string };
+
+const tool = (
+  id: string,
+  name: string,
+  status: string,
+  input: unknown,
+  output?: unknown,
+) =>
+  ({
+    content_type: "tool_use",
+    tool_call_id: id,
+    tool_name: name,
+    status,
+    input,
+    output: output ?? null,
+  }) as unknown as ContentPart;
+
+function sectionPlan(
+  rows: Row[],
+  titles: string[],
+  {
+    id = "plan",
+    status = (r: Row): string =>
+      r.action === "rewrite"
+        ? "waiting"
+        : r.action === "delete"
+          ? "deleted"
+          : "kept",
+  }: { id?: string; status?: (r: Row) => string } = {},
+) {
+  return tool(
+    id,
+    "plan_document_sections",
+    "success",
+    { snapshot: "s", readToken: "t", intent: "Plain wording.", rows },
+    {
+      status: "success",
+      result: {
+        draft_id: "draft-1",
+        revision: 1,
+        rows: rows.map((row, k) => ({
+          row: k + 1,
+          action: row.action,
+          title: titles[k],
+          ...(row.title ? { new_title: row.title } : {}),
+          paragraphs: 1,
+          status: status(row),
+        })),
+      },
+    },
+  );
+}
+
+const accepted = (id: string, row: number) =>
+  tool(
+    id,
+    "write_document_section",
+    "success",
+    { snapshot: "s", draft_id: "draft-1", row, ops: [] },
+    {
+      status: "success",
+      result: { draft_id: "draft-1", revision: 2, row, status: "ready" },
+      part: { tries_remaining: 2, calls_remaining: 30 },
+    },
+  );
+
+const SIX: Row[] = [1, 2, 3, 4, 5, 6].map((n) => ({
+  source: `b${n * 10 - 9}-b${n * 10}`,
+  action: "rewrite",
+}));
+const SIX_TITLES = SIX.map((_, k) => `§ ${k + 1} Section ${k + 1}`);
+
+describe("the parts card's rows", () => {
+  it("shows every row of a six-section plan as soon as the plan is accepted", () => {
+    const content = [sectionPlan(SIX, SIX_TITLES)];
+    const progress = wordPartsProgress(content, true)!;
+    expect(wordPartsSectionPlanCall(content)).toBe("plan");
+    expect(progress.rows.map((row) => [row.title, row.state])).toEqual(
+      SIX_TITLES.map((title) => [title, "waiting"]),
+    );
+    expect(progress).toMatchObject({
+      callId: "plan",
+      intent: "Plain wording.",
+      finishing: false,
+      stopped: false,
+    });
+    expect(progress.structure).toBeUndefined();
+  });
+
+  it("goes Waiting, Writing, Checking, Ready, and a quiet fix shows as Writing", () => {
+    const content = [
+      sectionPlan(SIX, SIX_TITLES),
+      accepted("p1", 1),
+      tool("p2", "write_document_section", "error", {
+        snapshot: "s",
+        draft_id: "draft-1",
+        row: 2,
+        ops: [],
+      }),
+      tool("p3", "write_document_section", "in_progress", {
+        snapshot: "s",
+        draft_id: "draft-1",
+        row: 3,
+        ops: [],
+      }),
+      tool(
+        "p4",
+        "write_document_section",
+        "preparing",
+        '{"snapshot":"s","draft_id":"draft-1","row":4,"ops":[{"keep":"b31',
+      ),
+    ];
+    const states = (generating: boolean) =>
+      wordPartsProgress(content, generating)!.rows.map((row) => row.state);
+    expect(states(true)).toEqual([
+      "ready",
+      "writing",
+      "checking",
+      "writing",
+      "waiting",
+      "waiting",
+    ]);
+    expect(states(false)).toEqual([
+      "ready",
+      "not-written",
+      "not-written",
+      "not-written",
+      "not-written",
+      "not-written",
+    ]);
+    expect(wordPartsProgress(content, false)!.stopped).toBe(true);
+  });
+
+  it("keeps a row ready when a resend of it is refused, and shows the resend while it runs", () => {
+    const resend = tool("p1b", "write_document_section", "error", {
+      snapshot: "s",
+      draft_id: "draft-1",
+      row: 1,
+      ops: [],
+    });
+    const content = [sectionPlan(SIX, SIX_TITLES), accepted("p1", 1), resend];
+    expect(wordPartsProgress(content, true)!.rows[0].state).toBe("writing");
+    expect(wordPartsProgress(content, false)!.rows[0].state).toBe("ready");
+  });
+
+  it("names the moves, merges and renames of the structure by the rows' own titles", () => {
+    const rows: Row[] = [
+      { source: "b1-b10", action: "keep" },
+      { source: "b31-b40", action: "keep", title: "§ 2 Lagerung" },
+      { source: "b21-b30", action: "rewrite" },
+      { source: "b11-b20", action: "keep", title: "§ 4 Abnahme" },
+      { source: "b41-b45,b51-b55", action: "rewrite" },
+      { source: "b46-b50", action: "delete" },
+      { source: "b56-b60", action: "keep" },
+    ];
+    const titles = [
+      "§ 1 Gegenstand",
+      "§ 4 Lagerung",
+      "§ 3 Lieferung",
+      "§ 2 Abnahme",
+      "§ 5 Haftung, § 7 Gewährleistung",
+      "§ 6 Sonstiges",
+      "§ 8 Schluss",
+    ];
+    const progress = wordPartsProgress([sectionPlan(rows, titles)], true)!;
+    expect(progress.rows.map((row) => [row.title, row.state])).toEqual([
+      ["§ 3 Lieferung", "waiting"],
+      ["§ 5 Haftung, § 7 Gewährleistung", "waiting"],
+      ["§ 6 Sonstiges", "ready"],
+    ]);
+    expect(progress.structure).toEqual({
+      moves: [
+        { row: 2, title: "§ 4 Lagerung", after: "§ 1 Gegenstand" },
+        { row: 3, title: "§ 3 Lieferung", after: "§ 2 Lagerung" },
+      ],
+      merges: [{ row: 5, title: "§ 5 Haftung, § 7 Gewährleistung" }],
+      renames: [
+        { row: 2, title: "§ 4 Lagerung", newTitle: "§ 2 Lagerung" },
+        { row: 4, title: "§ 2 Abnahme", newTitle: "§ 4 Abnahme" },
+      ],
+    });
+  });
+
+  it("takes the finish receipt's word for rows not written or changed in Word", () => {
+    const finish = tool(
+      "finish",
+      "submit_document_plan",
+      "success",
+      {
+        snapshot: "s",
+        readToken: "t",
+        draft_id: "draft-1",
+        revision: 4,
+        finish: true,
+      },
+      {
+        status: "success",
+        submission: { status: "accepted" },
+        result: {
+          draft_id: "finish",
+          snapshot: "s",
+          action: "word.apply_document_plan",
+          rows: SIX.map((_, k) => ({
+            row: k + 1,
+            action: "rewrite",
+            title: SIX_TITLES[k],
+            paragraphs: 10,
+            status:
+              k === 1 ? "changed_in_word" : k === 5 ? "not_written" : "ready",
+          })),
+        },
+      },
+    );
+    const content = [
+      sectionPlan(SIX, SIX_TITLES),
+      ...[1, 2, 3, 4, 5].map((row) => accepted(`p${row}`, row)),
+      finish,
+    ];
+    const progress = wordPartsProgress(content, false)!;
+    expect(progress.finished).toBe("finish");
+    expect(progress.stopped).toBe(false);
+    expect(progress.rows.map((row) => row.state)).toEqual([
+      "ready",
+      "changed-in-word",
+      "ready",
+      "ready",
+      "ready",
+      "not-written",
+    ]);
+  });
+
+  it("says when the finish is being checked, and follows only the latest section plan", () => {
+    const replanned = sectionPlan(SIX.slice(0, 2), SIX_TITLES.slice(0, 2), {
+      id: "plan-2",
+      status: (row) => (row.source === "b1-b10" ? "ready" : "waiting"),
+    });
+    const content = [
+      sectionPlan(SIX, SIX_TITLES),
+      accepted("p1", 1),
+      accepted("p3", 3),
+      replanned,
+      tool(
+        "finish",
+        "submit_document_plan",
+        "preparing",
+        '{"snapshot":"s","readToken":"t","draft_id":"draft-1","revision":3,"finish":true}',
+      ),
+    ];
+    const progress = wordPartsProgress(content, true)!;
+    expect(progress.callId).toBe("plan-2");
+    expect(progress.rows.map((row) => row.state)).toEqual(["ready", "waiting"]);
+    expect(progress.finishing).toBe(true);
+    expect(wordPartsProgress(content, false)!.finishing).toBe(false);
+  });
+
+  it("is absent without an accepted section plan", () => {
+    const refused = tool(
+      "plan",
+      "plan_document_sections",
+      "error",
+      {},
+      {
+        status: "error",
+        validation_errors: [],
+      },
+    );
+    expect(wordPartsProgress([refused], true)).toBeUndefined();
+    expect(wordPartsSectionPlanCall([refused])).toBeUndefined();
+  });
+});
+
+describe("the section plan's layout", () => {
+  it("counts the probe's two moves and no move for a delete row or an adjacent merge", () => {
+    const rows = [
+      "b1-b98",
+      "b179-b214",
+      "b99-b143",
+      "b144-b178",
+      "b350-b380",
+      "b215-b306",
+      "b307-b349",
+      "b381-b422",
+    ].map((source) => ({
+      action: "rewrite",
+      refs: wordPartSourceIndexes(source)!,
+    }));
+    expect(wordPartsLayout(rows)).toEqual({
+      moved: [1, 4],
+      merged: [],
+      renamed: [],
+    });
+    expect(
+      wordPartsLayout([
+        { action: "delete", refs: [9] },
+        { action: "keep", refs: [0, 1] },
+        { action: "rewrite", refs: [2, 3, 4] },
+      ]).moved,
+    ).toEqual([]);
+  });
+
+  it("reads refs and ranges and refuses anything else", () => {
+    expect(wordPartSourceIndexes("b2-b4, b7")).toEqual([1, 2, 3, 6]);
+    expect(wordPartSourceIndexes("b4–b5")).toEqual([3, 4]);
+    expect(wordPartSourceIndexes("b4-b2")).toBeUndefined();
+    expect(wordPartSourceIndexes("t1")).toBeUndefined();
+    expect(wordPartSourceIndexes(3)).toBeUndefined();
+  });
+});

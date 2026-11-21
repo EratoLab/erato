@@ -5329,6 +5329,36 @@ msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zw
 #~ msgstr "Szerokość strony"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.applyLater"
+msgstr "Zmianę można zastosować, gdy Erato skończy."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.parts.consent"
+msgstr "Zastosować zmiany sprawdzone poniżej?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.label"
+msgstr "Zmiany dokumentu w częściach"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.stopped"
+msgstr "Erato przerwał przed zakończeniem, więc nie ma nic do zastosowania."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleStopped"
+msgstr "Zmiany niedokończone"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleWriting"
+msgstr "Pisanie zmian"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Wstaw akapity"

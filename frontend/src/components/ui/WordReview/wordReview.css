@@ -269,3 +269,40 @@
   padding: 0 var(--theme-spacing-message-padding-x)
     var(--theme-spacing-message-padding-y);
 }
+
+/* A change in parts: one flat list the chat scrolls, never a scroll box of its own, so twenty
+   rows read in a 360 px pane. */
+.word-parts__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--review-line);
+  min-width: 0;
+}
+.word-parts__top:empty {
+  display: none;
+}
+.word-parts__rows .word-review__row-toggle {
+  overflow-wrap: anywhere;
+}
+.word-parts__rows .word-review__list {
+  max-height: none;
+  overflow: visible;
+}
+.word-parts__changes {
+  border: 1px solid var(--review-line);
+  border-radius: var(--theme-radius-control);
+}
+.word-parts__lines {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 1.25rem;
+  font-size: var(--theme-font-size-sm);
+  line-height: var(--theme-line-height-sm);
+  letter-spacing: var(--theme-letter-spacing-sm);
+  overflow-wrap: anywhere;
+}
+.word-parts__gap {
+  padding-block-start: var(--theme-spacing-message-padding-y);
+}

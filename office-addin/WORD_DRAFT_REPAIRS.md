@@ -83,3 +83,20 @@ names the row to send again; the same refusal twice at one revision ends the
 step. The section draft has the read session's lifetime, like the repair draft.
 The read contract describes the part tools on every complete read, since the
 pane does not know which tools a request offers.
+
+From the accepted section plan on, the message's card shows its rows
+(ERMAIN-1297): a Structure row for moves, merges of blocks from different
+places and renamed headings, then one row per rewrite or delete row, named by
+the document's own titles. Rows go Waiting, Writing, Checking, Ready from the
+stored calls (`wordPartsProgress` in the frontend library); a refused part
+reads as Writing while the turn runs. After the finish the plan card shows the
+same rows, with Apply on top. The pane rebuilds the draft from the stored calls
+(`wordPartsFromContent`) and offers Leave out only when that draft assembles to
+the accepted plan exactly: Apply then writes the plan with the left-out rows
+kept as they were (`wordPartsWithout`). Leaving out the reordering also puts
+the rows back in document order and leaves out the renames and the merges of
+blocks apart, so the rest takes the in-place route where it qualifies. At
+finish, a row the draft changes whose blocks the user or a co-author changed
+in Word since the capture is left out on its own, as `changed_in_word` in
+`result.rows` and named in `notInProposal`, instead of refusing the whole
+change; changes elsewhere are left to Apply's live check.

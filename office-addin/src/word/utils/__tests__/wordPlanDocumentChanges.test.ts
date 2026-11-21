@@ -19,6 +19,7 @@ import {
   resetWordChangeJournalForTests,
   wordChangePosition,
 } from "../wordChangeJournal";
+import { createWordDocumentPartExecutors } from "../wordDocumentPartTools";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
@@ -311,6 +312,93 @@ describe("a plan that writes what changed since the capture", () => {
         doc.snapshot,
       ),
     ]).toEqual([refs.indexOf(moved)]);
+  });
+
+  it("leaves a section of a change in parts out on its own when it changed in Word", async () => {
+    const { readToken } = okResult<{ readToken: string }>(
+      await doc.session.execute(
+        { snapshot: doc.snapshot.token, cursor: null },
+        { ...context, toolCallId: `read-${++call}` },
+      ),
+    );
+    const parts = createWordDocumentPartExecutors(doc.session);
+    const at = (text: string) => refOf(doc.snapshot, text);
+    const step = { ...context };
+    const planned = okResult<{ draft_id: string }>(
+      await parts.plan(
+        {
+          snapshot: doc.snapshot.token,
+          readToken,
+          intent: "Plainer wording.",
+          rows: [
+            { source: "b1-b2", action: "rewrite", change: "Plainer." },
+            { source: "b3-b6", action: "keep" },
+            { source: "b7-b9", action: "rewrite", change: "Plainer." },
+          ],
+        },
+        { ...step, toolCallId: `plan-${++call}` },
+      ),
+    );
+    let revision = 0;
+    for (const [row, ref, text] of [
+      [
+        1,
+        at("The Supplier provides the services."),
+        "The Supplier does the work.",
+      ],
+      [
+        3,
+        at("Liability is limited to the annual fee."),
+        "Liability stops at the fee.",
+      ],
+    ] as const) {
+      const first = row === 1 ? "b1" : "b7";
+      const last = row === 1 ? "b2" : "b9";
+      const rest = row === 1 ? [] : [{ keep: last }];
+      ({ revision } = okResult<{ revision: number }>(
+        await parts.write(
+          {
+            snapshot: doc.snapshot.token,
+            draft_id: planned.draft_id,
+            row,
+            ops: [{ keep: first }, { replace: ref, text }, ...rest],
+          },
+          { ...step, toolCallId: `part-${++call}` },
+        ),
+      ));
+    }
+    changed(idsOf("Liability is limited to the annual fee."));
+
+    const finished = await submit(
+      {
+        snapshot: doc.snapshot.token,
+        readToken,
+        draft_id: planned.draft_id,
+        revision,
+        finish: true,
+      },
+      { ...context, toolCallId: `submit-${++call}` },
+    );
+
+    const result = okResult<{
+      plan: { entries: { kind: string; blocks?: { text: string }[] }[] };
+      rows: { title: string; status: string }[];
+      notInProposal: string[];
+      notInProposalNote: string;
+    }>(finished);
+    expect(result.rows.map((row) => [row.title, row.status])).toEqual([
+      ["§ 1 Gegenstand", "ready"],
+      ["§ 2 Leistungen", "kept"],
+      ["§ 3 Haftung", "changed_in_word"],
+    ]);
+    const written = result.plan.entries.flatMap((entry) =>
+      (entry.blocks ?? []).map((block) => block.text),
+    );
+    expect(written).toEqual(["The Supplier does the work."]);
+    expect(result.notInProposal).toEqual(["§ 3 Haftung"]);
+    expect(result.notInProposalNote).toContain(
+      '"§ 3 Haftung", which changed in Word while you were working',
+    );
   });
 
   it("refuses a whole-document plan for a change anywhere, and stages it otherwise", async () => {
