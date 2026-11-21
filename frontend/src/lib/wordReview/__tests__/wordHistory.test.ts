@@ -1148,6 +1148,33 @@ describe("Word plans restored from the parts a turn read", () => {
     expect(snapshot?.blocks.map((b) => b.ref)).toEqual(["b1"]);
   });
 
+  const asReplayRecord = (part: ContentPart) =>
+    ({
+      ...part,
+      input: {
+        omitted_from_replay: "note",
+        kept: (part as { input: unknown }).input,
+      },
+    }) as unknown as ContentPart;
+
+  it("keeps the complete read when a later section read was sent as a replay record", () => {
+    const complete = readPart([{ ...byRef.get("b1"), part: 1, parts: 1 }]);
+    const snapshot = wordSnapshotFromHistory(
+      [{ content: [complete, asReplayRecord(sectionRead)] }],
+      "snap",
+    );
+
+    expect(snapshot?.partial).toBeUndefined();
+    expect(snapshot?.blocks.map((b) => b.ref)).toEqual(["b1"]);
+  });
+
+  it("rebuilds a section read sent as a replay record like the plain read", () => {
+    const { snapshot } = turn([asReplayRecord(sectionRead)]);
+
+    expect(snapshot?.partial).toBeDefined();
+    expect(snapshot).toEqual(turn([sectionRead]).snapshot);
+  });
+
   it("keeps the plan-only review when the turn read nothing", () => {
     expect(turn([]).snapshot).toBeUndefined();
   });
