@@ -43,6 +43,7 @@ pub mod mcp_surface;
 mod mcp_token_exchange;
 pub mod mcp_tool_annotations;
 pub mod mcp_tool_approval;
+pub mod mcp_tool_names;
 pub mod mcp_transports;
 pub mod mcp_wait;
 pub mod ms_graph;

@@ -597,6 +597,13 @@ pub struct ToolDisplayMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub server_name: Option<String>,
+    /// The tool's own name on its MCP server, set only when the model calls
+    /// it by a name qualified with the server because another server or one
+    /// of Erato's own tools has the same name. The call's `tool_name` is then
+    /// that qualified name; show this one instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub tool_name: Option<String>,
     /// What this call does to what, and where. Absent on client tools and
     /// older rows, which render as before.
     #[serde(
@@ -1667,7 +1674,15 @@ pub struct ChildWaitingFor {
 pub struct ApprovalItem {
     pub approval_id: String,
     pub tool_call_id: String,
+    /// The tool as its MCP server or Erato names it: what the card shows and
+    /// a standing decision is stored for.
     pub tool_name: String,
+    /// The name the model called the tool by, set only where it is not
+    /// `tool_name`: a name qualified with the MCP server. The continued call
+    /// is stored and replayed under it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub called_as: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<ToolDisplayMetadata>,
     pub input: JsonValue,
@@ -1734,11 +1749,19 @@ impl ContentPartToolApprovalRequest {
             approval_id: self.tool_call_id.clone(),
             tool_call_id: self.tool_call_id.clone(),
             tool_name: self.tool_name.clone(),
+            called_as: None,
             display: self.display.clone(),
             input: self.input.clone(),
             child: None,
             replaces_approval_id: None,
         }]
+    }
+}
+
+impl ApprovalItem {
+    /// The name the model called the tool by.
+    pub fn called_name(&self) -> &str {
+        self.called_as.as_deref().unwrap_or(&self.tool_name)
     }
 }
 
