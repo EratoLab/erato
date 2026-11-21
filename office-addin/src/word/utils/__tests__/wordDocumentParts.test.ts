@@ -6,10 +6,11 @@ import {
   validateWordDocumentPlan,
   WORD_SUBMIT_PLAN_TOOL,
 } from "@erato/frontend/word-review";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { wordDocumentFileToOoxml } from "../wordDocumentPackage";
 import { createWordDocumentPartExecutors } from "../wordDocumentPartTools";
+import { finishWordParts, wordPartsFinishRejected } from "../wordDocumentParts";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
@@ -71,13 +72,15 @@ async function open() {
     readToken: readToken!,
     plan: (input: Record<string, unknown>) =>
       parts.plan({ ...base, readToken, ...input }, context()),
-    write: (draft: string, row: number, ops: unknown) =>
-      parts.write({ ...base, draft_id: draft, row, ops }, context()),
+    write: (draft: string, row: number, ops: unknown, call = context()) =>
+      parts.write({ ...base, draft_id: draft, row, ops }, call),
     finish: (draft: string, revision: number, call = context()) =>
       submit(
         { ...base, readToken, draft_id: draft, revision, finish: true },
         call,
       ),
+    submit: (input: Record<string, unknown>) =>
+      submit({ ...base, readToken, ...input }, context()),
   };
 }
 
@@ -98,16 +101,18 @@ const rejection = (result: ClientToolExecutionResult) => {
 
 // Every call runs the shipping compile and verification on a 422-block document.
 describe("a large change in parts", { timeout: 30_000 }, () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("replays the probe's whole restructure (T1) into one accepted, valid plan", async () => {
     const doc = await open();
     const planned = receipt(await doc.plan(T1.plan));
     expect(planned.rows.map((row) => [row.title, row.status])).toEqual([
-      ["Rahmenliefervertrag RV-2026-117", "kept"],
+      ["Rahmenliefervertrag RV-2026-117 – § 3 Leistungsumfang", "kept"],
       ["§ 7 Preise und Zahlungsbedingungen", "kept"],
       ["§ 5 Bestellungen und Abrufe", "waiting"],
       ["§ 6 Lieferung und Logistik", "waiting"],
       ["§ 12 Notfall- und Eskalationsmanagement", "waiting"],
-      ["§ 8 Qualitätssicherung", "waiting"],
+      ["§ 8 Qualitätssicherung – § 10 Haftung", "waiting"],
       ["§ 11 Datenschutz und Informationssicherheit", "waiting"],
       ["§ 13 Laufzeit, Kündigung und Schlussbestimmungen", "kept"],
     ]);
@@ -142,6 +147,14 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
       ]),
     });
     expect(table?.type === "table" && table.rows).toHaveLength(6);
+    // The document's Table Grid gives a header row no look of its own.
+    expect(table).toMatchObject({ format: { styleRef: "TableGrid" } });
+    const header = table?.type === "table" ? table.rows[0].cells : [];
+    expect(
+      header.flatMap((cell) =>
+        (cell.blocks ?? []).flatMap((block) => block.runs ?? []),
+      ),
+    ).toEqual(header.map(() => expect.objectContaining({ bold: true })));
 
     const part = {
       content_type: "tool_use",
@@ -322,6 +335,187 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     expect(
       plan.entries.some((e) => e.kind === "keep" && e.source.includes("b309")),
     ).toBe(true);
+  });
+
+  it("names the row of a refused finish, ends the step on the same refusal and takes a new part as progress", async () => {
+    const doc = await open();
+    let { draft_id, revision } = receipt(await doc.plan(T1.plan));
+    for (const part of T1.parts)
+      ({ draft_id, revision } = receipt(
+        await doc.write(draft_id, part.row, part.ops),
+      ));
+    const input = {
+      snapshot: doc.snapshot.token,
+      readToken: doc.readToken,
+      draft_id,
+      revision,
+      finish: true,
+    };
+    const finish = finishWordParts(
+      input,
+      doc.snapshot,
+      doc.session.drafts.parts,
+    );
+    if (!finish.ok) throw new Error("fixture");
+    const entry = finish.assembly.entries.findIndex(
+      (origin) =>
+        origin.row === 4 && "op" in origin && origin.field === "replace",
+    );
+    expect(
+      wordPartsFinishRejected(
+        {
+          ok: false,
+          error: "Document plan validation failed.",
+          validationErrors: [
+            {
+              path: `/entries/${entry}/blocks/0/text`,
+              code: "numbers",
+              message: "A deadline changed.",
+            },
+          ],
+        },
+        finish,
+        doc.snapshot,
+      ),
+    ).toMatchObject({
+      validationErrors: [
+        {
+          path: "",
+          code: "numbers",
+          message:
+            "Row 5 (§ 12 Notfall- und Eskalationsmanagement), at /ops/1/text line 1: A deadline changed. Send row 5 again with write_document_section.",
+        },
+      ],
+    });
+
+    doc.snapshot.trackingMode = "TrackAll";
+    const refused = rejection(await doc.finish(draft_id, revision));
+    expect(refused?.validationErrors?.[0]).toMatchObject({
+      code: "tracking-needs-import",
+      message: expect.stringMatching(/^The section plan and its parts: /),
+    });
+    expect(refused?.submissionFeedback?.terminal).toBe(false);
+    expect(rejection(await doc.finish(draft_id, revision))).toMatchObject({
+      validationErrors: [
+        { code: "no-progress" },
+        { code: "tracking-needs-import" },
+      ],
+      submissionFeedback: { terminal: true },
+    });
+
+    doc.snapshot.trackingMode = "Off";
+    ({ revision } = receipt(await doc.write(draft_id, 5, T1.parts[2].ops)));
+    doc.snapshot.trackingMode = "TrackAll";
+    expect(
+      rejection(await doc.finish(draft_id, revision))?.submissionFeedback
+        ?.terminal,
+    ).toBe(false);
+  });
+
+  it("names the rows a section plan announced when a smaller change is accepted instead", async () => {
+    const doc = await open();
+    receipt(await doc.plan(T1.plan));
+    const accepted = await doc.submit({
+      scoped_edit: {
+        body: [
+          {
+            operation: "replace",
+            source: ["b101"],
+            blocks: [{ id: "n1", type: "paragraph", text: "Neu." }],
+          },
+        ],
+      },
+    });
+    expect(accepted.ok).toBe(true);
+    const result = (accepted as { result: Record<string, unknown> }).result;
+    expect(result.notInProposal).toEqual(
+      expect.arrayContaining([
+        "§ 6 Lieferung und Logistik",
+        "§ 12 Notfall- und Eskalationsmanagement",
+        "§ 11 Datenschutz und Informationssicherheit",
+      ]),
+    );
+    expect(result.notInProposalNote).toMatch(
+      /which the section plan of this request announced\./,
+    );
+  });
+
+  it("checks parts that overlap one after the other", async () => {
+    const doc = await open();
+    const { draft_id } = receipt(await doc.plan(T1.plan));
+    const [first, second] = await Promise.all(
+      T1.parts
+        .slice(0, 2)
+        .map((part) => doc.write(draft_id, part.row, part.ops)),
+    );
+    expect([receipt(first).revision, receipt(second).revision]).toEqual([2, 3]);
+    expect(receipt(second).rows_left).toEqual([5, 6, 7]);
+  });
+
+  it("refuses on arrival a part that Word for the web could only write by replacing the whole document", async () => {
+    vi.stubGlobal("Office", {
+      context: {
+        diagnostics: { platform: "OfficeOnline" },
+        requirements: { isSetSupported: () => true },
+        document: { getFileAsync: () => undefined },
+      },
+    });
+    const doc = await open();
+    expect(
+      rejection(await doc.plan(T1.plan))?.validationErrors?.[0],
+    ).toMatchObject({ code: "web-needs-whole-document" });
+    const { draft_id } = receipt(
+      await doc.plan({
+        ...T1.plan,
+        rows: [
+          { source: "b1-b100", action: "keep" },
+          { source: "b101", action: "rewrite", change: "As a list." },
+          { source: "b102-b422", action: "keep" },
+        ],
+      }),
+    );
+    expect(
+      rejection(
+        await doc.write(draft_id, 2, [
+          { replace: "b101", text: "- eins\n- zwei" },
+        ]),
+      )?.validationErrors?.[0],
+    ).toMatchObject({ code: "web-needs-whole-document" });
+  });
+
+  it("says a pane without this request's read cannot write a part", async () => {
+    const doc = await open();
+    const { draft_id } = receipt(await doc.plan(T1.plan));
+    expect(
+      await doc.write(draft_id, 3, T1.parts[0].ops, {
+        chatId: "chat-B",
+        messageId: "message-B",
+        toolCallId: "other",
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ path: "/snapshot", code: "wrong-request" }],
+      submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+    });
+  });
+
+  it("renames only the heading a keep row starts with", async () => {
+    const doc = await open();
+    const rows = [
+      { source: "b1-b100", action: "keep" },
+      { source: "b101-b178", action: "keep", title: "Neuer Titel" },
+      { source: "b179-b422", action: "keep" },
+    ];
+    expect(
+      rejection(await doc.plan({ ...T1.plan, rows }))?.validationErrors,
+    ).toEqual([
+      {
+        path: "/rows/1/title",
+        code: "row-shape",
+        message:
+          "title renames the heading a keep row starts with, and this row starts with other text; start the row at its heading, or rewrite the row.",
+      },
+    ]);
   });
 
   it("keeps the parts of unchanged rows when the section plan is sent again", async () => {

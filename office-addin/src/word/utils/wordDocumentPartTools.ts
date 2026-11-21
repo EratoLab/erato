@@ -11,8 +11,14 @@ import {
   wordPartRowTitle,
   wordUnwrittenRows,
 } from "./wordDocumentParts";
-import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
-import { prepareWordDocumentSubmission } from "./wordDocumentSubmission";
+import {
+  captureUnavailable,
+  WORD_NO_REQUEST_SESSION_MESSAGE,
+} from "./wordDocumentReadTool";
+import {
+  prepareWordDocumentSubmission,
+  wordSubmissionRecovery,
+} from "./wordDocumentSubmission";
 import { wordCompleteReadToken } from "./wordScopedSubmission";
 
 import type { WordPartsAssembly, WordPartsDraft } from "./wordDocumentParts";
@@ -51,29 +57,31 @@ type Step = (
   context: ClientToolCallContext,
 ) => Promise<ClientToolExecutionResult>;
 
-/**
- * Part calls run like a submission: on this request's capture, idempotent by tool call, and a
- * refusal always carries diagnostics, since the backend ends the step on a bare error. A part is
- * no attempt, so nothing here ends the step except a capture that is gone.
- */
+/** A refusal always carries diagnostics, since the backend ends the step on a bare error; a part
+ * is no attempt, so only a capture that is gone ends the step here. */
 function partExecutor(
   session: WordDocumentReadSession,
   step: Step,
 ): ClientToolExecutor {
   return async (input, context) => {
     if (!context || context.signal?.aborted)
-      return unavailable("Document part unavailable or stopped.");
+      return { ...captureUnavailable(), error: "Document part stopped." };
     const snapshot = session.snapshotForSubmission(context);
     if (!snapshot)
-      return unavailable(
-        "This request has no completed document read.",
-        WORD_NO_REQUEST_SESSION_MESSAGE,
-      );
+      return {
+        ok: false,
+        error: "This request has no completed document read.",
+        validationErrors: [
+          {
+            path: "/snapshot",
+            code: "wrong-request",
+            message: WORD_NO_REQUEST_SESSION_MESSAGE,
+          },
+        ],
+        submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+      };
     if (snapshot.revoked || snapshot.used || snapshot.issue)
-      return unavailable(
-        "This document capture is no longer available.",
-        "Start a new request with the document included.",
-      );
+      return captureUnavailable();
     if (!object(input))
       return refusal("", "part-shape", "Expected JSON arguments.");
     const serialized = JSON.stringify(input);
@@ -103,38 +111,19 @@ function partExecutor(
       session.snapshotForSubmission(context) !== snapshot ||
       snapshot.revoked
     )
-      return unavailable("Document part stopped.");
+      return { ...captureUnavailable(), error: "Document part stopped." };
     if (!result.ok)
       result = {
         ...result,
         submissionFeedback: {
           terminal: false,
-          recovery: result.validationErrors?.some(
-            ({ path }) => path === "/readToken",
-          )
-            ? "read_current_context"
-            : "repair_arguments",
+          recovery: wordSubmissionRecovery(result.validationErrors),
         },
       };
     return session.drafts.remember(context.toolCallId, serialized, result);
   };
 }
 
-function unavailable(
-  error: string,
-  message = "Start a new request with the document included.",
-): ClientToolExecutionResult {
-  return {
-    ok: false,
-    error,
-    validationErrors: [
-      { path: "/snapshot", code: "capture-unavailable", message },
-    ],
-    submissionFeedback: { terminal: true, recovery: "cannot_continue" },
-  };
-}
-
-/** The shipping pipeline on an assembled plan; its diagnostics, mapped, when it refuses. */
 async function check(
   assembly: WordPartsAssembly,
   focus: Parameters<typeof wordPartIssues>[2],
@@ -143,10 +132,13 @@ async function check(
   context: ClientToolCallContext,
   session: WordDocumentReadSession,
 ): Promise<ClientToolExecutionResult | undefined> {
+  // Checked as a sparse change is: a host that never imports the whole document refuses a part
+  // that needs it now, not on the card after every part is written.
   const prepared = await prepareWordDocumentSubmission(
     assembly.plan,
     context,
     session,
+    { inPlaceOnly: true },
   );
   if (prepared.ok) return undefined;
   const issues = prepared.validationErrors?.length
@@ -182,7 +174,6 @@ const nextStep = (draft: WordPartsDraft) => {
   };
 };
 
-/** `plan_document_sections`: opens the draft, or replaces its section plan. */
 function planStep(session: WordDocumentReadSession): Step {
   return async (input, snapshot, context) => {
     if (!wordCompleteReadToken(snapshot, input.readToken))
@@ -234,7 +225,6 @@ function planStep(session: WordDocumentReadSession): Step {
   };
 }
 
-/** `write_document_section`: adds or replaces one rewrite row's part. */
 function writeStep(session: WordDocumentReadSession): Step {
   return async (input, snapshot, context) => {
     const draft = session.drafts.parts.current;
@@ -328,8 +318,17 @@ function writeStep(session: WordDocumentReadSession): Step {
 export function createWordDocumentPartExecutors(
   session: WordDocumentReadSession,
 ): { plan: ClientToolExecutor; write: ClientToolExecutor } {
+  // One call at a time, so each part is checked on a draft that holds every part stored before it.
+  let queue: Promise<unknown> = Promise.resolve();
+  const inTurn =
+    (executor: ClientToolExecutor): ClientToolExecutor =>
+    (input, context) => {
+      const run = queue.then(() => executor(input, context));
+      queue = run.catch(() => undefined);
+      return run;
+    };
   return {
-    plan: partExecutor(session, planStep(session)),
-    write: partExecutor(session, writeStep(session)),
+    plan: inTurn(partExecutor(session, planStep(session))),
+    write: inTurn(partExecutor(session, writeStep(session))),
   };
 }

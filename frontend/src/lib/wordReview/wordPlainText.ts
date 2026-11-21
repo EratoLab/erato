@@ -1,17 +1,14 @@
+import { isDefaultTableStyle, isTableGridStyle } from "./wordBuiltInStyles";
+
 import type {
+  WordAuthoringSnapshot,
   WordPlanBlock,
   WordPlanRun,
   WordSourceBlock,
 } from "./wordDocumentPlan";
 import type { WordTableRow } from "./wordTableContent";
 
-/**
- * The plain-text form for new blocks of a document part (ERMAIN-1293). One
- * non-empty line is one block: `#`–`######` headings, `- ` bullets and `1. `
- * numbered items with two spaces of indent per level, `| a | b |` table rows
- * with a `|---|` line after the first row for a header row, and `**bold**` and
- * `*italic*` inside a line. A `\` at the start of a line keeps it as text.
- */
+/** The plain-text form of new blocks in a document part (ERMAIN-1293); its rules are the contract's. */
 
 /** Where a converted top-level block came from: its line, and a table's line per row. */
 export interface WordPlainTextOrigin {
@@ -25,11 +22,16 @@ export interface WordPlainTextIssue {
   message: string;
 }
 
+/** How new tables look: the document's table style, and whether that style marks a header row. */
+export interface WordPlainTextTable {
+  styleRef?: string;
+  headerLook?: boolean;
+}
+
 export interface WordPlainTextOptions {
   /** Block ids and list names start with it; unique per text in a plan. */
   idPrefix: string;
-  /** The table style new tables take, the document's own. */
-  tableStyle?: string;
+  table?: WordPlainTextTable;
   /** The blocks a replacing text takes the place of, in order. */
   replaced?: readonly WordSourceBlock[];
 }
@@ -43,6 +45,8 @@ export interface WordPlainTextResult {
 const MAX_ISSUES = 8;
 const MAX_LIST_LEVEL = 8;
 const KEEP_AS_TEXT = "or start the line with \\ to keep it as text";
+const EXISTING_LIST =
+  "to continue a list that is already in the document, keep its items by reference or use scoped_edit";
 
 /** `\|` is a literal bar inside a cell. */
 function tableCells(line: string): string[] {
@@ -111,7 +115,7 @@ function nearest(
 
 export function wordPlainTextBlocks(
   text: string,
-  { idPrefix, tableStyle, replaced = [] }: WordPlainTextOptions,
+  { idPrefix, table, replaced = [] }: WordPlainTextOptions,
 ): WordPlainTextResult {
   const lines = text.replace(/\r\n?/gu, "\n").split("\n");
   const blocks: WordPlanBlock[] = [];
@@ -120,9 +124,15 @@ export function wordPlainTextBlocks(
   let sequence = 0;
   const nextId = () => `${idPrefix}_${++sequence}`;
   let lists = 0;
-  /** The open list group per level of the current list, with the next number it shows. */
-  let groups: ({ name: string; ordered: boolean; next: number } | undefined)[] =
-    [];
+  /** The open list per level, the next number it shows, and whether every item so far was "1.". */
+  type Group = { name: string; ordered: boolean; next: number; lazy: boolean };
+  let groups: (Group | undefined)[] = [];
+  const newGroup = (ordered: boolean): Group => ({
+    name: `${idPrefix}_list${++lists}`,
+    ordered,
+    next: 1,
+    lazy: true,
+  });
   const issue = (line: number, message: string) => {
     if (issues.length < MAX_ISSUES)
       issues.push({ line, message: `Line ${line}: ${message}` });
@@ -157,10 +167,8 @@ export function wordPlainTextBlocks(
     const line = i + 1;
     const raw = lines[i].replace(/\t/gu, "  ");
     const trimmed = raw.trim();
-    if (!trimmed) {
-      groups = [];
-      continue;
-    }
+    // A blank line between items keeps the list, as Markdown does.
+    if (!trimmed) continue;
     if (trimmed.startsWith("\\")) {
       groups = [];
       const rest = trimmed.slice(1).trim();
@@ -197,12 +205,6 @@ export function wordPlainTextBlocks(
               "a |---| line belongs directly after a table's first row, where it makes that row the header; remove it here.",
             );
             broken = true;
-          } else if (cells.length !== width) {
-            issue(
-              at,
-              `this |---| line has ${cells.length} cells, but the table's first row (line ${rows[0].line}) has ${width}; give it one --- per column.`,
-            );
-            broken = true;
           } else header = true;
           continue;
         }
@@ -236,9 +238,8 @@ export function wordPlainTextBlocks(
           cells: cells.map((cell) => {
             if (!cell) return { blocks: [] };
             const content = inline(cell, at);
-            // Without a table style a header row has no look of its own.
             const runs =
-              header && k === 0 && !tableStyle
+              header && k === 0 && !table?.headerLook
                 ? (content.runs ?? [{ text: content.text }]).map((run) => ({
                     ...run,
                     bold: true,
@@ -263,7 +264,7 @@ export function wordPlainTextBlocks(
           type: "table",
           text: "",
           format: {
-            ...(tableStyle ? { styleRef: tableStyle } : {}),
+            ...(table?.styleRef ? { styleRef: table.styleRef } : {}),
             firstRow: header,
           },
           rows: tableRows,
@@ -303,21 +304,25 @@ export function wordPlainTextBlocks(
       const ordered = item[3] !== undefined;
       groups = groups.slice(0, level + 1);
       let group = groups[level];
-      if (group?.ordered !== ordered) {
-        group = { name: `${idPrefix}_list${++lists}`, ordered, next: 1 };
-        groups[level] = group;
-      }
-      if (ordered) {
-        const number = Number(item[3]);
-        if (number !== group.next && number !== 1)
+      const number = ordered ? Number(item[3]) : undefined;
+      // "1." after other numbers starts a new list, which then shows 1. as written.
+      if (
+        group?.ordered !== ordered ||
+        (number === 1 && group.next > 1 && !group.lazy)
+      )
+        groups[level] = group = newGroup(ordered);
+      if (number !== undefined) {
+        if (group.next === 1 && number !== 1)
           issue(
             line,
-            `this item shows as ${group.next}., not ${number}.: ${
-              group.next === 1
-                ? "a new numbered list always starts at 1"
-                : "items are numbered in order"
-            }. Number it ${group.next}., ${KEEP_AS_TEXT}.`,
+            `this item shows as 1., not ${number}.: a new numbered list always starts at 1. Number it 1.; ${EXISTING_LIST}, ${KEEP_AS_TEXT}.`,
           );
+        else if (number !== group.next && !(number === 1 && group.lazy))
+          issue(
+            line,
+            `this item shows as ${group.next}., not ${number}.: the items of a list are numbered in order. Number it ${group.next}., ${KEEP_AS_TEXT}.`,
+          );
+        group.lazy &&= number === 1;
         group.next++;
       }
       const style = nearest(replaced, "list-item", blocks.length)?.styleRef;
@@ -351,24 +356,28 @@ export function wordPlainTextBlocks(
   return { blocks, origins, issues };
 }
 
-/** The style of the document's tables, for new ones: the most used, else a defined Table Grid. */
-export function wordDocumentTableStyle(snapshot: {
-  blocks: readonly WordSourceBlock[];
-  styles: readonly { id: string; name: string; type?: string }[];
-}): string | undefined {
+/** New tables take the style most of the document's tables use, else a defined Table Grid. */
+export function wordDocumentTableStyle(
+  snapshot: Pick<WordAuthoringSnapshot, "blocks" | "styles">,
+): WordPlainTextTable {
+  const styles = snapshot.styles.filter(
+    (s) => s.type === "table" && !isDefaultTableStyle(s.id, s.name),
+  );
   const counts = new Map<string, number>();
   for (const block of snapshot.blocks) {
     const style = block.content?.format.styleRef;
     if (block.nativeKind === "table" && style)
       counts.set(style, (counts.get(style) ?? 0) + 1);
   }
-  const used = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (used && snapshot.styles.some((s) => s.id === used && s.type === "table"))
-    return used;
-  return snapshot.styles.find(
-    (s) =>
-      s.type === "table" &&
-      (s.id.toLowerCase() === "tablegrid" ||
-        s.name.toLowerCase() === "table grid"),
-  )?.id;
+  const style =
+    [...counts]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => styles.find((s) => s.id === id))
+      .find((s) => s !== undefined) ??
+    styles.find((s) => isTableGridStyle(s.id, s.name));
+  if (!style) return {};
+  return {
+    styleRef: style.id,
+    ...(style.firstRowLook ? { headerLook: true } : {}),
+  };
 }

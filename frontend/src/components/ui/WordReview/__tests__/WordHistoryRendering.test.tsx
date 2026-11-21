@@ -434,6 +434,34 @@ describe("Word chats shown outside Word", () => {
     expect(screen.getByText(/"paragr/)).toBeInTheDocument();
   });
 
+  it("folds the section plan and parts of a change in parts into the card", async () => {
+    const [user, assistant] = messagesOf(retryAccepted);
+    const part = (tool_name: string, n: number): ContentPart =>
+      ({
+        content_type: "tool_use",
+        tool_name,
+        tool_call_id: `${tool_name}-${n}`,
+        status: "success",
+        input: {},
+        output: { status: "success", result: { status: "ready" } },
+      }) as unknown as ContentPart;
+    renderChat([
+      user,
+      {
+        ...assistant,
+        content: [
+          part("plan_document_sections", 1),
+          part("write_document_section", 2),
+          part("write_document_section", 3),
+          ...assistant.content,
+        ],
+      },
+    ]);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual([]);
+  });
+
   it("keeps the other tool calls of a plan message", async () => {
     const [user, assistant] = messagesOf(retryAccepted);
     renderChat([

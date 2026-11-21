@@ -3,13 +3,12 @@ import {
   wordPlainTextBlocks,
 } from "@erato/frontend/word-review";
 
-import {
-  START_OF_DOCUMENT,
-  wordBlockIndex,
-  wordCaptureSections,
-} from "./wordDocumentOutline";
+import { wordBlockIndex, wordCaptureSections } from "./wordDocumentOutline";
+import { wordLeftOutPartName, wordTitledEntry } from "./wordPlanCoverage";
 import { wordBlockTitle, wordPassageStart } from "./wordPlanDocumentChanges";
+import { WORD_PLAN_PATH, WORD_PLAN_PATH_IN_TEXT } from "./wordScopedSubmission";
 
+import type { WordLeftOutPart } from "./wordPlanCoverage";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
   WordPlainTextOrigin,
@@ -21,10 +20,8 @@ import type {
 } from "@erato/frontend/word-review";
 
 /**
- * A large change as a section plan, one part per rewritten row and a finish (ERMAIN-1293). The
- * section plan lists every body block once, in output order, as keep, rewrite or delete rows; a
- * part replaces a rewrite row's blocks by ops whose new text is in the plain-text form. Both are
- * checked by the shipping validator on the plan they assemble to, so finish only joins them.
+ * A large change as a section plan, one part per rewritten row and a finish (ERMAIN-1293). Every
+ * call is checked by the shipping validator on the plan it assembles to, so finish only joins them.
  */
 
 export type WordPartRowAction = "keep" | "rewrite" | "delete";
@@ -34,7 +31,7 @@ export interface WordPartRow {
   /** In output order; several ranges in one row merge them. */
   refs: string[];
   change?: string;
-  /** A keep row's new heading text. */
+  /** A keep row's new text for the heading it starts with. */
   title?: string;
   reason?: string;
 }
@@ -57,10 +54,9 @@ export interface WordPartsDraft {
   /** The complete read's final token the section plan was sent with. */
   readToken: string;
   plan: WordPartsPlan;
-  /** Accepted parts by row index. */
   parts: Map<number, WordPartOp[]>;
-  /** The last refused finish, so an unchanged repeat ends the step or leaves rows unwritten. */
-  finish?: { revision: number; fingerprint: string; unwritten: boolean };
+  /** A finish at this revision was refused for rows without a part, so the next one leaves them. */
+  unwrittenRefusedAt?: number;
 }
 
 /** The part of the section plan an assembled entry or deletion came from. */
@@ -86,7 +82,6 @@ export const MAX_WORD_PART_OPS = 200;
 const MAX_TEXT = 1000;
 const MAX_TITLE = 200;
 const MAX_TERMS = 50;
-const ROW_TITLE_CHARS = 80;
 
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
@@ -119,7 +114,6 @@ export function wordPartRefs(
   return refs;
 }
 
-/** Consecutive refs as ranges, for messages. */
 export function wordPartRanges(
   refs: readonly string[],
   snapshot: WordAuthoringSnapshot,
@@ -140,63 +134,74 @@ export function wordPartRanges(
   return out.join(",");
 }
 
-/** The heading a keep row's `title` renames: the row's first heading block. */
-function renamedHeading(row: WordPartRow, snapshot: WordAuthoringSnapshot) {
-  const index = wordBlockIndex(snapshot);
-  return row.refs
-    .map((ref) => snapshot.blocks[index.get(ref)!])
-    .find((block) => block.type === "heading");
+/** The heading a keep row's `title` renames: the block the row starts with. */
+function renamedHeading(
+  row: Pick<WordPartRow, "refs">,
+  snapshot: WordAuthoringSnapshot,
+) {
+  const first = snapshot.blocks[wordBlockIndex(snapshot).get(row.refs[0])!];
+  return first?.type === "heading" ? first : undefined;
 }
 
-/** A row by the document's own name for it: the title of the section its first block lies in, else
- * of a section it starts, else the start of its text. Never a ref. */
+/**
+ * A row by the document's own name for it, never a ref. A row that spans several sections names
+ * the first and last, so an unwritten merge is not named after one section only; otherwise the
+ * section its first block lies in, else one it starts, else the start of its text.
+ */
 export function wordPartRowLabel(
   row: Pick<WordPartRow, "refs">,
   snapshot: WordAuthoringSnapshot,
-): { title?: string; passage?: string } {
+): WordLeftOutPart {
   const index = wordBlockIndex(snapshot);
   const sections = wordCaptureSections(snapshot);
   const positions = row.refs
     .map((ref) => index.get(ref))
     .filter((at): at is number => at !== undefined);
-  const cut = (text: string) => {
-    const chars = Array.from(text.trim());
-    return chars.length > ROW_TITLE_CHARS
-      ? `${chars.slice(0, ROW_TITLE_CHARS).join("")}…`
-      : chars.join("");
-  };
   const first = positions[0];
   if (first === undefined) return {};
+  const chains = positions.map((at) =>
+    sections.outline
+      .filter(
+        (entry) => wordTitledEntry(entry) && entry.from <= at && at < entry.to,
+      )
+      .sort((a, b) => a.level - b.level),
+  );
+  let depth = 0;
+  while (
+    chains.every((chain) => chain[depth] && chain[depth] === chains[0][depth])
+  )
+    depth++;
+  const spanned = chains.every((chain) => chain[depth])
+    ? [...new Set(chains.map((chain) => chain[depth]))].map((e) => e.title)
+    : [];
+  if (spanned.length > 1)
+    return {
+      title: positions.every((at, k) => !k || at === positions[k - 1] + 1)
+        ? `${spanned[0]} – ${spanned.at(-1)}`
+        : [...spanned.slice(0, 3), ...(spanned.length > 3 ? ["…"] : [])].join(
+            ", ",
+          ),
+    };
   const within = wordBlockTitle(sections, first);
-  if (within) return { title: cut(within) };
+  if (within) return { title: within };
   for (const at of positions) {
     const entry = sections.entryAt.get(at);
     const outline = entry === undefined ? undefined : sections.outline[entry];
-    if (
-      outline &&
-      outline.tag !== "P" &&
-      outline.title &&
-      outline.title !== START_OF_DOCUMENT
-    )
-      return { title: cut(outline.title) };
+    if (wordTitledEntry(outline)) return { title: outline!.title };
   }
   const passage = wordPassageStart(snapshot, first);
   return passage ? { passage } : {};
 }
 
-export function wordPartRowTitle(
+export const wordPartRowTitle = (
   row: Pick<WordPartRow, "refs">,
   snapshot: WordAuthoringSnapshot,
-): string {
-  const { title, passage } = wordPartRowLabel(row, snapshot);
-  return title ?? (passage ? `“${passage}”` : "");
-}
+): string => wordLeftOutPartName(wordPartRowLabel(row, snapshot));
 
 /** "Row 6 (§ 9 Haftung)": how messages to the model name a row. */
 export const wordPartRowName = (rowIndex: number, title: string) =>
   `Row ${rowIndex + 1}${title ? ` (${title})` : ""}`;
 
-/** The section plan, checked for its shape and for covering every body block exactly once. */
 export function parseWordPartsPlan(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
@@ -312,13 +317,16 @@ export function parseWordPartsPlan(
           "row-shape",
           `title is the heading's new text: one line of at most ${MAX_TITLE} characters.`,
         );
-      else if (!renamedHeading(row, snapshot))
+      else if (!renamedHeading(row, snapshot)) {
+        const first = snapshot.blocks[wordBlockIndex(snapshot).get(refs[0])!];
         issue(
           `${path}/title`,
           "row-shape",
-          "title renames a kept heading, but this row has no heading; rewrite the row instead.",
+          first.type === "list-item" && first.outlineLevel !== undefined
+            ? "This row starts with a numbered heading, which Word numbers itself, so its number follows the row's new place; leave title out, or rewrite the row to change its words."
+            : "title renames the heading a keep row starts with, and this row starts with other text; start the row at its heading, or rewrite the row.",
         );
-      else row.title = raw.title;
+      } else row.title = raw.title;
     }
     rows.push(row);
   });
@@ -341,7 +349,6 @@ export function parseWordPartsPlan(
   };
 }
 
-/** A part's ops, checked for their shape and for using every block of the row exactly once. */
 export function parseWordPartOps(
   value: unknown,
   rowIndex: number,
@@ -446,7 +453,6 @@ export function parseWordPartOps(
   return issues.length ? { issues } : { ops };
 }
 
-/** The look of a heading's runs when all of them share one. */
 function uniformRunFormat(
   runs: readonly WordPlanRun[] | undefined,
 ): Omit<WordPlanRun, "text"> | undefined {
@@ -457,11 +463,8 @@ function uniformRunFormat(
   return Object.keys(look).length ? look : undefined;
 }
 
-/**
- * The complete plan the section plan and its parts make, with where each entry came from. A
- * rewrite row without a part keeps its blocks, so every call is checked on the whole draft with
- * its change put in, and limits such as the plan size stop the part that crosses them.
- */
+/** A rewrite row without a part keeps its blocks, so every call is checked on the whole draft
+ * with its change put in, and a limit such as the plan size stops the part that crosses it. */
 export function assembleWordParts(
   snapshot: WordAuthoringSnapshot,
   readToken: string,
@@ -470,7 +473,7 @@ export function assembleWordParts(
 ): WordPartsAssembly {
   const index = wordBlockIndex(snapshot);
   const sourceOf = (ref: string) => snapshot.blocks[index.get(ref)!];
-  const tableStyle = wordDocumentTableStyle(snapshot);
+  const table = wordDocumentTableStyle(snapshot);
   const entries: WordPlanEntry[] = [];
   const entryOrigins: WordPartOrigin[] = [];
   const deleted: WordDocumentPlan["deleted"] = [];
@@ -490,10 +493,7 @@ export function assembleWordParts(
     if (!ops) {
       const heading = row.title ? renamedHeading(row, snapshot) : undefined;
       if (!heading) return add({ kind: "keep", source: row.refs }, { row: r });
-      const at = row.refs.indexOf(heading.ref);
       const look = uniformRunFormat(heading.runs);
-      if (at > 0)
-        add({ kind: "keep", source: row.refs.slice(0, at) }, { row: r });
       add(
         {
           kind: "replace",
@@ -511,8 +511,8 @@ export function assembleWordParts(
         },
         { row: r, title: true },
       );
-      if (at < row.refs.length - 1)
-        add({ kind: "keep", source: row.refs.slice(at + 1) }, { row: r });
+      if (row.refs.length > 1)
+        add({ kind: "keep", source: row.refs.slice(1) }, { row: r });
       return;
     }
     ops.forEach((op, k) => {
@@ -529,7 +529,7 @@ export function assembleWordParts(
       const field = op.kind === "replace" ? "text" : "insert";
       const converted = wordPlainTextBlocks(op.text, {
         idPrefix: `r${r + 1}_${k + 1}`,
-        tableStyle,
+        table,
         replaced: op.kind === "replace" ? op.refs.map(sourceOf) : [],
       });
       const issues = textIssues.get(r) ?? [];
@@ -572,19 +572,20 @@ export function assembleWordParts(
   };
 }
 
-const ASSEMBLED_PATH = /^\/(entries|deleted)\/(\d+)(\/.*)?$/u;
-const ASSEMBLED_PATH_IN_TEXT = /\/(?:entries|deleted)\/\d+(?:\/[\w-]+)*/gu;
-
 /** What an issue of the assembled plan is about: who sent it and the line it names. */
 function locate(
   path: string,
   assembly: Pick<WordPartsAssembly, "entries" | "deleted">,
 ): { origin?: WordPartOrigin; path: string; line?: number } {
-  const match = ASSEMBLED_PATH.exec(path);
+  const match = WORD_PLAN_PATH.exec(path);
   if (!match) return { path };
   const [, collection, n, rest = ""] = match;
   const origin =
-    collection === "entries" ? assembly.entries[+n] : assembly.deleted[+n];
+    collection === "entries"
+      ? assembly.entries[+n]
+      : collection === "deleted"
+        ? assembly.deleted[+n]
+        : undefined;
   if (!origin) return { path };
   if (!("op" in origin))
     return {
@@ -609,11 +610,8 @@ function locate(
   };
 }
 
-/**
- * Issues of an assembled plan, said in the model's terms. For a section plan they point at its
- * rows, for a part into that part's ops with the line, and for a finish they name the row and
- * what to send again.
- */
+/** Issues of an assembled plan in the model's terms: into the section plan's rows, into a part's
+ * ops with the line, or for a finish naming the row to send again. */
 export function wordPartIssues(
   issues: WordPlanDiagnostics,
   assembly: Pick<WordPartsAssembly, "entries" | "deleted">,
@@ -623,7 +621,7 @@ export function wordPartIssues(
   return issues.map((issue) => {
     const { origin, path, line } = locate(issue.path, assembly);
     const message = issue.message.replace(
-      ASSEMBLED_PATH_IN_TEXT,
+      WORD_PLAN_PATH_IN_TEXT,
       (found) => locate(found, assembly).path,
     );
     if (focus.kind === "part" && (!origin || origin.row === focus.row))
@@ -654,7 +652,7 @@ export function wordPartIssues(
   });
 }
 
-/** One section draft per capture; it belongs to the read session's request like the repair draft. */
+/** One section draft per request, cleared with the read session's drafts. */
 export class WordPartsDraftStore {
   private draft?: WordPartsDraft;
 
@@ -666,7 +664,7 @@ export class WordPartsDraftStore {
     return this.draft;
   }
 
-  /** The parts a new section plan keeps: those of rewrite rows with the same blocks. */
+  /** Rewrite rows with the same blocks keep their parts. */
   carried(plan: WordPartsPlan): Map<number, WordPartOp[]> {
     const previous = this.draft;
     const parts = new Map<number, WordPartOp[]>();
@@ -683,7 +681,6 @@ export class WordPartsDraftStore {
     return parts;
   }
 
-  /** Sending the plan again replaces it and keeps the carried parts. */
   open(plan: WordPartsPlan, readToken: string): WordPartsDraft {
     const previous = this.draft;
     this.draft = {
@@ -702,22 +699,25 @@ export class WordPartsDraftStore {
   }
 }
 
-/** Rewrite rows still without a part, by index. */
 export const wordUnwrittenRows = (draft: WordPartsDraft): number[] =>
   draft.plan.rows.flatMap((row, r) =>
     row.action === "rewrite" && !draft.parts.has(r) ? [r] : [],
   );
 
-/** Each row as the receipts and the card name it. */
 export function wordPartRows(
   draft: WordPartsDraft,
   snapshot: WordAuthoringSnapshot,
   { finished = false }: { finished?: boolean } = {},
 ) {
+  const sections = wordCaptureSections(snapshot);
+  const index = wordBlockIndex(snapshot);
   return draft.plan.rows.map((row, r) => ({
     row: r + 1,
     action: row.action,
-    title: wordPartRowTitle(row, snapshot),
+    // A renamed row is named by the heading it renames, so old and new read as a pair.
+    title: row.title
+      ? (wordBlockTitle(sections, index.get(row.refs[0])!) ?? "")
+      : wordPartRowTitle(row, snapshot),
     ...(row.title ? { new_title: row.title } : {}),
     paragraphs: row.refs.length,
     status:
@@ -749,16 +749,12 @@ export type WordPartsFinish =
       ok: true;
       draft: WordPartsDraft;
       assembly: WordPartsAssembly;
-      /** Rewrite rows left as they are, by index. */
       unwritten: number[];
     }
   | { ok: false; result: ClientToolExecutionResult };
 
-/**
- * A finish joins the section plan and its parts into the complete plan. Rows without a part are
- * refused once; finishing again at the same revision leaves them as they are, and the card names
- * them, so nothing announced disappears unnoticed.
- */
+/** Rows without a part are refused once; finishing again at the same revision leaves them as they
+ * are and the card names them, so nothing announced disappears unnoticed. */
 export function finishWordParts(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
@@ -791,22 +787,22 @@ export function finishWordParts(
       `Use the draft_id and revision of the latest section plan or part receipt; the revision is now ${draft.revision}.`,
     );
   const unwritten = wordUnwrittenRows(draft);
-  const leaveUnwritten =
-    draft.finish?.unwritten === true &&
-    draft.finish.revision === draft.revision;
+  const leaveUnwritten = draft.unwrittenRefusedAt === draft.revision;
   if (unwritten.length && !leaveUnwritten) {
-    draft.finish = {
-      revision: draft.revision,
-      fingerprint: "",
-      unwritten: true,
-    };
+    draft.unwrittenRefusedAt = draft.revision;
     const rows = unwritten.map((r) =>
       wordPartRowName(r, wordPartRowTitle(draft.plan.rows[r], snapshot)),
     );
+    const more = rows.length - 3;
+    const listed =
+      more > 0
+        ? `${rows.slice(0, 3).join(", ")} and ${more} more ${more === 1 ? "row" : "rows"}`
+        : rows.join(" and ");
+    const them = rows.length > 1 ? "them" : "it";
     return fail(
       "/finish",
       "rows-not-written",
-      `${rows.length > 3 ? `${rows.slice(0, 3).join(", ")} and ${rows.length - 3} more rows have` : `${rows.join(" and ")} ${rows.length > 1 ? "have" : "has"}`} no part yet. Write ${rows.length > 1 ? "them" : "it"} with write_document_section and finish again, or finish again at revision ${draft.revision} to leave ${rows.length > 1 ? "them" : "it"} unchanged; the card then says so.`,
+      `${listed} ${rows.length > 1 ? "have" : "has"} no part yet. Write ${them} with write_document_section and finish again, or finish again at revision ${draft.revision} to leave ${them} unchanged; the card then says so.`,
     );
   }
   return {
@@ -822,50 +818,20 @@ export function finishWordParts(
   };
 }
 
-/** A refused finish names the rows to send again; the same refusal twice at one revision ends the
- * step, as an unchanged repair does. */
 export function wordPartsFinishRejected(
   prepared: Extract<ClientToolExecutionResult, { ok: false }>,
-  finish: Extract<WordPartsFinish, { ok: true }>,
+  { draft, assembly }: Extract<WordPartsFinish, { ok: true }>,
   snapshot: WordAuthoringSnapshot,
 ): ClientToolExecutionResult {
-  const { draft, assembly } = finish;
-  const issues = wordPartIssues(
-    prepared.validationErrors?.length
-      ? prepared.validationErrors
-      : [{ path: "", code: "finish-rejected", message: prepared.error }],
-    assembly,
-    { kind: "finish" },
-    (r) => wordPartRowTitle(draft.plan.rows[r], snapshot),
-  );
-  const fingerprint = JSON.stringify(issues);
-  const terminal =
-    draft.finish?.revision === draft.revision &&
-    draft.finish.fingerprint === fingerprint;
-  draft.finish = {
-    revision: draft.revision,
-    fingerprint,
-    unwritten: finish.unwritten.length > 0,
-  };
   return {
     ...prepared,
-    error: terminal
-      ? "The same document parts failed with unchanged diagnostics."
-      : prepared.error,
-    validationErrors: terminal
-      ? [
-          {
-            path: "",
-            code: "no-progress",
-            message:
-              "The parts and validation errors are unchanged. This submission turn has ended.",
-          },
-          ...issues,
-        ].slice(0, 16)
-      : issues,
-    submissionFeedback: {
-      ...prepared.submissionFeedback,
-      terminal: terminal || !!prepared.submissionFeedback?.terminal,
-    },
+    validationErrors: wordPartIssues(
+      prepared.validationErrors?.length
+        ? prepared.validationErrors
+        : [{ path: "", code: "finish-rejected", message: prepared.error }],
+      assembly,
+      { kind: "finish" },
+      (r) => wordPartRowTitle(draft.plan.rows[r], snapshot),
+    ),
   };
 }

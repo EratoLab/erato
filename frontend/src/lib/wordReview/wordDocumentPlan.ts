@@ -127,6 +127,8 @@ export interface WordAuthoringSnapshot {
     /** Body blocks use it, so reads show its look. */
     inUse?: boolean;
     look?: WordStyleLook;
+    /** Host-only: a table style that formats its first row (w:tblStylePr firstRow). */
+    firstRowLook?: true;
   }[];
   /** Blocks every read and plan; "too-large" here means the file itself exceeds the capture limit. */
   issue?:

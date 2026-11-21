@@ -63,13 +63,23 @@ whole draft with its change put in; rewrite rows without a part keep their
 blocks there. Diagnostics point into the call (`/rows/2/source`,
 `/ops/1/text` with "Line 3: …"). A rejection changes nothing; each accepted
 call advances the draft's revision. Sending the section plan again keeps the
-parts of rewrite rows whose blocks are unchanged.
+parts of rewrite rows whose blocks are unchanged. Part calls run one at a time,
+so each is checked on a draft that holds every part stored before it. They are
+checked like a sparse change: where the whole-document import is `off` (Word
+for the web by default), a section plan or part that needs it is refused on
+arrival with `web-needs-whole-document`, not on the card after every part is
+written. `title` on a keep row renames the heading the row starts with, which
+then takes the built-in heading style of its level; a numbered heading takes
+no title, since Word numbers it by its place.
 
 `submit_document_plan` with `{snapshot, readToken, draft_id, revision,
 finish:true}` assembles every part and runs the full pipeline. Its receipt
 carries `result.plan`, as a repair's does, so review and Apply are unchanged,
 plus `result.rows`. A finish with rows still unwritten is refused once; a
 second finish at the same revision accepts the change with those rows kept and
-names them in `notInProposal`. A refused finish names the row to send again;
-the same refusal twice at one revision ends the step. The section draft has the
-read session's lifetime, like the repair draft.
+names them in `notInProposal`. A smaller plan accepted after a section plan
+names the parts the section plan announced and it leaves out. A refused finish
+names the row to send again; the same refusal twice at one revision ends the
+step. The section draft has the read session's lifetime, like the repair draft.
+The read contract describes the part tools on every complete read, since the
+pane does not know which tools a request offers.

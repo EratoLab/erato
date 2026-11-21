@@ -6,8 +6,10 @@ import {
 } from "@/components/ui/Message/ConversationMessages";
 import {
   WORD_ACTION_FACET_IDS,
+  WORD_PLAN_SECTIONS_TOOL,
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_TOOL,
+  WORD_WRITE_SECTION_TOOL,
 } from "@/lib/wordReview/wordHistoryNames";
 import { wordMessageLineage } from "@/lib/wordReview/wordHistoryParts";
 
@@ -64,10 +66,15 @@ export function useWordHistoryMessage(
   }, [request]);
 }
 
+const WORD_PLAN_TOOLS = new Set([
+  WORD_READ_TOOL,
+  WORD_SUBMIT_PLAN_TOOL,
+  WORD_PLAN_SECTIONS_TOOL,
+  WORD_WRITE_SECTION_TOOL,
+]);
+
 export const isWordPlanToolPart = (part: ContentPart): boolean =>
-  part.content_type === "tool_use" &&
-  (part.tool_name === WORD_READ_TOOL ||
-    part.tool_name === WORD_SUBMIT_PLAN_TOOL);
+  part.content_type === "tool_use" && WORD_PLAN_TOOLS.has(part.tool_name ?? "");
 
 export const isWordSubmitPlanPart = (part: ContentPart): boolean =>
   part.content_type === "tool_use" && part.tool_name === WORD_SUBMIT_PLAN_TOOL;

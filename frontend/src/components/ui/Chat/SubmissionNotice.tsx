@@ -3,8 +3,10 @@ import { t } from "@lingui/core/macro";
 import { WORD_SUBMIT_COMMENT_CHANGES_TOOL } from "@/lib/wordReview/wordCommentChanges";
 import { WORD_READ_COMMENTS_TOOL } from "@/lib/wordReview/wordCommentContext";
 import {
+  WORD_PLAN_SECTIONS_TOOL,
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_TOOL,
+  WORD_WRITE_SECTION_TOOL,
 } from "@/lib/wordReview/wordHistoryNames";
 
 import { Alert } from "../Feedback/Alert";
@@ -18,6 +20,8 @@ import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
 const WORD_TOOLS = new Set([
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_TOOL,
+  WORD_PLAN_SECTIONS_TOOL,
+  WORD_WRITE_SECTION_TOOL,
   WORD_READ_COMMENTS_TOOL,
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 ]);

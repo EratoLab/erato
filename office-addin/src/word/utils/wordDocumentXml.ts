@@ -391,7 +391,22 @@ export function captureWordAuthoringSnapshot(
           attr(s, "type") === "paragraph" &&
           ["1", "true", "on"].includes(attr(s, "default")),
       );
+      const firstRowLook = (styleId: string) => {
+        const visited = new Set<Element>();
+        let style = styles.get(styleId);
+        while (style && !visited.has(style)) {
+          visited.add(style);
+          if (
+            all(style, "tblStylePr").some((p) => attr(p, "type") === "firstRow")
+          )
+            return true;
+          style = styles.get(attr(child(style, "basedOn")));
+        }
+        return false;
+      };
       for (const style of base.styles) {
+        if (style.type === "table" && firstRowLook(style.id))
+          style.firstRowLook = true;
         if (style.type !== "paragraph") continue;
         const look = looks.get(style.id);
         if (look) style.look = look;
