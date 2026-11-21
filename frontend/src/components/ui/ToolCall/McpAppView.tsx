@@ -1,15 +1,21 @@
 import { t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useOptionalTheme } from "@/components/providers/ThemeProvider";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
+import { CONTENT_RESIZED_EVENT } from "@/hooks/useScrollToBottom";
 import { getClientPlatform } from "@/lib/clientPlatform";
 import { useGetMcpServerAppView } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { saveViewDownload } from "@/lib/mcpApps/download";
 import { viewHostContext } from "@/lib/mcpApps/hostContext";
+import {
+  forgetViewHeight,
+  rememberViewHeight,
+  rememberedViewHeight,
+} from "@/lib/mcpApps/viewHeights";
 import { isRecord } from "@/lib/toolCallGist/serverText";
 
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -24,14 +30,27 @@ import type { CallToolResult } from "@modelcontextprotocol/client";
 // eslint-disable-next-line lingui/no-unlocalized-strings -- URL path
 const SANDBOX_PAGE_PATH = "/public/common/mcp-apps-sandbox.html";
 
-/** A view's height until it asks for one, as an iframe has by default. */
+/**
+ * A view's height until it asks for one, as an iframe has by default, and
+ * its placeholder's when the view's last height is not known.
+ */
 const DEFAULT_VIEW_HEIGHT = 150;
 
+/** How long a view may take to show before a placeholder stands in for it. */
+export const VIEW_PLACEHOLDER_DELAY_MS = 1_000;
+
 /**
- * How long a view may take to start, from the moment it is connected,
- * before it counts as not shown. A view that starts later still shows.
+ * How long a view that has initialized may take to ask for a height before
+ * it shows at the height its frame has.
  */
-export const VIEW_START_TIMEOUT_MS = 10_000;
+export const VIEW_HEIGHT_TIMEOUT_MS = 1_000;
+
+/**
+ * How long a view may take to start, from the moment it is placed, before it
+ * counts as not shown when nothing has said so sooner. A view that starts
+ * later still shows.
+ */
+export const VIEW_START_TIMEOUT_MS = 30_000;
 
 /**
  * The sandbox page on `origin`, or none when `origin` is not a bare origin or
@@ -117,13 +136,19 @@ const McpAppFrame = ({
   const appTheme = themeContext?.theme;
   const { i18n } = useLingui();
   const locale = i18n.locale || undefined;
+  const boxRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  // Unset until the view has initialized: a view that never does stays out
-  // of sight, and the call's files show as they always have.
-  const [height, setHeight] = useState<number>();
+  const [initialized, setInitialized] = useState(false);
+  // The height the view asked for last.
+  const [reported, setReported] = useState<number>();
+  // Initialized without asking for a height within VIEW_HEIGHT_TIMEOUT_MS.
+  const [heightLate, setHeightLate] = useState(false);
   const [failed, setFailed] = useState(false);
-  // Not started within VIEW_START_TIMEOUT_MS: it may still start.
+  // Not started, as the frame tells or VIEW_START_TIMEOUT_MS: it may still
+  // start.
   const [late, setLate] = useState(false);
+  // Not shown within VIEW_PLACEHOLDER_DELAY_MS.
+  const [slow, setSlow] = useState(false);
   // One file at a time: the view is told no for any other until then.
   const [download, setDownload] = useState<PendingDownload>();
   const pendingDownload = useRef<PendingDownload>(undefined);
@@ -163,21 +188,98 @@ const McpAppFrame = ({
   };
   const connection = useRef<ViewConnection>(undefined);
 
-  useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return;
+  // Out of sight until the view has initialized and asked for a height, or
+  // taken too long to: a view that never initializes stays out of sight, and
+  // the call's files show as they always have.
+  const shown = initialized && (reported !== undefined || heightLate);
+  const unavailable = isError || (data !== undefined && !pageUrl) || failed;
+  // The view cannot be fetched, is not to be shown or has not started: the
+  // call's files show instead, and without files a line says so.
+  const notShown = unavailable || (late && !shown);
+  const heightKey = useMemo(
+    () => ({ callId: part.tool_call_id, serverId, uri, width }),
+    [part.tool_call_id, serverId, uri, width],
+  );
+  // The height the view had last time: its frame starts at it, and its place
+  // is kept for it until it shows.
+  const remembered = useMemo(
+    () => rememberedViewHeight(heightKey),
+    [heightKey],
+  );
+  // Never 0px while out of sight, so that the browser renders the view, which
+  // measures itself, as it would in sight.
+  const startHeight = remembered ?? DEFAULT_VIEW_HEIGHT;
+  const viewHeight = reported ?? startHeight;
+  // Until the view shows, its place: its last height, else the placeholder's
+  // once the view is slow; none once it has not shown.
+  const keptHeight = notShown
+    ? 0
+    : (remembered ?? (slow ? DEFAULT_VIEW_HEIGHT : 0));
+  const loading = !shown && !notShown;
+  const boxHeight = shown ? viewHeight : keptHeight;
+
+  // The width the view is given: the box is there before the view's frame.
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
     const measure = (next: number) => {
       if (next > 0) setWidth(Math.round(next));
     };
-    measure(frame.getBoundingClientRect().width);
+    measure(box.getBoundingClientRect().width);
     const observer = new ResizeObserver(([entry]) => {
       measure(entry.contentRect.width);
     });
-    observer.observe(frame);
+    observer.observe(box);
     return () => {
       observer.disconnect();
     };
-  }, [data, pageUrl]);
+  }, [unavailable]);
+
+  // A placeholder stands in for a view slow to show, and a view that has not
+  // started in time counts as not shown, when nothing has said so sooner.
+  useEffect(() => {
+    const placeholderTimer = setTimeout(() => {
+      setSlow(true);
+    }, VIEW_PLACEHOLDER_DELAY_MS);
+    const startTimer = setTimeout(() => {
+      setLate(true);
+    }, VIEW_START_TIMEOUT_MS);
+    return () => {
+      clearTimeout(placeholderTimer);
+      clearTimeout(startTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!initialized || reported !== undefined) return;
+    const heightTimer = setTimeout(() => {
+      setHeightLate(true);
+    }, VIEW_HEIGHT_TIMEOUT_MS);
+    return () => {
+      clearTimeout(heightTimer);
+    };
+  }, [initialized, reported]);
+
+  useEffect(() => {
+    if (shown) call.current.onShown?.();
+  }, [shown]);
+
+  useEffect(() => {
+    if (shown) rememberViewHeight(heightKey, viewHeight);
+  }, [shown, viewHeight, heightKey]);
+
+  // A view that did not show gives up its place, now and next time.
+  useEffect(() => {
+    if (notShown) forgetViewHeight(heightKey);
+  }, [notShown, heightKey]);
+
+  // Before the browser paints, so a list that follows its bottom never shows
+  // it moving.
+  useLayoutEffect(() => {
+    boxRef.current?.dispatchEvent(
+      new Event(CONTENT_RESIZED_EVENT, { bubbles: true }),
+    );
+  }, [boxHeight, notShown]);
 
   /** The user decided on the file the view asked to save. */
   const settleDownload = (save: boolean) => {
@@ -195,9 +297,6 @@ const McpAppFrame = ({
     if (!data || !pageUrl || !frame) return;
     let connected: ViewConnection | undefined;
     let cancelled = false;
-    const startTimer = setTimeout(() => {
-      setLate(true);
-    }, VIEW_START_TIMEOUT_MS);
     // Loaded with the first view, so the SDK stays out of the main bundle.
     // eslint-disable-next-line lingui/no-unlocalized-strings -- module path
     import("@/lib/mcpApps/viewHost")
@@ -218,11 +317,12 @@ const McpAppFrame = ({
           hostContext,
           {
             onInitialized: () => {
-              clearTimeout(startTimer);
-              setHeight((current) => current ?? DEFAULT_VIEW_HEIGHT);
-              call.current.onShown?.();
+              setInitialized(true);
             },
-            onHeight: setHeight,
+            onHeight: setReported,
+            onStalled: () => {
+              setLate(true);
+            },
             onDownload: (file) =>
               new Promise<boolean>((resolve) => {
                 if (pendingDownload.current) {
@@ -241,7 +341,6 @@ const McpAppFrame = ({
       });
     return () => {
       cancelled = true;
-      clearTimeout(startTimer);
       pendingDownload.current?.resolve(false);
       pendingDownload.current = undefined;
       setDownload(undefined);
@@ -255,41 +354,61 @@ const McpAppFrame = ({
     connection.current?.setHostContext(hostContext);
   }, [hostContext]);
 
-  // The view cannot be fetched, is not to be shown or has not started: the
-  // call's files show instead, and without files a line says so.
-  const notShown =
-    isError ||
-    (data !== undefined && !pageUrl) ||
-    failed ||
-    (late && height === undefined);
   const notice = notShown && !withFiles && <NotShownNotice />;
-  if (!data || !pageUrl || failed) return notice || null;
+  if (unavailable) return notice || null;
 
   const toolName = part.tool_name ?? "";
   const fileName = download?.file.name ?? "";
   return (
     <>
       {notice}
-      <iframe
-        ref={frameRef}
-        data-testid="mcp-app-view"
-        title={t({
-          id: "trace.tool.appView.title",
-          message: `Interactive view of ${toolName}`,
-        })}
-        // The spec's sandbox for the frame on the sandbox origin; the page
-        // there gives the view's own frame no more than these.
-        sandbox="allow-scripts allow-same-origin"
-        // The sandbox page takes messages from, and sends them to, this origin.
-        referrerPolicy="origin"
-        aria-hidden={height === undefined}
-        // On the message's own background like its text: no frame, padding or
-        // card around the view. The theme's color scheme, which the sandbox
-        // page takes from the host context too: where they differ, the
-        // browser paints an opaque backdrop behind the page.
-        className={clsx("block w-full", height !== undefined && "my-2")}
-        style={{ height: height ?? 0, colorScheme: theme }}
-      />
+      <div
+        ref={boxRef}
+        data-testid="mcp-app-view-box"
+        aria-busy={loading || undefined}
+        className={clsx("relative", boxHeight > 0 && "my-2")}
+        style={shown ? undefined : { height: keptHeight }}
+      >
+        {loading && slow && (
+          <div
+            aria-hidden
+            data-testid="mcp-app-view-placeholder"
+            className="absolute inset-0 animate-pulse rounded bg-theme-bg-accent motion-reduce:animate-none"
+          />
+        )}
+        {data && pageUrl && (
+          <iframe
+            ref={frameRef}
+            data-testid="mcp-app-view"
+            title={t({
+              id: "trace.tool.appView.title",
+              message: `Interactive view of ${toolName}`,
+            })}
+            // The spec's sandbox for the frame on the sandbox origin; the page
+            // there gives the view's own frame no more than these.
+            sandbox="allow-scripts allow-same-origin"
+            // The sandbox page takes messages from, and sends them to, this
+            // origin.
+            referrerPolicy="origin"
+            aria-hidden={!shown}
+            // On the message's own background like its text: no frame,
+            // padding or card around the view. Until it shows, laid over its
+            // place, or what is above it, and transparent. The theme's color
+            // scheme, which the sandbox page takes from the host context too:
+            // where they differ, the browser paints an opaque backdrop behind
+            // the page.
+            className={clsx(
+              "block w-full",
+              !shown &&
+                "pointer-events-none absolute inset-x-0 bottom-0 opacity-0",
+            )}
+            style={{
+              height: shown ? viewHeight : startHeight,
+              colorScheme: theme,
+            }}
+          />
+        )}
+      </div>
       <ConfirmationDialog
         isOpen={download !== undefined}
         onClose={() => {
@@ -317,7 +436,7 @@ const McpAppFrame = ({
 
 export interface McpAppViewProps {
   part: ToolUse;
-  /** Called once the view has initialized and shows. */
+  /** Called once the view has initialized and shows at its height. */
   onShown?: () => void;
   /**
    * Whether the call returned files, which show when the view does not.
@@ -330,10 +449,11 @@ export interface McpAppViewProps {
  * The interactive view (MCP Apps) a tool call names in
  * `result_details.view`, in a sandboxed frame from the server's sandbox
  * origin. Only the web app shows it; elsewhere nothing shows here and the
- * call's files stay as they are. When the view cannot be fetched or does not
- * start, or the server's view was refused (`result_details.view_unavailable`),
- * the call's files show as before, and a call without files says that the
- * view could not be shown.
+ * call's files stay as they are. Until it shows, its place is kept at the
+ * height it last had, and a placeholder stands in for a view slow to show.
+ * When the view cannot be fetched or does not start, or the server's view was
+ * refused (`result_details.view_unavailable`), the call's files show as
+ * before, and a call without files says that the view could not be shown.
  */
 export const McpAppView = ({
   part,

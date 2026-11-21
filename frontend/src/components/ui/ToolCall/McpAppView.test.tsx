@@ -21,12 +21,23 @@ import {
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { defaultTheme } from "@/config/theme";
 import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
+import { CONTENT_RESIZED_EVENT } from "@/hooks/useScrollToBottom";
 import { setClientPlatform } from "@/lib/clientPlatform";
 import { MAX_VIEW_DOWNLOAD_BYTES } from "@/lib/mcpApps/download";
 import { viewStyleVariables } from "@/lib/mcpApps/hostContext";
+import { resetViewHeights } from "@/lib/mcpApps/viewHeights";
+import {
+  PAGE_READY_GRACE_MS,
+  VIEW_INITIALIZE_GRACE_MS,
+} from "@/lib/mcpApps/viewHost";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { McpAppView, VIEW_START_TIMEOUT_MS } from "./McpAppView";
+import {
+  McpAppView,
+  VIEW_HEIGHT_TIMEOUT_MS,
+  VIEW_PLACEHOLDER_DELAY_MS,
+  VIEW_START_TIMEOUT_MS,
+} from "./McpAppView";
 
 import type {
   McpAppViewResponse,
@@ -43,9 +54,10 @@ const call = (
   withView = true,
   structuredContent?: Record<string, unknown>,
   meta?: Record<string, unknown>,
+  toolCallId = "call-1",
 ): ToolUse =>
   ({
-    tool_call_id: "call-1",
+    tool_call_id: toolCallId,
     tool_name: "show_counter",
     status: "success",
     input: { start: 41 },
@@ -192,6 +204,47 @@ const initialize = {
   },
 };
 
+const RESOURCE_LOADED = {
+  jsonrpc: "2.0",
+  method: "ui/notifications/sandbox-resource-loaded",
+  params: {},
+};
+
+const sizeChanged = (height: number) => ({
+  jsonrpc: "2.0",
+  method: "ui/notifications/size-changed",
+  params: { height },
+});
+
+/** Lets `ms` pass on the fake clock, with what each timer starts. */
+const elapse = async (ms: number) => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
+/** The height the views in these tests measure themselves at. */
+const VIEW_HEIGHT = 240;
+
+/**
+ * What a view built with the MCP Apps SDK sends as it starts: its handshake,
+ * then the height it measured.
+ */
+const startView = (
+  fromFrame: (data: unknown) => void,
+  height = VIEW_HEIGHT,
+) => {
+  fromFrame(PROXY_READY);
+  fromFrame(initialize);
+  fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+  fromFrame(sizeChanged(height));
+};
+
+/** The box that holds the view's place, and the placeholder in it. */
+const viewBox = () => screen.getByTestId("mcp-app-view-box");
+const placeholder = () => screen.queryByTestId("mcp-app-view-placeholder");
+const notice = () => screen.queryByTestId("mcp-app-view-not-shown");
+
 /** The first bytes of a PNG, as base64. */
 const PNG_BASE64 = globalThis.btoa("\x89PNG\r\n\x1a\n");
 
@@ -206,9 +259,7 @@ const downloadRequest = (id: number, resource: Record<string, unknown>) => ({
 /** The view, started, with the files it had saved and their bytes. */
 const startedView = async () => {
   const view = await loadedFrame();
-  view.fromFrame(PROXY_READY);
-  view.fromFrame(initialize);
-  view.fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+  startView(view.fromFrame);
   await waitFor(() => {
     expect(view.frame).toHaveAttribute("aria-hidden", "false");
   });
@@ -241,9 +292,12 @@ describe("McpAppView", () => {
   beforeEach(() => {
     fetchMock = vi.fn(() => Promise.resolve(json(viewResponse())));
     vi.stubGlobal("fetch", fetchMock);
+    window.sessionStorage.clear();
+    resetViewHeights();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     setClientPlatform("web");
@@ -312,33 +366,236 @@ describe("McpAppView", () => {
 
   it("says the view could not be shown when it does not start in time, until it does", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { frame, fromFrame } = await loadedFrame();
+    // The sandbox page runs, but the view's document never loads.
+    fireEvent.load(frame);
+    fromFrame(PROXY_READY);
+    // Counted from when the view was placed, a moment before.
+    await elapse(VIEW_START_TIMEOUT_MS - 1_000);
+    expect(notice()).not.toBeInTheDocument();
+
+    await elapse(1_000);
+    expect(notice()).toBeInTheDocument();
+    // Its place is given up, and its frame stays for a view that starts late.
+    expect(viewBox().style.height).toBe("0px");
+    expect(placeholder()).not.toBeInTheDocument();
+
+    // A view that starts late still shows, and the line goes.
+    startView(fromFrame);
+    await waitFor(() => {
+      expect(notice()).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("mcp-app-view")).toHaveAttribute(
+      "aria-hidden",
+      "false",
+    );
+  });
+
+  it("says at once that the view could not be shown when the frame loads a page that is not the sandbox page, until a view shows", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { frame, fromFrame } = await loadedFrame();
+
+    // Another page, an error page or one the browser would not frame loads
+    // without announcing itself.
+    fireEvent.load(frame);
+    await elapse(PAGE_READY_GRACE_MS - 1);
+    expect(notice()).not.toBeInTheDocument();
+    await elapse(1);
+    expect(notice()).toBeInTheDocument();
+    expect(viewBox().style.height).toBe("0px");
+
+    startView(fromFrame);
+    await waitFor(() => {
+      expect(notice()).not.toBeInTheDocument();
+    });
+    expect(frame).toHaveAttribute("aria-hidden", "false");
+  });
+
+  it("waits for a sandbox page that announces itself only after its load event", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { frame, fromFrame } = await loadedFrame();
+
+    fireEvent.load(frame);
+    await elapse(PAGE_READY_GRACE_MS / 2);
+    fromFrame(PROXY_READY);
+    await elapse(VIEW_START_TIMEOUT_MS / 2);
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("says that the view could not be shown when its document loads and it does not initialize, until it does", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { frame, fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fireEvent.load(frame);
+    fromFrame(RESOURCE_LOADED);
+
+    await elapse(VIEW_INITIALIZE_GRACE_MS - 1);
+    expect(notice()).not.toBeInTheDocument();
+    await elapse(1);
+    expect(notice()).toBeInTheDocument();
+
+    startView(fromFrame);
+    await waitFor(() => {
+      expect(notice()).not.toBeInTheDocument();
+    });
+    expect(frame).toHaveAttribute("aria-hidden", "false");
+  });
+
+  it("does not hurry a view that has sent its ui/initialize when its document loads", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    fromFrame(RESOURCE_LOADED);
+
+    await elapse(VIEW_INITIALIZE_GRACE_MS * 2);
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("holds the view's place with a placeholder once it is slow to show, until it shows at its height", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderView(call());
+    const { frame, fromFrame } = await loadedFrame();
+    // A fast view takes no place before it shows.
+    expect(viewBox().style.height).toBe("0px");
+    expect(viewBox()).toHaveAttribute("aria-busy", "true");
+    expect(placeholder()).not.toBeInTheDocument();
+
+    await elapse(VIEW_PLACEHOLDER_DELAY_MS);
+    expect(placeholder()).toBeInTheDocument();
+    expect(viewBox().style.height).toBe("150px");
+    expect(frame).toHaveAttribute("aria-hidden", "true");
+
+    // Its handshake is not enough: the view shows once it has a height.
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(placeholder()).toBeInTheDocument();
+
+    fromFrame(sizeChanged(320));
+    await waitFor(() => {
+      expect(placeholder()).not.toBeInTheDocument();
+    });
+    expect(frame).toHaveAttribute("aria-hidden", "false");
+    expect(frame.style.height).toBe("320px");
+    expect(viewBox()).not.toHaveAttribute("aria-busy");
+    expect(viewBox().style.height).toBe("");
+  });
+
+  it("shows a view that never asks for a height at the default height, and keeps its place next time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const first = renderView(call());
+    const { frame, sent, fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+    // Initialized: it is sent the call.
+    await waitFor(() => {
+      expect(sent()).toContainEqual(
+        expect.objectContaining({ method: "ui/notifications/tool-input" }),
+      );
+    });
+    await elapse(VIEW_HEIGHT_TIMEOUT_MS - 100);
+    expect(frame).toHaveAttribute("aria-hidden", "true");
+
+    await elapse(200);
+    expect(frame).toHaveAttribute("aria-hidden", "false");
+    expect(frame.style.height).toBe("150px");
+    first.unmount();
+
+    renderView(call());
+    expect(viewBox().style.height).toBe("150px");
+  });
+
+  it("starts a call's view at the height it showed at last, also after a reload, and a call of the same view at that width", async () => {
+    const resize = stubResizeObserver();
+    const first = renderView(call());
+    resize(640);
+    startView((await loadedFrame()).fromFrame, 320);
+    await waitFor(() => {
+      expect(screen.getByTestId("mcp-app-view").style.height).toBe("320px");
+    });
+    first.unmount();
+
+    // As after a reload: the heights come from the tab's session storage.
+    resetViewHeights();
+    // Its place is kept before the view is fetched, without a placeholder.
+    let answer: (response: Response) => void = () => undefined;
+    fetchMock.mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const again = renderView(call());
+    expect(viewBox().style.height).toBe("320px");
+    expect(placeholder()).not.toBeInTheDocument();
+    answer(json(viewResponse()));
+    const { frame } = await loadedFrame();
+    // Its frame starts at that height, out of sight.
+    expect(frame.style.height).toBe("320px");
+    expect(frame).toHaveAttribute("aria-hidden", "true");
+    again.unmount();
+
+    // Another call of the server's view, at the same width.
+    renderView(call(true, undefined, undefined, "call-2"));
+    resize(650);
+    await waitFor(() => {
+      expect(viewBox().style.height).toBe("320px");
+    });
+  });
+
+  it("gives up the place it kept for a view that does not show, now and next time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const first = renderView(call());
+    startView((await loadedFrame()).fromFrame, 320);
+    await waitFor(() => {
+      expect(screen.getByTestId("mcp-app-view").style.height).toBe("320px");
+    });
+    first.unmount();
+
+    const again = renderView(call());
+    const { frame } = await loadedFrame();
+    expect(viewBox().style.height).toBe("320px");
+    fireEvent.load(frame);
+    await elapse(PAGE_READY_GRACE_MS);
+    expect(notice()).toBeInTheDocument();
+    expect(viewBox().style.height).toBe("0px");
+    again.unmount();
+
+    renderView(call());
+    expect(viewBox().style.height).toBe("0px");
+  });
+
+  it("tells the list it sits in whenever the place it takes changes", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const heights: string[] = [];
+    const record = (event: Event) => {
+      heights.push((event.target as HTMLElement).style.height || "auto");
+    };
+    document.addEventListener(CONTENT_RESIZED_EVENT, record);
     try {
       renderView(call());
-      const { fromFrame } = await loadedFrame();
-      expect(
-        screen.queryByTestId("mcp-app-view-not-shown"),
-      ).not.toBeInTheDocument();
-
-      act(() => {
-        vi.advanceTimersByTime(VIEW_START_TIMEOUT_MS);
-      });
-      expect(screen.getByTestId("mcp-app-view-not-shown")).toBeInTheDocument();
-
-      // A view that starts late still shows, and the line goes.
-      fromFrame(PROXY_READY);
-      fromFrame(initialize);
-      fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      const { frame, fromFrame } = await loadedFrame();
+      await elapse(VIEW_PLACEHOLDER_DELAY_MS);
+      startView(fromFrame, 320);
       await waitFor(() => {
-        expect(
-          screen.queryByTestId("mcp-app-view-not-shown"),
-        ).not.toBeInTheDocument();
+        expect(frame).toHaveAttribute("aria-hidden", "false");
       });
-      expect(screen.getByTestId("mcp-app-view")).toHaveAttribute(
-        "aria-hidden",
-        "false",
-      );
+      fromFrame(sizeChanged(400));
+      await waitFor(() => {
+        expect(frame.style.height).toBe("400px");
+      });
+      // Bubbling from the view's box: none, the placeholder's place, then
+      // the view at each height it asks for.
+      expect(heights).toEqual(["0px", "150px", "auto", "auto"]);
     } finally {
-      vi.useRealTimers();
+      document.removeEventListener(CONTENT_RESIZED_EVENT, record);
     }
   });
 
@@ -365,7 +622,13 @@ describe("McpAppView", () => {
     expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin");
     expect(frame).toHaveAttribute("referrerpolicy", "origin");
     expect(frame).toHaveAttribute("aria-hidden", "true");
-    expect(frame.style.height).toBe("0px");
+    // Transparent and laid over what is above it, taking no place, at a
+    // height at which the browser renders the view as it would in sight.
+    expect(frame.className).toBe(
+      "block w-full pointer-events-none absolute inset-x-0 bottom-0 opacity-0",
+    );
+    expect(frame.style.height).toBe("150px");
+    expect(viewBox().style.height).toBe("0px");
   });
 
   it("hands the view its HTML and CSP, then the call's input and result, and follows its height", async () => {
@@ -424,18 +687,21 @@ describe("McpAppView", () => {
         params: { arguments: { start: 41 } },
       }),
     );
-    expect(frame).toHaveAttribute("aria-hidden", "false");
-    expect(frame.style.height).toBe("150px");
-    // On the message's background: no border, padding or card around it.
-    expect(frame.className).toBe("block w-full my-2");
+    // Out of sight until it asks for a height.
+    expect(frame).toHaveAttribute("aria-hidden", "true");
 
-    fromFrame({
-      jsonrpc: "2.0",
-      method: "ui/notifications/size-changed",
-      params: { height: 320 },
-    });
+    fromFrame(sizeChanged(320));
     await waitFor(() => {
       expect(frame.style.height).toBe("320px");
+    });
+    expect(frame).toHaveAttribute("aria-hidden", "false");
+    // On the message's background: no border, padding or card around it.
+    expect(frame.className).toBe("block w-full");
+    expect(viewBox().className).toBe("relative my-2");
+
+    fromFrame(sizeChanged(480));
+    await waitFor(() => {
+      expect(frame.style.height).toBe("480px");
     });
 
     // Everything goes to the sandbox origin only.
@@ -546,19 +812,23 @@ describe("McpAppView", () => {
     expect(contextChanges()).toHaveLength(2);
   });
 
-  it("says when the view shows, once it has initialized", async () => {
+  it("says when the view shows, once it has initialized and asked for a height", async () => {
     const onShown = vi.fn();
     renderView(call(), { onShown });
     const { fromFrame } = await loadedFrame();
     fromFrame(PROXY_READY);
     fromFrame(initialize);
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(onShown).not.toHaveBeenCalled();
 
-    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+    fromFrame(sizeChanged(320));
     await waitFor(() => {
       expect(onShown).toHaveBeenCalledTimes(1);
     });
+    fromFrame(sizeChanged(400));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onShown).toHaveBeenCalledTimes(1);
   });
 
   it("refuses every request the view makes but a download", async () => {
