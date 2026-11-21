@@ -154,12 +154,28 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             })
             .clone();
 
+        // `auth-fixed` and `auth-fixed-custom` serve the same tools, so the
+        // model is offered them under names qualified with their server.
+        let mut offered = mcp_servers
+            .list_tools(chat_id, &auth_context)
+            .await
+            .expect("Failed to list the tools of every server");
+        erato::services::mcp_tool_names::assign_model_names(&mut offered, &[]);
+        let model_name = offered
+            .iter()
+            .find(|tool| tool.server_id == server_id && tool.tool.name == expected_tool)
+            .map(|tool| tool.model_name().to_string())
+            .expect("the tool is offered");
+        if server_id.starts_with("auth-fixed") {
+            assert_eq!(model_name, format!("{server_id}__{expected_tool}"));
+        }
+
         let managed_tool_call = mcp_servers
             .convert_tool_call_to_managed_tool_call(
                 chat_id,
                 GenaiToolCall {
                     call_id: "call_123".to_string(),
-                    fn_name: expected_tool.to_string(),
+                    fn_name: model_name,
                     fn_arguments: json!({}),
                     thought_signatures: None,
                 },
@@ -168,6 +184,7 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
             .await
             .expect("Failed to resolve managed tool call");
         assert_eq!(managed_tool_call.tool.name, tool.tool.name);
+        assert_eq!(managed_tool_call.server_id, server_id);
 
         mcp_servers
             .call_tool(chat_id, managed_tool_call, &auth_context)

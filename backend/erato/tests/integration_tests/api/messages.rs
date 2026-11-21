@@ -8990,6 +8990,222 @@ async fn test_writes_off_offers_only_server_declared_read_only_mcp_tools(pool: P
     assert_eq!(offers[2], full_set, "writes back on restores the full set");
 }
 
+/// The stored parts of an assistant message.
+async fn stored_parts(app_state: &erato::state::AppState, message_id: Uuid) -> Vec<Value> {
+    Messages::find_by_id(message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the assistant message")
+        .raw_message["content"]
+        .as_array()
+        .unwrap()
+        .clone()
+}
+
+/// Two servers that offer the same tools: the model sees each tool under a
+/// name qualified with its server, and a call reaches the server its name
+/// names, under the tool's own name. Only the second server's `read_file`
+/// fails, so a call routed there would not succeed.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_server(
+    pool: Pool<Postgres>,
+) {
+    const README: &str = "This is a mock README file.";
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[README], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["ROUTED"]));
+    });
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[README]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[(
+                    "call_read",
+                    "files__read_file",
+                    json!({ "path": "docs/readme.txt" }),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    for (server_id, path) in [("files", "/mcp/file"), ("broken_files", "/mcp/error")] {
+        app_config.mcp_servers.insert(
+            server_id.to_string(),
+            mcp_server_config(
+                &mock_mcp_base_url(),
+                path,
+                McpServerAuthenticationConfig::None,
+            ),
+        );
+    }
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".to_string(), "broken_files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the readme" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert_eq!(extract_full_text(&events), "ROUTED");
+
+    let mut offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 1, "{offers:?}");
+    offers[0].sort();
+    assert_eq!(
+        offers[0],
+        vec![
+            "broken_files__list_files",
+            "broken_files__read_file",
+            "files__list_files",
+            "files__read_file",
+        ]
+    );
+
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let parts = stored_parts(&app_state, assistant_message_id).await;
+    let tool_use = parts
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .expect("the call is stored");
+    assert_eq!(tool_use["tool_name"], "files__read_file");
+    assert_eq!(tool_use["status"], "success", "{tool_use}");
+    assert!(
+        tool_use["output"].to_string().contains(README),
+        "{tool_use}"
+    );
+}
+
+/// A call the model makes by a qualified name parks under the server's own
+/// tool name, so the card and any standing decision name the tool as the
+/// server does; once approved, it runs on that server, and the stored call
+/// keeps the name the model used.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
+    pool: Pool<Postgres>,
+) {
+    const PUBLISHED: &str = "approval probe published";
+    const QUALIFIED: &str = "mock_mcp_approval_copy__publish_approval_probe";
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PUBLISHED], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["QUALIFIED-APPROVED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[QUALIFIED], &[PUBLISHED]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[("call_probe", QUALIFIED, json!({}))]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate_with_config(pool, mocks, |app_config| {
+            app_config.mcp_servers.insert(
+                "mock_mcp_approval_copy".to_string(),
+                mcp_server_config(
+                    &mock_mcp_base_url(),
+                    "/mcp/legacy/approval-policy",
+                    McpServerAuthenticationConfig::None,
+                ),
+            );
+            app_config.mcp_server_permissions.rules.insert(
+                "allow-mock-mcp-copy".to_string(),
+                erato::config::McpServerPermissionRule::AllowAll {
+                    mcp_server_ids: vec!["mock_mcp_approval_copy".to_string()],
+                },
+            );
+        })
+        .await;
+
+    let approval_request = parked_content
+        .as_array()
+        .unwrap()
+        .last()
+        .expect("Expected the approval request last")
+        .clone();
+    assert_eq!(approval_request["content_type"], "tool_approval_request");
+    assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval_copy");
+    assert_eq!(approval_request["tool_name"], "publish_approval_probe");
+    let approvals = approval_request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    let approval_id = approvals[0]["approval_id"].as_str().unwrap().to_string();
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": [{ "approval_id": approval_id, "decision": "approve" }],
+        }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "QUALIFIED-APPROVED"
+    );
+
+    let parts = stored_parts(&app_state, assistant_message_id).await;
+    let tool_use = parts
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == approval_id)
+        .expect("the approved call is stored");
+    assert_eq!(tool_use["tool_name"], QUALIFIED);
+    assert_eq!(tool_use["status"], "success", "{tool_use}");
+    assert!(
+        tool_use["output"].to_string().contains(PUBLISHED),
+        "{tool_use}"
+    );
+}
+
 /// With writes off the client-action tool is withheld even though the action
 /// facet declares client actions, while top-level client tools — read-only by
 /// contract — stay offered.

@@ -247,18 +247,21 @@ impl McpServers {
             .await
     }
 
-    /// Convert a GenAI tool call to a managed tool call by finding the server that provides the tool
+    /// Convert a GenAI tool call to a managed tool call by finding the server
+    /// that provides the tool, by its name among the tools of every server
+    /// (see `mcp_tool_names`).
     pub async fn convert_tool_call_to_managed_tool_call(
         &self,
         chat_id: Uuid,
         tool_call: GenaiToolCall,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<ManagedToolCall, Report> {
-        let all_tools = self.list_tools(chat_id, auth_context).await?;
+        let mut all_tools = self.list_tools(chat_id, auth_context).await?;
+        crate::services::mcp_tool_names::assign_model_names(&mut all_tools, &[]);
 
         let managed_tool = all_tools
             .iter()
-            .find(|tool| tool.tool.name == tool_call.fn_name.as_str());
+            .find(|tool| tool.model_name() == tool_call.fn_name.as_str());
 
         if let Some(managed_tool) = managed_tool {
             Ok(ManagedToolCall {
@@ -307,7 +310,8 @@ impl McpServers {
         >,
     ) -> Result<rmcp::model::CallToolResult, Report> {
         let mut params = CallToolRequestParams::default();
-        params.name = managed_tool_call.tool_call.fn_name.clone().into();
+        // The server's own name: the model may have called a qualified one.
+        params.name = managed_tool_call.tool.name.clone();
         let mut tool_args = managed_tool_call.tool_call.fn_arguments.clone();
         convert_mcp_tool_call_file_fields(
             &serde_json::Value::Object(managed_tool_call.tool.input_schema.as_ref().clone()),
@@ -342,6 +346,7 @@ pub fn convert_mcp_tools_to_genai_tools(
     managed_mcp_tools
         .into_iter()
         .map(|managed_tool| {
+            let name = managed_tool.model_name().to_string();
             let tool = managed_tool.tool;
 
             // Convert Arc<JsonObject> to serde_json::Value
@@ -379,7 +384,7 @@ pub fn convert_mcp_tools_to_genai_tools(
             sanitize_tool_schema_extensions(&mut input_schema_value);
 
             GenaiTool {
-                name: GenaiToolName::Custom(tool.name.to_string()),
+                name: GenaiToolName::Custom(name),
                 description,
                 schema: Some(input_schema_value),
                 strict: if omit_tool_strict { None } else { Some(false) },
@@ -1143,6 +1148,7 @@ mod tests {
                 tool,
                 approval_argument: Some("hasUserApproved".to_string()),
                 destructive_hint_source: Default::default(),
+                qualified_name: None,
             }],
             false,
         );
@@ -1203,6 +1209,7 @@ mod tests {
                 tool: mcp_tool,
                 approval_argument: None,
                 destructive_hint_source: Default::default(),
+                qualified_name: None,
             }],
             false,
         );

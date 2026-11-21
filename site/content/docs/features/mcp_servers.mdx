@@ -145,6 +145,14 @@ The `x-chat.erato/file_content_field` and `x-chat.erato/file_name_field` aliases
 - Each server identified by a unique configuration key
 - Independent configuration for each server (URLs, authentication, etc.)
 
+#### Tools with the same name
+
+Two servers can offer tools of the same name, for example two deployments of the same MCP server. Erato then offers each of them to the model under a name qualified with its server's key, `<server>__<tool>`: when `crm_eu` and `crm_us` both offer `search`, the model sees `crm_eu__search` and `crm_us__search`, and each call goes to its own server under the tool's own name, `search`. An MCP tool named like one of Erato's own tools (`wait`, `delegate_task`, `delegate_to_assistant`, `propose_client_action`, `retrieve_file_contents`, `retrieve_embedded_image`, `create_reminder`, `list_reminders`, `cancel_reminder`) is qualified the same way, and Erato's tool keeps its name. Every other tool keeps its name.
+
+A qualified name holds only letters, digits, `_` and `-`, starts with a letter or `_`, and has at most 64 characters, which every supported model provider accepts. When the server key or tool name had to be changed for that, or the name would equal another tool's name, it ends in `_` and eight hexadecimal characters derived from the server key and tool name. The names do not depend on the order the servers answer in, so they are the same after a restart.
+
+Erato compares the tools that the chat's assistant, facets and access rules allow, before the user's own decisions and the chat's tool switches apply, so switching off one of two same-named tools does not rename the other. Approvals, "Always allow" and "Never allow" decisions, [tool filtering](#tool-filtering), tool annotations, facet allowlists and the chat's tool switches keep naming a tool by its server key and its own name, and the tool's step in the chat shows the server and the tool's title as before. A client tool of the same name as an MCP tool is still not offered while that MCP tool keeps the name. Erato logs a warning the first time it sees each collision.
+
 ## Configuration
 
 MCP servers are configured in your `erato.toml` file under the `[mcp_servers]` section. Each server requires:
