@@ -26,7 +26,7 @@ import { CONTENT_RESIZED_EVENT } from "@/hooks/useScrollToBottom";
 import { setClientPlatform } from "@/lib/clientPlatform";
 import { MAX_VIEW_DOWNLOAD_BYTES } from "@/lib/mcpApps/download";
 import { viewStyleVariables } from "@/lib/mcpApps/hostContext";
-import { resetViewHeights } from "@/lib/mcpApps/viewHeights";
+import { resetViewHeightsForTests } from "@/lib/mcpApps/viewHeights";
 import {
   PAGE_READY_GRACE_MS,
   VIEW_INITIALIZE_GRACE_MS,
@@ -380,7 +380,7 @@ describe("McpAppView", () => {
     fetchMock = vi.fn(() => Promise.resolve(json(viewResponse())));
     vi.stubGlobal("fetch", fetchMock);
     window.sessionStorage.clear();
-    resetViewHeights();
+    resetViewHeightsForTests();
   });
 
   afterEach(() => {
@@ -615,7 +615,7 @@ describe("McpAppView", () => {
     first.unmount();
 
     // As after a reload: the heights come from the tab's session storage.
-    resetViewHeights();
+    resetViewHeightsForTests();
     // Its place is kept before the view is fetched, without a placeholder.
     let answer: (response: Response) => void = () => undefined;
     fetchMock.mockReturnValueOnce(

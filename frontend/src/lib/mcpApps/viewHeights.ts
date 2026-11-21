@@ -10,7 +10,7 @@ import { MAX_VIEW_HEIGHT } from "./hostContext";
 
 const STORAGE_KEY = "erato.mcpApps.viewHeights";
 
-/** The most heights kept; the oldest go first. */
+/** The most heights kept; those of the views seen least recently go first. */
 const MAX_ENTRIES = 200;
 
 /**
@@ -71,7 +71,12 @@ const store = (map: Map<string, number>) => {
 };
 
 const keysOf = ({ callId, serverId, uri, width }: ViewHeightKey) => ({
-  call: callId === undefined ? undefined : JSON.stringify(["call", callId]),
+  // Tool call ids can repeat across servers and views, so the view is part of
+  // the call's key.
+  call:
+    callId === undefined
+      ? undefined
+      : JSON.stringify(["call", serverId, uri, callId]),
   view:
     width === undefined
       ? undefined
@@ -102,9 +107,18 @@ export const rememberViewHeight = (key: ViewHeightKey, height: number) => {
   const keys = Object.values(keysOf(key)).filter(
     (entry): entry is string => entry !== undefined,
   );
-  if (keys.every((entry) => map.get(entry) === height)) return;
+  // Nothing to keep when the view's heights are already the newest ones.
+  const newest = [...map.keys()].slice(-keys.length);
+  if (
+    keys.every(
+      (entry, index) => newest[index] === entry && map.get(entry) === height,
+    )
+  ) {
+    return;
+  }
   for (const entry of keys) {
-    // Last in the map's order, so the oldest go first.
+    // Last in the map's order, also when unchanged, so the views seen least
+    // recently go first.
     map.delete(entry);
     map.set(entry, height);
   }
@@ -126,6 +140,6 @@ export const forgetViewHeight = (key: ViewHeightKey) => {
 };
 
 /** Reads the heights from session storage again, as a reload would; for tests. */
-export const resetViewHeights = () => {
+export const resetViewHeightsForTests = () => {
   heights = undefined;
 };

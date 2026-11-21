@@ -5,7 +5,7 @@ import {
   forgetViewHeight,
   rememberViewHeight,
   rememberedViewHeight,
-  resetViewHeights,
+  resetViewHeightsForTests,
 } from "./viewHeights";
 
 const view = { serverId: "charts", uri: "ui://charts/bar" };
@@ -13,7 +13,7 @@ const view = { serverId: "charts", uri: "ui://charts/bar" };
 describe("view heights", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
-    resetViewHeights();
+    resetViewHeightsForTests();
   });
 
   afterEach(() => {
@@ -43,6 +43,18 @@ describe("view heights", () => {
     expect(
       rememberedViewHeight({ ...view, serverId: "maps", width: 640 }),
     ).toBeUndefined();
+    // Nor for a call of another server or view with the same id: providers
+    // reuse tool call ids.
+    expect(
+      rememberedViewHeight({ ...view, serverId: "maps", callId: "call-1" }),
+    ).toBeUndefined();
+    expect(
+      rememberedViewHeight({
+        ...view,
+        uri: "ui://charts/pie",
+        callId: "call-1",
+      }),
+    ).toBeUndefined();
   });
 
   it("prefers the call's own height to the view's", () => {
@@ -60,11 +72,11 @@ describe("view heights", () => {
   it("keeps the heights in the tab's session storage, for a reload", () => {
     rememberViewHeight({ ...view, callId: "call-1", width: 640 }, 320);
 
-    resetViewHeights();
+    resetViewHeightsForTests();
     expect(rememberedViewHeight({ ...view, callId: "call-1" })).toBe(320);
 
     window.sessionStorage.clear();
-    resetViewHeights();
+    resetViewHeightsForTests();
     expect(rememberedViewHeight({ ...view, callId: "call-1" })).toBeUndefined();
   });
 
@@ -76,7 +88,7 @@ describe("view heights", () => {
     expect(
       rememberedViewHeight({ ...view, callId: "call-2", width: 640 }),
     ).toBeUndefined();
-    resetViewHeights();
+    resetViewHeightsForTests();
     expect(rememberedViewHeight({ ...view, callId: "call-1" })).toBeUndefined();
   });
 
@@ -89,32 +101,46 @@ describe("view heights", () => {
     window.sessionStorage.setItem(
       "erato.mcpApps.viewHeights",
       JSON.stringify([
-        ['["call","call-1"]', "320"],
-        ['["call","call-2"]', 10_000_000],
-        ['["call","call-3"]', 200],
+        ['["call","charts","ui://charts/bar","call-1"]', "320"],
+        ['["call","charts","ui://charts/bar","call-2"]', 10_000_000],
+        ['["call","charts","ui://charts/bar","call-3"]', 200],
         "nonsense",
       ]),
     );
-    resetViewHeights();
+    resetViewHeightsForTests();
     expect(rememberedViewHeight({ ...view, callId: "call-1" })).toBeUndefined();
     expect(rememberedViewHeight({ ...view, callId: "call-2" })).toBeUndefined();
     expect(rememberedViewHeight({ ...view, callId: "call-3" })).toBe(200);
   });
 
-  it("drops the oldest heights first once it holds many", () => {
+  it("drops the heights of the views seen least recently once it holds many", () => {
+    const heightOf = (index: number) =>
+      rememberedViewHeight({ ...view, callId: `call-${index}` });
     for (let index = 0; index < 250; index += 1) {
       rememberViewHeight({ ...view, callId: `call-${index}` }, 100 + index);
     }
-    // Seen again, so it is among the newest.
-    rememberViewHeight({ ...view, callId: "call-10" }, 99);
+    expect(heightOf(49)).toBeUndefined();
+    expect(heightOf(50)).toBe(150);
 
-    resetViewHeights();
-    expect(rememberedViewHeight({ ...view, callId: "call-0" })).toBeUndefined();
-    expect(
-      rememberedViewHeight({ ...view, callId: "call-49" }),
-    ).toBeUndefined();
-    expect(rememberedViewHeight({ ...view, callId: "call-10" })).toBe(99);
-    expect(rememberedViewHeight({ ...view, callId: "call-249" })).toBe(349);
+    // Seen again, at another height and at the same one: now the newest, also
+    // after a reload.
+    rememberViewHeight({ ...view, callId: "call-60" }, 99);
+    rememberViewHeight({ ...view, callId: "call-80" }, 180);
+    resetViewHeightsForTests();
+    for (let index = 250; index < 280; index += 1) {
+      rememberViewHeight({ ...view, callId: `call-${index}` }, 100 + index);
+    }
+
+    resetViewHeightsForTests();
+    expect(heightOf(0)).toBeUndefined();
+    expect(heightOf(59)).toBeUndefined();
+    expect(heightOf(60)).toBe(99);
+    expect(heightOf(61)).toBeUndefined();
+    expect(heightOf(79)).toBeUndefined();
+    expect(heightOf(80)).toBe(180);
+    expect(heightOf(81)).toBeUndefined();
+    expect(heightOf(82)).toBe(182);
+    expect(heightOf(279)).toBe(379);
   });
 
   it("works in memory when session storage cannot be read or written", () => {

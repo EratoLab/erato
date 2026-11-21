@@ -13,8 +13,9 @@ use percent_encoding::percent_decode_str;
 const SANDBOX_PAGE_FILE: &str = "mcp-apps-sandbox.html";
 
 /// Asks the browser to key the sandbox page, and the views it shows, to their
-/// own origin rather than their site. Chromium then runs a tab's view frames
-/// in a process of their own, apart from the app, also when the sandbox
+/// own origin rather than their site. Over HTTPS or on localhost, Chromium
+/// then runs the views of each sandbox origin in a process of their own,
+/// apart from the app's and from other sandbox origins, also when the sandbox
 /// origin is on the app's site.
 const ORIGIN_AGENT_CLUSTER: HeaderName = HeaderName::from_static("origin-agent-cluster");
 

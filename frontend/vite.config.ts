@@ -146,8 +146,9 @@ const sendStructuredPublicFile = (
   response.setHeader("Content-Type", contentTypeForPath(resolvedPath));
   response.setHeader("X-Content-Type-Options", "nosniff");
   if (requestPath.split("?")[0] === "/public/common/mcp-apps-sandbox.html") {
-    // As the backend serves it, so Chromium runs views in a process of their
-    // own also when the sandbox origin is on the app's site.
+    // As the backend serves it, so Chromium runs the views of each sandbox
+    // origin in a process of their own, apart from the app's, also when the
+    // sandbox origin is on the app's site.
     response.setHeader("Origin-Agent-Cluster", "?1");
   }
   fs.createReadStream(resolvedPath).pipe(response);
