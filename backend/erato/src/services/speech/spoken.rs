@@ -1,33 +1,48 @@
 //! The text a voice reads: markdown turned into plain sentences a listener can follow.
 //! Only the copy sent to the voice is changed; the chat keeps the text as written.
 
-use super::readings::Readings;
+use super::readings::{Readings, ReadingsByLanguage};
 use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{BrokenLink, CowStr, Event, Options, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::borrow::Cow;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
-/// The user's language as a bare two-letter code, the form the sentence splitter recognises.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SpeechLanguage(String);
+/// The user's language as a bare two-letter code, the form the sentence splitter recognises,
+/// with the readings the voice uses in it.
+#[derive(Clone)]
+pub struct SpeechLanguage {
+    code: String,
+    readings: Option<Arc<Readings>>,
+}
 
 impl SpeechLanguage {
     /// Reduces "de-DE" or "de_DE" to "de". Callers pass the language the screen shows when it is
-    /// supported, else the profile's resolved language, as Explain does.
+    /// supported, else the profile's resolved language, as Explain does. Uses the built-in
+    /// readings.
     pub fn new(language: &str) -> Self {
-        Self(
-            language
-                .split(['-', '_'])
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase(),
-        )
+        Self::with_readings(language, ReadingsByLanguage::built_in())
+    }
+
+    /// Like [`SpeechLanguage::new`], with the readings the configuration built.
+    pub fn with_readings(language: &str, readings: &ReadingsByLanguage) -> Self {
+        let code = language
+            .split(['-', '_'])
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let readings = readings.get(language);
+        Self { code, readings }
     }
 
     pub fn code(&self) -> &str {
-        &self.0
+        &self.code
+    }
+
+    #[cfg(test)]
+    pub(super) fn readings(&self) -> Option<Arc<Readings>> {
+        self.readings.clone()
     }
 
     /// The rules sentences are split with. English text is split with German rules too: on
@@ -164,7 +179,7 @@ pub(super) fn read(
         _ => true,
     });
 
-    let readings = Readings::for_language(language);
+    let readings = language.readings.as_deref();
     let last = pieces.len().saturating_sub(1);
     let mut spoken = String::new();
     for (index, piece) in pieces.into_iter().enumerate() {

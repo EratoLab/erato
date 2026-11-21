@@ -1217,6 +1217,18 @@ pub struct AppConfig {
     #[facet(erato_config::stability(level = "alpha"))]
     pub spoken_number_words: SpokenNumberWordsByLanguage,
 
+    /// Readings by language tag for written forms a voice may not say well,
+    /// such as abbreviations (`"z. B." = "zum Beispiel"`), applied only to
+    /// the text sent to the voice. They add to or override the built-in
+    /// German readings.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken_readings::deserialize_spoken_readings"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_readings: crate::spoken_readings::SpokenReadingsByLanguage,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -1754,7 +1766,7 @@ impl AppConfig {
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_wait_lines(&schema);
-        warn_misshaped_number_words(&schema);
+        warn_misshaped_language_data(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1776,7 +1788,7 @@ impl AppConfig {
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_wait_lines(&schema);
-        warn_misshaped_number_words(&schema);
+        warn_misshaped_language_data(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -3747,6 +3759,39 @@ mod audio_config_tests {
     }
 
     #[test]
+    fn hesitations_per_language_hold_only_that_languages_turns() {
+        let settings = load_conversational(
+            "hesitation_words = [\"erm\"]\n\
+             [hesitations]\nfr = [\"euh\", \"bah\"]\nFR = [\"euh\"]\npl = \"yyy\"\n",
+        );
+        let fr = settings.effective_hesitation_words_for("fr_CA");
+        assert!(fr.contains(&"euh".to_string()) && fr.contains(&"erm".to_string()));
+        assert!(fr.contains(&"äh".to_string()));
+        let en = settings.effective_hesitation_words_for("en");
+        assert!(!en.contains(&"euh".to_string()));
+        assert_eq!(en, settings.effective_hesitation_words());
+        let mut misshaped = crate::language_words::misshaped_hesitations(
+            &config::Config::builder()
+                .add_source(config::File::from_str(
+                    "[audio_conversational.hesitations]\nFR = [\"euh\"]\npl = \"yyy\"\n",
+                    config::FileFormat::Toml,
+                ))
+                .build()
+                .unwrap(),
+        );
+        misshaped.sort();
+        assert_eq!(
+            misshaped,
+            [
+                "audio_conversational.hesitations.pl is not a list and is ignored",
+                "audio_conversational.hesitations: 'FR' is not a lowercase language tag such as `de` and is ignored",
+            ]
+        );
+        assert!(settings.hesitations["pl"].is_empty());
+        assert!(!settings.hesitations.contains_key("FR"));
+    }
+
+    #[test]
     fn hesitation_words_add_or_replace_and_odd_entries_are_dropped() {
         let mut settings =
             load_conversational("hesitation_words = [\"euh\", \"äh ja\", \"42\", \" \", \"Bah\"]");
@@ -4256,6 +4301,16 @@ pub struct ApprovalVoiceCommandsConfig {
     pub model_timeout_ms: u32,
     /// Replaces the model's built-in instruction. Unset or blank keeps it.
     pub prompt: Option<String>,
+    /// Words per language tag that the rules match besides the built-in
+    /// German and English ones, usually from a content package. A card
+    /// uses the German and English words and those of its own language.
+    /// Its hesitations are trimmed around the confirmation phrase and its
+    /// negations, conditions and question words feed the guards.
+    #[serde(deserialize_with = "crate::voice_command_words::deserialize_voice_command_words")]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub words: crate::voice_command_words::VoiceCommandWordsByLanguage,
 }
 
 /// Off by default. Lets the user decide a waiting card by voice: "nein"
@@ -4279,6 +4334,16 @@ pub struct ApprovalVoiceDecisionsConfig {
     /// How long an accepted decision by voice may take to arrive, in
     /// seconds. Defaults to `120`; allowed from `5` to `600`.
     pub receipt_ttl_seconds: u32,
+    /// The confirmation phrase per language tag, usually from a content
+    /// package. A configured `de` or `en` phrase replaces the built-in one;
+    /// a card in another language approves by voice only with a phrase of
+    /// its own. Each phrase is checked at startup and dropped with a
+    /// warning when it could be heard by mistake.
+    #[serde(deserialize_with = "crate::confirmation_phrases::deserialize_confirmation_phrases")]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub phrases: crate::confirmation_phrases::ConfirmationPhrasesByLanguage,
 }
 
 impl Default for ApprovalVoiceDecisionsConfig {
@@ -4288,6 +4353,7 @@ impl Default for ApprovalVoiceDecisionsConfig {
             echo_tail_ms: 300,
             min_speech_ms_per_syllable: 80,
             receipt_ttl_seconds: 120,
+            phrases: Default::default(),
         }
     }
 }
@@ -4304,6 +4370,7 @@ impl Default for ApprovalVoiceCommandsConfig {
             chat_provider_id: None,
             model_timeout_ms: 2500,
             prompt: None,
+            words: Default::default(),
         }
     }
 }
@@ -9067,7 +9134,9 @@ pub struct AudioConversationalConfig {
     /// conversational turn whose words are all hesitation sounds does not
     /// end: nothing is sent, and the microphone listens on for what the
     /// speaker goes on to say. Each entry is one word of letters; others are
-    /// dropped with a warning. Defaults to none.
+    /// dropped with a warning. Before a confirmation phrase only the
+    /// voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words: Vec<String>,
@@ -9077,6 +9146,20 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words_replace_base: bool,
+    /// Hesitation sounds per language tag, usually from a content package,
+    /// added to the list above for a user whose interface is in that
+    /// language. Each entry is one word of letters, and never a negation,
+    /// condition or question word of German, English or that language;
+    /// others are dropped with a warning. Before a confirmation phrase only
+    /// the voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
+    #[serde(
+        default,
+        deserialize_with = "crate::language_words::deserialize_hesitations"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub hesitations: HashMap<String, Vec<String>>,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -9156,6 +9239,7 @@ impl Default for AudioConversationalConfig {
             voice_start_max_wait_ms: default_voice_start_max_wait_ms(),
             hesitation_words: Vec::new(),
             hesitation_words_replace_base: false,
+            hesitations: HashMap::new(),
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
@@ -9177,6 +9261,20 @@ impl AudioConversationalConfig {
         for word in base.chain(self.hesitation_words.iter().cloned()) {
             if !words.contains(&word) {
                 words.push(word);
+            }
+        }
+        words
+    }
+
+    /// The hesitation sounds that hold a turn for a user in `language`
+    /// ("fr", "fr-CA", …): [`Self::effective_hesitation_words`] and the
+    /// language's own.
+    pub fn effective_hesitation_words_for(&self, language: &str) -> Vec<String> {
+        let mut words = self.effective_hesitation_words();
+        let own = crate::language_words::by_tag(language, |tag| self.hesitations.get(tag));
+        for word in own.into_iter().flatten() {
+            if !words.contains(word) {
+                words.push(word.clone());
             }
         }
         words
@@ -9363,9 +9461,35 @@ fn warn_misshaped_approval_speech(schema: &Config) {
     }
 }
 
-fn warn_misshaped_number_words(schema: &Config) {
-    for dropped in crate::spoken::misshaped_number_words(schema) {
-        tracing::warn!("Spoken number word dropped: {dropped}.");
+/// Warns for each part of the per-language data a content package brings
+/// that the lenient loaders leave out.
+fn warn_misshaped_language_data(schema: &Config) {
+    let parts: [(&str, Vec<String>); 5] = [
+        (
+            "Spoken number word",
+            crate::spoken::misshaped_number_words(schema),
+        ),
+        (
+            "Voice-command word",
+            crate::voice_command_words::misshaped_voice_command_words(schema),
+        ),
+        (
+            "Spoken reading",
+            crate::spoken_readings::misshaped_spoken_readings(schema),
+        ),
+        (
+            "Confirmation phrase",
+            crate::confirmation_phrases::misshaped_confirmation_phrases(schema),
+        ),
+        (
+            "Hesitation words",
+            crate::language_words::misshaped_hesitations(schema),
+        ),
+    ];
+    for (what, dropped) in parts {
+        for dropped in dropped {
+            tracing::warn!("{what} dropped: {dropped}.");
+        }
     }
 }
 

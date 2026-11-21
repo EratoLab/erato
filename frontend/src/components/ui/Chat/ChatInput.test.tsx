@@ -8863,6 +8863,38 @@ describe("ChatInput", () => {
       ).toHaveTextContent("“Äh.” · Still listening");
     });
 
+    it("holds back the hesitations of the interface language", async () => {
+      const { i18n } = await import("@lingui/core");
+      const previous = i18n.locale;
+      conversational(vi.fn(), true);
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+        hesitationWords: ["äh"],
+        hesitationsByLanguage: { fr: ["äh", "euh"] },
+      });
+      const heldBack = (text: string) => {
+        const [options] = mockUseAudioDictationRecorder.mock.lastCall as [
+          { isHesitationOnly: (text: string) => boolean },
+        ];
+        return options.isHesitationOnly(text);
+      };
+      try {
+        const ui = await composer();
+        i18n.loadAndActivate({ locale: "fr", messages: {} });
+        const { unmount } = render(ui(true));
+        expect(heldBack("Euh…")).toBe(true);
+        expect(heldBack("Äh.")).toBe(true);
+        unmount();
+        i18n.activate(previous);
+        render(ui(true));
+        expect(heldBack("Euh…")).toBe(false);
+        expect(heldBack("Äh.")).toBe(true);
+      } finally {
+        i18n.activate(previous);
+      }
+    });
+
     it("ERMAIN-1234: switched on while a card waits, it stays closed while a change asked for by voice waits for its answer", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation);

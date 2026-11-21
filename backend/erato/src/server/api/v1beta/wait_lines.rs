@@ -328,7 +328,7 @@ pub async fn wait_lines(
     let (amount, source, audience, user_choice) =
         resolve(config, &audiences, me_user.preference_wait_lines_amount);
 
-    let language = speech_language(&me_user).code().to_string();
+    let language = speech_language(&app_state, &me_user).code().to_string();
     let voice = voice_fingerprint(provider_id, provider_config);
     let set = config.set_for(&language);
     let timing = WaitLinesTiming {
@@ -466,7 +466,7 @@ pub async fn progress_speech(
     if !generating {
         return Err(StatusCode::CONFLICT);
     }
-    let language = speech_language(&me_user);
+    let language = speech_language(&app_state, &me_user);
     speech_response(
         provider_config,
         &[text.to_string()],

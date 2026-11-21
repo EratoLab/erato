@@ -8888,12 +8888,12 @@ msgstr "Das habe ich nicht sicher gehört. Bitte noch einmal sagen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhrase"
-msgstr "Bitte „Ich bestätige“ sagen."
+msgstr "Bitte „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhraseAgain"
-msgstr "Bitte noch einmal „Ich bestätige“ sagen."
+msgstr "Bitte noch einmal „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9003,7 +9003,7 @@ msgstr "Bitte auf dem Bildschirm bestätigen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.requestPhrase"
-msgstr "Zum Ausführen bitte „Ich bestätige“ sagen."
+msgstr "Zum Ausführen bitte „{phrase}“ sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9416,7 +9416,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolApproval.voicePhrase"
-msgstr "Per Sprache: „Ich bestätige“"
+msgstr "Per Sprache: „{phrase}“"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

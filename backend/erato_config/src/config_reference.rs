@@ -4,6 +4,7 @@ use facet::{Facet, Shape};
 use serde_json::Value;
 
 use crate::config::{AppConfig, PromptSourceSpecification};
+use crate::spoken_readings::SpokenReading;
 pub use erato_config_schema::validate_config_reference;
 use erato_config_schema::{ReferenceOptions, generate_reference_with_options};
 
@@ -20,14 +21,29 @@ pub fn generate_config_reference() -> Result<Value> {
 fn custom_leaf_paths(shape: &Shape) -> Option<&'static [&'static str]> {
     // PromptSourceSpecification's custom Serde implementation accepts both a
     // scalar and tagged object forms that differ from its Rust representation.
-    (shape == PromptSourceSpecification::SHAPE).then_some(&[
-        "",
-        "source",
-        "prompt_name",
-        "label",
-        "prompt",
-        "fallback",
-    ])
+    if shape == PromptSourceSpecification::SHAPE {
+        return Some(&["", "source", "prompt_name", "label", "prompt", "fallback"]);
+    }
+    // A reading is written as its spoken text alone or as a table.
+    (shape == SpokenReading::SHAPE).then_some(&["", "spoken", "sentence_final"])
+}
+
+/// Sections that hold language data by language tag.
+const KEYED_BY_LANGUAGE: &[&[&str]] = &[
+    &["approval_voice_commands", "words"],
+    &["approval_speech", "words"],
+    &["spoken_readings"],
+    &["approval_voice_decisions", "phrases"],
+    &["audio_conversational", "hesitations"],
+    &["audio_conversational", "wait_lines", "phrases"],
+    &["approval_speech", "sentences"],
+    &["spoken_number_words"],
+];
+
+fn is_keyed_by_language(path: &[String]) -> bool {
+    KEYED_BY_LANGUAGE
+        .iter()
+        .any(|keyed| keyed.iter().copied().eq(path.iter().map(String::as_str)))
 }
 
 fn map_key_placeholder(path: &[String]) -> String {
@@ -35,6 +51,10 @@ fn map_key_placeholder(path: &[String]) -> String {
         Some("facets") => "<facet-id>".to_string(),
         Some("file_storage_providers") => "<provider-id>".to_string(),
         Some("localized_prompts") => "<locale>".to_string(),
+        Some(_) if is_keyed_by_language(path) => "<language>".to_string(),
+        Some("<language>") if path.len() == 2 && path[0] == "spoken_readings" => {
+            "<written-form>".to_string()
+        }
         Some("mcp_servers") => "<server-id>".to_string(),
         Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
         Some("field_names" | "choice_labels")

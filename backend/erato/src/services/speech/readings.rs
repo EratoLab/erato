@@ -1,11 +1,11 @@
 //! Written forms a voice may not say well, each with one fixed reading. Applied only to the text
 //! sent to the voice. The built-in rows are German abbreviations whose reading never depends on
-//! the context; other rows (product names, English terms) can be added through `Readings::new`.
+//! the context; `[spoken_readings.<language>]` adds rows or overrides them by written form.
 
-use super::spoken::SpeechLanguage;
-use regex::{Captures, Regex};
+use erato_config::spoken_readings::SpokenReadingsByLanguage;
+use regex::{Captures, Regex, RegexBuilder};
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Clone, Debug)]
 pub struct Reading {
@@ -51,15 +51,110 @@ const GERMAN: &[(&str, &str, bool)] = &[
     ("Fa.", "Firma", false),
 ];
 
+#[derive(Debug)]
 pub struct Readings {
     pattern: Option<Regex>,
     by_key: HashMap<String, Reading>,
 }
 
+/// The readings of every language that has any, built once from the configuration.
+#[derive(Debug, Default)]
+pub struct ReadingsByLanguage(HashMap<String, Arc<Readings>>);
+
+/// The largest compiled pattern for one language's written forms.
+const PATTERN_SIZE_LIMIT: usize = 10 * (1 << 20);
+
+fn built_in_rows(language: &str) -> Vec<Reading> {
+    if language != "de" {
+        return Vec::new();
+    }
+    GERMAN
+        .iter()
+        .map(|&(written, spoken, sentence_final)| Reading::new(written, spoken, sentence_final))
+        .collect()
+}
+
+impl ReadingsByLanguage {
+    /// The built-in rows with the configured ones; a configured row replaces a built-in one with
+    /// the same written form. A language whose forms cannot be matched keeps its built-in rows.
+    pub fn from_config(configured: &SpokenReadingsByLanguage) -> Self {
+        Self::built(configured, PATTERN_SIZE_LIMIT)
+    }
+
+    fn built(configured: &SpokenReadingsByLanguage, size_limit: usize) -> Self {
+        let mut languages: Vec<&str> = configured.keys().map(String::as_str).collect();
+        languages.push("de");
+        languages.sort_unstable();
+        languages.dedup();
+        let mut by_language = HashMap::new();
+        for language in languages {
+            let built_in = built_in_rows(language);
+            let mut rows: Vec<Reading> = Vec::new();
+            if let Some(readings) = configured.get(language) {
+                crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+                    "Spoken readings",
+                    language,
+                );
+                let overridden = readings
+                    .keys()
+                    .filter(|written| built_in.iter().any(|row| key(&row.written) == key(written)))
+                    .count();
+                tracing::info!(
+                    "Spoken readings for `{language}`: adds {}, overrides {overridden}.",
+                    readings.len() - overridden
+                );
+                rows.extend(readings.iter().map(|(written, reading)| {
+                    Reading::new(written, &reading.spoken, reading.sentence_final)
+                }));
+                rows.sort_by(|a, b| a.written.cmp(&b.written));
+            }
+            // Configured rows come first: `Readings::new` keeps the first row of a form.
+            rows.extend(built_in.iter().cloned());
+            if rows.is_empty() {
+                continue;
+            }
+            let readings = match Readings::built(rows, size_limit) {
+                Ok(readings) => Some(readings),
+                Err(error) => {
+                    tracing::warn!(
+                        "Spoken readings for `{language}` are not used, the built-in ones apply: {error}."
+                    );
+                    Readings::built(built_in, size_limit).ok()
+                }
+            };
+            if let Some(readings) = readings.filter(|readings| readings.pattern.is_some()) {
+                by_language.insert(language.to_string(), Arc::new(readings));
+            }
+        }
+        Self(by_language)
+    }
+
+    /// The built-in readings alone.
+    pub fn built_in() -> &'static Self {
+        static BUILT_IN: LazyLock<ReadingsByLanguage> =
+            LazyLock::new(|| ReadingsByLanguage::from_config(&SpokenReadingsByLanguage::new()));
+        &BUILT_IN
+    }
+
+    /// The readings for a language tag ("de-AT"), else for its primary subtag ("de").
+    pub fn get(&self, language: &str) -> Option<Arc<Readings>> {
+        let tag = language.trim().to_ascii_lowercase().replace('_', "-");
+        let primary = tag.split('-').next().unwrap_or_default();
+        self.0.get(&tag).or_else(|| self.0.get(primary)).cloned()
+    }
+}
+
 impl Readings {
     /// A space after a full stop in a written form is optional, so "z. B." also matches "z.B.".
     /// A form that starts in lower case also matches with a capital, and is then read with one.
-    pub fn new(rows: impl IntoIterator<Item = Reading>) -> Self {
+    pub fn new(rows: impl IntoIterator<Item = Reading>) -> Result<Self, regex::Error> {
+        Self::built(rows, PATTERN_SIZE_LIMIT)
+    }
+
+    fn built(
+        rows: impl IntoIterator<Item = Reading>,
+        size_limit: usize,
+    ) -> Result<Self, regex::Error> {
         let mut by_key = HashMap::new();
         for row in rows {
             let capitalised = capitalise(&row.written).map(|written| Reading {
@@ -75,23 +170,19 @@ impl Readings {
         written.sort_by(|a, b| key(b).len().cmp(&key(a).len()).then(a.cmp(b)));
         let alternatives: Vec<String> = written.into_iter().map(pattern).collect();
         // Whole words: not inside a word, an address or a file name.
-        let pattern = (!alternatives.is_empty()).then(|| {
-            Regex::new(&format!(
-                r"(^|[^\p{{L}}\p{{N}}.@/_])({})",
-                alternatives.join("|")
-            ))
-            .expect("escaped written forms form a valid pattern")
-        });
-        Self { pattern, by_key }
-    }
-
-    pub fn for_language(language: &SpeechLanguage) -> Option<&'static Readings> {
-        static GERMAN_READINGS: LazyLock<Readings> = LazyLock::new(|| {
-            Readings::new(GERMAN.iter().map(|&(written, spoken, sentence_final)| {
-                Reading::new(written, spoken, sentence_final)
-            }))
-        });
-        (language.code() == "de").then(|| &*GERMAN_READINGS)
+        let pattern = if alternatives.is_empty() {
+            None
+        } else {
+            Some(
+                RegexBuilder::new(&format!(
+                    r"(^|[^\p{{L}}\p{{N}}.@/_])({})",
+                    alternatives.join("|")
+                ))
+                .size_limit(size_limit)
+                .build()?,
+            )
+        };
+        Ok(Self { pattern, by_key })
     }
 
     /// One pass, longest written form first; replaced text is not read again. `piece_ends`: the
@@ -149,6 +240,11 @@ fn pattern(written: &str) -> String {
                 r"\s+"
             });
         } else {
+            // A full stop inside a form written without a space ("z.B.") also takes one, as
+            // its key does.
+            if previous == Some('.') {
+                pattern.push_str(r"\s*");
+            }
             pattern.push_str(&regex::escape(c.encode_utf8(&mut [0; 4])));
         }
         previous = Some(c);
@@ -161,10 +257,12 @@ fn pattern(written: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::super::spoken::SpeechLanguage;
     use super::*;
 
     fn german(text: &str) -> String {
-        Readings::for_language(&SpeechLanguage::new("de"))
+        SpeechLanguage::new("de")
+            .readings()
             .unwrap()
             .apply(text, true)
     }
@@ -197,7 +295,7 @@ mod tests {
             german("Nr.5, Bus bzw.Bahn, z.B.Bahn, Obst usw.Danach"),
             "Nummer 5, Bus beziehungsweise Bahn, zum Beispiel Bahn, Obst und so weiter Danach"
         );
-        assert!(Readings::for_language(&SpeechLanguage::new("en")).is_none());
+        assert!(SpeechLanguage::new("en").readings().is_none());
     }
 
     #[test]
@@ -214,10 +312,60 @@ mod tests {
             german("Das sind z. B. Kosten"),
             "Das sind zum Beispiel Kosten"
         );
-        let readings = Readings::for_language(&SpeechLanguage::new("de")).unwrap();
+        let readings = SpeechLanguage::new("de").readings().unwrap();
         assert_eq!(
             readings.apply("Das klären wir ggf.", false),
             "Das klären wir gegebenenfalls"
+        );
+    }
+
+    fn configured(readings: serde_json::Value) -> ReadingsByLanguage {
+        ReadingsByLanguage::from_config(
+            &erato_config::spoken_readings::deserialize_spoken_readings(readings).unwrap(),
+        )
+    }
+
+    #[test]
+    fn configured_readings_are_applied_in_their_language() {
+        let readings = configured(serde_json::json!({"fr": {
+            "p. ex.": "par exemple",
+            "etc.": {"spoken": "et cetera", "sentence_final": true},
+            "cf.": 3,
+        }}));
+        let french = SpeechLanguage::with_readings("fr-FR", &readings);
+        assert_eq!(
+            french
+                .readings()
+                .unwrap()
+                .apply("Des fruits, p.ex. des pommes, etc. Ensuite", true),
+            "Des fruits, par exemple des pommes, et cetera. Ensuite"
+        );
+        assert!(
+            SpeechLanguage::with_readings("en", &readings)
+                .readings()
+                .is_none()
+        );
+        let german = SpeechLanguage::with_readings("de", &readings);
+        assert_eq!(
+            german.readings().unwrap().apply("z. B. ggf.", true),
+            "zum Beispiel gegebenenfalls."
+        );
+    }
+
+    #[test]
+    fn a_configured_reading_overrides_the_built_in_one_of_its_form() {
+        let readings = configured(serde_json::json!({"de": {
+            "ca.": "zirka",
+            "z.B.": "beispielsweise",
+            "Kfz": "Kraftfahrzeug",
+        }}));
+        let german = SpeechLanguage::with_readings("de", &readings);
+        assert_eq!(
+            german
+                .readings()
+                .unwrap()
+                .apply("Ca. 3 Kfz, z. B. Busse, bzw. ca. 4", true),
+            "Zirka 3 Kraftfahrzeug, beispielsweise Busse, beziehungsweise zirka 4"
         );
     }
 
@@ -227,10 +375,67 @@ mod tests {
             Reading::new("Nr.", "Nummer", false),
             Reading::new("Nr. 1", "Nummer eins", false),
             Reading::new("A.", "Nr. 1", false),
-        ]);
+        ])
+        .unwrap();
         assert_eq!(
             readings.apply("Nr. 1, Nr. 12, Nr. 2 und A. hier", true),
             "Nummer eins, Nummer 12, Nummer 2 und Nr. 1 hier"
         );
+    }
+
+    #[test]
+    fn a_language_table_serves_its_regions_and_a_region_table_its_tag() {
+        let readings = configured(serde_json::json!({
+            "de": {"Kfz": "Kraftfahrzeug"},
+            "pt-br": {"p. ex.": "por exemplo"},
+            "PT": {"p. ex.": "por exemplo"},
+            "pt-PT": {"p. ex.": "por exemplo"},
+        }));
+        for language in ["de", "de-DE", "de-AT", "de_CH"] {
+            assert_eq!(
+                SpeechLanguage::with_readings(language, &readings)
+                    .readings()
+                    .unwrap()
+                    .apply("Kfz z. B.", false),
+                "Kraftfahrzeug zum Beispiel",
+                "{language}"
+            );
+        }
+        assert_eq!(
+            SpeechLanguage::with_readings("pt-BR", &readings)
+                .readings()
+                .unwrap()
+                .apply("p. ex. isto", true),
+            "por exemplo isto"
+        );
+        for language in ["pt", "pt-PT"] {
+            assert!(readings.get(language).is_none(), "{language}");
+        }
+    }
+
+    #[test]
+    fn readings_that_cannot_be_matched_leave_the_built_in_ones() {
+        let configured: SpokenReadingsByLanguage =
+            erato_config::spoken_readings::deserialize_spoken_readings(serde_json::json!({
+                "de": {"Kfz": "Kraftfahrzeug"},
+                "fr": {"p. ex.": "par exemple"},
+            }))
+            .unwrap();
+        let fits = |limit| Readings::built(built_in_rows("de"), limit).is_ok();
+        let (mut low, mut limit) = (1, PATTERN_SIZE_LIMIT);
+        while low < limit {
+            let middle = (low + limit) / 2;
+            if fits(middle) {
+                limit = middle
+            } else {
+                low = middle + 1
+            }
+        }
+        let readings = ReadingsByLanguage::built(&configured, limit);
+        let german = readings.get("de").unwrap();
+        assert_eq!(german.apply("Kfz z. B.", false), "Kfz zum Beispiel");
+        assert!(readings.get("fr").is_some());
+        let none = ReadingsByLanguage::built(&configured, 1);
+        assert!(none.get("de").is_none() && none.get("fr").is_none());
     }
 }

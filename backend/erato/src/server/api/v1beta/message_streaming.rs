@@ -18420,14 +18420,15 @@ fn read_back_reply(
     let read_back = requested && app_state.config.conversational_speech_provider().is_some();
     task.speech_enabled
         .store(read_back, std::sync::atomic::Ordering::Relaxed);
-    let _ = task
-        .speech_language
-        .set(crate::services::speech::spoken::SpeechLanguage::new(
+    let _ = task.speech_language.set(
+        crate::services::speech::spoken::SpeechLanguage::with_readings(
             super::me_profile_middleware::normalize_supported_language(
                 me_user.preference_language.as_deref(),
             )
             .unwrap_or(&me_user.preferred_language),
-        ));
+            &app_state.speech_readings,
+        ),
+    );
     read_back
 }
 

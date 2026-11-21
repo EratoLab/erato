@@ -906,3 +906,153 @@ async fn an_approval_by_voice_needs_the_phrase_and_its_receipt(pool: Pool<Postgr
         .await
         .assert_status(axum::http::StatusCode::CONFLICT);
 }
+
+/// What the voice command endpoint answers to `transcript` said on the
+/// waiting card in `language`, with signals that carry a decision.
+async fn said_on_card(
+    server: &TestServer,
+    message_id: Uuid,
+    approval_id: &str,
+    language: &str,
+    transcript: &str,
+) -> Value {
+    let response = server
+        .post(&format!(
+            "/api/v1beta/me/messages/{message_id}/approval-voice-command"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "transcript": transcript,
+            "language": language,
+            "pieces": [
+                {"id": "what", "role": "what", "state": "heard"},
+                {"id": "request", "role": "request", "state": "heard"},
+            ],
+            "approval_id": approval_id,
+            "signals": {
+                "voice_stopped_at_ms": 1_700_000_000_000u64,
+                "request_heard_at_ms": 1_699_999_999_000u64,
+                "recording_started_at_ms": 1_700_000_000_050u64,
+                "recording_ended_at_ms": 1_700_000_002_000u64,
+                "first_speech_at_ms": 1_700_000_000_600u64,
+                "speech_ms": 900,
+                "recorded_ms": 1_900,
+            },
+        }))
+        .await;
+    response.assert_status_ok();
+    response.json::<Value>()
+}
+
+/// A parked update with deciding by voice on, `configure` applied.
+async fn parked_for_voice(
+    pool: Pool<Postgres>,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (erato::state::AppState, TestServer, Uuid, String) {
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &["updated to"],
+        &[],
+        build_openai_text_streaming_response(&["DONE"]),
+    );
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &["updated to"],
+        update("call_update", "Done"),
+    );
+    let app_state = records_app_state_with(pool, mocks, |config| {
+        config.approval_voice_commands.enabled = true;
+        config.approval_voice_decisions.enabled = true;
+        configure(config);
+    })
+    .await;
+    let server = app_server(app_state.clone());
+    let (_chat_id, message_id) = park(&server).await;
+    let stop = stops(&message_content(&app_state, message_id).await)[0].clone();
+    let approval_id = own_item(&stop)["approval_id"].as_str().unwrap().to_string();
+    (app_state, server, message_id, approval_id)
+}
+
+/// A card in a language without a phrase of its own is approved on screen,
+/// whichever built-in phrase is said.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_card_in_a_language_without_its_own_phrase_is_approved_on_screen(pool: Pool<Postgres>) {
+    let (_app_state, server, message_id, approval_id) = parked_for_voice(pool, |_| {}).await;
+    for (language, transcript) in [
+        ("fr", "I confirm."),
+        ("fr", "Ich bestätige."),
+        ("es", "I confirm."),
+    ] {
+        let answer = said_on_card(&server, message_id, &approval_id, language, transcript).await;
+        assert_eq!(answer["meaning"], "approve", "{language}: {answer}");
+        assert_eq!(
+            answer["decision"],
+            json!({"status": "screen_only"}),
+            "{language}: {answer}"
+        );
+    }
+}
+
+/// A configured French phrase approves a French card, with a receipt the
+/// decision then carries; a Spanish card stays on screen.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_configured_french_phrase_approves_a_french_card(pool: Pool<Postgres>) {
+    let (app_state, server, message_id, approval_id) = parked_for_voice(pool, |config| {
+        config.approval_voice_decisions.phrases.insert(
+            "fr".to_string(),
+            erato_config::confirmation_phrases::ConfirmationPhraseConfig {
+                phrase: "Je confirme l'action".to_string(),
+                leading: vec!["oui".to_string()],
+                trailing: Vec::new(),
+            },
+        );
+        config.approval_voice_commands.words.insert(
+            "fr".to_string(),
+            erato_config::voice_command_words::VoiceCommandWordLists {
+                yes_particles: vec!["oui".to_string()],
+                casual_approvals: vec!["d'accord".to_string()],
+                ..Default::default()
+            },
+        );
+    })
+    .await;
+    let spanish = said_on_card(&server, message_id, &approval_id, "es", "I confirm.").await;
+    assert_eq!(spanish["decision"], json!({"status": "screen_only"}));
+    let french = said_on_card(
+        &server,
+        message_id,
+        &approval_id,
+        "fr",
+        "Je confirme l'action.",
+    )
+    .await;
+    assert_eq!(french["meaning"], "approve", "{french}");
+    assert_eq!(french["decision"]["status"], "accepted", "{french}");
+    let receipt = french["decision"]["receipt"].clone();
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{
+                "approval_id": approval_id,
+                "decision": "approve",
+                "voice_receipt": receipt,
+            }],
+        }))
+        .await
+        .assert_status_ok();
+    let content = message_content(&app_state, message_id).await;
+    let approval = content
+        .iter()
+        .find(|part| part["content_type"] == "tool_approval")
+        .expect("approved");
+    assert_eq!(
+        approval["voice"]["required_phrase"],
+        "fr.je_confirme_laction"
+    );
+    assert_eq!(approval["voice"]["matched_words"], "je confirme laction");
+    assert_eq!(approval["voice"]["match_kind"], "exact");
+}

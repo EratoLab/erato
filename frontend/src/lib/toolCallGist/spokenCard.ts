@@ -23,6 +23,10 @@ import type {
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
 import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
 import type { DictationRelation, UserTurn } from "./spokenDictation";
+import type {
+  ConfirmationPhrases,
+  SpokenCardLanguages,
+} from "./spokenLanguageData";
 import type { SpokenNames } from "./spokenNames";
 import type { NumberWords } from "./spokenNumbers";
 import type { SentenceSet } from "./spokenSentences";
@@ -324,6 +328,10 @@ export interface SpokenOptions {
    * user said in words. Without them only digits are read.
    */
   numberWords?: NumberWords;
+  /** The spoken-card words of every language; the built-in ones when not given. */
+  spokenCardLanguages?: SpokenCardLanguages;
+  /** The confirmation phrase of every language; the built-in ones when not given. */
+  confirmationPhrases?: ConfirmationPhrases;
   /** Dates in the current year are said without it. */
   now: Date;
   /** The zone times with an offset are said in. */
@@ -921,11 +929,15 @@ const withDestructiveMark = (
 
 /**
  * `facts` with each long text that is the user's dictation marked so. A text
- * the card holds only in part is never compared: its rest is unknown.
+ * the card holds only in part is never compared: its rest is unknown. An
+ * instruction before the dictation is read in German, English and the
+ * card's `language`.
  */
 export const withDictation = (
   facts: SpokenFacts,
   turns: readonly UserTurn[] | undefined,
+  language: string,
+  languages?: SpokenCardLanguages,
 ): SpokenFacts => {
   if (!turns || turns.length === 0) return facts;
   return {
@@ -934,7 +946,12 @@ export const withDictation = (
       if (spoken.read !== undefined || !spoken.full || spoken.full.cut) {
         return spoken;
       }
-      const dictated = dictationOf(spoken.full.text, turns);
+      const dictated = dictationOf(
+        spoken.full.text,
+        turns,
+        language,
+        languages,
+      );
       return dictated
         ? { ...spoken, dictated, full: { ...spoken.full, dictated } }
         : spoken;
@@ -1268,6 +1285,8 @@ const composedPieces = (
   const facts = withDictation(
     spokenFactsOf(card.gist, approval.server, options.timeZone, false, names),
     options.userTurns,
+    options.language,
+    options.spokenCardLanguages,
   );
   const loss = facts.action === "delete";
   const item = words.item(facts, position);
@@ -1577,7 +1596,10 @@ const readOutSentences = (piece: SpokenPiece, words: SpokenWords): string[] => {
 export const spokenUtteranceSentences = (
   utterance: SpokenUtterance,
   pieces: readonly SpokenPiece[],
-  options: Pick<SpokenOptions, "language" | "now" | "timeZone">,
+  options: Pick<
+    SpokenOptions,
+    "language" | "now" | "timeZone" | "confirmationPhrases"
+  >,
 ): string[] => {
   const words = spokenWordsFor(options.language, options);
   switch (utterance.type) {

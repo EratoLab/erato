@@ -134,6 +134,10 @@ pub struct AppState {
     pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
+    /// The voice-command words per card language, built once from the config.
+    pub voice_command_words: Arc<crate::services::approval_voice_commands::CommandWordsByLanguage>,
+    /// The readings the voice uses per language, built once from the config.
+    pub speech_readings: Arc<crate::services::speech::readings::ReadingsByLanguage>,
     /// Model label mappings per user, tool and argument shape.
     pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// How long one labeller request may take; tests shorten it.
@@ -218,7 +222,7 @@ impl AppState {
             .clone()
     }
 
-    pub async fn new(config: AppConfig) -> Result<Self, Report> {
+    pub async fn new(mut config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
@@ -356,6 +360,26 @@ impl AppState {
                 &config.integrations.entra_id.group_overage,
             )?;
 
+        let voice_command_words = Arc::new(
+            crate::services::approval_voice_commands::CommandWordsByLanguage::from_config(
+                &config.approval_voice_commands.words,
+                &config.approval_voice_decisions.phrases,
+            ),
+        );
+        let (warnings, notes) =
+            voice_command_words.check_turn_hesitations(&mut config.audio_conversational);
+        for warning in warnings {
+            tracing::warn!("{warning}");
+        }
+        for note in notes {
+            tracing::info!("Hesitation words: {note}.");
+        }
+        let speech_readings = Arc::new(
+            crate::services::speech::readings::ReadingsByLanguage::from_config(
+                &config.spoken_readings,
+            ),
+        );
+        report_spoken_card_words(&config.approval_speech.words);
         let mut state = Self {
             memory_reservation: None,
             db,
@@ -379,6 +403,8 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
+            voice_command_words,
+            speech_readings,
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: Arc::new(Semaphore::new(
@@ -1370,6 +1396,8 @@ impl Clone for AppState {
             file_bytes_cache: self.file_bytes_cache.clone(),
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
+            voice_command_words: self.voice_command_words.clone(),
+            speech_readings: self.speech_readings.clone(),
             tool_label_cache: self.tool_label_cache.clone(),
             tool_label_timeout: self.tool_label_timeout,
             tool_label_permits: self.tool_label_permits.clone(),
@@ -1481,6 +1509,23 @@ impl AppState {
             report.opaque(c, "shared.genai_override", client);
         }
         report
+    }
+}
+
+/// One startup line per language whose spoken-card words are configured.
+fn report_spoken_card_words(
+    configured: &erato_config::approval_speech_words::ApprovalSpeechWordsByLanguage,
+) {
+    let mut languages: Vec<_> = configured.iter().collect();
+    languages.sort_by(|a, b| a.0.cmp(b.0));
+    for (language, words) in languages {
+        crate::server::api::v1beta::me_profile_middleware::warn_unreachable_voice_language(
+            "Spoken-card words",
+            language,
+        );
+        if let Some(summary) = erato_config::approval_speech_words::summary(words) {
+            tracing::info!("Spoken-card words for `{language}`: {summary}.");
+        }
     }
 }
 

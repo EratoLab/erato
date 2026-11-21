@@ -1,5 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- sentence variants are data in the same form a deployment supplies them, not catalog copy */
 import { cleanServerText } from "./serverText";
+import { primaryLanguage } from "./spokenLanguageData";
 
 /**
  * The natural wording of a spoken card: hand-written sentence variants for
@@ -118,8 +119,7 @@ export const naturalVariant = (
   const configured = deployment?.[key];
   if (configured !== undefined && usableVariant(key, configured))
     return configured;
-  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const builtIn = BUILT_IN[code]?.[key];
+  const builtIn = BUILT_IN[primaryLanguage(language)]?.[key];
   return builtIn !== undefined && usableVariant(key, builtIn)
     ? builtIn
     : undefined;
