@@ -839,10 +839,12 @@ CREATE TABLE public.user_preferences (
     approval_speech_amount text,
     approval_speech_wording text,
     wait_lines_amount text,
+    reply_speech_wording text,
     CONSTRAINT user_preferences_approval_speech_amount_check CHECK ((approval_speech_amount = ANY (ARRAY['full'::text, 'short'::text]))),
     CONSTRAINT user_preferences_approval_speech_wording_check CHECK ((approval_speech_wording = ANY (ARRAY['precise'::text, 'natural'::text]))),
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
+    CONSTRAINT user_preferences_reply_speech_wording_check CHECK ((reply_speech_wording = ANY (ARRAY['natural'::text, 'precise'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
     CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL))))),
     CONSTRAINT user_preferences_wait_lines_amount_check CHECK ((wait_lines_amount = ANY (ARRAY['normal'::text, 'long_only'::text, 'off'::text])))

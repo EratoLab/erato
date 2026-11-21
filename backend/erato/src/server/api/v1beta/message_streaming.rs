@@ -1555,6 +1555,14 @@ pub enum MessageSubmitStreamingResponseMessage {
     },
     #[serde(rename = "audio_error")]
     AudioError { message_id: Uuid },
+    #[serde(rename = "spoken_delta")]
+    /// Sent whenever the voice gets new text of a reply's spoken part. The
+    /// written answer comes as `text_delta`.
+    SpokenDelta(MessageSubmitStreamingResponseMessageTextDelta),
+    #[serde(rename = "spoken_end")]
+    /// Sent when a spoken part is complete: the voice has all of it, and the
+    /// written answer may still be streaming.
+    SpokenEnd { message_id: Uuid },
     #[serde(rename = "chat_created")]
     /// May optionally be sent at the start of the stream to indicate that a new chat has been created.
     ChatCreated(MessageSubmitStreamingResponseChatCreated),
@@ -1593,6 +1601,8 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
         match self {
             Self::AudioDelta { .. } => "audio_delta",
             Self::AudioError { .. } => "audio_error",
+            Self::SpokenDelta(_) => "spoken_delta",
+            Self::SpokenEnd { .. } => "spoken_end",
             Self::ChatCreated(_) => "chat_created",
             Self::UserMessageSaved(_) => "user_message_saved",
             Self::AssistantMessageStarted(_) => "assistant_message_started",
@@ -2047,6 +2057,26 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
         StreamingEvent::AudioError { message_id } => (
             "audio_error",
             serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioError {
+                message_id: *message_id,
+            })?,
+        ),
+        StreamingEvent::SpokenDelta {
+            message_id,
+            content_index,
+            new_text,
+        } => (
+            "spoken_delta",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::SpokenDelta(
+                MessageSubmitStreamingResponseMessageTextDelta {
+                    message_id: *message_id,
+                    content_index: *content_index,
+                    new_text: new_text.clone(),
+                },
+            ))?,
+        ),
+        StreamingEvent::SpokenEnd { message_id } => (
+            "spoken_end",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::SpokenEnd {
                 message_id: *message_id,
             })?,
         ),
@@ -5570,6 +5600,267 @@ fn append_text_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> u
     }
 }
 
+fn append_spoken_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> usize {
+    let content_index = content.len().saturating_sub(1);
+    if let Some(ContentPart::Spoken(spoken_part)) = content.last_mut() {
+        spoken_part.text.push_str(&new_text);
+        content_index
+    } else {
+        let content_index = content.len();
+        content.push(ContentPart::Spoken(
+            crate::models::message::ContentPartSpoken { text: new_text },
+        ));
+        content_index
+    }
+}
+
+/// Whether a generation's reply is split into a spoken and a written part:
+/// the turn asked for it, or the history shows the format and the model may
+/// imitate it on a turn that did not.
+fn splits_reply(messages: &GenerationInputMessages) -> bool {
+    use crate::models::message::{BuiltinTurnInstruction, StoredTurnInstructionKind};
+    messages
+        .messages
+        .iter()
+        .any(|message| match &message.content {
+            ContentPart::TurnInstructionMarker(marker) => matches!(
+                marker.kind,
+                StoredTurnInstructionKind::Builtin(BuiltinTurnInstruction::SpokenAndWritten)
+            ),
+            ContentPart::Text(text) => {
+                message.role == MessageRole::Assistant
+                    && text
+                        .text
+                        .contains(crate::services::speech::reply_split::OPEN)
+            }
+            _ => false,
+        })
+}
+
+/// Routes the split text of a reply: the spoken part to the voice and a
+/// `Spoken` part, the written part to the chat, as the deltas arrive.
+async fn emit_reply_pieces(
+    pieces: Vec<crate::services::speech::reply_split::Piece>,
+    content: &mut Vec<ContentPart>,
+    speech: &mut Option<crate::services::speech::session::SpeechSession>,
+    assistant_message_id: Uuid,
+    streaming_task: Option<&Arc<StreamingTask>>,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    use crate::services::speech::reply_split::Piece;
+    for piece in pieces {
+        let written = match piece {
+            Piece::Plain(text) => {
+                if let Some(speech) = speech.as_mut() {
+                    speech.push(&text);
+                }
+                text
+            }
+            Piece::Written(text) => text,
+            Piece::Spoken(text) => {
+                if let Some(speech) = speech.as_mut() {
+                    speech.push(&text);
+                }
+                let content_index = append_spoken_delta_part(content, text.clone());
+                let event = StreamingEvent::SpokenDelta {
+                    message_id: assistant_message_id,
+                    content_index,
+                    new_text: text,
+                };
+                if let Some(task) = streaming_task {
+                    send_background_event(task, event.clone(), "broadcast spoken delta").await;
+                }
+                let _ = tx.send(Ok(streaming_event_to_sse(&event)?)).await;
+                continue;
+            }
+            Piece::SpokenEnd => {
+                // The speech worker sends `spoken_end` after the part's last
+                // audio, so the client knows when the voice is done.
+                if let Some(speech) = speech.as_mut() {
+                    speech.flush_spoken();
+                }
+                continue;
+            }
+            Piece::SpokenIsWritten => {
+                if let Some(at) = content
+                    .iter()
+                    .rposition(|part| matches!(part, ContentPart::Spoken(_)))
+                    && let ContentPart::Spoken(spoken) = &content[at]
+                {
+                    content[at] = ContentPart::Text(ContentPartText {
+                        text: spoken.text.clone(),
+                    });
+                }
+                continue;
+            }
+        };
+        if written.is_empty() {
+            continue;
+        }
+        let content_index = append_text_delta_part(content, written.clone());
+        if let Some(task) = streaming_task {
+            send_background_event(
+                task,
+                StreamingEvent::TextDelta {
+                    message_id: assistant_message_id,
+                    content_index,
+                    new_text: written.clone(),
+                },
+                "broadcast text delta",
+            )
+            .await;
+        }
+        let message: GenerationStreamingMessage = MessageSubmitStreamingResponseMessageTextDelta {
+            message_id: assistant_message_id,
+            content_index,
+            new_text: written,
+        }
+        .into();
+        send_generation_event(&message, tx.clone()).await?;
+    }
+    Ok(())
+}
+
+/// The stored shape of a split reply, on every way out of the generation.
+/// A reply with no written text keeps what was spoken as its text, so the
+/// message is never empty for titles, search or read aloud; a spoken part
+/// the written text repeats is not kept twice.
+fn settle_spoken_parts(content: &mut Vec<ContentPart>) {
+    if !content
+        .iter()
+        .any(|part| matches!(part, ContentPart::Spoken(_)))
+    {
+        return;
+    }
+    let has_written = content
+        .iter()
+        .any(|part| matches!(part, ContentPart::Text(text) if !text.text.trim().is_empty()));
+    if !has_written {
+        let mut settled: Vec<ContentPart> = Vec::with_capacity(content.len());
+        for part in content.drain(..) {
+            match (settled.last_mut(), part) {
+                (Some(ContentPart::Text(last)), ContentPart::Spoken(spoken)) => {
+                    last.text.push(' ');
+                    last.text.push_str(spoken.text.trim());
+                }
+                (_, ContentPart::Spoken(spoken)) => {
+                    settled.push(ContentPart::Text(ContentPartText {
+                        text: spoken.text.trim().to_string(),
+                    }));
+                }
+                (_, part) => settled.push(part),
+            }
+        }
+        *content = settled;
+        return;
+    }
+    let mut index = 0;
+    while index < content.len() {
+        if let ContentPart::Spoken(spoken) = &content[index] {
+            let said = spoken.text.trim();
+            let repeated = content[index + 1..]
+                .iter()
+                .find(|part| !matches!(part, ContentPart::Reasoning(_)))
+                .is_some_and(
+                    |next| matches!(next, ContentPart::Text(text) if text.text.trim() == said),
+                );
+            if said.is_empty() || repeated {
+                content.remove(index);
+                continue;
+            }
+        }
+        index += 1;
+    }
+}
+
+#[cfg(test)]
+mod spoken_part_tests {
+    use super::*;
+    use crate::models::message::ContentPartSpoken;
+
+    fn spoken(text: &str) -> ContentPart {
+        ContentPart::Spoken(ContentPartSpoken { text: text.into() })
+    }
+
+    fn text(text: &str) -> ContentPart {
+        ContentPart::Text(ContentPartText { text: text.into() })
+    }
+
+    #[test]
+    fn a_reply_stopped_while_speaking_keeps_what_was_said_as_its_text() {
+        let mut content = vec![spoken("Ich schaue nach. "), spoken("Morgen um zwei.")];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [text("Ich schaue nach. Morgen um zwei.")]);
+    }
+
+    #[test]
+    fn a_spoken_part_the_written_text_repeats_is_kept_once() {
+        let mut content = vec![spoken("Gern."), text("Gern.")];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [text("Gern.")]);
+
+        let mut content = vec![
+            spoken("Ich schaue nach."),
+            spoken(" "),
+            text("Der Termin ist morgen um 14:00."),
+        ];
+        settle_spoken_parts(&mut content);
+        assert_eq!(
+            content,
+            [
+                spoken("Ich schaue nach."),
+                text("Der Termin ist morgen um 14:00.")
+            ]
+        );
+    }
+
+    #[test]
+    fn a_late_reasoning_summary_goes_before_the_spoken_part() {
+        let mut content = vec![spoken("Ja."), text("Ja, morgen.")];
+        assert_eq!(
+            insert_reasoning_part_before_text(&mut content, "r".into()),
+            0
+        );
+        assert!(matches!(content[0], ContentPart::Reasoning(_)));
+    }
+
+    #[test]
+    fn a_reply_is_split_when_the_turn_asks_or_the_history_shows_the_format() {
+        use crate::models::message::{
+            BuiltinTurnInstruction, ContentPartTurnInstructionMarker, InputMessage,
+            StoredTurnInstructionKind,
+        };
+        let message = |role, content| InputMessage { role, content };
+        let plain = GenerationInputMessages {
+            messages: vec![message(MessageRole::User, text("Hallo"))],
+        };
+        assert!(!splits_reply(&plain));
+        let asked = GenerationInputMessages {
+            messages: vec![message(
+                MessageRole::User,
+                ContentPart::TurnInstructionMarker(ContentPartTurnInstructionMarker {
+                    kind: StoredTurnInstructionKind::Builtin(
+                        BuiltinTurnInstruction::SpokenAndWritten,
+                    ),
+                }),
+            )],
+        };
+        assert!(splits_reply(&asked));
+        let history = GenerationInputMessages {
+            messages: vec![
+                message(MessageRole::Assistant, text("<spoken>Ja.</spoken>\n\nJa.")),
+                message(MessageRole::User, text("Und morgen?")),
+            ],
+        };
+        assert!(splits_reply(&history));
+        // The user writing the tag is not the format.
+        let typed = GenerationInputMessages {
+            messages: vec![message(MessageRole::User, text("<spoken>"))],
+        };
+        assert!(!splits_reply(&typed));
+    }
+}
+
 fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> usize {
     let content_index = content.len().saturating_sub(1);
     if let Some(ContentPart::Reasoning(reasoning_part)) = content.last_mut() {
@@ -5588,7 +5879,7 @@ fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String)
 fn insert_reasoning_part_before_text(content: &mut Vec<ContentPart>, text: String) -> usize {
     let insertion_index = content
         .iter()
-        .position(|part| matches!(part, ContentPart::Text(_)))
+        .position(|part| matches!(part, ContentPart::Text(_) | ContentPart::Spoken(_)))
         .unwrap_or(content.len());
 
     content.insert(
@@ -6960,6 +7251,9 @@ async fn stream_generate_chat_completion<'a>(
     // reached, so the first turn dispatches them instead of going straight to
     // the model. `None` for a generation that starts from a user message.
     resume: Option<ParkedTurnResume>,
+    // The reply is written as a spoken part and a written part (see
+    // `splits_reply`); the spoken part is dropped when nothing is spoken.
+    split_reply: bool,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     let mut speech = streaming_task
         .filter(|task| {
@@ -6977,6 +7271,8 @@ async fn stream_generate_chat_completion<'a>(
                 assistant_message_id,
             ))
         });
+    let mut reply_split = split_reply
+        .then(|| crate::services::speech::reply_split::ReplySplit::new(speech.is_some()));
     let mcp = app_state.mcp_state().await;
     let mut tool_result_context = Arc::new(tool_result_context);
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
@@ -11430,32 +11726,22 @@ async fn stream_generate_chat_completion<'a>(
                                 generation_metadata,
                             ));
                         }
-                        if let Some(speech) = &mut speech {
-                            speech.push(&content);
-                        }
                         current_turn_streamed_text.push_str(&content);
-                        let content_index =
-                            append_text_delta_part(&mut current_message_content, content.clone());
-                        let delta = MessageSubmitStreamingResponseMessageTextDelta {
-                            message_id: assistant_message_id,
-                            content_index,
-                            new_text: content.clone(),
+                        let pieces = match reply_split.as_mut() {
+                            Some(split) => split.push(&content),
+                            None => {
+                                vec![crate::services::speech::reply_split::Piece::Plain(content)]
+                            }
                         };
-                        // Forward to streaming_task if present
-                        if let Some(task) = streaming_task {
-                            send_background_event(
-                                task,
-                                StreamingEvent::TextDelta {
-                                    message_id: assistant_message_id,
-                                    content_index,
-                                    new_text: content,
-                                },
-                                "broadcast text delta",
-                            )
-                            .await;
-                        }
-                        let message: GenerationStreamingMessage = delta.into();
-                        send_generation_event(&message, tx.clone()).await?;
+                        emit_reply_pieces(
+                            pieces,
+                            &mut current_message_content,
+                            &mut speech,
+                            assistant_message_id,
+                            streaming_task,
+                            &tx,
+                        )
+                        .await?;
                     }
                     ChatStreamEvent::ReasoningChunk(StreamChunk { content }) => {
                         captured_reasoning_summary.push_str(&content);
@@ -11725,14 +12011,49 @@ async fn stream_generate_chat_completion<'a>(
                 send_generation_event(&message, tx.clone()).await?;
             }
 
+            if let Some(split) = reply_split.as_mut() {
+                let pieces = split.finish();
+                emit_reply_pieces(
+                    pieces,
+                    &mut current_message_content,
+                    &mut speech,
+                    assistant_message_id,
+                    streaming_task,
+                    &tx,
+                )
+                .await?;
+                if speech.is_some()
+                    && let Some(fallback) = split.take_fallback()
+                {
+                    crate::metrics::report_reply_split_fallback(fallback.label());
+                }
+            }
+
             #[allow(clippy::collapsible_match)]
             #[allow(clippy::single_match)]
             if let Some(captured_texts) = stream_end.captured_texts() {
                 if current_turn_streamed_text.is_empty() {
                     for captured_text in captured_texts {
-                        current_message_content.push(ContentPart::Text(ContentPartText {
-                            text: captured_text.into(),
-                        }));
+                        // Never spoken, so only the written part is kept.
+                        let pieces = if split_reply {
+                            let mut split =
+                                crate::services::speech::reply_split::ReplySplit::new(false);
+                            let mut pieces = split.push(captured_text);
+                            pieces.extend(split.finish());
+                            pieces
+                        } else {
+                            vec![crate::services::speech::reply_split::Piece::Plain(
+                                captured_text.into(),
+                            )]
+                        };
+                        for piece in pieces {
+                            if let crate::services::speech::reply_split::Piece::Written(text)
+                            | crate::services::speech::reply_split::Piece::Plain(text) = piece
+                            {
+                                current_message_content
+                                    .push(ContentPart::Text(ContentPartText { text }));
+                            }
+                        }
                     }
                 }
             } else if !current_turn_streamed_text.is_empty() {
@@ -12191,6 +12512,7 @@ async fn stream_generate_chat_completion<'a>(
     persist_correction!();
     let mut completion = completion;
     if let Ok((content, _)) = &mut completion {
+        settle_spoken_parts(content);
         let upgraded = label_upgrades.finish(content);
         announce_tool_rows(
             content,
@@ -12673,7 +12995,8 @@ fn summary_user_message_text_from_generation_input(
                     let text = text.trim();
                     (!text.is_empty()).then_some(text)
                 }
-                ContentPart::Reasoning(_)
+                ContentPart::Spoken(_)
+                | ContentPart::Reasoning(_)
                 | ContentPart::ToolUse(_)
                 | ContentPart::ClientToolPending(_)
                 | ContentPart::ToolApprovalRequest(_)
@@ -18336,7 +18659,7 @@ pub(crate) async fn run_generation_after_user_message(
 /// Turns on speech for the reply `task` generates when the client asked for it
 /// and conversational audio can speak, in the user's language. Returns whether
 /// the reply is read back.
-fn read_back_reply(
+fn enable_reply_speech(
     task: &StreamingTask,
     app_state: &AppState,
     me_user: &MeProfile,
@@ -18356,6 +18679,25 @@ fn read_back_reply(
     read_back
 }
 
+/// Turns on speech like [`enable_reply_speech`] and returns how the reply is
+/// spoken, resolved for the caller at turn time, or `None` when it is not
+/// read back.
+async fn read_back_reply(
+    task: &StreamingTask,
+    app_state: &AppState,
+    me_user: &MeProfile,
+    requested: bool,
+) -> Option<erato_config::reply_speech::ReplySpeechWording> {
+    if !enable_reply_speech(task, app_state, me_user, requested) {
+        return None;
+    }
+    Some(
+        super::reply_speech_style::resolve_for(app_state, me_user)
+            .await
+            .wording,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_generation_after_user_message_memory_inner(
     task: &Arc<StreamingTask>,
@@ -18370,8 +18712,8 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
-    let reply_is_read_back =
-        read_back_reply(task, app_state, me_user, request.conversational_audio_back);
+    let reply_speech =
+        read_back_reply(task, app_state, me_user, request.conversational_audio_back).await;
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -18394,7 +18736,7 @@ async fn run_generation_after_user_message_memory_inner(
         }),
         turn_instructions: crate::services::prompt_composition::turn_instructions_for_turn(
             &app_state.config.turn_instructions,
-            reply_is_read_back,
+            reply_speech,
         ),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
@@ -18625,6 +18967,7 @@ async fn run_generation_after_user_message_memory_inner(
         }),
         task_tool_budgets_for_chat(chat),
         None,
+        splits_reply(&generation_input_messages),
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -19382,6 +19725,7 @@ pub(crate) async fn start_regeneration(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                splits_reply(&generation_input_messages),
             )
             .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -20016,6 +20360,7 @@ pub(crate) async fn start_edit(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                splits_reply(&generation_input_messages),
             )
             .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -22151,7 +22496,7 @@ pub(crate) async fn start_continuation(
     let client_stream_guard = task.client_stream_guard();
     // The turn instruction for a spoken reply is in the stored prompt the
     // continuation reuses, so only the speech itself is decided here.
-    read_back_reply(&task, app_state, me_user, request.conversational_audio_back);
+    enable_reply_speech(&task, app_state, me_user, request.conversational_audio_back);
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
@@ -24729,6 +25074,9 @@ async fn resume_parked_generation(
         compat_omit_strict,
     )
     .await;
+    // Split or not follows the stored prompt, never the setting now, so the
+    // prompt and the speech cannot disagree after a settings change.
+    let split_reply = splits_reply(&source_generation_input_messages);
     let generation_input_messages =
         resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
@@ -25177,6 +25525,7 @@ async fn resume_parked_generation(
         // The same logical turn retains its consumption across stops.
         task_tool_budgets_for_chat(&chat),
         resume,
+        split_reply,
     )
     .await?;
     // Written even when the generation reported no metadata of its own, and

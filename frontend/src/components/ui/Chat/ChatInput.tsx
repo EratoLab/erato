@@ -795,7 +795,9 @@ export const ChatInput = ({
     speech.enabled;
   const overVoiceSpeaking =
     overVoiceAllowed &&
-    (speech.playing || cardSpeaking || (isPendingResponse && !decisionWaiting));
+    (speech.playing ||
+      cardSpeaking ||
+      (isPendingResponse && !decisionWaiting && !speech.spokenPartDone));
   // A reply the user talked over: whether that was a turn or only a sound
   // is known once the recording has ended.
   const interruptedReplyRef = useRef(false);
@@ -3178,7 +3180,10 @@ export const ChatInput = ({
     if (
       !isAudioMode ||
       speech.paused ||
-      (!overVoiceAllowed && (isPendingResponse || speech.playing)) ||
+      // Once the spoken part is said, the microphone listens while the
+      // written answer still streams; the words are sent after it.
+      (!overVoiceAllowed &&
+        ((isPendingResponse && !speech.spokenPartDone) || speech.playing)) ||
       cardSpeaking ||
       changeAwaited ||
       decisionWaiting
@@ -3227,6 +3232,7 @@ export const ChatInput = ({
     isPendingResponse,
     speech.enabled,
     speech.playing,
+    speech.spokenPartDone,
     speechEnabled,
     isRecording,
     isRecordingUpload,

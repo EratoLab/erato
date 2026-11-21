@@ -633,6 +633,10 @@ pub(crate) fn resolve_directive_markers_with_config(
                         .prompt(*kind)
                         .unwrap_or_default()
                         .to_string(),
+                    StoredTurnInstructionKind::Builtin(
+                        crate::models::message::BuiltinTurnInstruction::SpokenAndWritten,
+                    ) => crate::services::speech::reply_split::SPOKEN_AND_WRITTEN_PROTOCOL
+                        .to_string(),
                     StoredTurnInstructionKind::Unknown(kind) => {
                         tracing::warn!(
                             kind = %kind,

@@ -3,10 +3,10 @@
 //! in, and the caller's own choice where that is allowed, in this order.
 
 use super::me_profile_middleware::MeProfile;
-use super::starting_assistant::{AudienceIdentity, subject_matches};
+use super::starting_assistant::{AudienceIdentity, matching_audiences_for};
 use crate::config::{ApprovalSpeechAmount, ApprovalSpeechConfig, ApprovalSpeechWording};
 use crate::distribution::experience_policy::{
-    APPROVAL_SPEECH_SETTING, AudienceApprovalSpeech, ExperiencePolicyDocument, resolution_order_for,
+    APPROVAL_SPEECH_SETTING, AudienceApprovalSpeech, ExperiencePolicyDocument,
 };
 use crate::state::AppState;
 use axum::{Extension, Json, extract::State, http::StatusCode};
@@ -47,17 +47,9 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceApprovalSpeech)> {
-    resolution_order_for(policy, APPROVAL_SPEECH_SETTING)
-        .filter_map(|(name, audience)| {
-            let speech = audience.approval_speech.as_ref()?;
-            (audience.is_active_at(now)
-                && audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity)))
-            .then_some((name, speech))
-        })
-        .collect()
+    matching_audiences_for(policy, APPROVAL_SPEECH_SETTING, identity, now, |audience| {
+        audience.approval_speech.as_ref()
+    })
 }
 
 /// The style in resolution order: deployment, audiences, the user's own.

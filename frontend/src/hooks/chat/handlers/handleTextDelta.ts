@@ -12,7 +12,7 @@ const logger = createLogger("EVENT", "handleTextDelta");
 export function appendTextLikeDelta(
   currentContent: ContentPart[],
   contentIndex: number,
-  contentType: "text" | "reasoning",
+  contentType: "text" | "reasoning" | "spoken",
   newText: string,
 ): ContentPart[] {
   const updatedContent = [...currentContent];
@@ -22,15 +22,25 @@ export function appendTextLikeDelta(
   if (existingPart?.content_type === contentType) {
     updatedContent[contentIndex] = {
       ...existingPart,
+      text: (existingPart.text ?? "") + newText,
+    };
+    return updatedContent;
+  }
+
+  // The server turns a spoken part that never closed into the start of the
+  // written text, and sends the rest as text at the same index.
+  if (contentType === "text" && existingPart?.content_type === "spoken") {
+    updatedContent[contentIndex] = {
+      content_type: "text",
       text: existingPart.text + newText,
     };
     return updatedContent;
   }
 
-  const nextPart =
-    contentType === "text"
-      ? ({ content_type: "text", text: newText } as const)
-      : ({ content_type: "reasoning", text: newText } as const);
+  const nextPart: ContentPart =
+    contentType === "reasoning"
+      ? { content_type: "reasoning", text: newText }
+      : { content_type: contentType, text: newText };
 
   if (contentIndex >= updatedContent.length) {
     updatedContent.push(nextPart);

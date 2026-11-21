@@ -34,6 +34,10 @@ pub struct AudioSynthesisMetadata {
 
 type SynthesizedResponse = (Vec<u8>, Vec<String>, u32);
 
+// Queued after a spoken part's last sentence: the worker reports the part's
+// end once all audio before it is sent. Spoken text never holds a NUL.
+const PART_END: &str = "\0part-end";
+
 // Gather a useful initial passage without waiting indefinitely for more text.
 // Subsequent calls drain sentences accumulated during synthesis, up to the input cap.
 async fn next_passage(
@@ -46,6 +50,9 @@ async fn next_passage(
         Some(text) => text,
         None => receiver.recv().await?,
     };
+    if text == PART_END {
+        return Some(text);
+    }
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(250);
     let mut length = text.chars().count();
     loop {
@@ -61,6 +68,10 @@ async fn next_passage(
             Err(mpsc::error::TryRecvError::Empty) => None,
         };
         let Some(next) = next else { break };
+        if next == PART_END {
+            *pending = Some(next);
+            break;
+        }
         let next_length = next.chars().count();
         if length + next_length > MAX_CHARS {
             *pending = Some(next);
@@ -80,6 +91,13 @@ pub struct SpeechChunk {
     pub sequence: u64,
     pub sample_rate: u32,
     pub pcm: Vec<u8>,
+}
+
+/// What a [`PassageSpeaker`] yields: audio, or the end of a spoken part
+/// whose audio has all been yielded.
+pub enum SpeakerOutput {
+    Chunk(SpeechChunk),
+    PartEnd,
 }
 
 /// Speaks queued text passage by passage and yields the audio as it arrives.
@@ -134,6 +152,16 @@ impl PassageSpeaker {
     /// The next audio chunk, or `None` once every passage is spoken.
     pub async fn next_chunk(&mut self) -> Result<Option<SpeechChunk>, Report> {
         loop {
+            match self.next_output().await? {
+                Some(SpeakerOutput::Chunk(chunk)) => return Ok(Some(chunk)),
+                Some(SpeakerOutput::PartEnd) => continue,
+                None => return Ok(None),
+            }
+        }
+    }
+
+    pub async fn next_output(&mut self) -> Result<Option<SpeakerOutput>, Report> {
+        loop {
             if let Some(audio) = &mut self.audio {
                 let Some(chunk) = audio.next().await else {
                     if !self.carry.is_empty() || self.passage_bytes == 0 {
@@ -155,11 +183,11 @@ impl PassageSpeaker {
                 self.passage_bytes += pcm.len();
                 let sequence = self.sequence;
                 self.sequence += 1;
-                return Ok(Some(SpeechChunk {
+                return Ok(Some(SpeakerOutput::Chunk(SpeechChunk {
                     sequence,
                     sample_rate: self.sample_rate,
                     pcm,
-                }));
+                })));
             }
             if self.finished {
                 return Ok(None);
@@ -169,6 +197,9 @@ impl PassageSpeaker {
                 self.finished = true;
                 return Ok(None);
             };
+            if text == PART_END {
+                return Ok(Some(SpeakerOutput::PartEnd));
+            }
             if text.trim().is_empty() {
                 continue;
             }
@@ -216,7 +247,19 @@ impl SpeechSession {
             let mut speaker = PassageSpeaker::new(&settings, receiver)?;
             let mut pcm = Vec::new();
             let run = async {
-                while let Some(chunk) = speaker.next_chunk().await? {
+                while let Some(output) = speaker.next_output().await? {
+                    let chunk = match output {
+                        SpeakerOutput::Chunk(chunk) => chunk,
+                        SpeakerOutput::PartEnd => {
+                            let event = StreamingEvent::SpokenEnd { message_id };
+                            let json = serde_json::to_string(&event)?;
+                            task.send_event(event).await.map_err(Report::msg)?;
+                            let _ = tx
+                                .send(Ok(Event::default().event("spoken_end").data(json)))
+                                .await;
+                            continue;
+                        }
+                    };
                     let event = StreamingEvent::AudioDelta {
                         message_id,
                         sequence: chunk.sequence,
@@ -264,6 +307,17 @@ impl SpeechSession {
                 let _ = sender.send(sentence);
             }
         }
+    }
+    /// Says the last sentence of a spoken part now, without waiting for the
+    /// written part, and reports `spoken_end` once its audio is sent. The
+    /// input stays open: a later model call in the same generation can speak
+    /// again.
+    pub fn flush_spoken(&mut self) {
+        let Some(sender) = &self.sender else { return };
+        for sentence in self.sentences.finish() {
+            let _ = sender.send(sentence);
+        }
+        let _ = sender.send(PART_END.to_string());
     }
     pub async fn finish(
         mut self,
@@ -502,6 +556,88 @@ mod tests {
             .await
             .expect("dropping the speaker cancels the provider request")
             .unwrap();
+        server.abort();
+    }
+
+    // A spoken part, a tool call, another spoken part: one session per
+    // generation says both, each as soon as its part is complete.
+    #[tokio::test]
+    async fn each_flushed_spoken_part_is_said_while_the_input_stays_open() {
+        let inputs = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let recorded = inputs.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/audio/speech",
+                    post(move |axum::Json(request): axum::Json<serde_json::Value>| {
+                        let recorded = recorded.clone();
+                        async move {
+                            recorded
+                                .lock()
+                                .unwrap()
+                                .push(request["input"].as_str().unwrap().to_string());
+                            Response::builder()
+                                .header("content-type", "audio/pcm")
+                                .body(Body::from(vec![1, 2, 3, 4]))
+                                .unwrap()
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let config: SpeechProviderConfig = serde_json::from_value(serde_json::json!({
+            "provider_kind":"audio_cpp", "model_name":"local", "voice":"voice", "base_url":format!("http://{address}")
+        })).unwrap();
+        let manager = BackgroundTaskManager::new(None, Default::default(), None);
+        let message_id = Uuid::new_v4();
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (tx, _rx) = mpsc::channel(8);
+        let mut session = SpeechSession::start(
+            config,
+            "test".into(),
+            SpeechLanguage::default(),
+            task.clone(),
+            tx,
+            message_id,
+        );
+        // Each part's end comes after its audio, never before.
+        let part_spoken = |events: &mut tokio::sync::broadcast::Receiver<StreamingEvent>| {
+            let mut events = events.resubscribe();
+            async move {
+                let mut audio = false;
+                loop {
+                    let event =
+                        tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
+                            .await
+                            .unwrap()
+                            .unwrap();
+                    match event {
+                        StreamingEvent::AudioDelta { .. } => audio = true,
+                        StreamingEvent::SpokenEnd { .. } => return audio,
+                        _ => {}
+                    }
+                }
+            }
+        };
+        let first = part_spoken(&mut events);
+        session.push("Ich schaue nach");
+        session.flush_spoken();
+        assert!(first.await);
+        let second = part_spoken(&mut events);
+        session.push("Morgen um zwei");
+        session.flush_spoken();
+        assert!(second.await);
+        let inputs = inputs.lock().unwrap().clone();
+        assert_eq!(inputs.len(), 2, "{inputs:?}");
+        assert!(inputs[0].contains("Ich schaue nach"), "{inputs:?}");
+        assert!(inputs[1].contains("Morgen um zwei"), "{inputs:?}");
+        assert!(session.sender.is_some());
+        task.request_abort();
         server.abort();
     }
 

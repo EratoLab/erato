@@ -261,6 +261,39 @@ describe("one reply, one utterance", () => {
     }
   });
 
+  it("is done with a spoken part once its audio played and the written answer began", async () => {
+    const p = await replying();
+    p.spokenPartBegins("chat-1");
+    p.spokenPartEnds("chat-1", "m1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+    p.writtenPartArrives("chat-1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(true);
+    expect(p.useSpeechPlayback.getState().playing).toBe(true);
+    playedOut();
+    expect(p.useSpeechPlayback.getState().playing).toBe(false);
+  });
+
+  it("a spoken part before a tool call does not end the voice", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = await replying();
+      p.spokenPartBegins("chat-1");
+      p.spokenPartEnds("chat-1", "m1");
+      playedOut();
+      expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+      // The next part speaks after the tool: a dry spell inside it holds.
+      p.spokenPartBegins("chat-1");
+      p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+      playedOut();
+      vi.advanceTimersByTime(700);
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      p.beginSpeechResponse("chat-1");
+      expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("is quiet as soon as the last audio of an ended reply has played", async () => {
     const p = await replying();
     p.endSpeechResponse("chat-1", "m1");

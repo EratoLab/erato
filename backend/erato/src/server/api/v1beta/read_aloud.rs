@@ -300,9 +300,12 @@ mod tests {
     use crate::models::message::{ContentPartReasoning, ContentPartText};
 
     #[test]
-    fn only_text_parts_are_read() {
+    fn only_the_written_text_is_read() {
         let content = vec![
             ContentPart::Reasoning(ContentPartReasoning::default()),
+            ContentPart::Spoken(crate::models::message::ContentPartSpoken {
+                text: "Kurz gesagt.".into(),
+            }),
             ContentPart::Text(ContentPartText {
                 text: "First.".into(),
             }),

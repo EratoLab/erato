@@ -81,7 +81,8 @@ use crate::config::{
     ActionFacetConfig, ChatProviderConfig, TurnInstructionKind, TurnInstructionsConfig,
 };
 use crate::db::entity::chats;
-use crate::models::message::GenerationInputMessages;
+use crate::models::message::{BuiltinTurnInstruction, GenerationInputMessages};
+use erato_config::reply_speech::ReplySpeechWording;
 use eyre::Report;
 use std::collections::{BTreeSet, HashMap};
 
@@ -105,20 +106,30 @@ pub use traits::{FileResolver, MessageRepository, PromptProvider};
 pub use transforms::{build_abstract_sequence, resolve_sequence, to_concrete_request};
 pub use types::{
     AbstractChatSequence, AbstractChatSequencePart, ConcreteChatRequest,
-    PromptCompositionUserInput, PromptSpec, ResolvedChatSequence,
+    PromptCompositionUserInput, PromptSpec, ResolvedChatSequence, TurnInstruction,
 };
 
-/// The turn instruction types that apply to a turn and have text configured.
-/// Each type says here when it applies.
+/// The turn instructions for a turn. A reply read back in the `natural`
+/// style gets the configured spoken-reply style, when set, and the built-in
+/// protocol that asks for a spoken part and a written part. A `precise`
+/// reply, or one not read back, gets none: the model writes as for typed
+/// chat, and the voice reads that.
 pub fn turn_instructions_for_turn(
     config: &TurnInstructionsConfig,
-    reply_is_read_back: bool,
-) -> BTreeSet<TurnInstructionKind> {
-    [(TurnInstructionKind::SpokenReply, reply_is_read_back)]
-        .into_iter()
-        .filter(|&(kind, applies)| applies && config.prompt(kind).is_some())
-        .map(|(kind, _)| kind)
-        .collect()
+    read_back: Option<ReplySpeechWording>,
+) -> BTreeSet<TurnInstruction> {
+    if read_back != Some(ReplySpeechWording::Natural) {
+        return BTreeSet::new();
+    }
+    let mut instructions = BTreeSet::from([TurnInstruction::Builtin(
+        BuiltinTurnInstruction::SpokenAndWritten,
+    )]);
+    if config.prompt(TurnInstructionKind::SpokenReply).is_some() {
+        instructions.insert(TurnInstruction::Configured(
+            TurnInstructionKind::SpokenReply,
+        ));
+    }
+    instructions
 }
 
 /// Convenience function that orchestrates all three phases of prompt composition.

@@ -4254,6 +4254,35 @@
         ]
       }
     },
+    "/api/v1beta/me/reply-speech-style": {
+      "get": {
+        "tags": [
+          "reply_speech_style"
+        ],
+        "summary": "How replies are spoken for the caller in conversational audio mode.",
+        "operationId": "reply_speech_style",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplySpeechStyleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/scheduled-items": {
       "get": {
         "tags": [
@@ -8343,6 +8372,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/ContentPartSpoken",
+                "description": "What the voice said for a reply in conversational audio mode, kept\napart from the written answer in the `Text` parts after it. Not part\nof the message's text: titles, search, read aloud and exports use the\nwritten answer only."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "spoken"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "What the voice said for a reply in conversational audio mode, kept\napart from the written answer in the `Text` parts after it. Not part\nof the message's text: titles, search, read aloud and exports use the\nwritten answer only."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/ContentPartReasoning"
               },
               {
@@ -8840,6 +8892,17 @@
           "text": {
             "type": "string",
             "default": ""
+          }
+        }
+      },
+      "ContentPartSpoken": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
           }
         }
       },
@@ -11592,6 +11655,49 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessageTextDelta",
+                "description": "Sent whenever the voice gets new text of a reply's spoken part. The\nwritten answer comes as `text_delta`."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "spoken_delta"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent whenever the voice gets new text of a reply's spoken part. The\nwritten answer comes as `text_delta`."
+          },
+          {
+            "type": "object",
+            "description": "Sent when a spoken part is complete: the voice has all of it, and the\nwritten answer may still be streaming.",
+            "required": [
+              "message_id",
+              "message_type"
+            ],
+            "properties": {
+              "message_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "spoken_end"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseChatCreated",
                 "description": "May optionally be sent at the start of the stream to indicate that a new chat has been created."
               },
@@ -13381,6 +13487,48 @@
             "description": "The days of a weekly rule; empty for the other frequencies."
           }
         }
+      },
+      "ReplySpeechStyleResponse": {
+        "type": "object",
+        "required": [
+          "wording",
+          "source",
+          "user_choice"
+        ],
+        "properties": {
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ReplySpeechStyleSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own wording."
+          },
+          "wording": {
+            "$ref": "#/components/schemas/ReplySpeechWording"
+          }
+        }
+      },
+      "ReplySpeechStyleSource": {
+        "type": "string",
+        "description": "Where the caller's reply wording comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "ReplySpeechWording": {
+        "type": "string",
+        "description": "How a reply in conversational audio mode is spoken.",
+        "enum": [
+          "natural",
+          "precise"
+        ]
       },
       "ResolveShareLinkResponse": {
         "type": "object",
@@ -16378,6 +16526,13 @@
             ],
             "description": "Preferred name to address the user with."
           },
+          "preference_reply_speech_wording": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How replies are spoken in conversation: `natural` or `precise`, like\nthe amount."
+          },
           "preference_starting_assistant_cleared": {
             "type": "boolean",
             "description": "Set `true` to explicitly clear the start screen (welcome screen even\nthough an audience pin exists), `false` to inherit again. Clearing\nalso removes any own pick; picking also un-clears."
@@ -16519,6 +16674,10 @@
           "preference_nickname": {
             "type": "string",
             "description": "Preferred name to address the user with."
+          },
+          "preference_reply_speech_wording": {
+            "$ref": "#/components/schemas/ReplySpeechWording",
+            "description": "How replies are spoken in conversation, as the user chose; absent\nfollows the organisation."
           },
           "preference_starting_assistant_cleared": {
             "type": "boolean",

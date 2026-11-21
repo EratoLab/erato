@@ -4,6 +4,7 @@ pub mod client_tool_schema;
 pub mod config;
 pub mod config_facet_attrs;
 pub mod config_reference;
+pub mod reply_speech;
 pub mod spoken;
 pub mod startup_log;
 pub mod wait_lines;

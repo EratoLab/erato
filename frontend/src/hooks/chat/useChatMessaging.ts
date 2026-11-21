@@ -44,8 +44,11 @@ import {
   playSpeechChunk,
   readsBackContinuation,
   speechFailed,
+  spokenPartBegins,
+  spokenPartEnds,
   stopSpeechPlayback,
   useSpeechPlayback,
+  writtenPartArrives,
 } from "@/hooks/audio/speechPlayback";
 import {
   beginWaitTurn,
@@ -90,6 +93,7 @@ import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleClientToolCall } from "./handlers/handleClientToolCall";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
 import { handleReasoningDelta } from "./handlers/handleReasoningDelta";
+import { handleSpokenDelta } from "./handlers/handleSpokenDelta";
 import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
@@ -1228,9 +1232,22 @@ export function useChatMessaging(
             break;
 
           case "text_delta":
+            if (responseData.new_text.trim().length > 0) {
+              waitTurnAnswered(activeStreamKey);
+              writtenPartArrives(activeStreamKey);
+            }
+            handleTextDelta(responseData, activeStreamKey);
+            break;
+
+          case "spoken_delta":
             if (responseData.new_text.trim().length > 0)
               waitTurnAnswered(activeStreamKey);
-            handleTextDelta(responseData, activeStreamKey);
+            spokenPartBegins(activeStreamKey);
+            handleSpokenDelta(responseData, activeStreamKey);
+            break;
+
+          case "spoken_end":
+            spokenPartEnds(activeStreamKey, responseData.message_id);
             break;
 
           case "reasoning_delta":

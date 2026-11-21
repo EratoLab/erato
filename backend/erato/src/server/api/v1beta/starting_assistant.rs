@@ -148,6 +148,29 @@ pub fn matching_subjects<'a>(
         .collect()
 }
 
+/// The active audiences in `setting`'s order that match the caller and set a
+/// value for it, first one first: the shared lookup of every per-audience
+/// voice setting. Only audiences the admin listed under `setting` take part.
+pub fn matching_audiences_for<'a, T: 'a>(
+    policy: &'a ExperiencePolicyDocument,
+    setting: &str,
+    identity: AudienceIdentity<'_>,
+    now: DateTime<Utc>,
+    pick: impl Fn(&'a ExperienceAudience) -> Option<&'a T>,
+) -> Vec<(&'a str, &'a T)> {
+    resolution_order_for(policy, setting)
+        .filter_map(|(name, audience)| {
+            let value = pick(audience)?;
+            (audience.is_active_at(now)
+                && audience
+                    .subjects
+                    .iter()
+                    .any(|subject| subject_matches(subject, identity)))
+            .then_some((name, value))
+        })
+        .collect()
+}
+
 /// Pick the winning audience for a user: the first audience in the
 /// starting-assistant resolution order that is still active at `now` and any
 /// of whose subjects matches the caller.
@@ -472,6 +495,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         }
     }
 
@@ -818,6 +842,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         };
         let policy = policy_with(
             vec![

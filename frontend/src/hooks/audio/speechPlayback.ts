@@ -39,6 +39,12 @@ interface SpeechState {
    * spoken on its own then, but waits to be asked for.
    */
   quietTurn?: string;
+  /**
+   * The reply's spoken part has all its audio and the written answer is
+   * streaming: once the voice is quiet the microphone may listen, and what
+   * the user says waits until the answer is complete.
+   */
+  spokenPartDone: boolean;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -47,6 +53,7 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   paused: false,
   blocked: false,
   failed: false,
+  spokenPartDone: false,
 }));
 const sequences = new Map<string, number>();
 let activeMessage: string | undefined;
@@ -65,6 +72,8 @@ const UNDERRUN_HOLD_MS = 1500;
 /** The reply's stream has ended: no more audio comes for it. */
 let audioEnded = true;
 let underrunTimer: ReturnType<typeof setTimeout> | undefined;
+/** The current spoken part has sent its last audio. */
+let spokenPartEnded = false;
 const clearUnderrun = () => {
   clearTimeout(underrunTimer);
   underrunTimer = undefined;
@@ -199,7 +208,9 @@ export function beginSpeechResponse(streamKey?: string) {
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
   audioEnded = !accepting;
+  spokenPartEnded = false;
   useSpeechPlayback.setState({
+    spokenPartDone: false,
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
     quietTurn: undefined,
@@ -230,6 +241,36 @@ export function endSpeechResponse(streamKey?: string, messageId?: string) {
     clearUnderrun();
     useSpeechPlayback.setState({ playing: false });
   }
+}
+
+/**
+ * The reply speaks a spoken part: its audio is still to come, so a dry spell
+ * between its sentences does not count as quiet.
+ */
+export function spokenPartBegins(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  spokenPartEnded = false;
+  if (accepting) audioEnded = false;
+  if (useSpeechPlayback.getState().spokenPartDone)
+    useSpeechPlayback.setState({ spokenPartDone: false });
+}
+
+/** The spoken part has sent its last audio; the written answer may follow. */
+export function spokenPartEnds(streamKey?: string, messageId?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  spokenPartEnded = true;
+  endSpeechResponse(streamKey, messageId);
+}
+
+/**
+ * Written text arrived. After a spoken part has ended, the voice says no
+ * more for this reply: a spoken part only precedes a tool call or the
+ * written answer, and the written answer has begun.
+ */
+export function writtenPartArrives(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  if (spokenPartEnded && !useSpeechPlayback.getState().spokenPartDone)
+    useSpeechPlayback.setState({ spokenPartDone: true });
 }
 
 /** The user stopped the voice: quiet for the rest of this turn. */

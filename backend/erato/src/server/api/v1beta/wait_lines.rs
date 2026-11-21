@@ -9,10 +9,10 @@
 
 use super::me_profile_middleware::MeProfile;
 use super::read_aloud::{speech_language, speech_response};
-use super::starting_assistant::{AudienceIdentity, subject_matches};
+use super::starting_assistant::{AudienceIdentity, matching_audiences_for};
 use crate::config::SpeechProviderConfig;
 use crate::distribution::experience_policy::{
-    AudienceWaitLines, ExperiencePolicyDocument, WAIT_LINES_SETTING, resolution_order_for,
+    AudienceWaitLines, ExperiencePolicyDocument, WAIT_LINES_SETTING,
 };
 use crate::models::chat::get_chat_by_message_id;
 use crate::policy::engine::PolicyEngine;
@@ -133,17 +133,9 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceWaitLines)> {
-    resolution_order_for(policy, WAIT_LINES_SETTING)
-        .filter_map(|(name, audience)| {
-            let lines = audience.wait_lines.as_ref()?;
-            (audience.is_active_at(now)
-                && audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity)))
-            .then_some((name, lines))
-        })
-        .collect()
+    matching_audiences_for(policy, WAIT_LINES_SETTING, identity, now, |audience| {
+        audience.wait_lines.as_ref()
+    })
 }
 
 /// The amount in resolution order: deployment, audiences, the user's own
