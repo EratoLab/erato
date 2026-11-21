@@ -9117,20 +9117,29 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
     assert_eq!(extract_full_text(&parse_sse_events(&response)), "ROUTED");
 }
 
-const QUALIFIED_PROBE: &str = "mock_mcp_approval_copy__publish_approval_probe";
-const PROBE_PUBLISHED: &str = "approval probe published";
-
-/// A turn whose model calls the approval probe of the second of two servers
-/// that serve it, by its qualified name, and parks on the card; and the
-/// approval id. Once the call's result is in, the model answers
-/// `QUALIFIED-APPROVED`, provided the call is replayed under the name it
-/// called.
-async fn park_a_qualified_call(
+/// A call the model makes by a qualified name parks under the server's own
+/// tool name, so the card and any standing decision name the tool as the
+/// server does. The other server that offered the probe is gone by the time
+/// the user approves, so the rebuilt tool set offers the probe under its own
+/// name: the approved call runs on its server and is still stored, and
+/// replayed to the model, under the name the model called, with the tool's
+/// own name for the row to show.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_continued_call_keeps_the_name_the_model_called_once_the_names_no_longer_collide(
     pool: Pool<Postgres>,
-) -> (erato::state::AppState, TestServer, Uuid, String) {
-    const PUBLISHED: &str = PROBE_PUBLISHED;
-    const QUALIFIED: &str = QUALIFIED_PROBE;
+) {
+    const PUBLISHED: &str = "approval probe published";
+    const QUALIFIED: &str = "mock_mcp_approval_copy__publish_approval_probe";
     let mut mocks = MockSet::new();
+    // By the final request the tool list offers the probe under its own
+    // name, so the qualified name reaches the model only in the replayed call.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
@@ -9187,16 +9196,21 @@ async fn park_a_qualified_call(
         "publish_approval_probe"
     );
     let approval_id = approvals[0]["approval_id"].as_str().unwrap().to_string();
-    (app_state, server, assistant_message_id, approval_id)
-}
 
-/// Approve the parked qualified call and return its stored row.
-async fn approve_the_qualified_call(
-    app_state: &erato::state::AppState,
-    server: &TestServer,
-    assistant_message_id: Uuid,
-    approval_id: &str,
-) -> Value {
+    {
+        let mut reloadable = app_state.reloadable.write().await;
+        assert!(
+            reloadable
+                .mcp
+                .config
+                .mcp_servers
+                .remove("mock_mcp_approval")
+                .is_some()
+        );
+        let config = reloadable.mcp.config.clone();
+        reloadable.mcp.servers.reconfigure(&config).await;
+    }
+
     let continued = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -9211,75 +9225,18 @@ async fn approve_the_qualified_call(
         "QUALIFIED-APPROVED"
     );
 
-    let parts = message_content(app_state, assistant_message_id).await;
+    let parts = message_content(&app_state, assistant_message_id).await;
     let tool_use = parts
         .iter()
         .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == approval_id)
-        .expect("the approved call is stored")
-        .clone();
+        .expect("the approved call is stored");
     assert_eq!(tool_use["status"], "success", "{tool_use}");
     assert!(
-        tool_use["output"].to_string().contains(PROBE_PUBLISHED),
+        tool_use["output"].to_string().contains(PUBLISHED),
         "{tool_use}"
     );
-    tool_use
-}
-
-/// A call the model makes by a qualified name parks under the server's own
-/// tool name, so the card and any standing decision name the tool as the
-/// server does; once approved, it runs on that server, and the stored call
-/// keeps the name the model used, with the tool's own name for the row to
-/// show.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `sse-streaming`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
-    pool: Pool<Postgres>,
-) {
-    let (app_state, server, assistant_message_id, approval_id) = park_a_qualified_call(pool).await;
-    let tool_use =
-        approve_the_qualified_call(&app_state, &server, assistant_message_id, &approval_id).await;
-    assert_eq!(tool_use["tool_name"], QUALIFIED_PROBE);
+    assert_eq!(tool_use["tool_name"], QUALIFIED);
     assert_eq!(tool_use["display"]["tool_name"], "publish_approval_probe");
-}
-
-/// The other server that offered the probe is gone by the time the user
-/// approves, so the rebuilt tool set offers the probe under its own name: the
-/// continued call is still stored, and replayed to the model, under the name
-/// the model called.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `sse-streaming`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_continued_call_keeps_the_name_the_model_called_once_the_names_no_longer_collide(
-    pool: Pool<Postgres>,
-) {
-    let (app_state, server, assistant_message_id, approval_id) = park_a_qualified_call(pool).await;
-    {
-        let mut reloadable = app_state.reloadable.write().await;
-        assert!(
-            reloadable
-                .mcp
-                .config
-                .mcp_servers
-                .remove("mock_mcp_approval")
-                .is_some()
-        );
-        let config = reloadable.mcp.config.clone();
-        reloadable.mcp.servers.reconfigure(&config).await;
-    }
-    let tool_use =
-        approve_the_qualified_call(&app_state, &server, assistant_message_id, &approval_id).await;
-    assert_eq!(tool_use["tool_name"], QUALIFIED_PROBE);
 }
 
 /// An MCP tool named like Erato's own `wait`: with waiting on, both are
