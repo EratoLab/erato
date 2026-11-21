@@ -171,9 +171,11 @@ export type ChatSessionValue = Omit<ChatContextValue, ChatTranscriptKey> & {
 };
 
 /**
- * @deprecated Not filled any more: a value per streamed token above the
- * message list made React search every message for readers on each token.
- * Read the chat with `useChatContext`.
+ * The chat, for readers outside the hooks. Its identity follows the session,
+ * and its transcript fields read the latest transcript when they are read: a
+ * reader sees the latest messages whenever it renders, but no longer
+ * re-renders on every streamed token. `useChatContext` or `useChatTranscript`
+ * re-render on every token.
  */
 export const ChatContext = createContext<ChatContextValue | null>(null);
 
@@ -181,8 +183,10 @@ export const ChatContext = createContext<ChatContextValue | null>(null);
 export const ChatSessionContext = createContext<ChatSessionValue | null>(null);
 
 /**
- * @deprecated Not filled any more, for the reason given on `ChatContext`.
- * Read the transcript with `useChatTranscript` or `useChatTranscriptSelector`.
+ * The transcript, for readers outside the hooks: one object for the provider's
+ * lifetime whose fields read the latest transcript, so, as with `ChatContext`,
+ * a reader sees the latest messages whenever it renders but is not re-rendered
+ * by a token.
  */
 export const ChatTranscriptContext = createContext<ChatTranscriptValue | null>(
   null,
@@ -206,6 +210,17 @@ const NO_STORE: ValueStore<null> = {
 
 const useStoredOrNull = <T,>(store: ValueStore<T> | undefined): T | null =>
   useValueStore<T | null>(store ?? NO_STORE);
+
+const transcriptGetters = (
+  getTranscript: () => ChatTranscriptValue,
+): PropertyDescriptorMap => ({
+  messages: { enumerable: true, get: () => getTranscript().messages },
+  messageOrder: { enumerable: true, get: () => getTranscript().messageOrder },
+  streamingContent: {
+    enumerable: true,
+    get: () => getTranscript().streamingContent,
+  },
+});
 
 /** The whole chat; re-renders on every streamed token. */
 export const useChatContext = () => {
@@ -260,8 +275,9 @@ export function useChatTranscriptSelector<T>(
  * and the transcript, which changes on every streamed token.
  *
  * Readers get a new value right after this provider commits and before the
- * browser paints; one that renders in the same pass as the provider still
- * sees the previous value for that pass.
+ * browser paints. A component that something else re-renders in the same pass
+ * as the provider still renders, and runs its effects, with the previous
+ * session and transcript; it gets the new ones in the pass that follows.
  */
 export function ChatContextProviders({
   value,
@@ -299,11 +315,24 @@ export function ChatContextProviders({
     stores.transcript.set(transcript);
     stores.value.set(value);
   }, [stores, session, transcript, value]);
+  const contextView = useMemo(
+    () =>
+      Object.defineProperties({ ...session }, transcriptGetters(getTranscript)),
+    [session, getTranscript],
+  ) as unknown as ChatContextValue;
+  const transcriptView = useMemo(
+    () => Object.defineProperties({}, transcriptGetters(getTranscript)),
+    [getTranscript],
+  ) as ChatTranscriptValue;
 
   return (
     <ChatStoresContext.Provider value={stores}>
       <ChatSessionContext.Provider value={session}>
-        {children}
+        <ChatContext.Provider value={contextView}>
+          <ChatTranscriptContext.Provider value={transcriptView}>
+            {children}
+          </ChatTranscriptContext.Provider>
+        </ChatContext.Provider>
       </ChatSessionContext.Provider>
     </ChatStoresContext.Provider>
   );

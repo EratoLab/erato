@@ -3,8 +3,10 @@ import { memo, useContext } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ChatContext,
   ChatContextProviders,
   ChatSessionContext,
+  ChatTranscriptContext,
   useChatContext,
   useChatSession,
   useChatTranscript,
@@ -218,5 +220,59 @@ describe("ChatContextProviders", () => {
 
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBe(hookSession);
+  });
+
+  it("gives readers of the chat contexts the latest transcript without re-rendering them per token", () => {
+    const renders = { context: 0, transcript: 0 };
+    const seen: {
+      context: (ChatContextValue | null)[];
+      transcript: (ChatTranscriptValue | null)[];
+    } = { context: [], transcript: [] };
+    const ContextReader = memo(function ContextReader(_props: {
+      tick: number;
+    }) {
+      renders.context += 1;
+      seen.context.push(useContext(ChatContext));
+      return null;
+    });
+    const TranscriptReader = memo(function TranscriptReader(_props: {
+      tick: number;
+    }) {
+      renders.transcript += 1;
+      seen.transcript.push(useContext(ChatTranscriptContext));
+      return null;
+    });
+    const tree = (value: ChatContextValue, tick: number) => (
+      <ChatContextProviders value={value}>
+        <ContextReader tick={tick} />
+        <TranscriptReader tick={tick} />
+      </ChatContextProviders>
+    );
+    const view = render(tree(valueFor({ reply: reply("Hel") }), 0));
+    const latest = valueFor({ reply: reply("Hello") });
+    view.rerender(tree(latest, 0));
+
+    expect(renders).toEqual({ context: 1, transcript: 1 });
+    const [context] = seen.context;
+    const [transcript] = seen.transcript;
+    expect(context?.currentChatId).toBe("chat-1");
+    expect(context?.sendMessage).toBe(sendMessage);
+    expect(context?.messages).toBe(latest.messages);
+    expect(context?.messageOrder).toBe(latest.messageOrder);
+    expect(transcript?.messages).toBe(latest.messages);
+
+    // A reader that renders for its own reason reads the same objects again.
+    view.rerender(tree(latest, 1));
+    expect(seen.context[1]).toBe(context);
+    expect(seen.transcript[1]).toBe(transcript);
+
+    // A session change gives the chat context a new identity; the transcript
+    // context keeps its one object.
+    view.rerender(
+      tree(valueFor(latest.messages, { isPendingResponse: false }), 1),
+    );
+    expect(seen.context.at(-1)).not.toBe(context);
+    expect(seen.context.at(-1)?.isPendingResponse).toBe(false);
+    expect(seen.transcript.at(-1)).toBe(transcript);
   });
 });

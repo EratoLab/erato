@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 
 import { isMessageBlockedByPromptInjection } from "@/types/chat";
+import { shallowEqual } from "@/utils/chat/stableValues";
 
 import type {
   ChatContextValue,
@@ -18,32 +19,36 @@ type MockedChat = Partial<ChatContextValue>;
 export function createChatProviderMock(
   useChatContext: () => unknown = vi.fn(),
 ) {
-  // One session per described chat, as the real provider keeps it while only
-  // the transcript changes.
-  const sessions = new WeakMap<MockedChat, ChatSessionValue>();
-  const useMockedContext = () =>
-    useChatContext() as MockedChat | null | undefined;
   const transcriptOf = (value: MockedChat): ChatTranscriptValue => ({
     messages: value.messages ?? {},
     messageOrder: value.messageOrder ?? [],
     streamingContent: value.streamingContent ?? [],
   });
+  const useMockedContext = () =>
+    useChatContext() as MockedChat | null | undefined;
   // Read when called, as the real getTranscript is, from the test's chat now.
   const useLatestTranscript = () => transcriptOf(useMockedContext() ?? {});
+  // As the real provider does, the session keeps its object while only the
+  // transcript changes.
+  let lastSession: ChatSessionValue | null = null;
   const sessionOf = (value: MockedChat): ChatSessionValue => {
-    const known = sessions.get(value);
-    if (known) return known;
+    const {
+      messages: _messages,
+      messageOrder: _messageOrder,
+      streamingContent: _streamingContent,
+      ...rest
+    } = value;
     const order = value.messageOrder ?? [];
-    const session = {
-      ...value,
+    const next = {
+      ...rest,
       hasMessages: order.length > 0,
       isLastMessageBlockedByPromptInjection: isMessageBlockedByPromptInjection(
         value.messages?.[order.at(-1) ?? ""],
       ),
       getTranscript: useLatestTranscript,
     } as ChatSessionValue;
-    sessions.set(value, session);
-    return session;
+    if (!lastSession || !shallowEqual(lastSession, next)) lastSession = next;
+    return lastSession;
   };
   const useOptionalChatSession = () => {
     const value = useMockedContext();

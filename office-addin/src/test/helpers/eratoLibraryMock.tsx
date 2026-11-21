@@ -175,6 +175,17 @@ const stubActionFacetEstimate = (facet: {
   return file;
 };
 
+const EMPTY_TRANSCRIPT = {
+  messages: {},
+  messageOrder: [] as string[],
+  streamingContent: [] as unknown[],
+};
+const EMPTY_CHAT = { ...EMPTY_TRANSCRIPT, currentChatId: null };
+const EMPTY_CHAT_SESSION = {
+  currentChatId: null,
+  getTranscript: () => EMPTY_TRANSCRIPT,
+};
+
 export const DEFAULT_STUBS = {
   holdComposeReload: () => () => {},
   installAudioCaptureAccessPolicy: () => () => {},
@@ -622,11 +633,36 @@ export const DEFAULT_STUBS = {
     clearStatus: noop,
   })),
   ChatContextProviders: StubPassthrough,
+  // An empty chat; a test that describes its own chat through `useChatContext`
+  // gets hooks derived from it instead.
+  useChatContext: () => EMPTY_CHAT,
+  useChatSession: () => EMPTY_CHAT_SESSION,
+  useChatTranscript: () => EMPTY_TRANSCRIPT,
+  useChatTranscriptSelector: <T,>(
+    select: (transcript: typeof EMPTY_TRANSCRIPT) => T,
+  ) => select(EMPTY_TRANSCRIPT),
   useStableChatMessages: <T,>(messages: T) => messages,
   useStableValue: <T,>(value: T) => value,
 } satisfies Partial<Record<keyof typeof EratoLibrary, unknown>>;
 
 type ChatContextHook = () => Record<string, unknown>;
+
+const TRANSCRIPT_KEYS = new Set([
+  "messages",
+  "messageOrder",
+  "streamingContent",
+]);
+
+const sameFields = (
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+) => {
+  const keys = Object.keys(previous);
+  return (
+    keys.length === Object.keys(next).length &&
+    keys.every((key) => Object.is(previous[key], next[key]))
+  );
+};
 
 /**
  * The session, transcript and conversation hooks, derived from a test's
@@ -636,23 +672,28 @@ type ChatContextHook = () => Record<string, unknown>;
 export const chatHooksFrom = (useChatContext: ChatContextHook) => {
   const useMessages = () =>
     (useChatContext().messages ?? {}) as Record<string, unknown>;
-  // One session per described chat, as the real provider keeps it while only
-  // the transcript changes; the pane's handlers and edit context key on it.
-  const sessions = new WeakMap<object, Record<string, unknown>>();
+  // As the real provider does, the session keeps its object while only the
+  // transcript changes, and getTranscript reads the latest one rendered.
+  let latest: Record<string, unknown> = {};
+  let lastSession: Record<string, unknown> | null = null;
+  const getTranscript = () => latest;
+  const useChatTranscript = () => {
+    latest = useChatContext();
+    return latest;
+  };
   const useChatSession = () => {
-    const context = useChatContext();
-    let session = sessions.get(context);
-    if (!session) {
-      const transcript = context;
-      session = { ...context, getTranscript: () => transcript };
-      sessions.set(context, session);
-    }
-    return session;
+    latest = useChatContext();
+    const next: Record<string, unknown> = Object.fromEntries(
+      Object.entries(latest).filter(([key]) => !TRANSCRIPT_KEYS.has(key)),
+    );
+    next.getTranscript = getTranscript;
+    if (!lastSession || !sameFields(lastSession, next)) lastSession = next;
+    return lastSession;
   };
   return {
     useChatSession,
     useOptionalChatSession: useChatSession,
-    useChatTranscript: useChatContext,
+    useChatTranscript,
     useConversationMessage: (messageId?: string) => {
       const messages = useMessages();
       return messageId === undefined ? undefined : messages[messageId];
