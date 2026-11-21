@@ -119,8 +119,11 @@ async function targetRead(
   );
   const execute = createWordDocumentSubmissionExecutor(session);
   let calls = 0;
+  const submit = (input: Record<string, unknown>) =>
+    execute(input, { ...context, toolCallId: `submit-${++calls}` });
   return {
     snapshot,
+    submit,
     async completeRead(): Promise<string> {
       type Page = {
         complete: boolean;
@@ -139,13 +142,27 @@ async function targetRead(
     sparse: (
       scoped_edit: Record<string, unknown>,
       readToken = read.readToken,
-    ) =>
-      execute(
-        { snapshot: snapshot.token, readToken, scoped_edit },
-        { ...context, toolCallId: `submit-${++calls}` },
-      ),
+    ) => submit({ snapshot: snapshot.token, readToken, scoped_edit }),
   };
 }
+
+/** A full plan replacing the blocks with the given texts and keeping the rest. */
+const fullPlan = (
+  snapshot: WordAuthoringSnapshot,
+  readToken: string,
+  replaced: Record<string, WordPlanBlock>,
+) => ({
+  version: 1,
+  snapshot: snapshot.token,
+  readToken,
+  scope: "body",
+  entries: snapshot.blocks.map((b) =>
+    replaced[b.text]
+      ? { kind: "replace", source: [b.ref], blocks: [replaced[b.text]] }
+      : { kind: "keep", source: [b.ref] },
+  ),
+  deleted: [],
+});
 
 const TODAYS_RECEIPT = ["action", "draft_id", "plan", "snapshot"];
 
@@ -208,6 +225,87 @@ describe("a smaller retry that leaves out parts", () => {
     });
     const result = okResult(await s.sparse(change, await s.completeRead()));
     expect(Object.keys(result).sort()).toEqual(TODAYS_RECEIPT);
+  });
+
+  it("names the sections refused full plans and repairs changed that the accepted repair leaves out", async () => {
+    const s = await targetRead();
+    const plan = fullPlan(s.snapshot, await s.completeRead(), {
+      "Liability is limited to the annual fee.": block("dup", "Capped"),
+      "Goods are delivered to the Buyer's warehouse.": block("dup", "Sent"),
+    });
+    const draftOf = (refused: Awaited<ReturnType<typeof s.submit>>) => {
+      expect(refused).toMatchObject({
+        ok: false,
+        validationErrors: [{ code: "duplicate-id" }],
+      });
+      if (refused.ok || !refused.submissionFeedback?.draft)
+        throw new Error("Expected a repair handle");
+      return {
+        snapshot: s.snapshot.token,
+        readToken: plan.readToken,
+        draft_id: refused.submissionFeedback.draft.id,
+        revision: refused.submissionFeedback.draft.revision,
+      };
+    };
+    const at = (text: string) =>
+      s.snapshot.blocks.findIndex((b) => b.text === text);
+    const notice = "Either party may terminate with three months' notice.";
+    const delivery = "Goods are delivered to the Buyer's warehouse.";
+    const draft = draftOf(await s.submit(plan));
+    const repaired = draftOf(
+      await s.submit({
+        ...draft,
+        patches: [
+          {
+            op: "replace",
+            path: `/entries/${at(notice)}`,
+            value: {
+              kind: "replace",
+              source: [refOf(s.snapshot, notice)],
+              blocks: [block("dup", "Ended")],
+            },
+          },
+        ],
+      }),
+    );
+
+    const result = okResult(
+      await s.submit({
+        ...repaired,
+        patches: [notice, delivery].map((text) => ({
+          op: "replace",
+          path: `/entries/${at(text)}`,
+          value: { kind: "keep", source: [refOf(s.snapshot, text)] },
+        })),
+      }),
+    );
+    expect(result.notInProposal).toEqual(["§ 6 Lieferung", "§ 11 Kündigung"]);
+  });
+
+  it("names no section a refused full plan only re-emitted unchanged", async () => {
+    const s = await targetRead();
+    const readToken = await s.completeRead();
+    const invoices = "Invoices are due within 30 days.";
+    expect(
+      await s.submit(
+        fullPlan(s.snapshot, readToken, {
+          "Liability is limited to the annual fee.": block("dup", "Capped"),
+          "Goods are delivered to the Buyer's warehouse.": block("dup", "Sent"),
+          [invoices]: block("same", invoices),
+        }),
+      ),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "duplicate-id" }],
+    });
+
+    const result = okResult(
+      await s.sparse(
+        rewrite(s.snapshot, ["Liability is limited to the annual fee."]),
+        readToken,
+      ),
+    );
+    expect(result.notInProposal).toEqual(["§ 6 Lieferung"]);
   });
 
   it("names nothing when the retry keeps every part of the refused attempt", async () => {

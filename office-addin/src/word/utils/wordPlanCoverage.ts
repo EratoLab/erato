@@ -1,4 +1,7 @@
-import { MAX_NOT_IN_PROPOSAL_NAMES } from "@erato/frontend/word-review";
+import {
+  canonicalWordPlan,
+  MAX_NOT_IN_PROPOSAL_NAMES,
+} from "@erato/frontend/word-review";
 
 import {
   START_OF_DOCUMENT,
@@ -33,12 +36,45 @@ const items = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const strings = (v: unknown): string[] =>
   items(v).filter((r): r is string => typeof r === "string");
 
-/**
- * The body blocks a submission changes, read leniently from its arguments so that an attempt
- * refused before parsing (for its size, say) still counts. A sparse change is read as sent, never
- * as the plan it expands to, so a refused and an accepted sparse change name blocks alike. Moves a
- * full plan implies are left out: a refused plan's duplicated keep would read as one.
- */
+const LOOK = [
+  "type",
+  "text",
+  "level",
+  "styleRef",
+  "list",
+  "ordered",
+  "runs",
+  "format",
+] as const;
+
+/** A full plan may re-emit untouched text as a replace; that changes nothing a retry could drop. */
+function unchangedReplace(
+  source: string[],
+  blocks: unknown[],
+  snapshot: WordAuthoringSnapshot,
+): boolean {
+  const index = wordBlockIndex(snapshot);
+  return (
+    !!source.length &&
+    source.length === blocks.length &&
+    source.every((ref, k) => {
+      const at = index.get(ref);
+      const block = blocks[k];
+      return (
+        at !== undefined &&
+        object(block) &&
+        LOOK.every(
+          (key) =>
+            canonicalWordPlan(block[key]) ===
+            canonicalWordPlan(snapshot.blocks[at][key]),
+        )
+      );
+    })
+  );
+}
+
+/** Read leniently, so an attempt refused before parsing still counts; implied moves are left out, as
+ * a refused plan's duplicated keep would read as one. */
 export function wordSubmissionBlocks(
   input: unknown,
   snapshot: WordAuthoringSnapshot,
@@ -68,7 +104,19 @@ export function wordSubmissionBlocks(
             : e.kind === "keep"
               ? [{ kind: "keep", source: strings(e.source) }]
               : e.kind === "replace"
-                ? [{ kind: "replace", source: strings(e.source), blocks: [] }]
+                ? [
+                    unchangedReplace(
+                      strings(e.source),
+                      items(e.blocks),
+                      snapshot,
+                    )
+                      ? { kind: "keep", source: strings(e.source) }
+                      : {
+                          kind: "replace",
+                          source: strings(e.source),
+                          blocks: [],
+                        },
+                  ]
                 : [],
       ),
       deleted: items(input.deleted).flatMap((d) =>
@@ -109,10 +157,8 @@ const titled = (entry: WordOutlineEntry | undefined) =>
   !!entry.title &&
   entry.title !== START_OF_DOCUMENT;
 
-/**
- * The parts that hold a block, outermost first: each heading or numbered section with a title of
- * its own. A block outside all of them is in one untitled part, keyed by its outline entry.
- */
+/** The titled parts that hold a block, outermost first; a block outside all of them is in one
+ * untitled part, keyed by its outline entry. */
 function partChain(sections: WordCaptureSections, block: number): string[] {
   const chain = sections.outline
     .map((entry, k) => ({ entry, k }))
@@ -168,13 +214,8 @@ function leftOutPart(
   return {};
 }
 
-/**
- * The parts an earlier attempt of the same request changed that the accepted plan leaves out, in
- * document order. An attempt counts only when it changed more parts than the accepted plan under
- * the document or under a part both changed, so a retry that moves a change from one part to
- * another names none. A left-out part is named at its outermost level: a whole section, not its
- * subsections. Only blocks the request read count, so a mistyped ref the host refused names none.
- */
+/** An attempt counts only when it changed more parts at some level, so a moved change names none;
+ * only read blocks count, so a mistyped ref the host refused names none. */
 export function wordPartsNotInProposal(
   snapshot: WordAuthoringSnapshot,
   earlier: readonly ReadonlySet<number>[],
@@ -219,8 +260,7 @@ export function wordPartsNotInProposal(
   return parts;
 }
 
-/** What an accepted receipt adds when the plan leaves out parts an earlier attempt changed: the
- * card shows `notInProposal`, and the note tells the model when a later turn replays the call. An
+/** `notInProposal` is for the card, the note for the model when a later turn replays the call; an
  * empty card name stands for a part without text. */
 export function wordNotInProposalReceipt(
   parts: readonly WordLeftOutPart[],

@@ -109,7 +109,7 @@ describe("WordProposalCard", () => {
       { wrapper },
     );
     expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
-      /^Not in this proposal: § 6 Lieferung, § 11 Kündigung$/,
+      /^Not in this proposal: § 6 Lieferung, § 11 Kündigung\. Ask for the rest in your next message\.$/,
     );
 
     view.rerender(
@@ -120,7 +120,7 @@ describe("WordProposalCard", () => {
       />,
     );
     expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
-      /^Not in this proposal: § 1, § 2, § 3, § 4, § 5 and other parts$/,
+      /^Not in this proposal: § 1, § 2, § 3, § 4, § 5 and other parts\. Ask for the rest/,
     );
 
     view.rerender(
@@ -131,7 +131,7 @@ describe("WordProposalCard", () => {
       />,
     );
     expect(screen.getByTestId("word-plan-not-in-proposal")).toHaveTextContent(
-      /^Not in this proposal: a part without text, § 2$/,
+      /^Not in this proposal: a part without text, § 2\. /,
     );
 
     view.rerender(<WordProposalCard plan={plan} snapshot={snapshot()} />);

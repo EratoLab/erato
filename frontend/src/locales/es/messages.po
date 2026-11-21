@@ -5564,12 +5564,12 @@ msgstr "Cambios propuestos en el documento"
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.notInProposal"
-msgstr "No incluido en esta propuesta: {listed}"
+msgstr "No incluido en esta propuesta: {listed}. Pide el resto en tu próximo mensaje."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.notInProposalMore"
-msgstr "No incluido en esta propuesta: {listed} y otras partes"
+msgstr "No incluido en esta propuesta: {listed} y otras partes. Pide el resto en tu próximo mensaje."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx

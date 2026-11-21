@@ -13,6 +13,7 @@ import {
 } from "@erato/frontend/word-review";
 
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
+import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
@@ -36,6 +37,7 @@ import {
 import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
 import {
   expandWordScopedSubmission,
+  wordCompleteReadToken,
   WORD_SCOPED_TOKEN_MESSAGE,
   wordScopedIssues,
   WordScopedSubmissionError,
@@ -185,17 +187,31 @@ function createSubmissionExecutor(
       return { ok: false, error: "Expected JSON plan arguments." };
     }
     if (new TextEncoder().encode(serialized).length > MAX_PLAN_BYTES)
-      return {
-        ok: false,
-        error: "Document plan exceeds maxPlanBytes.",
-        validationErrors: [
-          {
-            path: "",
-            code: "too-large",
-            message: "Submission arguments exceed maxPlanBytes.",
-          },
-        ],
-      };
+      return "scoped_edit" in input &&
+        input.snapshot === snapshot.token &&
+        wordCompleteReadToken(snapshot, input.readToken)
+        ? sparseRejection(input, {
+            ok: false,
+            error: "Scoped edit rejected.",
+            validationErrors: [
+              {
+                path: "/scoped_edit",
+                code: "scoped-shape",
+                message: WORD_SCOPED_EXPANDED_TOO_LARGE,
+              },
+            ],
+          })
+        : {
+            ok: false,
+            error: "Document plan exceeds maxPlanBytes.",
+            validationErrors: [
+              {
+                path: "",
+                code: "too-large",
+                message: "Submission arguments exceed maxPlanBytes.",
+              },
+            ],
+          };
     try {
       const previous = session.drafts.replay(context.toolCallId, serialized);
       if (previous) return previous;
@@ -299,7 +315,6 @@ function createSubmissionExecutor(
           "draft_id" in input ||
           "table_cell" in input ||
           "scoped_edit" in input;
-        // A retry that changes fewer parts than an earlier attempt names what it left out (ERMAIN-1287).
         const notInProposal = wordNotInProposalReceipt(
           wordPartsNotInProposal(
             snapshot,

@@ -69,7 +69,7 @@ export interface WordProposalCardProps {
   adapter?: WordProposalAdapter;
 }
 
-/** One plain line naming the parts a smaller retry left out; never refs. */
+/** Names the parts a smaller retry left out, never refs; the model learns of them only next turn. */
 function wordNotInProposalText(names: readonly string[]): string {
   const listed = formatList(
     names.slice(0, MAX_NOT_IN_PROPOSAL_NAMES).map(
@@ -84,11 +84,11 @@ function wordNotInProposalText(names: readonly string[]): string {
   return names.length > MAX_NOT_IN_PROPOSAL_NAMES
     ? t({
         id: "officeAddin.word.proposal.notInProposalMore",
-        message: `Not in this proposal: ${listed} and other parts`,
+        message: `Not in this proposal: ${listed} and other parts. Ask for the rest in your next message.`,
       })
     : t({
         id: "officeAddin.word.proposal.notInProposal",
-        message: `Not in this proposal: ${listed}`,
+        message: `Not in this proposal: ${listed}. Ask for the rest in your next message.`,
       });
 }
 

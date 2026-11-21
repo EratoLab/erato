@@ -17,6 +17,7 @@ import {
   captureRealisticSnapshot,
   realisticWordPackageXml,
 } from "../../../test/mocks/word/realisticWordFixtures";
+import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "../wordAuthoringContract";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import {
@@ -328,7 +329,7 @@ describe("sparse changes after a complete read", () => {
       ],
       [
         "more than a full plan's 256 KiB",
-        "too-large",
+        "scoped-shape",
         (s, token) =>
           s.sparse(token, {
             body: [
@@ -400,6 +401,35 @@ describe("sparse changes after a complete read", () => {
       expect(result.ok, name).toBe(false);
       expect(!result.ok && result.validationErrors?.[0]?.code, name).toBe(code);
     }
+  });
+
+  it("asks to split a change over 256 KiB, as sent or with its kept blocks, instead of reading again", async () => {
+    const s = setup();
+    const token = await s.completeRead();
+    const args = (text: string) => ({
+      snapshot: s.snapshot.token,
+      readToken: token,
+      scoped_edit: {
+        body: [
+          {
+            operation: "insert-after",
+            anchor: "b2",
+            blocks: [block("big", text)],
+          },
+        ],
+      },
+    });
+    for (const size of [
+      257 * 1024,
+      256 * 1024 - 400 - JSON.stringify(args("")).length,
+    ])
+      expect(await s.submit(args("x".repeat(size)))).toMatchObject({
+        ok: false,
+        validationErrors: [
+          { code: "scoped-shape", message: WORD_SCOPED_EXPANDED_TOO_LARGE },
+        ],
+        submissionFeedback: { recovery: "repair_arguments" },
+      });
   });
 
   it("refuses a token from an earlier request on the same capture", async () => {

@@ -392,11 +392,8 @@ export function acceptedWordPlanFromHistory(
   };
 }
 
-/**
- * The parts an earlier attempt of the request changed that its accepted plan leaves out, by their
- * own titles, as the add-in returned them on acceptance. An empty name stands for a part without
- * text. Empty for a plan accepted at once.
- */
+/** The parts a smaller accepted retry left out, as the add-in's receipt names them; an empty name
+ * stands for a part without text. */
 export function wordPlanNotInProposal(
   content: readonly ContentPart[] | undefined,
 ): string[] {

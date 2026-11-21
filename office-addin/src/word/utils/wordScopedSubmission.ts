@@ -160,29 +160,36 @@ export function wordScopedIssues(
   });
 }
 
-/** The final token of a finished complete read covers everything that read returned. */
-function completeReadTargets(
+/** Whether `token` is the final token of this capture's finished complete read. */
+export function wordCompleteReadToken(
   snapshot: WordAuthoringSnapshot,
   token: unknown,
-): WordScopeTarget[] | undefined {
-  return typeof token === "string" &&
+): boolean {
+  return (
+    typeof token === "string" &&
     token === snapshot.readToken &&
     !snapshot.revoked &&
     !snapshot.used &&
     !snapshot.issue &&
     !snapshot.completeReadIssue &&
     wordSourceReadRefs(snapshot).every((ref) => snapshot.read.has(ref))
+  );
+}
+
+/** The final token of a finished complete read covers everything that read returned. */
+function completeReadTargets(
+  snapshot: WordAuthoringSnapshot,
+  token: unknown,
+): WordScopeTarget[] | undefined {
+  return wordCompleteReadToken(snapshot, token)
     ? wordTargetInventory(snapshot)
     : undefined;
 }
 
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-/**
- * The body blocks a scoped_edit names, read as sent and leniently, so that a refused change counts
- * like an accepted one: the sources it replaces, deletes or moves, its insertion anchors, the blocks
- * holding the objects it edits and the anchors of its new notes.
- */
+/** The body blocks a scoped_edit names, read as sent and leniently so a refused change counts like
+ * an accepted one. */
 export function wordScopedEditBlocks(
   edit: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
