@@ -1635,6 +1635,7 @@ fn classify_segment(
     match found {
         Some(Segment::Decision(VoiceMeaning::Approve)) if no => Segment::Unknown,
         Some(Segment::Decision(VoiceMeaning::Reject)) if yes => Segment::Unknown,
+        Some(Segment::Nav(meaning, _)) if no && meaning != VoiceMeaning::Stop => Segment::Unknown,
         Some(found) => found,
         None => Segment::Unknown,
     }
@@ -1803,12 +1804,15 @@ pub(super) fn match_rules(
         }
     }
     // Yes and no together ("no, wait, yes"), or a no taken back, are for the
-    // model. A single yes or no beside navigation acknowledges; the
-    // navigation is meant.
+    // model. A single yes beside navigation acknowledges; the navigation is
+    // meant. A no beside anything but a stop ("nein, sorry") is never lost
+    // to it: it is decided as a refusal, or left unclear.
     if decisions.len() > 1 || words.takes_back && !decisions.is_empty() {
         return None;
     }
-    if let Some((meaning, piece_id)) = navigation {
+    if let Some((meaning, piece_id)) = navigation
+        && (meaning == VoiceMeaning::Stop || !decisions.contains(&VoiceMeaning::Reject))
+    {
         return Some(RuleMatch { meaning, piece_id });
     }
     match decisions.len() {

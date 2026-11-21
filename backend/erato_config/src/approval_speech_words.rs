@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::language_words::{
-    WordLists, language_tables, merge_word_list, named_word_lists, word_list, word_lists,
+    WordLists, added_summary, language_tables, merge_word_list, word_list, word_lists,
 };
 use crate::spoken::{MAX_ENTRY_BYTES, Written, shown, slots_of, usable};
 
@@ -19,18 +19,6 @@ pub const SAID_NUMBER_WORDS: usize = 13;
 /// Ordinals said for the first to the tenth.
 pub const MAX_ORDINALS: usize = 10;
 const MAX_LOCALE_BYTES: usize = 35;
-
-word_lists! {
-    /// Words a language takes out of the built-in lists, by list.
-    pub struct ApprovalSpeechWordRemovals {
-        /// Verbs that say what to do with a dictated text ("schreib", "write").
-        dictation_verbs,
-        /// Besides the verbs, the words such an instruction may hold.
-        dictation_words,
-        /// Words that say nothing about a value on their own.
-        difference_fillers,
-    }
-}
 
 word_lists! {
     /// One language's words for spoken approval cards, as configured.
@@ -68,8 +56,6 @@ word_lists! {
         from: Option<String>,
         /// A new value in a sentence variant, with `{value}` (`to {value}`).
         to: Option<String>,
-        /// Words taken out of the built-in lists, by list.
-        remove: ApprovalSpeechWordRemovals,
     }
 }
 
@@ -279,20 +265,17 @@ fn lower(words: &[String]) -> Vec<String> {
     words.iter().map(|word| word.to_lowercase()).collect()
 }
 
-fn merged_list(base: &[String], added: &[String], removed: &[String]) -> Vec<String> {
+fn merged_list(base: &[String], added: &[String]) -> Vec<String> {
     let added = lower(added);
-    let removed = lower(removed);
-    let removed: Vec<&str> = removed.iter().map(String::as_str).collect();
     merge_word_list(
         base.iter().map(String::as_str),
         added.iter().map(String::as_str),
-        &removed,
     )
 }
 
 /// The built-in words with the configured ones merged in, for every
 /// language that has either. A configured value replaces the built-in one;
-/// a configured list adds to the built-in one, without its `remove` words.
+/// a configured list adds to the built-in one.
 pub fn spoken_card_languages(
     configured: &ApprovalSpeechWordsByLanguage,
 ) -> BTreeMap<String, SpokenCardLanguage> {
@@ -320,21 +303,9 @@ pub fn spoken_card_languages(
             time: words.time.clone().or(base.time),
             from: words.from.clone().or(base.from),
             to: words.to.clone().or(base.to),
-            dictation_verbs: merged_list(
-                &base.dictation_verbs,
-                &words.dictation_verbs,
-                &words.remove.dictation_verbs,
-            ),
-            dictation_words: merged_list(
-                &base.dictation_words,
-                &words.dictation_words,
-                &words.remove.dictation_words,
-            ),
-            difference_fillers: merged_list(
-                &base.difference_fillers,
-                &words.difference_fillers,
-                &words.remove.difference_fillers,
-            ),
+            dictation_verbs: merged_list(&base.dictation_verbs, &words.dictation_verbs),
+            dictation_words: merged_list(&base.dictation_words, &words.dictation_words),
+            difference_fillers: merged_list(&base.difference_fillers, &words.difference_fillers),
         };
         languages.insert(language.clone(), merged);
     }
@@ -342,8 +313,8 @@ pub fn spoken_card_languages(
 }
 
 /// What one language's configured words change, for the startup log
-/// ("sets locale, numbers; adds dictation_verbs 2; removes dictation_verbs
-/// 1"), or nothing for an empty table.
+/// ("sets locale, numbers; adds dictation_verbs 2"), or nothing for an empty
+/// table.
 pub fn summary(words: &ApprovalSpeechWords) -> Option<String> {
     let set: Vec<&str> = [
         ("locale", words.locale.is_some()),
@@ -358,26 +329,8 @@ pub fn summary(words: &ApprovalSpeechWords) -> Option<String> {
     .into_iter()
     .filter_map(|(name, set)| set.then_some(name))
     .collect();
-    let counts = |of: &dyn Fn(&str) -> usize| {
-        ApprovalSpeechWordRemovals::NAMES
-            .iter()
-            .map(|name| (*name, of(name)))
-            .filter(|(_, count)| *count > 0)
-            .map(|(name, count)| format!("{name} {count}"))
-            .collect::<Vec<_>>()
-    };
-    let added = counts(&|name| words.list(name).map_or(0, Vec::len));
-    let removed = counts(&|name| words.remove.list(name).map_or(0, Vec::len));
-    let mut parts = Vec::new();
-    if !set.is_empty() {
-        parts.push(format!("sets {}", set.join(", ")));
-    }
-    if !added.is_empty() {
-        parts.push(format!("adds {}", added.join(", ")));
-    }
-    if !removed.is_empty() {
-        parts.push(format!("removes {}", removed.join(", ")));
-    }
+    let set = (!set.is_empty()).then(|| format!("sets {}", set.join(", ")));
+    let parts: Vec<String> = set.into_iter().chain(added_summary(words)).collect();
     (!parts.is_empty()).then(|| parts.join("; "))
 }
 
@@ -480,12 +433,6 @@ fn shaped_language(
             "time" => words.time = template(&place, value, &["hour", "minute"], dropped),
             "from" => words.from = template(&place, value, &["value"], dropped),
             "to" => words.to = template(&place, value, &["value"], dropped),
-            "remove" => match value {
-                Written::Table(table) => {
-                    words.remove = named_word_lists(&place, table, &[], "", dropped);
-                }
-                _ => dropped.push(format!("{place} is not a table and is ignored")),
-            },
             name => match words.list_mut(name) {
                 Some(list) => *list = word_list(&place, value, dropped),
                 None => dropped.push(format!("{place} is not a known setting; it is ignored")),
@@ -596,8 +543,7 @@ mod tests {
     fn a_built_in_language_merges_by_kind() {
         let languages = spoken_card_languages(&words(
             "[approval_speech.words.en]\nnumbers = [\"nought\"]\nfrom = \"since {value}\"\n\
-             dictation_verbs = [\"draft\"]\n\
-             [approval_speech.words.en.remove]\ndictation_verbs = [\"Send\"]\n",
+             dictation_verbs = [\"Draft\"]\n",
         ));
         let english = &languages["en"];
         let base = &base_spoken_card_languages()["en"];
@@ -605,7 +551,10 @@ mod tests {
         assert_eq!(english.ordinals, base.ordinals);
         assert_eq!(english.from.as_deref(), Some("since {value}"));
         assert_eq!(english.to, base.to);
-        assert_eq!(english.dictation_verbs, ["write", "compose", "draft"]);
+        assert_eq!(
+            english.dictation_verbs,
+            [base.dictation_verbs.clone(), vec!["draft".to_string()]].concat()
+        );
         assert_eq!(english.locale, "en-GB");
         assert!(english.full_card);
     }
@@ -637,7 +586,7 @@ mod tests {
                 "approval_speech.words.fr.locale is not a locale such as `fr-FR`; it is ignored",
                 "approval_speech.words.fr.numbers is ignored: its entries count by their place",
                 "approval_speech.words.fr.numbers: an entry is not a text and is ignored",
-                "approval_speech.words.fr.remove is not a table and is ignored",
+                "approval_speech.words.fr.remove is not a known setting; it is ignored",
                 "approval_speech.words.fr.shout is not a known setting; it is ignored",
                 "approval_speech.words.fr.time is not a text with exactly the slots {hour} and {minute}; it is ignored",
                 "approval_speech.words: 'IT' is not a lowercase language tag such as `de` and is ignored",

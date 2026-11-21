@@ -233,7 +233,6 @@ async fn decide(
         return answer(VoiceDecisionStatus::ScreenOnly);
     }
     let item = &decidable[0];
-    // A card in a language without a phrase of its own approves on screen.
     if outcome == VoiceDecisionOutcome::Approved
         && (approval_is_screen_only(item)
             || app_state

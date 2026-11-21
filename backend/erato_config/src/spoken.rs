@@ -20,8 +20,51 @@ use crate::config_facet_attrs as erato_config;
 /// them never approves a card by voice, and none of them is ever a
 /// hesitation sound.
 pub const NEGATIONS: &[&str] = &[
-    "nicht", "not", "dont", "kein", "keine", "keinen", "never", "nie", "nein", "nee", "ne", "noe",
-    "no", "nope", "nah", "shouldnt", "wont", "cant", "isnt", "doesnt", "didnt", "nobody",
+    "nicht",
+    "nichts",
+    "nix",
+    "not",
+    "dont",
+    "kein",
+    "keine",
+    "keinen",
+    "keinem",
+    "keiner",
+    "keines",
+    "keinesfalls",
+    "never",
+    "nie",
+    "niemals",
+    "nimmer",
+    "nein",
+    "nee",
+    "ne",
+    "noe",
+    "no",
+    "nope",
+    "nah",
+    "nothing",
+    "neither",
+    "nor",
+    "none",
+    "shouldnt",
+    "wont",
+    "cant",
+    "isnt",
+    "arent",
+    "wasnt",
+    "werent",
+    "doesnt",
+    "didnt",
+    "wouldnt",
+    "couldnt",
+    "hasnt",
+    "havent",
+    "hadnt",
+    "mustnt",
+    "neednt",
+    "aint",
+    "nobody",
     "niemand",
 ];
 pub const CONDITIONS: &[&str] = &[
@@ -574,6 +617,9 @@ fn written_numbers(
     numbers
 }
 
+/// Unlike [`crate::language_words::word_list`], keeps an empty entry: an
+/// empty ordinal ending lets a stem stand alone. `drop_unusable` checks the
+/// entries.
 fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Vec<String> {
     let Written::List(entries) = written else {
         dropped.push(format!("{place} is not a list and is ignored"));
@@ -593,13 +639,10 @@ fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Ve
 fn shaped_number_words(written: Written) -> (SpokenNumberWordsByLanguage, Vec<String>) {
     let mut dropped = Vec::new();
     let mut languages = SpokenNumberWordsByLanguage::new();
-    for (language, settings) in written_table("spoken_number_words", written, &mut dropped) {
+    for (language, mut settings) in
+        crate::language_words::language_tables("spoken_number_words", written, &mut dropped)
+    {
         let place = format!("spoken_number_words.{language}");
-        if !matches!(settings, Written::Table(_)) {
-            dropped.push(format!("{place} is not a table and is ignored"));
-            continue;
-        }
-        let mut settings = written_table(&place, settings, &mut dropped);
         let mut numbers = |setting: &str, dropped: &mut Vec<String>| {
             settings
                 .remove(setting)
@@ -734,13 +777,6 @@ impl SpokenNumberWordsConfig {
 pub fn drop_unusable_number_words(languages: &mut SpokenNumberWordsByLanguage) -> Vec<String> {
     let mut dropped = Vec::new();
     languages.retain(|language, words| {
-        if !is_language_tag(language) {
-            dropped.push(format!(
-                "spoken_number_words: '{}' is not a lowercase language tag such as `de` and is ignored",
-                shown(language)
-            ));
-            return false;
-        }
         let place = format!("spoken_number_words.{language}");
         dropped.extend(words.drop_unusable(&place));
         // Without numbers, ordinals or their endings a day said in words
@@ -1404,6 +1440,20 @@ mod tests {
     }
 
     #[test]
+    fn number_words_take_the_same_language_tags_as_the_other_language_data() {
+        let toml = "[spoken_number_words.DE]\nnumbers = { zwei = 2 }\n\
+                    [spoken_number_words.pt-BR]\nnumbers = { dois = 2 }\n\
+                    [spoken_number_words.pt-br]\nnumbers = { dois = 2 }\n";
+        assert_eq!(number_words(toml).keys().collect::<Vec<_>>(), ["pt-br"]);
+        assert_eq!(
+            misshaped_number_words(&schema(toml)),
+            ["DE", "pt-BR"].map(|tag| format!(
+                "spoken_number_words: '{tag}' is not a lowercase language tag such as `de` and is ignored"
+            ))
+        );
+    }
+
+    #[test]
     fn number_words_hold_one_language_each() {
         let loaded = number_words(
             r#"
@@ -1497,9 +1547,9 @@ mod tests {
                 "spoken_number_words.en has no numbers; it is ignored and only digits are read in this language",
                 "spoken_number_words.en.numbers: 'two words' is ignored",
                 "spoken_number_words.fr has no ordinals, ordinal_endings; it is ignored and only digits are read in this language",
-                "spoken_number_words: 'DE' is not a lowercase language tag such as `de` and is ignored",
             ]
         );
+        assert!(!loaded.contains_key("DE"));
         assert!(!loaded.contains_key("en"));
         assert!(!loaded.contains_key("fr"));
         let de = &loaded["de"];

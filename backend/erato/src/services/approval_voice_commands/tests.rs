@@ -1284,9 +1284,16 @@ mod deciding_by_voice {
 
     #[test]
     fn the_phrase_needs_speech_for_its_syllables() {
-        assert_eq!(syllables(phrase_for("de-DE").unwrap()), 5);
-        assert_eq!(syllables(phrase_for("en").unwrap()), 3);
-        assert!(phrase_for("fr").is_none());
+        let words = CommandWordsByLanguage::default();
+        assert_eq!(
+            syllables(words.for_language("de-DE").phrase_of("de-DE").unwrap()),
+            5
+        );
+        assert_eq!(
+            syllables(words.for_language("en").phrase_of("en").unwrap()),
+            3
+        );
+        assert!(words.for_language("fr").phrase_of("fr").is_none());
     }
 
     fn signals() -> VoiceSignals {

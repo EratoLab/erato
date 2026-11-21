@@ -7,6 +7,7 @@ import languageBase from "@/lib/generated/languageBase.json";
 import { spokenWordsFor } from "./spokenCardWords";
 import { dictationOf } from "./spokenDictation";
 import {
+  byLanguageTag,
   confirmationPhraseOf,
   languagesHeard,
   spokenCardLanguage,
@@ -190,5 +191,16 @@ describe("language data for spoken cards", () => {
     expect(said("en")).toContain("I confirm");
     expect(said("es")).toContain("I confirm");
     expect(said("es")).not.toContain("{phrase}");
+  });
+});
+
+describe("byLanguageTag", () => {
+  it("finds a region's own entry, then its primary language's, as the backend does", () => {
+    const map = { de: 1, "de-at": 2 };
+    expect(byLanguageTag(map, "de_AT")).toBe(2);
+    expect(byLanguageTag(map, " DE-at ")).toBe(2);
+    expect(byLanguageTag(map, "de-CH")).toBe(1);
+    expect(byLanguageTag(map, "fr")).toBeUndefined();
+    expect(byLanguageTag(undefined, "de")).toBeUndefined();
   });
 });

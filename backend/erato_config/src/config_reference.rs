@@ -35,6 +35,9 @@ const KEYED_BY_LANGUAGE: &[&[&str]] = &[
     &["spoken_readings"],
     &["approval_voice_decisions", "phrases"],
     &["audio_conversational", "hesitations"],
+    &["audio_conversational", "wait_lines", "phrases"],
+    &["approval_speech", "sentences"],
+    &["spoken_number_words"],
 ];
 
 fn is_keyed_by_language(path: &[String]) -> bool {

@@ -195,7 +195,13 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
 
     let frontend_registry = Arc::new(erato::metrics::components::sync(
         erato::metrics::components::Component::RuntimeDistribution,
-        || build_frontend_registry(&config, &state.distribution),
+        || {
+            build_frontend_registry(
+                &state.config,
+                &state.distribution,
+                &state.voice_command_words,
+            )
+        },
     ));
     erato::metrics::owned::start_reporter(state.clone(), frontend_registry.clone());
 

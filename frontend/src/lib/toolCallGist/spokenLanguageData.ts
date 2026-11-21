@@ -46,13 +46,23 @@ export const BUILT_IN_CONFIRMATION_PHRASES: ConfirmationPhrases =
 export const primaryLanguage = (language: string): string =>
   language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
 
+/**
+ * The entry of `map` for `language` ("de-AT", "de_AT"): its whole tag in lower
+ * case with a hyphen first, then its primary subtag ("de"), as the backend
+ * looks language data up.
+ */
+export const byLanguageTag = <T>(
+  map: Partial<Record<string, T>> | undefined,
+  language: string,
+): T | undefined =>
+  map?.[language.trim().toLowerCase().replace(/_/g, "-")] ??
+  map?.[primaryLanguage(language.trim())];
+
 /** The words of `language` ("fr-CA" first, then "fr"), if it has any. */
 export const spokenCardLanguage = (
   language: string,
   languages: SpokenCardLanguages = BUILT_IN_SPOKEN_CARD_LANGUAGES,
-): SpokenCardLanguage | undefined =>
-  languages[language.toLowerCase().replace(/_/g, "-")] ??
-  languages[primaryLanguage(language)];
+): SpokenCardLanguage | undefined => byLanguageTag(languages, language);
 
 /**
  * The phrase a card in `language` approves with ("fr-CA" first, then "fr"),
@@ -61,9 +71,7 @@ export const spokenCardLanguage = (
 export const confirmationPhraseOf = (
   language: string,
   phrases: ConfirmationPhrases = BUILT_IN_CONFIRMATION_PHRASES,
-): string | undefined =>
-  phrases[language.toLowerCase().replace(/_/g, "-")] ??
-  phrases[primaryLanguage(language)];
+): string | undefined => byLanguageTag(phrases, language);
 
 /**
  * The languages whose words read what a user said about a card: German and

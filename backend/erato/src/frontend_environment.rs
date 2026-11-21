@@ -208,10 +208,17 @@ impl FrontendRegistry {
     }
 }
 
+/// `voice_command_words` are the lists built at startup, whose checked
+/// confirmation phrases the web app shows.
 pub fn build_frontend_registry(
     config: &AppConfig,
     distribution: &Distribution,
+    voice_command_words: &crate::services::approval_voice_commands::CommandWordsByLanguage,
 ) -> FrontendRegistry {
+    let phrases = approval_voice_phrases(config, voice_command_words);
+    let build_frontend_environment = |config: &AppConfig, kind: FrontendKind| {
+        build_frontend_environment_with(config, kind, phrases.as_ref())
+    };
     let component_kits = distribution.component_kits.kits().to_vec();
     let content_security_policy = build_content_security_policy(config);
     let bundles = &distribution.frontend_bundles;
@@ -320,9 +327,36 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
     )
 }
 
+/// The confirmation phrase each language approves with, as shown, once a
+/// deployment configures one; the web app ships the built-in ones.
+fn approval_voice_phrases(
+    config: &AppConfig,
+    words: &crate::services::approval_voice_commands::CommandWordsByLanguage,
+) -> Option<Value> {
+    (!config.approval_voice_decisions.phrases.is_empty())
+        .then(|| serde_json::to_value(words.shown_phrases()).unwrap_or(Value::Null))
+}
+
+#[cfg(test)]
 fn build_frontend_environment(
     config: &AppConfig,
     frontend_kind: FrontendKind,
+) -> FrontedEnvironment {
+    let (words, _) = crate::services::approval_voice_commands::CommandWordsByLanguage::build(
+        &config.approval_voice_commands.words,
+        &config.approval_voice_decisions.phrases,
+    );
+    build_frontend_environment_with(
+        config,
+        frontend_kind,
+        approval_voice_phrases(config, &words).as_ref(),
+    )
+}
+
+fn build_frontend_environment_with(
+    config: &AppConfig,
+    frontend_kind: FrontendKind,
+    approval_voice_phrases: Option<&Value>,
 ) -> FrontedEnvironment {
     let mut env = FrontedEnvironment::default();
 
@@ -697,8 +731,6 @@ fn build_frontend_environment(
                 .collect(),
         ),
     );
-    // Each language with its own hesitations gets its whole list; any other
-    // uses the list above.
     if !config.audio_conversational.hesitations.is_empty() {
         let by_language: serde_json::Map<String, Value> = config
             .audio_conversational
@@ -753,17 +785,9 @@ fn build_frontend_environment(
             config.approval_voice_commands.enabled && config.approval_voice_decisions.enabled,
         ),
     );
-    // The confirmation phrase each language approves with, as shown, once a
-    // deployment configures one; the web app ships the built-in ones.
-    if !config.approval_voice_decisions.phrases.is_empty() {
-        let (words, _) = crate::services::approval_voice_commands::CommandWordsByLanguage::build(
-            &config.approval_voice_commands.words,
-            &config.approval_voice_decisions.phrases,
-        );
-        env.additional_environment.insert(
-            "APPROVAL_VOICE_PHRASES".to_string(),
-            serde_json::to_value(words.shown_phrases()).unwrap_or(Value::Null),
-        );
+    if let Some(phrases) = approval_voice_phrases {
+        env.additional_environment
+            .insert("APPROVAL_VOICE_PHRASES".to_string(), phrases.clone());
     }
     // The deployment's natural sentence variants for approval cards read
     // aloud; how much is said and how it is worded is asked per user.
@@ -1756,16 +1780,25 @@ mod tests {
             ..Default::default()
         };
         config.approval_voice_decisions.phrases = std::collections::HashMap::from([
-            ("fr".to_string(), phrase("Je confirme")),
+            ("fr".to_string(), phrase("Je confirme l'action")),
             ("es".to_string(), phrase("Sí")),
         ]);
+        let words = |words: &[&str]| words.iter().map(|word| word.to_string()).collect();
+        config.approval_voice_commands.words = std::collections::HashMap::from([(
+            "fr".to_string(),
+            erato_config::voice_command_words::VoiceCommandWordLists {
+                yes_particles: words(&["oui"]),
+                casual_approvals: words(&["d'accord"]),
+                ..Default::default()
+            },
+        )]);
         for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
             assert_eq!(
                 get(&config, kind),
                 Some(serde_json::json!({
                     "de": "Ich bestätige",
                     "en": "I confirm",
-                    "fr": "Je confirme",
+                    "fr": "Je confirme l'action",
                 }))
             );
         }
@@ -1862,7 +1895,11 @@ mod tests {
             .manifest
             .icon_source_path = Some("./icon.png".into());
         let distribution = Distribution::load(&config);
-        let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        let registry = std::sync::Arc::new(build_frontend_registry(
+            &config,
+            &distribution,
+            &Default::default(),
+        ));
         for (asset, content_type, expected) in [
             ("theme.json", "application/json", "Acme"),
             ("locales/en/messages.json", "application/json", "Acme"),
@@ -2612,7 +2649,7 @@ mod tests {
             bundle_dir.path().to_string_lossy().into_owned();
 
         let distribution = Distribution::load(&config);
-        let registry = build_frontend_registry(&config, &distribution);
+        let registry = build_frontend_registry(&config, &distribution, &Default::default());
         let legacy_frontend = registry
             .frontends
             .iter()
@@ -2795,7 +2832,11 @@ mod tests {
         config.frontend.translation_po_compilation_mode =
             crate::config::TranslationPoCompilationMode::JustInTime;
         let distribution = Distribution::load(&config);
-        let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        let registry = std::sync::Arc::new(build_frontend_registry(
+            &config,
+            &distribution,
+            &Default::default(),
+        ));
         let request = |if_none_match: Option<&str>| {
             let mut request = Request::builder().uri("/public/common/locales/de/messages.json");
             if let Some(etag) = if_none_match {

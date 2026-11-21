@@ -212,7 +212,7 @@ impl std::fmt::Debug for AppState {
 }
 
 impl AppState {
-    pub async fn new(config: AppConfig) -> Result<Self, Report> {
+    pub async fn new(mut config: AppConfig) -> Result<Self, Report> {
         let prompt_guardrails = Arc::new(CompiledPromptGuardrails::new(&config.guardrails)?);
         let distribution = Arc::new(Distribution::load(&config));
         crate::server::router::ensure_office_addin_manifests_support_launch_events(
@@ -358,7 +358,12 @@ impl AppState {
                 &config.approval_voice_decisions.phrases,
             ),
         );
-        for note in voice_command_words.hesitation_notes(&config.audio_conversational) {
+        let (warnings, notes) =
+            voice_command_words.check_turn_hesitations(&mut config.audio_conversational);
+        for warning in warnings {
+            tracing::warn!("{warning}");
+        }
+        for note in notes {
             tracing::info!("Hesitation words: {note}.");
         }
         let speech_readings = Arc::new(

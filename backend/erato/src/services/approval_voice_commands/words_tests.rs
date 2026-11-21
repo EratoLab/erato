@@ -130,34 +130,35 @@ fn a_language_without_words_decides_on_screen_only() {
 }
 
 #[test]
-fn removals_shorten_a_list_that_never_decides_and_nothing_else() {
+fn no_built_in_word_can_be_taken_out() {
     let set = sentence_set();
-    let words = loaded(serde_json::json!({"fr": {
-        "negations": ["ne"],
+    let words = loaded(serde_json::json!({"de": {
         "remove": {
-            "skip": ["weiter"],
-            "fillers": ["mal"],
-            "reject": ["ne", "nein"],
-            "refusal_words": ["das"],
-            "stop": ["stopp"],
-            "stop_first": ["halt"],
-            "approve": ["ja"],
+            "hesitations": ["aeh", "aehm"],
+            "fillers": ["doch", "einfach", "mal"],
+            "reject": ["nein"],
+            "noise_words": ["okay"],
         },
     }}));
-    let fr = words.for_language("fr");
-    assert!(!fr.skip.contains("weiter") && !fr.fillers.contains("mal"));
-    assert!(fr.reject.contains("ne") && fr.reject.contains("nein"));
-    assert!(fr.stop.contains("stopp") && fr.stop_first.contains("halt"));
-    assert!(fr.approve.contains("ja") && fr.refusal_words.contains("das"));
+    let de = words.for_language("de");
+    assert!(de.hesitations.contains("aeh") && de.fillers.contains("doch"));
+    assert!(de.reject.contains("nein") && de.noise_words.contains("okay"));
+    for said in [
+        "Nein, äh, lass es",
+        "Nein, ähm, abbrechen",
+        "Lass es doch",
+        "Lass es einfach",
+    ] {
+        assert_eq!(
+            by_rules(&on_card(&set, said, "de"), de),
+            Some(VoiceMeaning::Reject),
+            "{said}"
+        );
+    }
     assert_eq!(
-        by_rules(&on_card(&set, "nein", "fr"), fr),
-        Some(VoiceMeaning::Reject)
-    );
-    assert_eq!(
-        by_rules(&on_card(&set, "stopp", "fr"), fr),
+        by_rules(&on_card(&set, "Warte mal", "de"), de),
         Some(VoiceMeaning::Stop)
     );
-    assert!(words.for_language("de").skip.contains("weiter"));
 }
 
 #[test]
@@ -168,19 +169,18 @@ fn an_added_word_never_hides_a_refusal_or_a_stop() {
             "de".to_string(),
             VoiceCommandWordLists {
                 approve: strings(&["abbrechen", "nein danke", "von mir aus"]),
-                noise_words: strings(&["stopp", "nein", "halt"]),
-                yes_particles: strings(&["abbrechen"]),
-                approve_helpers: strings(&["lass"]),
-                reject_helpers: strings(&["nein", "abbrechen"]),
+                yes_particles: strings(&["abbrechen", "das", "it"]),
+                question_first: strings(&["das", "cancel"]),
+                question_verbs: strings(&["lass"]),
+                continuations: strings(&["it", "es"]),
+                leading_no: strings(&["halt"]),
                 conditions: strings(&["stopp"]),
                 wh_words: strings(&["cancel"]),
                 skip: strings(&["abbrechen", "ruhe"]),
                 repeat: strings(&["stopp"]),
                 casual_approvals: strings(&["vergiss es"]),
                 reject: strings(&["warte mal", "das will ich nicht"]),
-                refusal_words: strings(&["halt"]),
                 stop: strings(&["lass", "sei mal leise"]),
-                stop_first: strings(&["nein"]),
                 ..Default::default()
             },
         )]
@@ -198,12 +198,15 @@ fn an_added_word_never_hides_a_refusal_or_a_stop() {
     for (list, entry) in [
         ("approve", "abbrechen"),
         ("approve", "nein danke"),
-        ("noise_words", "stopp"),
-        ("noise_words", "halt"),
         ("yes_particles", "abbrechen"),
-        ("approve_helpers", "lass"),
-        ("reject_helpers", "nein"),
-        ("reject_helpers", "abbrechen"),
+        ("yes_particles", "das"),
+        ("yes_particles", "it"),
+        ("question_first", "das"),
+        ("question_first", "cancel"),
+        ("question_verbs", "lass"),
+        ("continuations", "it"),
+        ("continuations", "es"),
+        ("leading_no", "halt"),
         ("conditions", "stopp"),
         ("wh_words", "cancel"),
         ("skip", "abbrechen"),
@@ -211,9 +214,7 @@ fn an_added_word_never_hides_a_refusal_or_a_stop() {
         ("repeat", "stopp"),
         ("casual_approvals", "vergiss es"),
         ("reject", "warte mal"),
-        ("refusal_words", "halt"),
         ("stop", "lass"),
-        ("stop_first", "nein"),
     ] {
         assert!(refused(list, entry), "{list} {entry}: {notes:?}");
     }
@@ -225,6 +226,11 @@ fn an_added_word_never_hides_a_refusal_or_a_stop() {
         ("abbrechen", VoiceMeaning::Reject),
         ("nein danke", VoiceMeaning::Reject),
         ("vergiss es", VoiceMeaning::Reject),
+        ("Mach das nicht", VoiceMeaning::Reject),
+        ("Lass das", VoiceMeaning::Reject),
+        ("Cancel it", VoiceMeaning::Reject),
+        ("Forget it", VoiceMeaning::Reject),
+        ("Don't do it", VoiceMeaning::Reject),
         ("stopp", VoiceMeaning::Stop),
         ("halt", VoiceMeaning::Stop),
         ("ruhe", VoiceMeaning::Stop),
@@ -261,11 +267,9 @@ fn hostile() -> VoiceCommandWordLists {
     ]);
     VoiceCommandWordLists {
         hesitations: guards.clone(),
-        fillers: guards.clone(),
-        noise_words: guards.clone(),
+        fillers: guards,
         approve: strings(&["nicht machen", "ja aber", "ja wenn", "warum nicht"]),
         yes_particles: strings(&["nicht"]),
-        approve_helpers: guards,
         ..Default::default()
     }
 }
@@ -428,13 +432,11 @@ fn a_hostile_package_cannot_make_an_attack_with_a_guard_word_decide() {
         VoiceCommandWordLists {
             approve: all_phrasings.clone(),
             reject: all_phrasings,
-            refusal_words: all_words.clone(),
-            noise_words: all_words.clone(),
             fillers: all_words.clone(),
             hesitations: all_words.clone(),
             yes_particles: all_words.clone(),
-            approve_helpers: all_words.clone(),
-            reject_helpers: all_words,
+            continuations: all_words.clone(),
+            leading_no: all_words,
             ..Default::default()
         },
     )]);
@@ -511,21 +513,6 @@ fn never_refuses(said: &str, language: &str, lists: &CommandWords) {
 }
 
 #[test]
-fn subjects_and_noise_words_cannot_be_removed() {
-    let words = loaded(serde_json::json!({"de": {"remove": {
-        "subjects": ["das", "du"],
-        "noise_words": ["okay"],
-        "reject_helpers": ["will"],
-    }}}));
-    let de = words.for_language("de");
-    assert!(de.subjects.contains("das") && de.subjects.contains("du"));
-    assert!(de.noise_words.contains("okay"));
-    for said in ["passt das", "kannst du das", "mhm, ja okay"] {
-        never_approves(said, "de", de);
-    }
-}
-
-#[test]
 fn a_filler_never_takes_a_subject_or_a_refusal_word() {
     let words = configured(&[(
         "de",
@@ -549,15 +536,13 @@ fn an_added_agreement_never_holds_a_question_word() {
     let words = configured(&[(
         "de",
         VoiceCommandWordLists {
-            noise_words: strings(&["was", "wieso"]),
-            approve: strings(&["ja warum"]),
-            yes_particles: strings(&["wie"]),
-            approve_helpers: strings(&["warum"]),
+            approve: strings(&["ja warum", "ja wieso"]),
+            yes_particles: strings(&["wie", "was"]),
             ..Default::default()
         },
     )]);
     let de = words.for_language("de");
-    assert!(!de.noise_words.contains("wieso") && !de.noise_words.contains("was"));
+    assert!(!de.yes_particles.contains("wie") && !de.approve.contains("ja wieso"));
     for said in ["ja warum", "ja wieso", "warum ja", "ja was", "wie ja"] {
         never_approves(said, "de", de);
     }
@@ -566,19 +551,6 @@ fn an_added_agreement_never_holds_a_question_word() {
 #[test]
 fn helper_words_never_decide_alone() {
     let set = sentence_set();
-    let french = configured(&[(
-        "fr",
-        VoiceCommandWordLists {
-            approve: strings(&["c'est bon"]),
-            approve_helpers: strings(&["bon"]),
-            ..Default::default()
-        },
-    )]);
-    let fr = french.for_language("fr");
-    let input = on_card(&set, "c'est bon", "fr");
-    assert_eq!(by_rules(&input, fr), Some(VoiceMeaning::Approve));
-    never_approves("bon", "fr", fr);
-
     let german = configured(&[(
         "de",
         VoiceCommandWordLists {
@@ -599,6 +571,79 @@ fn helper_words_never_decide_alone() {
     for said in ["will", "ausführen", "want", "run", "Ausführen."] {
         never_refuses(said, "de", de);
     }
+}
+
+#[test]
+fn a_hesitation_or_filler_is_never_a_negation_time_or_correction() {
+    let words = configured(&[
+        (
+            "de",
+            VoiceCommandWordLists {
+                hesitations: strings(&["niemals", "nichts", "spaeter", "Montag", "falsch", "öhm"]),
+                fillers: strings(&["nix", "keinesfalls", "später", "morgen"]),
+                ..Default::default()
+            },
+        ),
+        (
+            "en",
+            VoiceCommandWordLists {
+                hesitations: strings(&["nothing", "later", "neither", "umm"]),
+                ..Default::default()
+            },
+        ),
+    ]);
+    let de = words.for_language("de");
+    for word in [
+        "niemals",
+        "nichts",
+        "spaeter",
+        "montag",
+        "falsch",
+        "nix",
+        "keinesfalls",
+        "nothing",
+        "later",
+        "neither",
+    ] {
+        assert!(!de.fillers.contains(word), "{word}");
+    }
+    assert!(de.hesitations.contains("oehm") && de.hesitations.contains("umm"));
+    for said in [
+        "Ich bestätige niemals",
+        "Ich bestätige nichts",
+        "Ich bestätige später",
+        "Ich bestätige nix",
+        "I confirm nothing",
+        "I confirm later",
+        "Neither, I confirm",
+    ] {
+        assert!(match_phrase(said, de).is_none(), "{said}");
+    }
+    assert!(match_phrase("Öhm, ich bestätige", de).is_some());
+}
+
+#[test]
+fn a_refusal_is_never_lost_to_navigation_beside_it() {
+    let set = sentence_set();
+    let words = configured(&[(
+        "de",
+        VoiceCommandWordLists {
+            skip: strings(&["spaeter"]),
+            ..Default::default()
+        },
+    )]);
+    let de = words.for_language("de");
+    for said in ["Nein, sorry", "No, sorry", "Nein sorry", "Nein, später"] {
+        let meaning = by_rules(&on_card(&set, said, "de"), de);
+        assert!(
+            matches!(meaning, None | Some(VoiceMeaning::Reject)),
+            "{said}: {meaning:?}"
+        );
+    }
+    assert_eq!(
+        by_rules(&on_card(&set, "Nein, stopp", "de"), de),
+        Some(VoiceMeaning::Stop)
+    );
 }
 
 #[test]

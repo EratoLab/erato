@@ -4,7 +4,7 @@ import { env } from "@/app/env";
 import { fetchApprovalSpeechStyle } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   BUILT_IN_SPOKEN_CARD_LANGUAGES,
-  primaryLanguage,
+  byLanguageTag,
 } from "@/lib/toolCallGist/spokenLanguageData";
 
 import type { ApprovalSpeechStyleResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -93,7 +93,7 @@ export const deploymentSentences = (
   language: string,
 ): SentenceSet | undefined => {
   const all = env().approvalSpeechSentences;
-  return all?.[language] ?? all?.[primaryLanguage(language)];
+  return byLanguageTag(all, language);
 };
 
 /**
@@ -104,7 +104,7 @@ export const deploymentNumberWords = (
   language: string,
 ): NumberWords | undefined => {
   const all = env().spokenNumberWords;
-  return all?.[language.toLowerCase()] ?? all?.[primaryLanguage(language)];
+  return byLanguageTag(all, language);
 };
 
 /**

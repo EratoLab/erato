@@ -1003,16 +1003,31 @@ async fn a_configured_french_phrase_approves_a_french_card(pool: Pool<Postgres>)
         config.approval_voice_decisions.phrases.insert(
             "fr".to_string(),
             erato_config::confirmation_phrases::ConfirmationPhraseConfig {
-                phrase: "Je confirme".to_string(),
+                phrase: "Je confirme l'action".to_string(),
                 leading: vec!["oui".to_string()],
                 trailing: Vec::new(),
+            },
+        );
+        config.approval_voice_commands.words.insert(
+            "fr".to_string(),
+            erato_config::voice_command_words::VoiceCommandWordLists {
+                yes_particles: vec!["oui".to_string()],
+                casual_approvals: vec!["d'accord".to_string()],
+                ..Default::default()
             },
         );
     })
     .await;
     let spanish = said_on_card(&server, message_id, &approval_id, "es", "I confirm.").await;
     assert_eq!(spanish["decision"], json!({"status": "screen_only"}));
-    let french = said_on_card(&server, message_id, &approval_id, "fr", "Je confirme.").await;
+    let french = said_on_card(
+        &server,
+        message_id,
+        &approval_id,
+        "fr",
+        "Je confirme l'action.",
+    )
+    .await;
     assert_eq!(french["meaning"], "approve", "{french}");
     assert_eq!(french["decision"]["status"], "accepted", "{french}");
     let receipt = french["decision"]["receipt"].clone();
@@ -1034,7 +1049,10 @@ async fn a_configured_french_phrase_approves_a_french_card(pool: Pool<Postgres>)
         .iter()
         .find(|part| part["content_type"] == "tool_approval")
         .expect("approved");
-    assert_eq!(approval["voice"]["required_phrase"], "fr.je_confirme");
-    assert_eq!(approval["voice"]["matched_words"], "je confirme");
+    assert_eq!(
+        approval["voice"]["required_phrase"],
+        "fr.je_confirme_laction"
+    );
+    assert_eq!(approval["voice"]["matched_words"], "je confirme laction");
     assert_eq!(approval["voice"]["match_kind"], "exact");
 }

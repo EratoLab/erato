@@ -1,4 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- hesitation sounds as transcripts spell them, not copy */
+import { byLanguageTag } from "@/lib/toolCallGist/spokenLanguageData";
+
 /**
  * Whether a conversational turn's words are only hesitation sounds, which
  * end no turn. The list comes from the deployment
@@ -46,10 +48,8 @@ export const hesitationWordsFor = (
   language: string,
   shared: readonly string[] | undefined,
   byLanguage: Partial<Record<string, string[]>> | undefined,
-): readonly string[] | undefined => {
-  const tag = language.toLowerCase().replace(/_/g, "-");
-  return byLanguage?.[tag] ?? byLanguage?.[tag.split("-")[0]] ?? shared;
-};
+): readonly string[] | undefined =>
+  byLanguageTag(byLanguage, language) ?? shared;
 
 export function hesitationMatcher(
   words: readonly string[] | undefined,

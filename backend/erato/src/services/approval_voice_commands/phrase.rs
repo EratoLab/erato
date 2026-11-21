@@ -3,8 +3,9 @@
 //! know in advance what approves; no model's judgement ever does.
 
 use super::rules::{drop_fillers, words_of};
-use super::words::CommandWords;
+use super::words::{CommandWords, SHARED_LANGUAGES};
 use erato_config::confirmation_phrases::{BUILT_IN_PHRASES, ConfirmationPhraseConfig};
+use erato_config::language_words::primary_subtag;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use unicode_normalization::UnicodeNormalization;
@@ -49,18 +50,20 @@ impl ConfirmationPhrase {
 
     /// The phrase `config` configures for `language`, checked with the
     /// lists of that language's cards; `None` when it could be heard by
-    /// mistake. Each problem is noted; a leading or trailing word that
-    /// cannot be used is dropped on its own.
+    /// mistake. `knows_language` says the lists hold the language's own yes
+    /// and casual approvals, which a phrase is checked against. Each problem
+    /// is noted; a leading or trailing word that cannot be used is dropped
+    /// on its own.
     pub(super) fn checked(
         language: &str,
         config: &ConfirmationPhraseConfig,
         lists: &CommandWords,
+        knows_language: bool,
         notes: &mut Vec<PhraseNote>,
     ) -> Option<Self> {
         let place = format!("approval_voice_decisions.phrases.{language}");
         let words = words_of(&config.phrase);
         let shown = &config.phrase;
-        let quiet = |word: &String| lists.is_quiet(word);
         // Compared as the lists are: without fillers.
         let core = drop_fillers(&words, &lists.fillers, &lists.again);
         let joined = core.join(" ");
@@ -78,7 +81,12 @@ impl ConfirmationPhrase {
             Some("it holds a digit, which transcribers write in many ways".to_string())
         } else if words.iter().any(|word| lists.decides_meaning(word)) {
             Some("it holds a negation, condition or question word".to_string())
-        } else if words.iter().all(quiet) {
+        } else if !SHARED_LANGUAGES.contains(&primary_subtag(language).as_str()) && !knows_language
+        {
+            Some(format!(
+                "the voice-command words of `{language}` list no `yes_particles` and `casual_approvals` to check it against"
+            ))
+        } else if words.iter().all(|word| lists.is_quiet(word)) {
             Some(
                 "it is only noise or hesitation words or words of agreement, which are said without meaning to approve"
                     .to_string(),
@@ -94,6 +102,8 @@ impl ConfirmationPhrase {
             Some("a refusal starts with it".to_string())
         } else if lists.reject.iter().any(holds) || core.iter().any(|word| lists.refuses(word)) {
             Some("it holds a refusal".to_string())
+        } else if core.iter().any(|word| lists.stops(word)) {
+            Some("it holds a word that stops the voice".to_string())
         } else {
             match syllables {
                 None => Some("cannot count syllables for this script".to_string()),
@@ -101,7 +111,7 @@ impl ConfirmationPhrase {
                     "it has {}; at least {MIN_SYLLABLES} keep a short sound from approving",
                     syllables_shown(count)
                 )),
-                Some(count) => weaker_than_built_in(language, &words, &joined, count, lists),
+                Some(count) => weaker_than_built_in(language, &words, &core, count, lists),
             }
         };
         if let Some(problem) = problem {
@@ -160,12 +170,65 @@ impl ConfirmationPhrase {
     }
 }
 
+/// Whether `core` is made of approvals said in passing: only words of the
+/// approve phrases, casual approvals and quiet words ("sure, go ahead",
+/// "okay, passt, mach das so"), or mostly words an approve phrase or casual
+/// approval covers ("I confirm, go ahead"). The built-in phrases' own words
+/// and the built-in phrases themselves do not count as said in passing.
+fn said_in_passing(core: &[String], lists: &CommandWords) -> bool {
+    let built_ins = built_in_phrases();
+    let of_built_in = |word: &str| {
+        built_ins
+            .iter()
+            .any(|phrase| phrase.words.iter().any(|own| own == word))
+    };
+    let approvals: Vec<Vec<&str>> = lists
+        .approve
+        .iter()
+        .chain(&lists.casual_approvals)
+        .map(|entry| {
+            entry
+                .split(' ')
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .filter(|entry| {
+            !entry.is_empty()
+                && !built_ins.iter().any(|phrase| {
+                    phrase
+                        .words
+                        .iter()
+                        .map(String::as_str)
+                        .eq(entry.iter().copied())
+                })
+        })
+        .collect();
+    let casual_word = |word: &String| {
+        !of_built_in(word)
+            && (lists.is_quiet(word)
+                || approvals.iter().any(|entry| entry.contains(&word.as_str())))
+    };
+    if core.iter().all(casual_word) {
+        return true;
+    }
+    let mut covered = vec![false; core.len()];
+    for entry in &approvals {
+        for (start, window) in core.windows(entry.len()).enumerate() {
+            if window.iter().zip(entry).all(|(word, part)| word == part) {
+                covered[start..start + entry.len()].fill(true);
+            }
+        }
+    }
+    covered.iter().filter(|covered| **covered).count() * 2 > core.len()
+}
+
 /// Why a phrase that passed the other checks is still weaker than the
-/// built-in ones, if it is.
+/// built-in ones, if it is: a phrase of another language is held to the
+/// longest built-in one.
 fn weaker_than_built_in(
     language: &str,
     words: &[String],
-    joined: &str,
+    core: &[String],
     count: u32,
     lists: &CommandWords,
 ) -> Option<String> {
@@ -175,15 +238,26 @@ fn weaker_than_built_in(
         return Some("it holds a yes, which is said without meaning to approve".to_string());
     }
     let built_ins = built_in_phrases();
-    if lists.approve.contains(joined) && !built_ins.iter().any(|phrase| phrase.words == words) {
+    if built_ins.iter().any(|phrase| phrase.words == words) {
+        return None;
+    }
+    if lists.approve.contains(&core.join(" ")) {
         return Some("the voice commands already hear it as a plain approval".to_string());
     }
-    let primary = language.split('-').next()?;
-    let built_in = built_ins.iter().find(|phrase| phrase.language == primary)?;
+    if said_in_passing(core, lists) {
+        return Some(
+            "it is made of approvals said in passing, without meaning to approve".to_string(),
+        );
+    }
+    let primary = primary_subtag(language);
+    let built_in = built_ins
+        .iter()
+        .find(|phrase| phrase.language == primary)
+        .or_else(|| built_ins.iter().max_by_key(|phrase| syllables(phrase)))?;
     (count < syllables(built_in)).then(|| {
         format!(
-            "it is shorter than the built-in '{}'; a {} phrase is never weaker than it",
-            built_in.shown, built_in.language
+            "it is shorter than the built-in '{}'; a {language} phrase is never weaker than it",
+            built_in.shown
         )
     })
 }
@@ -254,14 +328,6 @@ pub struct PhraseMatch<'a> {
     pub kind: PhraseMatchKind,
     /// The words as matched, folded.
     pub words: String,
-}
-
-/// The built-in phrase of `language` ("de", "de-DE", …), if it has one.
-pub fn phrase_for(language: &str) -> Option<&'static ConfirmationPhrase> {
-    let code = language.split(['-', '_']).next()?.to_ascii_lowercase();
-    built_in_phrases()
-        .iter()
-        .find(|phrase| phrase.language == code)
 }
 
 /// Question marks of any script (the Greek one, U+037E, is not the ASCII
@@ -363,8 +429,8 @@ pub fn word_syllables(word: &str, language: &str) -> Option<u32> {
         }
         in_vowel = vowel;
     }
-    let primary = language.split(['-', '_']).next().unwrap_or_default();
-    if matches!(primary, "fr" | "en") && silent_ending(word, primary) {
+    let primary = primary_subtag(language);
+    if matches!(primary.as_str(), "fr" | "en") && silent_ending(word, &primary) {
         count = count.saturating_sub(1);
     }
     Some(count.max(1))

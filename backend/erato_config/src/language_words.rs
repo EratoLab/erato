@@ -174,21 +174,15 @@ pub(crate) fn word_list(place: &str, written: Written, dropped: &mut Vec<String>
 }
 
 /// One language's named lists. A name the lists do not have is dropped with
-/// a warning, and so is a name in `refused`, with `why_refused`.
+/// a warning.
 pub(crate) fn named_word_lists<L: WordLists>(
     place: &str,
     table: HashMap<String, Written>,
-    refused: &[&str],
-    why_refused: &str,
     dropped: &mut Vec<String>,
 ) -> L {
     let mut lists = L::default();
     for (name, written) in table {
         let place = format!("{place}.{}", shown(&name));
-        if refused.contains(&name.as_str()) {
-            dropped.push(format!("{place} is ignored: {why_refused}"));
-            continue;
-        }
         match lists.list_mut(&name) {
             Some(list) => *list = word_list(&place, written, dropped),
             None => dropped.push(format!("{place}: no list has this name; it is ignored")),
@@ -197,17 +191,45 @@ pub(crate) fn named_word_lists<L: WordLists>(
     lists
 }
 
-/// `base`, then the `added` entries it lacks, without the `removed` ones,
-/// in order and without repeats. The caller passes all three in the form it
-/// compares words in.
+/// "adds approve 2, reject 1": the lists a language adds to, for the startup
+/// log; nothing when it adds to none.
+pub fn added_summary<L: WordLists>(lists: &L) -> Option<String> {
+    let counts: Vec<String> = L::NAMES
+        .iter()
+        .map(|name| (*name, lists.list(name).map_or(0, Vec::len)))
+        .filter(|(_, count)| *count > 0)
+        .map(|(name, count)| format!("{name} {count}"))
+        .collect();
+    (!counts.is_empty()).then(|| format!("adds {}", counts.join(", ")))
+}
+
+/// Looks `language` ("de", "de-AT", "de_AT") up by its whole tag, in lower
+/// case with a hyphen, then by its primary subtag: "de-AT" finds "de".
+pub fn by_tag<T>(language: &str, mut find: impl FnMut(&str) -> Option<T>) -> Option<T> {
+    let tag = language.trim().to_ascii_lowercase().replace('_', "-");
+    let primary = primary_subtag(&tag);
+    find(&tag).or_else(|| find(&primary))
+}
+
+/// The primary subtag of `language`, in lower case: "de" for "de-AT".
+pub fn primary_subtag(language: &str) -> String {
+    language
+        .trim()
+        .split(['-', '_'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
+
+/// `base`, then the `added` entries it lacks, in order and without repeats.
+/// The caller passes both in the form it compares words in.
 pub fn merge_word_list<'a>(
     base: impl IntoIterator<Item = &'a str>,
     added: impl IntoIterator<Item = &'a str>,
-    removed: &[&str],
 ) -> Vec<String> {
     let mut merged: Vec<String> = Vec::new();
     for word in base.into_iter().chain(added) {
-        if !removed.contains(&word) && !merged.iter().any(|kept| kept == word) {
+        if !merged.iter().any(|kept| kept == word) {
             merged.push(word.to_string());
         }
     }
@@ -243,7 +265,7 @@ mod tests {
                 .into_iter()
                 .map(|(language, table)| {
                     let place = format!("section.{language}");
-                    let lists = named_word_lists(&place, table, &["no"], "kept", &mut dropped);
+                    let lists = named_word_lists(&place, table, &mut dropped);
                     (language, lists)
                 })
                 .collect();
@@ -267,7 +289,7 @@ mod tests {
                     "fr".to_string(),
                     Lists {
                         yes: vec!["oui".into(), "ouais".into()],
-                        no: Vec::new(),
+                        no: vec!["non".into()],
                     }
                 ),
             ]
@@ -277,7 +299,6 @@ mod tests {
             [
                 "section.es.yes is not a list and is ignored",
                 "section.fr.maybe: no list has this name; it is ignored",
-                "section.fr.no is ignored: kept",
                 "section.fr.yes: ' ' is blank, longer than 128 bytes or holds hidden characters and is ignored",
                 "section.fr.yes: an entry is not a text and is ignored",
                 "section.it is not a table and is ignored",
@@ -298,14 +319,31 @@ mod tests {
     }
 
     #[test]
-    fn merging_adds_after_the_base_and_removes_without_repeats() {
+    fn a_tag_finds_its_own_entry_then_its_primary_subtags() {
+        let map: HashMap<&str, u8> = [("de", 1), ("de-at", 2)].into();
+        let find = |language: &str| by_tag(language, |tag| map.get(tag).copied());
+        assert_eq!(find("de_AT"), Some(2));
+        assert_eq!(find(" DE-at "), Some(2));
+        assert_eq!(find("de-CH"), Some(1));
+        assert_eq!(find("fr"), None);
+        assert_eq!(primary_subtag("pt_BR"), "pt");
+    }
+
+    #[test]
+    fn the_summary_counts_what_each_list_adds() {
+        let lists = Lists {
+            yes: vec!["oui".into(), "ouais".into()],
+            no: Vec::new(),
+        };
+        assert_eq!(added_summary(&lists).as_deref(), Some("adds yes 2"));
+        assert_eq!(added_summary(&Lists::default()), None);
+    }
+
+    #[test]
+    fn merging_adds_after_the_base_without_repeats() {
         assert_eq!(
-            merge_word_list(
-                ["ja", "nein", "doch"],
-                ["oui", "ja", "non"],
-                &["doch", "non"]
-            ),
-            ["ja", "nein", "oui"]
+            merge_word_list(["ja", "nein"], ["oui", "ja", "non"]),
+            ["ja", "nein", "oui", "non"]
         );
     }
 }
