@@ -279,7 +279,8 @@ const McpAppFrame = ({
             onHeight: setHeight,
             onDownload: (file) =>
               new Promise<boolean>((resolve) => {
-                if (pendingDownload.current) {
+                // One at a time, and none from a view being torn down.
+                if (cancelled || pendingDownload.current) {
                   resolve(false);
                   return;
                 }

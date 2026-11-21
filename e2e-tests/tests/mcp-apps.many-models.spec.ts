@@ -7,7 +7,7 @@ import {
   test,
 } from "@playwright/test";
 import Sharp from "sharp";
-import { chatIsReadyToChat, login } from "./shared";
+import { chatIsReadyToChat, ensureOpenSidebar, login } from "./shared";
 import { TAG_CI } from "./tags";
 
 // The scenario's `mock_mcp_apps` server enables MCP Apps for the group of
@@ -307,6 +307,40 @@ test(
       // The view initializes again and is sent the call once more.
       await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
       expect(refusals).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "An MCP Apps view receives ui/resource-teardown when the user leaves its chat, and its frame then leaves the page",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    // What the page and its frames log: the counter view logs its teardown.
+    const logs: string[] = [];
+    page.on("console", (entry) => logs.push(entry.text()));
+    try {
+      const message = await callCounterTool(page);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+
+      // Only what is logged from here on: a new chat without a page load, so
+      // the view's message leaves the page.
+      logs.length = 0;
+      await ensureOpenSidebar(page);
+      await page
+        .getByRole("complementary")
+        .getByRole("link", { name: "New Chat", exact: true })
+        .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
+        .click();
+      await expect(page).toHaveURL(/\/chat\/new$/);
+
+      await expect.poll(() => logs).toContain("mock-counter-view torn down");
+      await expect(page.getByTestId("mcp-app-view")).toHaveCount(0);
     } finally {
       await context.close();
     }

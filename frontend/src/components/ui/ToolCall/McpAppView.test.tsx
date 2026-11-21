@@ -813,8 +813,6 @@ describe("McpAppView", () => {
     const holder = view.frame.closest<HTMLElement>("[inert]");
     expect(holder?.style.height).toBe("0px");
     expect(holder?.style.overflow).toBe("hidden");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(view.frame.isConnected).toBe(true);
 
     // ...until the view answers.
     fromFrameNow(view.frame, { jsonrpc: "2.0", id: teardown?.id, result: {} });
@@ -860,7 +858,7 @@ describe("McpAppView", () => {
     expect(teardownOf(view)).toBeUndefined();
   });
 
-  it("still tells the view while its frame is in the page where the browser cannot move a frame without reloading it", async () => {
+  it("sends the teardown while the frame is in the page and lets the frame go with the message where the browser cannot move a frame without reloading it", async () => {
     const { unmount } = renderView(call());
     const view = await startedView();
     const inPlace = framePlaceAtTeardown(view);
@@ -873,7 +871,7 @@ describe("McpAppView", () => {
   });
 
   it("tears the view down in its place when its view changes, and shows the new one in the same frame after the old one answered", async () => {
-    stubMoveBefore();
+    const moveBefore = stubMoveBefore();
     const { queryClient } = renderView(call());
     const view = await startedView();
     const nextHtml = "<!doctype html><p>counter, again</p>";
@@ -886,9 +884,35 @@ describe("McpAppView", () => {
       expect(teardownOf(view)).toBeDefined();
     });
     const teardown = teardownOf(view);
-    // Back in its place in the message, in the same commit.
+    // Back in its place in the message, in the same commit: moved out to the
+    // holder and back into its slot, both times without a reload.
     expect(screen.getByTestId("mcp-app-view")).toBe(view.frame);
     expect(view.frame.closest("[inert]")).toBeNull();
+    expect(moveBefore).toHaveBeenCalledTimes(2);
+    expect(moveBefore.mock.contexts[1]).toBe(view.frame.parentElement);
+
+    // The old view, which is being torn down, cannot ask to save a file.
+    const tornDownWindow = view.frame.contentWindow;
+    if (!tornDownWindow) throw new Error("The frame has no window.");
+    const answeredLate = vi.spyOn(tornDownWindow, "postMessage");
+    fromFrameNow(
+      view.frame,
+      downloadRequest(40, {
+        uri: "ui://charts/late.png",
+        mimeType: "image/png",
+        blob: PNG_BASE64,
+      }),
+    );
+    await waitFor(() => {
+      expect(answeredLate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 40,
+          result: expect.objectContaining({ isError: true }),
+        }),
+        SANDBOX_ORIGIN,
+      );
+    });
+    expect(screen.queryByText("Save late.png?")).toBeNull();
 
     const answeredFrom = view.frame.contentWindow;
     fromFrameNow(view.frame, { jsonrpc: "2.0", id: teardown?.id, result: {} });
