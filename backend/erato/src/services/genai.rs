@@ -96,12 +96,9 @@ impl From<ContentPart> for GenAiMessageContent {
             ContentPart::Text(text) => GenAiMessageContent::from_text(text),
             // Replay turns a spoken part into text before this point; the
             // markup keeps it recognisable if one ever arrives here.
-            ContentPart::Spoken(spoken) => GenAiMessageContent::from_text(format!(
-                "{}{}{}",
-                crate::services::speech::reply_split::OPEN,
-                spoken.text,
-                crate::services::speech::reply_split::CLOSE
-            )),
+            ContentPart::Spoken(spoken) => GenAiMessageContent::from_text(
+                crate::services::speech::reply_split::spoken_markup(&spoken.text),
+            ),
             ContentPart::Reasoning(reasoning) => {
                 GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ReasoningContent(
                     reasoning.text,

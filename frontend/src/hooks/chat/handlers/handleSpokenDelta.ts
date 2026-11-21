@@ -1,5 +1,4 @@
-import { appendTextLikeDelta } from "./handleTextDelta";
-import { useMessagingStore } from "../store/messagingStore";
+import { applyTextLikeDelta } from "./handleTextDelta";
 
 import type { MessageSubmitStreamingResponseMessageTextDelta } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -12,38 +11,11 @@ export const handleSpokenDelta = (
     message_type: "spoken_delta";
   },
   streamKey?: string,
-): void => {
-  useMessagingStore.setState(
-    (state) => {
-      const resolvedStreamKey = streamKey ?? state.activeStreamKey;
-      const currentStreaming =
-        state.streamingByKey[resolvedStreamKey] ?? state.streaming;
-      const updatedContent = appendTextLikeDelta(
-        currentStreaming.content,
-        responseData.content_index,
-        "spoken",
-        responseData.new_text,
-      );
-
-      return {
-        ...state,
-        streamingByKey: {
-          ...state.streamingByKey,
-          [resolvedStreamKey]: {
-            ...currentStreaming,
-            content: updatedContent,
-          },
-        },
-        streaming:
-          state.activeStreamKey === resolvedStreamKey
-            ? {
-                ...currentStreaming,
-                content: updatedContent,
-              }
-            : state.streaming,
-      };
-    },
-    false,
+): void =>
+  applyTextLikeDelta(
+    "spoken",
+    responseData.content_index,
+    responseData.new_text,
+    streamKey,
     "messaging/handleSpokenDelta",
   );
-};

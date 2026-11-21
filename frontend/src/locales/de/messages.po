@@ -6090,6 +6090,11 @@ msgstr "Wie die Stimme im Gesprächsmodus spricht. Die Schaltfläche „Vorlesen
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Einstellung der Organisation verwenden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.heading"
 msgstr "Sprachausgabe"
 

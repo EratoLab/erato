@@ -130,44 +130,44 @@ mod tests {
     fn the_deployment_then_the_audience_then_the_user_where_allowed() {
         let config = ReplySpeechConfig::default();
         let plain = resolve(&config, &[], None);
-        assert_eq!(plain.wording, ReplySpeechWording::Natural);
+        assert_eq!(plain.wording, ReplySpeechWording::Precise);
         assert_eq!(plain.source, ReplySpeechStyleSource::Deployment);
         assert!(plain.user_choice);
 
-        let precise = audience(Some(ReplySpeechWording::Precise), None);
-        let by_audience = resolve(&config, &[("Vertrieb", &precise)], None);
-        assert_eq!(by_audience.wording, ReplySpeechWording::Precise);
+        let natural = audience(Some(ReplySpeechWording::Natural), None);
+        let by_audience = resolve(&config, &[("Vertrieb", &natural)], None);
+        assert_eq!(by_audience.wording, ReplySpeechWording::Natural);
         assert_eq!(by_audience.audience.as_deref(), Some("Vertrieb"));
 
         let own = resolve(
             &config,
-            &[("Vertrieb", &precise)],
-            Some(ReplySpeechWording::Natural),
+            &[("Vertrieb", &natural)],
+            Some(ReplySpeechWording::Precise),
         );
-        assert_eq!(own.wording, ReplySpeechWording::Natural);
+        assert_eq!(own.wording, ReplySpeechWording::Precise);
         assert_eq!(own.source, ReplySpeechStyleSource::User);
     }
 
     #[test]
     fn a_lock_keeps_the_users_own_value_out() {
         let config = ReplySpeechConfig::default();
-        let locked = audience(Some(ReplySpeechWording::Precise), Some(false));
+        let locked = audience(Some(ReplySpeechWording::Natural), Some(false));
         let kept = resolve(
             &config,
             &[("Vertrieb", &locked)],
-            Some(ReplySpeechWording::Natural),
+            Some(ReplySpeechWording::Precise),
         );
-        assert_eq!(kept.wording, ReplySpeechWording::Precise);
+        assert_eq!(kept.wording, ReplySpeechWording::Natural);
         assert_eq!(kept.source, ReplySpeechStyleSource::Audience);
         assert!(!kept.user_choice);
 
         let closed = ReplySpeechConfig {
-            wording: ReplySpeechWording::Precise,
+            wording: ReplySpeechWording::Natural,
             user_choice: false,
         };
         assert_eq!(
-            resolve(&closed, &[], Some(ReplySpeechWording::Natural)).wording,
-            ReplySpeechWording::Precise
+            resolve(&closed, &[], Some(ReplySpeechWording::Precise)).wording,
+            ReplySpeechWording::Natural
         );
     }
 
@@ -175,13 +175,13 @@ mod tests {
     fn each_field_comes_from_the_first_audience_that_sets_it() {
         let config = ReplySpeechConfig::default();
         let lock_only = audience(None, Some(false));
-        let wording_only = audience(Some(ReplySpeechWording::Precise), Some(true));
+        let wording_only = audience(Some(ReplySpeechWording::Natural), Some(true));
         let style = resolve(
             &config,
             &[("Pilot", &lock_only), ("Vertrieb", &wording_only)],
-            Some(ReplySpeechWording::Natural),
+            Some(ReplySpeechWording::Precise),
         );
-        assert_eq!(style.wording, ReplySpeechWording::Precise);
+        assert_eq!(style.wording, ReplySpeechWording::Natural);
         assert!(!style.user_choice);
         assert_eq!(style.audience.as_deref(), Some("Pilot"));
     }

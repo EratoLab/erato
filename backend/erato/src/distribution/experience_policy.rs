@@ -261,33 +261,48 @@ pub struct AudienceReplySpeech {
 fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceReplySpeech>, D::Error> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    let serde_json::Value::Object(fields) = value else {
-        if !value.is_null() {
-            tracing::warn!("An audience's reply_speech block is ignored: it is not a table");
-        }
-        return Ok(None);
-    };
-    // Each field on its own: a typo in one never drops a lock in another.
-    let mut speech = AudienceReplySpeech::default();
-    for (key, value) in fields {
-        let parsed = match key.as_str() {
+    Ok(lenient_fields(
+        "reply_speech",
+        serde_json::Value::deserialize(deserializer)?,
+        |speech: &mut AudienceReplySpeech, key, value| match key {
             "wording" => {
-                serde_json::from_value(value).map(|wording| speech.wording = Some(wording))
+                Some(serde_json::from_value(value).map(|wording| speech.wording = Some(wording)))
             }
             "user_choice" => {
-                serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice))
+                Some(serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice)))
             }
-            _ => {
-                tracing::warn!(%key, "An audience's reply_speech field is not known and is ignored");
-                Ok(())
+            _ => None,
+        },
+    ))
+}
+
+/// Reads an audience's setting block field by field, so a typo in one field
+/// never drops a lock in another. `field` sets one known field and returns
+/// `None` for a key it does not know.
+fn lenient_fields<T: Default, E: std::fmt::Display>(
+    block: &str,
+    value: serde_json::Value,
+    mut field: impl FnMut(&mut T, &str, serde_json::Value) -> Option<Result<(), E>>,
+) -> Option<T> {
+    let serde_json::Value::Object(fields) = value else {
+        if !value.is_null() {
+            tracing::warn!(%block, "An audience's setting block is ignored: it is not a table");
+        }
+        return None;
+    };
+    let mut set = T::default();
+    for (key, value) in fields {
+        match field(&mut set, &key, value) {
+            None => {
+                tracing::warn!(%block, %key, "An audience's setting field is not known and is ignored");
             }
-        };
-        if let Err(error) = parsed {
-            tracing::warn!(%key, %error, "An audience's reply_speech field is ignored: it does not parse");
+            Some(Err(error)) => {
+                tracing::warn!(%block, %key, %error, "An audience's setting field is ignored: it does not parse");
+            }
+            Some(Ok(())) => {}
         }
     }
-    Ok(Some(speech))
+    Some(set)
 }
 
 /// A supervisor's choice for what an audience hears while it waits.
@@ -303,31 +318,19 @@ pub struct AudienceWaitLines {
 fn lenient_wait_lines<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceWaitLines>, D::Error> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    let serde_json::Value::Object(fields) = value else {
-        if !value.is_null() {
-            tracing::warn!("An audience's wait_lines block is ignored: it is not a table");
-        }
-        return Ok(None);
-    };
-    // Each field on its own: a typo in one never drops a lock in another.
-    let mut lines = AudienceWaitLines::default();
-    for (key, value) in fields {
-        let parsed = match key.as_str() {
-            "amount" => serde_json::from_value(value).map(|amount| lines.amount = Some(amount)),
+    Ok(lenient_fields(
+        "wait_lines",
+        serde_json::Value::deserialize(deserializer)?,
+        |lines: &mut AudienceWaitLines, key, value| match key {
+            "amount" => {
+                Some(serde_json::from_value(value).map(|amount| lines.amount = Some(amount)))
+            }
             "user_choice" => {
-                serde_json::from_value(value).map(|choice| lines.user_choice = Some(choice))
+                Some(serde_json::from_value(value).map(|choice| lines.user_choice = Some(choice)))
             }
-            _ => {
-                tracing::warn!(%key, "An audience's wait_lines field is not known and is ignored");
-                Ok(())
-            }
-        };
-        if let Err(error) = parsed {
-            tracing::warn!(%key, %error, "An audience's wait_lines field is ignored: it does not parse");
-        }
-    }
-    Ok(Some(lines))
+            _ => None,
+        },
+    ))
 }
 
 /// A supervisor's choice for how an audience hears approval cards.

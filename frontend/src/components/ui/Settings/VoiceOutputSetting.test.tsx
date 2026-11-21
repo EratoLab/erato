@@ -11,7 +11,7 @@ import { VoiceOutputSetting } from "./VoiceOutputSetting";
 import type { Messages } from "@lingui/core";
 
 const api = vi.hoisted(() => ({
-  replies: { wording: "natural", user_choice: true },
+  replies: { wording: "natural", user_choice: true, source: "user" },
   cards: { wording: "precise", user_choice: false },
   update: vi.fn(async () => ({})),
 }));
@@ -65,5 +65,20 @@ describe("voice output setting", () => {
     const cards = screen.getByRole("tablist", { name: "Approval cards" });
     for (const tab of cards.querySelectorAll('[role="tab"]'))
       expect(tab).toBeDisabled();
+  });
+
+  it("goes back to the organization's value", async () => {
+    renderSetting();
+    expect(
+      screen.getAllByRole("button", { name: "Use my organization's setting" }),
+    ).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use my organization's setting" }),
+    );
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_wording: null },
+      }),
+    );
   });
 });

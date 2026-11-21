@@ -281,7 +281,7 @@ describe("one reply, one utterance", () => {
       p.spokenPartEnds("chat-1", "m1");
       playedOut();
       expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
-      // The next part speaks after the tool: a dry spell inside it holds.
+      p.replyCallsTool("chat-1");
       p.spokenPartBegins("chat-1");
       p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
       playedOut();
@@ -292,6 +292,48 @@ describe("one reply, one utterance", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a reply after a tool without a spoken part keeps the microphone closed while it is read", async () => {
+    vi.useFakeTimers();
+    try {
+      const p = await replying();
+      p.spokenPartBegins("chat-1");
+      p.spokenPartEnds("chat-1", "m1");
+      p.replyCallsTool("chat-1");
+      playedOut();
+      p.writtenPartArrives("chat-1");
+      expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+      p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+      playedOut();
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      vi.advanceTimersByTime(700);
+      expect(p.useSpeechPlayback.getState().playing).toBe(true);
+      expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the end of the part before a tool, heard late, does not end the next one", async () => {
+    const p = await replying();
+    p.spokenPartBegins("chat-1");
+    p.replyCallsTool("chat-1");
+    p.spokenPartBegins("chat-1");
+    p.spokenPartEnds("chat-1", "m1");
+    p.writtenPartArrives("chat-1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+    p.spokenPartEnds("chat-1", "m1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(true);
+  });
+
+  it("is done when the written answer arrived before the spoken part's end", async () => {
+    const p = await replying();
+    p.spokenPartBegins("chat-1");
+    p.writtenPartArrives("chat-1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(false);
+    p.spokenPartEnds("chat-1", "m1");
+    expect(p.useSpeechPlayback.getState().spokenPartDone).toBe(true);
   });
 
   it("is quiet as soon as the last audio of an ended reply has played", async () => {

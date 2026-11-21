@@ -6090,6 +6090,11 @@ msgstr "How the voice speaks in conversation mode. The read-aloud button always 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Use my organization's setting"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.heading"
 msgstr "Voice"
 

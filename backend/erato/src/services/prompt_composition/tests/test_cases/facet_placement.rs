@@ -788,13 +788,22 @@ fn turn_instruction_renders_its_configured_prompt_or_nothing() {
     );
     assert_eq!(resolved.messages[0].role, MessageRole::User);
 
-    // The built-in protocol renders its own text, whatever is configured.
     let resolved =
         resolve_directive_markers_with_config(&config, turn("spoken_and_written".into()));
     assert_eq!(
         labels(&resolved),
         [
             reminder(crate::services::speech::reply_split::SPOKEN_AND_WRITTEN_PROTOCOL),
+            "U1".into()
+        ]
+    );
+    config.turn_instructions.spoken_reply.prompt = None;
+    let resolved =
+        resolve_directive_markers_with_config(&config, turn("spoken_and_written".into()));
+    assert_eq!(
+        labels(&resolved),
+        [
+            reminder(&crate::services::speech::reply_split::protocol_text(false)),
             "U1".into()
         ]
     );
@@ -810,7 +819,7 @@ fn turn_instruction_renders_its_configured_prompt_or_nothing() {
 }
 
 #[test]
-fn a_natural_spoken_reply_gets_the_protocol_and_the_configured_style() {
+fn a_spoken_reply_keeps_the_configured_style_and_natural_adds_the_protocol() {
     let natural = Some(ReplySpeechWording::Natural);
     let protocol = TurnInstruction::Builtin(BuiltinTurnInstruction::SpokenAndWritten);
     let mut config = config().turn_instructions;
@@ -820,9 +829,17 @@ fn a_natural_spoken_reply_gets_the_protocol_and_the_configured_style() {
             .collect::<Vec<_>>(),
         [protocol]
     );
+    assert!(turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise)).is_empty());
     config.spoken_reply.prompt = Some("Answer as speech.".into());
     assert!(turn_instructions_for_turn(&config, None).is_empty());
-    assert!(turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise)).is_empty());
+    assert_eq!(
+        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise))
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [TurnInstruction::Configured(
+            TurnInstructionKind::SpokenReply
+        )]
+    );
     assert_eq!(
         turn_instructions_for_turn(&config, natural)
             .into_iter()

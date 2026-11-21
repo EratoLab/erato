@@ -109,24 +109,27 @@ pub use types::{
     PromptCompositionUserInput, PromptSpec, ResolvedChatSequence, TurnInstruction,
 };
 
-/// The turn instructions for a turn. A reply read back in the `natural`
-/// style gets the configured spoken-reply style, when set, and the built-in
-/// protocol that asks for a spoken part and a written part. A `precise`
-/// reply, or one not read back, gets none: the model writes as for typed
-/// chat, and the voice reads that.
+/// The turn instructions for a turn. A reply read back gets the configured
+/// spoken-reply style, when set; in the `natural` style also the built-in
+/// protocol that asks for a spoken part and a written part. A `precise` reply
+/// is read as written, as before the split existed. A reply not read back
+/// gets none.
 pub fn turn_instructions_for_turn(
     config: &TurnInstructionsConfig,
     read_back: Option<ReplySpeechWording>,
 ) -> BTreeSet<TurnInstruction> {
-    if read_back != Some(ReplySpeechWording::Natural) {
+    let Some(wording) = read_back else {
         return BTreeSet::new();
-    }
-    let mut instructions = BTreeSet::from([TurnInstruction::Builtin(
-        BuiltinTurnInstruction::SpokenAndWritten,
-    )]);
+    };
+    let mut instructions = BTreeSet::new();
     if config.prompt(TurnInstructionKind::SpokenReply).is_some() {
         instructions.insert(TurnInstruction::Configured(
             TurnInstructionKind::SpokenReply,
+        ));
+    }
+    if wording == ReplySpeechWording::Natural {
+        instructions.insert(TurnInstruction::Builtin(
+            BuiltinTurnInstruction::SpokenAndWritten,
         ));
     }
     instructions

@@ -5615,26 +5615,56 @@ fn append_spoken_delta_part(content: &mut Vec<ContentPart>, new_text: String) ->
 }
 
 /// Whether a generation's reply is split into a spoken and a written part:
-/// the turn asked for it, or the history shows the format and the model may
-/// imitate it on a turn that did not.
+/// only when its prompt asked for the format. Earlier replies are replayed
+/// without their spoken parts, so a turn that did not ask has no format to
+/// copy.
 fn splits_reply(messages: &GenerationInputMessages) -> bool {
     use crate::models::message::{BuiltinTurnInstruction, StoredTurnInstructionKind};
-    messages
-        .messages
+    messages.messages.iter().any(|message| {
+        matches!(
+            &message.content,
+            ContentPart::TurnInstructionMarker(marker)
+                if marker.kind
+                    == StoredTurnInstructionKind::Builtin(BuiltinTurnInstruction::SpokenAndWritten)
+        )
+    })
+}
+
+/// What a spoken part that never closed, or ran too long, becomes: the start
+/// of the written text.
+fn spoken_becomes_written(content: &mut [ContentPart]) {
+    if let Some(at) = content
         .iter()
-        .any(|message| match &message.content {
-            ContentPart::TurnInstructionMarker(marker) => matches!(
-                marker.kind,
-                StoredTurnInstructionKind::Builtin(BuiltinTurnInstruction::SpokenAndWritten)
-            ),
-            ContentPart::Text(text) => {
-                message.role == MessageRole::Assistant
-                    && text
-                        .text
-                        .contains(crate::services::speech::reply_split::OPEN)
+        .rposition(|part| matches!(part, ContentPart::Spoken(_)))
+        && let ContentPart::Spoken(spoken) = &content[at]
+    {
+        content[at] = ContentPart::Text(ContentPartText {
+            text: spoken.text.clone(),
+        });
+    }
+}
+
+/// Stores split text no client sees streamed: what a stopped call still
+/// held, or a reply that arrived whole.
+fn store_reply_pieces(
+    pieces: Vec<crate::services::speech::reply_split::Piece>,
+    content: &mut Vec<ContentPart>,
+) {
+    use crate::services::speech::reply_split::Piece;
+    for piece in pieces {
+        match piece {
+            Piece::Spoken(text) => {
+                append_spoken_delta_part(content, text);
             }
-            _ => false,
-        })
+            Piece::Written(text) | Piece::Plain(text) => {
+                if !text.is_empty() {
+                    append_text_delta_part(content, text);
+                }
+            }
+            Piece::SpokenEnd => {}
+            Piece::SpokenIsWritten => spoken_becomes_written(content),
+        }
+    }
 }
 
 /// Routes the split text of a reply: the spoken part to the voice and a
@@ -5682,14 +5712,11 @@ async fn emit_reply_pieces(
                 continue;
             }
             Piece::SpokenIsWritten => {
-                if let Some(at) = content
-                    .iter()
-                    .rposition(|part| matches!(part, ContentPart::Spoken(_)))
-                    && let ContentPart::Spoken(spoken) = &content[at]
-                {
-                    content[at] = ContentPart::Text(ContentPartText {
-                        text: spoken.text.clone(),
-                    });
+                spoken_becomes_written(content);
+                // The voice says what it has and reports the part's end, so
+                // the client counts it as said.
+                if let Some(speech) = speech.as_mut() {
+                    speech.flush_spoken();
                 }
                 continue;
             }
@@ -5726,9 +5753,12 @@ async fn emit_reply_pieces(
 /// message is never empty for titles, search or read aloud; a spoken part
 /// the written text repeats is not kept twice.
 fn settle_spoken_parts(content: &mut Vec<ContentPart>) {
-    if !content
-        .iter()
-        .any(|part| matches!(part, ContentPart::Spoken(_)))
+    // A turn parked on a decision is settled when it ends, with what the
+    // continuation writes.
+    if crate::models::message::is_durable_stop(content)
+        || !content
+            .iter()
+            .any(|part| matches!(part, ContentPart::Spoken(_)))
     {
         return;
     }
@@ -5825,16 +5855,12 @@ mod spoken_part_tests {
     }
 
     #[test]
-    fn a_reply_is_split_when_the_turn_asks_or_the_history_shows_the_format() {
+    fn a_reply_is_split_only_when_the_turn_asks() {
         use crate::models::message::{
             BuiltinTurnInstruction, ContentPartTurnInstructionMarker, InputMessage,
             StoredTurnInstructionKind,
         };
         let message = |role, content| InputMessage { role, content };
-        let plain = GenerationInputMessages {
-            messages: vec![message(MessageRole::User, text("Hallo"))],
-        };
-        assert!(!splits_reply(&plain));
         let asked = GenerationInputMessages {
             messages: vec![message(
                 MessageRole::User,
@@ -5846,18 +5872,54 @@ mod spoken_part_tests {
             )],
         };
         assert!(splits_reply(&asked));
-        let history = GenerationInputMessages {
+        let not_asked = GenerationInputMessages {
             messages: vec![
                 message(MessageRole::Assistant, text("<spoken>Ja.</spoken>\n\nJa.")),
-                message(MessageRole::User, text("Und morgen?")),
+                message(MessageRole::User, text("<spoken>")),
             ],
         };
-        assert!(splits_reply(&history));
-        // The user writing the tag is not the format.
-        let typed = GenerationInputMessages {
-            messages: vec![message(MessageRole::User, text("<spoken>"))],
-        };
-        assert!(!splits_reply(&typed));
+        assert!(!splits_reply(&not_asked));
+    }
+
+    #[test]
+    fn a_parked_turn_keeps_its_spoken_part_for_the_continuation() {
+        let approval = ContentPart::ToolApprovalRequest(
+            crate::models::message::ContentPartToolApprovalRequest {
+                tool_call_id: "call".into(),
+                tool_name: "create_event".into(),
+                display: None,
+                mcp_server_id: "calendar".into(),
+                input: serde_json::json!({}),
+                annotations: crate::models::message::ToolApprovalAnnotations {
+                    read_only_hint: false,
+                    destructive_hint: false,
+                    idempotent_hint: false,
+                    open_world_hint: true,
+                },
+                preset: "restrictive".into(),
+                allow_always: false,
+                requested_at: String::new(),
+                kind: Default::default(),
+                approvals: Vec::new(),
+                pending_tool_calls: Vec::new(),
+                approval_scope: None,
+            },
+        );
+        let mut content = vec![spoken("Ich trage den Termin ein."), approval.clone()];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [spoken("Ich trage den Termin ein."), approval]);
+    }
+
+    #[test]
+    fn a_stopped_call_keeps_what_the_split_still_held() {
+        let mut split = crate::services::speech::reply_split::ReplySplit::new();
+        let mut content = Vec::new();
+        store_reply_pieces(
+            split.push("<spoken>Ja.</spoken>Morgen um 14:00 </"),
+            &mut content,
+        );
+        store_reply_pieces(split.finish(), &mut content);
+        assert_eq!(content, [spoken("Ja."), text("Morgen um 14:00 </")]);
     }
 }
 
@@ -7271,8 +7333,7 @@ async fn stream_generate_chat_completion<'a>(
                 assistant_message_id,
             ))
         });
-    let mut reply_split = split_reply
-        .then(|| crate::services::speech::reply_split::ReplySplit::new(speech.is_some()));
+    let mut reply_split = split_reply.then(crate::services::speech::reply_split::ReplySplit::new);
     let mcp = app_state.mcp_state().await;
     let mut tool_result_context = Arc::new(tool_result_context);
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
@@ -11518,6 +11579,9 @@ async fn stream_generate_chat_completion<'a>(
             let next_result = if let Some(task) = streaming_task {
                 tokio::select! {
                     _ = task.wait_for_abort() => {
+                        if let Some(split) = reply_split.as_mut() {
+                            store_reply_pieces(split.finish(), &mut current_message_content);
+                        }
                         let aborted_content = current_message_content.clone();
 
                         if let (Some(client), Some(turn_start)) = (&tracing_client, turn_start_time) {
@@ -11709,6 +11773,9 @@ async fn stream_generate_chat_completion<'a>(
 
                             let message: GenerationStreamingMessage = error_event.into();
                             send_generation_event(&message, tx.clone()).await?;
+                            if let Some(split) = reply_split.as_mut() {
+                                store_reply_pieces(split.finish(), &mut current_message_content);
+                            }
                             let generation_metadata = build_generation_metadata(
                                 total_prompt_tokens,
                                 total_completion_tokens,
@@ -11915,6 +11982,9 @@ async fn stream_generate_chat_completion<'a>(
 
                     let message: GenerationStreamingMessage = error_event.into();
                     send_generation_event(&message, tx.clone()).await?;
+                    if let Some(split) = reply_split.as_mut() {
+                        store_reply_pieces(split.finish(), &mut current_message_content);
+                    }
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -12022,9 +12092,7 @@ async fn stream_generate_chat_completion<'a>(
                     &tx,
                 )
                 .await?;
-                if speech.is_some()
-                    && let Some(fallback) = split.take_fallback()
-                {
+                if let Some(fallback) = split.take_fallback() {
                     crate::metrics::report_reply_split_fallback(fallback.label());
                 }
             }
@@ -12034,25 +12102,15 @@ async fn stream_generate_chat_completion<'a>(
             if let Some(captured_texts) = stream_end.captured_texts() {
                 if current_turn_streamed_text.is_empty() {
                     for captured_text in captured_texts {
-                        // Never spoken, so only the written part is kept.
-                        let pieces = if split_reply {
-                            let mut split =
-                                crate::services::speech::reply_split::ReplySplit::new(false);
+                        if split_reply {
+                            let mut split = crate::services::speech::reply_split::ReplySplit::new();
                             let mut pieces = split.push(captured_text);
                             pieces.extend(split.finish());
-                            pieces
+                            store_reply_pieces(pieces, &mut current_message_content);
                         } else {
-                            vec![crate::services::speech::reply_split::Piece::Plain(
-                                captured_text.into(),
-                            )]
-                        };
-                        for piece in pieces {
-                            if let crate::services::speech::reply_split::Piece::Written(text)
-                            | crate::services::speech::reply_split::Piece::Plain(text) = piece
-                            {
-                                current_message_content
-                                    .push(ContentPart::Text(ContentPartText { text }));
-                            }
+                            current_message_content.push(ContentPart::Text(ContentPartText {
+                                text: captured_text.into(),
+                            }));
                         }
                     }
                 }

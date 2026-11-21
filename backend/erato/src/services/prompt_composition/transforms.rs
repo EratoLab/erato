@@ -741,8 +741,16 @@ pub async fn resolve_sequence(
                 let offered = OfferedClientTools::from_generation_parameters(
                     message.generation_parameters.as_ref(),
                 );
+                // An earlier reply's written text stands on its own; its
+                // spoken part shown here would be copied on a later turn
+                // that did not ask for the format.
+                let content = parsed
+                    .content
+                    .into_iter()
+                    .filter(|part| !matches!(part, ContentPart::Spoken(_)))
+                    .collect();
                 input_messages.extend(
-                    replay_assistant_content(&parsed.role, parsed.content)
+                    replay_assistant_content(&parsed.role, content)
                         .into_iter()
                         .map(|message| {
                             replay_policy.apply_to_prior_turn_message(message, &offered)
@@ -807,15 +815,15 @@ pub(crate) fn replay_assistant_content(
     content: Vec<ContentPart>,
 ) -> Vec<InputMessage> {
     let mut input_messages = Vec::new();
-    // A spoken part replays in the format it was written in, `<spoken>…</spoken>`
-    // before its written text, so the model sees what it asked aloud.
+    // A spoken part of the turn in progress replays in the format the turn's
+    // prompt asks for, so a continuation goes on writing it.
     let mut spoken: Option<String> = None;
     let flush_spoken = |spoken: &mut Option<String>, input_messages: &mut Vec<InputMessage>| {
         if let Some(said) = spoken.take() {
             input_messages.push(InputMessage {
                 role: role.clone(),
                 content: ContentPart::Text(ContentPartText {
-                    text: spoken_markup(&said),
+                    text: crate::services::speech::reply_split::spoken_markup(&said),
                 }),
             });
         }
@@ -831,7 +839,10 @@ pub(crate) fn replay_assistant_content(
                 input_messages.push(InputMessage {
                     role: role.clone(),
                     content: ContentPart::Text(ContentPartText {
-                        text: format!("{}\n\n{text}", spoken_markup(&said)),
+                        text: format!(
+                            "{}\n\n{text}",
+                            crate::services::speech::reply_split::spoken_markup(&said)
+                        ),
                     }),
                 });
             }
@@ -876,11 +887,6 @@ pub(crate) fn replay_assistant_content(
     }
     flush_spoken(&mut spoken, &mut input_messages);
     input_messages
-}
-
-fn spoken_markup(said: &str) -> String {
-    use crate::services::speech::reply_split::{CLOSE, OPEN};
-    format!("{OPEN}{}{CLOSE}", said.trim())
 }
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {

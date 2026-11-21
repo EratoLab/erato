@@ -23,8 +23,11 @@ interface WordingRowProps {
   description: string;
   wording?: Wording;
   userChoice?: boolean;
+  /** The value shown is the user's own, not the organization's. */
+  ownValue: boolean;
   saving: boolean;
   onChange: (wording: Wording) => void;
+  onFollowOrganization: () => void;
 }
 
 function WordingRow({
@@ -32,8 +35,10 @@ function WordingRow({
   description,
   wording,
   userChoice,
+  ownValue,
   saving,
   onChange,
+  onFollowOrganization,
 }: WordingRowProps) {
   const options: { value: Wording; label: string }[] = [
     {
@@ -66,6 +71,19 @@ function WordingRow({
           disabled={saving || userChoice === false}
         />
       )}
+      {userChoice !== false && ownValue && (
+        <button
+          type="button"
+          className="text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50"
+          onClick={onFollowOrganization}
+          disabled={saving}
+        >
+          {t({
+            id: "preferences.dialog.audio.voice.followOrganization",
+            message: "Use my organization's setting",
+          })}
+        </button>
+      )}
       {userChoice === false && (
         <p className="text-xs text-theme-fg-muted">
           {t({
@@ -89,12 +107,14 @@ export function VoiceOutputSetting() {
   const cards = useApprovalSpeechStyle({});
   const [saving, setSaving] = useState(false);
 
+  // `null` clears the user's own value: the organization's applies again.
   const save = async (
     patch: Partial<
       Record<
         | "preference_reply_speech_wording"
-        | "preference_approval_speech_wording",
-        Wording
+        | "preference_approval_speech_wording"
+        | "preference_approval_speech_amount",
+        string | null
       >
     >,
   ) => {
@@ -153,9 +173,13 @@ export function VoiceOutputSetting() {
         })}
         wording={replies.data?.wording}
         userChoice={replies.data?.user_choice}
+        ownValue={replies.data?.source === "user"}
         saving={saving}
         onChange={(wording) =>
           void save({ preference_reply_speech_wording: wording })
+        }
+        onFollowOrganization={() =>
+          void save({ preference_reply_speech_wording: null })
         }
       />
       <WordingRow
@@ -170,9 +194,16 @@ export function VoiceOutputSetting() {
         })}
         wording={cards.data?.wording}
         userChoice={cards.data?.user_choice}
+        ownValue={cards.data?.source === "user"}
         saving={saving}
         onChange={(wording) =>
           void save({ preference_approval_speech_wording: wording })
+        }
+        onFollowOrganization={() =>
+          void save({
+            preference_approval_speech_wording: null,
+            preference_approval_speech_amount: null,
+          })
         }
       />
     </div>

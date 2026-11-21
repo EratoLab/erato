@@ -3697,10 +3697,10 @@ mod audio_config_tests {
     fn reply_speech_loads_and_a_wrong_value_keeps_the_default() {
         use crate::reply_speech::{ReplySpeechConfig, ReplySpeechWording};
         assert_eq!(
-            load_conversational("[reply_speech]\nwording = \"precise\"\nuser_choice = false\n")
+            load_conversational("[reply_speech]\nwording = \"natural\"\nuser_choice = false\n")
                 .reply_speech,
             ReplySpeechConfig {
-                wording: ReplySpeechWording::Precise,
+                wording: ReplySpeechWording::Natural,
                 user_choice: false,
             }
         );
@@ -3710,7 +3710,7 @@ mod audio_config_tests {
         );
         assert_eq!(
             load_conversational("").reply_speech.wording,
-            ReplySpeechWording::Natural
+            ReplySpeechWording::Precise
         );
     }
 
@@ -9129,6 +9129,7 @@ pub struct AudioConversationalConfig {
         deserialize_with = "crate::reply_speech::deserialize_reply_speech"
     )]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
     pub reply_speech: crate::reply_speech::ReplySpeechConfig,
 }
 

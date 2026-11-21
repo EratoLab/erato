@@ -43,6 +43,7 @@ import {
   moveSpeechStream,
   playSpeechChunk,
   readsBackContinuation,
+  replyCallsTool,
   speechFailed,
   spokenPartBegins,
   spokenPartEnds,
@@ -1332,6 +1333,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_proposed event received. Full payload:",
               responseData,
             );
+            replyCallsTool(activeStreamKey);
             handleToolCallProposed(responseData, activeStreamKey);
             break;
 

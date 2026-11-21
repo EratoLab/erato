@@ -16,7 +16,7 @@ use uuid::Uuid;
 use crate::{
     test_app_state,
     test_utils::{
-        RequestBodyRecorder, TEST_JWT_TOKEN, TestRequestAuthExt,
+        BodyContainsMatcher, RequestBodyRecorder, TEST_JWT_TOKEN, TestRequestAuthExt,
         build_openai_text_streaming_response, create_test_server, parse_sse_events,
         setup_mock_llm_server_with_mocks,
     },
@@ -114,14 +114,31 @@ async fn a_natural_reply_is_spoken_short_and_kept_complete_in_the_chat(pool: Poo
     let mut mocks = MockSet::new();
     let recorded = recorder.clone();
     mocks.mock(move |when, then| {
-        when.post().path("/v1/chat/completions").matcher(recorded);
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["Wann ist der Termin?"],
+                &["Und danach?"],
+            ))
+            .matcher(recorded);
         then.status(StatusCode::OK)
             .headers([("Content-Type", "text/event-stream")])
             .bytes_stream_with_delays(build_openai_text_streaming_response(SPLIT_REPLY));
     });
+    let recorded = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["Und danach?"], &[]))
+            .matcher(recorded);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(&["Nichts mehr."]));
+    });
     let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
     let (speech_url, speech) = mock_speech().await;
     speaking_config(&mut config, speech_url);
+    config.audio_conversational.reply_speech.wording = ReplySpeechWording::Natural;
     let state = test_app_state(config, pool).await;
     let server = create_test_server(state.clone());
 
@@ -162,8 +179,8 @@ async fn a_natural_reply_is_spoken_short_and_kept_complete_in_the_chat(pool: Poo
         ]
     );
 
-    // A typed turn after it: no protocol, the earlier reply replayed in its
-    // format, and the spoken part the model imitates is dropped.
+    // A typed turn after it gets no protocol and sees only the written
+    // answer, so it has no format to copy.
     let typed_id = submit(
         &server,
         json!({ "user_message": "Und danach?", "previous_message_id": spoken_id }),
@@ -171,10 +188,7 @@ async fn a_natural_reply_is_spoken_short_and_kept_complete_in_the_chat(pool: Poo
     .await;
     assert_eq!(
         stored_parts(&state, &typed_id).await,
-        [(
-            "text".to_string(),
-            "| Tag | Zeit |\n|---|---|\n| Mo | 14:00 |".to_string()
-        )]
+        [("text".to_string(), "Nichts mehr.".to_string())]
     );
     let bodies = recorder.bodies();
     let protocol = "Begin your reply with <spoken>";
@@ -190,14 +204,15 @@ async fn a_natural_reply_is_spoken_short_and_kept_complete_in_the_chat(pool: Poo
         .filter(|body| body.contains("Und danach?"))
         .collect();
     assert!(!typed.is_empty());
-    assert!(typed.iter().all(|body| !body.contains(protocol)));
-    let typed_body = typed[0];
-    assert!(typed_body.contains("<spoken>Morgen um zwei.</spoken>"));
+    for body in typed {
+        assert!(!body.contains(protocol) && !body.contains("<spoken>"));
+        assert!(body.contains("| Mo | 14:00 |"));
+    }
     speech.abort();
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_precise_reply_is_written_as_for_typed_chat_and_read_as_written(pool: Pool<Postgres>) {
+async fn a_precise_reply_keeps_the_spoken_reply_style_and_is_read_as_written(pool: Pool<Postgres>) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     let recorded = recorder.clone();
@@ -240,8 +255,104 @@ async fn a_precise_reply_is_written_as_for_typed_chat_and_read_as_written(pool: 
             "Der Termin ist morgen um 14:00.".to_string()
         )]
     );
+    let bodies = recorder.bodies();
+    assert!(bodies.iter().any(|body| body.contains(INSTRUCTION)));
+    assert!(bodies.iter().all(|body| !body.contains("<spoken>")));
+    speech.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_users_choice_and_an_audience_lock_apply_at_turn_time(pool: Pool<Postgres>) {
+    use erato::distribution::experience_policy::{
+        AudienceReplySpeech, AudienceSubject, ExperienceAudience, ExperiencePolicyDocument,
+    };
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let recorded = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &["Erste Frage"],
+                &["Zweite Frage"],
+            ))
+            .matcher(recorded);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(&["Gelesen."]));
+    });
+    let recorded = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&["Zweite Frage"], &[]))
+            .matcher(recorded);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(SPLIT_REPLY));
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    let (speech_url, speech) = mock_speech().await;
+    speaking_config(&mut config, speech_url);
+    config.audio_conversational.reply_speech.wording = ReplySpeechWording::Natural;
+    let state = test_app_state(config, pool).await;
+    let server = create_test_server(state.clone());
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_reply_speech_wording": "precise" }))
+        .await
+        .assert_status_ok();
+
+    let own = submit(
+        &server,
+        json!({ "user_message": "Erste Frage", "conversational_audio_back": true }),
+    )
+    .await;
+    assert_eq!(
+        stored_parts(&state, &own).await,
+        [("text".to_string(), "Gelesen.".to_string())]
+    );
+
+    state.reloadable.write().await.experience_policy = Some(ExperiencePolicyDocument {
+        audiences: [(
+            "Vertrieb".to_string(),
+            ExperienceAudience {
+                id: Some("aud-sales".into()),
+                subjects: vec![AudienceSubject::Organization],
+                pinned_assistant_hub_assistant_id: Uuid::new_v4(),
+                expires_at: None,
+                provenance: None,
+                approval_speech: None,
+                wait_lines: None,
+                reply_speech: Some(AudienceReplySpeech {
+                    wording: Some(ReplySpeechWording::Natural),
+                    user_choice: Some(false),
+                }),
+            },
+        )]
+        .into(),
+        priority_order: vec!["Vertrieb".into()],
+        setting_orders: [("reply_speech".to_string(), vec!["aud-sales".to_string()])].into(),
+    });
+    let locked = submit(
+        &server,
+        json!({
+            "user_message": "Zweite Frage",
+            "previous_message_id": own,
+            "conversational_audio_back": true,
+        }),
+    )
+    .await;
+    assert_eq!(stored_parts(&state, &locked).await[0].0, "spoken");
+
+    let protocol = "Begin your reply with <spoken>";
     for body in recorder.bodies() {
-        assert!(!body.contains(INSTRUCTION) && !body.contains("<spoken>"));
+        assert_eq!(
+            body.contains(protocol),
+            body.contains("Zweite Frage"),
+            "{body}"
+        );
     }
     speech.abort();
 }

@@ -72,8 +72,37 @@ const UNDERRUN_HOLD_MS = 1500;
 /** The reply's stream has ended: no more audio comes for it. */
 let audioEnded = true;
 let underrunTimer: ReturnType<typeof setTimeout> | undefined;
-/** The current spoken part has sent its last audio. */
-let spokenPartEnded = false;
+/**
+ * The spoken parts of the reply so far, counted when their first text and
+ * when their last audio arrive. A part's end comes after its audio, so it
+ * can arrive after the next model call has begun.
+ */
+let partsBegun = 0;
+let partsEnded = 0;
+/** Within the current model call: a spoken part is open, it spoke, it wrote. */
+let partOpen = false;
+let callSpoke = false;
+let callWrote = false;
+const resetParts = () => {
+  partsBegun = 0;
+  partsEnded = 0;
+  partOpen = false;
+  callSpoke = false;
+  callWrote = false;
+};
+/**
+ * Once the current model call's spoken part is said and its written answer
+ * streams, the voice says no more for the reply.
+ */
+const markSpokenPartDone = () => {
+  if (
+    callSpoke &&
+    callWrote &&
+    partsEnded >= partsBegun &&
+    !useSpeechPlayback.getState().spokenPartDone
+  )
+    useSpeechPlayback.setState({ spokenPartDone: true });
+};
 const clearUnderrun = () => {
   clearTimeout(underrunTimer);
   underrunTimer = undefined;
@@ -208,7 +237,7 @@ export function beginSpeechResponse(streamKey?: string) {
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
   audioEnded = !accepting;
-  spokenPartEnded = false;
+  resetParts();
   useSpeechPlayback.setState({
     spokenPartDone: false,
     failed: false,
@@ -249,28 +278,47 @@ export function endSpeechResponse(streamKey?: string, messageId?: string) {
  */
 export function spokenPartBegins(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
-  spokenPartEnded = false;
+  if (!partOpen) {
+    partOpen = true;
+    partsBegun += 1;
+    callSpoke = true;
+    callWrote = false;
+  }
   if (accepting) audioEnded = false;
   if (useSpeechPlayback.getState().spokenPartDone)
     useSpeechPlayback.setState({ spokenPartDone: false });
 }
 
-/** The spoken part has sent its last audio; the written answer may follow. */
+/** A spoken part has sent its last audio. */
 export function spokenPartEnds(streamKey?: string, messageId?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
-  spokenPartEnded = true;
+  partsEnded += 1;
+  // The end of an earlier call's part: the current call may still speak.
+  if (!callSpoke || partsEnded < partsBegun) return;
   endSpeechResponse(streamKey, messageId);
+  markSpokenPartDone();
+}
+
+/** Written text arrived: after a spoken part, the written answer has begun. */
+export function writtenPartArrives(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  partOpen = false;
+  callWrote = true;
+  markSpokenPartDone();
 }
 
 /**
- * Written text arrived. After a spoken part has ended, the voice says no
- * more for this reply: a spoken part only precedes a tool call or the
- * written answer, and the written answer has begun.
+ * The model calls a tool: the next call may speak again, or reply without
+ * a spoken part, which the voice then reads as it streams.
  */
-export function writtenPartArrives(streamKey?: string) {
+export function replyCallsTool(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
-  if (spokenPartEnded && !useSpeechPlayback.getState().spokenPartDone)
-    useSpeechPlayback.setState({ spokenPartDone: true });
+  partOpen = false;
+  callSpoke = false;
+  callWrote = false;
+  if (accepting) audioEnded = false;
+  if (useSpeechPlayback.getState().spokenPartDone)
+    useSpeechPlayback.setState({ spokenPartDone: false });
 }
 
 /** The user stopped the voice: quiet for the rest of this turn. */

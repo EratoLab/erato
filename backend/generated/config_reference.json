@@ -567,13 +567,13 @@
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "alpha"
   },
   "audio_conversational.reply_speech.wording": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "alpha"
   },
   "audio_conversational.speech_provider": {
     "default_value_security": "unreviewed",
