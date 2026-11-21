@@ -8151,6 +8151,7 @@ pub struct ClientToolReplayConfig {
     /// JSON bytes a kept argument may have before it is left out of the
     /// replayed call. Default 2048, at most 65536.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub max_input_field_bytes: Option<usize>,
 }
 

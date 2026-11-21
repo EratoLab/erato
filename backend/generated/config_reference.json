@@ -1817,7 +1817,7 @@
   },
   "client_tools.tools.<key>.replay.max_input_field_bytes": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.7.0",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

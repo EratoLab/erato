@@ -7,6 +7,7 @@ import {
   wordSourceDetails,
   isWordHistorySnapshot,
   WORD_READ_TOOL,
+  wordReplayRecordRead,
 } from "@erato/frontend/word-review";
 
 import { checkWordApprovalScope } from "./wordApprovalScope";
@@ -24,7 +25,6 @@ import {
   wordCompleteReadUnavailable,
   wordReadArgumentsRefusal,
   wordRefusalOffersPlainRead,
-  wordReplayRecordRead,
 } from "./wordReadArguments";
 import {
   wordReadFragments,
@@ -130,9 +130,11 @@ export class WordDocumentReadSession {
       ? session.snapshot
       : undefined;
   }
-  /** Why this request's model budget refuses the complete read, checked once per request. */
-  private completeBudgetIssue(): Promise<string | undefined> {
-    if (!this.completeBudgetCheck) return Promise.resolve(undefined);
+  /** Why this request cannot make a complete read, if it cannot; the budget is checked once. */
+  async completeReadIssue(): Promise<string | undefined> {
+    if (this.session?.snapshot.completeReadIssue)
+      return this.session.snapshot.completeReadIssue;
+    if (!this.completeBudgetCheck) return undefined;
     this.completeBudget ??= this.completeBudgetCheck().catch(
       () => "budget-unavailable",
     );
@@ -375,8 +377,7 @@ export class WordDocumentReadSession {
       !snapshot.revoked &&
       !snapshot.used &&
       !snapshot.issue &&
-      !snapshot.completeReadIssue &&
-      !(await this.completeBudgetIssue());
+      !(await this.completeReadIssue());
     const refuse = async (issue: {
       path: string;
       code: string;
@@ -454,7 +455,7 @@ export class WordDocumentReadSession {
     if (snapshot.completeReadIssue)
       return wordCompleteReadUnavailable(snapshot, snapshot.completeReadIssue);
     if (this.completeBudgetCheck) {
-      const issue = await this.completeBudgetIssue();
+      const issue = await this.completeReadIssue();
       if (
         this.session !== session ||
         snapshot.revoked ||

@@ -43,6 +43,9 @@ function correctCall(response: ClientToolExecutionResult) {
   >;
 }
 
+const EARLIER_REFS =
+  "Refs from an earlier snapshot can name other parts now; take them from this request's outline.";
+
 const RECEIPT_NOTE =
   'This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under "kept" remain. Call the tool again if current data is needed.';
 
@@ -182,7 +185,7 @@ describe("a refused read", () => {
     });
   });
 
-  it("fixes a section call copied from an earlier turn in one refusal", async () => {
+  it("fixes a section call copied from an earlier turn in one refusal, without its ref", async () => {
     const snapshot = snapshotOf();
     const { session } = openReadSession(snapshot);
 
@@ -201,8 +204,34 @@ describe("a refused read", () => {
       "Unexpected field: include. Use this request's exact snapshot and documentIdentity.",
     );
     expect(fix.code).toBe("snapshot-mismatch");
-    const call = JSON.parse(fix.message.replace("A correct call: ", ""));
-    expect(okResult(await session.execute(call, readContext))).toMatchObject({
+    const [lead, json] = fix.message.split("A correct call: ");
+    expect(lead).toBe(`${EARLIER_REFS} `);
+    const call = JSON.parse(json) as Record<string, unknown>;
+    expect(call).toEqual({
+      snapshot: snapshot.token,
+      documentIdentity: snapshot.identity,
+      section: { ref: "b1" },
+    });
+    okResult(await session.execute(call, readContext));
+  });
+
+  it("keeps the ref of a section call with this request's snapshot", async () => {
+    const snapshot = snapshotOf();
+    const { session } = openReadSession(snapshot);
+
+    const refused = await session.execute(
+      {
+        snapshot: snapshot.token,
+        documentIdentity: "another-document",
+        section: { ref: "b2" },
+      },
+      readContext,
+    );
+    const [first, fix] = issues(refused);
+    expect(first.code).toBe("snapshot-mismatch");
+    expect(JSON.parse(fix.message.replace("A correct call: ", ""))).toEqual({
+      snapshot: snapshot.token,
+      documentIdentity: snapshot.identity,
       section: { ref: "b2" },
     });
   });
@@ -226,6 +255,20 @@ describe("a refused read", () => {
     expect(fix.message).toBe(
       `This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity })}`,
     );
+
+    const [, byRef] = issues(
+      await session.execute(
+        {
+          snapshot: "earlier-turn",
+          documentIdentity: snapshot.identity,
+          target: { refs: ["b3"] },
+        },
+        readContext,
+      ),
+    );
+    expect(byRef.message).toBe(
+      `${EARLIER_REFS} This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity })}`,
+    );
   });
 
   it("keeps the call whole when the document identity is long", async () => {
@@ -241,6 +284,18 @@ describe("a refused read", () => {
     expect(example.message).toBe(
       'A correct call sends this request\'s snapshot and documentIdentity with {"section":{"ref":"b2"}}.',
     );
+
+    for (const call of [
+      { target: { text: "Payment" } },
+      { table_cell: { text: "Fees" } },
+    ]) {
+      const [, fix] = issues(
+        await execute({ ...call, snapshot: "earlier-turn" }),
+      );
+      expect(fix.message).toBe(
+        `This request's snapshot: ${JSON.stringify(snapshot.token)}; send it with this request's documentIdentity, the current document identity.`,
+      );
+    }
   });
 });
 

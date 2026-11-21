@@ -22,7 +22,7 @@
 
 use crate::config::{ClientToolReplayMode, ClientToolsConfig, parse_receipt_field_path};
 use crate::models::message::{ContentPart, InputMessage, ToolUse};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
 /// Key of the omission note in every shortened result.
@@ -34,6 +34,8 @@ pub const RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its r
 /// this note. Stored snapshots still hold them.
 pub(super) const LEGACY_KEPT_KEY: &str = "kept";
 pub(super) const LEGACY_RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+/// The reason a refused call sent as a copied receipt replays with.
+pub(super) const COPIED_RECEIPT_ISSUE: &str = "This call was sent with these arguments wrapped under \"kept\", as a replay record, and was refused.";
 const LEGACY_UPGRADED_NOTE: &str = "This call belongs to an earlier user turn. Its arguments and result are shortened in the conversation replay. Call the tool again if current data is needed.";
 
 /// Key of the per-generation record, in a row's `generation_parameters`, of
@@ -167,10 +169,9 @@ pub fn upgrade_legacy_receipt(mut message: InputMessage) -> InputMessage {
 fn shorten_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
     // A call whose arguments are a copied receipt meant the arguments under
     // "kept"; replaying the wrapper would teach it again.
-    let source = tool_use
-        .input
-        .as_ref()
-        .map(|input| copied_receipt(input).unwrap_or(input));
+    let copied = tool_use.input.as_ref().and_then(copied_receipt);
+    let wrapped = copied.is_some();
+    let source = copied.or(tool_use.input.as_ref());
     let arguments = kept_fields(source, &spec.input_paths, |value, size| {
         (size <= spec.input_bound).then(|| value.clone())
     });
@@ -197,11 +198,21 @@ fn shorten_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
             result.entry("status".to_string()).or_insert(status);
         }
         // A refused call keeps why next to its arguments, so it does not read
-        // as a valid call. Stored issues are already bounded.
+        // as a valid call. Stored issues are already bounded. A refused copied
+        // receipt replays unwrapped, so its stored reason would no longer fit.
         if let Some(issue) = first_validation_issue(tool_use.output.as_ref()) {
+            let issue = if wrapped {
+                json!({
+                    "path": "",
+                    "code": issue.get("code").cloned().unwrap_or(Value::Null),
+                    "message": COPIED_RECEIPT_ISSUE,
+                })
+            } else {
+                issue.clone()
+            };
             result
                 .entry("validation_errors".to_string())
-                .or_insert_with(|| Value::Array(vec![issue.clone()]));
+                .or_insert_with(|| Value::Array(vec![issue]));
         }
         result.insert(
             RECEIPT_MARKER_KEY.to_string(),
@@ -578,12 +589,24 @@ mod tests {
                 json!(RECEIPT_NOTE)
             );
         }
+        let issue = json!({"path": "", "code": "read-arguments", "message": "Expected a snapshot token; no other arguments are supported."});
+        let refused = stubbed(
+            &policy,
+            json!({RECEIPT_MARKER_KEY: LEGACY_RECEIPT_NOTE, "kept": read}),
+            json!({"status": "error", "validation_errors": [issue, issue]}),
+        );
+        assert_eq!(refused.input, Some(read.clone()));
+        assert_eq!(
+            refused.output.unwrap()["validation_errors"],
+            json!([{"path": "", "code": "read-arguments", "message": COPIED_RECEIPT_ISSUE}])
+        );
         let beside = stubbed(
             &policy,
             json!({"kept": read, "snapshot": "s2"}),
-            json!({"status": "error"}),
+            json!({"status": "error", "validation_errors": [issue]}),
         );
         assert_eq!(beside.input, Some(json!({"snapshot": "s2"})));
+        assert_eq!(beside.output.unwrap()["validation_errors"], json!([issue]));
     }
 
     #[test]

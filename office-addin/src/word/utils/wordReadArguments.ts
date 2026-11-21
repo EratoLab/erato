@@ -1,4 +1,9 @@
 import {
+  WORD_REPLAY_KEPT_KEY,
+  WORD_REPLAY_NOTE_KEY,
+} from "@erato/frontend/word-review";
+
+import {
   wordBlockIndex,
   wordDocumentOutline,
   wordDocumentOutlineText,
@@ -10,9 +15,6 @@ import { WORD_TARGET_READ_KEYS } from "./wordTargetRead";
 import type { WordReadOutcome } from "./wordReadFreshness";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
-/** The backend's form of an earlier turn's call (replay_policy.rs) before ERMAIN-1274. */
-const REPLAY_NOTE_KEY = "omitted_from_replay";
-const REPLAY_KEPT_KEY = "kept";
 /** The backend keeps 512 characters of each validation message (client_tools.rs). */
 const MAX_ISSUE_CHARS = 512;
 const MAX_NAMED_FIELDS = 8;
@@ -47,27 +49,6 @@ const readForm = (args: unknown): ReadForm =>
 export const wordRefusalOffersPlainRead = (args: unknown) =>
   readForm(args) === "plain";
 
-/**
- * A model that copies the form earlier calls replay in sends the read under `kept`. Running that
- * read gives the result it asked for, so only the wrapper is dropped (ERMAIN-1274, the ERMAIN-1194
- * rule); anything else beside the wrapper stays and is refused. The backend replays such a call
- * by the same rule (replay_policy.rs copied_receipt).
- */
-export function wordReplayRecordRead(input: unknown): {
-  call: unknown;
-  replayRecord: boolean;
-} {
-  if (!object(input) || !(REPLAY_NOTE_KEY in input || REPLAY_KEPT_KEY in input))
-    return { call: input, replayRecord: false };
-  const wrapperOnly = Object.keys(input).every((key) =>
-    [REPLAY_NOTE_KEY, REPLAY_KEPT_KEY, "status"].includes(key),
-  );
-  return {
-    call: wrapperOnly && object(input.kept) ? input.kept : input,
-    replayRecord: true,
-  };
-}
-
 function unexpectedFields(args: Record<string, unknown>): string[] {
   const allowed = FORM_KEYS[readForm(args)];
   const fields = Object.keys(args).filter((key) => !allowed.includes(key));
@@ -100,6 +81,25 @@ function sectionCall(snapshot: WordAuthoringSnapshot, ref: string) {
   };
 }
 
+/** Refs are positions in the capture they were read from, so after a plan has added or removed
+ * paragraphs an earlier snapshot's ref can name another part of this one. */
+function namesEarlierRefs(
+  snapshot: WordAuthoringSnapshot,
+  args: unknown,
+): boolean {
+  const form = readForm(args);
+  return (
+    object(args) &&
+    form !== "plain" &&
+    typeof args.snapshot === "string" &&
+    args.snapshot !== snapshot.token &&
+    /"(ref|refs|throughRef|sourceRef)":/.test(JSON.stringify(args[form]) ?? "")
+  );
+}
+
+const EARLIER_REFS =
+  "Refs from an earlier snapshot can name other parts now; take them from this request's outline.";
+
 /** One read this capture accepts now: the complete read when the caller found it available,
  * otherwise a section read of the part the call named or of the outline's first part. */
 function exampleRead(
@@ -110,7 +110,9 @@ function exampleRead(
   const section = object(args) && object(args.section) ? args.section : null;
   const index = wordBlockIndex(snapshot);
   const ref =
-    typeof section?.ref === "string" && index.has(section.ref)
+    typeof section?.ref === "string" &&
+    index.has(section.ref) &&
+    !namesEarlierRefs(snapshot, args)
       ? section.ref
       : firstSectionRef(snapshot);
   if ((plainAvailable && !section) || !ref)
@@ -119,21 +121,29 @@ function exampleRead(
 }
 
 /** What fixes the call: a whole call for plain and section reads; for target and table_cell reads,
- * whose selectors only the model knows, this request's snapshot and documentIdentity. */
+ * whose selectors only the model knows, this request's snapshot and documentIdentity. Each form
+ * fits the backend's bound, since a cut value would be copied as it is. */
 function fix(
   snapshot: WordAuthoringSnapshot,
   args: unknown,
   plainAvailable: boolean,
 ): string {
   const form = readForm(args);
+  const lead = namesEarlierRefs(snapshot, args) ? `${EARLIER_REFS} ` : "";
+  const fitting = (whole: string, short: string) =>
+    lead.length + whole.length <= MAX_ISSUE_CHARS
+      ? `${lead}${whole}`
+      : `${lead}${short}`;
   if (form === "target" || form === "table_cell")
-    return `This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity })}`;
+    return fitting(
+      `This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity })}`,
+      `This request's snapshot: ${JSON.stringify(snapshot.token)}; send it with this request's documentIdentity, the current document identity.`,
+    );
   const example = exampleRead(snapshot, args, plainAvailable);
-  const correct = `A correct call: ${JSON.stringify(example)}`;
-  // Only a long documentIdentity makes it longer; a cut call would be copied as it is.
-  return correct.length <= MAX_ISSUE_CHARS
-    ? correct
-    : `A correct call sends this request's snapshot and documentIdentity with ${JSON.stringify({ section: example.section })}.`;
+  return fitting(
+    `A correct call: ${JSON.stringify(example)}`,
+    `A correct call sends this request's snapshot and documentIdentity with ${JSON.stringify({ section: example.section })}.`,
+  );
 }
 
 /**
@@ -155,7 +165,7 @@ export function wordReadArgumentsRefusal(
   const unexpected = (object(args) ? unexpectedFields(args) : []).filter(
     (field) =>
       !options.replayRecord ||
-      ![REPLAY_NOTE_KEY, REPLAY_KEPT_KEY].includes(field),
+      ![WORD_REPLAY_NOTE_KEY, WORD_REPLAY_KEPT_KEY].includes(field),
   );
   const plainUnavailable =
     readForm(args) === "plain" &&

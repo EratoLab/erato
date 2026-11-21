@@ -353,7 +353,7 @@ describe("section pages", () => {
         { code: "snapshot-mismatch" },
         {
           code: "snapshot-mismatch",
-          message: `A correct call: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity, section: { ref: "b1" } })}`,
+          message: `Refs from an earlier snapshot can name other parts now; take them from this request's outline. A correct call: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity, section: { ref: "b1" } })}`,
         },
       ],
     });
