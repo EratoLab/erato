@@ -229,6 +229,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
                 ))
                 .layer(Extension(frontend_registry))
                 .layer(Extension(DeploymentVersion::from_env()))
+                .layer(Extension(state.reloadable.clone()))
                 .layer(CorsLayer::very_permissive())
                 .layer(SetResponseHeaderLayer::overriding(
                     axum::http::header::SERVER,

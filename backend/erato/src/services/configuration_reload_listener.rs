@@ -73,21 +73,29 @@ async fn listen_for_configuration_changes(
         "Listening for configuration reload notifications"
     );
 
+    // Catch changes committed between the startup load and LISTEN.
+    reload(app_state).await;
     loop {
-        let notification = listener.recv().await?;
-        tracing::info!(
-            channel = notification.channel(),
-            "Received configuration reload notification"
-        );
+        // An automatic reconnect can miss a notification while disconnected.
+        // Reconcile once after reconnecting and after each notification.
+        if let Some(notification) = listener.try_recv().await? {
+            tracing::info!(
+                channel = notification.channel(),
+                "Received configuration reload notification"
+            );
+        }
+        reload(app_state).await;
+    }
+}
 
-        match ReloadableAppState::load(app_state).await {
-            Ok(next_state) => {
-                *app_state.reloadable.write().await = next_state;
-                tracing::info!("Reloaded runtime distribution");
-            }
-            Err(error) => {
-                tracing::error!(%error, "Failed to reload runtime distribution; keeping the previous state");
-            }
+async fn reload(app_state: &AppState) {
+    match ReloadableAppState::load(app_state).await {
+        Ok(next_state) => {
+            *app_state.reloadable.write().await = next_state;
+            tracing::info!("Reloaded runtime distribution");
+        }
+        Err(error) => {
+            tracing::error!(%error, "Failed to reload runtime distribution; keeping the previous state");
         }
     }
 }

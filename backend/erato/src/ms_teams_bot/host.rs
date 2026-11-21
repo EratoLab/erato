@@ -337,26 +337,22 @@ impl Host {
     /// The language to answer in: the user's stored language, else the one
     /// their client reports, else the deployment's default. A failed read
     /// answers anyway, without the stored language.
-    pub async fn reply_language(
-        &self,
-        user_id: Option<Uuid>,
-        client: Option<&str>,
-        default: &str,
-    ) -> Lang {
+    pub async fn reply_language(&self, user_id: Option<Uuid>, client: Option<&str>) -> Lang {
+        let default = self.app_state.default_language().await;
         let Some(user_id) = user_id else {
-            return Lang::resolve(None, client, default);
+            return Lang::resolve(None, client, &default);
         };
-        text_language::of_user(&self.app_state.db, user_id, client, default)
+        text_language::of_user(&self.app_state.db, user_id, client, &default)
             .await
             .unwrap_or_else(|error| {
                 tracing::warn!(%error, "Could not read the stored language of a Teams user");
-                Lang::resolve(None, client, default)
+                Lang::resolve(None, client, &default)
             })
     }
 
     /// The language for a message nobody asked for, such as a task result.
-    pub async fn stored_language(&self, user_id: Uuid, default: &str) -> Lang {
-        self.reply_language(Some(user_id), None, default).await
+    pub async fn stored_language(&self, user_id: Uuid) -> Lang {
+        self.reply_language(Some(user_id), None).await
     }
 
     /// Whether any Teams message got through to Erato on any replica: it left

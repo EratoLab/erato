@@ -6,6 +6,8 @@ import {
   usePersistedState,
   useUploadFeature,
   type FileUploadItem,
+  type HostArtifact,
+  type Message,
   type PersistedStateOptions,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
@@ -28,6 +30,7 @@ import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import {
   AddinChatCore,
   AddinChatCoreView,
+  type AddinChatController,
   type AddinChatHostProps,
 } from "../core/AddinChatCore";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
@@ -52,9 +55,11 @@ import { useOffice } from "../providers/OfficeProvider";
 import { resolveMailListRowFetcher } from "./utils/resolveMailListRowFetcher";
 import { FreshCompletionTracker } from "../core/clientActions/freshCompletionTracker";
 import { useActionFacetClientActions } from "../core/clientActions/useAvailableActionFacets";
+import { stampHostArtifact } from "../core/hostArtifactStamp";
 import { yieldToRenderer } from "../utils/yieldToRenderer";
 
 import type { DropPipelineState } from "./hooks/useDropPipeline";
+import type { HostArtifactStamp } from "../core/hostArtifactStamp";
 import type {
   FetchOutlookMessageBytesResult,
   OutlookMessageFetcher,
@@ -74,6 +79,19 @@ const EMAIL_MIME_TYPES: Record<string, string[]> = {
   "application/vnd.ms-outlook": [".msg"],
 };
 const SKIP_REASONS: DroppedFileSkipReason[] = ["no-fetcher", "unparseable"];
+type PaneMessage = AddinChatController["messages"][string];
+
+// `outlookArtifact` is the deprecated alias of `hostArtifact` — stamped with
+// the same object for one release so kits reading the old field keep working;
+// drop it together with the alias.
+const withHostArtifact = <M extends Message>(
+  message: M,
+  hostArtifact: HostArtifact,
+): M => ({
+  ...message,
+  hostArtifact,
+  outlookArtifact: hostArtifact,
+});
 const PIN_HINT_DISMISSED_KEY = "erato.outlookAddin.pinHintDismissed";
 const pinHintDismissedPersistedOptions: PersistedStateOptions<boolean> = {
   parse: (value) => (typeof value === "boolean" ? value : null),
@@ -526,7 +544,9 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   };
 
   const clientActionsByFacetId = useActionFacetClientActions();
+  const stampsRef = useRef(new Map<string, HostArtifactStamp<PaneMessage>>());
   const messagesWithArtifact = useMemo(() => {
+    const stamps = new Map<string, HostArtifactStamp<PaneMessage>>();
     let next = controller.messages;
     for (const id of controller.messageOrder) {
       const message = controller.messages[id];
@@ -539,25 +559,34 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
       }
       const previous = controller.messages[message.previous_message_id];
       const facetId = previous?.action_facet_id;
-      const hostArtifact = buildOutlookArtifact({
-        facetId,
-        facetArgs: previous?.action_facet_args,
-        clientActionInfo: facetId
-          ? clientActionsByFacetId.get(facetId)
-          : undefined,
-        content: message.content,
-        messageId: id,
-        freshItemIdentity: freshMessageIds.has(id)
-          ? freshItemIdentityRef.current.get(id)!
-          : undefined,
-      });
-      if (!hostArtifact) continue;
+      const facetArgs = previous?.action_facet_args;
+      const clientActionInfo = facetId
+        ? clientActionsByFacetId.get(facetId)
+        : undefined;
+      const freshItemIdentity = freshMessageIds.has(id)
+        ? freshItemIdentityRef.current.get(id)!
+        : undefined;
+      const stamp = stampHostArtifact(
+        stampsRef.current.get(id),
+        message,
+        [facetId, facetArgs, clientActionInfo, freshItemIdentity],
+        () =>
+          buildOutlookArtifact({
+            facetId,
+            facetArgs,
+            clientActionInfo,
+            content: message.content,
+            messageId: id,
+            freshItemIdentity,
+          }),
+        withHostArtifact,
+      );
+      stamps.set(id, stamp);
+      if (stamp.message === message) continue;
       if (next === controller.messages) next = { ...controller.messages };
-      // `outlookArtifact` is the deprecated alias of `hostArtifact` — stamped
-      // with the same object for one release so kits reading the old field
-      // keep working; drop it together with the alias.
-      next[id] = { ...message, hostArtifact, outlookArtifact: hostArtifact };
+      next[id] = stamp.message;
     }
+    stampsRef.current = stamps;
     return next;
   }, [
     clientActionsByFacetId,
