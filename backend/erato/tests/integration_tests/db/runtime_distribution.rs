@@ -380,7 +380,7 @@ async fn translation_reload_replaces_cached_json_and_removes_deleted_locales(poo
 
 /// The admin panel's `erato.toml` row switches voice features on reload;
 /// deciding by voice only off, and a switch that cannot work keeps the
-/// previous switches.
+/// previous switches, except those the same save switches off.
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn voice_switches_follow_the_admin_panel_override(pool: Pool<Postgres>) {
     let app_state = app_state_with_encryption(pool).await;
@@ -417,9 +417,21 @@ async fn voice_switches_follow_the_admin_panel_override(pool: Pool<Postgres>) {
     assert!(!on.voice_decisions, "never switched on by an override");
     assert!(app_state.voice_switches().await.voice_commands);
 
-    let kept = set_override("[audio_read_aloud]\nenabled = true\n").await;
+    let kept = set_override(
+        "[approval_voice_commands]\nenabled = true\n[audio_read_aloud]\nenabled = true\n",
+    )
+    .await;
     assert_eq!(
         kept, on,
         "read aloud without a voice keeps the previous switches"
+    );
+
+    let off = set_override(
+        "[approval_voice_commands]\nenabled = false\n[audio_read_aloud]\nenabled = true\n",
+    )
+    .await;
+    assert!(
+        !off.voice_commands && !off.read_aloud,
+        "a refused switch-on does not hold back a switch-off in the same save"
     );
 }

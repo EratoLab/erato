@@ -1388,16 +1388,6 @@ pub mod axum {
         }
 
         let mut frontend_environment = frontend.environment.clone();
-        if frontend.inject_environment {
-            let switches = reloadable.read().await.voice_switches;
-            for (key, value) in
-                voice_switch_environment(frontend_registry.configured_voices, switches)
-            {
-                frontend_environment
-                    .additional_environment
-                    .insert(key.to_string(), value);
-            }
-        }
         let component_kits = frontend.component_kits.clone();
         let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
@@ -1501,6 +1491,14 @@ pub mod axum {
             headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
 
         if is_html && should_inject_environment {
+            let switches = reloadable.read().await.voice_switches;
+            for (key, value) in
+                voice_switch_environment(frontend_registry.configured_voices, switches)
+            {
+                frontend_environment
+                    .additional_environment
+                    .insert(key.to_string(), value);
+            }
             // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
@@ -1787,6 +1785,80 @@ mod tests {
             voice_switch_environment(voices, live).into_iter().collect();
         assert_eq!(spoken["SPEECH_ENABLED"], Value::Bool(true));
         assert_eq!(spoken["READ_ALOUD_ENABLED"], Value::Bool(true));
+    }
+
+    #[tokio::test]
+    async fn a_served_page_carries_the_switches_of_the_last_reload() {
+        use ::axum::{Extension, body::Body, http::Request};
+        use http_body_util::BodyExt;
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(
+            web.join("index.html"),
+            "<html><head></head><body></body></html>",
+        )
+        .unwrap();
+        std::fs::write(web.join("404.html"), "Not Found").unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web.display().to_string();
+        let distribution = Distribution::load(&config);
+        let registry = std::sync::Arc::new(build_frontend_registry(
+            &config,
+            &distribution,
+            &Default::default(),
+        ));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
+        let page = || async {
+            let response = serve_files_with_script(
+                Extension(registry.clone()),
+                Extension(DeploymentVersion(None)),
+                Extension(reloadable.clone()),
+                Request::builder()
+                    .uri("/index.html")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+            String::from_utf8(
+                response
+                    .into_body()
+                    .collect()
+                    .await
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec(),
+            )
+            .unwrap()
+        };
+        assert!(
+            page()
+                .await
+                .contains("window.APPROVAL_VOICE_COMMANDS_ENABLED = false;")
+        );
+
+        let switched = VoiceSwitches {
+            voice_commands: true,
+            voice_decisions: true,
+            ..VoiceSwitches::from_app_config(&config)
+        };
+        reloadable.write().await.voice_switches = switched;
+        let served = page().await;
+        assert!(
+            served.contains("window.APPROVAL_VOICE_COMMANDS_ENABLED = true;"),
+            "{served}"
+        );
+        assert!(
+            served.contains("window.APPROVAL_VOICE_DECISIONS_ENABLED = true;"),
+            "{served}"
+        );
     }
 
     #[test]

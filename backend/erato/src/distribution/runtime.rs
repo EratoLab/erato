@@ -340,8 +340,9 @@ fn load_teams_nudge(
     next
 }
 
-/// The voice switches from the layered sources, or the previous ones when
-/// they fail the checks a feature switched on must pass.
+/// The voice switches from the layered sources. When they fail the checks a
+/// feature switched on must pass, the previous ones, with what the sources
+/// switch off switched off all the same.
 fn load_voice_switches(
     app_state: &AppState,
     config_sources: &[ConfigSourceFile],
@@ -349,12 +350,12 @@ fn load_voice_switches(
 ) -> VoiceSwitches {
     let next = match VoiceSwitches::from_toml_sources(config_sources, &app_state.config) {
         Ok(next) => next,
-        Err(error) => {
+        Err(refused) => {
             tracing::error!(
-                %error,
-                "Failed to load the voice switches; keeping the previous switches"
+                error = %refused.error,
+                "Failed to load the voice switches; keeping the previous switches, except those the sources switch off"
             );
-            return previous;
+            refused.keep(previous)
         }
     };
     if next != previous {

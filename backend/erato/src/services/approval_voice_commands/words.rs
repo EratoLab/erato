@@ -854,21 +854,23 @@ impl CommandWordsByLanguage {
     ) -> Vec<String> {
         wait_lines.drop_lines_where(|language, line| {
             let words = self.for_language(language);
-            let card = super::corpus::asked_card();
             if super::phrase::match_phrase(line, words).is_some() {
                 return Some("it is a confirmation phrase".to_string());
             }
-            let input = super::VoiceCommandInput {
-                transcript: line,
-                language,
-                pieces: &card.pieces,
-                current_piece_id: Some(&card.current_piece_id),
-                question: None,
-            };
-            let meaning = super::classify_by_rules(&input, words)?.command.meaning;
-            meaning
-                .is_decision()
-                .then(|| format!("it sounds like a decision ({})", meaning.wire_name()))
+            super::corpus::asked_cards(language)
+                .into_iter()
+                .find_map(|card| {
+                    let input = super::VoiceCommandInput {
+                        transcript: line,
+                        language,
+                        pieces: &card.pieces,
+                        current_piece_id: Some(&card.current_piece_id),
+                        question: None,
+                    };
+                    let meaning = super::classify_by_rules(&input, words)?.command.meaning;
+                    meaning.is_decision().then_some(meaning)
+                })
+                .map(|meaning| format!("it sounds like a decision ({})", meaning.wire_name()))
         })
     }
 
@@ -1004,6 +1006,53 @@ mod tests {
         );
         assert_eq!(wait_lines.tools["de"].items, None);
         assert_eq!(dropped.len(), 4, "{dropped:#?}");
+    }
+
+    /// The lines of the `erato-wait-lines` configuration package.
+    #[test]
+    fn the_wait_lines_package_keeps_every_line() {
+        let mut wait_lines: erato_config::wait_lines::WaitLinesConfig =
+            serde_json::from_value(serde_json::json!({
+                "phrases": {
+                    "de": {
+                        "opener": ["Einen Moment.", "Alles klar, einen Moment.", "Moment, ich kümmere mich darum."],
+                        "opener_short": ["Moment.", "Okay, Moment."],
+                        "still": ["Ich bin noch dran.", "Ich bin noch dabei.", "Ich arbeite noch daran."],
+                        "long": [
+                            "Das dauert gerade etwas länger.",
+                            "Das braucht diesmal etwas länger. Ich bin weiter dran.",
+                            "Das dauert noch etwas, ich bin noch dabei."
+                        ]
+                    },
+                    "en": {
+                        "opener": ["One moment.", "Okay, one moment.", "Sure, I'm on it."],
+                        "opener_short": ["One moment.", "Okay."],
+                        "still": ["Still on it.", "I'm still working on it.", "Still working on this."],
+                        "long": [
+                            "This is taking a bit longer.",
+                            "This one's taking a little longer. Still on it.",
+                            "Bear with me, this is taking a while."
+                        ]
+                    }
+                },
+                "tools": {
+                    "de": {
+                        "search": "Ich suche nach {search}.",
+                        "items": "Ich sehe mir {table} an.",
+                        "list": "Ich sehe mir die {table} an."
+                    },
+                    "en": {
+                        "search": "Searching for {search}.",
+                        "items": "Looking at {table}.",
+                        "list": "Looking at the {table}."
+                    }
+                }
+            }))
+            .unwrap();
+        let before = wait_lines.clone();
+        let dropped = CommandWordsByLanguage::default().check_wait_lines(&mut wait_lines);
+        assert!(dropped.is_empty(), "{dropped:#?}");
+        assert_eq!(wait_lines, before);
     }
 
     #[test]

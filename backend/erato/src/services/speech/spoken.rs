@@ -92,19 +92,29 @@ pub fn speakable(markdown: &str, language: &SpeechLanguage) -> String {
 }
 
 /// Plain text as markdown that reads back as exactly that text: every ASCII
-/// punctuation mark escaped and the whitespace collapsed to single spaces, so
-/// no mark, table, list, heading or code block is parsed out of it.
+/// punctuation mark escaped, the other whitespace collapsed to single spaces,
+/// so no mark, table, list, heading or code block is parsed out of it. Each
+/// line is a paragraph of its own, so a line break still ends a sentence.
 pub fn plain_as_markdown(plain: &str) -> String {
     let mut escaped = String::with_capacity(plain.len() + 8);
-    for word in plain.split_whitespace() {
-        if !escaped.is_empty() {
-            escaped.push(' ');
+    for line in plain.lines() {
+        let mut words = line.split_whitespace().peekable();
+        if words.peek().is_none() {
+            continue;
         }
-        for c in word.chars() {
-            if c.is_ascii_punctuation() {
-                escaped.push('\\');
+        if !escaped.is_empty() {
+            escaped.push_str("\n\n");
+        }
+        for (index, word) in words.enumerate() {
+            if index > 0 {
+                escaped.push(' ');
             }
-            escaped.push(c);
+            for c in word.chars() {
+                if c.is_ascii_punctuation() {
+                    escaped.push('\\');
+                }
+                escaped.push(c);
+            }
         }
     }
     escaped
@@ -366,7 +376,7 @@ mod tests {
             ("Preis **50 € _netto", &["Preis", "50", "netto"]),
             ("[Entwurf", &["Entwurf"]),
             ("# 1. Punkt", &["1", "Punkt"]),
-            ("    eingerückt\n\n  Zeile", &["eingerückt Zeile"]),
+            ("    eingerückt\n\n  Zeile", &["eingerückt.", "Zeile"]),
         ] {
             let said = spoken(plain);
             for word in words {
@@ -379,6 +389,19 @@ mod tests {
             "{table:?}"
         );
         assert!(super::speakable("~~alt~~ neu", &language).trim() == "neu.");
+    }
+
+    #[test]
+    fn plain_text_keeps_its_line_breaks_and_readings() {
+        let language = super::SpeechLanguage::new("de");
+        let spoken = |plain: &str| super::speakable(&super::plain_as_markdown(plain), &language);
+        let email = spoken("Hallo Max,\n\nder Bericht ist fertig\nviele Grüße\nDaniel");
+        assert!(
+            email.contains("fertig.") && email.contains("Grüße."),
+            "{email:?}"
+        );
+        let due = "Am 21.11.2026 um 14:30 Uhr sind 1.250,00 € fällig.";
+        assert_eq!(spoken(due), super::speakable(due, &language));
     }
 
     use super::*;

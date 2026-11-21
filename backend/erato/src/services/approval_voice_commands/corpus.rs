@@ -3,7 +3,7 @@
 
 use super::{CardPiece, VoiceMeaning};
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -52,28 +52,45 @@ pub(super) fn attacks() -> Vec<(&'static str, &'static str)> {
         .collect()
 }
 
-/// Every phrasing the startup check reruns, as (language, words), and the
-/// cards it says them on: before and after each card asked.
+/// One phrasing the startup check reruns.
+pub(super) struct Phrasing {
+    pub language: String,
+    pub said: String,
+    /// What the sentence sets say it means, on any card; empty for an attack
+    /// phrasing no sentence labels.
+    pub meant: Vec<VoiceMeaning>,
+}
+
+/// Every phrasing the startup check reruns, and the cards it says them on:
+/// before and after each card asked.
 pub(super) struct Corpus {
-    pub phrasings: Vec<(String, String)>,
+    pub phrasings: Vec<Phrasing>,
     pub cards: Vec<Card>,
 }
 
 pub(super) static CORPUS: LazyLock<Corpus> = LazyLock::new(|| {
     let set = sentence_set();
     let heldout = heldout_set();
-    let mut phrasings: Vec<(String, String)> = attacks()
+    let mut meant: BTreeMap<(String, String), Vec<VoiceMeaning>> = attacks()
         .into_iter()
-        .map(|(language, said)| (language.to_string(), said.to_string()))
+        .map(|(language, said)| ((language.to_string(), said.to_string()), Vec::new()))
         .collect();
-    phrasings.extend(
-        set.sentences
-            .iter()
-            .chain(&heldout.sentences)
-            .map(|sentence| (sentence.language.clone(), sentence.text.clone())),
-    );
-    phrasings.sort();
-    phrasings.dedup();
+    for sentence in set.sentences.iter().chain(&heldout.sentences) {
+        let meanings = meant
+            .entry((sentence.language.clone(), sentence.text.clone()))
+            .or_default();
+        if !meanings.contains(&sentence.meaning) {
+            meanings.push(sentence.meaning);
+        }
+    }
+    let phrasings = meant
+        .into_iter()
+        .map(|((language, said), meant)| Phrasing {
+            language,
+            said,
+            meant,
+        })
+        .collect();
     let cards = ["de", "de-asked", "en", "en-asked"]
         .into_iter()
         .map(|card| set.cards[card].clone())
@@ -81,7 +98,12 @@ pub(super) static CORPUS: LazyLock<Corpus> = LazyLock::new(|| {
     Corpus { phrasings, cards }
 });
 
-/// The German example card once it has asked for a decision.
-pub(super) fn asked_card() -> &'static Card {
-    &CORPUS.cards[1]
+/// The example cards of a language once they have asked for a decision: the
+/// German or English one, or both for any other language.
+pub(super) fn asked_cards(language: &str) -> Vec<&'static Card> {
+    match language.split(['-', '_']).next().unwrap_or(language) {
+        "de" => vec![&CORPUS.cards[1]],
+        "en" => vec![&CORPUS.cards[3]],
+        _ => vec![&CORPUS.cards[1], &CORPUS.cards[3]],
+    }
 }
