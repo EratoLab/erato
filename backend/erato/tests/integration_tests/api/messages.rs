@@ -9082,9 +9082,9 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
     let events = parse_sse_events(&response);
     assert_eq!(extract_full_text(&events), "ROUTED");
 
-    let mut offers = recorded_tool_offers(&recorder.bodies());
+    // In the servers' sorted order, as after every restart.
+    let offers = recorded_tool_offers(&recorder.bodies());
     assert_eq!(offers.len(), 1, "{offers:?}");
-    offers[0].sort();
     assert_eq!(
         offers[0],
         vec![
@@ -9109,23 +9109,18 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
     );
 }
 
-/// A call the model makes by a qualified name parks under the server's own
-/// tool name, so the card and any standing decision name the tool as the
-/// server does; once approved, it runs on that server, and the stored call
-/// keeps the name the model used.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `sse-streaming`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
+const QUALIFIED_PROBE: &str = "mock_mcp_approval_copy__publish_approval_probe";
+const PROBE_PUBLISHED: &str = "approval probe published";
+
+/// A turn whose model calls the approval probe of the second of two servers
+/// that serve it, by its qualified name, and parks on the card; and the
+/// approval id. Once the call's result is in, the model answers
+/// `QUALIFIED-APPROVED`.
+async fn park_a_qualified_call(
     pool: Pool<Postgres>,
-) {
-    const PUBLISHED: &str = "approval probe published";
-    const QUALIFIED: &str = "mock_mcp_approval_copy__publish_approval_probe";
+) -> (erato::state::AppState, TestServer, Uuid, String) {
+    const PUBLISHED: &str = PROBE_PUBLISHED;
+    const QUALIFIED: &str = QUALIFIED_PROBE;
     let mut mocks = MockSet::new();
     mocks.mock(|when, then| {
         when.post()
@@ -9177,8 +9172,22 @@ async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
     let approvals = approval_request["approvals"].as_array().unwrap();
     assert_eq!(approvals.len(), 1);
     assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    assert_eq!(approvals[0]["called_as"], QUALIFIED);
+    assert_eq!(
+        approvals[0]["display"]["tool_name"],
+        "publish_approval_probe"
+    );
     let approval_id = approvals[0]["approval_id"].as_str().unwrap().to_string();
+    (app_state, server, assistant_message_id, approval_id)
+}
 
+/// Approve the parked qualified call and return its stored row.
+async fn approve_the_qualified_call(
+    app_state: &erato::state::AppState,
+    server: &TestServer,
+    assistant_message_id: Uuid,
+    approval_id: &str,
+) -> Value {
     let continued = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -9193,16 +9202,208 @@ async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
         "QUALIFIED-APPROVED"
     );
 
-    let parts = stored_parts(&app_state, assistant_message_id).await;
+    let parts = stored_parts(app_state, assistant_message_id).await;
     let tool_use = parts
         .iter()
         .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == approval_id)
-        .expect("the approved call is stored");
-    assert_eq!(tool_use["tool_name"], QUALIFIED);
+        .expect("the approved call is stored")
+        .clone();
     assert_eq!(tool_use["status"], "success", "{tool_use}");
     assert!(
-        tool_use["output"].to_string().contains(PUBLISHED),
+        tool_use["output"].to_string().contains(PROBE_PUBLISHED),
         "{tool_use}"
+    );
+    tool_use
+}
+
+/// A call the model makes by a qualified name parks under the server's own
+/// tool name, so the card and any standing decision name the tool as the
+/// server does; once approved, it runs on that server, and the stored call
+/// keeps the name the model used, with the tool's own name for the row to
+/// show.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_qualified_call_parks_under_the_tools_own_name_and_runs_once_approved(
+    pool: Pool<Postgres>,
+) {
+    let (app_state, server, assistant_message_id, approval_id) = park_a_qualified_call(pool).await;
+    let tool_use =
+        approve_the_qualified_call(&app_state, &server, assistant_message_id, &approval_id).await;
+    assert_eq!(tool_use["tool_name"], QUALIFIED_PROBE);
+    assert_eq!(tool_use["display"]["tool_name"], "publish_approval_probe");
+}
+
+/// The other server that offered the probe is gone by the time the user
+/// approves, so the rebuilt tool set offers the probe under its own name: the
+/// continued call is still stored, and replayed to the model, under the name
+/// the model called.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_continued_call_keeps_the_name_the_model_called_once_the_names_no_longer_collide(
+    pool: Pool<Postgres>,
+) {
+    let (app_state, server, assistant_message_id, approval_id) = park_a_qualified_call(pool).await;
+    {
+        let mut reloadable = app_state.reloadable.write().await;
+        assert!(
+            reloadable
+                .mcp
+                .config
+                .mcp_servers
+                .remove("mock_mcp_approval")
+                .is_some()
+        );
+        let config = reloadable.mcp.config.clone();
+        reloadable.mcp.servers.reconfigure(&config).await;
+    }
+    let tool_use =
+        approve_the_qualified_call(&app_state, &server, assistant_message_id, &approval_id).await;
+    assert_eq!(tool_use["tool_name"], QUALIFIED_PROBE);
+}
+
+/// An MCP tool named like Erato's own `wait`: with waiting on, both are
+/// offered, Erato's as `wait` and the server's as `<server>__wait`, and each
+/// call reaches its own handler. The server's call is shown, live and stored,
+/// under the tool's own name.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_mcp_tool_named_like_the_wait_tool_is_offered_beside_it(pool: Pool<Postgres>) {
+    let answer = mock_mcp_server::MCP_WAIT_ANSWER;
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[answer], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["BOTH-WAITED"]));
+    });
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[answer]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[
+                    ("call_erato_wait", "wait", json!({ "seconds": 1 })),
+                    ("call_queue_wait", "queue__wait", json!({})),
+                ]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "queue".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/builtin-names",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-queue".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["queue".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.enable_wait = true;
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "wait for the queue" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert_eq!(extract_full_text(&events), "BOTH-WAITED");
+
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 1, "{offers:?}");
+    for name in ["queue__wait", "wait"] {
+        assert_eq!(
+            offers[0].iter().filter(|offered| *offered == name).count(),
+            1,
+            "{name} is offered once: {offers:?}"
+        );
+    }
+
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let parts = stored_parts(&app_state, assistant_message_id).await;
+    // Erato keeps the model's call id after a prefix of its own.
+    let is_call = |part: &Value, call_id: &str| {
+        part["tool_call_id"]
+            .as_str()
+            .is_some_and(|id| id.ends_with(&format!(":{call_id}")))
+    };
+    let stored = |call_id: &str| {
+        parts
+            .iter()
+            .find(|part| part["content_type"] == "tool_use" && is_call(part, call_id))
+            .unwrap_or_else(|| panic!("{call_id} is stored: {parts:?}"))
+            .clone()
+    };
+    let erato_wait = stored("call_erato_wait");
+    assert_eq!(erato_wait["tool_name"], "wait");
+    assert_eq!(erato_wait["status"], "success", "{erato_wait}");
+    assert!(
+        !erato_wait["output"].to_string().contains(answer),
+        "{erato_wait}"
+    );
+    let queue_wait = stored("call_queue_wait");
+    assert_eq!(queue_wait["tool_name"], "queue__wait");
+    assert_eq!(queue_wait["status"], "success", "{queue_wait}");
+    assert!(
+        queue_wait["output"].to_string().contains(answer),
+        "{queue_wait}"
+    );
+    assert_eq!(queue_wait["display"]["tool_name"], "wait");
+
+    // Every live update of the server's call, from its first, carries the
+    // tool's own name to show.
+    let updates: Vec<Value> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| {
+            json["message_type"] == "tool_call_update" && is_call(json, "call_queue_wait")
+        })
+        .collect();
+    assert!(!updates.is_empty());
+    assert!(
+        updates
+            .iter()
+            .all(|update| update["display"]["tool_name"] == "wait"),
+        "{updates:?}"
     );
 }
 

@@ -656,6 +656,7 @@ fn ask_for_tool_call(
         approvals: vec![ApprovalItem {
             approval_id: tool_call.call_id.clone(),
             tool_call_id: tool_call.call_id.clone(),
+            called_as: (display_name.text != tool_call.fn_name).then(|| tool_call.fn_name.clone()),
             tool_name: display_name.text,
             display,
             input: tool_call.fn_arguments.clone(),
@@ -6198,6 +6199,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
         approval_id: child.tool_call.call_id.clone(),
         tool_call_id: child.tool_call.call_id.clone(),
         tool_name: child.tool_call.fn_name.clone(),
+        called_as: None,
         display: None,
         input: child.tool_call.fn_arguments.clone(),
         child: Some(child_ref),
@@ -6278,6 +6280,7 @@ fn task_plan_approval_part(
             approval_id: format!("plan:{batch_id}:{position}"),
             tool_call_id: call.call_id.clone(),
             tool_name: call.fn_name.clone(),
+            called_as: None,
             display: None,
             input: call.fn_arguments.clone(),
             child: None,
@@ -7870,40 +7873,29 @@ async fn stream_generate_chat_completion<'a>(
                             managed.approval_argument.as_deref(),
                         )
                         .await;
-                        let display = crate::services::tool_display::mcp_tool_call_display_from(
-                            &mcp.config,
-                            &managed.server_id,
-                            &managed.tool,
-                            managed.destructive_hint_source,
-                            &unfinished_tool_call.fn_arguments,
-                            managed.approval_argument.as_deref(),
-                            &label_mapping.mapping,
-                            &tool_result_context,
-                        );
+                        let display = crate::models::message::ToolDisplayMetadata {
+                            tool_name: crate::services::tool_display::own_tool_name(managed),
+                            ..crate::services::tool_display::mcp_tool_call_display_from(
+                                &mcp.config,
+                                &managed.server_id,
+                                &managed.tool,
+                                managed.destructive_hint_source,
+                                &unfinished_tool_call.fn_arguments,
+                                managed.approval_argument.as_deref(),
+                                &label_mapping.mapping,
+                                &tool_result_context,
+                            )
+                        };
                         (Some(display), label_mapping.unlabelled)
                     }
                     None => (None, None),
                 };
             // Emit event for tool call proposed
             {
-                let unfinished_tool_call = unfinished_tool_call.clone();
                 let tool_call_start_time = now_timestamp();
                 tool_call_started_at
                     .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
-                if was_preparing {
-                    send_tool_generation_update::<GenerationStreamingMessage>(
-                        assistant_message_id,
-                        tool_index,
-                        &unfinished_tool_call,
-                        mcp_display.as_ref().map(tool_row_display),
-                        ToolCallStatus::InProgress,
-                        None,
-                        None,
-                        streaming_task,
-                        &tx,
-                    )
-                    .await?;
-                } else {
+                if !was_preparing {
                     let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
                         message_id: assistant_message_id,
                         content_index: tool_index,
@@ -7918,9 +7910,9 @@ async fn stream_generate_chat_completion<'a>(
                             StreamingEvent::ToolCallProposed {
                                 message_id: assistant_message_id,
                                 content_index: tool_index,
-                                tool_call_id: unfinished_tool_call.call_id,
-                                tool_name: unfinished_tool_call.fn_name,
-                                input: Some(unfinished_tool_call.fn_arguments),
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
                             },
                             "broadcast proposed tool call",
                         )
@@ -7928,6 +7920,26 @@ async fn stream_generate_chat_completion<'a>(
                     }
                     let message: GenerationStreamingMessage = proposed_call.into();
                     send_generation_event(&message, tx.clone()).await?;
+                }
+                // A proposed call shows the name it was called by until its
+                // display comes, so a call by a qualified name gets it at once.
+                if was_preparing
+                    || mcp_display
+                        .as_ref()
+                        .is_some_and(|display| display.tool_name.is_some())
+                {
+                    send_tool_generation_update::<GenerationStreamingMessage>(
+                        assistant_message_id,
+                        tool_index,
+                        &unfinished_tool_call,
+                        mcp_display.as_ref().map(tool_row_display),
+                        ToolCallStatus::InProgress,
+                        None,
+                        None,
+                        streaming_task,
+                        &tx,
+                    )
+                    .await?;
                 }
             }
 
@@ -9757,19 +9769,12 @@ async fn stream_generate_chat_completion<'a>(
                     return Err(error);
                 }
             };
-            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall {
-                server_id: managed_tool.server_id.clone(),
-                tool_call: unfinished_tool_call.clone(),
-                tool: managed_tool.tool.clone(),
-                // A call reaches this dispatch only when the gate let it
-                // through without asking, so no user decision exists for it.
-                approval_argument: managed_tool.approval_argument.clone().map(|name| {
-                    crate::services::mcp_manager::ApprovalArgument {
-                        name,
-                        user_approved: false,
-                    }
-                }),
-            };
+            // A call reaches this dispatch only when the gate let it through
+            // without asking, so no user decision exists for it.
+            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall::ungated(
+                &managed_tool,
+                unfinished_tool_call.clone(),
+            );
             let row_display = tool_row_display(&display);
 
             // MCP approval is a durable stop, not an in-memory park. Persist
@@ -11534,6 +11539,14 @@ async fn stream_generate_chat_completion<'a>(
                                     .into();
                                 send_generation_event(&message, tx.clone()).await?;
                             }
+                            let preparing_display = available_mcp_tools_by_name
+                                .get(chunk.tool_call.fn_name.as_str())
+                                .and_then(|tool| {
+                                    crate::services::tool_display::preparing_call_display(
+                                        &mcp.config,
+                                        tool,
+                                    )
+                                });
                             let preview_call = genai::chat::ToolCall {
                                 fn_arguments: progress.preview,
                                 ..chunk.tool_call
@@ -11542,7 +11555,7 @@ async fn stream_generate_chat_completion<'a>(
                                 assistant_message_id,
                                 progress.index,
                                 &preview_call,
-                                None,
+                                preparing_display,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
                                 None,
@@ -13067,7 +13080,11 @@ async fn resolve_generation_mcp_tools(
     crate::services::mcp_tool_names::warn_about(
         &crate::services::mcp_tool_names::assign_model_names(
             &mut generation_mcp_tools,
-            &crate::services::mcp_tool_names::builtin_tool_names(),
+            &crate::services::mcp_tool_names::offered_builtin_tool_names(
+                &app_state.config,
+                &mcp.config,
+                crate::services::scheduled_items::teams_channel_available(app_state),
+            ),
         ),
     );
     let mcp_claimed_names: HashSet<String> = generation_mcp_tools
@@ -14218,7 +14235,10 @@ mod tests {
 
         let plain = Tool::new("publish", "publish", Map::new());
         match gate_call(&restrictive, "server", &plain, &call("publish"), None) {
-            ToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.tool_name, "publish");
+                assert_eq!(request.approvals[0].called_as, None);
+            }
             other => panic!("expected an approval request, got {other:?}"),
         }
 
@@ -14263,6 +14283,12 @@ mod tests {
                 assert_eq!(request.mcp_server_id, "wiki_eu");
                 assert_eq!(request.approvals[0].tool_name, "publish");
                 assert_eq!(request.approvals[0].tool_call_id, "call-1");
+                // The continuation stores and replays the call under this.
+                assert_eq!(
+                    request.approvals[0].called_as.as_deref(),
+                    Some("wiki_eu__publish")
+                );
+                assert_eq!(request.approvals[0].called_name(), "wiki_eu__publish");
             }
             other => panic!("expected an approval request, got {other:?}"),
         }
@@ -14404,6 +14430,7 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "publish".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child: None,
@@ -14774,6 +14801,7 @@ mod tests {
                 description: Some("Friday, 13 Nov, 10:00".into()),
                 description_truncated: false,
                 server_name: None,
+                tool_name: None,
                 label: None,
                 read_only: false,
                 closed_world: false,
@@ -15418,6 +15446,7 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "delegate_task".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child,
@@ -23696,11 +23725,9 @@ pub(crate) async fn run_continuation(
             .find(|tool| tool.server_id == server_id && tool.tool.name == item.tool_name)
             .cloned();
         // The card names the server's own tool; the row and the model's replay
-        // keep the name the model called it by, qualified or not.
-        let call_name = approved_tool.as_ref().map_or_else(
-            || item.tool_name.clone(),
-            |tool| tool.model_name().to_string(),
-        );
+        // keep the name the model called it by, qualified or not, even when
+        // the tools that share the name changed since the turn parked.
+        let call_name = item.called_name().to_string();
         // A grant is only written for a call that actually runs: "always allow"
         // on a stale card must not overwrite a denial stored in the meantime.
         let always_allow_setting =

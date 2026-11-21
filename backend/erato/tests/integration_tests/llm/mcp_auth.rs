@@ -169,19 +169,18 @@ async fn test_mcp_auth_variants_execute_expected_tools(pool: Pool<Postgres>) {
         if server_id.starts_with("auth-fixed") {
             assert_eq!(model_name, format!("{server_id}__{expected_tool}"));
         }
+        let offered = erato::services::mcp_tool_names::by_model_name(offered);
 
-        let managed_tool_call = mcp_servers
-            .convert_tool_call_to_managed_tool_call(
-                chat_id,
+        let managed_tool_call =
+            erato::services::mcp_manager::convert_tool_call_to_managed_tool_call(
+                &offered,
                 GenaiToolCall {
                     call_id: "call_123".to_string(),
                     fn_name: model_name,
                     fn_arguments: json!({}),
                     thought_signatures: None,
                 },
-                &auth_context,
             )
-            .await
             .expect("Failed to resolve managed tool call");
         assert_eq!(managed_tool_call.tool.name, tool.tool.name);
         assert_eq!(managed_tool_call.server_id, server_id);

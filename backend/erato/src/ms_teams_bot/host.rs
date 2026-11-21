@@ -927,19 +927,27 @@ fn translate(
                 Ok(StreamingEvent::ToolCallUpdate {
                     tool_call_id,
                     tool_name,
+                    display,
                     status,
                     progress_message,
                     progress: completed,
                     total,
                     ..
-                }) => GenerationUpdate::Status(progress.tool(
-                    tool_call_id,
-                    &tool_name,
-                    status,
-                    progress_message.as_deref(),
-                    completed,
-                    total,
-                )),
+                }) => GenerationUpdate::Status(
+                    progress.tool(
+                        tool_call_id,
+                        // The tool's own name where the model called it by a
+                        // name qualified with its server.
+                        display
+                            .as_ref()
+                            .and_then(|display| display.tool_name.as_deref())
+                            .unwrap_or(&tool_name),
+                        status,
+                        progress_message.as_deref(),
+                        completed,
+                        total,
+                    ),
+                ),
                 Ok(StreamingEvent::ClientToolCall { .. }) => GenerationUpdate::Status(
                     Msg::NeedsAppProgress.fill(lang, &[("app", &app_name)]),
                 ),
@@ -1644,6 +1652,7 @@ mod tests {
             description: Some("Description".into()),
             description_truncated: true,
             server_name: None,
+            tool_name: None,
             label: None,
             read_only: false,
             closed_world: false,
@@ -1695,6 +1704,7 @@ mod tests {
                 description: None,
                 description_truncated: false,
                 server_name: Some("Team Wiki".into()),
+                tool_name: None,
                 label: None,
                 read_only: false,
                 closed_world: false,
@@ -1770,6 +1780,7 @@ mod tests {
                 approval_id: "task-a".to_string(),
                 tool_call_id: "task-a".to_string(),
                 tool_name: "delegate_task".to_string(),
+                called_as: None,
                 display: None,
                 input: json!({"task": "Publish the page"}),
                 child: Some(crate::models::message::ChildApprovalRef {

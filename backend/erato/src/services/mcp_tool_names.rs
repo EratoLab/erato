@@ -8,6 +8,7 @@
 //! name depends only on the server id, the tool name and which names collide,
 //! never on the order the servers answered in.
 
+use crate::config::{AppConfig, McpRuntimeConfig};
 use crate::services::mcp_session_manager::ManagedTool;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -23,8 +24,8 @@ pub const MAX_NAME_LEN: usize = 64;
 /// shortened, cleaned or told apart from another name.
 const DIGEST_HEX_LEN: usize = 8;
 
-/// The names Erato offers its own tools under. An MCP tool with one of these
-/// names is offered under its qualified name, so both stay callable.
+/// The names Erato offers its own tools under, whether or not this deployment
+/// offers them.
 pub fn builtin_tool_names() -> Vec<&'static str> {
     use crate::services::scheduled_items::chat_tools;
     let mut names = vec![
@@ -37,6 +38,63 @@ pub fn builtin_tool_names() -> Vec<&'static str> {
     ];
     names.extend(chat_tools::TOOL_NAMES);
     names
+}
+
+/// The names of Erato's own tools this deployment can offer. An MCP tool with
+/// one of these names is offered under its qualified name, so both stay
+/// callable; a tool Erato never offers here leaves its name to the MCP tool.
+/// Read from the configuration alone, never from the turn, so a tool keeps
+/// its name from turn to turn. `reminders` says whether this deployment
+/// delivers reminders (see `scheduled_items::teams_channel_available`).
+pub fn offered_builtin_tool_names(
+    config: &AppConfig,
+    mcp: &McpRuntimeConfig,
+    reminders: bool,
+) -> Vec<&'static str> {
+    use crate::services::scheduled_items::chat_tools;
+    let client_actions = config
+        .action_facets
+        .facets
+        .values()
+        .any(|facet| !facet.client_actions.is_empty());
+    let wait = mcp.mcp_servers_global.enable_wait
+        || mcp
+            .mcp_servers
+            .values()
+            .any(|server| !server.wait_tools.is_empty());
+    let embedded_images = match &config.chat_providers {
+        Some(providers) => providers
+            .providers
+            .keys()
+            .any(|provider_id| config.embedded_image_retrieval_enabled(provider_id)),
+        None => config
+            .chat_provider
+            .as_ref()
+            .is_some_and(|provider| provider.enable_embedded_image_retrieval_tool == Some(true)),
+    };
+    let offered = [
+        (
+            erato_config::config::CLIENT_ACTION_TOOL_NAME,
+            client_actions,
+        ),
+        // Offered for any assistant a user mentions.
+        (erato_config::config::DELEGATE_TO_ASSISTANT_TOOL_NAME, true),
+        (
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            config.delegation.tasks.enabled,
+        ),
+        (crate::services::mcp_wait::WAIT_TOOL_NAME, wait),
+        (
+            crate::services::file_retrieval::TOOL_NAME,
+            config.file_context.retrieve_file_contents_enabled,
+        ),
+        (crate::services::embedded_images::TOOL_NAME, embedded_images),
+    ];
+    offered
+        .into_iter()
+        .filter_map(|(name, offered)| offered.then_some(name))
+        .chain(chat_tools::TOOL_NAMES.into_iter().filter(|_| reminders))
+        .collect()
 }
 
 /// A bare tool name that more than one server, or a server and Erato itself,
@@ -347,6 +405,67 @@ mod tests {
         );
     }
 
+    /// Only the tools a deployment can offer take their names from MCP tools:
+    /// with waiting and reminders off, an MCP `wait` or `list_reminders`
+    /// keeps its name.
+    #[test]
+    fn only_builtins_the_deployment_offers_take_a_name() {
+        let mut config = AppConfig::default();
+        config.file_context.retrieve_file_contents_enabled = false;
+        let mut mcp = McpRuntimeConfig::default();
+        let offered = |config: &AppConfig, mcp: &McpRuntimeConfig, reminders| {
+            let mut names = offered_builtin_tool_names(config, mcp, reminders);
+            names.sort_unstable();
+            names
+        };
+        assert_eq!(
+            offered(&config, &mcp, false),
+            [erato_config::config::DELEGATE_TO_ASSISTANT_TOOL_NAME]
+        );
+        let mut tools = vec![
+            tool("todo", crate::services::mcp_wait::WAIT_TOOL_NAME),
+            tool("todo", "list_reminders"),
+        ];
+        assert!(assign_model_names(&mut tools, &offered(&config, &mcp, false)).is_empty());
+        assert_eq!(
+            model_names(&tools),
+            [
+                ("todo", "wait", "wait"),
+                ("todo", "list_reminders", "list_reminders")
+            ]
+        );
+
+        mcp.mcp_servers_global.enable_wait = true;
+        assert!(offered(&config, &mcp, false).contains(&crate::services::mcp_wait::WAIT_TOOL_NAME));
+        mcp.mcp_servers_global.enable_wait = false;
+        let waits = serde_json::from_value(serde_json::json!({
+            "transport_type": "streamable_http",
+            "url": "http://jobs.example.test/mcp",
+            "wait_tools": ["poll_*"],
+        }))
+        .unwrap();
+        mcp.mcp_servers.insert("jobs".into(), waits);
+        assert!(offered(&config, &mcp, false).contains(&crate::services::mcp_wait::WAIT_TOOL_NAME));
+
+        assert!(offered(&config, &mcp, true).contains(&"list_reminders"));
+        config.delegation.tasks.enabled = true;
+        config.file_context.retrieve_file_contents_enabled = true;
+        let names = offered(&config, &mcp, true);
+        assert!(names.contains(&erato_config::config::DELEGATE_TASK_TOOL_NAME));
+        assert!(names.contains(&crate::services::file_retrieval::TOOL_NAME));
+        assert!(!names.contains(&erato_config::config::CLIENT_ACTION_TOOL_NAME));
+        assert!(names.iter().all(|name| builtin_tool_names().contains(name)));
+
+        assign_model_names(&mut tools, &names);
+        assert_eq!(
+            model_names(&tools),
+            [
+                ("todo", "wait", "todo__wait"),
+                ("todo", "list_reminders", "todo__list_reminders")
+            ]
+        );
+    }
+
     #[test]
     fn a_qualified_name_never_takes_a_name_that_stays() {
         // `a__search` is the qualified name of `a`'s `search`, and also a bare
@@ -461,13 +580,10 @@ mod tests {
         assert_eq!(offered, ["crm_eu__search", "crm_us__search", "get_record"]);
     }
 
-    /// Two servers with the same tools: each call reaches the server its
-    /// qualified name names, and the server is asked for its own tool name.
-    #[tokio::test]
-    async fn a_qualified_call_reaches_its_own_server_under_the_bare_name() {
-        use crate::services::mcp_manager::{McpRequestAuthContext, McpServers};
-        use serde_json::{Value, json};
-
+    /// The mock MCP server in process, recording each `tools/call` as its path
+    /// and the tool name it was asked for.
+    async fn serve_mock() -> (String, Arc<Mutex<Vec<String>>>, tokio::task::JoinHandle<()>) {
+        use serde_json::Value;
         let calls = Arc::new(Mutex::new(Vec::<String>::new()));
         let seen = calls.clone();
         let app = mock_mcp_server::app().layer(axum::middleware::from_fn(
@@ -492,18 +608,43 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let mock = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (url, calls, mock)
+    }
 
-        // Both serve `list_files` and `read_file`; only the second one fails.
+    /// Servers at the mock's `paths`, configured in the order given.
+    fn mock_servers(
+        url: &str,
+        servers: &[(&str, &str)],
+    ) -> crate::services::mcp_manager::McpServers {
         let mut config = crate::config::AppConfig::default();
-        for (server_id, path) in [("files", "/mcp/file"), ("broken_files", "/mcp/error")] {
-            let server = serde_json::from_value(json!({
+        for (server_id, path) in servers {
+            let server = serde_json::from_value(serde_json::json!({
                 "transport_type": "streamable_http",
                 "url": format!("{url}{path}"),
             }))
             .unwrap();
             config.mcp_servers.insert(server_id.to_string(), server);
         }
-        let servers = McpServers::new(&config);
+        crate::services::mcp_manager::McpServers::new(&config)
+    }
+
+    /// Two servers with the same tools: each call, routed through the map the
+    /// stream dispatches by, reaches the server its qualified name names, and
+    /// the server is asked for its own tool name.
+    #[tokio::test]
+    async fn a_qualified_call_reaches_its_own_server_under_the_bare_name() {
+        use crate::services::mcp_manager::{
+            McpRequestAuthContext, convert_mcp_tools_to_genai_tools,
+            convert_tool_call_to_managed_tool_call,
+        };
+        use serde_json::json;
+
+        let (url, calls, mock) = serve_mock().await;
+        // Both serve `list_files` and `read_file`; only the second one fails.
+        let servers = mock_servers(
+            &url,
+            &[("files", "/mcp/file"), ("broken_files", "/mcp/error")],
+        );
         let auth = McpRequestAuthContext::default();
         let chat = sea_orm::prelude::Uuid::new_v4();
 
@@ -516,14 +657,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["list_files", "read_file"]
         );
-        let mut offered: Vec<String> =
-            crate::services::mcp_manager::convert_mcp_tools_to_genai_tools(tools, false)
-                .iter()
-                .map(|tool| tool.name.to_string())
-                .collect();
-        offered.sort();
+        // The same named set is offered and dispatched by.
+        let offered_to_model: Vec<String> = convert_mcp_tools_to_genai_tools(tools.clone(), false)
+            .iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
         assert_eq!(
-            offered,
+            offered_to_model,
             [
                 "broken_files__list_files",
                 "broken_files__read_file",
@@ -531,6 +671,10 @@ mod tests {
                 "files__read_file"
             ]
         );
+        let offered = by_model_name(tools);
+        let mut keys: Vec<&str> = offered.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, offered_to_model);
 
         let call = |name: &str| genai::chat::ToolCall {
             call_id: format!("call-{name}"),
@@ -538,10 +682,8 @@ mod tests {
             fn_arguments: json!({"path": "docs/readme.txt"}),
             thought_signatures: None,
         };
-        let read = servers
-            .convert_tool_call_to_managed_tool_call(chat, call("files__read_file"), &auth)
-            .await
-            .unwrap();
+        let read =
+            convert_tool_call_to_managed_tool_call(&offered, call("files__read_file")).unwrap();
         assert_eq!(read.server_id, "files");
         let result = servers.call_tool(chat, read, &auth).await.unwrap();
         assert!(
@@ -549,10 +691,9 @@ mod tests {
             "{result:?}"
         );
 
-        let broken = servers
-            .convert_tool_call_to_managed_tool_call(chat, call("broken_files__read_file"), &auth)
-            .await
-            .unwrap();
+        let broken =
+            convert_tool_call_to_managed_tool_call(&offered, call("broken_files__read_file"))
+                .unwrap();
         assert_eq!(broken.server_id, "broken_files");
         let outcome = match servers.call_tool(chat, broken, &auth).await {
             Ok(result) => format!("{result:?}"),
@@ -561,16 +702,52 @@ mod tests {
         assert!(outcome.contains("Simulated read_file error"), "{outcome}");
 
         assert!(
-            servers
-                .convert_tool_call_to_managed_tool_call(chat, call("read_file"), &auth)
-                .await
-                .is_err(),
+            convert_tool_call_to_managed_tool_call(&offered, call("read_file")).is_err(),
             "the bare name is no longer offered, so it routes nowhere"
         );
         assert_eq!(
             *calls.lock().unwrap(),
             ["/mcp/file read_file", "/mcp/error read_file"]
         );
+        mock.abort();
+    }
+
+    /// Discovery visits the servers in sorted order, so the tools reach the
+    /// model in the same order whichever order the configuration map holds
+    /// them in, and so after a restart.
+    #[tokio::test]
+    async fn tools_reach_the_model_in_the_same_order_whatever_the_configuration_order() {
+        use crate::services::mcp_manager::{
+            McpRequestAuthContext, convert_mcp_tools_to_genai_tools,
+        };
+        let (url, _calls, mock) = serve_mock().await;
+        let ids = [
+            "files_f", "files_b", "files_d", "files_a", "files_e", "files_c",
+        ];
+        let mut offers = Vec::new();
+        for order in [ids.to_vec(), ids.iter().rev().copied().collect()] {
+            let servers: Vec<(&str, &str)> = order.iter().map(|id| (*id, "/mcp/file")).collect();
+            let servers = mock_servers(&url, &servers);
+            let mut tools = servers
+                .list_tools(
+                    sea_orm::prelude::Uuid::new_v4(),
+                    &McpRequestAuthContext::default(),
+                )
+                .await
+                .unwrap();
+            assign_model_names(&mut tools, &[]);
+            offers.push(
+                convert_mcp_tools_to_genai_tools(tools, false)
+                    .iter()
+                    .map(|tool| tool.name.to_string())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        let mut sorted = offers[0].clone();
+        sorted.sort();
+        assert_eq!(offers[0].len(), 12);
+        assert_eq!(offers[0], sorted, "servers in sorted order");
+        assert_eq!(offers[0], offers[1]);
         mock.abort();
     }
 
