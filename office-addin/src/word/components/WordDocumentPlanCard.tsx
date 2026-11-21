@@ -20,6 +20,7 @@ import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
   wordHistoryProposal,
+  wordPlanNotInProposal,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -181,6 +182,10 @@ export function WordDocumentPlanCard({
         ? wordHistoryProposal(lineage, content)
         : undefined,
     [parsed, liveMatches, lineage, content],
+  );
+  const notInProposal = useMemo(
+    () => wordPlanNotInProposal(lineage.at(-1)?.content),
+    [lineage],
   );
   const shown = liveMatches ? snapshot : (history?.snapshot ?? snapshot);
   const plan = useMemo(
@@ -816,6 +821,7 @@ export function WordDocumentPlanCard({
       snapshot={shown}
       review={planReview}
       showSavedPlan={!!artifact?.submittedCard}
+      notInProposal={notInProposal}
       adapter={{
         locate: host.operationInProgress
           ? undefined

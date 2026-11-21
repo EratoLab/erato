@@ -19,7 +19,7 @@ import {
   WORD_READ_ONLY_FIELDS,
   wordReadRefusedByIssue,
 } from "./wordReadAccess";
-import { MAX_WORD_FRESHNESS_BYTES } from "./wordReadFreshness";
+import { MAX_WORD_RECEIPT_FIELD_BYTES } from "./wordReadFreshness";
 import {
   WORD_SCOPED_GUIDANCE,
   wordScopedReadContract,
@@ -474,7 +474,7 @@ export function readWordTargets(
         ...(readOnly ? WORD_READ_ONLY_FIELDS : { readToken: "0".repeat(36) }),
         maxContextBytes: MAX_WORD_SCOPE_BYTES,
         fullDocument: !!snapshot.fullDocument,
-        freshness: "0".repeat(MAX_WORD_FRESHNESS_BYTES - 2),
+        freshness: "0".repeat(MAX_WORD_RECEIPT_FIELD_BYTES - 2),
       }),
     ).length > MAX_WORD_SCOPE_BYTES
   )

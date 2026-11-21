@@ -48,7 +48,7 @@ export interface WordReadFreshness {
 
 const MAX_SECTIONS = 32;
 /** Replay keeps a receipt field only up to 512 bytes of JSON (MAX_RECEIPT_FIELD_BYTES). */
-export const MAX_WORD_FRESHNESS_BYTES = 512;
+export const MAX_WORD_RECEIPT_FIELD_BYTES = 512;
 const encoder = new TextEncoder();
 
 interface Mapping {
@@ -251,7 +251,8 @@ export function wordReadFreshness(
   freshness.sections = refs;
   while (
     refs.length &&
-    encoder.encode(JSON.stringify(freshness)).length > MAX_WORD_FRESHNESS_BYTES
+    encoder.encode(JSON.stringify(freshness)).length >
+      MAX_WORD_RECEIPT_FIELD_BYTES
   )
     refs.pop();
   return freshness;

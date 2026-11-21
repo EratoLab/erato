@@ -1,4 +1,7 @@
-import { MAX_WORD_SCOPE_BYTES } from "@erato/frontend/word-review";
+import {
+  MAX_PLAN_BYTES,
+  MAX_WORD_SCOPE_BYTES,
+} from "@erato/frontend/word-review";
 
 /** The backend schema for word_submit_document_plan (erato-action-facets.toml) and its tool
  * description state the same numbers. Blocks per change have no count limit (ERMAIN-1193). */
@@ -6,11 +9,17 @@ export const MAX_WORD_SCOPED_CHANGES = 16;
 export const MAX_WORD_SCOPED_SOURCES = 16;
 const WORD_SCOPED_JSON = `about ${Math.floor(MAX_WORD_SCOPE_BYTES / 1000)},000 characters of JSON`;
 export const WORD_SCOPED_SIZE = `${MAX_WORD_SCOPE_BYTES / 1024} KiB (${WORD_SCOPED_JSON})`;
-export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection (body, objects, stories, sections), ${MAX_WORD_SCOPED_SOURCES} source refs per change and ${WORD_SCOPED_SIZE} per submission`;
+/** The 24 KiB cap holds only after a target read; after a complete read a sparse change is
+ * expanded into a full plan anyway, so it has a full plan's limit (ERMAIN-1287). */
+export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection (body, objects, stories, sections) and ${MAX_WORD_SCOPED_SOURCES} source refs per change; after a target read at most ${WORD_SCOPED_SIZE} per submission, after a complete read as much as a full plan (${MAX_PLAN_BYTES / 1024} KiB)`;
 /** One rule for when a full plan is needed; the plan contract, tool description and facet prompt
- * carry the same sentence (ERMAIN-1186). */
-export const WORD_FULL_PLAN_RULE = `Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than ${MAX_WORD_SCOPED_CHANGES} changes per collection, or ${WORD_SCOPED_JSON}). Otherwise submit only the changes with scoped_edit, also after a complete read.`;
-export const WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN = `This document is too large for a full plan; submit at most ${WORD_SCOPED_JSON} now and tell the user the rest follows in the next turn.`;
+ * carry the same sentence (ERMAIN-1186). Size alone never calls for a full plan (ERMAIN-1287). */
+export const WORD_FULL_PLAN_RULE = `Use a full plan only to rewrite or reorder most of the document, or for more than ${MAX_WORD_SCOPED_CHANGES} changes per collection. Otherwise submit only the changes with scoped_edit, also after a complete read. A scoped_edit over ${WORD_SCOPED_JSON} after a target read needs the complete read first, then the same scoped_edit with its final readToken; when the document is too large for a complete read, submit what fits and continue in the next turn.`;
+export const WORD_SCOPED_NEEDS_COMPLETE_READ = `Scoped submission exceeds ${WORD_SCOPED_SIZE}, the limit after a target read. Complete the full read and resubmit the same scoped_edit with its final readToken; after a complete read it may be as large as a full plan.`;
+const WORD_SCOPED_WHAT_FITS = `submit at most ${WORD_SCOPED_JSON} now and tell the user the rest follows in the next turn.`;
+export const WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN = `This document is too large for a full plan; ${WORD_SCOPED_WHAT_FITS}`;
+export const WORD_SCOPED_OVER_COMPLETE_READ_BUDGET = `A complete read does not fit this request's model budget; ${WORD_SCOPED_WHAT_FITS}`;
+export const WORD_SCOPED_EXPANDED_TOO_LARGE = `With the blocks it keeps, this change exceeds a full plan's ${MAX_PLAN_BYTES / 1024} KiB. Submit part of it now and tell the user the rest follows in the next turn.`;
 
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
@@ -58,7 +67,7 @@ export const WORD_AUTHORING_CONTRACT = {
     revision:
       "Each changed rejected proposal advances the revision. Validation covers the complete materialized plan. Unchanged proposals with unchanged diagnostics end the submission turn. Full and repair submissions share the configured attempt budget. Acceptance persists the complete plan for review without writing to Word.",
   },
-  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.",
+  plan: `{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. ${WORD_FULL_PLAN_RULE}`,
   ownership:
     "Every body source ref is consumed once by keep, replace or deleted. New nested block IDs are globally unique. Story sources and document_sections are separate read records, not body ownership refs. Keep preserves exact content. Replacement and deletion accept native objects. Source references are scoped to this immutable snapshot.",
   entries: {

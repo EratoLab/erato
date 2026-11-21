@@ -137,6 +137,8 @@ export class WordDocumentDraftStore {
     string,
     { input: string; result: ClientToolExecutionResult }
   >();
+  /** The body blocks each refused attempt of this request changed, by tool call. */
+  private attempts = new Map<string, ReadonlySet<number>>();
   accepted = false;
 
   clear(): void {
@@ -144,7 +146,21 @@ export class WordDocumentDraftStore {
     this.failure = undefined;
     this.sparseFailure = undefined;
     this.replies.clear();
+    this.attempts.clear();
     this.accepted = false;
+  }
+
+  /** The latest rejected full plan or repair, as materialized. */
+  get latestDraft(): Record<string, unknown> | undefined {
+    return this.draft?.value;
+  }
+
+  refused(callId: string, blocks: ReadonlySet<number>): void {
+    if (!this.accepted) this.attempts.set(callId, blocks);
+  }
+
+  get refusedAttempts(): ReadonlySet<number>[] {
+    return [...this.attempts.values()];
   }
 
   replay(callId: string, input: string): ClientToolExecutionResult | undefined {
