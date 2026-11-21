@@ -55,6 +55,26 @@ The example's `editor/read_context` must be a separately configured non-submissi
 
 The same tool selection works in regular facets and action facets. `submission` is an optional table, not a new tool type or hardcoded name.
 
+## Parts of a submission
+
+A large draft can be staged in parts before the submission call finishes it. `part_tools` names the configured non-submission tools whose calls stage parts; each belongs to one submission and is neither durable nor a recovery read.
+
+```toml
+[client_tools.tools.submit_draft.submission]
+max_attempts = 5
+part_tools = ["editor/plan_sections", "editor/write_section"]
+max_part_calls = 40   # per request, across all part tools (1–200)
+max_row_tries = 3     # per part (1–10)
+part_key = "/row"     # JSON Pointer to the argument that names the part
+```
+
+- A part call gets the submission's checks against its own schema (string decoding, then validation) and goes to the same client as the submission. It continues generation, uses neither a submission attempt nor the ordinary tool budget, and opens the editing step if none is open.
+- Its tries are counted per part: the part tool and the JSON text of its `part_key` argument. Calls without that argument, such as a section plan, count as one part of their tool. A call the schema or the host rejects uses one of its part's tries and nothing else. A part past its tries is refused before dispatch with `part_tries_exhausted` at the key's path, and the other parts go on.
+- The first part call past `max_part_calls` is refused with `part_calls_exhausted`, which asks for the submission call; the next one ends the step unresolved with `attempts_exhausted`.
+- Part updates add `{ "part": { "tries_remaining": 2, "calls_remaining": 35 } }`. They carry `submission_outcome` only when the part ended the step: a timeout, a lost client, a client error, `cannot_continue` or a terminal rejection end it as they end a submission. `read_current_context` admits recovery reads as for a submission.
+- Only the submission call can finish the draft; acceptance ends generation as before. While parts are staged and no submission call was made, the first text reply gets one reminder without using an attempt, and a second one ends the step unresolved with `model_stopped`; other tool calls are ordinary calls. After a submission call, replies without progress use attempts as before, and part calls count as progress.
+- A part call of a submission other than the open one is an ordinary client call. Without `part_tools`, nothing changes.
+
 ## Native schema enforcement
 
 Server validation and host validation work with every existing tool-capable provider. Native constrained generation is an additional optimization. Enable it only for a model and endpoint verified to support strict tool arguments:
