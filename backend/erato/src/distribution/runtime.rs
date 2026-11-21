@@ -1,9 +1,12 @@
 //! Runtime distribution artifacts loaded from the database.
 
-use crate::config::{AppConfig, ConfigSourceFile, McpRuntimeConfig, TeamsInactivityNudgeConfig};
+use crate::config::{
+    AppConfig, ConfigSourceFile, I18nRuntimeConfig, McpRuntimeConfig, TeamsInactivityNudgeConfig,
+};
 use crate::db::entity::prelude::RuntimeConfiguration;
 use crate::db::entity::runtime_configuration;
 use crate::distribution::desktop_ui::{self, DesktopUiPackage};
+use crate::distribution::translations::TranslationCatalogs;
 use crate::distribution::{Distribution, experience_policy};
 use crate::models::runtime_configuration::{
     ERATO_BACKEND_SOURCE_SERVICE, ERATO_TOML_SOURCE_TYPE, EXPERIENCE_POLICY_SOURCE_TYPE,
@@ -108,6 +111,8 @@ impl DistributionBundle {
 #[derive(Clone, Debug)]
 pub struct ReloadableAppState {
     pub distribution_bundle: DistributionBundle,
+    pub i18n: I18nRuntimeConfig,
+    pub translation_catalogs: TranslationCatalogs,
     /// `None` means no policy row exists — a valid complete state, distinct
     /// from a failed load, which keeps the previous policy. Kept out of the
     /// bundle above, whose files are served unauthenticated.
@@ -129,13 +134,18 @@ impl ReloadableAppState {
     #[must_use]
     pub fn new(config: &AppConfig, distribution: &Distribution, mcp_servers: McpServers) -> Self {
         let distribution_bundle = DistributionBundle::default();
+        let i18n = I18nRuntimeConfig::from_app_config(config);
+        let translation_catalogs = TranslationCatalogs::new(&i18n);
         Self {
             desktop_ui_package: desktop_ui::assemble_for_state(
                 config,
                 distribution,
+                &translation_catalogs,
                 &distribution_bundle,
             ),
             distribution_bundle,
+            i18n,
+            translation_catalogs,
             experience_policy: None,
             mcp: McpAppState {
                 config: McpRuntimeConfig::from_app_config(config),
@@ -165,13 +175,34 @@ impl ReloadableAppState {
     async fn load_memory_inner(app_state: &AppState) -> Result<Self, Report> {
         // Scoped so the read guard drops here: callers assign the result into
         // a `write()` on the same lock.
-        let (previous_policy, previous_mcp, previous_nudge) = {
+        let (previous_policy, previous_mcp, previous_nudge, previous_i18n, previous_catalogs) = {
             let previous = app_state.reloadable.read().await;
             (
                 previous.experience_policy.clone(),
                 previous.mcp.clone(),
                 previous.teams_nudge.clone(),
+                previous.i18n.clone(),
+                previous.translation_catalogs.clone(),
             )
+        };
+
+        let mut config_sources = load_toml_sources(app_state, ERATO_BACKEND_SOURCE_SERVICE).await?;
+        config_sources.extend(load_toml_sources(app_state, ADMIN_PANEL_SOURCE_SERVICE).await?);
+        let mcp_config = McpRuntimeConfig::from_toml_sources(&config_sources)?;
+        let i18n = match I18nRuntimeConfig::from_toml_sources(&config_sources) {
+            Ok(i18n) => i18n,
+            Err(error) => {
+                tracing::error!(%error, "Failed to load internationalization settings; keeping the previous settings");
+                previous_i18n.clone()
+            }
+        };
+        let translation_catalogs = if i18n.translation_po_compilation_mode
+            == previous_i18n.translation_po_compilation_mode
+            && i18n.language.default_language == previous_i18n.language.default_language
+        {
+            previous_catalogs
+        } else {
+            TranslationCatalogs::new(&i18n)
         };
 
         let translation_rows = RuntimeConfiguration::find()
@@ -201,9 +232,15 @@ impl ReloadableAppState {
         let (distribution_bundle, desktop_ui_package) = {
             let config = app_state.config.clone();
             let distribution = app_state.distribution.clone();
+            let translation_catalogs = translation_catalogs.clone();
             tokio::task::spawn_blocking(move || {
                 let bundle = DistributionBundle::from_files(files);
-                let package = desktop_ui::assemble_for_state(&config, &distribution, &bundle);
+                let package = desktop_ui::assemble_for_state(
+                    &config,
+                    &distribution,
+                    &translation_catalogs,
+                    &bundle,
+                );
                 (bundle, package)
             })
             .await
@@ -221,10 +258,6 @@ impl ReloadableAppState {
             }
         };
 
-        let mut config_sources = load_toml_sources(app_state, ERATO_BACKEND_SOURCE_SERVICE).await?;
-        config_sources.extend(load_toml_sources(app_state, ADMIN_PANEL_SOURCE_SERVICE).await?);
-        let mcp_config = McpRuntimeConfig::from_toml_sources(&config_sources)?;
-
         let changed_server_ids = if previous_mcp.config == mcp_config {
             Vec::new()
         } else {
@@ -241,6 +274,8 @@ impl ReloadableAppState {
 
         Ok(Self {
             distribution_bundle,
+            i18n,
+            translation_catalogs,
             experience_policy,
             mcp: McpAppState {
                 config: mcp_config,

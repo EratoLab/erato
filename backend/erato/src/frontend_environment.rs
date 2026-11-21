@@ -7,7 +7,7 @@ use crate::distribution::frontend_bundles::{
     FrontendRewrite, MAIN_FRONTEND_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH,
     OFFICE_ADDIN_MOUNT_PATH,
 };
-use crate::distribution::translations::TranslationDistribution;
+use crate::distribution::translations::TranslationCatalogs;
 use crate::models::chat::ChatCreatedVia;
 use ::axum::http::HeaderValue;
 use lol_html::html_content::ContentType;
@@ -186,7 +186,6 @@ pub struct ServedFrontend {
 #[derive(Debug, erato_memory::HeapSize)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
-    translations: TranslationDistribution,
     branding: crate::distribution::branding::BrandingAssets,
 }
 
@@ -282,7 +281,6 @@ pub fn build_frontend_registry(
 
     FrontendRegistry {
         frontends,
-        translations: distribution.translations.clone(),
         branding: distribution.branding.clone(),
     }
 }
@@ -1203,7 +1201,7 @@ pub mod axum {
     }
 
     fn cache_control_for_path(request_path: &str) -> &'static str {
-        if TranslationDistribution::is_messages_json_path(request_path) {
+        if TranslationCatalogs::is_messages_json_path(request_path) {
             "no-cache"
         } else {
             "public, max-age=3600, stale-while-revalidate=604800"
@@ -1242,6 +1240,9 @@ pub mod axum {
     pub async fn serve_files_with_script(
         Extension(frontend_registry): Extension<Arc<FrontendRegistry>>,
         Extension(deployment_version): Extension<DeploymentVersion>,
+        Extension(reloadable): Extension<
+            Arc<tokio::sync::RwLock<crate::distribution::runtime::ReloadableAppState>>,
+        >,
         req: Request<Body>,
     ) -> Result<Response<UnsyncBoxBody<Bytes, BoxError>>, Infallible> {
         let request_path = req.uri().path().to_string();
@@ -1249,15 +1250,18 @@ pub mod axum {
             return Ok(not_found_response());
         };
 
-        if request_path.starts_with("/public/common/custom-theme/")
-            && TranslationDistribution::is_messages_json_path(&request_path)
+        let translation_catalogs = if TranslationCatalogs::is_messages_json_path(&request_path) {
+            Some(reloadable.read().await.translation_catalogs.clone())
+        } else {
+            None
+        };
+        if let Some(catalogs) = &translation_catalogs
+            && request_path.starts_with("/public/common/custom-theme/")
             && let Ok(source) = frontend_registry.branding.resolve_source(
                 &request_path.replace("/messages.json", "/messages.po"),
                 false,
             )
-            && let Some(compiled) = frontend_registry
-                .translations
-                .compile_messages_json_source(&source)
+            && let Some(compiled) = catalogs.compile_messages_json_source(&source)
         {
             let Ok(compiled) = compiled else {
                 return Ok(internal_server_error_response());
@@ -1316,9 +1320,9 @@ pub mod axum {
         let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_request_path = req.uri().path().to_string();
 
-        if let Some((po_path, compilation)) = frontend_registry
-            .translations
-            .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
+        if let Some(catalogs) = &translation_catalogs
+            && let Some((po_path, compilation)) = catalogs
+                .compile_messages_json_for_request(&bundle_dir_path, &rewritten_request_path)
         {
             match compilation {
                 Ok(compiled) => {
@@ -1734,6 +1738,13 @@ mod tests {
             .icon_source_path = Some("./icon.png".into());
         let distribution = Distribution::load(&config);
         let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
         for (asset, content_type, expected) in [
             ("theme.json", "application/json", "Acme"),
             ("locales/en/messages.json", "application/json", "Acme"),
@@ -1741,6 +1752,7 @@ mod tests {
             let response = serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
+                Extension(reloadable.clone()),
                 Request::builder()
                     .uri(format!("/public/common/custom-theme/acme/{asset}"))
                     .body(Body::empty())
@@ -1773,6 +1785,7 @@ mod tests {
                 let response = serve_files_with_script(
                     Extension(registry.clone()),
                     Extension(DeploymentVersion(None)),
+                    Extension(reloadable.clone()),
                     Request::builder()
                         .uri(format!("{mount}/{asset}"))
                         .body(Body::empty())
@@ -2415,14 +2428,12 @@ mod tests {
 
     #[test]
     fn specific_mount_path_matches_before_root() {
-        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
             frontends: vec![
                 served_frontend("/public/platform-office-addin", true),
                 served_frontend("/office-addin", true),
                 served_frontend("/", true),
             ],
-            translations: distribution.translations,
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
@@ -2436,13 +2447,11 @@ mod tests {
 
     #[test]
     fn disabled_specific_mount_path_does_not_fall_back_to_root() {
-        let distribution = Distribution::load(&AppConfig::default());
         let registry = FrontendRegistry {
             frontends: vec![
                 served_frontend("/office-addin", false),
                 served_frontend("/", true),
             ],
-            translations: distribution.translations,
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
@@ -2667,6 +2676,13 @@ mod tests {
             crate::config::TranslationPoCompilationMode::JustInTime;
         let distribution = Distribution::load(&config);
         let registry = std::sync::Arc::new(build_frontend_registry(&config, &distribution));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
         let request = |if_none_match: Option<&str>| {
             let mut request = Request::builder().uri("/public/common/locales/de/messages.json");
             if let Some(etag) = if_none_match {
@@ -2675,6 +2691,7 @@ mod tests {
             serve_files_with_script(
                 Extension(registry.clone()),
                 Extension(DeploymentVersion(None)),
+                Extension(reloadable.clone()),
                 request.body(Body::empty()).unwrap(),
             )
         };
