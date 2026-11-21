@@ -456,6 +456,7 @@ export { ParkedTaskNotice } from "@/components/ui/Message/ParkedTaskNotice";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
 export type { ReadAloudButtonProps } from "@/components/ui/Message/ReadAloudButton";
 export { SidecarReviewItem } from "@/components/ui/Message/SidecarReviewItem";
+export { SpokenReply } from "@/components/ui/Message/SpokenReply";
 export { StopWaitingAction } from "@/components/ui/Message/StopWaitingAction";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";

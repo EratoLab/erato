@@ -1765,6 +1765,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_reply_speech(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_language_data(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
@@ -1787,6 +1788,7 @@ impl AppConfig {
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
+        warn_misshaped_reply_speech(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_language_data(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
@@ -3717,6 +3719,27 @@ mod audio_config_tests {
             .unwrap()
             .try_deserialize::<AudioConversationalConfig>()
             .unwrap()
+    }
+
+    #[test]
+    fn reply_speech_loads_and_a_wrong_value_keeps_the_default() {
+        use crate::reply_speech::{ReplySpeechConfig, ReplySpeechWording};
+        assert_eq!(
+            load_conversational("[reply_speech]\nwording = \"natural\"\nuser_choice = false\n")
+                .reply_speech,
+            ReplySpeechConfig {
+                wording: ReplySpeechWording::Natural,
+                user_choice: false,
+            }
+        );
+        assert_eq!(
+            load_conversational("[reply_speech]\nwording = 3\n").reply_speech,
+            ReplySpeechConfig::default()
+        );
+        assert_eq!(
+            load_conversational("").reply_speech.wording,
+            ReplySpeechWording::Precise
+        );
     }
 
     #[test]
@@ -9228,6 +9251,15 @@ pub struct AudioConversationalConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub wait_lines: Box<crate::wait_lines::WaitLinesConfig>,
+    /// How a reply is spoken: a short answer for the ear with the complete
+    /// written answer kept in the chat, or the written answer read as it is.
+    #[serde(
+        default,
+        deserialize_with = "crate::reply_speech::deserialize_reply_speech"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub reply_speech: crate::reply_speech::ReplySpeechConfig,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -9289,6 +9321,7 @@ impl Default for AudioConversationalConfig {
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
+            reply_speech: crate::reply_speech::ReplySpeechConfig::default(),
         }
     }
 }
@@ -9498,6 +9531,12 @@ fn warn_unknown_spoken_keys(schema: &Config) {
 fn warn_misshaped_wait_lines(schema: &Config) {
     for warning in crate::wait_lines::misshaped_wait_lines(schema) {
         tracing::warn!("Wait line setting dropped: {warning}.");
+    }
+}
+
+fn warn_misshaped_reply_speech(schema: &Config) {
+    for warning in crate::reply_speech::misshaped_reply_speech(schema) {
+        tracing::warn!("Reply speech setting dropped: {warning}.");
     }
 }
 

@@ -1827,6 +1827,7 @@ msgstr "Read the card aloud"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Replay audio response"
 
@@ -3228,6 +3229,11 @@ msgstr "Please take a moment to check the chat history for confidential informat
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.warning.title"
 msgstr "The conversation may contain sensitive information"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.spoken_reply.label"
+msgstr "Spoken"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -6101,6 +6107,61 @@ msgstr "Test microphone"
 #: src/components/ui/Settings/MicTestPanel.tsx
 msgid "preferences.dialog.audio.test.stop"
 msgstr "Stop test"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.description"
+msgstr "Natural: the voice says what is being approved in plain sentences. Word for word: it reads the card's fields as shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.heading"
+msgstr "Approval cards"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.description"
+msgstr "How the voice speaks in conversation mode. The read-aloud button always reads the text in the chat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Use my organization's setting"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.heading"
+msgstr "Voice"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.locked"
+msgstr "Set by your organization"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.natural"
+msgstr "Natural"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.precise"
+msgstr "Word for word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.description"
+msgstr "Natural: the voice gives a short spoken answer and the chat keeps the complete written one. Word for word: the voice reads the written answer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.heading"
+msgstr "Replies in conversation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.saveFailed"
+msgstr "The voice setting could not be saved"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -1613,6 +1613,9 @@ export type ContentPart =
   | (ContentPartText & {
       content_type: "text";
     })
+  | (ContentPartSpoken & {
+      content_type: "spoken";
+    })
   | (ContentPartReasoning & {
       content_type: "reasoning";
     })
@@ -1755,6 +1758,10 @@ export type ContentPartReasoning = {
    * @default
    */
   text?: string;
+};
+
+export type ContentPartSpoken = {
+  text: string;
 };
 
 /**
@@ -3258,6 +3265,16 @@ export type MessageSubmitStreamingResponseMessage =
       message_id: string;
       message_type: "audio_error";
     }
+  | (MessageSubmitStreamingResponseMessageTextDelta & {
+      message_type: "spoken_delta";
+    })
+  | {
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "spoken_end";
+    }
   | (MessageSubmitStreamingResponseChatCreated & {
       message_type: "chat_created";
     })
@@ -4135,6 +4152,29 @@ export type RepeatRule = {
    */
   weekdays?: DayOfWeek[];
 };
+
+export type ReplySpeechStyleResponse = {
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  source: ReplySpeechStyleSource;
+  /**
+   * Whether the caller may choose their own wording.
+   */
+  user_choice: boolean;
+  wording: ReplySpeechWording;
+};
+
+/**
+ * Where the caller's reply wording comes from.
+ */
+export type ReplySpeechStyleSource = "deployment" | "audience" | "user";
+
+/**
+ * How a reply in conversational audio mode is spoken.
+ */
+export type ReplySpeechWording = "natural" | "precise";
 
 export type ResolveShareLinkResponse = {
   owner_display_name?: null | undefined;
@@ -6132,6 +6172,11 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_nickname?: string | null | undefined;
   /**
+   * How replies are spoken in conversation: `natural` or `precise`, like
+   * the amount.
+   */
+  preference_reply_speech_wording?: null | undefined;
+  /**
    * Set `true` to explicitly clear the start screen (welcome screen even
    * though an audience pin exists), `false` to inherit again. Clearing
    * also removes any own pick; picking also un-clears.
@@ -6249,6 +6294,7 @@ export type UserProfile = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
+  preference_reply_speech_wording?: ReplySpeechWording;
   /**
    * True when the user explicitly cleared their start screen. This is
    * deliberately distinct from "never set": a clear must keep suppressing

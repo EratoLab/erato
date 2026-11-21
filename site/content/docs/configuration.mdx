@@ -3329,6 +3329,46 @@ opener_short = ["Moment."]
 list = "Ich sehe mir die {table} an."
 ```
 
+#### `audio_conversational.reply_speech`
+
+{/* erato_toml_config_key: audio_conversational.reply_speech */}
+
+How a reply is spoken in conversation mode, when Audio-back is on. Approval cards have their own setting, `approval_speech`.
+
+With `natural`, one model call writes two parts: first a short spoken part for the ear, then the complete written answer, the same a typed question would get, with lists, tables and code. The voice says only the spoken part and starts as soon as it is written; the chat keeps the written answer and shows what the voice said, folded, above it. After a tool call the next model call starts again with a spoken part. The spoken part's style comes from `turn_instructions.spoken_reply`; without it, the built-in instruction asks for one to three short sentences. The instruction that asks for the two parts is built into Erato, in English, and the model answers in the user's language. A reply that does not keep the format is stored as written and read as written, and counted in `erato_reply_split_fallback_total`. For pure conversation ("Danke", "Hallo") the model may write no written part; the spoken text is then the message. Later turns see only the written answers of earlier replies.
+
+With `precise`, the reply is read as written, as before this setting existed: `turn_instructions.spoken_reply`, when set, shapes the whole reply, and the voice reads that text with the same clean-up as the read-aloud button (tables and code are not read out). Without `spoken_reply`, the model writes as for a typed message.
+
+The read-aloud button always reads the written text. A continuation after an approval keeps the form its turn started with, whatever the setting is by then.
+
+The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`) and are listed under `setting_orders.reply_speech`; the user's own choice (`preference_reply_speech_wording`) where the deciding level allows it. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
+
+**Type:** `object`
+
+#### `audio_conversational.reply_speech.wording`
+
+{/* erato_toml_config_key: audio_conversational.reply_speech.wording */}
+
+`natural`: a short spoken answer, the complete written answer in the chat. `precise`: the voice reads the written answer as it is. Before switching to `natural`, make sure `turn_instructions.spoken_reply` speaks about the spoken part only; a text written for the whole reply ("no tables, no lists") contradicts the written part.
+
+Messages written in `natural` hold a `spoken` part that Erato versions before this setting cannot read, so a deployment that has used `natural` cannot go back to such a version.
+
+**Type:** `string` · **Default:** `precise`
+
+#### `audio_conversational.reply_speech.user_choice`
+
+{/* erato_toml_config_key: audio_conversational.reply_speech.user_choice */}
+
+Whether a user may choose the wording for themselves, unless an audience setting says otherwise.
+
+**Type:** `boolean` · **Default:** `true`
+
+```toml
+[audio_conversational.reply_speech]
+wording = "natural"
+user_choice = true
+```
+
 ### `model_permissions`
 
 {/* erato_toml_config_key: model_permissions */}
@@ -8048,15 +8088,18 @@ The instruction text. Unset or blank, the type adds nothing.
 ```toml
 [turn_instructions.spoken_reply]
 prompt = """
-Your reply to this message is read aloud. Answer the way people talk: a few
-short sentences, no lists, no headings, no tables.
+The spoken part is heard, not read. The spoken part answers the way people
+talk: one to three short sentences, numbers as people say them.
 """
 ```
 
-Without it, the model answers a turn that is read back the way it answers a
-typed one: long, structured text, which is then read aloud. A typed turn in the
-same chat does not get it, so the user can switch between speaking and typing,
-and neither does a spoken turn with Audio-back off.
+In the `natural` style of `audio_conversational.reply_speech`, Erato also adds
+its built-in instruction to write a spoken part and then the complete written
+answer; `spoken_reply` then shapes the spoken part only, so write every rule as
+"the spoken part …" and the written answer keeps the normal chat style. In the
+`precise` style it shapes the whole reply, which the voice reads. A typed turn
+in the same chat gets neither, so the user can switch between speaking and
+typing, and neither does a spoken turn with Audio-back off.
 
 ### Validated client submissions
 
