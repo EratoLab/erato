@@ -104,6 +104,12 @@ function reasonText(
       return t`The correction attempts were exhausted.`;
     case "recovery_reads_exhausted":
       return t`The recovery read limit was reached.`;
+    case "part_calls_exhausted":
+      return t({
+        id: "chat.submission.partCallsExhausted",
+        message:
+          "Erato reached the limit of parts it can write in one request; ask for a smaller change.",
+      });
     case "user_requested_answer":
       return t`You chose to finish without further corrections.`;
     case "user_stopped":

@@ -2467,9 +2467,9 @@ impl AppConfig {
                             );
                         }
                         for name in &submission.recovery_read_tools {
-                            if !config.client_tools.tools.values().any(|read| {
-                                read.qualified_name() == *name && read.submission.is_none()
-                            }) {
+                            if configured_non_submission_tool(&config.client_tools.tools, name)
+                                .is_none()
+                            {
                                 panic!(
                                     "Client tool '{}' recovery read '{}' must name a configured non-submission client tool.",
                                     qualified, name
@@ -8576,9 +8576,19 @@ pub enum ClientToolNativeSchema {
     Required,
 }
 
+fn configured_non_submission_tool<'a>(
+    tools: &'a HashMap<String, ClientToolConfig>,
+    name: &str,
+) -> Option<&'a ClientToolConfig> {
+    tools
+        .values()
+        .find(|tool| tool.qualified_name() == name && tool.submission.is_none())
+}
+
 /// Panics unless the part tools of a submission are configured non-submission,
 /// non-durable tools with compiling schemas that belong to this submission
-/// only, and the part budgets are in range.
+/// only, are no recovery read and are never offered to a delegated task, and
+/// the part budgets are in range.
 fn validate_submission_parts(
     qualified: &str,
     submission: &ClientToolSubmissionConfig,
@@ -8599,21 +8609,30 @@ fn validate_submission_parts(
         );
     }
     for name in &submission.part_tools {
-        if submission.recovery_read_tools.contains(name) {
+        if let Some(reader) = tools.values().find(|reader| {
+            reader
+                .submission
+                .as_ref()
+                .is_some_and(|reader| reader.recovery_read_tools.contains(name))
+        }) {
             panic!(
-                "Client tool '{qualified}' lists '{name}' as both a part tool and a recovery read."
+                "Client tool '{name}' is a part tool of '{qualified}' and a recovery read of '{}'.",
+                reader.qualified_name()
             );
         }
-        let Some(part) = tools
-            .values()
-            .find(|part| part.qualified_name() == *name && part.submission.is_none())
-        else {
+        let Some(part) = configured_non_submission_tool(tools, name) else {
             panic!(
                 "Client tool '{qualified}' part tool '{name}' must name a configured non-submission client tool."
             );
         };
         if part.durable.is_some() {
             panic!("Client tool '{qualified}' part tool '{name}' cannot be durable.");
+        }
+        // Only the coordinator writes a draft; a delegated task never gets its submission.
+        if part.child_access == ClientToolChildAccess::Read {
+            panic!(
+                "Client tool '{qualified}' part tool '{name}' cannot set child_access = \"read\"."
+            );
         }
         let compiled = serde_json::from_str::<serde_json::Value>(&part.parameters)
             .map_err(|error| error.to_string())

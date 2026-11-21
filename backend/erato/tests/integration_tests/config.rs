@@ -3769,6 +3769,32 @@ part_tools = ["client/write_part"]
     ));
 }
 
+#[test]
+#[should_panic(expected = "part tool 'client/write_part' cannot set child_access = \"read\"")]
+fn a_part_tool_is_never_offered_to_a_task() {
+    migrate_config_with_action_facets(&PART_TOOLS.replace(
+        "description = \"Stage a part\"",
+        "description = \"Stage a part\"\nchild_access = \"read\"\nhost_context = \"word_document\"",
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "is a part tool of 'client/submit_draft' and a recovery read of 'client/submit_other'"
+)]
+fn a_part_tool_is_no_recovery_read_of_another_submission() {
+    migrate_config_with_action_facets(&format!(
+        r#"{PART_TOOLS}
+[client_tools.tools.other]
+name = "submit_other"
+description = "Stage another draft"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.other.submission]
+recovery_read_tools = ["client/write_part"]
+"#
+    ));
+}
+
 fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"

@@ -959,6 +959,12 @@ async fn run_scenario(
                     })
                 })
                 .expect("budget approval");
+            let parked =
+                &row.generation_metadata.as_ref().unwrap_or(&Value::Null)["submission_outcome"];
+            assert!(
+                parked["status"] != "correcting" || parked["attempts_used"] != 0,
+                "a park before any submission call shows no correction: {parked}"
+            );
             let mut continuation_state = state.clone();
             if withdraw_submission_on_approval {
                 continuation_state.config.client_tools.tools.remove("draft");
@@ -1852,8 +1858,124 @@ async fn a_part_call_past_the_request_limit_asks_for_the_finish_then_ends(pool: 
     );
     assert_eq!(
         final_outcome(&events),
-        &json!({"status":"unresolved","reason":"attempts_exhausted","attempts_used":0,"max_attempts":5})
+        &json!({"status":"unresolved","reason":"part_calls_exhausted","attempts_used":0,"max_attempts":5})
     );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_part_parked_on_task_approval_is_charged_once(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            ModelStep::Tools(vec![
+                (
+                    "call_1291_task",
+                    "delegate_task",
+                    json!({"task":"Research context","facet_ids":["plan"]}),
+                ),
+                (
+                    "call_1291_parked",
+                    "write_part",
+                    json!({"row":2,"text":"New text"}),
+                ),
+            ]),
+            write_part("call_1291_again", 2),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(2),
+            staged(2),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        ScenarioOptions {
+            max_part_calls: Some(40),
+            task_approval: true,
+            budget_decision: Some("reject"),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(
+        dispatched(&events),
+        ["call_1291_parked", "call_1291_again", "call_1291_finish"]
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_parked")[0]["part"],
+        json!({"tries_remaining":2,"calls_remaining":38})
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_again")[0]["part"],
+        json!({"tries_remaining":1,"calls_remaining":37})
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":1,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_finish_sent_with_a_part_uses_an_attempt_and_is_refused(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            ModelStep::Tools(vec![
+                (
+                    "call_1291_part",
+                    "write_part",
+                    json!({"row":1,"text":"New text"}),
+                ),
+                ("call_1291_early", "submit_draft", json!({"title":"early"})),
+            ]),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(1),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        dispatched(&events),
+        ["call_1291_plan", "call_1291_part", "call_1291_finish"]
+    );
+    assert!(requests[2].to_string().contains("submission_must_be_alone"));
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":2,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_part_the_client_never_answers_ends_without_using_an_attempt(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_slow", 1),
+        ],
+        vec![json!({"result":{"draft_id":"d1","revision":1}})],
+        ScenarioOptions {
+            timeout_ms: 200,
+            check_metadata: true,
+            ..parts_options(40)
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    let expected =
+        json!({"status":"unresolved","reason":"timeout","attempts_used":0,"max_attempts":5});
+    assert_eq!(final_outcome(&events), &expected);
+    let slow = call_outputs(&events, "call_1291_slow")[0];
+    assert_eq!(slow["reason"], "timeout");
+    assert_eq!(slow["submission_outcome"], expected);
+    assert!(slow.get("submission").is_none(), "{slow}");
 }
 
 /// Client files must survive the full tool loop, completion SSE and persisted

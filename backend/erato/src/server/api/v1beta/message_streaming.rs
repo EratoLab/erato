@@ -7409,12 +7409,10 @@ async fn stream_generate_chat_completion<'a>(
     macro_rules! persist_correction {
         () => {
             if let Some(correction) = submission_correction.as_ref() {
-                let name = correction
-                    .tool
-                    .rsplit('/')
-                    .next()
-                    .expect("qualified submission name");
-                submission_attempts.insert(name.to_owned(), correction.outcome.attempts_used);
+                submission_attempts.insert(
+                    correction.model_name().to_owned(),
+                    correction.outcome.attempts_used,
+                );
             }
             if submission_correction.is_some()
                 && let Some(task) = streaming_task
@@ -7524,6 +7522,7 @@ async fn stream_generate_chat_completion<'a>(
                     let (number, try_number) = correction.charge_part(
                         &tool.config.qualified_name(),
                         part.key_of(&call.fn_arguments),
+                        current_turn,
                     );
                     let charge = tool_charges.entry(call.call_id.clone()).or_default();
                     charge.part_call = Some(number);
@@ -9685,33 +9684,10 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
-                    response_text = output_value.to_string();
                     if let Some(correction) = submission_correction.as_mut() {
                         correction.record(&outcome);
                         output_value["submission_outcome"] =
                             serde_json::to_value(&correction.outcome)?;
-                        if !correction.pending() && correction.outcome.status != crate::services::submission_correction::SubmissionStatus::Accepted {
-                            output_value["submission"] = json!({"status":"failed", "attempts_remaining":0});
-                        }
-                        response_text = output_value.to_string();
-                    }
-                    if submission_correction
-                        .as_ref()
-                        .is_some_and(|correction| !correction.pending())
-                    {
-                        exit_after_join = true;
-                        exit_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
-                            langfuse_trace_id.clone(),
-                            false,
-                            None,
-                            non_empty_string(&captured_reasoning_summary),
-                            non_empty_vec(&captured_reasoning_items),
-                            non_empty_vec(&captured_reasoning_item_encrypted_content),
-                        );
                     }
                 }
                 if part.is_some()
@@ -9722,9 +9698,22 @@ async fn stream_generate_chat_completion<'a>(
                         &tool_policy.expect("offered part").config.qualified_name(),
                         part_key.as_deref(),
                     );
-                    if !correction.pending() {
+                }
+                if submission.is_some() || part.is_some() {
+                    if let Some(correction) = submission_correction
+                        .as_ref()
+                        .filter(|correction| !correction.pending())
+                    {
                         output_value["submission_outcome"] =
                             serde_json::to_value(&correction.outcome)?;
+                        // A part call is no attempt, so only a submission is marked failed.
+                        if submission.is_some()
+                            && correction.outcome.status
+                                != crate::services::submission_correction::SubmissionStatus::Accepted
+                        {
+                            output_value["submission"] =
+                                json!({"status":"failed", "attempts_remaining":0});
+                        }
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -12344,10 +12333,13 @@ async fn stream_generate_chat_completion<'a>(
         }
     }
     completion.map(|(content, mut metadata)| {
-        if let Some(correction) = submission_correction {
+        if let Some(outcome) = submission_correction
+            .as_ref()
+            .and_then(|correction| correction.shown_outcome())
+        {
             metadata
                 .get_or_insert_with(GenerationMetadata::default)
-                .submission_outcome = Some(correction.outcome);
+                .submission_outcome = Some(outcome.clone());
         }
         (without_preparing_tools(&content), metadata)
     })

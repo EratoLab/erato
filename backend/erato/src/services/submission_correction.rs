@@ -3,7 +3,8 @@ use serde_json::{Value, json};
 use utoipa::ToSchema;
 
 use super::client_tools::{
-    ClientToolOutcome, ClientToolValidationIssue, OfferedClientTool, SubmissionRecovery,
+    ClientToolOutcome, ClientToolSubmissionFeedback, ClientToolValidationIssue, OfferedClientTool,
+    SubmissionRecovery,
 };
 
 /// The cancellation of a part call past the last one a request allows.
@@ -24,6 +25,7 @@ pub enum SubmissionReason {
     AttemptsExhausted,
     ModelStopped,
     RecoveryReadsExhausted,
+    PartCallsExhausted,
     TerminalValidation,
     ContextUnavailable,
     CapabilityUnavailable,
@@ -69,6 +71,9 @@ pub struct PartAllowance {
     pub tries: Vec<PartTries>,
     /// A text answer while drafting got its one reminder.
     pub reminded: bool,
+    /// The model turn whose part calls first went past `max_calls`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_turn: Option<usize>,
 }
 
 /// The calls one part has had: a part tool, and the value of its `part_key`
@@ -103,12 +108,24 @@ impl SubmissionCorrection {
                 calls_used: 0,
                 tries: Vec::new(),
                 reminded: false,
+                limit_turn: None,
             }),
         }
     }
 
     pub fn pending(&self) -> bool {
         self.outcome.status == SubmissionStatus::Correcting
+    }
+
+    /// The submission's name as the model calls it.
+    pub fn model_name(&self) -> &str {
+        self.tool.rsplit('/').next().unwrap_or(&self.tool)
+    }
+
+    /// The outcome the message shows: none while no submission call was made
+    /// and the step is still open, so staged parts show no correction.
+    pub fn shown_outcome(&self) -> Option<&SubmissionOutcome> {
+        (!self.pending() || self.outcome.attempts_used > 0).then_some(&self.outcome)
     }
 
     pub fn stop(&mut self, reason: SubmissionReason) {
@@ -182,15 +199,26 @@ impl SubmissionCorrection {
         self.outcome.attempts_used == 0 && self.parts.as_ref().is_some_and(|p| p.calls_used > 0)
     }
 
-    /// Counts a call of the part tool `tool` for the part `key`; returns its
-    /// number among the request's part calls and among the part's tries.
-    pub fn charge_part(&mut self, tool: &str, key: Option<String>) -> (u32, u32) {
+    /// Counts a call of the part tool `tool` for the part `key` in the model
+    /// turn `turn`; returns its number among the request's part calls and
+    /// among the part's tries.
+    pub fn charge_part(&mut self, tool: &str, key: Option<String>, turn: usize) -> (u32, u32) {
         let pending = self.pending();
         let parts = self.parts.as_mut().expect("a part of this submission");
         if !pending {
             return (parts.max_calls + 2, 0);
         }
         parts.calls_used += 1;
+        if parts.calls_used > parts.max_calls && parts.limit_turn.is_none() {
+            parts.limit_turn = Some(turn);
+        }
+        // Every call of the turn that went past the limit is asked for the
+        // finish; only a later turn ends the step, after the model saw that.
+        let call = if parts.limit_turn == Some(turn) {
+            parts.calls_used.min(parts.max_calls + 1)
+        } else {
+            parts.calls_used
+        };
         let position = match parts
             .tries
             .iter()
@@ -207,12 +235,12 @@ impl SubmissionCorrection {
             }
         };
         parts.tries[position].used += 1;
-        (parts.calls_used, parts.tries[position].used)
+        (call, parts.tries[position].used)
     }
 
     /// The answer to a part call past its allowances, given before dispatch.
-    /// The first call past the request's last one asks for the finish; the
-    /// next ends the submission.
+    /// Calls past the request's last one ask for the finish in the model turn
+    /// that went past it, and end the submission in a later turn.
     pub fn part_refusal(
         &self,
         call: u32,
@@ -220,7 +248,7 @@ impl SubmissionCorrection {
         key_path: &str,
     ) -> Option<ClientToolOutcome> {
         let parts = self.parts.as_ref()?;
-        let finish = self.tool.rsplit('/').next().unwrap_or(&self.tool);
+        let finish = self.model_name();
         let refusal = |path: &str, code: &str, message: String| {
             ClientToolOutcome::ValidationFailed(
                 vec![ClientToolValidationIssue {
@@ -245,11 +273,18 @@ impl SubmissionCorrection {
                 ),
             ))
         } else if try_number > parts.max_tries {
+            // A call without a part key, such as a section plan, has no other
+            // parts of its own to go on with.
+            let next = if key_path.is_empty() {
+                format!("Do not call it again; finish with {finish} alone.")
+            } else {
+                format!("Go on with the other parts, then finish the draft with {finish} alone.")
+            };
             Some(refusal(
                 key_path,
                 "part_tries_exhausted",
                 format!(
-                    "This part has used all {} of its tries. Go on with the other parts, then finish the draft with {finish} alone.",
+                    "This part has used all {} of its tries. {next}",
                     parts.max_tries
                 ),
             ))
@@ -279,24 +314,41 @@ impl SubmissionCorrection {
     pub fn record_part(&mut self, result: &ClientToolOutcome) {
         match result {
             ClientToolOutcome::Result(..) => self.recovery = SubmissionRecovery::RepairArguments,
-            ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
-                "timeout" | "expired" => SubmissionReason::Timeout,
-                "context_unavailable" => SubmissionReason::ContextUnavailable,
-                PART_CALL_LIMIT => SubmissionReason::AttemptsExhausted,
-                _ => SubmissionReason::Cancelled,
-            }),
+            ClientToolOutcome::Cancelled { reason } => self.stop_cancelled(reason),
             ClientToolOutcome::ValidationFailed(_, feedback) => {
-                self.recovery = feedback
-                    .as_ref()
-                    .map_or(SubmissionRecovery::RepairArguments, |f| f.recovery);
-                if self.recovery == SubmissionRecovery::CannotContinue {
-                    self.stop(SubmissionReason::ContextUnavailable);
-                } else if feedback.as_ref().is_some_and(|f| f.terminal) {
-                    self.stop(SubmissionReason::TerminalValidation);
-                }
+                self.take_feedback(feedback.as_ref());
             }
             ClientToolOutcome::Error(_) => self.stop(SubmissionReason::CapabilityUnavailable),
         }
+    }
+
+    /// `expired` comes only from durable calls, which a submission or a part
+    /// call never is.
+    fn stop_cancelled(&mut self, reason: &str) {
+        self.stop(match reason {
+            "timeout" | "expired" => SubmissionReason::Timeout,
+            "context_unavailable" => SubmissionReason::ContextUnavailable,
+            "submission_attempt_limit" => SubmissionReason::AttemptsExhausted,
+            PART_CALL_LIMIT => SubmissionReason::PartCallsExhausted,
+            _ => SubmissionReason::Cancelled,
+        });
+    }
+
+    /// Takes the host's recovery request from a rejection; returns whether it
+    /// ended the step.
+    fn take_feedback(&mut self, feedback: Option<&ClientToolSubmissionFeedback>) -> bool {
+        self.recovery = feedback.map_or(SubmissionRecovery::RepairArguments, |f| f.recovery);
+        let end = if self.recovery == SubmissionRecovery::CannotContinue {
+            Some(SubmissionReason::ContextUnavailable)
+        } else if feedback.is_some_and(|f| f.terminal) {
+            Some(SubmissionReason::TerminalValidation)
+        } else {
+            None
+        };
+        if let Some(reason) = end {
+            self.stop(reason);
+        }
+        end.is_some()
     }
 
     /// While drafting, the first text answer gets one reminder without an
@@ -339,24 +391,14 @@ impl SubmissionCorrection {
                 self.outcome.status = SubmissionStatus::Accepted;
                 self.outcome.reason = None;
             }
-            ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
-                "timeout" => SubmissionReason::Timeout,
-                "context_unavailable" => SubmissionReason::ContextUnavailable,
-                "submission_attempt_limit" => SubmissionReason::AttemptsExhausted,
-                _ => SubmissionReason::Cancelled,
-            }),
+            ClientToolOutcome::Cancelled { reason } => self.stop_cancelled(reason),
             ClientToolOutcome::ValidationFailed(_, feedback) => {
-                self.recovery = feedback
-                    .as_ref()
-                    .map_or(SubmissionRecovery::RepairArguments, |f| f.recovery);
-                if self.recovery == SubmissionRecovery::CannotContinue {
-                    self.stop(SubmissionReason::ContextUnavailable);
-                } else if feedback.as_ref().is_some_and(|f| f.terminal) {
-                    self.stop(SubmissionReason::TerminalValidation);
-                } else if self.outcome.attempts_used >= self.outcome.max_attempts {
-                    self.stop(SubmissionReason::AttemptsExhausted);
-                } else {
-                    self.outcome.reason = Some(SubmissionReason::ValidationFailed);
+                if !self.take_feedback(feedback.as_ref()) {
+                    if self.outcome.attempts_used >= self.outcome.max_attempts {
+                        self.stop(SubmissionReason::AttemptsExhausted);
+                    } else {
+                        self.outcome.reason = Some(SubmissionReason::ValidationFailed);
+                    }
                 }
             }
             ClientToolOutcome::Error(_) => self.stop(SubmissionReason::CapabilityUnavailable),
@@ -370,11 +412,7 @@ impl SubmissionCorrection {
             {
                 self.stop(SubmissionReason::ContextUnavailable)
             }
-            ClientToolOutcome::Cancelled { reason } => self.stop(match reason.as_str() {
-                "timeout" | "expired" => SubmissionReason::Timeout,
-                "context_unavailable" => SubmissionReason::ContextUnavailable,
-                _ => SubmissionReason::Cancelled,
-            }),
+            ClientToolOutcome::Cancelled { reason } => self.stop_cancelled(reason),
             ClientToolOutcome::Error(_) => self.stop(SubmissionReason::CapabilityUnavailable),
             _ => {}
         }
@@ -384,12 +422,20 @@ impl SubmissionCorrection {
         if self.drafting() {
             return format!(
                 "The draft is not finished, and a text answer does not submit it. Send the remaining parts, then finish the draft with {} alone. This is the only reminder: another text answer ends the request without a proposal.",
-                self.tool.rsplit('/').next().unwrap_or(&self.tool)
+                self.model_name()
             );
         }
+        // Unchanged without part tools, which keep today's behaviour exactly.
+        let next = if self.parts.is_some() {
+            format!(
+                "Resend the parts the rejection names, then submit using {} alone.",
+                self.model_name()
+            )
+        } else {
+            format!("Submit a corrected proposal using {} alone.", self.tool)
+        };
         format!(
-            "The validated submission is unresolved. A text answer does not prepare a valid proposal and consumes an attempt. Submit a corrected proposal using {} alone. {} of {} total attempts remain. Only declared recovery reads may use the separate read allowance.",
-            self.tool,
+            "The validated submission is unresolved. A text answer does not prepare a valid proposal and consumes an attempt. {next} {} of {} total attempts remain. Only declared recovery reads may use the separate read allowance.",
             self.outcome
                 .max_attempts
                 .saturating_sub(self.outcome.attempts_used),
@@ -403,7 +449,7 @@ mod tests {
     use super::*;
     use crate::config::{ClientToolConfig, ClientToolSubmissionConfig};
 
-    fn correction(part_tools: &[&str], max_part_calls: u32) -> SubmissionCorrection {
+    fn submission_tool(part_tools: &[&str], max_part_calls: u32) -> OfferedClientTool {
         let config = ClientToolConfig {
             name: "submit_draft".into(),
             submission: Some(ClientToolSubmissionConfig {
@@ -414,14 +460,24 @@ mod tests {
             }),
             ..Default::default()
         };
-        let tool = OfferedClientTool::prepare(&config, &json!({"type":"object"})).unwrap();
-        SubmissionCorrection::new(&tool)
+        OfferedClientTool::prepare(&config, &json!({"type":"object"})).unwrap()
+    }
+
+    fn correction(part_tools: &[&str], max_part_calls: u32) -> SubmissionCorrection {
+        SubmissionCorrection::new(&submission_tool(part_tools, max_part_calls))
     }
 
     fn code(outcome: Option<ClientToolOutcome>) -> Option<String> {
         match outcome? {
             ClientToolOutcome::ValidationFailed(issues, None) => Some(issues[0].code.clone()),
             ClientToolOutcome::Cancelled { reason } => Some(reason),
+            other => panic!("unexpected refusal {other:?}"),
+        }
+    }
+
+    fn message(outcome: Option<ClientToolOutcome>) -> String {
+        match outcome {
+            Some(ClientToolOutcome::ValidationFailed(issues, None)) => issues[0].message.clone(),
             other => panic!("unexpected refusal {other:?}"),
         }
     }
@@ -435,31 +491,31 @@ mod tests {
     #[test]
     fn tries_are_counted_per_part_and_calls_per_request() {
         let mut correction = correction(&["client/plan", "client/write"], 6);
-        assert_eq!(correction.charge_part("client/plan", None), (1, 1));
+        assert_eq!(correction.charge_part("client/plan", None, 1), (1, 1));
         for try_number in 1..=3 {
-            let (call, tries) = correction.charge_part("client/write", Some("2".into()));
+            let (call, tries) = correction.charge_part("client/write", Some("2".into()), 2);
             assert_eq!(tries, try_number);
             assert_eq!(code(correction.part_refusal(call, tries, "/row")), None);
         }
-        let (call, tries) = correction.charge_part("client/write", Some("2".into()));
+        let (call, tries) = correction.charge_part("client/write", Some("2".into()), 3);
         assert_eq!(
             code(correction.part_refusal(call, tries, "/row")).as_deref(),
             Some("part_tries_exhausted")
         );
         assert_eq!(
-            correction.charge_part("client/write", Some("3".into())),
+            correction.charge_part("client/write", Some("3".into()), 4),
             (6, 1)
         );
         assert_eq!(
             correction.part_budget("client/write", Some("2")),
             json!({"tries_remaining":0,"calls_remaining":0})
         );
-        let (call, tries) = correction.charge_part("client/write", Some("4".into()));
+        let (call, tries) = correction.charge_part("client/write", Some("4".into()), 5);
         assert_eq!(
             code(correction.part_refusal(call, tries, "/row")).as_deref(),
             Some("part_calls_exhausted")
         );
-        let (call, tries) = correction.charge_part("client/write", Some("5".into()));
+        let (call, tries) = correction.charge_part("client/write", Some("5".into()), 6);
         let refusal = correction.part_refusal(call, tries, "/row").unwrap();
         assert_eq!(
             code(Some(refusal.clone())).as_deref(),
@@ -468,15 +524,53 @@ mod tests {
         correction.record_part(&refusal);
         assert_eq!(
             correction.outcome.reason,
-            Some(SubmissionReason::AttemptsExhausted)
+            Some(SubmissionReason::PartCallsExhausted)
         );
         assert_eq!(correction.outcome.attempts_used, 0);
     }
 
     #[test]
+    fn calls_past_the_limit_in_one_batch_are_all_asked_for_the_finish() {
+        let mut correction = correction(&["client/write"], 1);
+        correction.charge_part("client/write", Some("1".into()), 1);
+        for row in ["2", "3"] {
+            let (call, tries) = correction.charge_part("client/write", Some(row.into()), 2);
+            assert_eq!(
+                code(correction.part_refusal(call, tries, "/row")).as_deref(),
+                Some("part_calls_exhausted")
+            );
+        }
+        let (call, tries) = correction.charge_part("client/write", Some("4".into()), 3);
+        assert_eq!(
+            code(correction.part_refusal(call, tries, "/row")).as_deref(),
+            Some(PART_CALL_LIMIT)
+        );
+    }
+
+    #[test]
+    fn a_part_without_a_key_is_not_told_to_go_on_with_other_parts() {
+        let mut correction = correction(&["client/plan", "client/write"], 40);
+        for _ in 0..3 {
+            correction.charge_part("client/plan", None, 1);
+        }
+        let (call, tries) = correction.charge_part("client/plan", None, 2);
+        let keyless = message(correction.part_refusal(call, tries, ""));
+        assert!(
+            keyless.contains("finish with submit_draft alone"),
+            "{keyless}"
+        );
+        assert!(!keyless.contains("other parts"), "{keyless}");
+        for _ in 0..3 {
+            correction.charge_part("client/write", Some("2".into()), 3);
+        }
+        let (call, tries) = correction.charge_part("client/write", Some("2".into()), 3);
+        assert!(message(correction.part_refusal(call, tries, "/row")).contains("other parts"));
+    }
+
+    #[test]
     fn a_rejected_part_keeps_the_submission_open() {
         let mut correction = correction(&["client/write"], 40);
-        correction.charge_part("client/write", Some("1".into()));
+        correction.charge_part("client/write", Some("1".into()), 1);
         correction.record_part(&ClientToolOutcome::ValidationFailed(Vec::new(), None));
         assert!(correction.pending());
         correction.record_part(&ClientToolOutcome::Result(Value::Null, Vec::new()));
@@ -488,9 +582,43 @@ mod tests {
     }
 
     #[test]
+    fn a_resumed_correction_keeps_the_narrower_part_budgets() {
+        let mut correction = correction(&["client/plan", "client/write"], 40);
+        correction.charge_part("client/write", Some("1".into()), 1);
+        let mut current = submission_tool(&["client/write", "client/other"], 20);
+        current.config.submission.as_mut().unwrap().max_row_tries = 2;
+        correction.restore(Some(&current));
+        let parts = correction.parts.as_ref().unwrap();
+        assert_eq!(parts.tools, ["client/write"]);
+        assert_eq!(
+            (parts.max_calls, parts.max_tries, parts.calls_used),
+            (20, 2, 1)
+        );
+        assert!(correction.pending());
+    }
+
+    #[test]
+    fn no_outcome_is_shown_before_a_submission_call() {
+        let mut stopped = correction(&["client/write"], 40);
+        stopped.stop(SubmissionReason::Timeout);
+        let mut correction = correction(&["client/write"], 40);
+        correction.charge_part("client/write", Some("1".into()), 1);
+        assert_eq!(correction.shown_outcome(), None);
+        correction.charge_submission();
+        assert_eq!(
+            correction.shown_outcome().map(|outcome| outcome.status),
+            Some(SubmissionStatus::Correcting)
+        );
+        assert_eq!(
+            stopped.shown_outcome().map(|outcome| outcome.attempts_used),
+            Some(0)
+        );
+    }
+
+    #[test]
     fn text_while_drafting_gets_one_reminder_and_no_attempt() {
         let mut correction = correction(&["client/write"], 40);
-        correction.charge_part("client/write", Some("1".into()));
+        correction.charge_part("client/write", Some("1".into()), 1);
         assert!(correction.no_progress(3, false));
         assert!(correction.no_progress(4, true));
         assert!(correction.reminder().contains("This is the only reminder"));
@@ -506,14 +634,30 @@ mod tests {
     #[test]
     fn after_a_finish_attempt_text_uses_attempts_as_before() {
         let mut correction = correction(&["client/write"], 40);
-        correction.charge_part("client/write", Some("1".into()));
+        correction.charge_part("client/write", Some("1".into()), 1);
         assert_eq!(correction.charge_submission(), 1);
         assert!(correction.no_progress(3, true));
         assert_eq!(correction.outcome.attempts_used, 2);
+        let reminder = correction.reminder();
         assert!(
-            correction
-                .reminder()
-                .contains("3 of 5 total attempts remain")
+            reminder.contains("3 of 5 total attempts remain"),
+            "{reminder}"
+        );
+        assert!(
+            reminder.contains(
+                "Resend the parts the rejection names, then submit using submit_draft alone."
+            ),
+            "{reminder}"
+        );
+    }
+
+    #[test]
+    fn the_reminder_without_part_tools_is_unchanged() {
+        let mut correction = correction(&[], 40);
+        correction.charge_submission();
+        assert_eq!(
+            correction.reminder(),
+            "The validated submission is unresolved. A text answer does not prepare a valid proposal and consumes an attempt. Submit a corrected proposal using client/submit_draft alone. 4 of 5 total attempts remain. Only declared recovery reads may use the separate read allowance."
         );
     }
 }

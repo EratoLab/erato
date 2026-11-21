@@ -100,11 +100,20 @@ pub struct PartPolicy {
 const MAX_PART_KEY_CHARS: usize = 64;
 
 impl PartPolicy {
-    /// The part a call writes: the JSON text of its `part_key` argument.
+    /// The part a call writes, from its `part_key` argument: `2`, `2.0` and
+    /// `"2"` name the same part.
     pub fn key_of(&self, input: &Value) -> Option<String> {
-        input
-            .pointer(&self.key)
-            .map(|value| bounded(&value.to_string(), MAX_PART_KEY_CHARS))
+        input.pointer(&self.key).map(|value| {
+            let key = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number
+                    .as_f64()
+                    .filter(|value| value.fract() == 0.0 && value.abs() < 1e15)
+                    .map_or_else(|| number.to_string(), |value| (value as i64).to_string()),
+                other => other.to_string(),
+            };
+            bounded(&key, MAX_PART_KEY_CHARS)
+        })
     }
 
     pub fn key_pointer(&self) -> &str {
@@ -1120,7 +1129,10 @@ mod tests {
         assert!(offered["submit_draft"].part.is_none());
         assert!(offered_parts(false)["write_part"].part.is_none());
 
-        assert_eq!(part.key_of(&json!({"row":2})).as_deref(), Some("2"));
+        for row in [json!(2), json!(2.0), json!("2")] {
+            assert_eq!(part.key_of(&json!({ "row": row })).as_deref(), Some("2"));
+        }
+        assert_eq!(part.key_of(&json!({"row":2.5})).as_deref(), Some("2.5"));
         assert_eq!(part.key_of(&json!({})), None);
         let mut input = json!({"row":2,"lines":"[\"a\",\"b\"]"});
         let check = offered["write_part"].argument_check().unwrap();

@@ -3231,6 +3231,11 @@ msgstr "The conversation may contain sensitive information"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.partCallsExhausted"
+msgstr "Erato reached the limit of parts it can write in one request; ask for a smaller change."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
 msgid "chat.submission.word.noRequestSession"
 msgstr "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane."
 

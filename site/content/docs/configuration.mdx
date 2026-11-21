@@ -8092,6 +8092,21 @@ is absent. Schemas support local references, and never fetch external schemas.
 - **`recovery_read_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools permitted to read current context when the host returns `submission_feedback.recovery = "read_current_context"`. These reads use their separate allowance without spending the ordinary tool budget. Configure only tools that read the current source context.
 - **`max_recovery_reads`** _(default: 32, range: 0–128)_ - Maximum recovery reads across the editing step, including approval continuations. Exhaustion ends with an unresolved outcome. The host can end recovery immediately with `submission_feedback.recovery = "cannot_continue"` when the source context is unavailable.
 
+Native enforcement does not replace the host's parser or domain checks. A schema
+must already fit the provider subset: object properties are all required and
+`additionalProperties` is false. Optional fields are never silently made required
+or rewritten. More general schemas continue to work through local validation.
+Gemini/Vertex and Ollama currently use that local path.
+
+The shared frontend executor may return `ok: false`, an `error` string and
+`validationErrors: [{ path, code, message }]`. Paths are JSON Pointers into the
+arguments. The backend passes at most 16 bounded diagnostics to the model, with
+the remaining attempt count. A successful executor returns a small receipt in
+`result`; the accepted arguments and receipt are persisted without an additional
+model call. The host's review UI can restore the draft from those records.
+
+#### Parts of a submission
+
 A large draft can arrive in parts before the submission call that finishes it.
 List the tools that stage those parts in `part_tools`:
 
@@ -8107,31 +8122,19 @@ part_key = "/row"
 A part call is checked against its own tool's schema like a submission, goes
 to the same client, and continues generation. It uses neither a submission
 attempt nor the ordinary tool budget. Only the submission call finishes the
-draft and ends generation when accepted. One text reply before that call gets
-one reminder; a second one ends with an unresolved outcome.
+draft and ends generation when accepted. After a part call, one text reply
+before the submission call gets one reminder; a second one ends with an
+unresolved outcome.
 
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.part_tools.[] */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_part_calls */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_row_tries */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.part_key */}
 
-- **`part_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools whose calls stage parts of this submission's draft. A part tool belongs to one submission, cannot be durable and cannot also be a recovery read. Without part tools, the other part settings have no effect.
-- **`max_part_calls`** _(default: 40, range: 1–200)_ - Part calls per request across all part tools. The first call past the limit is refused and asks for the submission call; the next one ends with an unresolved outcome.
-- **`max_row_tries`** _(default: 3, range: 1–10)_ - Calls per part, including calls the schema or the client rejected. A part past its tries is refused without reaching the client, and the other parts go on.
-- **`part_key`** _(default: `"/row"`)_ - JSON Pointer to the argument that names the part a call writes. The calls of a part tool without that argument count as one part, such as a section plan.
-
-Native enforcement does not replace the host's parser or domain checks. A schema
-must already fit the provider subset: object properties are all required and
-`additionalProperties` is false. Optional fields are never silently made required
-or rewritten. More general schemas continue to work through local validation.
-Gemini/Vertex and Ollama currently use that local path.
-
-The shared frontend executor may return `ok: false`, an `error` string and
-`validationErrors: [{ path, code, message }]`. Paths are JSON Pointers into the
-arguments. The backend passes at most 16 bounded diagnostics to the model, with
-the remaining attempt count. A successful executor returns a small receipt in
-`result`; the accepted arguments and receipt are persisted without an additional
-model call. The host's review UI can restore the draft from those records.
+- **`part_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools whose calls stage parts of this submission's draft. A part tool belongs to one submission, cannot be durable, cannot be a recovery read of any submission and cannot set `child_access = "read"`. Without part tools, the other part settings have no effect.
+- **`max_part_calls`** _(default: 40, range: 1–200)_ - Part calls per request across all part tools. The calls past the limit in the model turn that reached it are refused and ask for the submission call; a part call in a later turn ends with the unresolved reason `part_calls_exhausted`.
+- **`max_row_tries`** _(default: 3, range: 1–10)_ - Calls per part, including accepted calls and calls the schema or the client rejected. A part past its tries is refused without reaching the client, and the other parts go on.
+- **`part_key`** _(default: `"/row"`)_ - JSON Pointer to the argument that names the part a call writes; `2`, `2.0` and `"2"` name the same part. The calls of a part tool without that argument count as one part, such as a section plan.
 
 ### Compact replay of earlier client tool calls
 
