@@ -95,6 +95,7 @@ export class WordDocumentReadSession {
   private session: Session | null = null;
   private access: WordReadAccess = "write";
   private readCapture?: WordReadCapture;
+  private requestText?: string;
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
@@ -121,6 +122,10 @@ export class WordDocumentReadSession {
   get capture(): WordReadCapture | undefined {
     return this.readCapture;
   }
+  /** What the user asked when the capture was taken; part checks look for the sections it names. */
+  get request(): string | undefined {
+    return this.requestText;
+  }
   snapshotForSubmission(
     context: ClientToolCallContext,
   ): WordAuthoringSnapshot | undefined {
@@ -143,6 +148,7 @@ export class WordDocumentReadSession {
   clear(): void {
     this.access = "write";
     this.readCapture = undefined;
+    this.requestText = undefined;
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
     this.drafts.clear();
@@ -153,12 +159,17 @@ export class WordDocumentReadSession {
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
     completeBudgetCheck?: () => Promise<string | undefined>,
-    options?: { access?: WordReadAccess; capture?: WordReadCapture },
+    options?: {
+      access?: WordReadAccess;
+      capture?: WordReadCapture;
+      request?: string;
+    },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
     this.access = options?.access ?? "write";
     this.readCapture = options?.capture;
+    this.requestText = options?.request;
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();

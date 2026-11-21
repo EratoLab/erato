@@ -8,6 +8,7 @@ import { wordLeftOutPartName, wordTitledEntry } from "./wordPlanCoverage";
 import { wordBlockTitle, wordPassageStart } from "./wordPlanDocumentChanges";
 import { WORD_PLAN_PATH, WORD_PLAN_PATH_IN_TEXT } from "./wordScopedSubmission";
 
+import type { WordPartAllow } from "./wordPartChecks";
 import type { WordLeftOutPart } from "./wordPlanCoverage";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type {
@@ -55,6 +56,9 @@ export interface WordPartsDraft {
   readToken: string;
   plan: WordPartsPlan;
   parts: Map<number, WordPartOp[]>;
+  /** Per written row: the checks its part allows, and those that found a change it allows. */
+  allow: Map<number, ReadonlySet<WordPartAllow>>;
+  waived: Map<number, WordPartAllow[]>;
   /** A finish at this revision was refused for rows without a part, so the next one leaves them. */
   unwrittenRefusedAt?: number;
 }
@@ -655,46 +659,77 @@ export function wordPartIssues(
 /** One section draft per request, cleared with the read session's drafts. */
 export class WordPartsDraftStore {
   private draft?: WordPartsDraft;
+  /** Sections of the request a fix request already named, so it is said once per request. */
+  readonly namedSections = new Set<number>();
 
   clear(): void {
     this.draft = undefined;
+    this.namedSections.clear();
   }
 
   get current(): WordPartsDraft | undefined {
     return this.draft;
   }
 
-  /** Rewrite rows with the same blocks keep their parts. */
-  carried(plan: WordPartsPlan): Map<number, WordPartOp[]> {
+  /** New row → the earlier rewrite row with the same blocks, whose part it keeps. */
+  private same(plan: WordPartsPlan): Map<number, number> {
     const previous = this.draft;
-    const parts = new Map<number, WordPartOp[]>();
+    const same = new Map<number, number>();
     if (previous)
       plan.rows.forEach((row, r) => {
         if (row.action !== "rewrite") return;
-        const same = previous.plan.rows.findIndex(
-          (old) =>
-            old.action === "rewrite" && old.refs.join() === row.refs.join(),
+        const old = previous.plan.rows.findIndex(
+          (was, k) =>
+            was.action === "rewrite" &&
+            was.refs.join() === row.refs.join() &&
+            previous.parts.has(k),
         );
-        const ops = same >= 0 ? previous.parts.get(same) : undefined;
-        if (ops) parts.set(r, ops);
+        if (old >= 0) same.set(r, old);
       });
+    return same;
+  }
+
+  /** Rewrite rows with the same blocks keep their parts. */
+  carried(plan: WordPartsPlan): Map<number, WordPartOp[]> {
+    const parts = new Map<number, WordPartOp[]>();
+    for (const [r, old] of this.same(plan))
+      parts.set(r, this.draft!.parts.get(old)!);
     return parts;
   }
 
   open(plan: WordPartsPlan, readToken: string): WordPartsDraft {
     const previous = this.draft;
+    const same = this.same(plan);
+    const moved = <T>(from: Map<number, T> | undefined) =>
+      new Map(
+        [...same].flatMap(([r, old]) =>
+          from?.has(old) ? [[r, from.get(old)!] as const] : [],
+        ),
+      );
     this.draft = {
       id: previous?.id ?? globalThis.crypto.randomUUID(),
       revision: (previous?.revision ?? 0) + 1,
       readToken,
       plan,
-      parts: this.carried(plan),
+      parts: moved(previous?.parts),
+      allow: moved(previous?.allow),
+      waived: moved(previous?.waived),
     };
     return this.draft;
   }
 
-  write(draft: WordPartsDraft, row: number, ops: WordPartOp[]): void {
+  write(
+    draft: WordPartsDraft,
+    row: number,
+    ops: WordPartOp[],
+    {
+      allow,
+      waived,
+    }: { allow: ReadonlySet<WordPartAllow>; waived: WordPartAllow[] },
+  ): void {
     draft.parts.set(row, ops);
+    draft.allow.set(row, allow);
+    draft.waived.set(row, waived);
     draft.revision++;
   }
 }
@@ -711,26 +746,31 @@ export function wordPartRows(
 ) {
   const sections = wordCaptureSections(snapshot);
   const index = wordBlockIndex(snapshot);
-  return draft.plan.rows.map((row, r) => ({
-    row: r + 1,
-    action: row.action,
-    // A renamed row is named by the heading it renames, so old and new read as a pair.
-    title: row.title
-      ? (wordBlockTitle(sections, index.get(row.refs[0])!) ?? "")
-      : wordPartRowTitle(row, snapshot),
-    ...(row.title ? { new_title: row.title } : {}),
-    paragraphs: row.refs.length,
-    status:
-      row.action === "keep"
-        ? "kept"
-        : row.action === "delete"
-          ? "deleted"
-          : draft.parts.has(r)
-            ? "ready"
-            : finished
-              ? "not_written"
-              : "waiting",
-  }));
+  return draft.plan.rows.map((row, r) => {
+    const allowed = draft.parts.has(r) ? draft.waived.get(r) : undefined;
+    return {
+      row: r + 1,
+      action: row.action,
+      // A renamed row is named by the heading it renames, so old and new read as a pair.
+      title: row.title
+        ? (wordBlockTitle(sections, index.get(row.refs[0])!) ?? "")
+        : wordPartRowTitle(row, snapshot),
+      ...(row.title ? { new_title: row.title } : {}),
+      paragraphs: row.refs.length,
+      status:
+        row.action === "keep"
+          ? "kept"
+          : row.action === "delete"
+            ? "deleted"
+            : draft.parts.has(r)
+              ? "ready"
+              : finished
+                ? "not_written"
+                : "waiting",
+      // Changes a check found and the part said were intended; the row shows them as notes.
+      ...(allowed?.length ? { allowed } : {}),
+    };
+  });
 }
 
 const refusal = (

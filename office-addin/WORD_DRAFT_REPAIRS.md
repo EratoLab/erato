@@ -83,3 +83,37 @@ names the row to send again; the same refusal twice at one revision ends the
 step. The section draft has the read session's lifetime, like the repair draft.
 The read contract describes the part tools on every complete read, since the
 pane does not know which tools a request offers.
+
+### Code checks
+
+Each part is also compared with the capture (ERMAIN-1298, `wordPartChecks.ts`).
+The rules come from the document itself, so they need no language tables, and
+meaning is left to the review:
+
+- `numbers`: the numbers and amounts of the replaced blocks, as a multiset,
+  against the new text; clause markers, a heading's own number and references
+  to the document's sections are left out.
+- `clause-numbering`: the clause markers such as "(1)" or "a)" of the replaced
+  paragraphs, in order, against the new lines.
+- `term`: a term of the section plan's `terms` that a replaced paragraph has
+  and its new text lacks.
+- `row-scope`: a new line that repeats its block word for word (keep it by
+  reference), or a part that keeps every block of its rewrite row.
+- `kept-unchanged`: a part that leaves more than half of its row's paragraphs
+  unchanged.
+
+A part's `allow` waives `numbers`, `clause-numbering`, `term`,
+`kept-unchanged` or `cross-reference` when its change is intended; the receipt
+and the finish's `rows` list what a check found and the part allowed as
+`allowed`, for the card to show on the row. A refused part names the line and
+says the fix; the shipping pipeline's own errors come in the same refusal.
+
+The finish checks every written row again on the final section plan and then
+`cross-reference`: new text that refers, by a heading's number such as "§ 10"
+or "12.1", to a section whose heading the change deletes, or newly to a
+section it moves, or by its old number to a section it renumbers. A refusal
+names the row to send again; the same refusal twice at one revision ends the
+step. A section the request names by number or full title that no row of the
+section plan changes, moves or renames gets one `fix_requests` entry on the
+section plan's receipt, not a refusal, since a request may name a section only
+for context.

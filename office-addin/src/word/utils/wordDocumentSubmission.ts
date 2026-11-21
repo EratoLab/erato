@@ -20,6 +20,7 @@ import {
   finishWordParts,
   wordPartRowLabel,
   wordPartRows,
+  wordPartRowTitle,
   wordPartsFinishRejected,
 } from "./wordDocumentParts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
@@ -36,6 +37,7 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
+import { wordPartsFinishIssues } from "./wordPartChecks";
 import {
   WORD_LEFT_OUT_EARLIER,
   wordNotInProposalGroups,
@@ -305,6 +307,21 @@ function createSubmissionExecutor(
           context.toolCallId,
           serialized,
           finish.result,
+        );
+      const checks =
+        finish &&
+        wordPartsFinishIssues(snapshot, finish.draft, finish.assembly, (r) =>
+          wordPartRowTitle(finish.draft.plan.rows[r], snapshot),
+        );
+      if (checks?.length)
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          sparseRejection(input, {
+            ok: false,
+            error: "Document plan finish rejected.",
+            validationErrors: checks,
+          }),
         );
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted

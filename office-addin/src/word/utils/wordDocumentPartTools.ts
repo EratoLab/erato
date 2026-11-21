@@ -19,6 +19,11 @@ import {
   prepareWordDocumentSubmission,
   wordSubmissionRecovery,
 } from "./wordDocumentSubmission";
+import {
+  checkWordPart,
+  parseWordPartAllow,
+  wordPartsUncoveredSections,
+} from "./wordPartChecks";
 import { wordCompleteReadToken } from "./wordScopedSubmission";
 
 import type { WordPartsAssembly, WordPartsDraft } from "./wordDocumentParts";
@@ -207,9 +212,18 @@ function planStep(session: WordDocumentReadSession): Step {
       session,
     );
     if (refused) return refused;
-    const draft = session.drafts.parts.open(parsed.plan, readToken);
+    const store = session.drafts.parts;
+    const draft = store.open(parsed.plan, readToken);
     const rows = wordPartRows(draft, snapshot);
     const first = rows.find((row) => row.status === "waiting");
+    const uncovered = wordPartsUncoveredSections(
+      snapshot,
+      parsed.plan,
+      session.request,
+    )
+      .filter(({ entry }) => !store.namedSections.has(entry))
+      .slice(0, 5);
+    for (const { entry } of uncovered) store.namedSections.add(entry);
     return {
       ok: true,
       result: {
@@ -220,6 +234,19 @@ function planStep(session: WordDocumentReadSession): Step {
         next: first
           ? `Write row ${first.row} with write_document_section.`
           : `No row needs a part: finish with ${FINISH_CALL}.`,
+        ...(uncovered.length
+          ? {
+              fix_requests: uncovered.map(({ title }) => ({
+                title,
+                issues: [
+                  {
+                    code: "section-not-covered",
+                    message: `The request names ${title}, and no row of this section plan changes it. If the request asks to change it, send the section plan again with a rewrite row for it; if it names it only for context, go on.`,
+                  },
+                ],
+              })),
+            }
+          : {}),
       },
     };
   };
@@ -229,14 +256,17 @@ function writeStep(session: WordDocumentReadSession): Step {
   return async (input, snapshot, context) => {
     const draft = session.drafts.parts.current;
     const unknown = Object.keys(input).find(
-      (key) => !["snapshot", "draft_id", "row", "ops"].includes(key),
+      (key) => !["snapshot", "draft_id", "row", "ops", "allow"].includes(key),
     );
     if (unknown !== undefined)
       return refusal(
         "",
         "part-shape",
-        `A part has snapshot, draft_id, row and ops only; remove "${unknown.slice(0, 40)}".`,
+        `A part has snapshot, draft_id, row, ops and allow only; remove "${unknown.slice(0, 40)}".`,
       );
+    const allowed = parseWordPartAllow(input.allow);
+    if ("message" in allowed)
+      return refusal("/allow", "part-shape", allowed.message);
     if (!draft || input.draft_id !== draft.id)
       return refusal(
         "/draft_id",
@@ -277,6 +307,15 @@ function writeStep(session: WordDocumentReadSession): Step {
     );
     const slips = assembly.textIssues.get(r);
     if (slips) return refuse(slips);
+    const checked = checkWordPart({
+      snapshot,
+      plan,
+      row: r,
+      ops: parsed.ops,
+      assembly,
+      allow: allowed.allow,
+    });
+    // The shipping checks run too, so one refusal names everything the part must fix.
     const refused = await check(
       assembly,
       { kind: "part", row: r },
@@ -285,14 +324,21 @@ function writeStep(session: WordDocumentReadSession): Step {
       context,
       session,
     );
-    if (refused) return refused;
+    if (checked.issues.length || refused)
+      return refuse([
+        ...checked.issues,
+        ...((refused && !refused.ok && refused.validationErrors) || []),
+      ]);
     if (session.drafts.parts.current !== draft || draft.plan !== plan)
       return refusal(
         "/draft_id",
         "draft-revision",
         "The section plan changed while this part was checked; send the part again for the new plan's row.",
       );
-    session.drafts.parts.write(draft, r, parsed.ops);
+    session.drafts.parts.write(draft, r, parsed.ops, {
+      allow: allowed.allow,
+      waived: checked.waived,
+    });
     const after = assembly.plan.entries.reduce(
       (count, entry, k) =>
         assembly.entries[k].row !== r
@@ -309,6 +355,7 @@ function writeStep(session: WordDocumentReadSession): Step {
         row,
         status: "ready",
         paragraphs: { before: planRow.refs.length, after },
+        ...(checked.waived.length ? { allowed: checked.waived } : {}),
         ...nextStep(draft),
       },
     };

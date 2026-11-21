@@ -1,0 +1,553 @@
+{
+  "source": "Research probe review set (probe-review/data/cases.json, 2026-11-21): § 5, § 6 and § 11 of framework-contract.docx rewritten for dispatchers within the T1 restructure, by gpt-6.1-sol (C-, faithful) and qwen3.8-max (R-), with slips seeded into the faithful parts (S-, X-, P-). parts holds each written row's new text by ref; a case overrides it and lists the refs it keeps by reference instead.",
+  "sections": {
+    "5": "b99-b143",
+    "6": "b144-b178",
+    "11": "b307-b349"
+  },
+  "parts": {
+    "R-T1-V4-qwen-t1__S11": {
+      "section": 11,
+      "after": {
+        "b309": "(1) Personenbezogene Kontaktdaten nutzen beide Seiten nur für diesen Rahmenliefervertrag. Für Werk Halden hinterlegen Sie höchstens Name, Funktion und dienstliche Erreichbarkeit.",
+        "b310": "(2) Der Auftragnehmer benennt für Werk Ostrup einen Datenschutzkontakt und eine Ersatzperson. Ändern sich diese Zuständigkeiten, informiert er den Auftraggeber innerhalb von 2 Arbeitstagen in Textform.",
+        "b311": "(3) Im Bestellportal sehen nur Beschäftigte personenbezogene Daten, die sie nachweislich für ihre Aufgabe brauchen. Die zuständige Führungskraft prüft alle Berechtigungen mindestens alle 90 Kalendertage.",
+        "b312": "(4) Löschen Sie personenbezogene Besucherdaten für Werk Liebenau grundsätzlich 30 Kalendertage nach dem Besuch. Gesetzliche Aufbewahrungspflichten und dokumentierte Erfordernisse einer konkreten Rechtsverfolgung gehen vor und bleiben unberührt.",
+        "b313": "(5) Fahrertelefonnummern für das Zentrallager Brück dürfen Sie nur für die Steuerung der jeweiligen Anlieferung verwenden. Löschen Sie die Nummern spätestens 7 Kalendertage nach der abgeschlossenen Entladung.",
+        "b314": "(6) Richten Sie für alle administrativen Zugänge zum Bestellportal zwingend eine Zwei-Faktor-Anmeldung ein. Ist der zweite Faktor verloren, muss die IT-Hotline ihn innerhalb von 1 Stunde nach Bekanntwerden sperren.",
+        "b315": "(7) Der Auftragnehmer schützt Zeichnungen für Werk Halden durch rollenbezogene Leserechte und verschlüsselte Ablage. Geben Sie die Zeichnungen an mehr als 3 intern zuständige Personen weiter, braucht es die Zustimmung des technischen Projektleiters.",
+        "b316": "(8) Sicherheitsvorfälle mit Bezug zu Werk Ostrup meldet der Auftragnehmer unverzüglich, spätestens binnen 4 Stunden nach Kenntnis. Die Erstmeldung enthält mindestens Entdeckungszeit, betroffene Systeme und eingeleitete Sicherungsmaßnahmen.",
+        "b317": "(9) Nach 5 aufeinanderfolgenden Fehlversuchen sperrt das Bestellportal die Anmeldung automatisch. Entsperren lässt sich der Zugang erst nach der Identitätsprüfung durch die IT-Hotline und mit dokumentiertem Anlass.",
+        "b318": "(10) Verarbeiten Sie Spezifikationen für Werk Liebenau ausschließlich auf freigegebenen Geschäftssystemen. Speichern Sie sie nicht auf privaten Endgeräten oder unverschlüsselten Datenträgern – auch nicht für weniger als 24 Stunden.",
+        "b319": "(11) Führen Sie für das Zentrallager Brück ein aktuelles Kontaktverzeichnis mit den technischen Ansprechpartnern und deren Vertretungen. Der Auftragnehmer bestätigt die Richtigkeit jeweils am ersten Arbeitstag eines Quartals.",
+        "b320": "(12) Protokolle sicherheitsrelevanter Vorgänge im Portal bleiben 180 Kalendertage lang gegen nachträgliche Veränderung geschützt. Einsicht erhalten nur benannte Sicherheitsverantwortliche und nur bei dokumentiertem Prüfzweck.",
+        "b321": "(13) Der Auftragnehmer unterrichtet Beschäftigte mit Zugriff auf Daten des Werks Halden, bevor er sie erstmals freischaltet. Danach schult er sie einmal pro Kalenderjahr mindestens 60 Minuten lang erneut.",
+        "b323": "(1) Unterauftragnehmer dürfen Zeichnungen des Werks Ostrup nur mit vorheriger Zustimmung des Auftraggebers einsehen. Der Auftragnehmer legt mindestens 10 Arbeitstage vor dem Einsatz offen, welche Aufgaben und Sicherheitsmaßnahmen geplant sind.",
+        "b324": "(2) Scheidet ein berechtigter Beschäftigter aus, deaktivieren Sie dessen Zugang zum Bestellportal spätestens zum Ende des letzten Arbeitstags. Bei fristloser Trennung veranlasst die Personalstelle die Sperrung innerhalb von 30 Minuten.",
+        "b325": "Wichtig: (3) Verschlüsseln Sie Konstruktionsdaten für Werk Liebenau bei der Übertragung nach dem Stand der Technik. Die IT-Verantwortlichen prüfen die eingesetzten Verfahren mindestens alle 6 Monate auf weiteren Anpassungsbedarf.",
+        "b326": "(4) Bereinigen Sie Datenträger mit Informationen des Zentrallagers Brück sicher, bevor Sie sie weiterverwenden. Der Auftragnehmer dokumentiert Verfahren, Datum und verantwortliche Person innerhalb von 2 Arbeitstagen nach der Durchführung.",
+        "b327": "(5) Nutzen Sie die Exportfunktionen des Bestellportals nur für freigegebene Vertragszwecke und nur mit besonders berechtigten Rollen. Für Exporte mit mehr als 500 personenbezogenen Datensätzen brauchen Sie eine gesonderte dokumentierte Genehmigung.",
+        "b328": "(6) Der Auftraggeber darf die vereinbarten Schutzmaßnahmen am Standort der Auftragsabwicklung einmal jährlich prüfen. Kündigen Sie den Termin mindestens 10 Arbeitstage vorher an und beschränken Sie ihn auf vertragsbezogene Systeme.",
+        "b329": "(7) Bei einem erheblichen Sicherheitsvorfall mit Bezug zu Werk Halden ist eine anlassbezogene Prüfung ohne Jahresbegrenzung zulässig. Die Ankündigungsfrist beträgt 24 Stunden, soweit der Untersuchungszweck dadurch nicht gefährdet wird.",
+        "b330": "(8) Tragen Sie personenbezogene Daten im Bestellportal nicht in frei zugängliche Kommentarfelder ein. Fehlplatzierte Angaben entfernt die zuständige Administration binnen 8 Stunden nach Eingang eines nachvollziehbaren Hinweises.",
+        "b331": "(9) Der Auftragnehmer erstellt von kritischen Vertragsdaten des Werks Ostrup mindestens täglich eine verschlüsselte Sicherungskopie. Alle 3 Monate prüft er die Wiederherstellbarkeit mit einem dokumentierten und technisch nachvollziehbaren Test.",
+        "b332": "(10) Kennzeichnen Sie Zeichnungsstände für Werk Liebenau mit Versionsnummer, Freigabedatum und verantwortlicher Fachstelle. Überholte Fassungen sperren Sie binnen 1 Arbeitstag nach dem Ersatz gegen produktive Verwendung.",
+        "b333": "(11) Die Rollen für Einkauf, Disposition und Administration im Bestellportal sind technisch voneinander getrennt. Alle 3 Rollen gleichzeitig darf jemand nur mit befristeter Freigabe des Informationssicherheitsbeauftragten haben.",
+        "b334": "(12) Betroffenenanfragen zu Daten des Zentrallagers Brück leitet der Auftragnehmer binnen 2 Arbeitstagen an den Datenschutzkontakt weiter. Gesetzliche Zuständigkeiten und kürzere zwingende Reaktionsfristen ändern sich dadurch nicht.",
+        "b335": "(13) Nach Vertragsende löscht der Auftragnehmer Zeichnungen des Werks Halden innerhalb von 30 Kalendertagen, soweit keine Aufbewahrungspflicht besteht. Die vollständige Durchführung bestätigt er dem technischen Projektleiter in einem nachvollziehbaren Löschprotokoll.",
+        "b338": "(1) Melden Sie einen vermuteten Missbrauch des Bestellportals unverzüglich, spätestens innerhalb von 60 Minuten, der IT-Hotline. Betroffene Sitzungen werden vorsorglich beendet, sofern keine überwiegenden Untersuchungsgründe entgegenstehen.",
+        "b339": "(2) Liegt eine Auftragsverarbeitung vor, schließen die Parteien vor dem Datenzugriff eine Vereinbarung nach Artikel 28 der Datenschutz-Grundverordnung. Für Werk Ostrup darf vorher kein entsprechender Produktivzugang freigeschaltet werden.",
+        "b340": "(3) Personenbezogene Vertragsdaten aus Werk Liebenau dürfen nur in Drittstaaten übermittelt werden, wenn die Rechtsgrundlage vorab geprüft ist. Der Auftragnehmer legt die erforderlichen Garantien mindestens 15 Arbeitstage vor dem geplanten Beginn vor.",
+        "b341": "(14) Das Bestellportal sperrt Sitzungen automatisch nach 15 Minuten ohne Nutzeraktivität. Melden Sie sich zum Weiterarbeiten erneut an. Dabei dürfen keine fremden Sitzungsinhalte offengelegt werden.",
+        "b342": "(5) Bewahren Sie Papierausdrucke mit vertraulichen Spezifikationen des Zentrallagers Brück in verschlossenen Schränken auf. Nicht mehr benötigte Exemplare lassen Sie innerhalb von 5 Arbeitstagen geeignet und sicher vernichten. Siehe auch Anlage 3.",
+        "b343": "(6) Der Auftragnehmer stuft technische Daten für Werk Halden vor der Weitergabe nach ihrem Schutzbedarf ein. Besonders vertrauliche Fertigungsunterlagen geben mindestens 2 benannte Fachverantwortliche gemeinsam frei.",
+        "b344": "(7) Neue Sicherheitsfunktionen des Portals werden vor der produktiven Nutzung in einer getrennten Umgebung geprüft. Die IT-Leitung dokumentiert mindestens 3 Zugriffstests, darunter einen unzulässigen Anmeldeversuch.",
+        "b345": "(8) Über einen gemeldeten Sicherheitsvorfall für Werk Ostrup berichtet der Auftragnehmer bis zur Eindämmung alle 12 Stunden. Der Abschlussbericht folgt binnen 10 Arbeitstagen und beschreibt Ursache, Auswirkungen sowie dauerhafte Abhilfemaßnahmen.",
+        "b346": "(9) Unterauftragnehmer für Werk Liebenau müssen auf mindestens gleichwertige Vertraulichkeits- und Sicherheitsstandards verpflichtet werden. Auf Anforderung weist der Auftragnehmer die Einhaltung innerhalb von 5 Arbeitstagen nach.",
+        "b347": "(10) Löschen Sie heruntergeladene personenbezogene Daten aus dem Bestellportal innerhalb von 48 Stunden, sobald der Bearbeitungszweck wegfällt. Länger speichern dürfen Sie sie nur mit dokumentierter Rechtsgrundlage und festgelegter Prüffrist.",
+        "b348": "(11) Mobile Arbeitsplätze mit Daten des Zentrallagers Brück brauchen eine vollständige Geräteverschlüsselung und eine automatische Bildschirmsperre. Die Sperre wirkt spätestens nach 5 Minuten ohne Eingabe."
+      }
+    },
+    "C-T1-V4-sol-t1__S5": {
+      "section": 5,
+      "after": {
+        "b101": "(1) Die Disposition des Auftraggebers darf für Werk Halden täglich bis 14 Uhr verbindliche Abrufe erteilen. Dafür hält der Auftragnehmer eine bestätigte Tageskapazität von mindestens 800 Teilen bereit.",
+        "b102": "(2) Die Auftragsabwicklung des Auftragnehmers muss Abrufe für Werk Ostrup innerhalb von 8 Stunden nach Zugang bestätigen. Schweigen bedeutet keine Annahme. Das gilt auch für angeforderte Mengen unter 200 Stück.",
+        "b103": "(3) Geben Sie bei jedem Abruf im Bestellportal die Artikelnummer, den Lieferort und die Menge in ganzen Stückzahlen an. Fehlen Pflichtangaben, muss die Auftragsabwicklung dies innerhalb von 4 Stunden bei der Disposition beanstanden.",
+        "b104": "(4) Für Werk Liebenau liegen zwischen dem bestätigten Abruf und der Bereitstellung verbindlich 5 Arbeitstage. Eine kürzere Vorlaufzeit ist nur erlaubt, wenn der Produktionsleiter des Auftragnehmers in Textform zustimmt.",
+        "b105": "(5) Nehmen Sie bei Abrufen zum Zentrallager Brück höchstens 6 unterschiedliche Artikelpositionen je Transportauftrag auf. Die Disposition muss weitere Positionen in einem gesonderten Abruf mit eigener Referenz bündeln. Siehe auch Anlage 3.",
+        "b106": "(6) Der Auftragnehmer muss neue Einträge im Bestellportal an Arbeitstagen mindestens alle 2 Stunden prüfen. Diese Prüfpflicht endet um 18 Uhr. Sie beginnt am folgenden Arbeitstag um 6 Uhr erneut.",
+        "b107": "(7) Für Werk Halden dürfen Mengen bis 48 Stunden vor dem bestätigten Fertigungsbeginn ohne Zuschlag geändert werden. Bereits beschafftes Sondermaterial wird nur gegen Nachweis vergütet. Die Vergütung beträgt höchstens 70 Prozent.",
+        "b108": "(8) Ein Abruf für Werk Ostrup kann nur durch eine Erklärung der einkaufsberechtigten Person storniert werden. Nach Fertigungsfreigabe muss der Auftraggeber belegte Nettokosten ersetzen. Der Ersatz ist auf 60 Prozent des Abrufwerts begrenzt.",
+        "b109": "(9) Jeder Änderungsantrag im Bestellportal erhält eine eigene Versionskennung und einen unveränderlichen Zeitstempel. Die Änderung muss innerhalb von 6 Stunden ausdrücklich bestätigt werden. Bis dahin gilt die bisherige Fassung.",
+        "b110": "(10) Der Auftraggeber muss für Werk Liebenau jeden Montag eine rollierende Vorschau für 12 Wochen übermitteln. Nur die ersten 5 Arbeitstage werden verbindlich, und nur durch einen gesondert bestätigten Abruf.",
+        "b111": "(11) Der Auftragnehmer muss für das Zentrallager Brück jede Woche 4.000 Fertigungseinheiten als Planungskapazität reservieren. Diese Reservierung allein verpflichtet nicht zur Abnahme. Die Abnahmeverpflichtung entsteht erst, wenn eine ausdrückliche Abrufbestätigung zugeht.",
+        "b112": "(12) Die Disposition muss Prognosen im Bestellportal mit dem Status unverbindlich und einem Planungsdatum kennzeichnen. Der Auftragnehmer darf auf dieser Grundlage Material für mehr als 20.000 Euro nur nach Freigabe kaufen.",
+        "b115": "(1) Bestätigte Abrufmengen für Werk Halden dürfen ohne Zustimmung nicht unterschritten werden. Bei technisch bedingten Mehrmengen bis 2 Prozent darf die Disposition die Freigabe erteilen. Dafür hat sie nach der Mitteilung 8 Stunden Zeit.",
+        "b116": "(2) Die Auftragsabwicklung muss erkennbare Kapazitätsengpässe für Werk Ostrup spätestens 24 Stunden nach der Feststellung melden. Sie muss die betroffenen Artikel nennen und einen Wiederanlaufplan mit mindestens 2 Maßnahmen angeben.",
+        "b117": "(3) Fällt das Portal aus, muss die Disposition Abrufe an das vertraglich benannte Funktionspostfach senden. Die Auftragsabwicklung muss den Empfang innerhalb von 2 Stunden bestätigen. Dabei muss sie die jeweilige Ersatzreferenz angeben.",
+        "b127": "(1) Telefonische Abrufe für Werk Liebenau sind erst verbindlich, wenn danach eine Erklärung in Textform übermittelt wird. Die zuständige Disposition muss diese Erklärung innerhalb von 3 Stunden nach dem Gespräch übermitteln.",
+        "b128": "(2) Für dringende Ersatzteile zum Zentrallager Brück darf der Einkaufsleiter eine Bearbeitung innerhalb von 4 Stunden verlangen. Dafür müssen mindestens 30 Stück des betroffenen Artikels auf Lager verfügbar sein.",
+        "b129": "(3) Zugangsdaten zum Bestellportal erhalten nur namentlich benannte Beschäftigte der Auftragsabwicklung. Erfährt der Auftragnehmer von einem Rollenwechsel, muss er spätestens 1 Stunde danach die Sperrung der Zugangsdaten beantragen.",
+        "b131": "(1) Die Disposition des Werks Halden darf Liefertermine um höchstens 2 Arbeitstage vorziehen, wenn freie Kapazität besteht. Der Auftragnehmer muss innerhalb von 10 Stunden zustimmen oder mit Begründung ablehnen.",
+        "b132": "(2) Widersprechen sich Abrufe für Werk Ostrup, gilt die jüngste ausdrücklich bestätigte Version. Der Widerspruch muss innerhalb von 12 Stunden geklärt werden. Bis zur Klärung darf nur die unstreitige Teilmenge gefertigt werden.",
+        "b133": "(3) Die Rollenverwaltung im Bestellportal trennt Leserechte für die Planung von der Befugnis, verbindlich zu bestellen. Jede Erweiterung braucht die Freigabe des Einkaufsleiters. Sie wird innerhalb von 2 Arbeitstagen geprüft.",
+        "b134": "(4) Geben Sie in jedem Abruf für Werk Liebenau eine verantwortliche Person aus der Disposition und deren Vertretung an. Ein Wechsel der Zuständigkeit muss der Auftragsabwicklung mindestens 1 Arbeitstag vorher mitgeteilt werden.",
+        "b135": "(5) Rahmenmengen für das Zentrallager Brück dürfen im laufenden Quartal um 15 Prozent angepasst werden. Die neue Planung muss spätestens 10 Arbeitstage vor Beginn des betroffenen Produktionsmonats angekündigt werden.",
+        "b136": "(6) Jede Zurückweisung im Bestellportal muss einen konkreten Ablehnungsgrund und den frühesten Ersatztermin nennen. Sind mehr als 500 Stück fristgerecht verfügbar, reicht ein pauschaler Hinweis auf begrenzte Kapazitäten nicht aus.",
+        "b137": "(7) Die IT-Hotline des Auftraggebers nimmt an Arbeitstagen von 6 bis 20 Uhr Störungsmeldungen entgegen. Bei Fehlern, die für Abrufe kritisch sind, muss sie innerhalb von 30 Minuten eine Vorgangsnummer und eine Eskalationsstufe vergeben.",
+        "b138": "(8) Wird ein Abruf für Werk Halden doppelt übermittelt, entsteht dadurch keine zusätzliche Fertigungspflicht. Der Auftragnehmer muss vor Produktionsbeginn Bestellreferenz und Menge abgleichen. Erkannte Doppelabrufe muss er innerhalb von 2 Stunden melden.",
+        "b139": "(9) Sobald das Bestellportal wieder funktioniert, muss die Disposition sämtliche Ersatzabrufe innerhalb von 8 Stunden nacherfassen. Kennzeichnen Sie diese als bereits bestätigt. So wird dieselbe Fertigungsmenge nicht erneut ausgelöst.",
+        "b140": "(10) Der Auftragnehmer darf bestätigte Wochenmengen für Werk Ostrup nur zusammenlegen, wenn vorher zugestimmt wurde. Er darf höchstens 3 Abrufe bündeln. Vereinbarte Liefertermine dürfen sich dadurch nicht verschieben.",
+        "b141": "(11) Abrufe für Werk Liebenau über 25.000 Euro brauchen zusätzlich die Freigabe des Einkaufsleiters. Ohne diese Freigabe muss der Auftragnehmer nicht fertigen. Das gilt auch, wenn die Disposition einen Termin vorgibt.",
+        "b142": "(12) Die Empfangsbestätigung des Bestellportals belegt nur den technischen Zugang. Sie ist keine Annahmeerklärung. Die Auftragsabwicklung muss den verbindlichen Liefertermin innerhalb von 12 Stunden gesondert bestätigen."
+      }
+    },
+    "C-T1-V4-sol-t1__S6": {
+      "section": 6,
+      "after": {
+        "b146": "(1) Alle Lieferungen erfolgen DAP nach Incoterms 2020 an den Standort, der im Abruf steht. Für Werk Halden trägt der Auftragnehmer die Transportkosten bis zum benannten Entladepunkt an Tor 2.",
+        "b147": "(2) Die Warenannahme im Werk Ostrup ist an Arbeitstagen von 7 bis 15 Uhr für angemeldete Transporte geöffnet. Die Fahrzeuge müssen spätestens 30 Minuten vor Schließung eintreffen. Die Begleitpapiere müssen vollständig sein.",
+        "b148": "(3) Der Auftragnehmer muss Transporte zum Werk Liebenau mindestens 24 Stunden vor Ankunft im Bestellportal anmelden. In der Anmeldung muss er das Kennzeichen, die Packstückzahl und ein Ankunftsfenster von höchstens 60 Minuten angeben.",
+        "b150": "(1) Das Zentrallager Brück nimmt reguläre Sendungen montags bis freitags von 6 bis 18 Uhr an. Für Anlieferungen außerhalb dieser Zeiten muss die Freigabe des Lagerleiters mindestens 8 Stunden vorher vorliegen.",
+        "b151": "(2) Jeder Sendung nach Werk Halden muss ein Lieferschein beiliegen. Er muss die Abrufnummer, den Artikelstand und die tatsächliche Stückzahl enthalten. Bei mehr als 10 Packstücken muss zusätzlich eine Inhaltsliste für die einzelnen Packstücke beiliegen.",
+        "b152": "(3) Die Lieferscheindaten für Werk Ostrup müssen spätestens 4 Stunden vor Ankunft über das Portal übermittelt werden. Trotz der digitalen Übertragung muss bei der Übergabe auch der Begleitbeleg auf Papier vorgelegt werden.",
+        "b154": "(1) Bearbeitete Präzisionsteile für Werk Liebenau müssen in geschlossenen Mehrwegbehältern verpackt sein. Jeder Behälter darf höchstens 20 Kilogramm brutto wiegen. Andere Verpackungen muss die Logistikleitung vorher freigeben.",
+        "b155": "(2) Jeder Ladungsträger zum Zentrallager Brück muss ein lesbares Warenetikett nach VDA 4902 tragen. Bei Mischpaletten müssen zusätzlich alle enthaltenen Artikel mit Menge und eindeutiger Packstücknummer angegeben sein.",
+        "b156": "(3) Das Entladefenster für Werk Halden muss spätestens 12 Stunden vor der Anlieferung verbindlich im Bestellportal gebucht sein. Wird das Fenster um mehr als 45 Minuten überschritten, weist die Warenannahme einen neuen Termin zu.",
+        "b157": "(4) Teillieferungen nach Werk Ostrup sind nur erlaubt, wenn die Disposition zustimmt. Sie dürfen höchstens 2 Chargen umfassen. Der Auftragnehmer trägt zusätzliche Frachtkosten, wenn der Grund für die Aufteilung in seinem Bereich liegt.",
+        "b158": "(5) Für Werk Liebenau geht die Gefahr nach DAP erst über, wenn die Ware am vereinbarten Bestimmungsort entladebereit bereitgestellt ist. Der Auftraggeber übernimmt die Entladung. Er setzt dafür mindestens 2 eingewiesene Lagerbeschäftigte ein.",
+        "b159": "(6) Sobald eine Lieferverzögerung zum Zentrallager Brück absehbar ist, muss der Auftragnehmer sie binnen 2 Stunden im Bestellportal melden. Er muss die Ursache, die betroffene Menge und einen Ersatztermin angeben. Der Frachtführer muss diesen Ersatztermin bestätigt haben.",
+        "b160": "(7) Ist der Auftragnehmer mit Lieferungen nach Werk Halden in Verzug, muss er den nachgewiesenen Verzugsschaden ersetzen. Eine dafür gesetzte Nachfrist beträgt in der Regel 2 Arbeitstage, soweit dies zumutbar ist.",
+        "b161": "(8) Ist eine angemessene Nachfrist ohne Erfolg abgelaufen, darf der Auftraggeber für Werk Ostrup Ersatz beschaffen. Der Auftragnehmer muss die erforderlichen Mehrkosten erstatten, soweit er für den Verzug verantwortlich ist.",
+        "b162": "(9) Die Logistikleitung muss eine Sonderfahrt nach Werk Liebenau grundsätzlich im Bestellportal freigeben. Vorher muss der Auftragnehmer ein Angebot vorlegen. Es muss einen Festpreis und eine garantierte Ankunftszeit innerhalb von 6 Stunden enthalten.",
+        "b163": "(10) Bei jeder zweiten Regelanlieferung müssen leere Mehrwegbehälter aus dem Zentrallager Brück zurückgenommen werden. Der Fahrer muss die übernommene Anzahl quittieren. Er muss erkennbare Schäden melden, bevor er das Betriebsgelände verlässt.",
+        "b164": "(11) Die Parteien führen für Werk Halden ein Leergutkonto nach Behältertyp und Stückzahl. Sie stimmen es monatlich ab. Wer dem Saldo widerspricht, muss dies binnen 5 Arbeitstagen mit unterschriebenen Rücknahmebelegen begründen.",
+        "b165": "(12) Die Logistikleitung muss Änderungen der Warenannahmezeiten für Werk Ostrup mindestens 3 Arbeitstage vorher im Bestellportal veröffentlichen. Bereits bestätigte Transporte erhalten bei Bedarf ein eigenes Ersatzzeitfenster.",
+        "b168": "(1) Korrosionsempfindliche Teile für Werk Liebenau müssen einen Transportschutz erhalten, der 30 Kalendertage wirksam ist. Der Auftragnehmer muss dokumentieren, welches Schutzmittel er einsetzt und dass es mit der Spezifikation verträglich ist.",
+        "b169": "(2) Am Zentrallager Brück dürfen Fahrzeuge nur auf den markierten Flächen vor Halle 3 bereitgestellt werden. Die Fahrer müssen sich binnen 10 Minuten nach der Einfahrt bei der Warenannahme melden. Dabei müssen sie die Transportreferenz vorlegen.",
+        "b170": "(3) Der Auftragnehmer muss fehlerhafte Versandavise für Werk Halden unverzüglich im Bestellportal korrigieren, spätestens 2 Stunden vor Ankunft. Bereits gebuchte Entladezeiten bleiben nur bestehen, wenn die Warenannahme sie bestätigt.",
+        "b171": "(4) Bei Überlieferungen nach Werk Ostrup von mehr als 2 Prozent darf der Auftraggeber die Mehrmenge zurückweisen. Der Auftragnehmer muss die erforderliche Rückholung innerhalb von 3 Arbeitstagen auf eigene Kosten organisieren.",
+        "b172": "(5) Bei Unterlieferungen nach Werk Liebenau müssen die Fehlmenge und das Nachlieferdatum deutlich im Lieferschein stehen. Nimmt der Auftraggeber eine Teilmenge an, verzichtet er damit nicht auf die restlichen 100 Prozent der bestätigten Menge.",
+        "b173": "(6) Der Auftragnehmer muss die Packstückstruktur für das Zentrallager Brück vor dem Versand im Bestellportal hinterlegen. Jede Palette muss eine eindeutige Identifikation erhalten. Diese muss mindestens 90 Tage nach der Anlieferung rückverfolgbar bleiben.",
+        "b174": "(7) Beschädigte Mehrwegbehälter aus Werk Halden müssen getrennt von unbeschädigtem Leergut transportiert werden. Die Parteien müssen die Schadensursache innerhalb von 5 Arbeitstagen prüfen. Dafür nutzen sie Fotos und Übergabeprotokolle.",
+        "b175": "(8) Der Auftragnehmer muss für Werk Ostrup sicherstellen, dass Ladungsträger höchstens 1,20 Meter hoch gestapelt werden. Die Ladungssicherung muss zugleich einen gefahrlosen Zugang für die Entladung mit Flurförderzeugen ermöglichen.",
+        "b176": "(9) Wenn die Warenannahme in Werk Liebenau ein Etikett beanstandet, muss sie binnen 4 Stunden einen Vorgang im Portal eröffnen. Innerhalb weiterer 2 Stunden muss der Auftragnehmer eine korrigierte, druckfähige Kennzeichnung übermitteln.",
+        "b177": "(10) Ist die Zufahrt zum Zentrallager Brück vollständig gesperrt, muss die Logistikleitung binnen 60 Minuten eine Ausweichfläche benennen. Eine Umleitung an einen anderen Standort ist nur erlaubt, wenn beide Transportverantwortlichen zustimmen.",
+        "b178": "(11) Wartezeiten in Werk Halden müssen ab der dokumentierten Anmeldung erfasst werden. Die Warenannahme muss sie bestätigen. Eine Vergütung gibt es erst nach 90 Minuten und nur, wenn die Verantwortung des Auftraggebers nachgewiesen ist."
+      }
+    },
+    "C-T1-V4-sol-t1__S11": {
+      "section": 11,
+      "after": {
+        "b309": "(1) Die Parteien nutzen personenbezogene Kontaktdaten nur, um diesen Rahmenliefervertrag durchzuführen. Für Werk Halden dürfen sie höchstens Name, Funktion und dienstliche Erreichbarkeit hinterlegen.",
+        "b310": "(2) Der Auftragnehmer benennt für Werk Ostrup einen Datenschutzkontakt. Er benennt außerdem eine Ersatzperson, die zur Vertretung berechtigt ist. Ändern sich diese Zuständigkeiten, informiert er den Auftraggeber innerhalb von 2 Arbeitstagen in Textform.",
+        "b311": "(3) Nur Beschäftigte, die die personenbezogenen Daten nachweislich für ihre Aufgaben brauchen, dürfen im Bestellportal darauf zugreifen. Die zuständige Führungskraft prüft alle Berechtigungen mindestens alle 90 Kalendertage.",
+        "b312": "(4) Personenbezogene Besucherdaten für Werk Liebenau müssen grundsätzlich 30 Kalendertage nach dem Besuch gelöscht werden. Ausnahmen gelten bei gesetzlichen Aufbewahrungspflichten oder wenn die Daten nachweislich für eine konkrete Rechtsverfolgung benötigt werden.",
+        "b313": "(5) Nutzen Sie Fahrertelefonnummern, die für das Zentrallager Brück erhoben wurden, nur zur Steuerung der jeweiligen Anlieferung. Die Nummern müssen spätestens 7 Kalendertage nach abgeschlossener Entladung gelöscht werden.",
+        "b314": "(6) Für alle administrativen Zugänge zum Bestellportal muss eine Zwei-Faktor-Anmeldung eingerichtet sein. Geht ein zweiter Faktor verloren, muss die IT-Hotline ihn innerhalb von 1 Stunde nach Bekanntwerden sperren.",
+        "b315": "(7) Der Auftragnehmer schützt Zeichnungen für Werk Halden mit rollenbezogenen Leserechten und speichert sie verschlüsselt. Will er sie an mehr als 3 intern zuständige Personen weitergeben, braucht er die Zustimmung des technischen Projektleiters.",
+        "b316": "(8) Der Auftragnehmer meldet Sicherheitsvorfälle mit Bezug zu Werk Ostrup unverzüglich. Die Meldung muss spätestens 4 Stunden nach Kenntnis erfolgen. Die Erstmeldung nennt mindestens die Entdeckungszeit, die betroffenen Systeme und die bereits eingeleiteten Sicherungsmaßnahmen.",
+        "b317": "(9) Nach 5 aufeinanderfolgenden Fehlversuchen sperrt das Bestellportal den Zugang und unterbricht damit verdächtige Anmeldeversuche. Vor einer Entsperrung muss die IT-Hotline die Identität prüfen. Außerdem muss der Anlass für die Entsperrung dokumentiert sein.",
+        "b318": "(10) Verarbeiten Sie Spezifikationen für Werk Liebenau nur auf freigegebenen Geschäftssystemen. Speichern Sie diese nicht auf privaten Endgeräten oder unverschlüsselten Datenträgern. Das Verbot gilt auch für weniger als 24 Stunden.",
+        "b319": "(11) Für das Zentrallager Brück muss ein aktuelles Kontaktverzeichnis die technischen Ansprechpartner und ihre Vertretungen enthalten. Der Auftragnehmer bestätigt jeweils am ersten Arbeitstag eines Quartals, dass das Verzeichnis richtig ist.",
+        "b320": "(12) Protokolle zu sicherheitsrelevanten Vorgängen im Portal bleiben 180 Kalendertage vor nachträglichen Änderungen geschützt. Nur benannte Sicherheitsverantwortliche dürfen sie einsehen. Dafür muss der Prüfzweck dokumentiert sein.",
+        "b321": "(13) Der Auftragnehmer schult Beschäftigte, die auf Daten des Werks Halden zugreifen, vor ihrer ersten Freischaltung. Danach muss einmal in jedem Kalenderjahr eine Wiederholungsschulung stattfinden. Sie dauert mindestens 60 Minuten.",
+        "b323": "(1) Bevor Unterauftragnehmer auf Zeichnungen des Werks Ostrup zugreifen dürfen, muss der Auftraggeber zustimmen. Der Auftragnehmer legt ihre Aufgaben und Sicherheitsmaßnahmen mindestens 10 Arbeitstage vor ihrem Einsatz offen.",
+        "b324": "(2) Wenn berechtigte Beschäftigte ausscheiden, müssen ihre Zugänge zum Bestellportal spätestens am Ende des letzten Arbeitstags deaktiviert sein. Bei einer fristlosen Trennung veranlasst die Personalstelle die Sperrung innerhalb von 30 Minuten.",
+        "b325": "Wichtig: (3) Konstruktionsdaten, die für Werk Liebenau empfangen werden, müssen bei der Übertragung nach dem Stand der Technik verschlüsselt sein. Die IT-Verantwortlichen prüfen mindestens alle 6 Monate, ob die eingesetzten Verfahren weiter angepasst werden müssen.",
+        "b326": "(4) Datenträger mit Informationen des Zentrallagers Brück müssen vor einer erneuten Verwendung sicher bereinigt werden. Der Auftragnehmer dokumentiert innerhalb von 2 Arbeitstagen nach der Bereinigung das Verfahren, das Datum und die verantwortliche Person.",
+        "b327": "(5) Nutzen Sie Exportfunktionen des Bestellportals nur für freigegebene Vertragszwecke und nur mit einer besonders berechtigten Rolle. Für Exporte mit mehr als 500 personenbezogenen Datensätzen ist eine gesonderte, dokumentierte Genehmigung nötig.",
+        "b328": "(6) Der Auftraggeber darf einmal jährlich am Standort der Auftragsabwicklung prüfen, ob die vereinbarten Schutzmaßnahmen eingehalten werden. Er muss den Termin mindestens 10 Arbeitstage vorher ankündigen. Die Prüfung darf nur vertragsbezogene Systeme betreffen.",
+        "b329": "(7) Bei einem erheblichen Sicherheitsvorfall mit Bezug zu Werk Halden ist eine Prüfung aus diesem Anlass auch unabhängig von der jährlichen Begrenzung erlaubt. Die Prüfung muss 24 Stunden vorher angekündigt werden, soweit dies den Untersuchungszweck nicht gefährdet.",
+        "b330": "(8) Tragen Sie im Bestellportal keine personenbezogenen Daten in frei zugängliche Kommentarfelder ein. Die zuständige Administration entfernt falsch platzierte Angaben innerhalb von 8 Stunden, nachdem sie einen nachvollziehbaren Hinweis erhalten hat.",
+        "b331": "(9) Der Auftragnehmer sichert kritische Vertragsdaten des Werks Ostrup mindestens täglich mit einer verschlüsselten Kopie. Alle 3 Monate testet er, ob sich die Daten wiederherstellen lassen. Der Test muss dokumentiert und technisch nachvollziehbar sein.",
+        "b332": "(10) Jeder Zeichnungsstand für Werk Liebenau muss die Versionsnummer, das Freigabedatum und die verantwortliche Fachstelle angeben. Nach dem Ersatz einer Fassung muss die alte Fassung innerhalb von 1 Arbeitstag für die produktive Verwendung gesperrt werden.",
+        "b333": "(11) Im Bestellportal müssen die Rollen für Einkauf, Disposition und Administration technisch getrennt sein. Alle 3 Rollen dürfen einer Person nur gleichzeitig zugewiesen werden, wenn der Informationssicherheitsbeauftragte dies befristet freigibt.",
+        "b334": "(12) Der Auftragnehmer leitet Anfragen betroffener Personen zu Daten des Zentrallagers Brück innerhalb von 2 Arbeitstagen an den Datenschutzkontakt weiter. Gesetzliche Zuständigkeiten gelten unverändert. Auch kürzere gesetzlich zwingende Reaktionsfristen bleiben bestehen.",
+        "b335": "(13) Der Auftragnehmer löscht Zeichnungen des Werks Halden innerhalb von 30 Kalendertagen nach Vertragsende, wenn keine Aufbewahrungspflicht besteht. Er bestätigt dem technischen Projektleiter die vollständige Löschung mit einem nachvollziehbaren Löschprotokoll.",
+        "b338": "(1) Melden Sie einen vermuteten Missbrauch des Bestellportals unverzüglich der IT-Hotline, spätestens innerhalb von 60 Minuten. Betroffene Sitzungen werden vorsorglich beendet. Das gilt nicht, wenn überwiegende Untersuchungsgründe dagegen sprechen.",
+        "b339": "(2) Liegt eine Auftragsverarbeitung vor, müssen die Parteien vor dem Datenzugriff eine Vereinbarung nach Artikel 28 der Datenschutz-Grundverordnung schließen. Für Werk Ostrup darf ein entsprechender Produktivzugang erst danach freigeschaltet werden.",
+        "b340": "(3) Personenbezogene Vertragsdaten aus Werk Liebenau dürfen nur auf einer vorab geprüften Rechtsgrundlage in Drittstaaten übermittelt werden. Der Auftragnehmer legt die erforderlichen Garantien mindestens 15 Arbeitstage vor dem geplanten Beginn vor.",
+        "b341": "(4) Nach 15 Minuten ohne Nutzeraktivität sperrt das Bestellportal die Sitzung automatisch gegen weiteren Zugriff. Um fortzufahren, müssen Sie sich erneut authentisieren. Dabei dürfen keine Inhalte fremder Sitzungen offengelegt werden.",
+        "b342": "(5) Bewahren Sie Papierausdrucke mit vertraulichen Spezifikationen des Zentrallagers Brück in verschlossenen Schränken auf. Führen Sie nicht mehr benötigte Exemplare innerhalb von 5 Arbeitstagen einer geeigneten sicheren Vernichtung zu. Siehe auch Anlage 3.",
+        "b343": "(6) Der Auftragnehmer bewertet vor der Weitergabe technischer Daten für Werk Halden deren Schutzbedarf und stuft sie entsprechend ein. An der Freigabe besonders vertraulicher Fertigungsunterlagen wirken mindestens 2 benannte Fachverantwortliche mit.",
+        "b344": "(7) Neue Sicherheitsfunktionen des Portals müssen vor dem produktiven Einsatz in einer getrennten Umgebung getestet werden. Die IT-Leitung dokumentiert mindestens 3 Zugriffstests. Einer davon muss ein unzulässiger Anmeldeversuch sein.",
+        "b345": "(8) Nach einem gemeldeten Sicherheitsvorfall für Werk Ostrup berichtet der Auftragnehmer alle 12 Stunden über den Stand, bis der Vorfall eingedämmt ist. Innerhalb von 10 Arbeitstagen folgt der Abschlussbericht. Er beschreibt die Ursache, die Auswirkungen und die dauerhaften Abhilfemaßnahmen.",
+        "b346": "(9) Unterauftragnehmer, die für Werk Liebenau eingesetzt werden, müssen mindestens gleichwertige Vertraulichkeits- und Sicherheitsstandards einhalten und dazu verpflichtet werden. Auf Anforderung weist der Auftragnehmer innerhalb von 5 Arbeitstagen nach, dass sie diese Standards einhalten.",
+        "b347": "(10) Löschen Sie heruntergeladene personenbezogene Daten aus dem Bestellportal innerhalb von 48 Stunden, sobald der Bearbeitungszweck entfällt. Länger dürfen Sie die Daten nur speichern, wenn eine dokumentierte Rechtsgrundlage und eine festgelegte Prüffrist vorliegen.",
+        "b348": "(11) Mobile Arbeitsplätze mit Daten des Zentrallagers Brück brauchen eine vollständige Geräteverschlüsselung und eine automatische Bildschirmsperre. Die Bildschirmsperre muss spätestens nach 5 Minuten ohne Eingabe greifen."
+      }
+    },
+    "C-T1-V4-sol-t2__S5": {
+      "section": 5,
+      "after": {
+        "b101": "(1) Die Disposition des Auftraggebers darf für Werk Halden täglich bis 14 Uhr verbindliche Abrufe erteilen. Der Auftragnehmer muss dafür eine bestätigte Tageskapazität von mindestens 800 Teilen bereithalten.",
+        "b102": "(2) Die Auftragsabwicklung des Auftragnehmers muss Abrufe für Werk Ostrup innerhalb von 8 Stunden nach Zugang bestätigen. Eine ausbleibende Antwort gilt nicht als Annahme. Das gilt auch bei einer angeforderten Menge unter 200 Stück.",
+        "b103": "(3) Geben Sie bei jedem Abruf im Bestellportal die Artikelnummer, den Lieferort und die Menge in ganzen Stückzahlen an. Fehlen Pflichtangaben, muss die Auftragsabwicklung dies innerhalb von 4 Stunden bei der Disposition beanstanden.",
+        "b104": "(4) Für Werk Liebenau liegen zwischen bestätigtem Abruf und Bereitstellung verbindlich 5 Arbeitstage. Eine kürzere Vorlaufzeit ist nur zulässig, wenn der Produktionsleiter des Auftragnehmers in Textform zustimmt.",
+        "b105": "(5) Abrufe zum Zentrallager Brück dürfen je Transportauftrag höchstens 6 unterschiedliche Artikelpositionen enthalten. Die Disposition muss weitere Positionen in einem gesonderten Abruf mit eigener Referenz bündeln. Siehe auch Anlage 3.",
+        "b106": "(6) Der Auftragnehmer muss neue Einträge im Bestellportal an Arbeitstagen mindestens alle 2 Stunden prüfen. Diese Prüfpflicht endet um 18 Uhr. Am folgenden Arbeitstag beginnt sie um 6 Uhr erneut.",
+        "b107": "(7) Für Werk Halden sind Mengenänderungen bis 48 Stunden vor dem bestätigten Fertigungsbeginn ohne Zuschlag erlaubt. Bereits beschafftes Sondermaterial wird nur gegen Nachweis vergütet. Die Vergütung beträgt höchstens 70 Prozent.",
+        "b108": "(8) Für die Stornierung eines Abrufs für Werk Ostrup ist eine Erklärung der einkaufsberechtigten Person erforderlich. Nach der Fertigungsfreigabe muss der Auftraggeber belegte Nettokosten ersetzen. Die Erstattung ist auf 60 Prozent des Abrufwerts begrenzt.",
+        "b109": "(9) Änderungsanträge im Bestellportal erhalten eine eigene Versionskennung und einen unveränderlichen Zeitstempel. Die Änderung muss innerhalb von 6 Stunden ausdrücklich bestätigt werden. Bis dahin gilt die bisherige Fassung.",
+        "b110": "(10) Der Auftraggeber muss für Werk Liebenau jeden Montag eine rollierende Vorschau über 12 Wochen übermitteln. Nur die ersten 5 Arbeitstage werden verbindlich, und zwar durch einen gesondert bestätigten Abruf.",
+        "b111": "(11) Der Auftragnehmer muss für das Zentrallager Brück wöchentlich 4.000 Fertigungseinheiten als Planungskapazität reservieren. Daraus entsteht erst dann eine Abnahmeverpflichtung, wenn eine ausdrückliche Abrufbestätigung zugeht.",
+        "b112": "(12) Die Disposition muss Prognosen im Bestellportal mit dem Status unverbindlich und einem Planungsdatum kennzeichnen. Will der Auftragnehmer auf Grundlage dieser Prognosen Material für mehr als 20.000 Euro kaufen, braucht er vorher eine Freigabe.",
+        "b115": "(1) Bestätigte Abrufmengen für Werk Halden dürfen ohne Zustimmung nicht unterschritten werden. Die Disposition darf eine technisch bedingte Mehrmenge bis 2 Prozent freigeben. Dafür hat sie ab der Mitteilung 8 Stunden Zeit.",
+        "b116": "(2) Die Auftragsabwicklung muss erkennbare Kapazitätsengpässe für Werk Ostrup spätestens 24 Stunden nach der Feststellung melden. Sie muss dabei die betroffenen Artikel nennen und einen Wiederanlaufplan mit mindestens 2 Maßnahmen vorlegen.",
+        "b117": "(3) Fällt das Portal aus, muss die Disposition Abrufe an das vertraglich benannte Funktionspostfach senden. Die Auftragsabwicklung muss den Empfang innerhalb von 2 Stunden bestätigen und dabei die jeweilige Ersatzreferenz angeben.",
+        "b127": "(1) Telefonische Abrufe für Werk Liebenau sind erst verbindlich, wenn danach eine Erklärung in Textform erfolgt. Die zuständige Disposition muss diese Erklärung innerhalb von 3 Stunden nach dem Gespräch übermitteln.",
+        "b128": "(2) Für dringende Ersatzteile zum Zentrallager Brück darf der Einkaufsleiter eine Bearbeitung innerhalb von 4 Stunden verlangen. Das gilt nur, wenn mindestens 30 Stück des betroffenen Artikels als Lagermenge verfügbar sind.",
+        "b129": "(3) Nur namentlich benannte Beschäftigte der Auftragsabwicklung erhalten Zugangsdaten zum Bestellportal. Erfährt der Auftragnehmer von einem Rollenwechsel, muss er spätestens 1 Stunde danach die Sperrung der Zugangsdaten beantragen.",
+        "b131": "(1) Die Disposition des Werks Halden darf Liefertermine um höchstens 2 Arbeitstage vorziehen, wenn freie Kapazität besteht. Der Auftragnehmer muss innerhalb von 10 Stunden zustimmen oder mit Begründung ablehnen.",
+        "b132": "(2) Widersprechen sich Abrufe für Werk Ostrup, gilt die jüngste ausdrücklich bestätigte Version. Die Widersprüche müssen innerhalb von 12 Stunden geklärt werden. Bis zur Klärung darf nur die unstreitige Teilmenge gefertigt werden.",
+        "b133": "(3) Die Rollenverwaltung im Bestellportal trennt Leserechte für die Planung von Befugnissen für verbindliche Bestellungen. Jede Erweiterung braucht die Freigabe des Einkaufsleiters. Sie wird innerhalb von 2 Arbeitstagen geprüft.",
+        "b134": "(4) Nennen Sie in jedem Abruf für Werk Liebenau eine verantwortliche Person aus der Disposition und deren Vertretung. Teilen Sie der Auftragsabwicklung einen Wechsel dieser Zuständigkeit mindestens 1 Arbeitstag vorher mit.",
+        "b135": "(5) Rahmenmengen für das Zentrallager Brück dürfen im laufenden Quartal um 15 Prozent angepasst werden. Die neue Planung muss spätestens 10 Arbeitstage vor Beginn des betroffenen Produktionsmonats angekündigt werden.",
+        "b136": "(6) Jede Zurückweisung im Bestellportal muss einen konkreten Ablehnungsgrund und den frühesten Ersatztermin nennen. Sind mehr als 500 Stück fristgerecht verfügbar, reichen pauschale Kapazitätsvorbehalte nicht aus.",
+        "b137": "(7) Die IT-Hotline des Auftraggebers nimmt an Arbeitstagen zwischen 6 und 20 Uhr Störungsmeldungen entgegen. Bei abrufkritischen Fehlern muss sie innerhalb von 30 Minuten eine Vorgangsnummer und eine Eskalationsstufe vergeben.",
+        "b138": "(8) Ein doppelt übermittelter Abruf für Werk Halden verpflichtet nicht zu zusätzlicher Fertigung. Der Auftragnehmer muss vor Produktionsbeginn Bestellreferenz und Menge abgleichen. Erkannte Doppelungen muss er innerhalb von 2 Stunden melden.",
+        "b139": "(9) Sobald das Bestellportal wieder verfügbar ist, muss die Disposition alle Ersatzabrufe innerhalb von 8 Stunden nacherfassen. Die Kennzeichnung als bereits bestätigt verhindert, dass dieselbe Fertigungsmenge erneut ausgelöst wird.",
+        "b140": "(10) Der Auftragnehmer darf bestätigte Wochenmengen für Werk Ostrup nur nach vorheriger Zustimmung zusammenlegen. Er darf dabei höchstens 3 Abrufe bündeln. Vereinbarte Liefertermine dürfen sich dadurch nicht verschieben.",
+        "b141": "(11) Abrufe für Werk Liebenau über 25.000 Euro brauchen zusätzlich die Freigabe des Einkaufsleiters. Ohne diese Freigabe muss der Auftragnehmer nicht fertigen. Das gilt auch, wenn die Disposition einen Termin vorgibt.",
+        "b142": "(12) Die Empfangsbestätigung des Bestellportals belegt nur den technischen Zugang. Sie ersetzt keine Annahmeerklärung. Die Auftragsabwicklung muss den verbindlichen Liefertermin innerhalb von 12 Stunden gesondert bestätigen."
+      }
+    },
+    "C-T1-V4-sol-t2__S6": {
+      "section": 6,
+      "after": {
+        "b146": "(1) Alle Lieferungen erfolgen DAP nach Incoterms 2020 an den Standort, der im Abruf genannt ist. Für Werk Halden trägt der Auftragnehmer die Transportkosten bis zum benannten Entladepunkt an Tor 2.",
+        "b147": "(2) Die Warenannahme im Werk Ostrup ist an Arbeitstagen von 7 bis 15 Uhr für angemeldete Transporte geöffnet. Fahrzeuge müssen mit vollständigen Begleitpapieren spätestens 30 Minuten vor Schließung eintreffen.",
+        "b148": "(3) Der Auftragnehmer muss Transporte zum Werk Liebenau mindestens 24 Stunden vor Ankunft im Bestellportal anmelden. In der Anmeldung muss er das Kennzeichen, die Packstückzahl und ein Ankunftsfenster von höchstens 60 Minuten angeben.",
+        "b150": "(1) Das Zentrallager Brück nimmt reguläre Sendungen montags bis freitags von 6 bis 18 Uhr an. Für Anlieferungen außerhalb dieser Zeiten muss der Lagerleiter mindestens 8 Stunden vorher die Freigabe erteilen.",
+        "b151": "(2) Jede Sendung nach Werk Halden muss einen Lieferschein enthalten. Darauf müssen Abrufnummer, Artikelstand und tatsächliche Stückzahl stehen. Bei mehr als 10 Packstücken muss zusätzlich eine Inhaltsliste für die einzelnen Packstücke beiliegen.",
+        "b152": "(3) Die Lieferscheindaten für Werk Ostrup müssen spätestens 4 Stunden vor Ankunft über das Portal übermittelt werden. Bei der Übergabe muss trotzdem ein Begleitbeleg in Papierform vorgelegt werden. Die digitale Übertragung ersetzt diesen Beleg nicht.",
+        "b154": "(1) Bearbeitete Präzisionsteile für Werk Liebenau müssen in geschlossenen Mehrwegbehältern verpackt werden. Das Bruttogewicht darf höchstens 20 Kilogramm betragen. Andere Verpackungen muss die Logistikleitung vorher freigeben.",
+        "b155": "(2) Jeder Ladungsträger zum Zentrallager Brück muss ein lesbares Warenetikett nach VDA 4902 erhalten. Bei Mischpaletten müssen zusätzlich alle enthaltenen Artikel mit ihrer Menge und einer eindeutigen Packstücknummer angegeben sein.",
+        "b156": "(3) Das Entladefenster für Werk Halden muss spätestens 12 Stunden vor der Anlieferung verbindlich im Bestellportal gebucht werden. Wird das Zeitfenster um mehr als 45 Minuten überschritten, weist die Warenannahme einen neuen Termin zu.",
+        "b157": "(4) Teillieferungen nach Werk Ostrup sind nur erlaubt, wenn die Disposition zustimmt. Es sind höchstens 2 Chargen zulässig. Der Auftragnehmer trägt zusätzliche Frachtkosten, wenn die Aufteilung aus seinem Verantwortungsbereich veranlasst wurde.",
+        "b158": "(5) Für Werk Liebenau geht die Gefahr nach DAP erst über, wenn die Ware am vereinbarten Bestimmungsort entladebereit bereitgestellt ist. Der Auftraggeber übernimmt die Entladung. Er muss dafür mindestens 2 eingewiesene Lagerbeschäftigte einsetzen.",
+        "b159": "(6) Der Auftragnehmer muss absehbare Lieferverzögerungen zum Zentrallager Brück innerhalb von 2 Stunden im Bestellportal melden. Er muss die Ursache, die betroffene Menge und einen vom Frachtführer bestätigten Ersatztermin nennen.",
+        "b160": "(7) Kommt der Auftragnehmer mit Lieferungen nach Werk Halden in Verzug, muss er den nachgewiesenen Verzugsschaden ersetzen. Eine dafür gesetzte Nachfrist beträgt in der Regel 2 Arbeitstage, soweit dies zumutbar ist.",
+        "b161": "(8) Ist eine angemessene Nachfrist erfolglos abgelaufen, darf der Auftraggeber für Werk Ostrup Ersatz beschaffen. Der Auftragnehmer muss die erforderlichen Mehrkosten erstatten, soweit er den Verzug zu vertreten hat.",
+        "b162": "(9) Eine Sonderfahrt nach Werk Liebenau muss grundsätzlich die Logistikleitung im Bestellportal freigeben. Zuvor muss der Auftragnehmer ein Angebot vorlegen. Es muss einen Festpreis und eine garantierte Ankunftszeit innerhalb von 6 Stunden enthalten.",
+        "b163": "(10) Bei jeder zweiten Regelanlieferung müssen leere Mehrwegbehälter aus dem Zentrallager Brück zurückgenommen werden. Der Fahrer muss die übernommene Anzahl quittieren. Er muss erkennbare Schäden melden, bevor er das Betriebsgelände verlässt.",
+        "b164": "(11) Für Werk Halden führen die Parteien ein Leergutkonto nach Behältertyp und Stückzahl. Sie stimmen das Konto monatlich ab. Einwendungen gegen den Saldo müssen innerhalb von 5 Arbeitstagen mit unterschriebenen Rücknahmebelegen begründet werden.",
+        "b165": "(12) Die Logistikleitung muss Änderungen der Warenannahmezeiten für Werk Ostrup mindestens 3 Arbeitstage vorher im Bestellportal veröffentlichen. Bereits bestätigte Transporte erhalten bei Bedarf ein gesondertes Ersatzzeitfenster.",
+        "b168": "(1) Korrosionsempfindliche Teile für Werk Liebenau müssen einen Transportschutz erhalten, der 30 Kalendertage wirksam ist. Der Auftragnehmer muss dokumentieren, welches Schutzmittel eingesetzt wird und dass es mit der Spezifikation verträglich ist.",
+        "b169": "(2) Am Zentrallager Brück dürfen Fahrzeuge nur auf den markierten Flächen vor Halle 3 bereitgestellt werden. Fahrer müssen sich innerhalb von 10 Minuten nach der Einfahrt bei der Warenannahme melden. Dabei müssen sie die Transportreferenz vorlegen.",
+        "b170": "(3) Der Auftragnehmer muss fehlerhafte Versandavise für Werk Halden unverzüglich im Bestellportal berichtigen, spätestens jedoch 2 Stunden vor Ankunft. Bereits gebuchte Entladezeiten bleiben nur bestehen, wenn die Warenannahme sie bestätigt.",
+        "b171": "(4) Bei Überlieferungen nach Werk Ostrup von mehr als 2 Prozent darf der Auftraggeber die Mehrmenge zurückweisen. Der Auftragnehmer muss die erforderliche Rückholung innerhalb von 3 Arbeitstagen auf eigene Kosten organisieren.",
+        "b172": "(5) Bei Unterlieferungen nach Werk Liebenau müssen Fehlmenge und Nachlieferdatum deutlich im Lieferschein stehen. Nimmt der Auftraggeber eine Teilmenge an, verzichtet er damit nicht auf die restlichen 100 Prozent der bestätigten Menge.",
+        "b173": "(6) Der Auftragnehmer muss die Packstückstruktur für das Zentrallager Brück vor dem Versand im Bestellportal hinterlegen. Jede Palette muss eine eindeutige Identifikation erhalten. Diese muss mindestens 90 Tage nach Anlieferung rückverfolgbar bleiben.",
+        "b174": "(7) Beschädigte Mehrwegbehälter aus Werk Halden müssen getrennt von unbeschädigtem Leergut transportiert werden. Die Parteien müssen die Schadensursache innerhalb von 5 Arbeitstagen prüfen. Grundlage sind Fotos und Übergabeprotokolle.",
+        "b175": "(8) Der Auftragnehmer muss für Werk Ostrup sicherstellen, dass Ladungsträger höchstens 1,20 Meter hoch gestapelt werden. Die Ladungssicherung muss zugleich einen gefahrlosen Zugang ermöglichen, damit mit Flurförderzeugen entladen werden kann.",
+        "b176": "(9) Beanstandet die Warenannahme in Werk Liebenau ein Etikett, muss sie innerhalb von 4 Stunden einen Vorgang im Portal eröffnen. Der Auftragnehmer muss innerhalb weiterer 2 Stunden eine korrigierte, druckfähige Kennzeichnung übermitteln.",
+        "b177": "(10) Ist die Zufahrt zum Zentrallager Brück vollständig gesperrt, muss die Logistikleitung innerhalb von 60 Minuten eine Ausweichfläche benennen. Eine Umleitung an einen anderen Standort ist nur mit Zustimmung beider Transportverantwortlichen zulässig.",
+        "b178": "(11) Wartezeiten in Werk Halden müssen ab der dokumentierten Anmeldung erfasst werden. Die Warenannahme muss sie bestätigen. Ein Anspruch auf Vergütung entsteht erst nach 90 Minuten und nur, wenn die Verantwortung des Auftraggebers nachgewiesen ist."
+      }
+    },
+    "C-T1-V4-sol-t2__S11": {
+      "section": 11,
+      "after": {
+        "b309": "(1) Beide Parteien dürfen personenbezogene Kontaktdaten nur zur Durchführung dieses Rahmenliefervertrags verarbeiten. Hinterlegen Sie für Werk Halden höchstens Name, Funktion und dienstliche Erreichbarkeit.",
+        "b310": "(2) Der Auftragnehmer benennt für Werk Ostrup einen Datenschutzkontakt und eine vertretungsberechtigte Ersatzperson. Ändern sich diese Zuständigkeiten, muss er dies dem Auftraggeber innerhalb von 2 Arbeitstagen in Textform mitteilen.",
+        "b311": "(3) Nur Beschäftigte mit nachgewiesenem Aufgabenbezug dürfen auf personenbezogene Daten im Bestellportal zugreifen. Die zuständige Führungskraft muss sämtliche Berechtigungen mindestens alle 90 Kalendertage prüfen.",
+        "b312": "(4) Personenbezogene Besucherdaten für Werk Liebenau müssen grundsätzlich 30 Kalendertage nach dem Besuch gelöscht werden. Gesetzliche Aufbewahrungspflichten gelten weiterhin. Auch dokumentierte Erfordernisse einer konkreten Rechtsverfolgung bleiben bestehen.",
+        "b313": "(5) Verwenden Sie Fahrertelefonnummern, die für das Zentrallager Brück erhoben wurden, nur zur Steuerung der jeweiligen Anlieferung. Die Nummern müssen spätestens 7 Kalendertage nach abgeschlossener Entladung gelöscht werden.",
+        "b314": "(6) Für alle administrativen Zugänge zum Bestellportal muss eine Zwei-Faktor-Anmeldung eingerichtet sein. Geht ein zweiter Faktor verloren, muss die IT-Hotline ihn innerhalb von 1 Stunde nach Bekanntwerden sperren.",
+        "b315": "(7) Der Auftragnehmer muss Zeichnungen für Werk Halden durch rollenbezogene Leserechte und verschlüsselte Ablage schützen. Sollen die Zeichnungen an mehr als 3 intern zuständige Personen weitergegeben werden, ist die Zustimmung des technischen Projektleiters erforderlich.",
+        "b316": "(8) Der Auftragnehmer muss Sicherheitsvorfälle mit Bezug zu Werk Ostrup unverzüglich melden, spätestens binnen 4 Stunden nach Kenntnis. Die Erstmeldung muss mindestens angeben, wann der Vorfall entdeckt wurde, welche Systeme betroffen sind und welche Sicherungsmaßnahmen eingeleitet wurden.",
+        "b317": "(9) Nach 5 aufeinanderfolgenden Fehlversuchen unterbricht eine Zugangssperre verdächtige Anmeldeversuche im Bestellportal. Der Zugang darf erst entsperrt werden, wenn die IT-Hotline die Identität geprüft hat und ein dokumentierter Anlass vorliegt.",
+        "b318": "(10) Verarbeiten Sie Spezifikationen für Werk Liebenau nur auf freigegebenen Geschäftssystemen. Speichern Sie diese weder auf privaten Endgeräten noch auf unverschlüsselten Datenträgern. Das Verbot gilt auch für weniger als 24 Stunden.",
+        "b319": "(11) Für das Zentrallager Brück muss ein aktuelles Kontaktverzeichnis mit den technischen Ansprechpartnern und deren Vertretungen geführt werden. Der Auftragnehmer muss die Richtigkeit des Verzeichnisses jeweils am ersten Arbeitstag eines Quartals bestätigen.",
+        "b320": "(12) Protokolle sicherheitsrelevanter Vorgänge im Portal müssen für 180 Kalendertage vor nachträglichen Veränderungen geschützt werden. Nur benannte Sicherheitsverantwortliche dürfen Einsicht erhalten. Dafür muss ein dokumentierter Prüfzweck vorliegen.",
+        "b321": "(13) Der Auftragnehmer muss Beschäftigte mit Zugriff auf Daten des Werks Halden vor der ersten Freischaltung unterrichten. Danach muss einmal innerhalb jedes Kalenderjahres eine Wiederholungsschulung von mindestens 60 Minuten stattfinden.",
+        "b323": "(1) Unterauftragnehmer dürfen nur mit vorheriger Zustimmung des Auftraggebers auf Zeichnungen des Werks Ostrup zugreifen. Der Auftragnehmer muss deren Aufgaben und Sicherheitsmaßnahmen mindestens 10 Arbeitstage vor ihrem Einsatz offenlegen.",
+        "b324": "(2) Scheiden berechtigte Beschäftigte aus, müssen ihre Zugänge zum Bestellportal spätestens zum Ende des letzten Arbeitstags deaktiviert werden. Bei einer fristlosen Trennung muss die Personalstelle die Sperrung innerhalb von 30 Minuten veranlassen.",
+        "b325": "Wichtig: (3) Für Werk Liebenau empfangene Konstruktionsdaten müssen bei der Übertragung nach dem Stand der Technik verschlüsselt werden. Die IT-Verantwortlichen müssen mindestens alle 6 Monate prüfen, ob die eingesetzten Verfahren weiter angepasst werden müssen.",
+        "b326": "(4) Datenträger mit Informationen des Zentrallagers Brück müssen vor einer Weiterverwendung sicher bereinigt werden. Der Auftragnehmer muss innerhalb von 2 Arbeitstagen nach der Bereinigung das Verfahren, das Datum und die verantwortliche Person dokumentieren.",
+        "b327": "(5) Nutzen Sie Exportfunktionen des Bestellportals nur, wenn Ihre Rolle besonders dazu berechtigt ist, und nur für freigegebene Vertragszwecke. Für Exporte mit mehr als 500 personenbezogenen Datensätzen ist eine gesonderte dokumentierte Genehmigung erforderlich.",
+        "b328": "(6) Der Auftraggeber darf die vereinbarten Schutzmaßnahmen einmal jährlich am Standort der Auftragsabwicklung prüfen. Der Prüftermin muss mindestens 10 Arbeitstage vorher angekündigt werden. Die Prüfung muss auf vertragsbezogene Systeme beschränkt bleiben.",
+        "b329": "(7) Bei einem erheblichen Sicherheitsvorfall mit Bezug zu Werk Halden ist eine anlassbezogene Prüfung zulässig. Dafür gilt keine jährliche Begrenzung. Die Prüfung muss 24 Stunden vorher angekündigt werden, soweit dies den Untersuchungszweck nicht gefährdet.",
+        "b330": "(8) Tragen Sie im Bestellportal keine personenbezogenen Daten in frei zugängliche Kommentarfelder ein. Die zuständige Administration muss fehlplatzierte Angaben binnen 8 Stunden nach Eingang eines nachvollziehbaren Hinweises entfernen.",
+        "b331": "(9) Der Auftragnehmer muss mindestens täglich eine verschlüsselte Sicherungskopie der kritischen Vertragsdaten des Werks Ostrup erstellen. Alle 3 Monate muss er mit einem dokumentierten und technisch nachvollziehbaren Test prüfen, ob sich die Daten wiederherstellen lassen.",
+        "b332": "(10) Zeichnungsstände für Werk Liebenau müssen mit Versionsnummer, Freigabedatum und verantwortlicher Fachstelle gekennzeichnet sein. Wird eine Fassung ersetzt, muss sie binnen 1 Arbeitstag für die produktive Verwendung gesperrt werden.",
+        "b333": "(11) Die Rollen für Einkauf, Disposition und Administration im Bestellportal müssen technisch voneinander getrennt sein. Alle 3 Rollen dürfen nur gleichzeitig zugewiesen werden, wenn der Informationssicherheitsbeauftragte dies befristet freigegeben hat.",
+        "b334": "(12) Der Auftragnehmer muss Betroffenenanfragen zu Daten des Zentrallagers Brück binnen 2 Arbeitstagen an den Datenschutzkontakt weiterleiten. Die gesetzlichen Zuständigkeiten bleiben dabei unverändert. Kürzere zwingende Reaktionsfristen gelten weiterhin.",
+        "b335": "(13) Der Auftragnehmer muss Zeichnungen des Werks Halden, für die keine Aufbewahrungspflicht besteht, innerhalb von 30 Kalendertagen nach Vertragsende löschen. Er muss dem technischen Projektleiter die vollständige Löschung in einem nachvollziehbaren Löschprotokoll bestätigen.",
+        "b338": "(1) Melden Sie einen vermuteten Missbrauch des Bestellportals unverzüglich der IT-Hotline, spätestens innerhalb von 60 Minuten. Betroffene Sitzungen werden vorsorglich beendet. Dies gilt nicht, wenn überwiegende Untersuchungsgründe entgegenstehen.",
+        "b339": "(2) Liegt eine Auftragsverarbeitung vor, müssen die Parteien vor dem Datenzugriff eine Vereinbarung nach Artikel 28 der Datenschutz-Grundverordnung schließen. Für Werk Ostrup darf der entsprechende Produktivzugang erst danach freigeschaltet werden.",
+        "b340": "(3) Personenbezogene Vertragsdaten aus Werk Liebenau dürfen nur mit einer vorab geprüften Rechtsgrundlage in Drittstaaten übermittelt werden. Der Auftragnehmer muss die erforderlichen Garantien mindestens 15 Arbeitstage vor dem geplanten Beginn vorlegen.",
+        "b341": "(4) Nach 15 Minuten ohne Nutzeraktivität wird eine Sitzung im Bestellportal automatisch gegen weiteren Zugriff gesperrt. Um die Sitzung fortzusetzen, müssen Sie sich erneut authentisieren. Dabei dürfen keine fremden Sitzungsinhalte offengelegt werden.",
+        "b342": "(5) Bewahren Sie Papierausdrucke mit vertraulichen Spezifikationen des Zentrallagers Brück in verschlossenen Schränken auf. Nicht mehr benötigte Exemplare müssen innerhalb von 5 Arbeitstagen einer geeigneten sicheren Vernichtung zugeführt werden. Siehe auch Anlage 3.",
+        "b343": "(6) Der Auftragnehmer muss technische Daten für Werk Halden vor der Weitergabe nach ihrem Schutzbedarf einstufen. An der Freigabe besonders vertraulicher Fertigungsunterlagen müssen mindestens 2 benannte Fachverantwortliche mitwirken.",
+        "b344": "(7) Neue Sicherheitsfunktionen des Portals müssen vor der produktiven Nutzung in einer getrennten Umgebung geprüft werden. Die IT-Leitung muss mindestens 3 Zugriffstests dokumentieren. Dazu gehört auch ein unzulässiger Anmeldeversuch.",
+        "b345": "(8) Der Auftragnehmer muss über einen gemeldeten Sicherheitsvorfall für Werk Ostrup bis zur Eindämmung alle 12 Stunden berichten. Der Abschlussbericht muss binnen 10 Arbeitstagen folgen. Er muss die Ursache, die Auswirkungen und die dauerhaften Abhilfemaßnahmen beschreiben.",
+        "b346": "(9) Unterauftragnehmer, die für Werk Liebenau eingesetzt werden, müssen auf mindestens gleichwertige Vertraulichkeits- und Sicherheitsstandards verpflichtet werden. Der Auftragnehmer muss die Einhaltung auf Anforderung innerhalb von 5 Arbeitstagen nachweisen.",
+        "b347": "(10) Heruntergeladene personenbezogene Daten aus dem Bestellportal müssen innerhalb von 48 Stunden gelöscht werden, nachdem der Bearbeitungszweck weggefallen ist. Eine längere Speicherung ist nur mit dokumentierter Rechtsgrundlage und festgelegter Prüffrist zulässig.",
+        "b348": "(11) Mobile Arbeitsplätze mit Daten des Zentrallagers Brück müssen vollständig geräteverschlüsselt sein und eine automatische Bildschirmsperre haben. Die Sperre muss spätestens nach 5 Minuten ohne Eingabe greifen."
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "R-T1-V4-qwen-t1__S11",
+      "kind": "real",
+      "base": "R-T1-V4-qwen-t1__S11",
+      "expect": [
+        {
+          "code": "clause-numbering",
+          "ref": "b341"
+        }
+      ]
+    },
+    {
+      "id": "C-T1-V4-sol-t1__S5",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t1__S5",
+      "expect": []
+    },
+    {
+      "id": "C-T1-V4-sol-t1__S6",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t1__S6",
+      "expect": []
+    },
+    {
+      "id": "C-T1-V4-sol-t1__S11",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t1__S11",
+      "expect": []
+    },
+    {
+      "id": "C-T1-V4-sol-t2__S5",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t2__S5",
+      "expect": []
+    },
+    {
+      "id": "C-T1-V4-sol-t2__S6",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t2__S6",
+      "expect": []
+    },
+    {
+      "id": "C-T1-V4-sol-t2__S11",
+      "kind": "clean",
+      "base": "C-T1-V4-sol-t2__S11",
+      "expect": []
+    },
+    {
+      "id": "S-Va-T1-V4-sol-t1__S5",
+      "kind": "seeded",
+      "base": "C-T1-V4-sol-t1__S5",
+      "after": {
+        "b102": "(2) Die Auftragsabwicklung des Auftragnehmers muss Abrufe für Werk Ostrup innerhalb von 8 Stunden bestätigen. Schweigen bedeutet keine Annahme. Das gilt auch für angeforderte Mengen unter 200 Stück.",
+        "b107": "(7) Für Werk Halden dürfen Mengen bis 48 Stunden vor dem bestätigten Fertigungsbeginn ohne Zuschlag geändert werden. Bereits beschafftes Sondermaterial wird nur gegen Nachweis vergütet. Die Vergütung beträgt höchstens 80 Prozent.",
+        "b115": "(1) Bestätigte Abrufmengen für Werk Halden dürfen ohne Zustimmung nicht unterschritten werden. Bei technisch bedingten Mehrmengen bis 2 Prozent muss die Disposition die Freigabe erteilen. Dafür hat sie nach der Mitteilung 8 Stunden Zeit."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "numbers",
+          "ref": "b107"
+        }
+      ]
+    },
+    {
+      "id": "S-Vc-T1-V4-sol-t1__S11",
+      "kind": "seeded",
+      "base": "C-T1-V4-sol-t1__S11",
+      "after": {
+        "b311": "(3) Nur Beschäftigte, die die personenbezogenen Daten nachweislich für ihre Aufgaben brauchen, dürfen im Bestellportal darauf zugreifen. Die zuständige Führungskraft prüft alle Berechtigungen mindestens alle 180 Kalendertage.",
+        "b314": "(6) Für alle administrativen Zugänge zum Bestellportal muss eine Zwei-Faktor-Anmeldung eingerichtet sein. Geht ein zweiter Faktor verloren, muss die IT-Hotline ihn innerhalb von 1 Stunde sperren.",
+        "b328": "(6) Der Auftraggeber muss einmal jährlich am Standort der Auftragsabwicklung prüfen, ob die vereinbarten Schutzmaßnahmen eingehalten werden. Er muss den Termin mindestens 10 Arbeitstage vorher ankündigen. Die Prüfung darf nur vertragsbezogene Systeme betreffen."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "numbers",
+          "ref": "b311"
+        }
+      ]
+    },
+    {
+      "id": "S-Vd-T1-V4-sol-t2__S5",
+      "kind": "seeded",
+      "base": "C-T1-V4-sol-t2__S5",
+      "after": {
+        "b101": "(1) Die Disposition des Auftraggebers darf für Werk Halden täglich bis 14 Uhr verbindliche Abrufe erteilen. Der Auftragnehmer muss dafür eine bestätigte Tageskapazität von mindestens 600 Teilen bereithalten.",
+        "b112": "(12) Die Disposition muss Prognosen im Bestellportal mit dem Status unverbindlich und einem Planungsdatum kennzeichnen. Will der Auftragnehmer Material für mehr als 20.000 Euro kaufen, braucht er vorher eine Freigabe.",
+        "b116": "(2) Die Auftragsabwicklung muss erkennbare Kapazitätsengpässe für Werk Ostrup spätestens 24 Stunden nach dem Auftreten melden. Sie muss dabei die betroffenen Artikel nennen und einen Wiederanlaufplan mit mindestens 2 Maßnahmen vorlegen."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "numbers",
+          "ref": "b101"
+        }
+      ]
+    },
+    {
+      "id": "S-Vh-T1-V4-sol-t2__S6",
+      "kind": "seeded",
+      "base": "C-T1-V4-sol-t2__S6",
+      "after": {
+        "b148": "(3) Sie müssen Transporte zum Werk Liebenau mindestens 24 Stunden vor Ankunft im Bestellportal anmelden. In der Anmeldung müssen Sie das Kennzeichen, die Packstückzahl und ein Ankunftsfenster von höchstens 60 Minuten angeben.",
+        "b156": "(3) Das Entladefenster für Werk Halden muss spätestens 24 Stunden vor der Anlieferung verbindlich im Bestellportal gebucht werden. Wird das Zeitfenster um mehr als 45 Minuten überschritten, weist die Warenannahme einen neuen Termin zu.",
+        "b178": "(11) Wartezeiten in Werk Halden müssen ab der dokumentierten Anmeldung erfasst werden. Die Warenannahme muss sie bestätigen. Ein Anspruch auf Vergütung entsteht erst nach 90 Minuten."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "numbers",
+          "ref": "b156"
+        }
+      ]
+    },
+    {
+      "id": "S-Vj-T1-V4-sol-t2__S5",
+      "kind": "seeded",
+      "base": "C-T1-V4-sol-t2__S5",
+      "after": {
+        "b108": "(8) Für die Stornierung eines Abrufs für Werk Ostrup ist eine Erklärung der einkaufsberechtigten Person erforderlich. Nach der Fertigungsfreigabe muss der Auftragnehmer belegte Nettokosten ersetzen. Die Erstattung ist auf 60 Prozent des Abrufwerts begrenzt.",
+        "b135": "(5) Rahmenmengen für das Zentrallager Brück dürfen im laufenden Quartal um 25 Prozent angepasst werden. Die neue Planung muss spätestens 10 Arbeitstage vor Beginn des betroffenen Produktionsmonats angekündigt werden.",
+        "b141": "(11) Abrufe für Werk Liebenau über 25.000 Euro brauchen zusätzlich die Freigabe des Einkaufsleiters."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "numbers",
+          "ref": "b135"
+        }
+      ]
+    },
+    {
+      "id": "X-X1-T1-V4-sol-t1__S6",
+      "kind": "cross",
+      "base": "C-T1-V4-sol-t1__S6",
+      "after": {
+        "b147": "(2) Der Wareneingang im Werk Ostrup ist an Arbeitstagen von 7 bis 15 Uhr für angemeldete Transporte geöffnet. Die Fahrzeuge müssen spätestens 30 Minuten vor Schließung eintreffen. Die Begleitpapiere müssen vollständig sein.",
+        "b156": "(3) Das Entladefenster für Werk Halden muss spätestens 12 Stunden vor der Anlieferung verbindlich im Bestellportal gebucht sein. Wird das Fenster um mehr als 45 Minuten überschritten, weist der Wareneingang einen neuen Termin zu.",
+        "b170": "(3) Der Auftragnehmer muss fehlerhafte Versandavise für Werk Halden unverzüglich im Bestellportal korrigieren, spätestens 2 Stunden vor Ankunft. Bereits gebuchte Entladezeiten bleiben nur bestehen, wenn der Wareneingang sie bestätigt."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "term",
+          "ref": "b147"
+        },
+        {
+          "code": "term",
+          "ref": "b156"
+        },
+        {
+          "code": "term",
+          "ref": "b170"
+        }
+      ]
+    },
+    {
+      "id": "X-X2-T1-V4-sol-t2__S6",
+      "kind": "cross",
+      "base": "C-T1-V4-sol-t2__S6",
+      "after": {
+        "b160": "(7) Kommt der Auftragnehmer mit Lieferungen nach Werk Halden in Verzug, muss er den nachgewiesenen Verzugsschaden ersetzen. Eine dafür gesetzte Nachfrist beträgt in der Regel 2 Arbeitstage, soweit dies zumutbar ist. Weitere Haftungsfragen regelt § 10 Haftung.",
+        "b177": "(10) Ist die Zufahrt zum Zentrallager Brück vollständig gesperrt, muss die Logistikleitung innerhalb von 60 Minuten eine Ausweichfläche benennen. Eine Umleitung an einen anderen Standort ist nur mit Zustimmung beider Transportverantwortlichen zulässig. Für die Eskalation gelten die Stufen in § 12 am Ende dieses Vertrags."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "cross-reference",
+          "ref": "b160"
+        },
+        {
+          "code": "cross-reference",
+          "ref": "b177"
+        }
+      ]
+    },
+    {
+      "id": "P-keptbyref-T1-V4-sol-t2__S11",
+      "kind": "scope",
+      "base": "C-T1-V4-sol-t2__S11",
+      "after": {},
+      "kept": [
+        "b315",
+        "b316",
+        "b317",
+        "b318",
+        "b319",
+        "b320",
+        "b321",
+        "b323",
+        "b324",
+        "b325",
+        "b326",
+        "b327",
+        "b328",
+        "b329",
+        "b330",
+        "b331",
+        "b332",
+        "b333",
+        "b334",
+        "b335",
+        "b338",
+        "b339",
+        "b340",
+        "b341",
+        "b342"
+      ],
+      "expect": [
+        {
+          "code": "scope",
+          "refs": [
+            "b315",
+            "b316",
+            "b317",
+            "b318",
+            "b319",
+            "b320",
+            "b321",
+            "b323",
+            "b324",
+            "b325",
+            "b326",
+            "b327",
+            "b328",
+            "b329",
+            "b330",
+            "b331",
+            "b332",
+            "b333",
+            "b334",
+            "b335",
+            "b338",
+            "b339",
+            "b340",
+            "b341",
+            "b342"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P-verbatim-T1-V4-sol-t1__S6",
+      "kind": "scope",
+      "base": "C-T1-V4-sol-t1__S6",
+      "after": {
+        "b157": "(4) Teillieferungen nach Werk Ostrup sind nur mit Zustimmung der Disposition und höchstens in 2 Chargen zulässig. Zusätzliche Frachtkosten trägt der Auftragnehmer, sofern die Aufteilung aus seiner Sphäre veranlasst wurde.",
+        "b158": "(5) Für Werk Liebenau geht die Gefahr nach DAP erst mit entladebereiter Bereitstellung am vereinbarten Bestimmungsort über. Die Entladung übernimmt der Auftraggeber durch mindestens 2 eingewiesene Lagerbeschäftigte.",
+        "b159": "(6) Absehbare Lieferverzögerungen zum Zentrallager Brück meldet der Auftragnehmer binnen 2 Stunden im Bestellportal. Die Meldung nennt Ursache, betroffene Menge und einen durch den Frachtführer bestätigten Ersatztermin.",
+        "b160": "(7) Gerät der Auftragnehmer mit Lieferungen nach Werk Halden in Verzug, schuldet er Ersatz des nachgewiesenen Verzugsschadens. Eine hierfür gesetzte Nachfrist beträgt regelmäßig 2 Arbeitstage, soweit dies zumutbar ist.",
+        "b161": "(8) Nach erfolglosem Ablauf einer angemessenen Nachfrist darf der Auftraggeber für Werk Ostrup eine Ersatzbeschaffung vornehmen. Erforderliche Mehrkosten sind zu erstatten, soweit der Auftragnehmer den Verzug zu vertreten hat.",
+        "b162": "(9) Eine Sonderfahrt nach Werk Liebenau bedarf grundsätzlich der Freigabe durch die Logistikleitung im Bestellportal. Der Auftragnehmer legt zuvor ein Angebot mit Festpreis und einer garantierten Ankunftszeit innerhalb von 6 Stunden vor.",
+        "b163": "(10) Leere Mehrwegbehälter aus dem Zentrallager Brück sind bei jeder zweiten Regelanlieferung zurückzunehmen. Der Fahrer quittiert die übernommene Anzahl und meldet erkennbare Schäden noch vor Verlassen des Betriebsgeländes.",
+        "b164": "(11) Für Werk Halden führen die Parteien ein monatlich abgestimmtes Leergutkonto nach Behältertyp und Stückzahl. Einwendungen gegen den Saldo sind binnen 5 Arbeitstagen mit unterschriebenen Rücknahmebelegen zu begründen.",
+        "b165": "(12) Die Logistikleitung veröffentlicht Änderungen der Warenannahmezeiten für Werk Ostrup mindestens 3 Arbeitstage vorher im Bestellportal. Bereits bestätigte Transporte erhalten bei Bedarf ein gesondertes Ersatzzeitfenster.",
+        "b168": "(1) Korrosionsempfindliche Teile für Werk Liebenau sind mit einem für 30 Kalendertage wirksamen Transportschutz zu versehen. Der Auftragnehmer dokumentiert das eingesetzte Schutzmittel und dessen Verträglichkeit mit der Spezifikation."
+      },
+      "kept": [],
+      "expect": [
+        {
+          "code": "scope",
+          "refs": [
+            "b157",
+            "b158",
+            "b159",
+            "b160",
+            "b161",
+            "b162",
+            "b163",
+            "b164",
+            "b165",
+            "b168"
+          ]
+        }
+      ]
+    }
+  ]
+}

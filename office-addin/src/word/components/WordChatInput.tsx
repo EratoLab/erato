@@ -1014,6 +1014,7 @@ export function WordChatInput({
                     changes: build.changes,
                     ordinalMap: build.ordinalMap,
                   },
+                  request: message,
                 }
               : undefined,
           );
