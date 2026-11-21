@@ -15,7 +15,7 @@ use genai::chat::ToolName as GenaiToolName;
 use rmcp::model::CallToolRequestParams;
 use sea_orm::EntityTrait;
 use sea_orm::prelude::Uuid;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Default)]
@@ -42,6 +42,38 @@ pub struct ManagedToolCall {
     pub tool: rmcp::model::Tool,
     /// Set when the tool declares the server's consent argument.
     pub approval_argument: Option<ApprovalArgument>,
+}
+
+impl ManagedToolCall {
+    /// A call of `tool` that no gate asked the user about, so with no user
+    /// decision for its consent argument.
+    pub fn ungated(tool: &ManagedTool, tool_call: GenaiToolCall) -> Self {
+        Self {
+            server_id: tool.server_id.clone(),
+            tool_call,
+            tool: tool.tool.clone(),
+            approval_argument: tool.approval_argument.clone().map(|name| ApprovalArgument {
+                name,
+                user_approved: false,
+            }),
+        }
+    }
+}
+
+/// Route a GenAI tool call to the server of the tool it names among
+/// `offered`: the tools the model was offered, keyed by the names it calls
+/// them by (see `mcp_tool_names::by_model_name`).
+pub fn convert_tool_call_to_managed_tool_call(
+    offered: &HashMap<String, ManagedTool>,
+    tool_call: GenaiToolCall,
+) -> Result<ManagedToolCall, Report> {
+    match offered.get(tool_call.fn_name.as_str()) {
+        Some(tool) => Ok(ManagedToolCall::ungated(tool, tool_call)),
+        None => Err(eyre!(
+            "Tool with name '{}' not found in any MCP server",
+            tool_call.fn_name
+        )),
+    }
 }
 
 /// The consent argument Erato fills in at dispatch: the server's name for it
@@ -247,40 +279,6 @@ impl McpServers {
             .await
     }
 
-    /// Convert a GenAI tool call to a managed tool call by finding the server that provides the tool
-    pub async fn convert_tool_call_to_managed_tool_call(
-        &self,
-        chat_id: Uuid,
-        tool_call: GenaiToolCall,
-        auth_context: &McpRequestAuthContext<'_>,
-    ) -> Result<ManagedToolCall, Report> {
-        let all_tools = self.list_tools(chat_id, auth_context).await?;
-
-        let managed_tool = all_tools
-            .iter()
-            .find(|tool| tool.tool.name == tool_call.fn_name.as_str());
-
-        if let Some(managed_tool) = managed_tool {
-            Ok(ManagedToolCall {
-                server_id: managed_tool.server_id.clone(),
-                tool_call,
-                tool: managed_tool.tool.clone(),
-                // No gate ran for this call, so no user decision exists for it.
-                approval_argument: managed_tool.approval_argument.clone().map(|name| {
-                    ApprovalArgument {
-                        name,
-                        user_approved: false,
-                    }
-                }),
-            })
-        } else {
-            Err(eyre!(
-                "Tool with name '{}' not found in any MCP server",
-                tool_call.fn_name
-            ))
-        }
-    }
-
     /// Call a tool on the appropriate MCP server and return the raw MCP
     /// result, without naming the surface the call comes from.
     pub async fn call_tool(
@@ -307,7 +305,8 @@ impl McpServers {
         >,
     ) -> Result<rmcp::model::CallToolResult, Report> {
         let mut params = CallToolRequestParams::default();
-        params.name = managed_tool_call.tool_call.fn_name.clone().into();
+        // The server's own name: the model may have called a qualified one.
+        params.name = managed_tool_call.tool.name.clone();
         let mut tool_args = managed_tool_call.tool_call.fn_arguments.clone();
         convert_mcp_tool_call_file_fields(
             &serde_json::Value::Object(managed_tool_call.tool.input_schema.as_ref().clone()),
@@ -342,6 +341,7 @@ pub fn convert_mcp_tools_to_genai_tools(
     managed_mcp_tools
         .into_iter()
         .map(|managed_tool| {
+            let name = managed_tool.model_name().to_string();
             let tool = managed_tool.tool;
 
             // Convert Arc<JsonObject> to serde_json::Value
@@ -379,7 +379,7 @@ pub fn convert_mcp_tools_to_genai_tools(
             sanitize_tool_schema_extensions(&mut input_schema_value);
 
             GenaiTool {
-                name: GenaiToolName::Custom(tool.name.to_string()),
+                name: GenaiToolName::Custom(name),
                 description,
                 schema: Some(input_schema_value),
                 strict: if omit_tool_strict { None } else { Some(false) },
@@ -1143,6 +1143,7 @@ mod tests {
                 tool,
                 approval_argument: Some("hasUserApproved".to_string()),
                 destructive_hint_source: Default::default(),
+                offered_as: None,
             }],
             false,
         );
@@ -1203,6 +1204,7 @@ mod tests {
                 tool: mcp_tool,
                 approval_argument: None,
                 destructive_hint_source: Default::default(),
+                offered_as: None,
             }],
             false,
         );

@@ -174,6 +174,26 @@ describe("Word plans restored from chat history", () => {
     );
   });
 
+  it("follows read pages the model sent as replay records", () => {
+    const [user, assistant] = messagesOf(multiPage);
+    const pages = toolUses(assistant);
+    const snapshotId = (
+      pages[0].output as unknown as { result: { snapshot: string } }
+    ).result.snapshot;
+    const wrapped = pages.map(
+      (page) =>
+        ({
+          ...page,
+          input: { omitted_from_replay: "note", kept: page.input },
+        }) as unknown as ContentPart,
+    );
+    const snapshot = wordSnapshotFromHistory(
+      [user, { ...assistant, content: wrapped }],
+      snapshotId,
+    );
+    expect(snapshot?.blocks).toHaveLength(53);
+  });
+
   it("offers no plan when every attempt failed", () => {
     const [, assistant] = messagesOf(noAccepted);
     expect(

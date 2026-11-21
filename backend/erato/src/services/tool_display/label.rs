@@ -1477,6 +1477,7 @@ mod tests {
             description: None,
             description_truncated: false,
             server_name: Some("Notion".into()),
+            tool_name: None,
             label: Some(label),
             read_only: false,
             closed_world: false,

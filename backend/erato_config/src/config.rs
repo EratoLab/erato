@@ -1217,6 +1217,18 @@ pub struct AppConfig {
     #[facet(erato_config::stability(level = "alpha"))]
     pub spoken_number_words: SpokenNumberWordsByLanguage,
 
+    /// Readings by language tag for written forms a voice may not say well,
+    /// such as abbreviations (`"z. B." = "zum Beispiel"`), applied only to
+    /// the text sent to the voice. They add to or override the built-in
+    /// German readings.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken_readings::deserialize_spoken_readings"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_readings: crate::spoken_readings::SpokenReadingsByLanguage,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -1755,7 +1767,7 @@ impl AppConfig {
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_reply_speech(&schema);
         warn_misshaped_wait_lines(&schema);
-        warn_misshaped_number_words(&schema);
+        warn_misshaped_language_data(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1778,7 +1790,7 @@ impl AppConfig {
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_reply_speech(&schema);
         warn_misshaped_wait_lines(&schema);
-        warn_misshaped_number_words(&schema);
+        warn_misshaped_language_data(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -2394,11 +2406,19 @@ impl AppConfig {
             }
             let replay = &tool.replay;
             if replay.mode == ClientToolReplayMode::Full
-                && !(replay.keep_input_fields.is_empty() && replay.keep_output_fields.is_empty())
+                && !(replay.keep_input_fields.is_empty()
+                    && replay.keep_output_fields.is_empty()
+                    && replay.max_input_field_bytes.is_none())
             {
                 panic!(
                     "Client tool '{}' lists replay receipt fields but replay.mode is not \"receipt\".",
                     qualified
+                );
+            }
+            if replay.input_field_bound() > MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES {
+                panic!(
+                    "Client tool '{}' replay.max_input_field_bytes must be at most {}.",
+                    qualified, MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES
                 );
             }
             for fields in [&replay.keep_input_fields, &replay.keep_output_fields] {
@@ -3353,24 +3373,12 @@ impl AppConfig {
         }
     }
 
-    /// The speech provider read aloud uses, or `None` while the feature is off.
-    pub fn read_aloud_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
-        if !self.audio_read_aloud.enabled {
-            return None;
-        }
-        let id = self.audio_read_aloud.speech_provider.as_deref()?;
-        let id = self.resolve_speech_provider_id(id).ok()?;
-        Some((id, self.speech_providers.provider.get(id)?))
-    }
-
-    /// The speech provider conversational mode reads replies back with, or
-    /// `None` while conversational mode cannot speak.
-    pub fn conversational_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
-        if !self.audio_conversational.transcription.enabled {
-            return None;
-        }
-        let id = self.audio_conversational.speech_provider.as_deref()?;
-        let id = self.resolve_speech_provider_id(id).ok()?;
+    /// The active provider behind a configured speech provider id.
+    pub fn speech_provider<'a>(
+        &'a self,
+        id: Option<&'a str>,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        let id = self.resolve_speech_provider_id(id?).ok()?;
         Some((id, self.speech_providers.provider.get(id)?))
     }
 
@@ -3547,47 +3555,55 @@ impl AppConfig {
     }
 }
 
-fn validate_audio_feature_config(
+/// The checks an enabled audio feature's section must pass, at startup and
+/// when a live switch turns it on.
+pub fn check_audio_feature_config(
     app_config: &AppConfig,
     config_key: &str,
     audio_config: &AudioTranscriptionConfig,
-) {
+) -> Result<(), Report> {
     if !audio_config.enabled {
-        return;
+        return Ok(());
     }
 
     if audio_config.max_recording_duration_seconds == 0 {
-        panic!(
+        return Err(eyre!(
             "Invalid `{config_key}.max_recording_duration_seconds`: value must be greater than 0."
-        );
+        ));
     }
     if audio_config.chunk_duration_seconds == 0 {
-        panic!("Invalid `{config_key}.chunk_duration_seconds`: value must be greater than 0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.chunk_duration_seconds`: value must be greater than 0."
+        ));
     }
     if audio_config.chunk_duration_seconds > audio_config.max_recording_duration_seconds {
-        panic!(
+        return Err(eyre!(
             "Invalid `{config_key}.chunk_duration_seconds`: value must be less than or equal to `{config_key}.max_recording_duration_seconds`."
-        );
+        ));
     }
     if audio_config.max_attempts == 0 {
-        panic!("Invalid `{config_key}.max_attempts`: value must be greater than 0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.max_attempts`: value must be greater than 0."
+        ));
     }
     if !(0.0..=1.0).contains(&audio_config.min_unique_word_ratio) {
-        panic!("Invalid `{config_key}.min_unique_word_ratio`: value must be between 0.0 and 1.0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.min_unique_word_ratio`: value must be between 0.0 and 1.0."
+        ));
     }
     if audio_config.tokens_per_word <= 0.0 || audio_config.output_token_buffer_factor <= 0.0 {
-        panic!(
+        return Err(eyre!(
             "Invalid {config_key} token sizing config: `tokens_per_word` and `output_token_buffer_factor` must be greater than 0."
-        );
+        ));
     }
     if let (Some(min_output_tokens), Some(max_output_tokens)) = (
         audio_config.min_output_tokens,
         audio_config.max_output_tokens,
     ) && min_output_tokens > max_output_tokens
     {
-        panic!(
+        return Err(eyre!(
             "Invalid {config_key} token sizing config: `min_output_tokens` must be less than or equal to `max_output_tokens`."
-        );
+        ));
     }
 
     let configured_audio_provider = if let Some(provider_id) =
@@ -3595,19 +3611,20 @@ fn validate_audio_feature_config(
     {
         let resolved_id = app_config
             .resolve_chat_provider_id(provider_id)
-            .unwrap_or_else(|error| panic!("Invalid {config_key} provider: {error}"));
+            .map_err(|error| eyre!("Invalid {config_key} provider: {error}"))?;
         let provider = app_config.get_chat_provider(resolved_id);
         if !provider.model_capabilities.supports_audio_input {
-            panic!(
+            return Err(eyre!(
                 "{config_key}.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
                 provider_id
-            );
+            ));
         }
         if !audio_provider_kind_supports_binary_audio(&provider.provider_kind) {
-            panic!(
+            return Err(eyre!(
                 "{config_key}.chat_provider_id '{}' uses provider_kind '{}', which does not support audio input through the current adapter.",
-                provider_id, provider.provider_kind
-            );
+                provider_id,
+                provider.provider_kind
+            ));
         }
         Some(provider)
     } else if let Some(chat_providers) = &app_config.chat_providers {
@@ -3628,10 +3645,21 @@ fn validate_audio_feature_config(
     };
 
     if configured_audio_provider.is_none() {
-        panic!(
+        return Err(eyre!(
             "{config_key} is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
 Enable {config_key} with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
-        );
+        ));
+    }
+    Ok(())
+}
+
+fn validate_audio_feature_config(
+    app_config: &AppConfig,
+    config_key: &str,
+    audio_config: &AudioTranscriptionConfig,
+) {
+    if let Err(error) = check_audio_feature_config(app_config, config_key, audio_config) {
+        panic!("{error}");
     }
 }
 
@@ -3770,6 +3798,39 @@ mod audio_config_tests {
     }
 
     #[test]
+    fn hesitations_per_language_hold_only_that_languages_turns() {
+        let settings = load_conversational(
+            "hesitation_words = [\"erm\"]\n\
+             [hesitations]\nfr = [\"euh\", \"bah\"]\nFR = [\"euh\"]\npl = \"yyy\"\n",
+        );
+        let fr = settings.effective_hesitation_words_for("fr_CA");
+        assert!(fr.contains(&"euh".to_string()) && fr.contains(&"erm".to_string()));
+        assert!(fr.contains(&"äh".to_string()));
+        let en = settings.effective_hesitation_words_for("en");
+        assert!(!en.contains(&"euh".to_string()));
+        assert_eq!(en, settings.effective_hesitation_words());
+        let mut misshaped = crate::language_words::misshaped_hesitations(
+            &config::Config::builder()
+                .add_source(config::File::from_str(
+                    "[audio_conversational.hesitations]\nFR = [\"euh\"]\npl = \"yyy\"\n",
+                    config::FileFormat::Toml,
+                ))
+                .build()
+                .unwrap(),
+        );
+        misshaped.sort();
+        assert_eq!(
+            misshaped,
+            [
+                "audio_conversational.hesitations.pl is not a list and is ignored",
+                "audio_conversational.hesitations: 'FR' is not a lowercase language tag such as `de` and is ignored",
+            ]
+        );
+        assert!(settings.hesitations["pl"].is_empty());
+        assert!(!settings.hesitations.contains_key("FR"));
+    }
+
+    #[test]
     fn hesitation_words_add_or_replace_and_odd_entries_are_dropped() {
         let mut settings =
             load_conversational("hesitation_words = [\"euh\", \"äh ja\", \"42\", \" \", \"Bah\"]");
@@ -3863,14 +3924,28 @@ mod audio_config_tests {
             },
             ..Default::default()
         };
-        assert!(config.read_aloud_speech_provider().is_none());
+        assert!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .is_none()
+        );
         config.audio_read_aloud.enabled = true;
-        assert_eq!(config.read_aloud_speech_provider().unwrap().0, "voice");
+        assert_eq!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .unwrap()
+                .0,
+            "voice"
+        );
         // Conversational mode stays off: read aloud does not depend on it.
         assert!(!config.audio_conversational.transcription.enabled);
         assert_eq!(config.audio_conversational.speech_provider, None);
         config.audio_read_aloud.speech_provider = Some("missing".into());
-        assert!(config.read_aloud_speech_provider().is_none());
+        assert!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .is_none()
+        );
     }
 
     #[test]
@@ -4279,6 +4354,16 @@ pub struct ApprovalVoiceCommandsConfig {
     pub model_timeout_ms: u32,
     /// Replaces the model's built-in instruction. Unset or blank keeps it.
     pub prompt: Option<String>,
+    /// Words per language tag that the rules match besides the built-in
+    /// German and English ones, usually from a content package. A card
+    /// uses the German and English words and those of its own language.
+    /// Its hesitations are trimmed around the confirmation phrase and its
+    /// negations, conditions and question words feed the guards.
+    #[serde(deserialize_with = "crate::voice_command_words::deserialize_voice_command_words")]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub words: crate::voice_command_words::VoiceCommandWordsByLanguage,
 }
 
 /// Off by default. Lets the user decide a waiting card by voice: "nein"
@@ -4302,6 +4387,16 @@ pub struct ApprovalVoiceDecisionsConfig {
     /// How long an accepted decision by voice may take to arrive, in
     /// seconds. Defaults to `120`; allowed from `5` to `600`.
     pub receipt_ttl_seconds: u32,
+    /// The confirmation phrase per language tag, usually from a content
+    /// package. A configured `de` or `en` phrase replaces the built-in one;
+    /// a card in another language approves by voice only with a phrase of
+    /// its own. Each phrase is checked at startup and dropped with a
+    /// warning when it could be heard by mistake.
+    #[serde(deserialize_with = "crate::confirmation_phrases::deserialize_confirmation_phrases")]
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub phrases: crate::confirmation_phrases::ConfirmationPhrasesByLanguage,
 }
 
 impl Default for ApprovalVoiceDecisionsConfig {
@@ -4311,6 +4406,7 @@ impl Default for ApprovalVoiceDecisionsConfig {
             echo_tail_ms: 300,
             min_speech_ms_per_syllable: 80,
             receipt_ttl_seconds: 120,
+            phrases: Default::default(),
         }
     }
 }
@@ -4327,6 +4423,7 @@ impl Default for ApprovalVoiceCommandsConfig {
             chat_provider_id: None,
             model_timeout_ms: 2500,
             prompt: None,
+            words: Default::default(),
         }
     }
 }
@@ -8149,20 +8246,36 @@ impl ClientToolHostContext {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolReplayConfig {
     /// `full` (default) replays arguments and result verbatim. `receipt`
-    /// replaces both with a bounded receipt built from the fields listed below
-    /// plus a fixed omission note.
+    /// replays the call with the argument fields listed below and a bounded
+    /// result built from the result fields listed below plus an omission note.
     #[serde(default)]
     pub mode: ClientToolReplayMode,
-    /// Argument fields kept in a receipt, as `$.key.key` paths into the call
-    /// arguments. At most 32. Missing fields are skipped; a value larger than
-    /// the per-field bound is replaced by an omission marker.
+    /// Argument fields the replayed call keeps, as `$.key.key` paths into the
+    /// call arguments. At most 32. Missing fields are skipped; a value larger
+    /// than `max_input_field_bytes` is left out.
     #[serde(default)]
     pub keep_input_fields: Vec<String>,
-    /// Result fields kept in a receipt, as `$.key.key` paths into the stored
-    /// tool output. Same rules as `keep_input_fields`.
+    /// Result fields kept in the shortened result, as `$.key.key` paths into
+    /// the stored tool output. At most 32. Missing fields are skipped; a value
+    /// larger than the per-field bound is replaced by an omission marker.
     #[serde(default)]
     pub keep_output_fields: Vec<String>,
+    /// JSON bytes a kept argument may have before it is left out of the
+    /// replayed call. Default 2048, at most 65536.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_input_field_bytes: Option<usize>,
 }
+
+impl ClientToolReplayConfig {
+    pub fn input_field_bound(&self) -> usize {
+        self.max_input_field_bytes
+            .unwrap_or(DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES)
+    }
+}
+
+pub const DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES: usize = 2048;
+pub const MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
@@ -9090,7 +9203,9 @@ pub struct AudioConversationalConfig {
     /// conversational turn whose words are all hesitation sounds does not
     /// end: nothing is sent, and the microphone listens on for what the
     /// speaker goes on to say. Each entry is one word of letters; others are
-    /// dropped with a warning. Defaults to none.
+    /// dropped with a warning. Before a confirmation phrase only the
+    /// voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words: Vec<String>,
@@ -9100,6 +9215,20 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub hesitation_words_replace_base: bool,
+    /// Hesitation sounds per language tag, usually from a content package,
+    /// added to the list above for a user whose interface is in that
+    /// language. Each entry is one word of letters, and never a negation,
+    /// condition or question word of German, English or that language;
+    /// others are dropped with a warning. Before a confirmation phrase only
+    /// the voice-command `hesitations` are trimmed, never these. Defaults to
+    /// none.
+    #[serde(
+        default,
+        deserialize_with = "crate::language_words::deserialize_hesitations"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub hesitations: HashMap<String, Vec<String>>,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -9188,6 +9317,7 @@ impl Default for AudioConversationalConfig {
             voice_start_max_wait_ms: default_voice_start_max_wait_ms(),
             hesitation_words: Vec::new(),
             hesitation_words_replace_base: false,
+            hesitations: HashMap::new(),
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
@@ -9210,6 +9340,20 @@ impl AudioConversationalConfig {
         for word in base.chain(self.hesitation_words.iter().cloned()) {
             if !words.contains(&word) {
                 words.push(word);
+            }
+        }
+        words
+    }
+
+    /// The hesitation sounds that hold a turn for a user in `language`
+    /// ("fr", "fr-CA", …): [`Self::effective_hesitation_words`] and the
+    /// language's own.
+    pub fn effective_hesitation_words_for(&self, language: &str) -> Vec<String> {
+        let mut words = self.effective_hesitation_words();
+        let own = crate::language_words::by_tag(language, |tag| self.hesitations.get(tag));
+        for word in own.into_iter().flatten() {
+            if !words.contains(word) {
+                words.push(word.clone());
             }
         }
         words
@@ -9402,9 +9546,35 @@ fn warn_misshaped_approval_speech(schema: &Config) {
     }
 }
 
-fn warn_misshaped_number_words(schema: &Config) {
-    for dropped in crate::spoken::misshaped_number_words(schema) {
-        tracing::warn!("Spoken number word dropped: {dropped}.");
+/// Warns for each part of the per-language data a content package brings
+/// that the lenient loaders leave out.
+fn warn_misshaped_language_data(schema: &Config) {
+    let parts: [(&str, Vec<String>); 5] = [
+        (
+            "Spoken number word",
+            crate::spoken::misshaped_number_words(schema),
+        ),
+        (
+            "Voice-command word",
+            crate::voice_command_words::misshaped_voice_command_words(schema),
+        ),
+        (
+            "Spoken reading",
+            crate::spoken_readings::misshaped_spoken_readings(schema),
+        ),
+        (
+            "Confirmation phrase",
+            crate::confirmation_phrases::misshaped_confirmation_phrases(schema),
+        ),
+        (
+            "Hesitation words",
+            crate::language_words::misshaped_hesitations(schema),
+        ),
+    ];
+    for (what, dropped) in parts {
+        for dropped in dropped {
+            tracing::warn!("{what} dropped: {dropped}.");
+        }
     }
 }
 
@@ -10348,6 +10518,265 @@ impl TeamsNudgeSendWindowConfig {
                 "Teams bot `inactivity_nudge.send_window.time_zone` is not an IANA time zone: {error}"
             )
         })
+    }
+}
+
+/// The voice features' on/off switches, the part of them that can change
+/// while the process runs. Layered from the runtime sources like
+/// `McpRuntimeConfig`, so the admin panel's `erato.toml` override switches
+/// them without a restart; everything else about the features stays as
+/// configured at startup. A key no source sets keeps its startup value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, HeapSize)]
+pub struct VoiceSwitches {
+    /// `audio_conversational.enabled`.
+    pub conversational: bool,
+    /// `audio_read_aloud.enabled`.
+    pub read_aloud: bool,
+    /// `approval_voice_commands.enabled`.
+    pub voice_commands: bool,
+    /// `approval_voice_decisions.enabled`: a later source may only switch
+    /// deciding by voice off, never on, and it is off whenever voice
+    /// commands are.
+    pub voice_decisions: bool,
+}
+
+impl VoiceSwitches {
+    #[must_use]
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            conversational: config.audio_conversational.transcription.enabled,
+            read_aloud: config.audio_read_aloud.enabled,
+            voice_commands: config.approval_voice_commands.enabled,
+            voice_decisions: config.approval_voice_decisions.enabled
+                && config.approval_voice_commands.enabled,
+        }
+    }
+
+    /// The switches as the runtime sources layer them over `startup`,
+    /// checked as at startup for each feature they switch on. A refusal
+    /// still carries the switches the sources turn off.
+    pub fn from_toml_sources(
+        sources: &[ConfigSourceFile],
+        startup: &AppConfig,
+    ) -> Result<Self, VoiceSwitchesRefused> {
+        let schema = runtime_sources(sources).map_err(|error| VoiceSwitchesRefused {
+            error,
+            at_most: Self::ALL_ON,
+        })?;
+        let read = |path: &str, startup: bool| match schema.get::<bool>(path) {
+            Ok(value) => Ok(value),
+            Err(ConfigError::NotFound(_)) => Ok(startup),
+            Err(error) => Err(eyre!("`{path}` must be true or false: {error}")),
+        };
+        let conversational = read(
+            "audio_conversational.enabled",
+            startup.audio_conversational.transcription.enabled,
+        );
+        let read_aloud = read("audio_read_aloud.enabled", startup.audio_read_aloud.enabled);
+        let voice_commands = read(
+            "approval_voice_commands.enabled",
+            startup.approval_voice_commands.enabled,
+        );
+        let voice_decisions = read(
+            "approval_voice_decisions.enabled",
+            startup.approval_voice_decisions.enabled,
+        );
+        // A value that is not a bool keeps a switch as it was, except
+        // deciding by voice, which it turns off.
+        let at_most = Self {
+            conversational: *conversational.as_ref().unwrap_or(&true),
+            read_aloud: *read_aloud.as_ref().unwrap_or(&true),
+            voice_commands: *voice_commands.as_ref().unwrap_or(&true),
+            voice_decisions: *voice_decisions.as_ref().unwrap_or(&false)
+                && *voice_commands.as_ref().unwrap_or(&true),
+        };
+        let refused = |error| VoiceSwitchesRefused { error, at_most };
+        let voice_commands = voice_commands.map_err(refused)?;
+        let switches = Self {
+            conversational: conversational.map_err(refused)?,
+            read_aloud: read_aloud.map_err(refused)?,
+            voice_commands,
+            voice_decisions: startup.approval_voice_decisions.enabled
+                && voice_commands
+                && voice_decisions.map_err(refused)?,
+        };
+        let mut config = startup.clone();
+        switches.apply_to(&mut config);
+        if switches.conversational {
+            check_audio_feature_config(
+                &config,
+                "audio_conversational",
+                &config.audio_conversational.transcription,
+            )
+            .map_err(refused)?;
+        }
+        if switches.read_aloud && switches.read_aloud_speech_provider(&config).is_none() {
+            return Err(refused(eyre!(
+                "audio_read_aloud.enabled requires an active audio_read_aloud.speech_provider"
+            )));
+        }
+        config.validate_approval_voice_commands().map_err(refused)?;
+        config
+            .validate_approval_voice_decisions()
+            .map_err(refused)?;
+        Ok(switches)
+    }
+
+    const ALL_ON: Self = Self {
+        conversational: true,
+        read_aloud: true,
+        voice_commands: true,
+        voice_decisions: true,
+    };
+
+    pub fn apply_to(&self, config: &mut AppConfig) {
+        config.audio_conversational.transcription.enabled = self.conversational;
+        config.audio_read_aloud.enabled = self.read_aloud;
+        config.approval_voice_commands.enabled = self.voice_commands;
+        config.approval_voice_decisions.enabled = self.voice_decisions;
+    }
+
+    /// The speech provider conversational mode reads replies back with, or
+    /// `None` while conversational mode is off or cannot speak.
+    #[must_use]
+    pub fn conversational_speech_provider<'a>(
+        &self,
+        config: &'a AppConfig,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        self.conversational
+            .then(|| config.speech_provider(config.audio_conversational.speech_provider.as_deref()))
+            .flatten()
+    }
+
+    /// The speech provider finished messages are read aloud with, or `None`
+    /// while read aloud is off or has no active provider.
+    #[must_use]
+    pub fn read_aloud_speech_provider<'a>(
+        &self,
+        config: &'a AppConfig,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        self.read_aloud
+            .then(|| config.speech_provider(config.audio_read_aloud.speech_provider.as_deref()))
+            .flatten()
+    }
+}
+
+/// Runtime sources the voice switches cannot follow: a switch turned on
+/// without what it needs, or a value that is not a bool.
+#[derive(Debug)]
+pub struct VoiceSwitchesRefused {
+    pub error: Report,
+    /// What the sources allow each switch at most: off where they turn it
+    /// off, so turning a switch off never waits for another to be fixed.
+    at_most: VoiceSwitches,
+}
+
+impl VoiceSwitchesRefused {
+    /// `previous`, with every switch the sources turn off turned off.
+    #[must_use]
+    pub fn keep(&self, previous: VoiceSwitches) -> VoiceSwitches {
+        let voice_commands = previous.voice_commands && self.at_most.voice_commands;
+        VoiceSwitches {
+            conversational: previous.conversational && self.at_most.conversational,
+            read_aloud: previous.read_aloud && self.at_most.read_aloud,
+            voice_commands,
+            voice_decisions: previous.voice_decisions
+                && self.at_most.voice_decisions
+                && voice_commands,
+        }
+    }
+}
+
+#[cfg(test)]
+mod voice_switches_tests {
+    use super::*;
+
+    fn layered(startup: &AppConfig, toml: &str) -> Result<VoiceSwitches, VoiceSwitchesRefused> {
+        VoiceSwitches::from_toml_sources(
+            &[ConfigSourceFile {
+                source_filename: "admin.toml".into(),
+                contents: toml.into(),
+            }],
+            startup,
+        )
+    }
+
+    fn deciding() -> AppConfig {
+        let mut config = AppConfig::default();
+        config.approval_voice_commands.enabled = true;
+        config.approval_voice_decisions.enabled = true;
+        config
+    }
+
+    #[test]
+    fn unset_keys_keep_the_startup_switches() {
+        let startup = deciding();
+        assert_eq!(
+            layered(&startup, "").unwrap(),
+            VoiceSwitches::from_app_config(&startup)
+        );
+    }
+
+    #[test]
+    fn deciding_by_voice_can_only_be_switched_off() {
+        let startup = deciding();
+        let off = layered(&startup, "[approval_voice_decisions]\nenabled = false\n").unwrap();
+        assert!(off.voice_commands && !off.voice_decisions);
+        let commands_off =
+            layered(&startup, "[approval_voice_commands]\nenabled = false\n").unwrap();
+        assert!(!commands_off.voice_commands && !commands_off.voice_decisions);
+
+        let mut startup = deciding();
+        startup.approval_voice_decisions.enabled = false;
+        let on = layered(&startup, "[approval_voice_decisions]\nenabled = true\n").unwrap();
+        assert!(on.voice_commands && !on.voice_decisions);
+    }
+
+    #[test]
+    fn a_feature_switched_on_without_what_it_needs_is_refused() {
+        let startup = AppConfig::default();
+        assert!(layered(&startup, "[audio_read_aloud]\nenabled = true\n").is_err());
+        assert!(layered(&startup, "[audio_conversational]\nenabled = true\n").is_err());
+        assert!(layered(&startup, "[audio_read_aloud]\nenabled = \"maybe\"\n").is_err());
+        let off = layered(&startup, "[audio_read_aloud]\nenabled = false\n").unwrap();
+        assert!(!off.read_aloud);
+    }
+
+    #[test]
+    fn a_refused_save_still_switches_off_what_it_turns_off() {
+        let startup = deciding();
+        let previous = VoiceSwitches::from_app_config(&startup);
+        let refused = layered(
+            &startup,
+            "[approval_voice_decisions]\nenabled = false\n[audio_read_aloud]\nenabled = true\n",
+        )
+        .unwrap_err();
+        assert_eq!(
+            refused.keep(previous),
+            VoiceSwitches {
+                voice_decisions: false,
+                ..previous
+            }
+        );
+        let commands_off = layered(
+            &startup,
+            "[approval_voice_commands]\nenabled = false\n[audio_conversational]\nenabled = true\n",
+        )
+        .unwrap_err()
+        .keep(previous);
+        assert!(!commands_off.voice_commands && !commands_off.voice_decisions);
+
+        let unreadable = layered(
+            &startup,
+            "[approval_voice_decisions]\nenabled = \"maybe\"\n",
+        )
+        .unwrap_err()
+        .keep(previous);
+        assert!(unreadable.voice_commands && !unreadable.voice_decisions);
+        let unreadable = layered(&startup, "[audio_read_aloud]\nenabled = \"maybe\"\n")
+            .unwrap_err()
+            .keep(previous);
+        assert_eq!(unreadable, previous);
     }
 }
 
@@ -13019,9 +13448,14 @@ mod client_tool_replay_serialization_tests {
             mode: ClientToolReplayMode::Receipt,
             keep_input_fields: vec!["$.snapshot".into()],
             keep_output_fields: vec!["$.status".into(), "$.result.complete".into()],
+            max_input_field_bytes: Some(24 * 1024),
         };
         let json = serde_json::to_value(&replay).unwrap();
         assert_eq!(json["mode"], "receipt");
+        assert_eq!(
+            ClientToolReplayConfig::default().input_field_bound(),
+            DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES
+        );
         assert_eq!(
             serde_json::from_value::<ClientToolReplayConfig>(json).unwrap(),
             replay

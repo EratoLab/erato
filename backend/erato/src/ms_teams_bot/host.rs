@@ -923,19 +923,27 @@ fn translate(
                 Ok(StreamingEvent::ToolCallUpdate {
                     tool_call_id,
                     tool_name,
+                    display,
                     status,
                     progress_message,
                     progress: completed,
                     total,
                     ..
-                }) => GenerationUpdate::Status(progress.tool(
-                    tool_call_id,
-                    &tool_name,
-                    status,
-                    progress_message.as_deref(),
-                    completed,
-                    total,
-                )),
+                }) => GenerationUpdate::Status(
+                    progress.tool(
+                        tool_call_id,
+                        // The tool's own name where the model called it by a
+                        // name qualified with its server.
+                        display
+                            .as_ref()
+                            .and_then(|display| display.tool_name.as_deref())
+                            .unwrap_or(&tool_name),
+                        status,
+                        progress_message.as_deref(),
+                        completed,
+                        total,
+                    ),
+                ),
                 Ok(StreamingEvent::ClientToolCall { .. }) => GenerationUpdate::Status(
                     Msg::NeedsAppProgress.fill(lang, &[("app", &app_name)]),
                 ),
@@ -1640,6 +1648,7 @@ mod tests {
             description: Some("Description".into()),
             description_truncated: true,
             server_name: None,
+            tool_name: None,
             label: None,
             read_only: false,
             closed_world: false,
@@ -1691,6 +1700,7 @@ mod tests {
                 description: None,
                 description_truncated: false,
                 server_name: Some("Team Wiki".into()),
+                tool_name: None,
                 label: None,
                 read_only: false,
                 closed_world: false,
@@ -1766,6 +1776,7 @@ mod tests {
                 approval_id: "task-a".to_string(),
                 tool_call_id: "task-a".to_string(),
                 tool_name: "delegate_task".to_string(),
+                called_as: None,
                 display: None,
                 input: json!({"task": "Publish the page"}),
                 child: Some(crate::models::message::ChildApprovalRef {
@@ -1978,5 +1989,54 @@ mod tests {
             texts,
             ["I am checking.", "", "The result", "The result is ready."]
         );
+    }
+
+    /// A call the model made by a name qualified with its server shows the
+    /// tool's own name, which its display carries, in the progress line.
+    #[tokio::test]
+    async fn progress_names_a_qualified_call_by_the_tools_own_name() {
+        let (sender, receiver) = broadcast::channel(16);
+        let mut updates = translate(
+            Uuid::new_v4(),
+            receiver,
+            None,
+            Lang::En,
+            "Erato".into(),
+            FacetsConfig::default(),
+        );
+        sender
+            .send(StreamingEvent::ToolCallUpdate {
+                message_id: Uuid::new_v4(),
+                content_index: 0,
+                tool_call_id: "call".into(),
+                tool_name: "crm_eu__search".into(),
+                display: Some(crate::models::message::ToolDisplayMetadata {
+                    title: "Search".into(),
+                    description: None,
+                    description_truncated: false,
+                    server_name: Some("CRM EU".into()),
+                    tool_name: Some("search".into()),
+                    label: None,
+                    read_only: false,
+                    closed_world: false,
+                }),
+                status: ToolCallStatus::InProgress,
+                input: None,
+                output: None,
+                result_details: None,
+                allowed_by: None,
+                progress_message: None,
+                progress: None,
+                total: None,
+            })
+            .unwrap();
+        sender.send(StreamingEvent::StreamEnd).unwrap();
+        let mut statuses = Vec::new();
+        while let Some(update) = updates.recv().await {
+            if let GenerationUpdate::Status(status) = update {
+                statuses.push(status);
+            }
+        }
+        assert_eq!(statuses, ["Using search…"]);
     }
 }

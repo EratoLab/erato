@@ -1093,7 +1093,7 @@ impl McpSessionManager {
         let mut unavailable_server_ids = Vec::new();
         let mut needing_auth_server_ids = Vec::new();
         let mut missing_credential_server_ids = Vec::new();
-        let server_ids: Vec<String> = self
+        let mut server_ids: Vec<String> = self
             .configuration
             .read()
             .await
@@ -1106,6 +1106,9 @@ impl McpSessionManager {
             })
             .cloned()
             .collect();
+        // The configuration is a map: sorted, the tools reach the model in
+        // the same order in every process.
+        server_ids.sort();
 
         let creation_results = join_all(server_ids.iter().map(|server_id| async move {
             (
@@ -1171,6 +1174,7 @@ impl McpSessionManager {
                     tool: tool.tool,
                     approval_argument: tool.approval_argument,
                     destructive_hint_source: tool.sources.destructive_hint,
+                    offered_as: None,
                 });
             }
         }
@@ -1527,6 +1531,18 @@ pub struct ManagedTool {
     pub approval_argument: Option<String>,
     /// Who set the tool's destructive hint, which a card names.
     pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
+    /// The name the model is offered the tool under, set only where it is not
+    /// `tool.name`: when another server or one of Erato's own tools uses the
+    /// same bare name, it is a name qualified with the server (see
+    /// `mcp_tool_names`). The server is always called with `tool.name`.
+    pub offered_as: Option<String>,
+}
+
+impl ManagedTool {
+    /// The name the tool is offered to the model under and dispatched by.
+    pub fn model_name(&self) -> &str {
+        self.offered_as.as_deref().unwrap_or(&self.tool.name)
+    }
 }
 
 #[cfg(test)]

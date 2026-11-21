@@ -5,7 +5,7 @@
 //! value the admin does not allow never shapes a turn.
 
 use super::me_profile_middleware::MeProfile;
-use super::starting_assistant::{AudienceIdentity, matching_audiences_for};
+use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::distribution::experience_policy::{
     AudienceReplySpeech, ExperiencePolicyDocument, REPLY_SPEECH_SETTING,
 };
@@ -43,9 +43,13 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceReplySpeech)> {
-    matching_audiences_for(policy, REPLY_SPEECH_SETTING, identity, now, |audience| {
-        audience.reply_speech.as_ref()
-    })
+    matching_blocks(
+        policy,
+        REPLY_SPEECH_SETTING,
+        |audience| audience.reply_speech.as_ref(),
+        identity,
+        now,
+    )
 }
 
 /// Each field comes from the first audience in the order that sets it, else
@@ -62,10 +66,10 @@ pub fn resolve(
             .unwrap_or(config.wording),
         source: ReplySpeechStyleSource::Deployment,
         audience: None,
-        user_choice: audiences
-            .iter()
-            .find_map(|(_, set)| set.user_choice)
-            .unwrap_or(config.user_choice),
+        user_choice: user_choice_open(
+            config.user_choice,
+            audiences.iter().map(|(_, set)| set.user_choice),
+        ),
     };
     if let Some((name, _)) = audiences.first() {
         style.source = ReplySpeechStyleSource::Audience;

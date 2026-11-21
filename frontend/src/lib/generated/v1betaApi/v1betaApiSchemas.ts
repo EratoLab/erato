@@ -193,6 +193,12 @@ export type ApprovalDecisionsError = {
  */
 export type ApprovalItem = {
   approval_id: string;
+  /**
+   * The name the model called the tool by, set only where it is not
+   * `tool_name`: a name qualified with the MCP server. The continued call
+   * is stored and replayed under it.
+   */
+  called_as?: string;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
   input: Value;
@@ -203,6 +209,10 @@ export type ApprovalItem = {
    */
   replaces_approval_id?: string | null | undefined;
   tool_call_id: string;
+  /**
+   * The tool as its MCP server or Erato names it: what the card shows and
+   * a standing decision is stored for.
+   */
   tool_name: string;
 };
 
@@ -5836,6 +5846,13 @@ export type ToolDisplayMetadata = {
    */
   server_name?: string;
   title: string;
+  /**
+   * The tool's own name on its MCP server, set only when the model calls
+   * it by a name qualified with the server because another server or one
+   * of Erato's own tools has the same name. The call's `tool_name` is then
+   * that qualified name; show this one instead.
+   */
+  tool_name?: string;
 };
 
 /**

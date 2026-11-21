@@ -9,7 +9,7 @@
 
 use super::me_profile_middleware::MeProfile;
 use super::read_aloud::{speech_language, speech_response};
-use super::starting_assistant::{AudienceIdentity, matching_audiences_for};
+use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::config::SpeechProviderConfig;
 use crate::distribution::experience_policy::{
     AudienceWaitLines, ExperiencePolicyDocument, WAIT_LINES_SETTING,
@@ -133,9 +133,13 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceWaitLines)> {
-    matching_audiences_for(policy, WAIT_LINES_SETTING, identity, now, |audience| {
-        audience.wait_lines.as_ref()
-    })
+    matching_blocks(
+        policy,
+        WAIT_LINES_SETTING,
+        |audience| audience.wait_lines.as_ref(),
+        identity,
+        now,
+    )
 }
 
 /// The amount in resolution order: deployment, audiences, the user's own
@@ -149,10 +153,10 @@ pub fn resolve(
         .iter()
         .find_map(|(_, set)| set.amount)
         .unwrap_or(config.amount);
-    let user_choice = audiences
-        .iter()
-        .find_map(|(_, set)| set.user_choice)
-        .unwrap_or(config.user_choice);
+    let user_choice = user_choice_open(
+        config.user_choice,
+        audiences.iter().map(|(_, set)| set.user_choice),
+    );
     let (mut source, audience) = match audiences.first() {
         Some((name, _)) => (WaitLinesSource::Audience, Some((*name).to_string())),
         None => (WaitLinesSource::Deployment, None),
@@ -306,7 +310,10 @@ pub async fn wait_lines(
     Extension(me_user): Extension<MeProfile>,
     Query(query): Query<WaitLinesQuery>,
 ) -> Result<Json<WaitLinesResponse>, StatusCode> {
-    let Some((provider_id, provider_config)) = app_state.config.conversational_speech_provider()
+    let Some((provider_id, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .conversational_speech_provider(&app_state.config)
     else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -320,7 +327,7 @@ pub async fn wait_lines(
     let (amount, source, audience, user_choice) =
         resolve(config, &audiences, me_user.preference_wait_lines_amount);
 
-    let language = speech_language(&me_user).code().to_string();
+    let language = speech_language(&app_state, &me_user).code().to_string();
     let voice = voice_fingerprint(provider_id, provider_config);
     let set = config.set_for(&language);
     let timing = WaitLinesTiming {
@@ -421,7 +428,11 @@ pub async fn progress_speech(
     Path(message_id): Path<Uuid>,
     Json(request): Json<ProgressSpeechRequest>,
 ) -> Result<Response, StatusCode> {
-    let Some((_, provider_config)) = app_state.config.conversational_speech_provider() else {
+    let Some((_, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .conversational_speech_provider(&app_state.config)
+    else {
         return Err(StatusCode::NOT_FOUND);
     };
     let text = request.text.trim();
@@ -458,7 +469,7 @@ pub async fn progress_speech(
     if !generating {
         return Err(StatusCode::CONFLICT);
     }
-    let language = speech_language(&me_user);
+    let language = speech_language(&app_state, &me_user);
     speech_response(
         provider_config,
         &[text.to_string()],

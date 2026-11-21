@@ -148,29 +148,6 @@ pub fn matching_subjects<'a>(
         .collect()
 }
 
-/// The active audiences in `setting`'s order that match the caller and set a
-/// value for it, first one first: the shared lookup of every per-audience
-/// voice setting. Only audiences the admin listed under `setting` take part.
-pub fn matching_audiences_for<'a, T: 'a>(
-    policy: &'a ExperiencePolicyDocument,
-    setting: &str,
-    identity: AudienceIdentity<'_>,
-    now: DateTime<Utc>,
-    pick: impl Fn(&'a ExperienceAudience) -> Option<&'a T>,
-) -> Vec<(&'a str, &'a T)> {
-    resolution_order_for(policy, setting)
-        .filter_map(|(name, audience)| {
-            let value = pick(audience)?;
-            (audience.is_active_at(now)
-                && audience
-                    .subjects
-                    .iter()
-                    .any(|subject| subject_matches(subject, identity)))
-            .then_some((name, value))
-        })
-        .collect()
-}
-
 /// Pick the winning audience for a user: the first audience in the
 /// starting-assistant resolution order that is still active at `now` and any
 /// of whose subjects matches the caller.
@@ -198,6 +175,38 @@ pub fn match_winning_audience<'a>(
                 .iter()
                 .any(|subject| subject_matches(subject, identity))
     })
+}
+
+/// The active audiences in `setting`'s order that match the caller and set
+/// that setting's `block`, first one first: the voice settings' resolver.
+pub fn matching_blocks<'a, T>(
+    policy: &'a ExperiencePolicyDocument,
+    setting: &str,
+    block: impl Fn(&'a ExperienceAudience) -> Option<&'a T>,
+    identity: AudienceIdentity<'_>,
+    now: DateTime<Utc>,
+) -> Vec<(&'a str, &'a T)> {
+    resolution_order_for(policy, setting)
+        .filter_map(|(name, audience)| {
+            let set = block(audience)?;
+            (audience.is_active_at(now)
+                && audience
+                    .subjects
+                    .iter()
+                    .any(|subject| subject_matches(subject, identity)))
+            .then_some((name, set))
+        })
+        .collect()
+}
+
+/// Whether the caller may choose their own: the deployment's `user_choice`
+/// is a lock an audience can only close, never reopen. Otherwise the first
+/// audience that sets it decides.
+pub fn user_choice_open(
+    deployment: bool,
+    audiences: impl IntoIterator<Item = Option<bool>>,
+) -> bool {
+    deployment && audiences.into_iter().flatten().next().unwrap_or(true)
 }
 
 #[utoipa::path(

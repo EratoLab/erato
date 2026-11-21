@@ -13,23 +13,30 @@ use std::collections::{HashMap, HashSet};
 /// for future drafts and are deliberately not loaded.
 pub const EXPERIENCE_POLICY_SLUG: &str = "policy";
 
-/// The `setting_orders` key of the one live setting. Also the only setting
-/// `priority_order` ever encoded, which is why it alone has a legacy fallback
+/// The `setting_orders` key of the starting assistant. Also the only setting
+/// `priority_order` ever encoded; the voice settings fall back to its order
 /// in [`resolution_order_for`].
 pub const STARTING_ASSISTANT_SETTING: &str = "starting_assistant";
 
 /// The `setting_orders` key of how waiting approval cards are read aloud.
-/// It has no legacy fallback: an audience takes part only once the admin
-/// lists it under this key.
+/// An audience listed under it takes part in that order; without the key,
+/// the starting assistant's order applies, with a warning.
 pub const APPROVAL_SPEECH_SETTING: &str = "approval_speech";
 
-/// The `setting_orders` key of what the voice says while the user waits.
-/// Like approval speech, an audience takes part only once listed under it.
+/// The `setting_orders` key of what the voice says while the user waits,
+/// resolved like approval speech.
 pub const WAIT_LINES_SETTING: &str = "wait_lines";
 
 /// The `setting_orders` key of how a reply is spoken in conversational audio
 /// mode. Like approval speech, an audience takes part only once listed under it.
 pub const REPLY_SPEECH_SETTING: &str = "reply_speech";
+/// The settings an audience sets in a block of its own, each with its own
+/// order.
+const VOICE_SETTINGS: [&str; 3] = [
+    APPROVAL_SPEECH_SETTING,
+    WAIT_LINES_SETTING,
+    REPLY_SPEECH_SETTING,
+];
 
 /// The shared resolution-contract fixture: the cases every resolver of this
 /// document must agree on. Downstream consumers keep a copy (the admin panel
@@ -232,13 +239,13 @@ pub struct ExperienceAudience {
     /// How waiting approval cards are read aloud for this audience, where an
     /// admin set it: each part left out is taken from the next audience in
     /// the [`APPROVAL_SPEECH_SETTING`] order that sets it, else from the
-    /// deployment. A block that does not parse is ignored with a warning and
-    /// costs nothing else: the audience and its pin stay.
+    /// deployment. Each field is read on its own: one that does not parse is
+    /// ignored with a warning and costs nothing else.
     #[serde(default, deserialize_with = "lenient_approval_speech")]
     pub approval_speech: Option<AudienceApprovalSpeech>,
     /// What the voice says while this audience waits for an answer, where
     /// an admin set it, resolved like `approval_speech` in the
-    /// [`WAIT_LINES_SETTING`] order. A block that does not parse is ignored.
+    /// [`WAIT_LINES_SETTING`] order, field by field.
     #[serde(default, deserialize_with = "lenient_wait_lines")]
     pub wait_lines: Option<AudienceWaitLines>,
     /// How a reply is spoken for this audience, where an admin set it,
@@ -261,48 +268,21 @@ pub struct AudienceReplySpeech {
 fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceReplySpeech>, D::Error> {
-    Ok(lenient_fields(
-        "reply_speech",
-        serde_json::Value::deserialize(deserializer)?,
-        |speech: &mut AudienceReplySpeech, key, value| match key {
-            "wording" => {
-                Some(serde_json::from_value(value).map(|wording| speech.wording = Some(wording)))
-            }
-            "user_choice" => {
-                Some(serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice)))
-            }
-            _ => None,
+    lenient_block(
+        deserializer,
+        REPLY_SPEECH_SETTING,
+        |speech: &mut AudienceReplySpeech, key, value| {
+            Some(match key {
+                "wording" => {
+                    serde_json::from_value(value).map(|wording| speech.wording = Some(wording))
+                }
+                "user_choice" => {
+                    serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice))
+                }
+                _ => return None,
+            })
         },
-    ))
-}
-
-/// Reads an audience's setting block field by field, so a typo in one field
-/// never drops a lock in another. `field` sets one known field and returns
-/// `None` for a key it does not know.
-fn lenient_fields<T: Default, E: std::fmt::Display>(
-    block: &str,
-    value: serde_json::Value,
-    mut field: impl FnMut(&mut T, &str, serde_json::Value) -> Option<Result<(), E>>,
-) -> Option<T> {
-    let serde_json::Value::Object(fields) = value else {
-        if !value.is_null() {
-            tracing::warn!(%block, "An audience's setting block is ignored: it is not a table");
-        }
-        return None;
-    };
-    let mut set = T::default();
-    for (key, value) in fields {
-        match field(&mut set, &key, value) {
-            None => {
-                tracing::warn!(%block, %key, "An audience's setting field is not known and is ignored");
-            }
-            Some(Err(error)) => {
-                tracing::warn!(%block, %key, %error, "An audience's setting field is ignored: it does not parse");
-            }
-            Some(Ok(())) => {}
-        }
-    }
-    Some(set)
+    )
 }
 
 /// A supervisor's choice for what an audience hears while it waits.
@@ -310,27 +290,62 @@ fn lenient_fields<T: Default, E: std::fmt::Display>(
 #[serde(default)]
 pub struct AudienceWaitLines {
     pub amount: Option<erato_config::wait_lines::WaitLinesAmount>,
-    /// Whether the audience's users may choose their own; absent keeps the
-    /// deployment's `wait_lines.user_choice`.
+    /// `false` keeps the audience's users from choosing their own; `true`
+    /// cannot reopen a choice the deployment's `wait_lines.user_choice`
+    /// closed. Absent keeps the next audience's or the deployment's.
     pub user_choice: Option<bool>,
 }
 
 fn lenient_wait_lines<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceWaitLines>, D::Error> {
-    Ok(lenient_fields(
-        "wait_lines",
-        serde_json::Value::deserialize(deserializer)?,
-        |lines: &mut AudienceWaitLines, key, value| match key {
-            "amount" => {
-                Some(serde_json::from_value(value).map(|amount| lines.amount = Some(amount)))
-            }
-            "user_choice" => {
-                Some(serde_json::from_value(value).map(|choice| lines.user_choice = Some(choice)))
-            }
-            _ => None,
+    lenient_block(
+        deserializer,
+        WAIT_LINES_SETTING,
+        |lines: &mut AudienceWaitLines, key, value| {
+            Some(match key {
+                "amount" => serde_json::from_value(value).map(|amount| lines.amount = Some(amount)),
+                "user_choice" => {
+                    serde_json::from_value(value).map(|choice| lines.user_choice = Some(choice))
+                }
+                _ => return None,
+            })
         },
-    ))
+    )
+}
+
+/// An audience's voice block, read field by field: a field that does not
+/// parse or is not known is ignored with a warning, and the others stay, so
+/// a typo in one never drops a lock in another. `set` reads one field and
+/// answers `None` for a key it does not know.
+fn lenient_block<'de, D: serde::Deserializer<'de>, T: Default>(
+    deserializer: D,
+    block: &'static str,
+    set: impl Fn(&mut T, &str, serde_json::Value) -> Option<Result<(), serde_json::Error>>,
+) -> Result<Option<T>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let serde_json::Value::Object(fields) = value else {
+        if !value.is_null() {
+            tracing::warn!(
+                block,
+                "An audience's voice block is ignored: it is not a table"
+            );
+        }
+        return Ok(None);
+    };
+    let mut parsed = T::default();
+    for (key, value) in fields {
+        match set(&mut parsed, &key, value) {
+            None => {
+                tracing::warn!(block, %key, "An audience's voice field is not known and is ignored");
+            }
+            Some(Err(error)) => {
+                tracing::warn!(block, %key, %error, "An audience's voice field is ignored: it does not parse");
+            }
+            Some(Ok(())) => {}
+        }
+    }
+    Ok(Some(parsed))
 }
 
 /// A supervisor's choice for how an audience hears approval cards.
@@ -340,28 +355,35 @@ pub struct AudienceApprovalSpeech {
     pub amount: Option<crate::config::ApprovalSpeechAmount>,
     pub short_details: Option<u8>,
     pub wording: Option<crate::config::ApprovalSpeechWording>,
-    /// Whether the audience's users may choose their own; absent keeps the
-    /// deployment's `approval_speech.user_choice`.
+    /// `false` keeps the audience's users from choosing their own; `true`
+    /// cannot reopen a choice the deployment's `approval_speech.user_choice`
+    /// closed. Absent keeps the next audience's or the deployment's.
     pub user_choice: Option<bool>,
 }
 
 fn lenient_approval_speech<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<AudienceApprovalSpeech>, D::Error> {
-    let value = serde_json::Value::deserialize(deserializer)?;
-    if value.is_null() {
-        return Ok(None);
-    }
-    match AudienceApprovalSpeech::deserialize(&value) {
-        Ok(speech) => Ok(Some(speech)),
-        Err(error) => {
-            tracing::warn!(
-                %error,
-                "An audience's approval_speech block is ignored: it does not parse"
-            );
-            Ok(None)
-        }
-    }
+    lenient_block(
+        deserializer,
+        APPROVAL_SPEECH_SETTING,
+        |speech: &mut AudienceApprovalSpeech, key, value| {
+            Some(match key {
+                "amount" => {
+                    serde_json::from_value(value).map(|amount| speech.amount = Some(amount))
+                }
+                "short_details" => serde_json::from_value(value)
+                    .map(|details| speech.short_details = Some(details)),
+                "wording" => {
+                    serde_json::from_value(value).map(|wording| speech.wording = Some(wording))
+                }
+                "user_choice" => {
+                    serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice))
+                }
+                _ => return None,
+            })
+        },
+    )
 }
 
 impl ExperienceAudience {
@@ -490,6 +512,10 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
         }
     }
 
+    for warning in voice_block_warnings(&document) {
+        tracing::warn!("Experience policy: {warning}");
+    }
+
     let mut setting_orders: Vec<_> = document.setting_orders.iter().collect();
     setting_orders.sort_by_key(|(setting, _)| *setting);
     for (setting, order) in setting_orders {
@@ -538,15 +564,68 @@ pub fn parse_experience_policy(contents: &str) -> Result<ExperiencePolicyDocumen
     Ok(document)
 }
 
+/// Voice blocks that apply other than the admin may expect: a setting
+/// without its own order follows the starting assistant's, and an audience
+/// missing from an existing order has no effect. One line each, for the log.
+fn voice_block_warnings(document: &ExperiencePolicyDocument) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for setting in VOICE_SETTINGS {
+        let mut with_block: Vec<(&str, Option<&str>)> = document
+            .audiences
+            .iter()
+            .filter(|(_, audience)| match setting {
+                APPROVAL_SPEECH_SETTING => audience.approval_speech.is_some(),
+                REPLY_SPEECH_SETTING => audience.reply_speech.is_some(),
+                _ => audience.wait_lines.is_some(),
+            })
+            .map(|(name, audience)| (name.as_str(), audience.id.as_deref()))
+            .collect();
+        if with_block.is_empty() {
+            continue;
+        }
+        with_block.sort_unstable();
+        match document.setting_orders.get(setting) {
+            None => {
+                let listed: HashSet<&str> = resolution_order_for(document, setting)
+                    .map(|(name, _)| name)
+                    .collect();
+                let active: Vec<&str> = with_block
+                    .iter()
+                    .map(|(name, _)| *name)
+                    .filter(|name| listed.contains(name))
+                    .collect();
+                warnings.push(format!(
+                    "setting_orders has no `{setting}` entry, so the `{setting}` blocks follow the starting assistant's order; active: {active:?}"
+                ));
+            }
+            Some(order) => {
+                let missing: Vec<&str> = with_block
+                    .iter()
+                    .filter(|(_, id)| id.is_none_or(|id| !order.iter().any(|listed| listed == id)))
+                    .map(|(name, _)| *name)
+                    .collect();
+                if !missing.is_empty() {
+                    warnings.push(format!(
+                        "audiences {missing:?} set `{setting}` but are not in its setting_orders entry, so their blocks have no effect"
+                    ));
+                }
+            }
+        }
+    }
+    warnings
+}
+
 /// The audiences to try for `setting`, first-match-wins — the ONE home for
 /// reader precedence: the setting's `setting_orders` entry when the key is
 /// present (even empty; the agreement invariant guarantees a parseable
-/// document cannot diverge from the legacy list), else the legacy
-/// `priority_order` for the starting assistant — the only setting that list
-/// ever encoded, so no other setting gets a fallback. Entries naming an
-/// unknown id or name are skipped so resolution stays total even over a
-/// document the parser would reject (the `skips_unknown_priority_order_entries`
-/// precedent).
+/// document cannot diverge from the legacy list), else the starting
+/// assistant's order: its `setting_orders` entry, else the legacy
+/// `priority_order`. Only the starting assistant and the voice settings fall
+/// back: a writer that drops a voice setting's order (an older admin panel)
+/// must not silently switch every audience's voice block off; the parser
+/// warns when it happens. Entries naming an unknown id or name are skipped
+/// so resolution stays total even over a document the parser would reject
+/// (the `skips_unknown_priority_order_entries` precedent).
 ///
 /// Deterministic for every document, including ones the parser rejects: when
 /// two audiences share an id, the one with the smaller name resolves for that
@@ -565,9 +644,13 @@ pub fn resolution_order_for<'a>(
         }
     }
 
-    let by_id = policy.setting_orders.get(setting);
-    let legacy = (by_id.is_none() && setting == STARTING_ASSISTANT_SETTING)
-        .then_some(&policy.priority_order);
+    let falls_back = setting == STARTING_ASSISTANT_SETTING || VOICE_SETTINGS.contains(&setting);
+    let by_id = match policy.setting_orders.get(setting) {
+        Some(order) => Some(order),
+        None if falls_back => policy.setting_orders.get(STARTING_ASSISTANT_SETTING),
+        None => None,
+    };
+    let legacy = (by_id.is_none() && falls_back).then_some(&policy.priority_order);
     by_id
         .into_iter()
         .flatten()
@@ -953,6 +1036,83 @@ mod tests {
         assert_eq!(document.priority_order, vec!["engineering"]);
     }
 
+    fn voice_document(setting_orders: &str) -> ExperiencePolicyDocument {
+        parse_experience_policy(&format!(
+            r#"{{
+                "audiences": {{
+                    "sales": {{
+                        "id": "a-sales",
+                        "subjects": [{{"subject_type": "organization"}}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                        "approval_speech": {{"amount": "short"}},
+                        "wait_lines": {{"amount": "off"}}
+                    }},
+                    "pilot": {{
+                        "id": "a-pilot",
+                        "subjects": [{{"subject_type": "organization"}}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                        "approval_speech": {{"wording": "natural"}}
+                    }}
+                }},
+                "priority_order": ["pilot", "sales"],
+                "setting_orders": {setting_orders}
+            }}"#
+        ))
+        .unwrap()
+    }
+
+    fn order(document: &ExperiencePolicyDocument, setting: &str) -> Vec<String> {
+        resolution_order_for(document, setting)
+            .map(|(name, _)| name.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn a_voice_setting_without_an_order_follows_the_starting_assistant_order() {
+        let dropped = voice_document(r#"{"starting_assistant": ["a-pilot", "a-sales"]}"#);
+        for setting in [APPROVAL_SPEECH_SETTING, WAIT_LINES_SETTING] {
+            assert_eq!(order(&dropped, setting), ["pilot", "sales"], "{setting}");
+        }
+        let legacy = voice_document("{}");
+        assert_eq!(order(&legacy, APPROVAL_SPEECH_SETTING), ["pilot", "sales"]);
+        assert_eq!(
+            order(&legacy, STARTING_ASSISTANT_SETTING),
+            ["pilot", "sales"]
+        );
+        assert!(order(&legacy, "another_setting").is_empty());
+    }
+
+    #[test]
+    fn a_voice_setting_with_its_own_order_keeps_it() {
+        let document = voice_document(
+            r#"{"starting_assistant": ["a-pilot", "a-sales"], "approval_speech": ["a-sales"], "wait_lines": []}"#,
+        );
+        assert_eq!(order(&document, APPROVAL_SPEECH_SETTING), ["sales"]);
+        assert!(order(&document, WAIT_LINES_SETTING).is_empty());
+        assert_eq!(
+            order(&document, STARTING_ASSISTANT_SETTING),
+            ["pilot", "sales"]
+        );
+    }
+
+    #[test]
+    fn a_missing_order_and_an_audience_left_out_of_one_are_logged() {
+        let document = voice_document(
+            r#"{"starting_assistant": ["a-pilot", "a-sales"], "approval_speech": ["a-sales"]}"#,
+        );
+        assert_eq!(
+            voice_block_warnings(&document),
+            [
+                r#"audiences ["pilot"] set `approval_speech` but are not in its setting_orders entry, so their blocks have no effect"#,
+                r#"setting_orders has no `wait_lines` entry, so the `wait_lines` blocks follow the starting assistant's order; active: ["sales"]"#,
+            ]
+        );
+        let complete = voice_document(
+            r#"{"starting_assistant": ["a-pilot", "a-sales"], "approval_speech": ["a-pilot", "a-sales"], "wait_lines": ["a-sales"]}"#,
+        );
+        assert!(voice_block_warnings(&complete).is_empty());
+    }
+
     #[test]
     fn a_typo_in_one_wait_lines_field_keeps_the_others() {
         let audience = |block: &str| {
@@ -1027,13 +1187,18 @@ mod tests {
     }
 
     #[test]
-    fn a_bad_approval_speech_block_costs_only_itself() {
-        for block in [
-            r#"{"wording": "Natural"}"#,
-            r#"{"amount": "medium"}"#,
-            r#"{"short_details": 300}"#,
-            r#"{"short_details": "2"}"#,
-            r#""short""#,
+    fn a_bad_approval_speech_field_costs_only_itself() {
+        let empty = Some(AudienceApprovalSpeech::default());
+        let locked = Some(AudienceApprovalSpeech {
+            user_choice: Some(false),
+            ..AudienceApprovalSpeech::default()
+        });
+        for (block, expected) in [
+            (r#"{"wording": "Natural"}"#, &empty),
+            (r#"{"amount": "medium", "user_choice": false}"#, &locked),
+            (r#"{"short_details": 300, "user_choice": false}"#, &locked),
+            (r#"{"short_details": "2", "tone": "warm"}"#, &empty),
+            (r#""short""#, &None),
         ] {
             let document = parse_experience_policy(&format!(
                 r#"{{
@@ -1049,7 +1214,7 @@ mod tests {
             ))
             .unwrap_or_else(|error| panic!("{block}: {error}"));
             let audience = &document.audiences["engineering"];
-            assert_eq!(audience.approval_speech, None, "{block}");
+            assert_eq!(&audience.approval_speech, expected, "{block}");
             assert_eq!(
                 audience.pinned_assistant_hub_assistant_id.to_string(),
                 "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"

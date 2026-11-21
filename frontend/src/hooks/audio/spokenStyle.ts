@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 
 import { env } from "@/app/env";
 import { fetchApprovalSpeechStyle } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import {
+  BUILT_IN_SPOKEN_CARD_LANGUAGES,
+  byLanguageTag,
+} from "@/lib/toolCallGist/spokenLanguageData";
 
 import type { ApprovalSpeechStyleResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenOptions } from "@/lib/toolCallGist/spokenCard";
+import type { SpokenCardLanguages } from "@/lib/toolCallGist/spokenLanguageData";
 import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
 import type { SentenceSet } from "@/lib/toolCallGist/spokenSentences";
 
@@ -88,8 +93,7 @@ export const deploymentSentences = (
   language: string,
 ): SentenceSet | undefined => {
   const all = env().approvalSpeechSentences;
-  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  return all?.[language] ?? all?.[code];
+  return byLanguageTag(all, language);
 };
 
 /**
@@ -100,6 +104,12 @@ export const deploymentNumberWords = (
   language: string,
 ): NumberWords | undefined => {
   const all = env().spokenNumberWords;
-  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  return all?.[language.toLowerCase()] ?? all?.[code];
+  return byLanguageTag(all, language);
 };
+
+/**
+ * The spoken-card words of every language: the deployment's, merged with the
+ * built-in ones by the backend, else the built-in ones.
+ */
+export const deploymentSpokenCardLanguages = (): SpokenCardLanguages =>
+  env().approvalSpeechWords ?? BUILT_IN_SPOKEN_CARD_LANGUAGES;

@@ -3,7 +3,7 @@
 //! in, and the caller's own choice where that is allowed, in this order.
 
 use super::me_profile_middleware::MeProfile;
-use super::starting_assistant::{AudienceIdentity, matching_audiences_for};
+use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::config::{ApprovalSpeechAmount, ApprovalSpeechConfig, ApprovalSpeechWording};
 use crate::distribution::experience_policy::{
     APPROVAL_SPEECH_SETTING, AudienceApprovalSpeech, ExperiencePolicyDocument,
@@ -47,9 +47,13 @@ pub fn matching_audiences<'a>(
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
 ) -> Vec<(&'a str, &'a AudienceApprovalSpeech)> {
-    matching_audiences_for(policy, APPROVAL_SPEECH_SETTING, identity, now, |audience| {
-        audience.approval_speech.as_ref()
-    })
+    matching_blocks(
+        policy,
+        APPROVAL_SPEECH_SETTING,
+        |audience| audience.approval_speech.as_ref(),
+        identity,
+        now,
+    )
 }
 
 /// The style in resolution order: deployment, audiences, the user's own.
@@ -76,7 +80,10 @@ pub fn resolve(
         wording: first(audiences, |set| set.wording).unwrap_or(config.wording),
         source: ApprovalSpeechStyleSource::Deployment,
         audience: None,
-        user_choice: first(audiences, |set| set.user_choice).unwrap_or(config.user_choice),
+        user_choice: user_choice_open(
+            config.user_choice,
+            audiences.iter().map(|(_, set)| set.user_choice),
+        ),
     };
     if let Some((name, _)) = audiences.first() {
         style.source = ApprovalSpeechStyleSource::Audience;
@@ -193,7 +200,7 @@ mod tests {
         assert_eq!(kept.amount, ApprovalSpeechAmount::Short);
         assert!(!kept.user_choice);
 
-        // So does the deployment, unless an audience opens it again.
+        // So does the deployment, and no audience opens it again.
         let closed = ApprovalSpeechConfig {
             user_choice: false,
             ..ApprovalSpeechConfig::default()
@@ -203,15 +210,13 @@ mod tests {
             ApprovalSpeechWording::Precise
         );
         let opened = audience(Some(true));
-        assert_eq!(
-            resolve(
-                &closed,
-                &[("Pilot", &opened)],
-                None,
-                Some(ApprovalSpeechWording::Natural)
-            )
-            .wording,
-            ApprovalSpeechWording::Natural
+        let still_closed = resolve(
+            &closed,
+            &[("Pilot", &opened)],
+            None,
+            Some(ApprovalSpeechWording::Natural),
         );
+        assert_eq!(still_closed.wording, ApprovalSpeechWording::Precise);
+        assert!(!still_closed.user_choice);
     }
 }

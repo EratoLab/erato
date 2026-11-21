@@ -8949,12 +8949,12 @@ msgstr "I didn't catch that clearly. Please say it again."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhrase"
-msgstr "Please say “I confirm” to go ahead."
+msgstr "Please say “{phrase}” to go ahead."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.sayPhraseAgain"
-msgstr "Please say “I confirm” once more."
+msgstr "Please say “{phrase}” once more."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9064,7 +9064,7 @@ msgstr "Please confirm on screen."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.requestPhrase"
-msgstr "Say “I confirm” to go ahead."
+msgstr "Say “{phrase}” to go ahead."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -9477,7 +9477,7 @@ msgstr "Denied — sent once every item is decided"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolApproval.voicePhrase"
-msgstr "By voice: “I confirm”"
+msgstr "By voice: “{phrase}”"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx

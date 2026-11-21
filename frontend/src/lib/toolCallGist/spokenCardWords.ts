@@ -3,6 +3,12 @@ import { plural, select, t } from "@lingui/core/macro";
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
+import {
+  confirmationPhraseOf,
+  intlLocale,
+  primaryLanguage,
+  spokenCardLanguage,
+} from "./spokenLanguageData";
 import { fillVariant, naturalVariant } from "./spokenSentences";
 import { bothPercent } from "./spokenValues";
 
@@ -18,6 +24,11 @@ import type {
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
 import type { DictationRelation } from "./spokenDictation";
+import type {
+  ConfirmationPhrases,
+  SpokenCardLanguage,
+  SpokenCardLanguages,
+} from "./spokenLanguageData";
 import type {
   SpokenCondition,
   SpokenReadFacts,
@@ -43,6 +54,10 @@ interface WordOptions {
   wording?: "precise" | "natural";
   /** The deployment's sentence variants for this language. */
   sentences?: SentenceSet;
+  /** The words of every language; the built-in ones when not given. */
+  spokenCardLanguages?: SpokenCardLanguages;
+  /** The phrase of every language; the built-in ones when not given. */
+  confirmationPhrases?: ConfirmationPhrases;
 }
 
 interface CalendarDay {
@@ -140,7 +155,7 @@ interface LanguageCode {
   numbers: readonly string[];
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
-  time?: (hour: number, minute: number) => string;
+  time?: (hour: number, minute: number) => string | undefined;
   /**
    * An old or new value with its direction, for a sentence variant, where
    * the language's value in that role carries none ("from 1 December"). A
@@ -149,75 +164,39 @@ interface LanguageCode {
   directed?: (role: "from" | "to", value: string) => string;
 }
 
-/* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
-const GERMAN: LanguageCode = {
-  locale: "de-DE",
-  numbers: [
-    "null",
-    "eins",
-    "zwei",
-    "drei",
-    "vier",
-    "fünf",
-    "sechs",
-    "sieben",
-    "acht",
-    "neun",
-    "zehn",
-    "elf",
-    "zwölf",
-  ],
-  ordinals: [
-    "erste",
-    "zweite",
-    "dritte",
-    "vierte",
-    "fünfte",
-    "sechste",
-    "siebte",
-    "achte",
-    "neunte",
-    "zehnte",
-  ],
-  // Said as people say it: "10 Uhr", "10:30 Uhr".
-  time: (hour, minute) =>
-    minute === 0
-      ? `${hour} Uhr`
-      : `${hour}:${String(minute).padStart(2, "0")} Uhr`,
-};
+/** The code parts of a language from its words (`languageBase.json`, `[approval_speech.words]`). */
+const codeOf = (
+  words: SpokenCardLanguage,
+  languages: SpokenCardLanguages | undefined,
+): LanguageCode => ({
+  locale: intlLocale(words.locale) ?? withoutWords(languages).locale,
+  numbers: words.numbers,
+  ordinals: words.ordinals,
+  time: (hour, minute) => {
+    const template =
+      minute === 0 ? (words.time_full_hour ?? words.time) : words.time;
+    return template === undefined
+      ? undefined
+      : fillVariant(template, {
+          hour: String(hour),
+          minute: String(minute).padStart(2, "0"),
+        });
+  },
+  directed: (role, value) => {
+    const template = role === "from" ? words.from : words.to;
+    return template === undefined ? value : fillVariant(template, { value });
+  },
+});
 
-const ENGLISH: LanguageCode = {
-  locale: "en-GB",
-  directed: (role, value) => `${role} ${value}`,
-  numbers: [
-    "zero",
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-  ],
-  ordinals: [
-    "first",
-    "second",
-    "third",
-    "fourth",
-    "fifth",
-    "sixth",
-    "seventh",
-    "eighth",
-    "ninth",
-    "tenth",
-  ],
-};
-/* eslint-enable lingui/no-unlocalized-strings */
+/** A language without words says only the pointer, formatted as English is. */
+const withoutWords = (
+  languages: SpokenCardLanguages | undefined,
+): LanguageCode => ({
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- a locale
+  locale: spokenCardLanguage("en", languages)?.locale ?? "en-GB",
+  numbers: [],
+  ordinals: [],
+});
 
 /** `Intl` separates some parts with no-break spaces; a voice needs none. */
 const plainSpaces = (text: string): string =>
@@ -991,10 +970,10 @@ const requestSentence = (): string =>
  * The request where the card is approved by voice: it names the phrase, never
  * as its last words, so an echo of the voice's end is not the phrase.
  */
-const requestPhraseSentence = (): string =>
+const requestPhraseSentence = (phrase: string): string =>
   t({
     id: "spokenCard.requestPhrase",
-    message: "Say “I confirm” to go ahead.",
+    message: `Say “${phrase}” to go ahead.`,
   });
 
 const cutMark = (): string =>
@@ -1018,7 +997,11 @@ const textCutSentence = (): string =>
     message: "The rest of the text is on screen.",
   });
 
-const noticeSentence = (notice: SpokenNotice, locale: string): string => {
+const noticeSentence = (
+  notice: SpokenNotice,
+  locale: string,
+  phrase: string,
+): string => {
   switch (notice.kind) {
     case "confirm_on_screen":
       return requestSentence();
@@ -1030,7 +1013,7 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
     case "say_phrase":
       return t({
         id: "spokenCard.notice.sayPhrase",
-        message: "Please say “I confirm” to go ahead.",
+        message: `Please say “${phrase}” to go ahead.`,
       });
     case "say_again":
       return t({
@@ -1040,7 +1023,7 @@ const noticeSentence = (notice: SpokenNotice, locale: string): string => {
     case "say_phrase_again":
       return t({
         id: "spokenCard.notice.sayPhraseAgain",
-        message: "Please say “I confirm” once more.",
+        message: `Please say “${phrase}” once more.`,
       });
     case "phrase_on_screen":
       return t({
@@ -1354,6 +1337,13 @@ const words = (
   language: string,
 ): LanguageWords => {
   const natural = options.wording === "natural";
+  // A card without a phrase of its own is approved on screen only and never
+  // asks for a phrase; the English one only keeps the text whole.
+  const confirmationPhrase =
+    confirmationPhraseOf(language, options.confirmationPhrases) ??
+    confirmationPhraseOf("en", options.confirmationPhrases) ??
+    confirmationPhraseOf("en") ??
+    "";
   /** The natural variant for `key`, or `undefined` for the precise sentence. */
   const variant = (key: string, oneField?: string): string | undefined =>
     natural
@@ -1818,7 +1808,8 @@ const words = (
         .map((consequence) => consequenceSentence(consequence, subject))
         .join(" ");
     },
-    request: (phrase) => (phrase ? requestPhraseSentence() : requestSentence()),
+    request: (phrase) =>
+      phrase ? requestPhraseSentence(confirmationPhrase) : requestSentence(),
     generic: (toolTitle, server) =>
       genericSentence(
         spokenToolTitle(toolTitle),
@@ -1829,7 +1820,7 @@ const words = (
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
     dictatedReadLead: dictatedReadLeadSentence,
-    notice: (notice) => noticeSentence(notice, code.locale),
+    notice: (notice) => noticeSentence(notice, code.locale, confirmationPhrase),
     difference: {
       intro: differenceIntro,
       differs: differenceEntry,
@@ -1857,18 +1848,23 @@ const words = (
 const spokenToolTitle = (title: string): string =>
   title.replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 
-/** Languages with the pointer sentence only, until a native speaker has judged the full card in them. */
-const POINTER_ONLY: readonly string[] = ["fr", "es", "pl"];
-
 /**
  * The words for `language` ("de", "de-DE", …), from the catalog of the
- * language shown; the code parts are English for a language without its own.
+ * language shown and the language's words. Only a language whose words say
+ * `full_card` says the whole card, until a native speaker has judged it;
+ * any other says the pointer sentence only.
  */
 export const spokenWordsFor = (
   language: string,
   options: WordOptions,
 ): LanguageWords => {
-  const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const said = words(code === "de" ? GERMAN : ENGLISH, options, code);
-  return POINTER_ONLY.includes(code) ? { ...said, full: false } : said;
+  const code = primaryLanguage(language);
+  const languages = options.spokenCardLanguages;
+  const own = spokenCardLanguage(language, languages);
+  const said = words(
+    own ? codeOf(own, languages) : withoutWords(languages),
+    options,
+    code,
+  );
+  return own?.full_card === true ? said : { ...said, full: false };
 };

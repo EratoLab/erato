@@ -5,7 +5,7 @@ use crate::models::message::{ContentPart, MessageRole, MessageSchema, get_messag
 use crate::policy::engine::PolicyEngine;
 use crate::services::sentry::log_internal_server_error;
 use crate::services::speech::session::{MAX_INPUT_BYTES, PassageSpeaker};
-use crate::services::speech::spoken::{SpeechLanguage, speakable};
+use crate::services::speech::spoken::{SpeechLanguage, plain_as_markdown, speakable};
 use crate::state::AppState;
 use axum::{
     Extension, Json,
@@ -133,10 +133,11 @@ pub(super) fn speech_response(
 }
 
 /// The language the user reads the app in, which speech is prepared for.
-pub(super) fn speech_language(me_user: &MeProfile) -> SpeechLanguage {
-    SpeechLanguage::new(
+pub(super) fn speech_language(app_state: &AppState, me_user: &MeProfile) -> SpeechLanguage {
+    SpeechLanguage::with_readings(
         normalize_supported_language(me_user.preference_language.as_deref())
             .unwrap_or(&me_user.preferred_language),
+        &app_state.speech_readings,
     )
 }
 
@@ -175,7 +176,11 @@ pub async fn read_message_aloud(
     Extension(policy): Extension<PolicyEngine>,
     Path(message_id): Path<Uuid>,
 ) -> Result<Response, StatusCode> {
-    let Some((_, provider_config)) = app_state.config.read_aloud_speech_provider() else {
+    let Some((_, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .read_aloud_speech_provider(&app_state.config)
+    else {
         return Err(StatusCode::NOT_FOUND);
     };
 
@@ -214,7 +219,7 @@ pub async fn read_message_aloud(
     if text.len() > MAX_INPUT_BYTES {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = speech_language(&me_user);
+    let language = speech_language(&app_state, &me_user);
     if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -264,7 +269,11 @@ pub async fn speak_approval(
     Path(message_id): Path<Uuid>,
     Json(request): Json<ApprovalSpeechRequest>,
 ) -> Result<Response, StatusCode> {
-    let Some((_, provider_config)) = app_state.config.conversational_speech_provider() else {
+    let Some((_, provider_config)) = app_state
+        .voice_switches()
+        .await
+        .conversational_speech_provider(&app_state.config)
+    else {
         return Err(StatusCode::NOT_FOUND);
     };
     let pieces = request.pieces;
@@ -280,7 +289,12 @@ pub async fn speak_approval(
     {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = speech_language(&me_user);
+    let language = speech_language(&app_state, &me_user);
+    // The pieces are what the card shows; markdown in a value is not meant.
+    let pieces: Vec<String> = pieces
+        .iter()
+        .map(|piece| plain_as_markdown(piece))
+        .collect();
     if pieces.is_empty()
         || pieces
             .iter()

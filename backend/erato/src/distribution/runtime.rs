@@ -2,6 +2,7 @@
 
 use crate::config::{
     AppConfig, ConfigSourceFile, I18nRuntimeConfig, McpRuntimeConfig, TeamsInactivityNudgeConfig,
+    VoiceSwitches,
 };
 use crate::db::entity::prelude::RuntimeConfiguration;
 use crate::db::entity::runtime_configuration;
@@ -128,6 +129,11 @@ pub struct ReloadableAppState {
     /// section that fails validation keeps the previous settings, as a
     /// malformed policy does, so it cannot hold up the rest of a reload.
     pub teams_nudge: TeamsInactivityNudgeConfig,
+    /// The voice features' on/off switches, layered from the same sources so
+    /// the admin panel switches them without a restart. Handlers and the
+    /// page read them per request; a section that fails its checks keeps
+    /// the previous switches, as the nudge does.
+    pub voice_switches: VoiceSwitches,
 }
 
 impl ReloadableAppState {
@@ -158,6 +164,7 @@ impl ReloadableAppState {
                 .bot
                 .inactivity_nudge
                 .clone(),
+            voice_switches: VoiceSwitches::from_app_config(config),
         }
     }
 }
@@ -175,7 +182,14 @@ impl ReloadableAppState {
     async fn load_memory_inner(app_state: &AppState) -> Result<Self, Report> {
         // Scoped so the read guard drops here: callers assign the result into
         // a `write()` on the same lock.
-        let (previous_policy, previous_mcp, previous_nudge, previous_i18n, previous_catalogs) = {
+        let (
+            previous_policy,
+            previous_mcp,
+            previous_nudge,
+            previous_i18n,
+            previous_catalogs,
+            previous_voice,
+        ) = {
             let previous = app_state.reloadable.read().await;
             (
                 previous.experience_policy.clone(),
@@ -183,6 +197,7 @@ impl ReloadableAppState {
                 previous.teams_nudge.clone(),
                 previous.i18n.clone(),
                 previous.translation_catalogs.clone(),
+                previous.voice_switches,
             )
         };
 
@@ -271,6 +286,7 @@ impl ReloadableAppState {
         }
 
         let teams_nudge = load_teams_nudge(app_state, &config_sources, previous_nudge);
+        let voice_switches = load_voice_switches(app_state, &config_sources, previous_voice);
 
         Ok(Self {
             distribution_bundle,
@@ -283,6 +299,7 @@ impl ReloadableAppState {
             },
             desktop_ui_package,
             teams_nudge,
+            voice_switches,
         })
     }
 }
@@ -318,6 +335,36 @@ fn load_teams_nudge(
         tracing::info!(
             enabled = next.enabled,
             "Reloaded the Teams inactivity nudge settings"
+        );
+    }
+    next
+}
+
+/// The voice switches from the layered sources. When they fail the checks a
+/// feature switched on must pass, the previous ones, with what the sources
+/// switch off switched off all the same.
+fn load_voice_switches(
+    app_state: &AppState,
+    config_sources: &[ConfigSourceFile],
+    previous: VoiceSwitches,
+) -> VoiceSwitches {
+    let next = match VoiceSwitches::from_toml_sources(config_sources, &app_state.config) {
+        Ok(next) => next,
+        Err(refused) => {
+            tracing::error!(
+                error = %refused.error,
+                "Failed to load the voice switches; keeping the previous switches, except those the sources switch off"
+            );
+            refused.keep(previous)
+        }
+    };
+    if next != previous {
+        tracing::info!(
+            conversational = next.conversational,
+            read_aloud = next.read_aloud,
+            voice_commands = next.voice_commands,
+            voice_decisions = next.voice_decisions,
+            "Reloaded the voice switches"
         );
     }
     next

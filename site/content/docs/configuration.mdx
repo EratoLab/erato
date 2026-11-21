@@ -2247,7 +2247,10 @@ upload_allowed_if_supports = ["supported_operations"]
 The integrated `retrieve_file_contents` tool is enabled by default and offered when
 the conversation has file references. Set `retrieve_file_contents_enabled = false`
 to disable it. Restrictive facet tool allowlists must permit
-`erato/retrieve_file_contents`; a conflicting MCP or client tool name takes precedence.
+`erato/retrieve_file_contents`; a client tool of the same name takes precedence. While the
+tool is enabled, an MCP tool of that name is offered under a name qualified with its
+server (see [Tools with the same name](./features/mcp_servers#tools-with-the-same-name));
+with it disabled, the MCP tool keeps its name.
 The model chooses when to request an omitted document. Small files still go directly
 into context without a tool call.
 
@@ -2711,6 +2714,8 @@ different speech provider.
 - `speech_provider`: ID from `speech_providers.provider`. Required while `enabled`
   is `true`.
 
+With [`runtime_configuration`](#runtime_configuration) enabled, the switches `audio_conversational.enabled`, `audio_read_aloud.enabled`, `approval_voice_commands.enabled` and `approval_voice_decisions.enabled` can be changed while Erato runs, for example from the admin panel: they are reloaded with the other runtime sources, and the API and the next page load use them. `approval_voice_decisions.enabled` can only be switched off this way, never on, and is off whenever `approval_voice_commands.enabled` is. A switch that turns a feature on without what it needs (a speech provider, an audio-capable chat provider) is refused, and the previous switches stay, except that a switch the same save turns off is turned off all the same. A value of `approval_voice_decisions.enabled` that is not `true` or `false` turns deciding by voice off. Everything else in these sections is read at startup only.
+
 ```toml
 [audio_read_aloud]
 enabled = true
@@ -3093,7 +3098,7 @@ The longest, in milliseconds, such a voice waits for that audio; what has come b
 
 Hesitation sounds to add to the built-in base. When the words of a conversational turn are all hesitation sounds ("Äh.", "Ähm …", "um"), the turn does not end: nothing is sent, the composer says that a hesitation was heard and the microphone keeps listening, so the question the speaker goes on to ask arrives whole and without the hesitation. Case, punctuation and drawn-out letters are ignored ("Ähhm…" counts as "ähm"). A turn with any other word, a number included ("Äh, 42.", "Ja.", "Mhm."), is sent as usual. It does not apply to what is said to a waiting approval card, whose own rules treat hesitations as listening.
 
-The built-in base is German and English: `äh`, `ähm`, `aeh`, `aehm`, `öh`, `öhm`, `eh`, `ehm`, `hm`, `mh`, `uh`, `uhm`, `um`, `erm`. "Mhm" is a yes and "er" a German word, so neither is in it. The list here is added to the base, so a later change of the base still reaches a deployment that adds its own words; a configuration package for another language (French "euh", for example) adds them here. Each entry must be one word of letters; an entry like "äh ja" or "42" is dropped with a warning at startup, since it would hold back real answers. So is a negation, condition or question word ("ne", "nicht", "aber", "wie"): it is never only a hesitation, and dropping it could change what an answer means.
+The built-in base is German and English: `äh`, `ähm`, `aeh`, `aehm`, `öh`, `öhm`, `eh`, `ehm`, `hm`, `mh`, `uh`, `uhm`, `um`, `erm`. "Mhm" is a yes and "er" a German word, so neither is in it. The list here is added to the base, so a later change of the base still reaches a deployment that adds its own words. It holds back turns in every language; a configuration package for another language (French "euh", for example) adds its sounds to [`hesitations`](#audio_conversationalhesitations) instead. Each entry must be one word of letters; an entry like "äh ja" or "42" is dropped with a warning at startup, since it would hold back real answers. So is a negation, condition or question word ("ne", "nicht", "aber", "wie"): it is never only a hesitation, and dropping it could change what an answer means.
 
 **Type:** list of strings
 
@@ -3108,6 +3113,22 @@ Whether `hesitation_words` replaces the built-in base instead of adding to it. U
 **Type:** `boolean`
 
 **Default:** `false`
+
+#### `audio_conversational.hesitations`
+
+{/* erato_toml_config_key: audio_conversational.hesitations */}
+{/* erato_toml_config_key: audio_conversational.hesitations.<language>.[] */}
+
+Hesitation sounds per language, usually from a content package. They are added to the base and `hesitation_words` for a user whose interface is in that language (the full tag first, then its primary language): a French "euh" holds back a French turn, never an English one. `hesitation_words` and `hesitation_words_replace_base` keep applying to every language.
+
+```toml
+[audio_conversational.hesitations]
+fr = ["euh", "bah"]
+```
+
+The same entries are dropped with a warning as for `hesitation_words`, and so is a negation, condition or question word of German, English or that language's [voice-command words](#approval_voice_commandswords). These sounds are separate from the voice-command `hesitations` and `fillers` of approval cards, and neither they nor `hesitation_words` are trimmed before a [confirmation phrase](#approval_voice_decisionsphrases): only the checked voice-command `hesitations` are, so „vielleicht“ added here never lets „Ich bestätige vielleicht“ approve. For a language whose cards have a confirmation phrase, the startup log names the entries that only hold a turn; a language without one needs only this list.
+
+**Type:** table of lists of strings by language tag. **Default:** none.
 
 #### `audio_conversational.talk_over_voice`
 
@@ -3168,7 +3189,7 @@ What the voice says while the user waits for an answer, when Audio-back is on. A
 
 The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute; a browser whose lines came back incomplete asks for all of them again at its next turn. The opener is left out when the lines are confirmed more than 3 s after it was due.
 
-Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
+Erato holds no lines of its own: the words come from `phrases` and `tools`, usually set by a configuration package (the German and English lines ship as one). A line or tool line that is a confirmation phrase, or that the voice-command rules would hear as an approval or refusal on a waiting card („Passt.“, „Nein.“), is dropped with a warning at startup: the voice never says what decides a card. A language without lines says nothing, and the screen shows the wait as before; that is also what an installation without such a package does. The supervisor's audience setting `wait_lines` (`amount`, `user_choice`) and the user's own choice apply in the same order as for `approval_speech`; each field of an audience's block is read on its own, so a typo in one keeps the others. A value of the wrong kind anywhere in this table keeps its default, and an unknown key is ignored, each with a warning at startup.
 
 **Type:** `object`
 
@@ -3264,16 +3285,16 @@ After this many turns with an opener in one session, the opener comes from the s
 
 {/* erato_toml_config_key: audio_conversational.wait_lines.user_choice */}
 
-Whether a user may choose their own amount, unless a supervisor's audience setting says otherwise.
+Whether a user may choose their own amount. `false` is a lock no audience reopens; with `true`, a supervisor's audience may still close it.
 
 **Type:** `boolean` · **Default:** `true`
 
 #### `audio_conversational.wait_lines.phrases`
 
-{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.opener.[] */}
-{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.opener_short.[] */}
-{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.still.[] */}
-{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<key>.long.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<language>.opener.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<language>.opener_short.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<language>.still.[] */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.phrases.<language>.long.[] */}
 
 Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. A slot without lines says nothing. A variant is picked at random, never the one said last. A line must be at most 120 characters, must not end in a question mark, and must not hold braces or control characters; other lines are dropped with a warning. Write lines that say only that the wait is real, never what was found, without a time promise ("eine Sekunde") and without hesitation sounds ("ähm", "hmm").
 
@@ -5736,6 +5757,77 @@ Replaces the model's built-in instruction, for example from subscription content
 
 **Type:** `string`
 
+#### `approval_voice_commands.words`
+
+{/* erato_toml_config_key: approval_voice_commands.words */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.approve.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.reject.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.stop.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.skip.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.repeat.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.hesitations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.fillers.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.negations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.conditions.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.wh_words.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.question_first.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.question_verbs.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.continuations.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.leading_no.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.yes_particles.[] */}
+{/* erato_toml_config_key: approval_voice_commands.words.<language>.casual_approvals.[] */}
+
+Words the rules match in a language besides the built-in German and English ones, by lowercase language tag, usually from a content package. Without this table the rules know German and English only: in another language they match nothing, a model's approve or refuse is turned into "unclear", and decisions are made on screen.
+
+A card uses the built-in lists, the words configured for `de` and `en` (people mix them), and those of the card's own language. Each list is the built-in list plus the configured words. Words and phrases are compared as transcripts are: lower case, umlauts as "ae", apostrophes dropped, punctuation as a word break. A list of single words drops an entry of several words; phrase lists match the whole segment. Only the lists below can be configured, and only added to: no built-in word can be taken out. The others (navigation, changes, dates, noise, …) stay built in, and a language without them can still approve, refuse and stop by voice.
+
+| List | What it holds | Built-in examples |
+|---|---|---|
+| `approve` | Phrases that approve. A card still asks for its [confirmation phrase](#approval_voice_decisionsphrases). | "ja", "passt", "fine" |
+| `reject` | Phrases that refuse. | "nein", "abgelehnt", "absolutely not" |
+| `stop` | Phrases that stop the voice. | "stopp", "hoer auf", "silence" |
+| `skip` | Phrases that skip to the next piece. | "weiter", "skip", "continue" |
+| `repeat` | Phrases that ask to repeat. | "nochmal", "was hast du gesagt", "one more time" |
+| `hesitations` | Hesitation sounds of at most one vowel group, dropped wherever they stand and the only words trimmed around a confirmation phrase. | "aeh", "hmmm", "erm" |
+| `fillers` | Fillers dropped wherever they stand. | "bitte", "doch", "kurz" |
+| `negations` | Words that negate: a sentence with one is never an approval. | "nicht", "niemals", "nothing" |
+| `conditions` | Words that make a sentence conditional: it never decides. | "aber", "ausser", "or" |
+| `wh_words` | Question words that open a question. | "was", "welches", "how" |
+| `question_first` | Other first words that open a question. | "ist", "kann", "does" |
+| `question_verbs` | Verbs that ask when they come before their subject ("passt das"). | "passt", "kannst", "is" |
+| `continuations` | Last words after which a sentence goes on: it is not a finished decision. | "und", "aber", "because" |
+| `leading_no` | A no said before something else. | "nein", "nee", "nope" |
+| `yes_particles` | Words of a bare yes, which alone or doubled is listening and never part of a confirmation phrase. | "ja", "yes", "yep" |
+| `casual_approvals` | Approvals said in passing; a confirmation phrase made of them is refused. | "passt", "in ordnung", "go ahead" |
+
+A card in a language other than German and English approves by voice only with a [confirmation phrase](#approval_voice_decisionsphrases) of that language, which needs its own `yes_particles` and `casual_approvals` here to be checked against.
+
+The guards cannot be weakened by data:
+
+- Refusals and stops are heard first: a segment that is a `reject` or `stop` phrase refuses or stops before it is checked as noise or as an approval. A word that carries a built-in refusal („nein“, „abbrechen“, "cancel") or stops alone („stopp“, „halt“, "wait") is added only to `reject`, `negations` or `leading_no`, respectively `stop` or `negations`; anywhere else it is ignored with a warning, so `approve = ["abbrechen"]` changes nothing.
+- `yes_particles`, `question_first`, `question_verbs` and `continuations` never take any word a built-in refusal or stop is made of, so `yes_particles = ["it"]` cannot make "cancel it" unclear.
+- An entry that holds a negation, condition or question word is not added to `approve`, `yes_particles`, `hesitations` or `fillers`.
+- `hesitations` and `fillers` are dropped before the guards look, so they never take a word the guards or decisions rely on, nor a date, time or correction word („später“, „Montag“, „falsch“). A filler "das" would otherwise turn "passt das" into an approval.
+- A no beside a skip or repeat („Nein, sorry“) is never taken as the skip or repeat: it refuses, or stays unclear.
+- A transcript in a script written without spaces between words (Chinese, Japanese, Thai, …) is never matched by the rules and never decides a card, whatever the lists hold.
+- At startup, the built-in sentence sets and attack phrasings (about a thousand) are heard again with the configured words of every language, on cards before and after they asked. A configured entry with which a phrasing loses the refusal or stop the built-in words hear, or is approved where the built-in words do not approve it and the sentence sets do not label it an approval, is dropped with a warning („Voice-command startup check“), even when each entry passes the checks above on its own. An entry that makes a phrasing refuse is kept: it only makes approving stricter. When several entries weaken a phrasing each on its own, all of them are dropped and the rest of their language is kept; the check runs again until nothing more is dropped. The same holds for a configured [confirmation phrase](#approval_voice_decisionsphrases) that accepts any of these phrasings. The startup log gives the time the check took; without configured words or phrases it does not run.
+
+Entries are checked at startup, each list on its own: a language that is not a lowercase tag, a list name the backend does not know, a value of the wrong kind, a blank entry, one longer than 128 bytes or with hidden characters, and entries past 500 in one list are ignored with a warning, so one bad entry of a content package never stops the server or drops the rest of its language. A card in a regional language ("fr-CA") uses the table of its tag, else that of its primary language ("fr"). The startup log names, per configured language, how many words each list adds. The card's language is the one the endpoint resolves (`language`, else the user's), so today only `fr`, `es` and `pl` tables are used besides `de` and `en`; a table for another language is kept with a startup warning until that language is supported.
+
+```toml
+[approval_voice_commands.words.fr]
+approve = ["oui", "d'accord", "vas-y"]
+reject = ["non", "non merci", "annule"]
+negations = ["non", "ne", "pas", "jamais", "rien"]
+conditions = ["mais", "si", "sauf"]
+continuations = ["et", "puis"]
+leading_no = ["non"]
+yes_particles = ["oui", "ouais"]
+casual_approvals = ["d'accord", "ça marche"]
+```
+
+The sounds that hold back a French turn belong in [`audio_conversational.hesitations`](#audio_conversationalhesitations); `hesitations` here are only those to trim around a French confirmation phrase.
+
 ### `approval_voice_decisions`
 
 {/* erato_toml_config_key: approval_voice_decisions */}
@@ -5751,11 +5843,11 @@ enabled = true
 
 {/* erato_toml_config_key: approval_voice_decisions.enabled */}
 
-Decide waiting cards by voice. **Default:** `false`.
+Decide waiting cards by voice. **Default:** `false`. A runtime override can switch it off without a restart, never on (see [Read aloud](#read-aloud)); a receipt issued before it was switched off is then refused.
 
-Only one phrase approves: „Ich bestätige“ in German, "I confirm" in English. It may start with „ja“ / "yes" and end with „das“ or „bitte“ / "this" or "please", and nothing else may be said with it. A plain „ja“, „okay“ or „mach das“ never approves, and neither does the phrase inside a longer sentence, with a negation or condition, or as a question. The phrase is matched by rule, never by the model, and never given to the transcriber as a hint. When it is on, the card's last sentence names the phrase („Zum Ausführen bitte „Ich bestätige“ sagen.“) and the card shows it under the buttons while it listens. A near miss gets one line naming the phrase; after two, the voice points to the screen. „Nein“ and the other refusals of the rules refuse. A transcript that ends unfinished („Ich bestätige …“) never approves.
+Only the confirmation phrase approves (built in: „Ich bestätige“ in German, "I confirm" in English; see [`phrases`](#approval_voice_decisionsphrases)). It may start with „ja“ / "yes" and end with „das“ or „bitte“ / "this" or "please", and nothing else may be said with it. A plain „ja“, „okay“ or „mach das“ never approves, and neither does the phrase inside a longer sentence, with a negation or condition, or as a question. The phrase is matched by rule, never by the model, and never given to the transcriber as a hint. When it is on, the card's last sentence names the phrase („Zum Ausführen bitte „Ich bestätige“ sagen.“) and the card shows it under the buttons while it listens. A near miss gets one line naming the phrase; after two, the voice points to the screen. „Nein“ and the other refusals of the rules refuse. A transcript that ends unfinished („Ich bestätige …“) never approves.
 
-A decision by voice also needs: the card's request heard in full, and before it a loss, consequences and outside recipients, and for an approval what the call does and on which record (on a card that names the phrase, skipping one has the voice say it again before the request; a refusal runs nothing, so it does not wait for those two); a recording that started after the voice stopped and not while it spoke, whose first speech comes after `echo_tail_ms`; and at least `min_speech_ms_per_syllable` of speech per syllable, as the web app's speech detector measured it (five for „Ich bestätige“, three for "I confirm", one for „nein“ or "no"). A decision whose recording fails these is asked for once more, an approval or a refusal alike. Only the turn's own single call is decided by voice, and only on a card read in German or English, the languages with a built-in phrase. SQL statements (also plain reads) and other statements, calls with a label warning, more than 20 items and calls the card cannot describe are approved on screen; a refusal by voice still counts for them.
+A decision by voice also needs: the card's request heard in full, and before it a loss, consequences and outside recipients, and for an approval what the call does and on which record (on a card that names the phrase, skipping one has the voice say it again before the request; a refusal runs nothing, so it does not wait for those two); a recording that started after the voice stopped and not while it spoke, whose first speech comes after `echo_tail_ms`; and at least `min_speech_ms_per_syllable` of speech per syllable, as the web app's speech detector measured it (five for „Ich bestätige“, three for "I confirm", one for „nein“ or "no"). A decision whose recording fails these is asked for once more, an approval or a refusal alike. Only the turn's own single call is decided by voice, and only on a card read in German, in English or in a language with a phrase in [`phrases`](#approval_voice_decisionsphrases). SQL statements (also plain reads) and other statements, calls with a label warning, more than 20 items and calls the card cannot describe are approved on screen; a refusal by voice still counts for them.
 
 An accepted decision gets a receipt bound to the user, the approval and a digest of the call's arguments. The web app sends the decision with it; the backend takes it once and refuses a decision whose receipt is unknown, expired, or for another card or decision. A decision without a receipt counts as a tap, so it is the web app that holds back an approval said without the phrase. Each decision by voice keeps a record with the decision part of the message: who, the card digest, which pieces were heard, the phrase and the matched words, the times (request heard, voice stopped, recording start and end), speech duration, the share of speech frames and the time from request to answer. No audio is kept, and the log never names the words.
 
@@ -5779,6 +5871,45 @@ Speech the detector must have heard per syllable of the words, in milliseconds: 
 
 How long an accepted decision by voice may take to arrive, in seconds. **Default:** `120`. **Range:** `5–600`.
 
+#### `approval_voice_decisions.phrases`
+
+{/* erato_toml_config_key: approval_voice_decisions.phrases */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.phrase */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.leading.[] */}
+{/* erato_toml_config_key: approval_voice_decisions.phrases.<language>.trailing.[] */}
+
+The confirmation phrase per language, usually from a content package. `phrase` is the phrase as the card shows it and the voice names it; `leading` and `trailing` are single words of which one may come before or after it, as „ja“ before and „das“ or „bitte“ after „Ich bestätige“. Words are compared as transcripts are: case, punctuation and apostrophes are ignored, umlauts count as „ae“, accents are kept.
+
+```toml
+[approval_voice_decisions.phrases.fr]
+phrase = "Je confirme l'action"
+leading = ["oui"]
+trailing = ["svp"]
+```
+
+A card tries the German and English phrases, which people mix with any language, and the phrase of its own language. A configured `de` or `en` phrase replaces the built-in one of that language. A card in a language without a phrase is approved on screen; a refusal by voice still counts when that language's [voice-command words](#approval_voice_commandswords) refuse. The web app names the phrase of the card's language in the request, the near-miss lines and under the buttons (`{phrase}` in those catalog texts).
+
+Each phrase is checked at startup with the voice-command words of its language, and dropped with a warning (the built-in one stays for German and English) when it:
+
+- has fewer than three syllables, or is in a script whose syllables are not counted;
+- holds a negation, condition or question word, or a digit;
+- is in a language other than German and English whose voice-command words list no `yes_particles` and `casual_approvals` of their own to check it against;
+- is only noise, hesitation, filler, yes or agreement words, or `leading` words of the voice commands („Ja, bitte gern“);
+- is, fillers left out, a listening phrase (`noise_phrases`, „In Ordnung“) or a casual approval (`casual_approvals`: „passt“, „geht klar“, "go ahead", "sure, fine", which a package can add to);
+- holds a refusal, or a refusal starts with it („Vergiss es bitte“, "Cancel it now"), or holds a word that stops the voice („Moment, ich bestätige“, "Wait, I confirm");
+- holds a yes („Ja, mach das“, "Yes, go ahead"), since a plain yes never approves;
+- is an `approve` phrase of the voice commands („Einverstanden“, "I approve"), other than a built-in phrase;
+- is made of approvals said in passing: only words of `approve` and `casual_approvals` phrases and quiet words („Okay, passt, mach das so“, "Sure, go ahead"), or mostly covered by such phrases ("I confirm, go ahead");
+- has fewer syllables than the built-in phrase of its language, or for another language than the longer built-in one („Ich bestätige“, five), so a configured phrase is never weaker than the built-in ones.
+
+At exactly three syllables a phrase is kept with a warning. A leading or trailing word is dropped on its own when it is not one word, holds a digit, is a negation, condition or question word (question verbs and question-first words such as "can" included), stops the voice or refuses, is the phrase's own first or last word, or is not a noise, hesitation, filler, yes or agreement word of the voice commands: „vielleicht“, „später“, „dann“ or "maybe" never stand beside the phrase. The startup log marks each note „Confirmation phrase dropped“ or „Confirmation phrase kept with a warning“, and names every phrase in use per card language, the built-in ones included, or "screen only" for a language without a usable phrase.
+
+Around the phrase only the hesitation sounds of the card's [voice-command words](#approval_voice_commandswords) (`hesitations`) are trimmed; the turn-end hesitations of `audio_conversational` never are.
+
+Syllables are groups of vowels, accented ones included (also „å“, „æ“, „ø“, „œ“); in French and English a final „e“ or „es“ after a consonant, and in English a final „ed“ after a consonant other than „t“ or „d“, is not one („J'approuve“ has two, „Je confirme l'action“ five). Chinese, Japanese and Korean count one per character; a phrase in another script (Cyrillic, Greek, Arabic, Hebrew, Devanagari, …) is refused, since its syllables are not counted. [`min_speech_ms_per_syllable`](#approval_voice_decisionsmin_speech_ms_per_syllable) uses the same count.
+
+**Type:** table of tables by language tag. **Default:** none (the built-in „Ich bestätige“ and "I confirm").
+
 ### `approval_speech`
 
 {/* erato_toml_config_key: approval_speech */}
@@ -5790,9 +5921,9 @@ How much a waiting approval card says aloud in conversational audio mode, and ho
 
 In every combination the item is said, and the pieces that must be said (a loss such as an emptied field, the warning about recipients outside the organisation, what a delete removes, the consequence) and the request to decide keep their precise words and are never held back. A short reading never holds back what tells the user the card is not what they may expect either: a value or a read's condition that is a record never read in the chat or known only by its ID on screen, an addition to a list taken on the tool's word, and a dictated text the card does not take word for word. The card's pieces stay the same in every combination, so skipping, "the rest", repeating and the difference reading after a change request work alike; the difference reading is always precise. The card on screen does not change.
 
-The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. This holds for `user_choice` too: a higher audience's `user_choice` applies to a lower audience's values, so a higher audience that allows the user's choice reopens it for a lower audience that fixed a value. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
+The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. For `user_choice` the deployment value is a lock: when it is `false`, no audience reopens the user's choice; when it is `true`, the first matching audience that sets `user_choice` decides, so an audience can close it. Each field of an audience's block is read on its own, so a value that does not parse costs only that field. An audience setting without its own entry in `setting_orders` follows the starting assistant's order, with a warning at startup and reload; an audience missing from an existing entry has no effect, also with a warning. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
 
-For now the supervisor level is edited by hand in the experience policy document: the audience needs a starting-assistant pin like every audience, and it must be listed under `setting_orders.approval_speech` (there is no fallback to `priority_order`). An audience's `approval_speech` block that does not parse is ignored with a warning; the rest of the policy, including the audience and its pin, stays in force.
+For now the supervisor level is edited by hand in the experience policy document: the audience needs a starting-assistant pin like every audience. List it under `setting_orders.approval_speech` to give the voice its own order; without that entry the starting assistant's order applies (`setting_orders.starting_assistant`, else `priority_order`). A field of the audience's `approval_speech` block that does not parse is ignored with a warning; its other fields and the rest of the policy, including the audience and its pin, stay in force.
 
 ```toml
 [approval_speech]
@@ -5823,11 +5954,11 @@ Details a short reading says before it holds back the rest, in the card's order.
 
 {/* erato_toml_config_key: approval_speech.user_choice */}
 
-Whether a user may choose their own amount and wording. An audience's `user_choice` overrides it for its members. **Default:** `true`.
+Whether a user may choose their own amount and wording. `false` is a lock no audience reopens; with `true`, an audience's `user_choice = false` closes it for its members. **Default:** `true`.
 
 #### `approval_speech.sentences`
 
-{/* erato_toml_config_key: approval_speech.sentences.<key>.<key> */}
+{/* erato_toml_config_key: approval_speech.sentences.<language>.<key> */}
 
 Per language tag, natural sentence variants by type, replacing the built-in ones: `changed` (slots `{field}`, `{from}`, `{to}`), `set` for a value a new item gets and `updated` for a value an item gets without a known old one (`{field}`, `{value}`). There is no variant for the opening. A variant must hold each of its slots exactly once, `{field}` before `{from}` before `{to}`, and no other slot or brace; one that does not is ignored with a warning naming the reason, and the precise sentence is said.
 
@@ -5837,6 +5968,46 @@ Old and new carry their direction in every language: `{from}` is said as "vom 1.
 [approval_speech.sentences.de]
 changed = "{field} geht {from} {to}."
 updated = "{field} wird {value} gesetzt."
+```
+
+#### `approval_speech.words`
+
+{/* erato_toml_config_key: approval_speech.words */}
+{/* erato_toml_config_key: approval_speech.words.<language>.locale */}
+{/* erato_toml_config_key: approval_speech.words.<language>.full_card */}
+{/* erato_toml_config_key: approval_speech.words.<language>.numbers.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.ordinals.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.time_full_hour */}
+{/* erato_toml_config_key: approval_speech.words.<language>.time */}
+{/* erato_toml_config_key: approval_speech.words.<language>.from */}
+{/* erato_toml_config_key: approval_speech.words.<language>.to */}
+{/* erato_toml_config_key: approval_speech.words.<language>.dictation_verbs.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.dictation_words.[] */}
+{/* erato_toml_config_key: approval_speech.words.<language>.difference_fillers.[] */}
+
+Per lowercase language tag, the words a spoken card says as code rather than as catalog sentences, and the words it reads the user's own words with. German and English are built in; this table adds a language, usually from a content package, or changes a built-in one. The web app gets the merged words from the backend; a development server without an injected environment uses the built-in ones, which the backend generates into `frontend/src/lib/generated/languageBase.json` (`just generate_language_base` in `backend/`, checked by `just generate_language_base_check`).
+
+- `locale`: the locale dates, numbers and lists are formatted in (`fr-FR`). Unset keeps the built-in one (`de-DE`, `en-GB`), else the language tag itself.
+- `full_card`: whether the voice says the whole card in this language. Without it, only the pointer sentence ("A decision is waiting on screen.") is said, and voice commands on the card are not listened for. On for German and English; a language should get it only after a native speaker has judged the full card in it, with the card sentences translated in the web app's catalog.
+- `numbers`: number words for 0 to 12, in order ("null", "eins", …); larger numbers are said as digits. `ordinals`: the first to the tenth, in order, for a queue of cards. One wrong entry would move every later one, so a list with a wrong entry, or with more than 13 or 10 entries, is ignored as a whole. These are what the voice says; [`spoken_number_words`](#spoken_number_words) are what it hears, so a package for a new language writes its numbers in both.
+- `time_full_hour` (slot `{hour}`) and `time` (slots `{hour}` and `{minute}`, the minute said with two digits): a time of day, `"{hour} Uhr"` and `"{hour}:{minute} Uhr"` in German. A full hour uses `time` when `time_full_hour` is unset; without both, the locale's own format is used, as in English.
+- `from` and `to` (slot `{value}`): an old and a new value in a [sentence variant](#approval_speechsentences), for a language whose value carries no direction of its own: `"from {value}"`, `"to {value}"` in English. German has none: its values say "vom", "auf den" already.
+- `dictation_verbs` and `dictation_words`: an instruction before a dictated text ("Schreib dem Kunden:") is not part of the dictation when every word of it is a word of one language and one of them is a verb.
+- `difference_fillers`: words that say nothing about a value on their own when telling which differences of a corrected card a [change request](#approval_change_requests) named ("und", "bitte", "instead").
+
+Values replace the built-in ones of their language; `dictation_verbs`, `dictation_words` and `difference_fillers` add to them. A card in a regional language ("fr-CA") uses the words of its tag, else those of its primary language ("fr"). The startup log names, per configured language, what it sets and adds. A change request is read with the fillers of German, English and the card's language, and with weekday and month names in the locales of these three; an instruction before a dictation is read in every language with words. Entries are checked at startup: a template without exactly its slots, a locale of the wrong shape, an entry that is blank, longer than 128 bytes or holds hidden characters, and an unknown key are ignored with a warning; the rest of the language is kept.
+
+```toml
+[approval_speech.words.fr]
+locale = "fr-FR"
+full_card = true
+numbers = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze"]
+ordinals = ["premier", "deuxième", "troisième"]
+time_full_hour = "{hour} heures"
+time = "{hour} h {minute}"
+dictation_verbs = ["écris", "envoie"]
+dictation_words = ["au", "client", "un", "message"]
+difference_fillers = ["et", "plutôt"]
 ```
 
 ### `spoken_vocabularies`
@@ -5872,13 +6043,13 @@ opportunity = "Verkaufschancen"
 ### `spoken_number_words`
 
 {/* erato_toml_config_key: spoken_number_words */}
-{/* erato_toml_config_key: spoken_number_words.<key>.numbers.<key> */}
-{/* erato_toml_config_key: spoken_number_words.<key>.ambiguous.<key> */}
-{/* erato_toml_config_key: spoken_number_words.<key>.multipliers.<key> */}
-{/* erato_toml_config_key: spoken_number_words.<key>.joiners.[] */}
-{/* erato_toml_config_key: spoken_number_words.<key>.ordinals.<key> */}
-{/* erato_toml_config_key: spoken_number_words.<key>.ambiguous_ordinals.<key> */}
-{/* erato_toml_config_key: spoken_number_words.<key>.ordinal_endings.[] */}
+{/* erato_toml_config_key: spoken_number_words.<language>.numbers.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<language>.ambiguous.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<language>.multipliers.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<language>.joiners.[] */}
+{/* erato_toml_config_key: spoken_number_words.<language>.ordinals.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<language>.ambiguous_ordinals.<key> */}
+{/* erato_toml_config_key: spoken_number_words.<language>.ordinal_endings.[] */}
 
 Number words by language tag, so that a number or date a person says in words counts as named. After a [change request](#approval_change_requests) by voice, the corrected card is read as its differences, and each difference is marked by whether the person's words name it. The words are compared with the card's values as values: "den zweiundzwanzigsten" names the 22nd, "sixty percent" names 60, "dreihunderteinundvierzigtausend" or "341 Tausend" names 341000, whatever format the server writes the value in. This is language data and usually comes from a content package. The table of the user's language setting is used, as for everything else in a spoken turn.
 
@@ -5924,6 +6095,25 @@ zwanzigst = 20
 
 [spoken_number_words.de.ambiguous_ordinals]
 acht = 8
+```
+
+### `spoken_readings`
+
+{/* erato_toml_config_key: spoken_readings */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form> */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form>.spoken */}
+{/* erato_toml_config_key: spoken_readings.<language>.<written-form>.sentence_final */}
+
+Per lowercase language tag, written forms a voice may not say well, such as abbreviations, each with the one reading the voice says instead. Only the text sent to the voice changes (read aloud and replies spoken in conversational audio mode); the chat keeps the text as written. German has built-in readings ("z. B." as "zum Beispiel", "bzw." as "beziehungsweise", "usw.", "MwSt.", …); a configured reading adds to them or replaces the built-in one of the same written form. The readings of the user's language are used.
+
+A reading is the spoken text alone, or a table with `spoken` and `sentence_final`. `sentence_final` marks a form that usually ends its sentence ("usw."): when a capital letter follows, its full stop is kept so the sentence still ends there. A form matches as a whole word only, not inside a word, an address or a file name; a space after one of its full stops is optional ("z. B." also matches "z.B."), and a form starting in lower case also matches with a capital and is then read with one. The longest form wins, and a replaced text is not read again.
+
+Entries are checked at startup: a form or reading that is blank, longer than 128 bytes or holds hidden characters, a reading of the wrong shape, a language that is not a lowercase tag and a language with more than 500 readings are ignored with a warning; the rest of the language is kept. If a language's forms together cannot be matched, its configured readings are ignored with a warning and the built-in ones apply. A user in a regional language ("de-AT") gets the readings of its tag, else those of its primary language ("de"). The startup log names, per configured language, how many readings it adds and how many built-in ones it overrides.
+
+```toml
+[spoken_readings.fr]
+"p. ex." = "par exemple"
+"etc." = { spoken = "et cetera", sentence_final = true }
 ```
 
 ### `approval_change_requests`
@@ -7628,7 +7818,7 @@ tool_call_allowlist = ["web-search-mcp/*"]
 
 The `erato` namespace is reserved for tools the backend exposes itself, and no MCP server or client tool may claim it. Built-ins are selected the same way as any other tool — by an allowlist pattern — so `erato/delegate_task`, `erato/*`, a bare `erato`, or `*` all select the task-delegation tool where it is available.
 
-Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. A built-in also stands down if a real MCP tool claims its name, matching the precedence the other synthetic tools already follow.
+Selection is opt-in: unlike the MCP allowlist, where leaving it unset means "all tools allowed", an empty tool allowlist selects no built-in at all. While a built-in can be offered, an MCP tool of the same name is offered under a name qualified with its server (see [Tools with the same name](./features/mcp_servers#tools-with-the-same-name)).
 
 <Callout type="warn">
   Always pair a reserved pattern with a real MCP pattern on the same facet. Adding any pattern to a facet turns the derived MCP server filter from "no restriction" into a concrete set; if the only patterns are `erato/*` ones, that set is empty and the turn loses **every** MCP tool while the facet is selected, and so does every task it launches, whatever its `child_facet_ids` allow. Write `["erato/delegate_task", "web-search-mcp/*"]`, not `["erato/delegate_task"]`.
@@ -7962,7 +8152,8 @@ model call. The host's review UI can restore the draft from those records.
 
 By default, every client tool call from earlier in a chat is sent to the model
 again on each later request, with its full arguments and result. Add a `replay`
-table to replace calls from earlier user turns with a small receipt instead.
+table to replay calls from earlier user turns with fewer arguments and a short
+result instead.
 Use it for tools whose results expire at the next user message, such as reads of
 a document capture. Those results cost context without helping later turns.
 
@@ -7982,22 +8173,35 @@ keep_output_fields = ["$.status", "$.error", "$.result.snapshot", "$.result.comp
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.mode */}
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_input_fields.[] */}
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_output_fields.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.replay.max_input_field_bytes */}
 
-- **`mode`** _(default: `"full"`)_ - `full` replays arguments and results unchanged. `receipt` replaces both with a receipt for calls from earlier user turns.
-- **`keep_input_fields`** _(default: `[]`)_ - Argument fields to keep in the receipt, as `$.key.key` paths. Only object keys are supported, not array indices or wildcards. At most 32 paths.
+- **`mode`** _(default: `"full"`)_ - `full` replays arguments and results unchanged. `receipt` shortens both for calls from earlier user turns.
+- **`keep_input_fields`** _(default: `[]`)_ - Argument fields the replayed call keeps, as `$.key.key` paths. Only object keys are supported, not array indices or wildcards. At most 32 paths.
 - **`keep_output_fields`** _(default: `[]`)_ - Result fields to keep, using the same syntax. Paths start at the stored tool output, so client results are under `$.result`, and `$.status`, `$.error` and `$.submission.status` are also available.
+- **`max_input_field_bytes`** _(default: `2048`)_ - A listed argument whose JSON is larger than this is left out of the replayed call. At most 65536. Raise it to the tool's own argument limit when no argument may be left out, as for a read whose selector says what it reads.
 
-A receipt keeps the tool name and call ID, the call status, the listed fields at
-their original nesting, and a fixed note. The note tells the model the body was
-omitted and that it should call the tool again for current data. A listed field
-whose JSON is larger than 512 bytes is replaced by a size marker. Missing fields
-are skipped. A call that never returned a result keeps replaying without one. The
-fields may only be set when `mode = "receipt"`. Client tools that share a
-model-facing name across namespaces must use the same `replay` settings.
+A shortened call keeps the tool name and call ID, and the listed argument fields
+at their original nesting as its arguments, never wrapped: the model copies the
+shape of the calls it sees, so list every field that says how a call was made.
+Its result keeps the call status, the listed result fields at their original
+nesting, and a note under `omitted_from_replay`. The note tells the model the
+result was shortened, names the argument fields the call is shown without, and
+says to call the tool again for current data. A listed argument larger than
+`max_input_field_bytes` is left out of the call; a listed result field larger
+than 512 bytes is replaced by a size marker. A call the host refused also keeps
+its first validation issue in the result, so the reason stays next to the call.
+Arguments that are only a copied `omitted_from_replay`/`kept` wrapper replay as
+the arguments under `kept`. Missing fields are skipped. A call that never
+returned a result keeps replaying without one. The fields may only be set when
+`mode = "receipt"`. Client tools that share a model-facing name across
+namespaces must use the same `replay` settings.
 
 A call is compacted only when the generation that made it recorded offering a client
-tool with that name. When an MCP tool has the same name, the MCP tool is offered
-instead, so its calls always replay in full. Calls from generations without that
+tool with that name. When one MCP tool is offered under the same name, the MCP tool is
+offered instead, so its calls always replay in full. When several MCP servers offer a
+tool of that name, each is offered under a name qualified with its server and the
+client tool keeps the name (see
+[Tools with the same name](./features/mcp_servers#tools-with-the-same-name)). Calls from generations without that
 record, including all calls stored before it existed, also replay in full.
 
 A user turn is one user message and every model call, tool call, correction and
@@ -8006,8 +8210,10 @@ replayed in full, so paging and corrections still see their own results. Only th
 model's context changes. Stored messages, chat history, previews and traces keep
 the full arguments and results. A call is compacted when the next user message is
 composed. History that an earlier request already stored in full stays full. Each request's stored input records the
-receipts the model received, so switching `mode` back to `full` restores only calls
-from the latest earlier turn. Older calls in that chat stay compacted.
+shortened calls the model received, so switching `mode` back to `full` restores only calls
+from the latest earlier turn. Older calls in that chat stay compacted. Calls stored
+in the earlier receipt form, with their arguments under `kept`, replay as calls
+with those arguments.
 
 ### A summary line for proposal tools
 

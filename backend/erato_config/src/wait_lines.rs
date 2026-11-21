@@ -86,8 +86,9 @@ pub struct WaitLinesConfig {
     /// set. `0` never shortens. Defaults to `3`; allowed up to `50`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub taper_after_turns: u32,
-    /// Whether a user may choose their own amount, unless a supervisor's
-    /// audience setting says otherwise. Defaults to `true`.
+    /// Whether a user may choose their own amount. `false` is a lock no
+    /// audience reopens; with `true`, a supervisor's audience may still
+    /// close it. Defaults to `true`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
     /// Lines per language tag, by slot. A language or slot without lines
@@ -388,6 +389,53 @@ impl WaitLinesConfig {
                 if let Some(problem) = template_problem(text, slot) {
                     dropped.push(format!(
                         "{place}.tools.{language}.{name}: '{text}' is ignored: {problem}"
+                    ));
+                    *template = None;
+                }
+            }
+        }
+        dropped.sort();
+        dropped
+    }
+
+    /// Removes each line and tool template for which `problem` names one,
+    /// and names each. Templates are checked with their slot left out.
+    pub fn drop_lines_where(
+        &mut self,
+        mut problem: impl FnMut(&str, &str) -> Option<String>,
+    ) -> Vec<String> {
+        let mut dropped = Vec::new();
+        let place = "audio_conversational.wait_lines";
+        for (language, phrases) in &mut self.phrases {
+            for slot in WaitLineSlot::ALL {
+                let Some(lines) = phrases.slot_mut(slot).as_mut() else {
+                    continue;
+                };
+                lines.retain(|line| match problem(language, line) {
+                    Some(why) => {
+                        dropped.push(format!(
+                            "{place}.phrases.{language}.{}: '{line}' is ignored: {why}",
+                            slot.name()
+                        ));
+                        false
+                    }
+                    None => true,
+                });
+            }
+        }
+        for (language, tools) in &mut self.tools {
+            for (name, template) in [
+                ("search", &mut tools.search),
+                ("items", &mut tools.items),
+                ("list", &mut tools.list),
+            ] {
+                let Some(text) = template.as_deref() else {
+                    continue;
+                };
+                let said = text.replace("{search}", " ").replace("{table}", " ");
+                if let Some(why) = problem(language, &said) {
+                    dropped.push(format!(
+                        "{place}.tools.{language}.{name}: '{text}' is ignored: {why}"
                     ));
                     *template = None;
                 }
