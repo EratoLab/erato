@@ -262,6 +262,8 @@ export function wordPartsNotInProposal(
  * empty card name stands for a part without text. */
 export function wordNotInProposalReceipt(
   parts: readonly WordLeftOutPart[],
+  /** Why each was meant to change. */
+  reason = "which an earlier attempt of this request changed",
 ): { notInProposal: string[]; notInProposalNote: string } | undefined {
   if (!parts.length) return undefined;
   const spoken = parts.map((part) =>
@@ -272,7 +274,7 @@ export function wordNotInProposalReceipt(
         : "a part without text",
   );
   const note = (count: number) =>
-    `Not in this proposal: ${wordNamedParts(spoken, count)}, which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.`;
+    `Not in this proposal: ${wordNamedParts(spoken, count)}, ${reason}. The card tells the user the same; name them when you describe this proposal.`;
   let count = Math.min(MAX_NOT_IN_PROPOSAL_NAMES, spoken.length);
   while (
     count > 1 &&

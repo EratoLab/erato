@@ -15,6 +15,12 @@ import {
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
 import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
+import {
+  finishWordParts,
+  wordPartRowLabel,
+  wordPartRows,
+  wordPartsFinishRejected,
+} from "./wordDocumentParts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
@@ -251,13 +257,39 @@ function createSubmissionExecutor(
       )
         return "scoped_edit" in input
           ? sparseRejection(input, scopedTokenRefusal(snapshot, input))
-          : prepareWordDocumentSubmission(input, context, session);
+          : "finish" in input
+            ? {
+                ok: false,
+                error: "Document plan finish rejected.",
+                validationErrors: [
+                  {
+                    path:
+                      input.snapshot !== snapshot.token
+                        ? "/snapshot"
+                        : "/readToken",
+                    code: snapshot.issue ?? "expired",
+                    message:
+                      "Use this request's active snapshot and the final readToken of its complete read, as the section plan did.",
+                  },
+                ],
+              }
+            : prepareWordDocumentSubmission(input, context, session);
       if (session.drafts.accepted)
         return {
           ok: false,
           error: "A document plan has already been accepted for this request.",
         };
       const submitted = JSON.parse(serialized) as Record<string, unknown>;
+      const finish =
+        "finish" in submitted
+          ? finishWordParts(submitted, snapshot, session.drafts.parts)
+          : undefined;
+      if (finish && !finish.ok)
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          finish.result,
+        );
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
           ? "scoped_edit"
@@ -285,7 +317,9 @@ function createSubmissionExecutor(
         expansion?.plan ??
         (kind === "table_cell"
           ? expandWordTableCellSubmission(submitted, snapshot)
-          : session.drafts.materialize(submitted));
+          : finish
+            ? finish.assembly.plan
+            : session.drafts.materialize(submitted));
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
@@ -315,22 +349,38 @@ function createSubmissionExecutor(
           "draft_id" in input ||
           "table_cell" in input ||
           "scoped_edit" in input;
-        const notInProposal = wordNotInProposalReceipt(
-          wordPartsNotInProposal(
-            snapshot,
-            session.drafts.refusedAttempts,
-            wordSubmissionBlocks(kind ? submitted : value, snapshot),
-          ),
+        const earlier = wordPartsNotInProposal(
+          snapshot,
+          session.drafts.refusedAttempts,
+          wordSubmissionBlocks(kind ? submitted : value, snapshot),
         );
+        const unwritten = (finish?.unwritten ?? []).map((r) =>
+          wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+        );
+        const notInProposal = unwritten.length
+          ? wordNotInProposalReceipt(
+              [...unwritten, ...earlier],
+              "which the section plan announced but no part wrote",
+            )
+          : wordNotInProposalReceipt(earlier);
         if (expanded || notInProposal)
           result = {
             ...prepared,
             result: {
               ...(prepared.result as object),
               ...(expanded ? { plan: value } : {}),
+              ...(finish
+                ? {
+                    rows: wordPartRows(finish.draft, snapshot, {
+                      finished: true,
+                    }),
+                  }
+                : {}),
               ...notInProposal,
             },
           };
+      } else if (finish) {
+        result = wordPartsFinishRejected(prepared, finish, snapshot);
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the
         // expanded plan the model never saw.
@@ -392,8 +442,9 @@ function createSubmissionExecutor(
   };
 }
 
-/** `origins` is set for a sparse change; its diagnostics then point at that change. */
-async function prepareWordDocumentSubmission(
+/** `origins` is set for a sparse change; its diagnostics then point at that change. Section plans
+ * and parts run their assembled plans through it too, without accepting anything. */
+export async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,

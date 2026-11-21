@@ -45,3 +45,31 @@ and subsequent context growth, without removing earlier full proposals.
 
 Runtime and deployment configuration must be released together. Protocol tests
 use synthetic plans; private deployment instructions remain outside this repo.
+
+## Changes in parts
+
+A large change can also arrive as a section plan, one part per rewritten row
+and a finish (ERMAIN-1293). `plan_document_sections` needs the complete read's
+final token and lists every body block exactly once, in output order, as
+`keep`, `rewrite` or `delete` rows; row order moves blocks, and one rewrite row
+with several ranges merges them. `write_document_section` replaces one rewrite
+row's blocks by ops (`keep`, `replace` and `insert` with plain text, `delete`
+with a reason) that use each block of the row exactly once. The plain-text
+form and its conversion to typed blocks are in the frontend library
+(`wordPlainText.ts`).
+
+Each call is checked on arrival by the same pipeline as a full plan, on the
+whole draft with its change put in; rewrite rows without a part keep their
+blocks there. Diagnostics point into the call (`/rows/2/source`,
+`/ops/1/text` with "Line 3: …"). A rejection changes nothing; each accepted
+call advances the draft's revision. Sending the section plan again keeps the
+parts of rewrite rows whose blocks are unchanged.
+
+`submit_document_plan` with `{snapshot, readToken, draft_id, revision,
+finish:true}` assembles every part and runs the full pipeline. Its receipt
+carries `result.plan`, as a repair's does, so review and Apply are unchanged,
+plus `result.rows`. A finish with rows still unwritten is refused once; a
+second finish at the same revision accepts the change with those rows kept and
+names them in `notInProposal`. A refused finish names the row to send again;
+the same refusal twice at one revision ends the step. The section draft has the
+read session's lifetime, like the repair draft.

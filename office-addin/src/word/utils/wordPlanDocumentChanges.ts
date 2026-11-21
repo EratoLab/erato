@@ -85,7 +85,7 @@ export function wordPlanWrittenBlocks(
 }
 
 /** The title of the innermost heading or numbered section that holds a block, if it has one. */
-function titleOf(
+export function wordBlockTitle(
   sections: WordCaptureSections,
   block: number,
 ): string | undefined {
@@ -124,7 +124,7 @@ function partName(
   sections: WordCaptureSections,
   block: number,
 ): string | undefined {
-  const title = titleOf(sections, block);
+  const title = wordBlockTitle(sections, block);
   if (title) return `"${title}"`;
   const start = wordPassageStart(snapshot, block);
   return start && wordPassageName(start);

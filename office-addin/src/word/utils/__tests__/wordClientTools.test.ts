@@ -72,6 +72,8 @@ describe("Word client tool registration", () => {
       ["word_read_comments", false],
       ["word_submit_comment_changes", false],
       ["submit_document_plan", false],
+      ["plan_document_sections", false],
+      ["write_document_section", false],
     ]);
   });
 
