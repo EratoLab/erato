@@ -253,7 +253,13 @@ describe("bounded body read session", () => {
       session.activate(s, context);
       expect(await session.execute(input, context)).toMatchObject({
         ok: false,
-        validationErrors: [{ code: "read-arguments" }],
+        validationErrors: [
+          { code: "read-arguments" },
+          {
+            code: "read-arguments",
+            message: expect.stringMatching(/^A correct call: /),
+          },
+        ],
       });
       expect(s.read.size).toBe(0);
     },

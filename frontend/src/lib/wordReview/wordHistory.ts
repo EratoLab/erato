@@ -4,6 +4,7 @@ import {
 } from "./wordDocumentPlan";
 import { WORD_READ_TOOL, WORD_SUBMIT_PLAN_TOOL } from "./wordHistoryNames";
 import { isAcceptedWordSubmission } from "./wordHistoryParts";
+import { wordReplayRecordRead } from "./wordReplayRecord";
 
 import type {
   WordAuthoringSnapshot,
@@ -78,9 +79,9 @@ function readPages(
             !Array.isArray(part.output.result.blocks)
           )
             return [];
-          const input: Record<string, unknown> = object(part.input)
-            ? part.input
-            : {};
+          // The pane runs a read sent as a replay record; its page is the read under `kept`.
+          const { call } = wordReplayRecordRead(part.input);
+          const input: Record<string, unknown> = object(call) ? call : {};
           // A scoped table-cell read discloses one cell, not the document.
           if ("table_cell" in input) return [];
           return [

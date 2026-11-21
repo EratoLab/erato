@@ -8106,7 +8106,8 @@ model call. The host's review UI can restore the draft from those records.
 
 By default, every client tool call from earlier in a chat is sent to the model
 again on each later request, with its full arguments and result. Add a `replay`
-table to replace calls from earlier user turns with a small receipt instead.
+table to replay calls from earlier user turns with fewer arguments and a short
+result instead.
 Use it for tools whose results expire at the next user message, such as reads of
 a document capture. Those results cost context without helping later turns.
 
@@ -8126,18 +8127,28 @@ keep_output_fields = ["$.status", "$.error", "$.result.snapshot", "$.result.comp
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.mode */}
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_input_fields.[] */}
 {/* erato_toml_config_key: client_tools.tools.<key>.replay.keep_output_fields.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.replay.max_input_field_bytes */}
 
-- **`mode`** _(default: `"full"`)_ - `full` replays arguments and results unchanged. `receipt` replaces both with a receipt for calls from earlier user turns.
-- **`keep_input_fields`** _(default: `[]`)_ - Argument fields to keep in the receipt, as `$.key.key` paths. Only object keys are supported, not array indices or wildcards. At most 32 paths.
+- **`mode`** _(default: `"full"`)_ - `full` replays arguments and results unchanged. `receipt` shortens both for calls from earlier user turns.
+- **`keep_input_fields`** _(default: `[]`)_ - Argument fields the replayed call keeps, as `$.key.key` paths. Only object keys are supported, not array indices or wildcards. At most 32 paths.
 - **`keep_output_fields`** _(default: `[]`)_ - Result fields to keep, using the same syntax. Paths start at the stored tool output, so client results are under `$.result`, and `$.status`, `$.error` and `$.submission.status` are also available.
+- **`max_input_field_bytes`** _(default: `2048`)_ - A listed argument whose JSON is larger than this is left out of the replayed call. At most 65536. Raise it to the tool's own argument limit when no argument may be left out, as for a read whose selector says what it reads.
 
-A receipt keeps the tool name and call ID, the call status, the listed fields at
-their original nesting, and a fixed note. The note tells the model the body was
-omitted and that it should call the tool again for current data. A listed field
-whose JSON is larger than 512 bytes is replaced by a size marker. Missing fields
-are skipped. A call that never returned a result keeps replaying without one. The
-fields may only be set when `mode = "receipt"`. Client tools that share a
-model-facing name across namespaces must use the same `replay` settings.
+A shortened call keeps the tool name and call ID, and the listed argument fields
+at their original nesting as its arguments, never wrapped: the model copies the
+shape of the calls it sees, so list every field that says how a call was made.
+Its result keeps the call status, the listed result fields at their original
+nesting, and a note under `omitted_from_replay`. The note tells the model the
+result was shortened, names the argument fields the call is shown without, and
+says to call the tool again for current data. A listed argument larger than
+`max_input_field_bytes` is left out of the call; a listed result field larger
+than 512 bytes is replaced by a size marker. A call the host refused also keeps
+its first validation issue in the result, so the reason stays next to the call.
+Arguments that are only a copied `omitted_from_replay`/`kept` wrapper replay as
+the arguments under `kept`. Missing fields are skipped. A call that never
+returned a result keeps replaying without one. The fields may only be set when
+`mode = "receipt"`. Client tools that share a model-facing name across
+namespaces must use the same `replay` settings.
 
 A call is compacted only when the generation that made it recorded offering a client
 tool with that name. When one MCP tool is offered under the same name, the MCP tool is
@@ -8153,8 +8164,10 @@ replayed in full, so paging and corrections still see their own results. Only th
 model's context changes. Stored messages, chat history, previews and traces keep
 the full arguments and results. A call is compacted when the next user message is
 composed. History that an earlier request already stored in full stays full. Each request's stored input records the
-receipts the model received, so switching `mode` back to `full` restores only calls
-from the latest earlier turn. Older calls in that chat stay compacted.
+shortened calls the model received, so switching `mode` back to `full` restores only calls
+from the latest earlier turn. Older calls in that chat stay compacted. Calls stored
+in the earlier receipt form, with their arguments under `kept`, replay as calls
+with those arguments.
 
 ### A summary line for proposal tools
 

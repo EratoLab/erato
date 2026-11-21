@@ -2404,11 +2404,19 @@ impl AppConfig {
             }
             let replay = &tool.replay;
             if replay.mode == ClientToolReplayMode::Full
-                && !(replay.keep_input_fields.is_empty() && replay.keep_output_fields.is_empty())
+                && !(replay.keep_input_fields.is_empty()
+                    && replay.keep_output_fields.is_empty()
+                    && replay.max_input_field_bytes.is_none())
             {
                 panic!(
                     "Client tool '{}' lists replay receipt fields but replay.mode is not \"receipt\".",
                     qualified
+                );
+            }
+            if replay.input_field_bound() > MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES {
+                panic!(
+                    "Client tool '{}' replay.max_input_field_bytes must be at most {}.",
+                    qualified, MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES
                 );
             }
             for fields in [&replay.keep_input_fields, &replay.keep_output_fields] {
@@ -8193,20 +8201,36 @@ impl ClientToolHostContext {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolReplayConfig {
     /// `full` (default) replays arguments and result verbatim. `receipt`
-    /// replaces both with a bounded receipt built from the fields listed below
-    /// plus a fixed omission note.
+    /// replays the call with the argument fields listed below and a bounded
+    /// result built from the result fields listed below plus an omission note.
     #[serde(default)]
     pub mode: ClientToolReplayMode,
-    /// Argument fields kept in a receipt, as `$.key.key` paths into the call
-    /// arguments. At most 32. Missing fields are skipped; a value larger than
-    /// the per-field bound is replaced by an omission marker.
+    /// Argument fields the replayed call keeps, as `$.key.key` paths into the
+    /// call arguments. At most 32. Missing fields are skipped; a value larger
+    /// than `max_input_field_bytes` is left out.
     #[serde(default)]
     pub keep_input_fields: Vec<String>,
-    /// Result fields kept in a receipt, as `$.key.key` paths into the stored
-    /// tool output. Same rules as `keep_input_fields`.
+    /// Result fields kept in the shortened result, as `$.key.key` paths into
+    /// the stored tool output. At most 32. Missing fields are skipped; a value
+    /// larger than the per-field bound is replaced by an omission marker.
     #[serde(default)]
     pub keep_output_fields: Vec<String>,
+    /// JSON bytes a kept argument may have before it is left out of the
+    /// replayed call. Default 2048, at most 65536.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_input_field_bytes: Option<usize>,
 }
+
+impl ClientToolReplayConfig {
+    pub fn input_field_bound(&self) -> usize {
+        self.max_input_field_bytes
+            .unwrap_or(DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES)
+    }
+}
+
+pub const DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES: usize = 2048;
+pub const MAX_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
 #[facet(rename_all = "snake_case")]
@@ -13104,9 +13128,14 @@ mod client_tool_replay_serialization_tests {
             mode: ClientToolReplayMode::Receipt,
             keep_input_fields: vec!["$.snapshot".into()],
             keep_output_fields: vec!["$.status".into(), "$.result.complete".into()],
+            max_input_field_bytes: Some(24 * 1024),
         };
         let json = serde_json::to_value(&replay).unwrap();
         assert_eq!(json["mode"], "receipt");
+        assert_eq!(
+            ClientToolReplayConfig::default().input_field_bound(),
+            DEFAULT_CLIENT_TOOL_REPLAY_INPUT_FIELD_BYTES
+        );
         assert_eq!(
             serde_json::from_value::<ClientToolReplayConfig>(json).unwrap(),
             replay
