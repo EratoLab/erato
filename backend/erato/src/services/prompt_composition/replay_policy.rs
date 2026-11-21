@@ -2,11 +2,16 @@
 //!
 //! A tool configured with `replay.mode = "receipt"` keeps its full arguments
 //! and result in the stored message, but prompt composition replays its calls
-//! from earlier user turns as bounded receipts. Composition always runs at the
-//! start of a user turn, so every tool call it replays belongs to an earlier
-//! one; the in-turn loop and the approval continuation replay the current
-//! turn's own calls through `replay_assistant_content`, which this policy never
-//! touches.
+//! from earlier user turns shortened: the call keeps the listed argument fields
+//! as its arguments, and the result keeps the listed result fields plus a note
+//! that the rest is omitted. Composition always runs at the start of a user
+//! turn, so every tool call it replays belongs to an earlier one; the in-turn
+//! loop and the approval continuation replay the current turn's own calls
+//! through `replay_assistant_content`, which this policy never touches.
+//!
+//! The replayed arguments are never wrapped and never get a placeholder value:
+//! the model copies the shape of the calls it sees, so a replayed call has to
+//! stay a call it could make (ERMAIN-1274).
 //!
 //! A stored call carries only its model-facing name, and an MCP tool may share
 //! that name (MCP wins the collision at offer time). A call is therefore
@@ -19,10 +24,16 @@ use crate::models::message::{ContentPart, InputMessage, ToolUse};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet};
 
-/// Top-level key of every receipt.
+/// Key of the omission note in every shortened result.
 pub const RECEIPT_MARKER_KEY: &str = "omitted_from_replay";
 
-pub const RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+pub const RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its result is shortened in the conversation replay. Call the tool again if current data is needed.";
+
+/// Receipts before ERMAIN-1274 wrapped the arguments under this key, with
+/// this note. Stored snapshots still hold them.
+const LEGACY_KEPT_KEY: &str = "kept";
+const LEGACY_RECEIPT_NOTE: &str = "This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+const LEGACY_UPGRADED_NOTE: &str = "This call belongs to an earlier user turn. Its arguments and result are shortened in the conversation replay. Call the tool again if current data is needed.";
 
 /// Key of the per-generation record, in a row's `generation_parameters`, of
 /// the client tools that generation offered (keyed by model-facing name).
@@ -50,9 +61,18 @@ impl OfferedClientTools {
     }
 }
 
-/// A kept value whose JSON serialisation exceeds this is replaced by a marker,
-/// so a receipt stays bounded even when a configured path selects a body.
+/// A kept result value whose JSON serialisation exceeds this is replaced by a
+/// size marker, so a shortened result stays bounded even when a configured
+/// path selects a body.
 pub const MAX_RECEIPT_FIELD_BYTES: usize = 512;
+
+/// A kept argument value larger than this is left out of the replayed call:
+/// a marker in its place would break the argument's schema.
+pub const MAX_REPLAYED_ARGUMENT_BYTES: usize = 2048;
+
+/// Left-out arguments the note names; any further ones are counted.
+const MAX_NAMED_ARGUMENTS: usize = 8;
+const MAX_NAMED_ARGUMENT_BYTES: usize = 64;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ToolReplayPolicy {
@@ -98,8 +118,8 @@ impl ToolReplayPolicy {
     /// Rewrites one replayed message of a stored row from an earlier user
     /// turn. Both the assistant-role call and the tool-role response are
     /// rewritten in place, never dropped, so every call keeps its matching
-    /// response. Both fields are stubbed on both roles: the provider reads only
-    /// one of them per role, but the persisted snapshot stores both.
+    /// response. Both fields are shortened on both roles: the provider reads
+    /// only one of them per role, but the persisted snapshot stores both.
     pub fn apply_to_prior_turn_message(
         &self,
         mut message: InputMessage,
@@ -109,58 +129,197 @@ impl ToolReplayPolicy {
             && offered.contains(&tool_use.tool_name)
             && let Some(spec) = self.receipts.get(&tool_use.tool_name)
         {
-            stub_tool_use(tool_use, spec);
+            shorten_tool_use(tool_use, spec);
         }
         message
     }
 }
 
-fn stub_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
-    tool_use.input = Some(receipt(tool_use.input.as_ref(), &spec.input_paths, None));
+/// Rewrites a receipt from before ERMAIN-1274, as a stored snapshot replays
+/// it, into the current form: what it kept of the arguments becomes the call's
+/// arguments again. Matched on the exact legacy note, which only the policy
+/// wrote; anything else passes through.
+pub fn upgrade_legacy_receipt(mut message: InputMessage) -> InputMessage {
+    if let ContentPart::ToolUse(tool_use) = &mut message.content {
+        if let Some(kept) = tool_use.input.as_ref().and_then(legacy_kept) {
+            tool_use.input = Some(Value::Object(without_size_markers(kept)));
+        }
+        if let Some(output) = tool_use.output.as_ref().and_then(Value::as_object)
+            && let Some(kept) = legacy_kept_fields(output)
+        {
+            let mut result = kept.clone();
+            if let Some(status) = output.get("status") {
+                result
+                    .entry("status".to_string())
+                    .or_insert_with(|| status.clone());
+            }
+            result.insert(
+                RECEIPT_MARKER_KEY.to_string(),
+                Value::String(LEGACY_UPGRADED_NOTE.to_string()),
+            );
+            tool_use.output = Some(Value::Object(result));
+        }
+    }
+    message
+}
+
+fn shorten_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
+    // A model that copied an earlier receipt into a call meant the arguments
+    // under "kept"; the add-in runs those too.
+    let source = tool_use
+        .input
+        .as_ref()
+        .map(|input| copied_receipt(input).unwrap_or(input));
+    let arguments = kept_fields(source, &spec.input_paths, |value, size| {
+        (size <= MAX_REPLAYED_ARGUMENT_BYTES).then(|| value.clone())
+    });
+    let mut left_out = Vec::new();
+    if let Some(source) = source {
+        left_out_fields(source, &arguments, "", &mut left_out);
+    }
+    tool_use.input = Some(Value::Object(arguments));
     // A call that never produced a result keeps replaying without one; a
-    // receipt would claim a result existed.
+    // shortened result would claim a result existed.
     if tool_use.output.is_some() {
-        let status = serde_json::to_value(&tool_use.status).ok();
-        tool_use.output = Some(receipt(
+        let mut result = kept_fields(
             tool_use.output.as_ref(),
             &spec.output_paths,
-            status,
-        ));
+            |value, size| {
+                Some(if size <= MAX_RECEIPT_FIELD_BYTES {
+                    value.clone()
+                } else {
+                    Value::String(size_marker(size))
+                })
+            },
+        );
+        if let Ok(status) = serde_json::to_value(&tool_use.status) {
+            result.entry("status".to_string()).or_insert(status);
+        }
+        result.insert(
+            RECEIPT_MARKER_KEY.to_string(),
+            Value::String(note(&left_out)),
+        );
+        tool_use.output = Some(Value::Object(result));
     }
 }
 
-fn receipt(source: Option<&Value>, paths: &[Vec<String>], status: Option<Value>) -> Value {
+fn note(left_out: &[String]) -> String {
+    if left_out.is_empty() {
+        return RECEIPT_NOTE.to_string();
+    }
+    let named: Vec<&str> = left_out
+        .iter()
+        .filter(|field| field.len() <= MAX_NAMED_ARGUMENT_BYTES)
+        .take(MAX_NAMED_ARGUMENTS)
+        .map(String::as_str)
+        .collect();
+    let mut fields = named.join(", ");
+    let more = left_out.len() - named.len();
+    if more > 0 {
+        let separator = if fields.is_empty() { "" } else { ", " };
+        fields = format!("{fields}{separator}{more} more");
+    }
+    format!(
+        "This call belongs to an earlier user turn. Its result is shortened in the conversation replay, and its arguments are shown without these fields: {fields}. Call the tool again if current data is needed."
+    )
+}
+
+/// The listed fields at their original nesting; `keep` decides each value
+/// from it and its JSON size, and `None` leaves it out.
+fn kept_fields(
+    source: Option<&Value>,
+    paths: &[Vec<String>],
+    keep: impl Fn(&Value, usize) -> Option<Value>,
+) -> Map<String, Value> {
     let mut kept = Map::new();
     if let Some(source) = source {
         for path in paths {
             if let Some(value) = lookup(source, path) {
-                insert(&mut kept, path, bounded(value));
+                let size = serde_json::to_string(value).map_or(usize::MAX, |json| json.len());
+                if let Some(value) = keep(value, size) {
+                    insert(&mut kept, path, value);
+                }
             }
         }
     }
-    let mut receipt = Map::new();
-    receipt.insert(
-        RECEIPT_MARKER_KEY.to_string(),
-        Value::String(RECEIPT_NOTE.to_string()),
-    );
-    if let Some(status) = status {
-        receipt.insert("status".to_string(), status);
+    kept
+}
+
+/// Dotted paths of the source's object members the replayed arguments lack.
+fn left_out_fields(source: &Value, kept: &Map<String, Value>, prefix: &str, out: &mut Vec<String>) {
+    let Some(source) = source.as_object() else {
+        return;
+    };
+    for (key, value) in source {
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        match kept.get(key) {
+            None => out.push(path),
+            Some(Value::Object(inner)) => left_out_fields(value, inner, &path, out),
+            Some(_) => {}
+        }
     }
-    receipt.insert("kept".to_string(), Value::Object(kept));
-    Value::Object(receipt)
+}
+
+/// The arguments under "kept" when a call's arguments are a receipt's wrapper
+/// and nothing else.
+fn copied_receipt(input: &Value) -> Option<&Value> {
+    let receipt = input.as_object()?;
+    if !(receipt.get(RECEIPT_MARKER_KEY)?.is_string() && only_receipt_keys(receipt)) {
+        return None;
+    }
+    receipt.get(LEGACY_KEPT_KEY).filter(|kept| kept.is_object())
+}
+
+fn legacy_kept(value: &Value) -> Option<&Map<String, Value>> {
+    legacy_kept_fields(value.as_object()?)
+}
+
+fn legacy_kept_fields(receipt: &Map<String, Value>) -> Option<&Map<String, Value>> {
+    if receipt.get(RECEIPT_MARKER_KEY)?.as_str()? != LEGACY_RECEIPT_NOTE
+        || !only_receipt_keys(receipt)
+    {
+        return None;
+    }
+    receipt.get(LEGACY_KEPT_KEY)?.as_object()
+}
+
+fn only_receipt_keys(receipt: &Map<String, Value>) -> bool {
+    receipt
+        .keys()
+        .all(|key| [RECEIPT_MARKER_KEY, LEGACY_KEPT_KEY, "status"].contains(&key.as_str()))
+}
+
+fn size_marker(size: usize) -> String {
+    format!("[omitted: {size} bytes]")
+}
+
+fn is_size_marker(value: &Value) -> bool {
+    value
+        .as_str()
+        .and_then(|text| text.strip_prefix("[omitted: "))
+        .and_then(|text| text.strip_suffix(" bytes]"))
+        .is_some_and(|size| !size.is_empty() && size.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn without_size_markers(kept: &Map<String, Value>) -> Map<String, Value> {
+    kept.iter()
+        .filter(|(_, value)| !is_size_marker(value))
+        .map(|(key, value)| {
+            let value = match value {
+                Value::Object(inner) => Value::Object(without_size_markers(inner)),
+                other => other.clone(),
+            };
+            (key.clone(), value)
+        })
+        .collect()
 }
 
 fn lookup<'a>(value: &'a Value, path: &[String]) -> Option<&'a Value> {
     path.iter().try_fold(value, |current, key| current.get(key))
-}
-
-fn bounded(value: &Value) -> Value {
-    let size = serde_json::to_string(value).map_or(usize::MAX, |json| json.len());
-    if size <= MAX_RECEIPT_FIELD_BYTES {
-        value.clone()
-    } else {
-        Value::String(format!("[omitted: {size} bytes]"))
-    }
 }
 
 /// Rebuilds the kept value at the same nesting as in the source. A path that
@@ -242,55 +401,122 @@ mod tests {
         }
     }
 
+    fn stubbed(policy: &ToolReplayPolicy, input: Value, output: Value) -> ToolUse {
+        tool_use(&policy.apply_to_prior_turn_message(
+            message(MessageRole::Tool, "read_pages", input, output),
+            &offered(&["read_pages"]),
+        ))
+        .clone()
+    }
+
     #[test]
-    fn keeps_only_the_configured_fields_at_their_original_nesting() {
+    fn keeps_the_configured_fields_as_real_arguments_and_shortens_the_result() {
         let policy = policy(
             &["$.snapshot"],
             &["$.result.snapshot", "$.result.complete", "$.missing"],
         );
-        let stubbed = policy.apply_to_prior_turn_message(
-            message(
-            MessageRole::Tool,
-            "read_pages",
+        let stubbed = stubbed(
+            &policy,
             json!({"snapshot": "s1", "cursor": "c2"}),
             json!({"status": "success", "result": {"snapshot": "s1", "complete": true, "blocks": ["body text"]}}),
-        ),
-            &offered(&["read_pages"]),
         );
-        let stubbed = tool_use(&stubbed);
-        assert_eq!(
-            stubbed.input,
-            Some(json!({RECEIPT_MARKER_KEY: RECEIPT_NOTE, "kept": {"snapshot": "s1"}}))
-        );
+        assert_eq!(stubbed.input, Some(json!({"snapshot": "s1"})));
         assert_eq!(
             stubbed.output,
             Some(json!({
-                RECEIPT_MARKER_KEY: RECEIPT_NOTE,
                 "status": "success",
-                "kept": {"result": {"snapshot": "s1", "complete": true}},
+                "result": {"snapshot": "s1", "complete": true},
+                RECEIPT_MARKER_KEY: note(&["cursor".to_string()]),
             }))
         );
+        assert!(note(&["cursor".to_string()]).contains("without these fields: cursor."));
         assert_eq!(stubbed.tool_call_id, "call-1");
         assert_eq!(stubbed.tool_name, "read_pages");
     }
 
     #[test]
-    fn an_oversized_kept_field_is_replaced_by_a_marker() {
-        let policy = policy(&[], &["$.body"]);
-        let body = "x".repeat(MAX_RECEIPT_FIELD_BYTES);
-        let stubbed = policy.apply_to_prior_turn_message(
-            message(
-                MessageRole::Tool,
-                "read_pages",
-                json!({}),
-                json!({"body": body}),
-            ),
-            &offered(&["read_pages"]),
+    fn a_call_whose_arguments_are_all_kept_replays_them_unchanged() {
+        let policy = policy(
+            &["$.snapshot", "$.documentIdentity", "$.section"],
+            &["$.status"],
         );
-        let size = MAX_RECEIPT_FIELD_BYTES + 2;
+        let call = json!({"snapshot": "s1", "documentIdentity": "doc", "section": {"ref": "b4", "cursor": "c2"}});
+        let stubbed = stubbed(
+            &policy,
+            call.clone(),
+            json!({"status": "success", "result": {}}),
+        );
+        assert_eq!(stubbed.input, Some(call));
         assert_eq!(
-            tool_use(&stubbed).output.as_ref().unwrap()["kept"]["body"],
-            json!(format!("[omitted: {size} bytes]"))
+            stubbed.output,
+            Some(json!({"status": "success", RECEIPT_MARKER_KEY: RECEIPT_NOTE}))
+        );
+    }
+
+    #[test]
+    fn an_oversized_argument_is_left_out_and_an_oversized_result_field_is_marked() {
+        let policy = policy(&["$.snapshot", "$.blocks"], &["$.body"]);
+        let blocks: Vec<Value> = (0..200)
+            .map(|k| json!({"text": format!("block {k}")}))
+            .collect();
+        let body = "x".repeat(MAX_RECEIPT_FIELD_BYTES);
+        let stubbed = stubbed(
+            &policy,
+            json!({"snapshot": "s1", "blocks": blocks}),
+            json!({"body": body}),
+        );
+        assert_eq!(stubbed.input, Some(json!({"snapshot": "s1"})));
+        let output = stubbed.output.unwrap();
+        let size = MAX_RECEIPT_FIELD_BYTES + 2;
+        assert_eq!(output["body"], json!(format!("[omitted: {size} bytes]")));
+        assert_eq!(
+            output[RECEIPT_MARKER_KEY],
+            json!(note(&["blocks".to_string()]))
+        );
+    }
+
+    #[test]
+    fn the_note_names_nested_left_out_arguments_and_counts_the_rest() {
+        let policy = policy(&["$.snapshot", "$.section.ref"], &[]);
+        let stubbed = stubbed(
+            &policy,
+            json!({"snapshot": "s1", "section": {"ref": "b1", "cursor": "c"}, "include": ["edits"]}),
+            json!({}),
+        );
+        assert_eq!(
+            stubbed.input,
+            Some(json!({"snapshot": "s1", "section": {"ref": "b1"}}))
+        );
+        let output = stubbed.output.unwrap();
+        let named = output[RECEIPT_MARKER_KEY].as_str().unwrap();
+        assert!(
+            named.contains("section.cursor") && named.contains("include"),
+            "{named}"
+        );
+        assert!(!named.contains("snapshot"), "{named}");
+
+        let many: Vec<String> = (0..12).map(|k| format!("field{k}")).collect();
+        let long = "y".repeat(MAX_NAMED_ARGUMENT_BYTES + 1);
+        let named = note(&[many.clone(), vec![long.clone()]].concat());
+        assert!(named.contains("field7, 5 more."), "{named}");
+        assert!(!named.contains("field8") && !named.contains(&long));
+    }
+
+    #[test]
+    fn a_call_that_copied_a_receipt_replays_as_the_call_it_wraps() {
+        let policy = policy(&["$.snapshot", "$.section"], &["$.status"]);
+        let stubbed = stubbed(
+            &policy,
+            json!({RECEIPT_MARKER_KEY: "This call belongs to an earlier user turn.", "kept": {"snapshot": "s1", "section": {"ref": "b2"}}}),
+            json!({"status": "success"}),
+        );
+        assert_eq!(
+            stubbed.input,
+            Some(json!({"snapshot": "s1", "section": {"ref": "b2"}}))
+        );
+        assert_eq!(
+            stubbed.output.unwrap()[RECEIPT_MARKER_KEY],
+            json!(RECEIPT_NOTE)
         );
     }
 
@@ -317,10 +543,7 @@ mod tests {
             );
         }
         let stubbed = policy.apply_to_prior_turn_message(call, &offered(&["read_pages"]));
-        assert_eq!(
-            tool_use(&stubbed).input.as_ref().unwrap()["kept"],
-            json!({"snapshot": "s1"})
-        );
+        assert_eq!(tool_use(&stubbed).input, Some(json!({"snapshot": "s1"})));
     }
 
     #[test]
@@ -339,27 +562,20 @@ mod tests {
         let stubbed = policy.apply_to_prior_turn_message(call, &offered(&["read_pages"]));
         let stubbed = tool_use(&stubbed);
         assert_eq!(stubbed.output, None);
-        assert_eq!(
-            stubbed.input.as_ref().unwrap()["kept"],
-            json!({"snapshot": "s1"})
-        );
+        assert_eq!(stubbed.input, Some(json!({"snapshot": "s1"})));
     }
 
     #[test]
     fn a_stored_payload_carrying_the_marker_key_is_still_compacted() {
         let policy = policy(&[], &["$.status"]);
-        let stubbed = policy.apply_to_prior_turn_message(
-            message(
-                MessageRole::Tool,
-                "read_pages",
-                json!({}),
-                json!({RECEIPT_MARKER_KEY: "x", "status": "success", "body": "y".repeat(4096)}),
-            ),
-            &offered(&["read_pages"]),
+        let stubbed = stubbed(
+            &policy,
+            json!({}),
+            json!({RECEIPT_MARKER_KEY: "x", "status": "success", "body": "y".repeat(4096)}),
         );
         assert_eq!(
-            tool_use(&stubbed).output.as_ref().unwrap()["kept"],
-            json!({"status": "success"})
+            stubbed.output,
+            Some(json!({"status": "success", RECEIPT_MARKER_KEY: RECEIPT_NOTE}))
         );
     }
 
@@ -382,13 +598,52 @@ mod tests {
     #[test]
     fn a_path_through_a_kept_scalar_does_not_overwrite_it() {
         let policy = policy(&[], &["$.a", "$.a.b"]);
-        let stubbed = policy.apply_to_prior_turn_message(
-            message(MessageRole::Tool, "read_pages", json!({}), json!({"a": 1})),
-            &offered(&["read_pages"]),
+        let stubbed = stubbed(&policy, json!({}), json!({"a": 1}));
+        assert_eq!(
+            stubbed.output,
+            Some(json!({"a": 1, "status": "success", RECEIPT_MARKER_KEY: RECEIPT_NOTE}))
+        );
+    }
+
+    #[test]
+    fn a_legacy_receipt_from_a_snapshot_is_upgraded_to_a_real_call() {
+        let legacy = message(
+            MessageRole::Assistant,
+            "read_pages",
+            json!({RECEIPT_MARKER_KEY: LEGACY_RECEIPT_NOTE, "kept": {"snapshot": "s1", "range": {"start": "b1", "body": "[omitted: 900 bytes]"}, "plan": "[omitted: 4096 bytes]"}}),
+            json!({RECEIPT_MARKER_KEY: LEGACY_RECEIPT_NOTE, "status": "success", "kept": {"result": {"complete": true}}}),
+        );
+        let upgraded = upgrade_legacy_receipt(legacy);
+        let upgraded = tool_use(&upgraded);
+        assert_eq!(
+            upgraded.input,
+            Some(json!({"snapshot": "s1", "range": {"start": "b1"}}))
         );
         assert_eq!(
-            tool_use(&stubbed).output.as_ref().unwrap()["kept"],
-            json!({"a": 1})
+            upgraded.output,
+            Some(
+                json!({"result": {"complete": true}, "status": "success", RECEIPT_MARKER_KEY: LEGACY_UPGRADED_NOTE})
+            )
         );
+
+        for untouched in [
+            message(
+                MessageRole::Tool,
+                "search",
+                json!({RECEIPT_MARKER_KEY: "another note", "kept": {"q": "a"}}),
+                json!({RECEIPT_MARKER_KEY: LEGACY_RECEIPT_NOTE, "kept": {}, "hits": [1]}),
+            ),
+            message(
+                MessageRole::Tool,
+                "read_pages",
+                json!({"snapshot": "s1"}),
+                json!({"status": "success", RECEIPT_MARKER_KEY: RECEIPT_NOTE}),
+            ),
+        ] {
+            assert_eq!(
+                json!(upgrade_legacy_receipt(untouched.clone())),
+                json!(untouched)
+            );
+        }
     }
 }

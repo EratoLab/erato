@@ -3858,27 +3858,41 @@ mod test_cases {
                 assert!(!turn_two_text.contains(&body), "{body} replayed in turn 2");
             }
             assert!(turn_two_text.contains(RECEIPT_MARKER_KEY));
-            let receipt = turn_two
-                .messages
-                .iter()
-                .find_map(|message| match (&message.role, &message.content) {
-                    (MessageRole::Tool, ContentPart::ToolUse(part))
-                        if part.tool_call_id == "submit-1-accepted" =>
-                    {
-                        part.output.clone()
-                    }
-                    _ => None,
-                })
-                .expect("turn 1 submission response is still replayed");
+            let submission = |role: MessageRole| {
+                turn_two
+                    .messages
+                    .iter()
+                    .find_map(|message| match &message.content {
+                        ContentPart::ToolUse(part)
+                            if message.role == role && part.tool_call_id == "submit-1-accepted" =>
+                        {
+                            Some(part.clone())
+                        }
+                        _ => None,
+                    })
+                    .expect("turn 1 submission is still replayed")
+            };
+            let mut response = submission(MessageRole::Tool).output.expect("response");
+            let note = response
+                .as_object_mut()
+                .and_then(|response| response.remove(RECEIPT_MARKER_KEY))
+                .expect("the note sits in the result");
             assert_eq!(
-                receipt["kept"],
+                response,
                 json!({
                     "status": "success",
                     "result": {"draft_id": "submit-1-accepted", "snapshot": "snap-1", "action": "word.submit_document_plan"},
                     "submission": {"status": "accepted"},
                 })
             );
-            assert_eq!(receipt["status"], json!("success"));
+            assert!(
+                note.as_str()
+                    .is_some_and(|note| note.contains("without these fields: blocks."))
+            );
+            assert_eq!(
+                submission(MessageRole::Assistant).input,
+                Some(json!({"snapshot": "snap-1"}))
+            );
 
             // Turn 3 replays turn 1 from turn 2's snapshot, where it already is a
             // receipt, and turn 2 from its raw row.
@@ -4193,6 +4207,289 @@ mod test_cases {
                 .expect("delegation response replayed");
             assert!(!response.to_string().contains("SECRET-STEP"));
             assert!(response.to_string().contains("DELEGATE-ANSWER"));
+        }
+
+        /// The read tool's kept argument fields in erato-action-facets since
+        /// ERMAIN-1274; `word_policy` keeps the older `["$.snapshot"]`.
+        const READ_ARGUMENTS: &[&str] = &[
+            "$.snapshot",
+            "$.cursor",
+            "$.documentIdentity",
+            "$.section",
+            "$.target",
+            "$.table_cell",
+            "$.include",
+        ];
+
+        fn word_policy_keeping_read_arguments() -> ToolReplayPolicy {
+            let mut tools = ClientToolsConfig::default();
+            tools.tools.insert(
+                "word_read".into(),
+                receipt_tool(
+                    READ,
+                    READ_ARGUMENTS,
+                    &["$.status", "$.error", "$.result.complete"],
+                ),
+            );
+            tools.tools.insert(
+                "word_submit".into(),
+                receipt_tool(
+                    SUBMIT,
+                    &["$.snapshot"],
+                    &["$.status", "$.error", "$.result.draft_id"],
+                ),
+            );
+            ToolReplayPolicy::from_client_tools(&tools)
+        }
+
+        const IDENTITY: &str = "https://contoso.example/Documents/Rahmenvertrag.docx";
+
+        /// Every read form the pane serves, a refused read and two plans.
+        fn long_turn_calls(turn: u32) -> Vec<ContentPart> {
+            let snapshot = format!("snap-{turn}");
+            let read = |n: u32, input: JsonValue, ok: bool| {
+                let output = if ok {
+                    json!({"status": "success", "result": {"snapshot": snapshot, "blocks": [{"text": page_body(turn, n)}], "complete": n.is_multiple_of(2)}})
+                } else {
+                    json!({"status": "error", "error": "Submission validation failed", "validation_errors": [{"path": "", "code": "read-arguments", "message": "bad"}]})
+                };
+                let ContentPart::ToolUse(mut call) =
+                    tool_use(&format!("read-{turn}-{n}"), READ, input, output)
+                else {
+                    unreachable!()
+                };
+                if !ok {
+                    call.status = ToolCallStatus::Error;
+                }
+                ContentPart::ToolUse(call)
+            };
+            let large_blocks: Vec<JsonValue> = (0..60)
+                .map(|k| json!({"id": format!("n{k}"), "type": "paragraph", "text": plan_body(turn, &k.to_string())}))
+                .collect();
+            vec![
+                read(1, json!({"snapshot": snapshot, "cursor": null}), true),
+                read(2, json!({"snapshot": snapshot, "cursor": "c2"}), true),
+                read(
+                    3,
+                    json!({"snapshot": snapshot, "documentIdentity": IDENTITY, "section": {"ref": format!("b{turn}")}}),
+                    true,
+                ),
+                read(
+                    4,
+                    json!({"snapshot": snapshot, "documentIdentity": IDENTITY, "section": {"ref": format!("b{turn}"), "throughRef": "b90", "cursor": "sc2"}}),
+                    true,
+                ),
+                read(
+                    5,
+                    json!({"snapshot": snapshot, "documentIdentity": IDENTITY, "target": {"queries": [{"text": "Haftung"}, {"sourceRef": "b12"}]}, "include": ["edits"]}),
+                    true,
+                ),
+                read(
+                    6,
+                    json!({"snapshot": snapshot, "documentIdentity": IDENTITY, "table_cell": {"header": "Stunden", "rowLabel": "West"}}),
+                    true,
+                ),
+                read(
+                    7,
+                    json!({"snapshot": snapshot, "documentIdentity": IDENTITY, "section": {"ref": "b3"}, "include": ["edits"]}),
+                    false,
+                ),
+                tool_use(
+                    &format!("submit-{turn}-scoped"),
+                    SUBMIT,
+                    json!({"snapshot": snapshot, "readToken": "rt", "scoped_edit": {"body": [{"operation": "replace", "source": ["b3"], "blocks": large_blocks}]}}),
+                    json!({"status": "success", "result": {"draft_id": format!("d{turn}")}}),
+                ),
+            ]
+        }
+
+        /// The forms read_document_blocks accepts (wordDocumentReadTool.ts,
+        /// wordSectionRead.ts, wordTargetRead.ts, wordTableCellRead.ts).
+        fn is_a_read_the_pane_accepts(input: &JsonValue) -> bool {
+            let Some(args) = input.as_object() else {
+                return false;
+            };
+            let only = |allowed: &[&str]| args.keys().all(|key| allowed.contains(&key.as_str()));
+            let text = |key: &str| {
+                args.get(key)
+                    .and_then(JsonValue::as_str)
+                    .is_some_and(|v| !v.is_empty())
+            };
+            let scoped = text("snapshot") && text("documentIdentity");
+            if let Some(section) = args.get("section") {
+                only(&["snapshot", "documentIdentity", "section"])
+                    && scoped
+                    && section.as_object().is_some_and(|section| {
+                        section
+                            .keys()
+                            .all(|key| ["ref", "throughRef", "cursor"].contains(&key.as_str()))
+                            && section.get("ref").is_some_and(JsonValue::is_string)
+                    })
+            } else if args.contains_key("target") {
+                only(&["snapshot", "documentIdentity", "target", "include"])
+                    && scoped
+                    && args["target"].is_object()
+            } else if args.contains_key("table_cell") {
+                only(&["snapshot", "documentIdentity", "table_cell"])
+                    && scoped
+                    && args["table_cell"].is_object()
+            } else {
+                only(&["snapshot", "cursor"])
+                    && text("snapshot")
+                    && args
+                        .get("cursor")
+                        .is_none_or(|cursor| cursor.is_null() || cursor.is_string())
+            }
+        }
+
+        fn holds_a_placeholder(value: &JsonValue) -> bool {
+            match value {
+                JsonValue::String(text) => text.starts_with("[omitted"),
+                JsonValue::Array(items) => items.iter().any(holds_a_placeholder),
+                JsonValue::Object(members) => {
+                    members.contains_key(RECEIPT_MARKER_KEY)
+                        || members.contains_key("kept")
+                        || members.values().any(holds_a_placeholder)
+                }
+                _ => false,
+            }
+        }
+
+        /// About 100 earlier calls over 13 turns, composed turn by turn the way
+        /// generations persist them, so the last turn replays twelve of them
+        /// from a snapshot and one from its row. The model copies the shape of
+        /// what it sees, so every replayed call must be one the tools accept.
+        #[tokio::test]
+        async fn a_long_history_replays_every_earlier_call_with_valid_arguments() {
+            for (policy, keeps_read_arguments) in [
+                (word_policy_keeping_read_arguments(), true),
+                (word_policy(), false),
+            ] {
+                let provider = MockPromptProvider::new()
+                    .with_system_prompt("You are helpful.")
+                    .with_replay_policy(policy);
+                let mut repo = MockMessageRepository::new();
+                let mut originals = HashMap::new();
+                let mut user = Uuid::new_v4();
+                repo.add_message(user, None, MessageRole::User, "Turn 0");
+                for turn in 0..13 {
+                    let composed = compose(&repo, &provider, user).await;
+                    let calls = long_turn_calls(turn);
+                    for call in &calls {
+                        if let ContentPart::ToolUse(call) = call {
+                            originals.insert(call.tool_call_id.clone(), call.input.clone());
+                        }
+                    }
+                    let assistant = Uuid::new_v4();
+                    repo.add_message_with_content(
+                        assistant,
+                        Some(user),
+                        MessageRole::Assistant,
+                        calls,
+                    );
+                    repo.update_generation_input_messages(assistant, &composed);
+                    record_offer(&mut repo, assistant, WORD_TOOLS);
+                    user = Uuid::new_v4();
+                    repo.add_message(
+                        user,
+                        Some(assistant),
+                        MessageRole::User,
+                        &format!("Turn {}", turn + 1),
+                    );
+                }
+
+                let last = compose(&repo, &provider, user).await;
+                let calls: Vec<&ToolUse> = last
+                    .messages
+                    .iter()
+                    .filter_map(|message| match (&message.role, &message.content) {
+                        (MessageRole::Assistant, ContentPart::ToolUse(call)) => Some(call),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(calls.len(), 104);
+                for call in calls {
+                    let input = call.input.as_ref().expect("arguments");
+                    assert!(!holds_a_placeholder(input), "{input}");
+                    if call.tool_name == READ {
+                        let original = originals[&call.tool_call_id].as_ref().expect("original");
+                        if call.tool_call_id.ends_with("-7") {
+                            // A refused read replays as what it was.
+                            assert!(!is_a_read_the_pane_accepts(original));
+                        } else {
+                            assert!(is_a_read_the_pane_accepts(input), "{input}");
+                        }
+                        if keeps_read_arguments {
+                            assert_eq!(input, original);
+                        }
+                    } else {
+                        assert_eq!(input, &json!({"snapshot": input["snapshot"]}));
+                        assert!(input["snapshot"].is_string());
+                    }
+                }
+                let text = json_text(&last);
+                for turn in 0..13 {
+                    assert!(
+                        !text.contains(&page_body(turn, 1)),
+                        "turn {turn} page replayed"
+                    );
+                    assert!(
+                        !text.contains(&plan_body(turn, "0")),
+                        "turn {turn} plan replayed"
+                    );
+                }
+                assert_provider_sequence_is_valid(last);
+            }
+        }
+
+        /// Snapshots stored before ERMAIN-1274 hold receipts that wrapped the
+        /// arguments; a later turn replays them as calls.
+        #[tokio::test]
+        async fn a_snapshot_with_legacy_receipts_replays_them_as_calls() {
+            let legacy_note = "This call belongs to an earlier user turn. Its full content is omitted from the conversation replay; only the fields under \"kept\" remain. Call the tool again if current data is needed.";
+            let receipt_call = |role: MessageRole| InputMessage {
+                role,
+                content: tool_use(
+                    "read-0-1",
+                    READ,
+                    json!({RECEIPT_MARKER_KEY: legacy_note, "kept": {"snapshot": "snap-0"}}),
+                    json!({RECEIPT_MARKER_KEY: legacy_note, "status": "success", "kept": {"status": "success", "result": {"complete": true}}}),
+                ),
+            };
+            let mut repo = MockMessageRepository::new();
+            let [user, assistant, next] = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+            repo.add_message(user, None, MessageRole::User, "Read it.");
+            let mut snapshot = compose(&repo, &word_provider(), user).await;
+            snapshot.messages.push(receipt_call(MessageRole::Assistant));
+            snapshot.messages.push(receipt_call(MessageRole::Tool));
+            repo.add_message(assistant, Some(user), MessageRole::Assistant, "Done.");
+            repo.update_generation_input_messages(assistant, &snapshot);
+            repo.add_message(next, Some(assistant), MessageRole::User, "Again.");
+
+            let composed = compose(&repo, &word_provider(), next).await;
+            let replayed: Vec<_> = composed
+                .messages
+                .iter()
+                .filter_map(|message| match &message.content {
+                    ContentPart::ToolUse(call) => Some(call.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(replayed.len(), 2);
+            for call in replayed {
+                assert_eq!(call.input, Some(json!({"snapshot": "snap-0"})));
+                let output = call.output.expect("result");
+                assert_eq!(output["result"], json!({"complete": true}));
+                assert_eq!(output["status"], json!("success"));
+                assert!(output.get("kept").is_none());
+                assert!(
+                    !output[RECEIPT_MARKER_KEY]
+                        .as_str()
+                        .unwrap()
+                        .contains("kept")
+                );
+            }
+            assert_provider_sequence_is_valid(composed);
         }
     }
 }

@@ -8126,17 +8126,18 @@ impl ClientToolHostContext {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolReplayConfig {
     /// `full` (default) replays arguments and result verbatim. `receipt`
-    /// replaces both with a bounded receipt built from the fields listed below
-    /// plus a fixed omission note.
+    /// replays the call with the argument fields listed below and a bounded
+    /// result built from the result fields listed below plus an omission note.
     #[serde(default)]
     pub mode: ClientToolReplayMode,
-    /// Argument fields kept in a receipt, as `$.key.key` paths into the call
-    /// arguments. At most 32. Missing fields are skipped; a value larger than
-    /// the per-field bound is replaced by an omission marker.
+    /// Argument fields the replayed call keeps, as `$.key.key` paths into the
+    /// call arguments. At most 32. Missing fields are skipped; a value larger
+    /// than the per-argument bound is left out.
     #[serde(default)]
     pub keep_input_fields: Vec<String>,
-    /// Result fields kept in a receipt, as `$.key.key` paths into the stored
-    /// tool output. Same rules as `keep_input_fields`.
+    /// Result fields kept in the shortened result, as `$.key.key` paths into
+    /// the stored tool output. At most 32. Missing fields are skipped; a value
+    /// larger than the per-field bound is replaced by an omission marker.
     #[serde(default)]
     pub keep_output_fields: Vec<String>,
 }

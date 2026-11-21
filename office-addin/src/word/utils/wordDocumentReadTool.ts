@@ -20,6 +20,11 @@ import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
 import { withReadOnlyFields, wordReadRefusedByIssue } from "./wordReadAccess";
 import {
+  wordReadArgumentsRefusal,
+  wordReplayRecordRead,
+  wordTooLargeOutlineRead,
+} from "./wordReadArguments";
+import {
   wordReadFragments,
   wordReadJsonBytes,
   wordReadPageStarts,
@@ -232,14 +237,18 @@ export class WordDocumentReadSession {
     if (!approval.read) return approval.result;
     const { snapshot } = session;
     const { hostGrant: _grant, ...call } = context;
-    return this.executeReadOnly(
-      input && typeof input === "object" && !Array.isArray(input)
+    // Filled into the read the call means, so a replay record still reads as one.
+    const { call: read } = wordReplayRecordRead(input);
+    const filled =
+      read && typeof read === "object" && !Array.isArray(read)
         ? {
-            ...input,
+            ...read,
             snapshot: snapshot.token,
             documentIdentity: snapshot.identity,
           }
-        : input,
+        : read;
+    return this.executeReadOnly(
+      read === input ? filled : { ...(input as object), kept: filled },
       { ...call, chatId: grant.ownerChatId, messageId: grant.ownerMessageId },
     );
   };
@@ -253,12 +262,18 @@ export class WordDocumentReadSession {
     context: ClientToolCallContext | undefined,
     sessionAccess: WordReadAccess,
   ): Promise<ClientToolExecutionResult> {
+    const { call, replayRecord } = wordReplayRecordRead(input);
     const access =
-      input && typeof input === "object" && "section" in input
+      call && typeof call === "object" && "section" in call
         ? "read-only"
         : sessionAccess;
     const capture = context && this.snapshotForSubmission(context);
-    const { result, scope } = await this.executeRead(input, context, access);
+    const { result, scope } = await this.executeRead(
+      call,
+      context,
+      access,
+      replayRecord,
+    );
     if (result.ok) {
       if (
         capture &&
@@ -317,6 +332,7 @@ export class WordDocumentReadSession {
     input: unknown,
     context: ClientToolCallContext | undefined,
     access: WordReadAccess,
+    replayRecord: boolean,
   ): Promise<WordReadOutcome> {
     const session = this.session;
     const fail = (error: string, code: string, path = "/snapshot") => ({
@@ -338,14 +354,24 @@ export class WordDocumentReadSession {
       session.chatId !== context.chatId
     )
       return fail(WORD_NO_REQUEST_SESSION_MESSAGE, "wrong-request");
+    const refuse = (expected: string, path: string) =>
+      wordReadArgumentsRefusal(snapshot, input, access, {
+        replayRecord,
+        expected,
+        path,
+      });
     if (!input || typeof input !== "object" || Array.isArray(input))
-      return fail(
-        "Expected a snapshot token and optional cursor.",
-        "read-arguments",
-        "",
-      );
+      return refuse("Expected a snapshot token and optional cursor.", "");
     const args = input as Record<string, unknown>;
-    if ("section" in args) return readWordSection(snapshot, args);
+    if ("section" in args) {
+      const read = readWordSection(snapshot, args);
+      const issue = read.result.ok
+        ? undefined
+        : read.result.validationErrors?.[0];
+      return issue?.code === "read-arguments"
+        ? refuse(issue.message, issue.path)
+        : read;
+    }
     if ("target" in args) return readWordTargets(snapshot, args, access);
     if ("table_cell" in args) {
       if (
@@ -375,9 +401,8 @@ export class WordDocumentReadSession {
         args.cursor !== null &&
         typeof args.cursor !== "string")
     )
-      return fail(
+      return refuse(
         "Expected a snapshot token and optional string or null cursor; no other arguments are supported.",
-        "read-arguments",
         "",
       );
     if (snapshot.revoked || snapshot.used)
@@ -391,9 +416,12 @@ export class WordDocumentReadSession {
         snapshot.issue,
       );
     if (snapshot.completeReadIssue)
-      return fail(
-        "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the sections the request needs with section:{ref} pages from the Outline, following nextCursor; use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.",
-        snapshot.completeReadIssue,
+      return (
+        wordTooLargeOutlineRead(snapshot) ??
+        fail(
+          "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the sections the request needs with section:{ref} pages from the Outline, following nextCursor; use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.",
+          snapshot.completeReadIssue,
+        )
       );
     if (this.completeBudgetCheck) {
       this.completeBudget ??= this.completeBudgetCheck().catch(

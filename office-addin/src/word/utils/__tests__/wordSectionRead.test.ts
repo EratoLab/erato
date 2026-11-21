@@ -330,11 +330,14 @@ describe("section pages", () => {
         "/section/throughRef",
       ],
     ];
-    for (const [args, code, path] of cases)
-      expect(await read(args)).toMatchObject({
-        ok: false,
-        validationErrors: [{ code, path }],
+    for (const [args, code, path] of cases) {
+      const refused = await read(args);
+      expect(refused.ok).toBe(false);
+      expect(refused.ok ? null : refused.validationErrors?.[0]).toMatchObject({
+        code,
+        path,
       });
+    }
     expect(
       await session.execute(
         {
