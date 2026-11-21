@@ -339,7 +339,8 @@ async fn with_mcp_apps_off_nothing_changes(pool: Pool<Postgres>) {
 }
 
 /// The backend serves the sandbox page only on the host of a sandbox origin
-/// whose server enables views, never on the app's own host.
+/// whose server enables views, never on the app's own host, and serves it
+/// keyed to its origin (`Origin-Agent-Cluster: ?1`).
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -359,20 +360,33 @@ async fn the_sandbox_page_is_served_on_an_enabled_sandbox_origin_host_only(pool:
             ),
         );
         let server = TestServer::new(app.into_make_service()).unwrap();
-        let status = async |path: &str, host: &str| {
-            server
-                .get(path)
-                .add_header("x-forwarded-host", host)
-                .await
-                .status_code()
+        let get = async |path: &str, host: &str| {
+            let response = server.get(path).add_header("x-forwarded-host", host).await;
+            let origin_agent_cluster = response
+                .maybe_header("origin-agent-cluster")
+                .map(|value| value.to_str().unwrap().to_owned());
+            (response.status_code(), origin_agent_cluster)
         };
 
-        assert_eq!(status(PAGE, "mcp-apps.example.com").await, on_sandbox_host);
-        assert_eq!(status(PAGE, APP_HOST).await, http::StatusCode::NOT_FOUND);
+        let on_sandbox_host_header =
+            (on_sandbox_host == http::StatusCode::OK).then(|| "?1".to_owned());
         assert_eq!(
-            status("/public/common/MCP-Apps-Sandbox%2Ehtml", APP_HOST).await,
-            http::StatusCode::NOT_FOUND
+            get(PAGE, "mcp-apps.example.com").await,
+            (on_sandbox_host, on_sandbox_host_header)
         );
-        assert_eq!(status("/", APP_HOST).await, http::StatusCode::OK);
+        assert_eq!(
+            get(PAGE, APP_HOST).await,
+            (http::StatusCode::NOT_FOUND, None)
+        );
+        assert_eq!(
+            get("/public/common/MCP-Apps-Sandbox%2Ehtml", APP_HOST).await,
+            (http::StatusCode::NOT_FOUND, None)
+        );
+        // Every other page is served as before.
+        assert_eq!(get("/", APP_HOST).await, (http::StatusCode::OK, None));
+        assert_eq!(
+            get("/", "mcp-apps.example.com").await,
+            (http::StatusCode::OK, None)
+        );
     }
 }
