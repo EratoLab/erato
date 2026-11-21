@@ -5,7 +5,6 @@ import type {
   ToolCallSpokenNames,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-
 /**
  * What people call a call's fields, coded values and tables in the language
  * the voice speaks, from the server's spoken vocabularies. The voice only:
