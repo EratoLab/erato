@@ -58,10 +58,7 @@ class SandboxFrameTransport implements Transport {
   }
 
   send(message: JSONRPCMessage) {
-    // A frame out of the page has no view left to tell.
-    if (this.frame.isConnected) {
-      this.frame.contentWindow?.postMessage(message, this.origin);
-    }
+    this.frame.contentWindow?.postMessage(message, this.origin);
     return Promise.resolve();
   }
 

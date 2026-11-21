@@ -265,6 +265,24 @@ const stubMoveBefore = () => {
   return moveBefore;
 };
 
+/**
+ * Gives a frame out of the document no window, as a browser does. jsdom
+ * keeps the window, and its `postMessage` throws.
+ */
+const dropWindowsOfRemovedFrames = () => {
+  const contentWindow = Object.getOwnPropertyDescriptor(
+    HTMLIFrameElement.prototype,
+    "contentWindow",
+  )?.get;
+  if (!contentWindow) throw new Error("jsdom has no contentWindow getter.");
+  Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+    configurable: true,
+    get(this: HTMLIFrameElement) {
+      return this.isConnected ? contentWindow.call(this) : null;
+    },
+  });
+};
+
 /** A message from the view, from the window its frame has now. */
 const fromFrameNow = (frame: HTMLIFrameElement, data: unknown) => {
   window.dispatchEvent(
@@ -303,6 +321,8 @@ describe("McpAppView", () => {
   beforeAll(() => {
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
+    // Kept for the whole file: a teardown may time out after its test.
+    dropWindowsOfRemovedFrames();
   });
 
   beforeEach(() => {
@@ -850,12 +870,17 @@ describe("McpAppView", () => {
     const view = await loadedFrame();
     view.fromFrame(PROXY_READY);
 
-    unmount();
+    // No timer may run before the frame is gone.
+    vi.useFakeTimers();
+    try {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
 
-    await waitFor(() => {
       expect(view.frame.isConnected).toBe(false);
-    });
-    expect(teardownOf(view)).toBeUndefined();
+      expect(teardownOf(view)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends the teardown while the frame is in the page and lets the frame go with the message where the browser cannot move a frame without reloading it", async () => {
