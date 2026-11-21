@@ -71,6 +71,11 @@ export interface AddinSessionControllerProps {
 
 type RecentChatsResult = ReturnType<typeof useInfiniteRecentChats>;
 
+// The pane has no pinned chats. Module constants, because the chat value is
+// rebuilt on every streamed chunk and the session is compared field by field.
+const NO_PINNED_CHATS: ChatContextValue["pinnedChats"] = [];
+const pinNothing: ChatContextValue["pinChat"] = async () => {};
+
 // The server-default listing shape (every type, archived and delegated runs
 // excluded).
 const SESSION_LISTING_FILTERS: RecentChatsListFilters = {
@@ -433,7 +438,7 @@ function AddinChatDataProvider({
   const contextValue = useMemo<ChatContextValue>(() => {
     return {
       chats,
-      pinnedChats: [],
+      pinnedChats: NO_PINNED_CHATS,
       currentChatId: session.currentChatId,
       isHistoryLoading,
       historyError,
@@ -441,7 +446,7 @@ function AddinChatDataProvider({
       archiveChat,
       unarchiveChat,
       updateChatTitle,
-      pinChat: async () => {},
+      pinChat: pinNothing,
       navigateToChat,
       refetchHistory,
       fetchNextHistoryPage,

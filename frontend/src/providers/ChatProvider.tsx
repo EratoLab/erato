@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useInsertionEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +27,11 @@ import {
   useStableChatMessages,
   useStableValue,
 } from "@/utils/chat/stableValues";
+import {
+  createValueStore,
+  useValueStore,
+  useValueStoreSelector,
+} from "@/utils/chat/valueStore";
 
 import {
   useChatInputFeature,
@@ -48,6 +54,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
+import type { ValueStore, WritableValueStore } from "@/utils/chat/valueStore";
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
 
@@ -151,16 +158,6 @@ export interface ChatContextValue {
   currentChatLastModel: ChatModel | null;
 }
 
-export const ChatContext = createContext<ChatContextValue | null>(null);
-
-export const useChatContext = () => {
-  const context = useContext(ChatContext);
-  if (!context) {
-    throw new Error("useChatContext must be used within a ChatProvider");
-  }
-  return context;
-};
-
 type ChatTranscriptKey = "messages" | "messageOrder" | "streamingContent";
 
 export type ChatTranscriptValue = Pick<ChatContextValue, ChatTranscriptKey>;
@@ -173,21 +170,83 @@ export type ChatSessionValue = Omit<ChatContextValue, ChatTranscriptKey> & {
   getTranscript: () => ChatTranscriptValue;
 };
 
+/**
+ * The chat, for readers outside the hooks. Its identity follows the session,
+ * and its transcript fields read the latest transcript when they are read: a
+ * reader sees the latest messages whenever it renders, but no longer
+ * re-renders on every streamed token. `useChatContext` or `useChatTranscript`
+ * re-render on every token.
+ */
+export const ChatContext = createContext<ChatContextValue | null>(null);
+
+/** The session, for readers outside the hooks; it changes only with the session. */
 export const ChatSessionContext = createContext<ChatSessionValue | null>(null);
+
+/**
+ * The transcript, for readers outside the hooks: one object for the provider's
+ * lifetime whose fields read the latest transcript, so, as with `ChatContext`,
+ * a reader sees the latest messages whenever it renders but is not re-rendered
+ * by a token.
+ */
 export const ChatTranscriptContext = createContext<ChatTranscriptValue | null>(
   null,
 );
 
+interface ChatStores {
+  value: WritableValueStore<ChatContextValue>;
+  session: WritableValueStore<ChatSessionValue>;
+  transcript: WritableValueStore<ChatTranscriptValue>;
+}
+
+// Stores rather than context values: a value that changes with every
+// streamed token would make React search the whole chat below it for
+// readers on each token, even though almost none of them read the messages.
+const ChatStoresContext = createContext<ChatStores | null>(null);
+
+const NO_STORE: ValueStore<null> = {
+  get: () => null,
+  subscribe: () => () => {},
+};
+
+const useStoredOrNull = <T,>(store: ValueStore<T> | undefined): T | null =>
+  useValueStore<T | null>(store ?? NO_STORE);
+
+const transcriptGetters = (
+  getTranscript: () => ChatTranscriptValue,
+): PropertyDescriptorMap => ({
+  messages: { enumerable: true, get: () => getTranscript().messages },
+  messageOrder: { enumerable: true, get: () => getTranscript().messageOrder },
+  streamingContent: {
+    enumerable: true,
+    get: () => getTranscript().streamingContent,
+  },
+});
+
+/** The whole chat; re-renders on every streamed token. */
+export const useChatContext = () => {
+  const context = useStoredOrNull(useContext(ChatStoresContext)?.value);
+  if (!context) {
+    throw new Error("useChatContext must be used within a ChatProvider");
+  }
+  return context;
+};
+
 export const useChatSession = () => {
-  const session = useContext(ChatSessionContext);
+  const session = useOptionalChatSession();
   if (!session) {
     throw new Error("useChatSession must be used within a ChatProvider");
   }
   return session;
 };
 
+/** The session, or null outside a chat provider (isolated stories and tests). */
+export function useOptionalChatSession(): ChatSessionValue | null {
+  return useStoredOrNull(useContext(ChatStoresContext)?.session);
+}
+
+/** The transcript; re-renders on every streamed token. */
 export const useChatTranscript = () => {
-  const transcript = useContext(ChatTranscriptContext);
+  const transcript = useStoredOrNull(useContext(ChatStoresContext)?.transcript);
   if (!transcript) {
     throw new Error("useChatTranscript must be used within a ChatProvider");
   }
@@ -195,9 +254,30 @@ export const useChatTranscript = () => {
 };
 
 /**
- * Provides a chat context value whole, as `ChatContext`, and in two halves:
- * the session, which keeps its identity while only messages change, and the
- * transcript, which changes on every streamed token.
+ * A value derived from the transcript, or from null outside a chat provider;
+ * re-renders only when `isEqual` says the derived value changed, so tokens
+ * streamed into other messages pass by.
+ */
+export function useChatTranscriptSelector<T>(
+  select: (transcript: ChatTranscriptValue | null) => T,
+  isEqual: (previous: T, next: T) => boolean = Object.is,
+): T {
+  return useValueStoreSelector<ChatTranscriptValue | null, T>(
+    useContext(ChatStoresContext)?.transcript ?? NO_STORE,
+    select,
+    isEqual,
+  );
+}
+
+/**
+ * Provides a chat context value whole, for `useChatContext`, and in two
+ * halves: the session, which keeps its identity while only messages change,
+ * and the transcript, which changes on every streamed token.
+ *
+ * Readers get a new value right after this provider commits and before the
+ * browser paints. A component that something else re-renders in the same pass
+ * as the provider still renders, and runs its effects, with the previous
+ * session and transcript; it gets the new ones in the pass that follows.
  */
 export function ChatContextProviders({
   value,
@@ -224,13 +304,37 @@ export function ChatContextProviders({
     ),
     getTranscript,
   });
+  const [stores] = useState<ChatStores>(() => ({
+    value: createValueStore(value),
+    session: createValueStore(session),
+    transcript: createValueStore(transcript),
+  }));
+  // All three in one effect, so readers of any of them re-render together.
+  useLayoutEffect(() => {
+    stores.session.set(session);
+    stores.transcript.set(transcript);
+    stores.value.set(value);
+  }, [stores, session, transcript, value]);
+  const contextView = useMemo(
+    () =>
+      Object.defineProperties({ ...session }, transcriptGetters(getTranscript)),
+    [session, getTranscript],
+  ) as unknown as ChatContextValue;
+  const transcriptView = useMemo(
+    () => Object.defineProperties({}, transcriptGetters(getTranscript)),
+    [getTranscript],
+  ) as ChatTranscriptValue;
 
   return (
-    <ChatSessionContext.Provider value={session}>
-      <ChatTranscriptContext.Provider value={transcript}>
-        <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
-      </ChatTranscriptContext.Provider>
-    </ChatSessionContext.Provider>
+    <ChatStoresContext.Provider value={stores}>
+      <ChatSessionContext.Provider value={session}>
+        <ChatContext.Provider value={contextView}>
+          <ChatTranscriptContext.Provider value={transcriptView}>
+            {children}
+          </ChatTranscriptContext.Provider>
+        </ChatContext.Provider>
+      </ChatSessionContext.Provider>
+    </ChatStoresContext.Provider>
   );
 }
 

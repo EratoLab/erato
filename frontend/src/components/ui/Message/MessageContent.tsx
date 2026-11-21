@@ -58,7 +58,7 @@ import {
   WORD_REPLACE_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
 import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
-import { ChatContext } from "@/providers/ChatProvider";
+import { useOptionalChatSession } from "@/providers/ChatProvider";
 import {
   useMessageTextActionsFeature,
   useTraceFeature,
@@ -782,7 +782,7 @@ function ClientToolPendingNotice({
   const link = useSidecarReviewLinks((state) =>
     key ? state.links[key] : undefined,
   );
-  const chatId = React.useContext(ChatContext)?.currentChatId ?? undefined;
+  const chatId = useOptionalChatSession()?.currentChatId ?? undefined;
   const chatInReview = useSidecarReviewStore(
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );

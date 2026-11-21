@@ -1,13 +1,6 @@
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
@@ -43,7 +36,10 @@ import {
 } from "@/lib/toolApprovalDecisions";
 import { approvalDisplayOf } from "@/lib/toolCallGist/approvalCard";
 import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
-import { ChatContext } from "@/providers/ChatProvider";
+import {
+  useChatTranscriptSelector,
+  useOptionalChatSession,
+} from "@/providers/ChatProvider";
 import { useOptionalFeatureConfig } from "@/providers/FeatureConfigProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
@@ -81,7 +77,8 @@ import type {
   ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
-import type { ChatContextValue } from "@/providers/ChatProvider";
+import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
+import type { ChatTranscriptValue } from "@/providers/ChatProvider";
 
 /** The `409` a child card gets while its origin is asking the same question. */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
@@ -132,11 +129,11 @@ const WAITING_REFRESH_MS = 5_000;
  * transcript on screen; a card rendered without one keeps waiting.
  */
 const answeredByLaterTurn = (
-  context: ChatContextValue | null,
+  transcript: ChatTranscriptValue | null,
   messageId: string,
 ): boolean => {
-  const order: readonly string[] | undefined = context?.messageOrder;
-  if (!context || !order) return false;
+  const order: readonly string[] | undefined = transcript?.messageOrder;
+  if (!transcript || !order) return false;
   const index = order.indexOf(messageId);
   return (
     index !== -1 &&
@@ -144,11 +141,31 @@ const answeredByLaterTurn = (
       .slice(index + 1)
       .some(
         (id) =>
-          (context.messages[id] as { role?: string } | undefined)?.role ===
+          (transcript.messages[id] as { role?: string } | undefined)?.role ===
           "user",
       )
   );
 };
+
+const NO_USER_TURNS: UserTurn[] = [];
+
+// A typed message's turn is rebuilt on every read, so turns are compared by
+// what they say.
+const sameUserTurns = (
+  previous: readonly UserTurn[],
+  next: readonly UserTurn[],
+): boolean =>
+  previous.length === next.length &&
+  previous.every(
+    (turn, index) =>
+      turn.text === next[index].text &&
+      turn.whole === next[index].whole &&
+      turn.passages.length === next[index].passages.length &&
+      turn.passages.every(
+        (passage, passageIndex) =>
+          passage === next[index].passages[passageIndex],
+      ),
+  );
 
 /** The `missing` ids of a `400 decisions_mismatch`, or none for anything else. */
 const mismatchedIds = (
@@ -241,8 +258,10 @@ export const McpToolApprovalCard = ({
   const kind = request.kind ?? "mcp_tool";
   // This component is also rendered in isolated stories/tests, where the chat
   // provider is deliberately absent. The in-app path always has it.
-  const chatContext = useContext(ChatContext);
-  const superseded = answeredByLaterTurn(chatContext, messageId);
+  const chatSession = useOptionalChatSession();
+  const superseded = useChatTranscriptSelector((transcript) =>
+    answeredByLaterTurn(transcript, messageId),
+  );
   const approvalItems =
     openItems ??
     approvalItemsOf(request).filter((item) => !isWaitingItem(item));
@@ -283,7 +302,7 @@ export const McpToolApprovalCard = ({
     localResolution === null &&
     // A stop that only waited is over once a later turn withdrew its waits.
     (!superseded || openItemCount > 0);
-  const chatId = chatContext?.currentChatId ?? null;
+  const chatId = chatSession?.currentChatId ?? null;
   // The approval is durable, so it outlives an archive. Continuing it is a
   // write the backend refuses, so the card states that instead of offering it.
   const isArchived = useChatArchived(chatId);
@@ -329,9 +348,9 @@ export const McpToolApprovalCard = ({
   // A waiting task settles on the server, not here: the row is read again
   // until it does, and never while this chat streams or a decision is in
   // flight, whose own refetch would race this one.
-  const refetchMessages = chatContext?.refetchMessages;
+  const refetchMessages = chatSession?.refetchMessages;
   const holdRefresh = useRef(false);
-  holdRefresh.current = isBusy || (chatContext?.isPendingResponse ?? false);
+  holdRefresh.current = isBusy || (chatSession?.isPendingResponse ?? false);
   const watchesTasks = isPending && waiting.length > 0 && isArchived === false;
   useEffect(() => {
     if (!watchesTasks || !refetchMessages) {
@@ -355,8 +374,8 @@ export const McpToolApprovalCard = ({
     decision: ToolApprovalDecision,
     itemDecisions: DecidedApproval[] | undefined,
   ) => {
-    if (chatContext?.continueToolApproval) {
-      await chatContext.continueToolApproval({
+    if (chatSession?.continueToolApproval) {
+      await chatSession.continueToolApproval({
         messageId,
         decision,
         toolCallId: request.tool_call_id,
@@ -417,7 +436,7 @@ export const McpToolApprovalCard = ({
       // cleared, but a stale list row or in-flight poll may still carry it.
       useGenerationStatusStore.getState().markApprovalDecided(chatId);
     }
-    await chatContext?.refetchMessages();
+    await chatSession?.refetchMessages();
   };
 
   const decide = async (
@@ -440,7 +459,7 @@ export const McpToolApprovalCard = ({
     setIsCoveredByParent(false);
     try {
       await submitDecision(decision, itemDecisions);
-      if (chatContext?.continueToolApproval) {
+      if (chatSession?.continueToolApproval) {
         return "sent";
       }
       setLocalResolution(isApprovalDecision(decision) ? "approved" : "denied");
@@ -511,7 +530,7 @@ export const McpToolApprovalCard = ({
               .map((answer) => [answer.approvalId, answer.scopePosition]),
           ),
         );
-        await chatContext?.refetchMessages();
+        await chatSession?.refetchMessages();
         return "conflict";
       }
       const refusal = readConflictRefusal(cause);
@@ -543,7 +562,7 @@ export const McpToolApprovalCard = ({
       setStaged({});
       setStagedPositions({});
       if (alreadyContinued) {
-        await chatContext?.refetchMessages();
+        await chatSession?.refetchMessages();
       }
       return covered || alreadyContinued ? "conflict" : "failed";
     } finally {
@@ -765,17 +784,20 @@ export const McpToolApprovalCard = ({
     [approvalIds.join("\n"), kind, voiceDecisionsOn],
   );
 
-  const chatMessages = chatContext?.messages;
-  const chatOrder = chatContext?.messageOrder;
   const composeSessionId = useComposeSessionStore((state) =>
     chatId === null ? undefined : state.sessionIdByChatKey[chatId],
   );
-  const userTurns = useMemo(
-    () =>
-      composeSessionId !== undefined && chatMessages && chatOrder
-        ? userTurnsBefore(composeSessionId, chatMessages, chatOrder, messageId)
-        : [],
-    [composeSessionId, chatMessages, chatOrder, messageId],
+  const userTurns = useChatTranscriptSelector(
+    (transcript) =>
+      composeSessionId !== undefined && transcript
+        ? userTurnsBefore(
+            composeSessionId,
+            transcript.messages,
+            transcript.messageOrder,
+            messageId,
+          )
+        : NO_USER_TURNS,
+    sameUserTurns,
   );
 
   const isClientTool = kind === "client_tool";
@@ -828,7 +850,7 @@ export const McpToolApprovalCard = ({
       isArchived === false &&
       !isBusy &&
       !isCoveredByParent,
-    responding: chatContext?.isPendingResponse ?? false,
+    responding: chatSession?.isPendingResponse ?? false,
     userTurns,
   });
 
@@ -845,7 +867,7 @@ export const McpToolApprovalCard = ({
   // Held while the chat is still settling the park's own completion (its
   // refetch resets the buffer a decision would seed), and while the decision is
   // in flight.
-  const cardIsBusy = isBusy || (chatContext?.isPendingResponse ?? false);
+  const cardIsBusy = isBusy || (chatSession?.isPendingResponse ?? false);
 
   // Shown under whichever card renders: a refusal, and where the decision can
   // be taken instead when this chat is not the surface that owns it.

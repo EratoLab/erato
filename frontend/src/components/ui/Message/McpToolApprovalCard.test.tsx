@@ -30,7 +30,8 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
-import { ChatContext } from "@/providers/ChatProvider";
+import { ChatContextProviders } from "@/providers/ChatProvider";
+import { testChatValue } from "@/test/chatContextValue";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -189,17 +190,15 @@ const withChatContext = (
   chatId = "chat-1",
   overrides: Partial<ChatContextValue> = {},
 ) => (
-  <ChatContext.Provider
-    value={
-      {
-        currentChatId: chatId,
-        refetchMessages: async () => undefined,
-        ...overrides,
-      } as unknown as ChatContextValue
-    }
+  <ChatContextProviders
+    value={testChatValue({
+      currentChatId: chatId,
+      refetchMessages: async () => undefined,
+      ...overrides,
+    })}
   >
     {ui}
-  </ChatContext.Provider>
+  </ChatContextProviders>
 );
 
 const renderCard = (ui: ReactNode) => {
