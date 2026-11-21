@@ -1247,7 +1247,8 @@ impl ServerHandler for UntrustedTextServer {
 pub const VIEW_MIME_TYPE: &str = "text/html;profile=mcp-app";
 /// The counter view, a minimal MCP Apps view: it shows the `start` the tool
 /// was called with and counts up on a click. Like a view built with the MCP
-/// Apps SDK, it takes the host context's theme as its color scheme.
+/// Apps SDK, it takes the host context's theme as its color scheme, and it
+/// answers `ui/resource-teardown`, logging "mock-counter-view torn down".
 pub const COUNTER_VIEW_URI: &str = "ui://mock/counter";
 /// A view served as plain `text/html`, which a host refuses.
 pub const WRONG_TYPE_VIEW_URI: &str = "ui://mock/wrong-type";
@@ -1283,6 +1284,10 @@ window.addEventListener("message", ({ data }) => {
     parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
   }
   if (data?.method === "ui/notifications/tool-input") count.value = Number(data.params?.arguments?.start ?? 0);
+  if (data?.method === "ui/resource-teardown") {
+    console.log("mock-counter-view torn down");
+    parent.postMessage({ jsonrpc: "2.0", id: data.id, result: {} }, "*");
+  }
 });
 parent.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {
   protocolVersion: "2026-01-26", appCapabilities: {}, appInfo: { name: "mock-counter", version: "1.0.0" } } }, "*");

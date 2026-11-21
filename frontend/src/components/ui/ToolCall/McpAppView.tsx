@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
 import clsx from "clsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useOptionalTheme } from "@/components/providers/ThemeProvider";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
@@ -71,6 +71,39 @@ const toolResultOf = (
   ...(isRecord(structuredContent) ? { structuredContent } : {}),
   ...(isRecord(meta) ? { _meta: meta } : {}),
 });
+
+/** An element that moves a child without reloading it, as `moveBefore` does. */
+interface MovingParent extends Element {
+  moveBefore: (node: Node, child: Node | null) => void;
+}
+
+const movesWithoutReload = (parent: Element): parent is MovingParent =>
+  "moveBefore" in parent;
+
+/**
+ * Tears down the view in `frame` while the frame is still in the page: the
+ * view is told right away, and the frame moves out of sight, still loaded
+ * and inert, until the view has answered or its time is up. A browser that
+ * cannot move a frame without reloading it leaves the frame in place, so the
+ * view cannot answer when React then removes it. Resolves once the view is
+ * disconnected.
+ */
+const tearDownView = (
+  frame: HTMLIFrameElement,
+  connection: ViewConnection,
+): Promise<void> => {
+  const disconnected = connection.disconnect();
+  const holder = document.createElement("div");
+  if (!movesWithoutReload(holder) || !frame.isConnected) return disconnected;
+  holder.setAttribute("inert", "");
+  // Its width, so the view does not lay itself out anew while it ends.
+  holder.style.cssText = `position:fixed;top:0;left:0;width:${frame.offsetWidth}px;height:0;overflow:hidden`;
+  document.body.append(holder);
+  holder.moveBefore(frame, null);
+  return disconnected.finally(() => {
+    holder.remove();
+  });
+};
 
 /**
  * In place of a view that does not show, for a call that returned no files
@@ -163,6 +196,11 @@ const McpAppFrame = ({
     onShown,
   };
   const connection = useRef<ViewConnection>(undefined);
+  // What React adds and removes in place of the frame, which a teardown may
+  // take out while the view ends.
+  const slotRef = useRef<HTMLDivElement>(null);
+  // The last teardown, which ends before the frame shows a view again.
+  const tornDown = useRef<Promise<void>>(undefined);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -191,18 +229,33 @@ const McpAppFrame = ({
     pending.resolve(save);
   };
 
-  useEffect(() => {
+  // A layout effect, so that React runs its cleanup while the frame is still
+  // in the page, and the view can be torn down there.
+  useLayoutEffect(() => {
     const frame = frameRef.current;
-    if (!data || !pageUrl || !frame) return;
+    const slot = slotRef.current;
+    if (!data || !pageUrl || !frame || !slot) return;
+    // Run again (new inputs, or shown again by a Suspense boundary) while a
+    // teardown has the frame: it comes back.
+    if (frame.parentNode !== slot) {
+      if (movesWithoutReload(slot) && frame.isConnected) {
+        slot.moveBefore(frame, null);
+      } else {
+        slot.append(frame);
+      }
+    }
     let connected: ViewConnection | undefined;
     let cancelled = false;
     const startTimer = setTimeout(() => {
       setLate(true);
     }, VIEW_START_TIMEOUT_MS);
     // Loaded with the first view, so the SDK stays out of the main bundle.
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- module path
-    import("@/lib/mcpApps/viewHost")
-      .then(({ connectView }) => {
+    Promise.all([
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- module path
+      import("@/lib/mcpApps/viewHost"),
+      tornDown.current,
+    ])
+      .then(([{ connectView }]) => {
         if (cancelled) return;
         const { input, output, structuredContent, meta, hostContext } =
           call.current;
@@ -226,7 +279,8 @@ const McpAppFrame = ({
             onHeight: setHeight,
             onDownload: (file) =>
               new Promise<boolean>((resolve) => {
-                if (pendingDownload.current) {
+                // One at a time, and none from a view being torn down.
+                if (cancelled || pendingDownload.current) {
                   resolve(false);
                   return;
                 }
@@ -246,7 +300,7 @@ const McpAppFrame = ({
       pendingDownload.current?.resolve(false);
       pendingDownload.current = undefined;
       setDownload(undefined);
-      connected?.disconnect();
+      if (connected) tornDown.current = tearDownView(frame, connected);
       if (connection.current === connected) connection.current = undefined;
     };
   }, [data, pageUrl]);
@@ -271,26 +325,28 @@ const McpAppFrame = ({
   return (
     <>
       {notice}
-      <iframe
-        ref={frameRef}
-        data-testid="mcp-app-view"
-        title={t({
-          id: "trace.tool.appView.title",
-          message: `Interactive view of ${toolName}`,
-        })}
-        // The spec's sandbox for the frame on the sandbox origin; the page
-        // there gives the view's own frame no more than these.
-        sandbox="allow-scripts allow-same-origin"
-        // The sandbox page takes messages from, and sends them to, this origin.
-        referrerPolicy="origin"
-        aria-hidden={height === undefined}
-        // On the message's own background like its text: no frame, padding or
-        // card around the view. The theme's color scheme, which the sandbox
-        // page takes from the host context too: where they differ, the
-        // browser paints an opaque backdrop behind the page.
-        className={clsx("block w-full", height !== undefined && "my-2")}
-        style={{ height: height ?? 0, colorScheme: theme }}
-      />
+      <div ref={slotRef} className="contents">
+        <iframe
+          ref={frameRef}
+          data-testid="mcp-app-view"
+          title={t({
+            id: "trace.tool.appView.title",
+            message: `Interactive view of ${toolName}`,
+          })}
+          // The spec's sandbox for the frame on the sandbox origin; the page
+          // there gives the view's own frame no more than these.
+          sandbox="allow-scripts allow-same-origin"
+          // The sandbox page takes messages from, and sends them to, this origin.
+          referrerPolicy="origin"
+          aria-hidden={height === undefined}
+          // On the message's own background like its text: no frame, padding or
+          // card around the view. The theme's color scheme, which the sandbox
+          // page takes from the host context too: where they differ, the
+          // browser paints an opaque backdrop behind the page.
+          className={clsx("block w-full", height !== undefined && "my-2")}
+          style={{ height: height ?? 0, colorScheme: theme }}
+        />
+      </div>
       <ConfirmationDialog
         isOpen={download !== undefined}
         onClose={() => {
