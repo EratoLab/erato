@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import {
   afterEach,
   beforeAll,
@@ -24,6 +25,7 @@ import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
 import { setClientPlatform } from "@/lib/clientPlatform";
 import { MAX_VIEW_DOWNLOAD_BYTES } from "@/lib/mcpApps/download";
 import { viewStyleVariables } from "@/lib/mcpApps/hostContext";
+import { VIEW_TEARDOWN_TIMEOUT_MS } from "@/lib/mcpApps/viewHost";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { McpAppView, VIEW_START_TIMEOUT_MS } from "./McpAppView";
@@ -90,7 +92,14 @@ const renderView = (
     onShown,
     withTheme = false,
     withFiles,
-  }: { onShown?: () => void; withTheme?: boolean; withFiles?: boolean } = {},
+    strict = false,
+  }: {
+    onShown?: () => void;
+    withTheme?: boolean;
+    withFiles?: boolean;
+    /** In StrictMode, as the app runs, which runs effects twice on mount. */
+    strict?: boolean;
+  } = {},
 ) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -100,7 +109,7 @@ const renderView = (
       <McpAppView part={part} onShown={onShown} withFiles={withFiles} />
     </QueryClientProvider>
   );
-  return render(
+  const tree = (
     <I18nProvider i18n={i18n}>
       {withTheme ? (
         <ThemeProvider
@@ -113,8 +122,12 @@ const renderView = (
       ) : (
         view
       )}
-    </I18nProvider>,
+    </I18nProvider>
   );
+  return {
+    ...render(strict ? <StrictMode>{tree}</StrictMode> : tree),
+    queryClient,
+  };
 };
 
 /**
@@ -230,6 +243,60 @@ const startedView = async () => {
   return { ...view, saved, blobs, answer };
 };
 
+/**
+ * Stands in for `Element.moveBefore`, which jsdom lacks. A browser keeps a
+ * frame it moves this way loaded; jsdom moves it as `insertBefore` does and
+ * gives it a new window, so the view answers from the frame's window as it
+ * is then.
+ */
+const stubMoveBefore = () => {
+  const moveBefore = vi.fn(function (
+    this: Element,
+    node: Node,
+    child: Node | null,
+  ) {
+    this.insertBefore(node, child);
+  });
+  Object.defineProperty(Element.prototype, "moveBefore", {
+    configurable: true,
+    writable: true,
+    value: moveBefore,
+  });
+  return moveBefore;
+};
+
+/** A message from the view, from the window its frame has now. */
+const fromFrameNow = (frame: HTMLIFrameElement, data: unknown) => {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data,
+      origin: SANDBOX_ORIGIN,
+      source: frame.contentWindow,
+    }),
+  );
+};
+
+type LoadedFrame = Awaited<ReturnType<typeof loadedFrame>>;
+
+/**
+ * For each `ui/resource-teardown` the view is sent from now on: whether its
+ * frame was then still in its place in the page.
+ */
+const framePlaceAtTeardown = (view: LoadedFrame) => {
+  const inPlace: boolean[] = [];
+  view.posted.mockImplementation((message: unknown) => {
+    if ((message as { method?: unknown }).method === "ui/resource-teardown") {
+      inPlace.push(
+        view.frame.isConnected && view.frame.closest("[inert]") === null,
+      );
+    }
+  });
+  return inPlace;
+};
+
+const teardownOf = (view: LoadedFrame) =>
+  view.sent().find((message) => message.method === "ui/resource-teardown");
+
 describe("McpAppView", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -246,6 +313,10 @@ describe("McpAppView", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(Element.prototype, "moveBefore");
+    document.querySelectorAll("[inert]").forEach((holder) => {
+      holder.remove();
+    });
     setClientPlatform("web");
   });
 
@@ -703,6 +774,123 @@ describe("McpAppView", () => {
     });
     expect(sent()[0]).toMatchObject({
       method: "ui/notifications/sandbox-resource-ready",
+    });
+  });
+
+  it("tells the view it is torn down while its frame is in the page, and keeps the frame loaded out of sight until the view answers", async () => {
+    const moveBefore = stubMoveBefore();
+    const { unmount } = renderView(call(), { strict: true });
+    const view = await startedView();
+    const inPlace = framePlaceAtTeardown(view);
+
+    unmount();
+
+    const teardown = teardownOf(view);
+    expect(teardown).toMatchObject({ jsonrpc: "2.0", params: {} });
+    expect(inPlace).toEqual([true]);
+    // Moved out of the message, which React has removed, but still in the
+    // page, inert, and out of sight...
+    expect(moveBefore).toHaveBeenCalledWith(view.frame, null);
+    expect(view.frame.isConnected).toBe(true);
+    const holder = view.frame.closest<HTMLElement>("[inert]");
+    expect(holder?.style.height).toBe("0px");
+    expect(holder?.style.overflow).toBe("hidden");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(view.frame.isConnected).toBe(true);
+
+    // ...until the view answers.
+    fromFrameNow(view.frame, { jsonrpc: "2.0", id: teardown?.id, result: {} });
+    await waitFor(() => {
+      expect(view.frame.isConnected).toBe(false);
+    });
+    expect(document.querySelector("[inert]")).toBeNull();
+  });
+
+  it("removes the frame of a view that does not answer its teardown in time", async () => {
+    stubMoveBefore();
+    const { unmount } = renderView(call());
+    const view = await startedView();
+    vi.useFakeTimers();
+    try {
+      unmount();
+      expect(teardownOf(view)).toBeDefined();
+
+      await vi.advanceTimersByTimeAsync(VIEW_TEARDOWN_TIMEOUT_MS - 1);
+      expect(view.frame.isConnected).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(() => {
+        expect(view.frame.isConnected).toBe(false);
+      });
+      expect(document.querySelector("[inert]")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes the frame of a view that never initialized at once, without a teardown", async () => {
+    stubMoveBefore();
+    const { unmount } = renderView(call());
+    const view = await loadedFrame();
+    view.fromFrame(PROXY_READY);
+
+    unmount();
+
+    await waitFor(() => {
+      expect(view.frame.isConnected).toBe(false);
+    });
+    expect(teardownOf(view)).toBeUndefined();
+  });
+
+  it("still tells the view while its frame is in the page where the browser cannot move a frame without reloading it", async () => {
+    const { unmount } = renderView(call());
+    const view = await startedView();
+    const inPlace = framePlaceAtTeardown(view);
+
+    unmount();
+
+    expect(inPlace).toEqual([true]);
+    // The frame goes with the message: the view cannot answer.
+    expect(view.frame.isConnected).toBe(false);
+  });
+
+  it("tears the view down in its place when its view changes, and shows the new one in the same frame after the old one answered", async () => {
+    stubMoveBefore();
+    const { queryClient } = renderView(call());
+    const view = await startedView();
+    const nextHtml = "<!doctype html><p>counter, again</p>";
+
+    act(() => {
+      queryClient.setQueriesData({}, () => viewResponse({ html: nextHtml }));
+    });
+
+    await waitFor(() => {
+      expect(teardownOf(view)).toBeDefined();
+    });
+    const teardown = teardownOf(view);
+    // Back in its place in the message, in the same commit.
+    expect(screen.getByTestId("mcp-app-view")).toBe(view.frame);
+    expect(view.frame.closest("[inert]")).toBeNull();
+
+    const answeredFrom = view.frame.contentWindow;
+    fromFrameNow(view.frame, { jsonrpc: "2.0", id: teardown?.id, result: {} });
+    // The new view loads the sandbox page anew, which in jsdom is a new
+    // window, and is handed the new HTML.
+    await waitFor(() => {
+      expect(view.frame.contentWindow).not.toBe(answeredFrom);
+    });
+    const frameWindow = view.frame.contentWindow;
+    if (!frameWindow) throw new Error("The frame has no window.");
+    const posted = vi.spyOn(frameWindow, "postMessage");
+    fromFrameNow(view.frame, PROXY_READY);
+    await waitFor(() => {
+      expect(posted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "ui/notifications/sandbox-resource-ready",
+          params: { html: nextHtml, csp: CSP },
+        }),
+        SANDBOX_ORIGIN,
+      );
     });
   });
 });
