@@ -1,3 +1,5 @@
+import { wordLongestIncreasing } from "@erato/frontend/word-review";
+
 import {
   START_OF_DOCUMENT,
   wordBlockIndex,
@@ -16,26 +18,6 @@ import type {
 
 const MAX_NAMED_PARTS = 3;
 const PASSAGE_START_CHARS = 40;
-
-/** Indexes of a longest run of values in increasing order. */
-function inOrder(values: readonly number[]): Set<number> {
-  const tails: number[] = [];
-  const previous = new Array<number>(values.length).fill(-1);
-  values.forEach((value, k) => {
-    let lo = 0;
-    let hi = tails.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (values[tails[mid]] < value) lo = mid + 1;
-      else hi = mid;
-    }
-    if (lo > 0) previous[k] = tails[lo - 1];
-    tails[lo] = k;
-  });
-  const kept = new Set<number>();
-  for (let k = tails.at(-1) ?? -1; k >= 0; k = previous[k]) kept.add(k);
-  return kept;
-}
 
 /** The blocks a plan writes: the sources it replaces, deletes or moves, and the blocks its
  * insertions and new notes are anchored to. A kept source counts as moved when it is out
@@ -77,7 +59,7 @@ export function wordPlanWrittenBlocks(
   for (const story of plan.stories ?? [])
     if (story.anchor) add(story.anchor.block);
   if (!moves) return written;
-  const kept = inOrder(placed.map((p) => p.at));
+  const kept = wordLongestIncreasing(placed.map((p) => p.at));
   placed.forEach((p, k) => {
     if (!kept.has(k)) p.source.forEach(add);
   });

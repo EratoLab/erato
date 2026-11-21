@@ -275,6 +275,37 @@ describe("buildWordArtifact", () => {
       });
     });
 
+    it("shows accepted comment changes over a section plan that never finished", () => {
+      const sectionPlan = {
+        content_type: "tool_use",
+        tool_call_id: "call-plan",
+        tool_name: "plan_document_sections",
+        status: "success",
+        input: { snapshot: "s", readToken: "t", intent: "x", rows: [] },
+        output: {
+          status: "success",
+          result: { draft_id: "draft", revision: 1, rows: [] },
+        },
+      } as unknown as ContentPart;
+      const artifact = buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: selectionInfo([
+          "word.apply_document_plan",
+          "word.add_comments",
+        ]),
+        content: [sectionPlan, ...accepted("word.add_comments")],
+        messageId: "m1",
+        capture,
+      });
+      expect(artifact).toMatchObject({
+        submittedCard: {
+          toolCallId: "call-7",
+          language: "erato-word-comments-add",
+        },
+        proposedClientAction: "word.add_comments",
+      });
+    });
+
     it("ships dark: no card where the facet does not offer the action", () => {
       const artifact = buildWordArtifact({
         facetId: "word_selection",

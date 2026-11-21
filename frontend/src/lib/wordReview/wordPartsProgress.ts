@@ -38,6 +38,19 @@ export interface WordPartsStructure {
   renames: { row: number; title: string; newTitle: string }[];
 }
 
+/** A row's status in the pane's section plan and finish receipts. */
+export type WordPartReceiptStatus =
+  | "waiting"
+  | "ready"
+  | "kept"
+  | "deleted"
+  | "not_written"
+  | "changed_in_word";
+
+/** Why the finish left the reordering out: the document changed in Word, and reordering replaces
+ * the whole document, which Apply then refuses. */
+export type WordPartsReorderingLeftOut = "changed_in_word";
+
 export interface WordPartsProgress {
   /** Changes exactly when something the card shows changes. */
   key: string;
@@ -51,6 +64,8 @@ export interface WordPartsProgress {
   finishing: boolean;
   /** The accepted finish's call id. */
   finished?: string;
+  /** The accepted finish left the reordering out. */
+  reorderingLeftOut?: WordPartsReorderingLeftOut;
   /** The turn ended without an accepted finish. */
   stopped: boolean;
 }
@@ -151,7 +166,8 @@ export interface WordPartsLayout {
   renamed: number[];
 }
 
-const runsOf = (refs: readonly number[]) => {
+/** Consecutive block indexes, as runs in the order given. */
+export const wordIndexRuns = (refs: readonly number[]): number[][] => {
   const runs: number[][] = [];
   for (const at of refs) {
     const last = runs.at(-1);
@@ -161,8 +177,8 @@ const runsOf = (refs: readonly number[]) => {
   return runs;
 };
 
-/** The positions of one longest strictly increasing subsequence. */
-function longestIncreasing(values: readonly number[]): Set<number> {
+/** The positions of one longest strictly increasing subsequence: what keeps its place. */
+export function wordLongestIncreasing(values: readonly number[]): Set<number> {
   const tails: number[] = [];
   const previous = new Array<number>(values.length).fill(-1);
   values.forEach((value, k) => {
@@ -194,12 +210,12 @@ export function wordPartsLayout(
   const pieces: { row: number; start: number }[] = [];
   rows.forEach((row, r) => {
     if (row.renamed) renamed.push(r);
-    const runs = runsOf(row.refs);
+    const runs = wordIndexRuns(row.refs);
     if (row.action === "rewrite" && runs.length > 1) merged.push(r);
     else if (row.action !== "delete")
       for (const run of runs) pieces.push({ row: r, start: run[0] });
   });
-  const kept = longestIncreasing(pieces.map((piece) => piece.start));
+  const kept = wordLongestIncreasing(pieces.map((piece) => piece.start));
   const moved = [
     ...new Set(pieces.filter((_, k) => !kept.has(k)).map((piece) => piece.row)),
   ].sort((a, b) => a - b);
@@ -257,15 +273,20 @@ const isFinish = (input: unknown) =>
     ? input.finish === true
     : typeof input === "string" && FINISH_IN_PREVIEW.test(input);
 
-const FINISHED_STATES: Record<string, WordPartsRowState> = {
+const FINISHED_STATES: Partial<
+  Record<WordPartReceiptStatus, WordPartsRowState>
+> = {
   ready: "ready",
+  deleted: "ready",
   not_written: "not-written",
   changed_in_word: "changed-in-word",
 };
 
+/** `leftOut`: rows the finish kept as they were, so they neither rename nor join blocks. */
 function structureOf(
   receipt: readonly ReceiptRow[],
   inputRows: unknown,
+  leftOut: (row: ReceiptRow) => boolean,
 ): WordPartsStructure | undefined {
   if (!Array.isArray(inputRows) || inputRows.length !== receipt.length)
     return undefined;
@@ -275,9 +296,9 @@ function structureOf(
   if (refs.some((indexes) => !indexes)) return undefined;
   const layout = wordPartsLayout(
     receipt.map((row, k) => ({
-      action: row.action,
+      action: leftOut(row) ? "keep" : row.action,
       refs: refs[k]!,
-      renamed: row.newTitle !== undefined,
+      renamed: row.newTitle !== undefined && !leftOut(row),
     })),
   );
   const named = (r: number) => receipt[r].newTitle ?? receipt[r].title;
@@ -329,7 +350,9 @@ export function wordPartsProgress(
   );
   const active = new Map<number, "writing" | "checking" | "retry">();
   let finishing = false;
-  let finish: { id: string; rows?: ReceiptRow[] } | undefined;
+  let finish:
+    | { id: string; rows?: ReceiptRow[]; reordering?: unknown }
+    | undefined;
   for (const part of content.slice(at + 1)) {
     if (part.content_type !== "tool_use") continue;
     if (part.tool_name === WORD_WRITE_SECTION_TOOL) {
@@ -350,9 +373,11 @@ export function wordPartsProgress(
     } else if (part.tool_name === WORD_SUBMIT_PLAN_TOOL) {
       if (isAcceptedWordPartsFinish(part)) {
         finishing = false;
+        const result = successResult(part);
         finish = {
           id: part.tool_call_id ?? "",
-          rows: receiptRows(successResult(part)?.rows),
+          rows: receiptRows(result?.rows),
+          reordering: result?.reordering,
         };
       } else
         finishing =
@@ -360,15 +385,22 @@ export function wordPartsProgress(
           isFinish(part.input);
     }
   }
+  const finished = (row: ReceiptRow) => {
+    const status = finish?.rows?.[row.row - 1]?.status;
+    return status
+      ? FINISHED_STATES[status as WordPartReceiptStatus]
+      : undefined;
+  };
+  // The finish receipt is the pane's own rule for what Apply writes, so it decides first.
   const state = (row: ReceiptRow): WordPartsRowState => {
-    if (row.action === "delete") return "ready";
-    if (finish) {
-      const status = finish.rows?.[row.row - 1]?.status;
+    if (finish)
       return (
-        (status ? FINISHED_STATES[status] : undefined) ??
-        (written.has(row.row) ? "ready" : "not-written")
+        finished(row) ??
+        (row.action === "delete" || written.has(row.row)
+          ? "ready"
+          : "not-written")
       );
-    }
+    if (row.action === "delete") return "ready";
     const call = generating ? active.get(row.row) : undefined;
     if (call) return call === "retry" ? "writing" : call;
     if (written.has(row.row)) return "ready";
@@ -387,7 +419,15 @@ export function wordPartsProgress(
       : [],
   );
   const input: Record<string, unknown> = object(plan.input) ? plan.input : {};
-  const structure = structureOf(receipt, input.rows);
+  const structure = structureOf(
+    receipt,
+    input.rows,
+    (row) => finished(row) === "changed-in-word",
+  );
+  const reorderingLeftOut =
+    finish?.reordering === "changed_in_word"
+      ? (finish.reordering as WordPartsReorderingLeftOut)
+      : undefined;
   const progress = {
     callId: plan.tool_call_id ?? "",
     draftId,
@@ -398,6 +438,7 @@ export function wordPartsProgress(
     ...(structure ? { structure } : {}),
     finishing: generating && finishing,
     ...(finish ? { finished: finish.id } : {}),
+    ...(structure && reorderingLeftOut ? { reorderingLeftOut } : {}),
     stopped: !finish && !generating,
   };
   return { key: JSON.stringify(progress), ...progress };

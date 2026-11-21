@@ -8,6 +8,7 @@ import {
 } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { completeWordRead } from "../../../test/mocks/word/partsTurn";
 import { wordDocumentFileToOoxml } from "../wordDocumentPackage";
 import { createWordDocumentPartExecutors } from "../wordDocumentPartTools";
 import { finishWordParts, wordPartsFinishRejected } from "../wordDocumentParts";
@@ -48,28 +49,14 @@ async function open() {
   );
   const session = new WordDocumentReadSession();
   session.activate(snapshot, context());
-  let cursor: string | null = null;
-  let readToken: string | undefined;
-  do {
-    const page = await session.execute(
-      { snapshot: snapshot.token, cursor },
-      context(),
-    );
-    if (!page.ok) throw new Error(page.error);
-    const result = page.result as {
-      nextCursor: string | null;
-      readToken?: string;
-    };
-    cursor = result.nextCursor;
-    readToken = result.readToken;
-  } while (cursor);
+  const readToken = await completeWordRead(session, snapshot, context);
   const parts = createWordDocumentPartExecutors(session);
   const submit = createWordDocumentSubmissionExecutor(session);
   const base = { snapshot: snapshot.token };
   return {
     snapshot,
     session,
-    readToken: readToken!,
+    readToken,
     plan: (input: Record<string, unknown>) =>
       parts.plan({ ...base, readToken, ...input }, context()),
     write: (draft: string, row: number, ops: unknown, call = context()) =>
@@ -243,6 +230,22 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
       rejection(await doc.write(draft_id, 5, [{ keep: "b349-b380" }]))
         ?.validationErrors?.[0],
     ).toMatchObject({ path: "/ops/0/keep", code: "source-ownership" });
+    expect(
+      rejection(
+        await doc.write(draft_id, 5, [
+          { keep: "b350-b353" },
+          { keep: "b359-b380" },
+          { replace: "b354-b358", text: "Neu." },
+        ]),
+      )?.validationErrors,
+    ).toEqual([
+      {
+        path: "/ops/1/keep",
+        code: "source-order",
+        message:
+          "b359 is out of order; the ops use row 5's blocks in the order of its source, b350-b380. To move blocks, change the row order in the section plan.",
+      },
+    ]);
     expect(
       rejection(await doc.write(draft_id, 1, [{ keep: "b1-b98" }]))
         ?.validationErrors?.[0],

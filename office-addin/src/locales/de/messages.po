@@ -5346,7 +5346,7 @@ msgstr "Dokumentänderungen in Teilen"
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx
 msgid "officeAddin.word.parts.stopped"
-msgstr "Erato hat vor dem Abschluss aufgehört, daher gibt es nichts zu übernehmen."
+msgstr "Erato hat vor dem Abschluss aufgehört, daher gibt es nichts zu übernehmen. Senden Sie Ihre Anfrage erneut, um fortzufahren."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx

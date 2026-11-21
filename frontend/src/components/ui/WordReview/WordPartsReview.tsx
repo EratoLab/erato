@@ -1,13 +1,21 @@
 import { plural, t } from "@lingui/core/macro";
-import { useEffect, useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
-import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
-import { Row } from "@/components/ui/Controls/Row";
 import { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 
-import { WordPlanChangeRow } from "./WordPlanChangeRow";
-import { WordCheckFirst } from "./WordReviewCardParts";
+import {
+  planRowStatusLabel,
+  WORD_PILL_TONE,
+  WordPlanChangeRow,
+  WordReviewRow,
+} from "./WordPlanChangeRow";
+import {
+  toggledKeys,
+  useWordReviewJumpFocus,
+  WordCheckFirst,
+  WordReviewHeader,
+} from "./WordReviewCardParts";
 import { formatList } from "./wordPlanLabels";
 
 import type { WordAuthoringSnapshot } from "@/lib/wordReview/wordDocumentPlan";
@@ -33,9 +41,9 @@ export interface WordPartsLeftOut {
 export interface WordPartsReviewProps {
   progress: WordPartsProgress;
   title: string;
-  /** Between the header and the rows: the change's Apply, on top of the card. */
+  /** Between Check first and the rows: the change's Apply, on top of the card. */
   top?: ReactNode;
-  /** The finished change's review rows per section plan row; a row without them doesn't open. */
+  /** The review rows of what Apply writes, per section plan row; a row without them doesn't open. */
   changes?: ReadonlyMap<number, readonly WordPlanRow[]>;
   risks?: readonly WordPlanRisk[];
   snapshot?: WordAuthoringSnapshot;
@@ -44,30 +52,26 @@ export interface WordPartsReviewProps {
   /** Offers Leave out per row and for the reordering when set. */
   leftOut?: WordPartsLeftOut;
   onLeaveOut?: (target: number | "structure", out: boolean) => void;
-  /** Hooks for the follow-up actions; their buttons show only when set. */
+  /** Hooks for the follow-up actions; without them the card says the step in words. */
   onRedo?: (row: WordPartsSectionRow) => void;
   onWriteMissing?: () => void;
   /** The change holds content only Word draws, as the plan review says. */
   checkInWord?: boolean;
 }
 
-const NEUTRAL = "bg-theme-bg-secondary text-theme-fg-secondary";
-const SUCCESS = "bg-theme-success-bg text-theme-success-fg";
-const INFO = "bg-theme-info-bg text-theme-info-fg";
-
-type Shown = WordPartsSectionRow["state"] | "left-out" | "removed";
+type Shown = WordPartsSectionRow["state"] | "left-out" | "removed" | "written";
 
 function pill(state: Shown): { label: string; tone: string } {
   switch (state) {
     case "waiting":
       return {
         label: t({ id: "officeAddin.word.parts.waiting", message: "Waiting" }),
-        tone: NEUTRAL,
+        tone: WORD_PILL_TONE.neutral,
       };
     case "writing":
       return {
         label: t({ id: "officeAddin.word.parts.writing", message: "Writing…" }),
-        tone: INFO,
+        tone: WORD_PILL_TONE.info,
       };
     case "checking":
       return {
@@ -75,17 +79,23 @@ function pill(state: Shown): { label: string; tone: string } {
           id: "officeAddin.word.parts.checking",
           message: "Checking…",
         }),
-        tone: INFO,
+        tone: WORD_PILL_TONE.info,
       };
     case "ready":
       return {
         label: t({ id: "officeAddin.word.parts.ready", message: "Ready" }),
-        tone: SUCCESS,
+        tone: WORD_PILL_TONE.success,
+      };
+    case "written":
+      return {
+        label: t({ id: "officeAddin.word.parts.written", message: "Written" }),
+        tone: WORD_PILL_TONE.neutral,
       };
     case "removed":
+      // Neutral, not the plan rows' red: nothing on this card is red.
       return {
-        label: t({ id: "officeAddin.word.parts.removed", message: "Removed" }),
-        tone: NEUTRAL,
+        label: planRowStatusLabel("removed"),
+        tone: WORD_PILL_TONE.neutral,
       };
     case "not-written":
       return {
@@ -93,13 +103,13 @@ function pill(state: Shown): { label: string; tone: string } {
           id: "officeAddin.word.parts.notWritten",
           message: "Not written",
         }),
-        tone: NEUTRAL,
+        tone: WORD_PILL_TONE.neutral,
       };
     case "changed-in-word":
     case "left-out":
       return {
         label: t({ id: "officeAddin.word.parts.leftOut", message: "Left out" }),
-        tone: NEUTRAL,
+        tone: WORD_PILL_TONE.neutral,
       };
   }
 }
@@ -109,6 +119,8 @@ const untitled = () =>
 
 function progressText(progress: WordPartsProgress): string | undefined {
   const rewrites = progress.rows.filter((row) => row.action === "rewrite");
+  // A stopped change has nothing to apply, so it counts nothing as ready.
+  if (progress.stopped) return undefined;
   if (progress.finishing)
     return t({
       id: "officeAddin.word.parts.finishing",
@@ -206,71 +218,6 @@ function namedRows(rows: readonly WordPartsSectionRow[]): string {
   });
 }
 
-function PartsRow({
-  rowKey,
-  title,
-  description,
-  shown,
-  detail,
-  open,
-  onOpenChange,
-}: {
-  rowKey: string;
-  title: string;
-  description?: string;
-  shown: Shown;
-  detail?: ReactNode;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const id = useId();
-  const { label, tone } = pill(shown);
-  const trailing = <SettledInfoPill label={label} toneClassName={tone} />;
-  if (!detail)
-    return (
-      <li className="word-review__row" data-parts-row={rowKey}>
-        <Row
-          variant="list"
-          as="div"
-          interactive={false}
-          className="word-review__row-toggle"
-          description={description}
-          trailing={trailing}
-        >
-          {title}
-        </Row>
-      </li>
-    );
-  return (
-    <li
-      className={
-        open ? "word-review__row word-review__row--open" : "word-review__row"
-      }
-      data-parts-row={rowKey}
-    >
-      <Row
-        variant="list"
-        as="button"
-        className="word-review__row-toggle"
-        aria-expanded={open}
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
-        aria-controls={`${id}-detail`}
-        onClick={() => onOpenChange(!open)}
-        leading={<DisclosureChevron open={open} />}
-        description={description}
-        trailing={trailing}
-      >
-        {title}
-      </Row>
-      {open && (
-        <div id={`${id}-detail`} className="word-review__detail">
-          {detail}
-        </div>
-      )}
-    </li>
-  );
-}
-
 /**
  * A change in parts, row by row: the Structure row for what moves, then one row per section the
  * section plan rewrites or removes, each named by the document's own title. Rows fill while Erato
@@ -296,35 +243,18 @@ export function WordPartsReview({
   const [openChanges, setOpenChanges] = useState<ReadonlySet<string>>(
     new Set(),
   );
-  const [focusKey, setFocusKey] = useState<string | null>(null);
-  useEffect(() => {
-    if (!focusKey) return;
-    const target = Array.from(
-      containerRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ??
-        [],
-    ).find((item) => item.dataset.rowKey === focusKey);
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
-    const focusable = target?.querySelector<HTMLElement>("button, [tabindex]");
-    focusable?.focus();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in jsdom
-    focusable?.scrollIntoView?.({ block: "nearest" });
-    setFocusKey(null);
-  }, [focusKey]);
+  const setFocusKey = useWordReviewJumpFocus(containerRef);
   const toggle = (
     set: (update: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void,
     key: string,
     next: boolean,
-  ) =>
-    set((prev) => {
-      const copy = new Set(prev);
-      if (next) copy.add(key);
-      else copy.delete(key);
-      return copy;
-    });
-  const jump = (rowKey: string) => {
-    const owner = [...(changes ?? [])].find(([, rows]) =>
+  ) => set((prev) => toggledKeys(prev, key, next));
+  const ownerOf = (rowKey: string) =>
+    [...(changes ?? [])].find(([, rows]) =>
       rows.some((row) => row.key === rowKey),
     )?.[0];
+  const jump = (rowKey: string) => {
+    const owner = ownerOf(rowKey);
     if (owner === undefined) return;
     toggle(setOpen, `row:${owner}`, true);
     toggle(setOpenChanges, rowKey, true);
@@ -334,6 +264,7 @@ export function WordPartsReview({
   const merged = new Set(structure?.merges.map((merge) => merge.row));
   const reorders = !!structure?.moves.length || !!structure?.merges.length;
   const editable = !!leftOut && !!onLeaveOut;
+  const reorderingOut = !!progress.reorderingLeftOut || !!leftOut?.structure;
   const leaveOutButton = (
     target: number | "structure",
     out: boolean,
@@ -369,24 +300,42 @@ export function WordPartsReview({
         </Button>
       </div>
     );
+  const withReordering = (row: WordPartsSectionRow) =>
+    reorderingOut && merged.has(row.row);
+  const isOut = (row: WordPartsSectionRow) =>
+    row.state === "changed-in-word" ||
+    withReordering(row) ||
+    !!leftOut?.rows.has(row.row);
+  const finished = progress.finished !== undefined;
+  // "Apply the rest" only while something is left for Apply to write.
+  const restApplies =
+    finished &&
+    (progress.rows.some((row) => row.state === "ready" && !isOut(row)) ||
+      (!!structure && !reorderingOut));
   const notWritten = progress.rows.filter((row) => row.state === "not-written");
+  const changedInWord = progress.rows.filter(
+    (row) => row.state === "changed-in-word",
+  );
   const gaps = namedRows(notWritten);
+  const redone = namedRows(changedInWord);
   const status = progressText(progress);
   return (
     <div ref={containerRef} className="word-plan-review">
-      <div className="word-review__header">
-        <h3>{title}</h3>
-        {progress.intent && (
-          <p className="word-review__hint">{progress.intent}</p>
-        )}
+      <WordReviewHeader title={title} scope={progress.intent}>
         {status && (
           <p className="word-review__hint" role="status">
             {status}
           </p>
         )}
-      </div>
-      <div className="word-plan-review__section word-parts__top">{top}</div>
-      <WordCheckFirst risks={risks} onJump={jump} />
+      </WordReviewHeader>
+      <WordCheckFirst
+        risks={risks}
+        onJump={jump}
+        jumpable={(rowKey) => ownerOf(rowKey) !== undefined}
+      />
+      {top && (
+        <div className="word-plan-review__section word-parts__top">{top}</div>
+      )}
       <ul
         className="word-parts__rows"
         aria-label={t({
@@ -395,14 +344,27 @@ export function WordPartsReview({
         })}
       >
         {structure && (
-          <PartsRow
+          <WordReviewRow
             rowKey="structure"
             title={t({
               id: "officeAddin.word.parts.structure",
               message: "Structure",
             })}
-            description={structureSummary(structure)}
-            shown={leftOut?.structure ? "left-out" : "ready"}
+            description={
+              progress.reorderingLeftOut
+                ? t({
+                    id: "officeAddin.word.parts.reorderingChangedInWord",
+                    message:
+                      "Reordering replaces the whole document, which changed in Word meanwhile",
+                  })
+                : structureSummary(structure)
+            }
+            pill={
+              // A stopped change applies nothing, so its planned structure has no state.
+              !progress.stopped && (
+                <Pill shown={reorderingOut ? "left-out" : "ready"} />
+              )
+            }
             open={open.has("structure")}
             onOpenChange={(next) => toggle(setOpen, "structure", next)}
             detail={
@@ -412,7 +374,8 @@ export function WordPartsReview({
                     <li key={k}>{line}</li>
                   ))}
                 </ul>
-                {leaveOutButton("structure", !!leftOut?.structure, reorders)}
+                {!progress.reorderingLeftOut &&
+                  leaveOutButton("structure", !!leftOut?.structure, reorders)}
               </>
             }
           />
@@ -420,18 +383,13 @@ export function WordPartsReview({
         {progress.rows.map((row) => {
           const key = `row:${row.row}`;
           const name = row.title || untitled();
-          const withReordering = !!leftOut?.structure && merged.has(row.row);
-          const out =
-            row.state === "changed-in-word" ||
-            withReordering ||
-            !!leftOut?.rows.has(row.row);
+          const out = isOut(row);
           const rowChanges = changes?.get(row.row) ?? [];
           const canLeaveOut =
-            row.state === "ready" && !withReordering && editable;
+            row.state === "ready" && !withReordering(row) && editable;
+          const redo = !!onRedo && row.state === "changed-in-word";
           const detail =
-            rowChanges.length ||
-            canLeaveOut ||
-            (onRedo && row.state === "changed-in-word") ? (
+            rowChanges.length || canLeaveOut || redo ? (
               <>
                 {!!rowChanges.length && (
                   <ul className="word-review__list word-parts__changes">
@@ -454,7 +412,7 @@ export function WordPartsReview({
                   </ul>
                 )}
                 {canLeaveOut && leaveOutButton(row.row, out)}
-                {onRedo && row.state === "changed-in-word" && (
+                {redo && (
                   <div className="word-review__actions">
                     <Button
                       type="button"
@@ -472,7 +430,7 @@ export function WordPartsReview({
               </>
             ) : undefined;
           return (
-            <PartsRow
+            <WordReviewRow
               key={key}
               rowKey={key}
               title={name}
@@ -482,19 +440,25 @@ export function WordPartsReview({
                       id: "officeAddin.word.parts.changedInWord",
                       message: "Changed in Word while Erato wrote it",
                     })
-                  : withReordering
+                  : withReordering(row)
                     ? t({
                         id: "officeAddin.word.parts.leftOutWithReordering",
                         message: "Left out with the reordering",
                       })
                     : undefined
               }
-              shown={
-                out
-                  ? "left-out"
-                  : row.action === "delete" && row.state === "ready"
-                    ? "removed"
-                    : row.state
+              pill={
+                <Pill
+                  shown={
+                    out
+                      ? "left-out"
+                      : row.action === "delete" && row.state === "ready"
+                        ? "removed"
+                        : progress.stopped && row.state === "ready"
+                          ? "written"
+                          : row.state
+                  }
+                />
               }
               open={open.has(key)}
               onOpenChange={(next) => toggle(setOpen, key, next)}
@@ -503,29 +467,63 @@ export function WordPartsReview({
           );
         })}
       </ul>
-      {!!notWritten.length &&
-        (progress.finished !== undefined || progress.stopped) && (
-          <div className="word-plan-review__section word-parts__gap">
+      {(!!notWritten.length && (finished || progress.stopped)) ||
+      (finished && !onRedo && !!changedInWord.length) ||
+      (finished && !!progress.reorderingLeftOut) ? (
+        <div className="word-plan-review__section word-parts__gap">
+          {!!notWritten.length && (finished || progress.stopped) && (
             <p className="word-review__hint">
               {t({
                 id: "officeAddin.word.parts.didntGetTo",
                 message: `Erato didn't get to ${gaps}.`,
+              })}{" "}
+              {finished &&
+                !onWriteMissing &&
+                (restApplies
+                  ? t({
+                      id: "officeAddin.word.parts.writeMissingAfterApply",
+                      message:
+                        "Apply the rest, then ask Erato to write the missing sections.",
+                    })
+                  : t({
+                      id: "officeAddin.word.parts.writeMissingNext",
+                      message:
+                        "Ask Erato to write the missing sections in your next message.",
+                    }))}
+            </p>
+          )}
+          {finished && !!notWritten.length && onWriteMissing && (
+            <Button type="button" variant="secondary" onClick={onWriteMissing}>
+              {t({
+                id: "officeAddin.word.parts.writeMissing",
+                message: "Write the missing sections",
+              })}
+            </Button>
+          )}
+          {finished && !onRedo && !!changedInWord.length && (
+            <p className="word-review__hint">
+              {restApplies
+                ? t({
+                    id: "officeAddin.word.parts.redoAfterApply",
+                    message: `Apply the rest, then ask Erato to redo ${redone}.`,
+                  })
+                : t({
+                    id: "officeAddin.word.parts.redoNext",
+                    message: `Ask Erato to redo ${redone} in your next message.`,
+                  })}
+            </p>
+          )}
+          {finished && !!progress.reorderingLeftOut && (
+            <p className="word-review__hint">
+              {t({
+                id: "officeAddin.word.parts.reorderAfterApply",
+                message:
+                  "Apply the rest, then ask Erato to reorder the sections again.",
               })}
             </p>
-            {onWriteMissing && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onWriteMissing}
-              >
-                {t({
-                  id: "officeAddin.word.parts.writeMissing",
-                  message: "Write the missing sections",
-                })}
-              </Button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
+      ) : null}
       {checkInWord && (
         <p className="word-review__hint word-plan-review__hint">
           {t({
@@ -537,4 +535,9 @@ export function WordPartsReview({
       )}
     </div>
   );
+}
+
+function Pill({ shown }: { shown: Shown }) {
+  const { label, tone } = pill(shown);
+  return <SettledInfoPill label={label} toneClassName={tone} />;
 }

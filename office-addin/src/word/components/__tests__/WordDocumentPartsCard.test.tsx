@@ -18,11 +18,19 @@ import {
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
-import { recordPartsTurn } from "../../../test/mocks/word/partsTurn";
+import {
+  recordPartsTurn,
+  wordCaptureJournal,
+} from "../../../test/mocks/word/partsTurn";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
 import { captureWordAuthoringSnapshot } from "../../utils/wordDocumentXml";
+import {
+  setWordInPlaceCapabilitiesForTests,
+  wordInPlaceCapabilities,
+} from "../../utils/wordInPlaceCapabilities";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
+import type * as WordInPlaceSwitch from "../../utils/wordInPlaceSwitch";
 import type * as wordPlanCommentCheckModule from "../../utils/wordPlanCommentCheck";
 import type * as EratoLibrary from "@erato/frontend/library";
 import type {
@@ -38,6 +46,16 @@ vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof wordPlanCommentCheckModule>()),
     readWordCommentStates: vi.fn(ooxmlHostCommentStates),
+  };
+});
+
+const inPlace = vi.hoisted(() => ({ on: false }));
+vi.mock("../../utils/wordInPlaceSwitch", async (importOriginal) => {
+  const actual = await importOriginal<typeof WordInPlaceSwitch>();
+  return {
+    ...actual,
+    wordInPlaceAvailability: () =>
+      inPlace.on ? { enabled: true } : actual.wordInPlaceAvailability(),
   };
 });
 
@@ -97,7 +115,7 @@ function Conversation({ children }: { children: ReactNode }) {
 }
 
 const SECTIONS = ["§ 1 Gegenstand", "§ 2 Lieferung", "§ 3 Abnahme"];
-const document = (sections = SECTIONS) =>
+const document = (sections = SECTIONS, fullDocument = false) =>
   captureWordAuthoringSnapshot(
     packageXml(
       sections
@@ -106,6 +124,7 @@ const document = (sections = SECTIONS) =>
     ),
     "doc-A",
     "Off",
+    fullDocument,
   );
 
 function mount(
@@ -180,6 +199,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  inPlace.on = false;
+  setWordInPlaceCapabilitiesForTests(undefined);
 });
 
 describe("the card of a change in parts", () => {
@@ -298,7 +319,9 @@ describe("the card of a change in parts", () => {
     );
 
     expect(
-      await screen.findByText("Erato didn't get to § 3 Abnahme."),
+      await screen.findByText(
+        "Erato didn't get to § 3 Abnahme. Apply the rest, then ask Erato to write the missing sections.",
+      ),
     ).toBeInTheDocument();
     expect(rowNamed("§ 3 Abnahme")).toHaveTextContent("Not written");
     expect(within(rowNamed("§ 3 Abnahme")).queryByRole("button")).toBeNull();
@@ -310,6 +333,109 @@ describe("the card of a change in parts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave out" }));
     expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Left out");
     expect(screen.getByRole("button", { name: /^Apply/ })).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Erato didn't get to § 3 Abnahme. Ask Erato to write the missing sections in your next message.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a ready row to its changes while Erato still writes the others", async () => {
+    const snapshot = document();
+    const turn = await recordPartsTurn(snapshot, {
+      messageId: String(mock.artifact.messageId),
+      plan: {
+        intent: "Shorter § 1 and § 3.",
+        rows: [
+          { source: "b1-b2", action: "rewrite", change: "Shorter." },
+          { source: "b3-b4", action: "keep" },
+          { source: "b5-b6", action: "rewrite", change: "Shorter." },
+        ],
+      },
+      parts: [
+        { row: 1, ops: [{ keep: "b1" }, { replace: "b2", text: "Kurz." }] },
+      ],
+      finish: false,
+    });
+    mock.content = turn.content;
+    mount(snapshot, "erato-word-document-parts", turn.sectionPlanCall);
+
+    expect(rowNamed("§ 3 Abnahme")).toHaveTextContent("Waiting");
+    expect(within(rowNamed("§ 3 Abnahme")).queryByRole("button")).toBeNull();
+    fireEvent.click(within(rowNamed("§ 1 Gegenstand")).getByRole("button"));
+    expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Kurz.");
+  });
+
+  it("says what to do when Erato stopped, with nothing counted as ready", async () => {
+    const snapshot = document();
+    const turn = await recordPartsTurn(snapshot, {
+      messageId: String(mock.artifact.messageId),
+      plan: {
+        intent: "Shorter § 1 and § 3.",
+        rows: [
+          { source: "b1-b2", action: "rewrite", change: "Shorter." },
+          { source: "b3-b4", action: "keep" },
+          { source: "b5-b6", action: "rewrite", change: "Shorter." },
+        ],
+      },
+      parts: [
+        { row: 1, ops: [{ keep: "b1" }, { replace: "b2", text: "Kurz." }] },
+      ],
+      finish: false,
+    });
+    mock.messageStatus = "completed";
+    mock.content = turn.content;
+    mount(snapshot, "erato-word-document-parts", turn.sectionPlanCall);
+
+    expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Written");
+    expect(screen.queryByText(/sections? ready/)).toBeNull();
+    expect(
+      screen.getByText(
+        "Erato stopped before finishing, so there is nothing to apply. Send your request again to continue.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves out a removal Word changed meanwhile, names it once, and says how to redo it", async () => {
+    inPlace.on = true;
+    setWordInPlaceCapabilitiesForTests(wordInPlaceCapabilities("PC"));
+    const snapshot = document(SECTIONS, true);
+    const { capture, edit } = wordCaptureJournal(snapshot);
+    const turn = await recordPartsTurn(snapshot, {
+      messageId: String(mock.artifact.messageId),
+      plan: {
+        intent: "Shorter § 1, and § 3 goes.",
+        rows: [
+          { source: "b1-b2", action: "rewrite", change: "Shorter." },
+          { source: "b3-b4", action: "keep" },
+          { source: "b5-b6", action: "delete", reason: "No longer needed." },
+        ],
+      },
+      parts: [
+        { row: 1, ops: [{ keep: "b1" }, { replace: "b2", text: "Kurz." }] },
+      ],
+      capture,
+      beforeFinish: () => edit("b6"),
+    });
+    if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    mock.messageStatus = "completed";
+    mock.content = turn.content;
+    mount(
+      snapshot,
+      "erato-word-document-plan",
+      JSON.stringify((turn.last.result as { plan: unknown }).plan),
+    );
+
+    const removal = await waitFor(() => rowNamed("§ 3 Abnahme"));
+    expect(removal).toHaveTextContent(
+      "§ 3 AbnahmeChanged in Word while Erato wrote itLeft out",
+    );
+    expect(within(removal).queryByRole("button")).toBeNull();
+    expect(
+      screen.getByText("Apply the rest, then ask Erato to redo § 3 Abnahme."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("word-plan-not-in-proposal")).toBeNull();
+    expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Ready");
   });
 
   it("lists twenty rows as one flat list that the chat scrolls, never a box of its own", async () => {

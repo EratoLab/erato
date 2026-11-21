@@ -5242,8 +5242,13 @@ msgstr "{name} neu schreiben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.removed"
-msgstr "Entfernt"
+msgid "officeAddin.word.parts.redoAfterApply"
+msgstr "Übernehmen Sie den Rest und bitten Sie Erato dann, {redone} neu zu schreiben."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redoNext"
+msgstr "Bitten Sie Erato in Ihrer nächsten Nachricht, {redone} neu zu schreiben."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5257,13 +5262,18 @@ msgstr "{renames, plural, one {# umbenannte Überschrift} other {# umbenannte Ü
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.rows"
-msgstr "Abschnitte"
+msgid "officeAddin.word.parts.reorderAfterApply"
+msgstr "Übernehmen Sie den Rest und bitten Sie Erato dann, die Abschnitte erneut neu zu ordnen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-#~ msgid "officeAddin.word.parts.stoppedProgress"
-#~ msgstr ""
+msgid "officeAddin.word.parts.reorderingChangedInWord"
+msgstr "Die Neuordnung ersetzt das ganze Dokument, das inzwischen in Word geändert wurde"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.rows"
+msgstr "Abschnitte"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5287,8 +5297,23 @@ msgstr "Fehlende Abschnitte schreiben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingAfterApply"
+msgstr "Übernehmen Sie den Rest und bitten Sie Erato dann, die fehlenden Abschnitte zu schreiben."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingNext"
+msgstr "Bitten Sie Erato in Ihrer nächsten Nachricht, die fehlenden Abschnitte zu schreiben."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.writing"
 msgstr "Wird geschrieben…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.written"
+msgstr "Geschrieben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts

@@ -19,6 +19,7 @@ import { wordBlockIndex } from "./wordDocumentOutline";
 import {
   assembleWordParts,
   finishWordParts,
+  WORD_PARTS_REORDERING_LEFT_OUT,
   wordPartRowLabel,
   wordPartRows,
   wordPartsChangedInWord,
@@ -46,6 +47,7 @@ import {
   wordSubmissionBlocks,
 } from "./wordPlanCoverage";
 import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
+import { wordWrittenChanges } from "./wordReadFreshness";
 import {
   expandWordScopedSubmission,
   wordCompleteReadToken,
@@ -54,8 +56,9 @@ import {
   WordScopedSubmissionError,
 } from "./wordScopedSubmission";
 
-import type { WordPartsDraft } from "./wordDocumentParts";
+import type { WordPartsAssembly, WordPartsDraft } from "./wordDocumentParts";
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
+import type { WordReadCapture } from "./wordReadFreshness";
 import type { WordScopedOrigins } from "./wordScopedSubmission";
 import type {
   ClientToolExecutor,
@@ -309,24 +312,16 @@ function createSubmissionExecutor(
           serialized,
           finish.result,
         );
-      // A row changed in Word while Erato wrote it is left out on its own, not the whole change.
-      const changedInWord = finish
-        ? wordPartsChangedInWord(finish.draft, snapshot, session.capture)
-        : new Set<number>();
-      if (finish && changedInWord.size) {
-        const { plan, parts } = wordPartsWithout(
-          finish.draft.plan,
-          finish.draft.parts,
-          { rows: changedInWord, structure: false },
-          snapshot,
+      let staging = finish
+        ? wordPartsFinishStaging(finish.draft, snapshot, session.capture)
+        : undefined;
+      if (staging && "refusal" in staging)
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          staging.refusal,
         );
-        finish.assembly = assembleWordParts(
-          snapshot,
-          finish.draft.readToken,
-          plan,
-          parts,
-        );
-      }
+      if (finish && staging?.assembly) finish.assembly = staging.assembly;
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
           ? "scoped_edit"
@@ -350,35 +345,61 @@ function createSubmissionExecutor(
         kind === "scoped_edit"
           ? expandWordScopedSubmission(submitted, snapshot, completeReadIssue)
           : undefined;
-      const value =
+      let value =
         expansion?.plan ??
         (kind === "table_cell"
           ? expandWordTableCellSubmission(submitted, snapshot)
           : finish
             ? finish.assembly.plan
             : session.drafts.materialize(submitted));
-      const prepared = await prepareWordDocumentSubmission(
-        value,
-        context,
-        session,
-        { origins: expansion?.origins, inPlaceOnly: !!expansion || !!finish },
-      );
+      const prepare = () =>
+        prepareWordDocumentSubmission(value, context, session, {
+          origins: expansion?.origins,
+          inPlaceOnly: !!expansion || !!finish,
+        });
       // The read session may have been cleared while preparation was pending.
-      if (
+      const stopped = () =>
         context.signal?.aborted ||
         session.snapshotForSubmission(context) !== snapshot ||
-        snapshot.revoked
-      )
+        snapshot.revoked;
+      let prepared = await prepare();
+      if (stopped())
         return { ok: false, error: "Document submission stopped." };
       const redelivery = session.drafts.replay(context.toolCallId, serialized);
       if (redelivery) return redelivery;
-      const changed = finish
+      let changed = finish
         ? undefined
         : wordDocumentChangedRefusal(
             snapshot,
             session.capture,
             kind ? (value as WordDocumentPlan) : "document",
           );
+      // Word may change a section while the finish is checked; the smaller change is checked once more.
+      for (let round = 0; finish && staging && !changed; round++) {
+        const later = wordPartsFinishStaging(
+          finish.draft,
+          snapshot,
+          session.capture,
+        );
+        if (!("refusal" in later) && sameStaging(later, staging)) break;
+        if ("refusal" in later || round > 0) {
+          changed =
+            "refusal" in later
+              ? later.refusal
+              : wordDocumentChangedRefusal(
+                  snapshot,
+                  session.capture,
+                  "document",
+                );
+          break;
+        }
+        staging = later;
+        if (later.assembly) finish.assembly = later.assembly;
+        value = finish.assembly.plan;
+        prepared = await prepare();
+        if (stopped())
+          return { ok: false, error: "Document submission stopped." };
+      }
       if (changed)
         return session.drafts.remember(context.toolCallId, serialized, changed);
       let result = prepared;
@@ -393,39 +414,48 @@ function createSubmissionExecutor(
           snapshot,
         );
         const sectionPlan = finish ? undefined : session.drafts.parts.current;
-        const notInProposal = wordNotInProposalGroups([
-          {
-            parts: [...changedInWord].map((r) =>
-              wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
-            ),
-            reason:
-              "which changed in Word while you were working, so the card leaves them out",
-          },
-          {
-            parts: (finish?.unwritten ?? []).map((r) =>
-              wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
-            ),
-            reason: "which the section plan announced but no part wrote",
-          },
-          {
-            parts: sectionPlan
-              ? wordPartsNotInProposal(
-                  snapshot,
-                  [wordPartsAnnouncedBlocks(sectionPlan, snapshot)],
-                  accepted,
-                )
-              : [],
-            reason: "which the section plan of this request announced",
-          },
-          {
-            parts: wordPartsNotInProposal(
-              snapshot,
-              session.drafts.refusedAttempts,
-              accepted,
-            ),
-            reason: WORD_LEFT_OUT_EARLIER,
-          },
-        ]);
+        const changedInWord =
+          staging && !("refusal" in staging)
+            ? staging.changed
+            : new Set<number>();
+        const reorderingLeftOut =
+          !!staging && !("refusal" in staging) && staging.reordering;
+        const notInProposal = wordNotInProposalGroups(
+          [
+            {
+              parts: [...changedInWord].map((r) =>
+                wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+              ),
+              reason:
+                "which changed in Word while you were working, so the card leaves them out",
+            },
+            {
+              parts: (finish?.unwritten ?? []).map((r) =>
+                wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+              ),
+              reason: "which the section plan announced but no part wrote",
+            },
+            {
+              parts: sectionPlan
+                ? wordPartsNotInProposal(
+                    snapshot,
+                    [wordPartsAnnouncedBlocks(sectionPlan, snapshot)],
+                    accepted,
+                  )
+                : [],
+              reason: "which the section plan of this request announced",
+            },
+            {
+              parts: wordPartsNotInProposal(
+                snapshot,
+                session.drafts.refusedAttempts,
+                accepted,
+              ),
+              reason: WORD_LEFT_OUT_EARLIER,
+            },
+          ],
+          reorderingLeftOut ? WORD_PARTS_REORDERING_NOTE : undefined,
+        );
         if (expanded || notInProposal)
           result = {
             ...prepared,
@@ -439,6 +469,9 @@ function createSubmissionExecutor(
                       changed: changedInWord,
                     }),
                   }
+                : {}),
+              ...(reorderingLeftOut
+                ? { reordering: WORD_PARTS_REORDERING_LEFT_OUT }
                 : {}),
               ...notInProposal,
             },
@@ -506,6 +539,88 @@ function createSubmissionExecutor(
             "scoped_edit" in input ? sparseRejection(input, failure) : failure,
           );
     }
+  };
+}
+
+const WORD_PARTS_REORDERING_NOTE =
+  "The reordering is left out: the document changed in Word while you were working, and reordering replaces the whole document.";
+
+type WordPartsFinishStaging =
+  | {
+      /** Rows (from 0) left out because Word changed what they write. */
+      changed: Set<number>;
+      reordering: boolean;
+      /** What the finish stages once the document changed. */
+      assembly?: WordPartsAssembly;
+    }
+  | { refusal: ClientToolExecutionResult };
+
+const sameStaging = (
+  a: Extract<WordPartsFinishStaging, { changed: unknown }>,
+  b: Extract<WordPartsFinishStaging, { changed: unknown }>,
+) => a.changed.size === b.changed.size && a.reordering === b.reordering;
+
+/** Whether Apply would replace the whole document for `plan`; undefined when it cannot compile,
+ * which preparation then reports. */
+function wordPlanReplacesDocument(
+  plan: WordDocumentPlan,
+  snapshot: WordAuthoringSnapshot,
+): boolean | undefined {
+  try {
+    const normalized = normalizeWordDocumentPlan(plan, snapshot);
+    const compiled = captureWordAuthoringSnapshot(
+      compileWordDocumentPlan(normalized, snapshot),
+      snapshot.identity,
+      "Off",
+      snapshot.fullDocument,
+      "verify",
+    );
+    if (compiled.issue) return undefined;
+    return (
+      routeWordDocumentPlan(
+        normalized,
+        snapshot,
+        wordInPlaceAvailability(),
+        wordInPlaceCapabilitiesUnder(snapshot.trackingMode),
+        compiled,
+      ).route !== "in-place"
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What a finish stages once the document changed in Word since the capture. A row whose written
+ * blocks changed is left out on its own. Apply refuses to replace a document that changed at all,
+ * so a rest that would still replace it leaves out the reordering too, and is refused as before
+ * when even that cannot go in place.
+ */
+function wordPartsFinishStaging(
+  draft: WordPartsDraft,
+  snapshot: WordAuthoringSnapshot,
+  capture: WordReadCapture | undefined,
+): WordPartsFinishStaging {
+  const changed = wordPartsChangedInWord(draft, snapshot, capture);
+  if (!wordWrittenChanges(snapshot, capture, "document"))
+    return { changed, reordering: false };
+  const assemble = (structure: boolean) => {
+    const { plan, parts } = wordPartsWithout(
+      draft.plan,
+      draft.parts,
+      { rows: changed, structure },
+      snapshot,
+    );
+    return assembleWordParts(snapshot, draft.readToken, plan, parts);
+  };
+  const rest = assemble(false);
+  if (wordPlanReplacesDocument(rest.plan, snapshot) !== true)
+    return { changed, reordering: false, assembly: rest };
+  const inPlace = assemble(true);
+  if (wordPlanReplacesDocument(inPlace.plan, snapshot) === false)
+    return { changed, reordering: true, assembly: inPlace };
+  return {
+    refusal: wordDocumentChangedRefusal(snapshot, capture, "document")!,
   };
 }
 

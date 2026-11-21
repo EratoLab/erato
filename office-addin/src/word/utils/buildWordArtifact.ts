@@ -52,18 +52,18 @@ export function buildWordArtifact(args: {
   const plan = offerable.includes(WORD_SUBMIT_PLAN_ACTION)
     ? acceptedWordPlanFromHistory(args.content)
     : undefined;
-  // A change in parts shows its rows from the accepted section plan until the finish's plan card.
-  const sectionPlan =
-    !plan && offerable.includes(WORD_SUBMIT_PLAN_ACTION)
-      ? wordPartsSectionPlanCall(args.content)
-      : undefined;
   // A comment card exists only for a submission the host accepted; its draft_id names the card.
-  const comments =
-    plan || sectionPlan
-      ? undefined
-      : acceptedWordCommentSubmission(args.content);
+  const comments = plan
+    ? undefined
+    : acceptedWordCommentSubmission(args.content);
   const commentCard =
     comments && offerable.includes(comments.action) ? comments : undefined;
+  // A change in parts shows its rows from the accepted section plan until the finish's plan card;
+  // an accepted submission of another kind has the Apply and wins over an unfinished one.
+  const sectionPlan =
+    !plan && !commentCard && offerable.includes(WORD_SUBMIT_PLAN_ACTION)
+      ? wordPartsSectionPlanCall(args.content)
+      : undefined;
   const submitted = plan
     ? { ...plan, language: WORD_PLAN_FENCE }
     : sectionPlan

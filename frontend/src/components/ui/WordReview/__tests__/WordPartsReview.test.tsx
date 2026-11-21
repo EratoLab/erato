@@ -105,7 +105,12 @@ describe("the rows of a change in parts", () => {
     expect(row("§ 11 Gewährleistung")).toHaveTextContent("Not written");
     expect(row("§ 12 Sonstiges")).toHaveTextContent("Removed");
     expect(
-      screen.getByText("Erato didn't get to § 11 Gewährleistung."),
+      screen.getByText(
+        "Erato didn't get to § 11 Gewährleistung. Apply the rest, then ask Erato to write the missing sections.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Apply the rest, then ask Erato to redo § 5 Abnahme."),
     ).toBeInTheDocument();
     expect(container.querySelector(".bg-theme-error-bg")).toBeNull();
     expect(
@@ -169,6 +174,96 @@ describe("the rows of a change in parts", () => {
       }),
     );
     expect(onLeaveOut).toHaveBeenLastCalledWith(8, false);
+  });
+
+  it("puts Check first above the Apply on top, and a risk without a row as plain text", () => {
+    render(
+      <WordPartsReview
+        progress={finished}
+        title="Changes"
+        top={<button type="button">Apply</button>}
+        changes={new Map([[2, [change]]])}
+        risks={[
+          {
+            kind: "headings-lost",
+            count: 1,
+            items: [{ rowKey: change.key, text: "§ 3 Lieferung" }],
+            rowKey: change.key,
+          },
+          {
+            kind: "sections-removed",
+            count: 1,
+            items: [{ rowKey: "section-removed:s1" }],
+            rowKey: "section-removed:s1",
+          },
+        ]}
+      />,
+      { wrapper },
+    );
+    const alert = screen.getByText("Check first");
+    const apply = screen.getByRole("button", { name: "Apply" });
+    expect(
+      alert.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /no longer in the document/ }),
+    ).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /section break/ })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /no longer in the document/ }),
+    );
+    expect(row("§ 3 Lieferung")).toHaveTextContent(
+      "Lieferung innerhalb von 14 Tagen.",
+    );
+  });
+
+  it("counts nothing as ready once Erato stopped, and shows written rows as written", () => {
+    const { container } = render(
+      <WordPartsReview
+        progress={{
+          ...finished,
+          finished: undefined,
+          stopped: true,
+          rows: [
+            { ...finished.rows[0], state: "ready" },
+            { ...finished.rows[3], state: "not-written" },
+          ],
+        }}
+        title="Changes not finished"
+      />,
+      { wrapper },
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(row("§ 3 Lieferung")).toHaveTextContent("Written");
+    expect(container.querySelector(".bg-theme-success-bg")).toBeNull();
+    expect(
+      screen.getByText("Erato didn't get to § 11 Gewährleistung."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the reordering the finish left out as left out for good, with the step", () => {
+    render(
+      <WordPartsReview
+        progress={{ ...finished, reorderingLeftOut: "changed_in_word" }}
+        title="Changes"
+        leftOut={{ rows: new Set(), structure: false }}
+        onLeaveOut={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(row("Structure")).toHaveTextContent(
+      "Reordering replaces the whole document, which changed in Word meanwhileLeft out",
+    );
+    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
+      "Left out with the reordering",
+    );
+    fireEvent.click(within(row("Structure")).getByRole("button"));
+    expect(screen.queryByRole("button", { name: /reordering/ })).toBeNull();
+    expect(
+      screen.getByText(
+        "Apply the rest, then ask Erato to reorder the sections again.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("offers the follow-up actions only through their hooks", () => {

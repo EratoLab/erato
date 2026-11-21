@@ -5346,7 +5346,7 @@ msgstr "Zmiany dokumentu w częściach"
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx
 msgid "officeAddin.word.parts.stopped"
-msgstr "Erato przerwał przed zakończeniem, więc nie ma nic do zastosowania."
+msgstr "Erato przerwał przed zakończeniem, więc nie ma nic do zastosowania. Wyślij prośbę ponownie, aby kontynuować."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx

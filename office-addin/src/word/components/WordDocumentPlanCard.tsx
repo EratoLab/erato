@@ -42,7 +42,10 @@ import {
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
-import { useWordPlanParts } from "../hooks/useWordPlanParts";
+import {
+  useWordPlanParts,
+  wordPartsChangesByRow,
+} from "../hooks/useWordPlanParts";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import { withoutParagraphMark } from "../utils/buildWordDocumentArgs";
@@ -203,16 +206,12 @@ export function WordDocumentPlanCard({
         : parsed && normalizeWordDocumentPlan(parsed, shown),
     [history, parsed, shown],
   );
-  const acceptedReview = useMemo(
-    () => acceptedPlan && buildWordPlanReview(acceptedPlan, shown),
-    [acceptedPlan, shown],
-  );
   const leftOut = review.partsLeftOut ?? NOTHING_LEFT_OUT;
   const parts = useWordPlanParts({
     content,
     messageContent: lineage.at(-1)?.content,
-    snapshot: liveMatches ? snapshot : undefined,
-    review: acceptedReview,
+    snapshot: shown,
+    live: liveMatches,
     leftOut,
   });
   // What Apply writes: the accepted plan, or with the rows the user left out as they were.
@@ -222,11 +221,13 @@ export function WordDocumentPlanCard({
     return changed ? normalizeWordDocumentPlan(changed, shown) : acceptedPlan;
   }, [parts?.applied, shown, acceptedPlan]);
   const planReview = useMemo(
-    () =>
-      plan === acceptedPlan
-        ? acceptedReview
-        : plan && buildWordPlanReview(plan, shown),
-    [plan, acceptedPlan, acceptedReview, shown],
+    () => plan && buildWordPlanReview(plan, shown),
+    [plan, shown],
+  );
+  // Rows and Check first both read the review of what Apply writes, so a jump finds its row.
+  const partsChanges = useMemo(
+    () => wordPartsChangesByRow(planReview, parts?.sectionRowOf),
+    [planReview, parts?.sectionRowOf],
   );
   const gate = resolveWordWriteGate({
     capture,
@@ -862,8 +863,11 @@ export function WordDocumentPlanCard({
         : [],
     ),
   );
+  // A stored whole-document block or refusal was for the plan before; the route is worked out anew.
   const leaveOut = (target: number | "structure", out: boolean) =>
     host.updateReview(key, {
+      wholeDocumentBlock: undefined,
+      wholeDocumentRefusal: undefined,
       partsLeftOut:
         target === "structure"
           ? { ...leftOut, structure: out }
@@ -1002,6 +1006,47 @@ export function WordDocumentPlanCard({
       )}
     </>
   );
+  const statusAlert = status ? (
+    <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
+  ) : (
+    commentWarning && (
+      <Alert type="warning" className="m-3 [overflow-wrap:anywhere]">
+        {commentWarning}
+      </Alert>
+    )
+  );
+  const statusTrailing = (
+    <>
+      {mismatchedParagraphs.length > 0 && (
+        <div className="word-review__actions m-3 mt-0">
+          {mismatchedParagraphs.map((id, i) => (
+            <Button
+              key={id}
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={host.operationInProgress}
+              onClick={() => void showWritten([id])}
+            >
+              {t({
+                id: "officeAddin.word.scoped.locate",
+                message: `Locate passage ${i + 1}`,
+              })}
+            </Button>
+          ))}
+        </div>
+      )}
+      <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
+      {status && errorReport && (
+        <div className="m-3 mt-0">
+          <CopyErrorButton
+            error={errorReport}
+            reportOptions={{ chatId: currentChatId }}
+          />
+        </div>
+      )}
+    </>
+  );
   return (
     <WordProposalCard
       cardRef={cardRef}
@@ -1017,8 +1062,14 @@ export function WordDocumentPlanCard({
           <WordPartsReview
             progress={parts.progress}
             title={planTitle}
-            top={applyControl}
-            changes={parts.changes}
+            top={
+              <>
+                {statusAlert}
+                {statusTrailing}
+                {applyControl}
+              </>
+            }
+            changes={partsChanges}
             risks={planReview.risks}
             snapshot={shown}
             onLocate={shown ? locateSource : undefined}
@@ -1219,49 +1270,9 @@ export function WordDocumentPlanCard({
               warning={commentWarning}
             />
           ),
-          alert: status ? (
-            <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
-          ) : (
-            commentWarning && (
-              <Alert type="warning" className="m-3 [overflow-wrap:anywhere]">
-                {commentWarning}
-              </Alert>
-            )
-          ),
-          trailing: (
-            <>
-              {mismatchedParagraphs.length > 0 && (
-                <div className="word-review__actions m-3 mt-0">
-                  {mismatchedParagraphs.map((id, i) => (
-                    <Button
-                      key={id}
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={host.operationInProgress}
-                      onClick={() => void showWritten([id])}
-                    >
-                      {t({
-                        id: "officeAddin.word.scoped.locate",
-                        message: `Locate passage ${i + 1}`,
-                      })}
-                    </Button>
-                  ))}
-                </div>
-              )}
-              <WordDiagnosticDetails
-                diagnostic={review.documentPlanDiagnostic}
-              />
-              {status && errorReport && (
-                <div className="m-3 mt-0">
-                  <CopyErrorButton
-                    error={errorReport}
-                    reportOptions={{ chatId: currentChatId }}
-                  />
-                </div>
-              )}
-            </>
-          ),
+          // A change in parts shows them beside its Apply on top instead.
+          alert: parts ? undefined : statusAlert,
+          trailing: parts ? undefined : statusTrailing,
           notice: idle && blockedText && !refusal && (
             <Alert
               type="info"

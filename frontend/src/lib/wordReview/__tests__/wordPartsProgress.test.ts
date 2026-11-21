@@ -241,6 +241,97 @@ describe("the parts card's rows", () => {
     ]);
   });
 
+  it("reads a delete row and a rename the finish left out as changed in Word, and drops them from the structure", () => {
+    const rows: Row[] = [
+      { source: "b1-b10", action: "rewrite" },
+      { source: "b11-b20", action: "keep", title: "§ 2 Services" },
+      { source: "b21-b30", action: "delete" },
+      { source: "b31-b35,b41-b45", action: "rewrite" },
+      { source: "b36-b40", action: "keep" },
+      { source: "b46-b50", action: "rewrite" },
+    ];
+    const titles = [
+      "§ 1 Gegenstand",
+      "§ 2 Leistungen",
+      "§ 3 Haftung",
+      "§ 4 Preise, § 6 Zahlung",
+      "§ 5 Lieferung",
+      "§ 7 Schluss",
+    ];
+    const statuses = [
+      "ready",
+      "changed_in_word",
+      "changed_in_word",
+      "ready",
+      "kept",
+      "ready",
+    ];
+    const finishOf = (status: (k: number) => string, extra = {}) =>
+      tool(
+        "finish",
+        "submit_document_plan",
+        "success",
+        {
+          snapshot: "s",
+          readToken: "t",
+          draft_id: "draft-1",
+          revision: 4,
+          finish: true,
+        },
+        {
+          status: "success",
+          submission: { status: "accepted" },
+          result: {
+            draft_id: "finish",
+            snapshot: "s",
+            action: "word.apply_document_plan",
+            rows: rows.map((row, k) => ({
+              row: k + 1,
+              action: row.action,
+              title: titles[k],
+              ...(row.title ? { new_title: row.title } : {}),
+              paragraphs: 5,
+              status: status(k),
+            })),
+            ...extra,
+          },
+        },
+      );
+    const content = [
+      sectionPlan(rows, titles),
+      accepted("p1", 1),
+      accepted("p4", 4),
+      accepted("p6", 6),
+      finishOf((k) => statuses[k]),
+    ];
+    const progress = wordPartsProgress(content, false)!;
+    expect(progress.rows.map((row) => [row.title, row.state])).toEqual([
+      ["§ 1 Gegenstand", "ready"],
+      ["§ 3 Haftung", "changed-in-word"],
+      ["§ 4 Preise, § 6 Zahlung", "ready"],
+      ["§ 7 Schluss", "ready"],
+    ]);
+    expect(progress.structure).toEqual({
+      moves: [],
+      merges: [{ row: 4, title: "§ 4 Preise, § 6 Zahlung" }],
+      renames: [],
+    });
+    expect(progress.reorderingLeftOut).toBeUndefined();
+
+    const mergeKept = wordPartsProgress(
+      [
+        ...content.slice(0, -1),
+        finishOf((k) => (k === 3 ? "changed_in_word" : statuses[k]), {
+          reordering: "changed_in_word",
+        }),
+      ],
+      false,
+    )!;
+    expect(mergeKept.structure?.merges).toEqual([]);
+    expect(mergeKept.structure?.moves).toHaveLength(1);
+    expect(mergeKept.reorderingLeftOut).toBe("changed_in_word");
+  });
+
   it("says when the finish is being checked, and follows only the latest section plan", () => {
     const replanned = sectionPlan(SIX.slice(0, 2), SIX_TITLES.slice(0, 2), {
       id: "plan-2",
@@ -308,6 +399,19 @@ describe("the section plan's layout", () => {
         { action: "rewrite", refs: [2, 3, 4] },
       ]).moved,
     ).toEqual([]);
+  });
+
+  it("keeps a merge of neighbouring sections out of the reordering", () => {
+    expect(
+      wordPartsLayout([
+        { action: "keep", refs: wordPartSourceIndexes("b1-b240")! },
+        {
+          action: "rewrite",
+          refs: wordPartSourceIndexes("b241-b260,b261-b290")!,
+        },
+        { action: "keep", refs: wordPartSourceIndexes("b291-b300")! },
+      ]),
+    ).toEqual({ moved: [], merged: [], renamed: [] });
   });
 
   it("reads refs and ranges and refuses anything else", () => {

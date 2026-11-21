@@ -5346,7 +5346,7 @@ msgstr "Cambios del documento por partes"
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx
 msgid "officeAddin.word.parts.stopped"
-msgstr "Erato se detuvo antes de terminar, así que no hay nada que aplicar."
+msgstr "Erato se detuvo antes de terminar, así que no hay nada que aplicar. Envíe su solicitud de nuevo para continuar."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordDocumentPartsCard.tsx

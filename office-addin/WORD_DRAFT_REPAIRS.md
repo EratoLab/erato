@@ -96,7 +96,18 @@ the accepted plan exactly: Apply then writes the plan with the left-out rows
 kept as they were (`wordPartsWithout`). Leaving out the reordering also puts
 the rows back in document order and leaves out the renames and the merges of
 blocks apart, so the rest takes the in-place route where it qualifies. At
-finish, a row the draft changes whose blocks the user or a co-author changed
-in Word since the capture is left out on its own, as `changed_in_word` in
-`result.rows` and named in `notInProposal`, instead of refusing the whole
-change; changes elsewhere are left to Apply's live check.
+finish, a row the draft changes whose written blocks the user or a co-author
+changed in Word since the capture (for a rename, its heading only) is left out
+on its own, as `changed_in_word` in `result.rows` and named in
+`notInProposal`, instead of refusing the whole change; changes elsewhere are
+left to Apply's live check. The whole-document import and the body route
+refuse after any change, so once the document changed a rest that would still
+take them leaves out the reordering too (`result.reordering:
+"changed_in_word"`, and a first sentence in `notInProposalNote`, which replay
+keeps), and the finish is refused as before when even that cannot go in place. The check runs again after
+preparation, and a section changed meanwhile is checked once more. A part's
+ops use the row's blocks in the row's own order, so moves live in the section
+plan only and the card's Structure row agrees with Apply's route. Rows and
+Check first both read the review of the plan Apply writes; the assembler's
+record of where each entry came from maps its review rows to section plan
+rows (`wordPartsApplied`).

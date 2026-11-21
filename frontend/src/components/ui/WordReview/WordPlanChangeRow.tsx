@@ -84,11 +84,18 @@ export function planRowStatusLabel(status: PillStatus): string {
       });
   }
 }
+/** Pill tones the Word review rows share. */
+export const WORD_PILL_TONE = {
+  neutral: "bg-theme-bg-secondary text-theme-fg-secondary",
+  success: "bg-theme-success-bg text-theme-success-fg",
+  error: "bg-theme-error-bg text-theme-error-fg",
+  info: "bg-theme-info-bg text-theme-info-fg",
+} as const;
 const STATUS_TONE: Partial<Record<PillStatus, string>> = {
-  new: "bg-theme-success-bg text-theme-success-fg",
-  removed: "bg-theme-error-bg text-theme-error-fg",
-  kept: "bg-theme-bg-secondary text-theme-fg-secondary",
-  unchanged: "bg-theme-bg-secondary text-theme-fg-secondary",
+  new: WORD_PILL_TONE.success,
+  removed: WORD_PILL_TONE.error,
+  kept: WORD_PILL_TONE.neutral,
+  unchanged: WORD_PILL_TONE.neutral,
 };
 export function WordPlanStatusPill({ status }: { status: PillStatus }) {
   return (
@@ -107,11 +114,14 @@ interface RowProps<F extends WordPlanRow["family"]> {
   snapshot?: WordAuthoringSnapshot;
 }
 
-interface ShellProps {
-  row: WordPlanRow;
-  icon: ReactNode;
+export interface WordReviewRowProps {
+  /** Found by the review's jump to a row. */
+  rowKey: string;
+  leading?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
+  /** The row's status pill. */
+  pill?: ReactNode;
   /** Omitted for one-line rows, which then render without a disclosure. */
   detail?: ReactNode;
   locate?: ReactNode;
@@ -119,24 +129,24 @@ interface ShellProps {
   onOpenChange: (open: boolean) => void;
   toggleRef?: RowRef;
 }
-function RowShell({
-  row,
-  icon,
+
+/** One line of a Word review list, opening to its detail when it has one. */
+export function WordReviewRow({
+  rowKey,
+  leading,
   title,
   description,
+  pill,
   detail,
   locate,
   open,
   onOpenChange,
   toggleRef,
-}: ShellProps) {
+}: WordReviewRowProps) {
   const id = useId();
-  const pill = row.status !== "unchanged" && (
-    <WordPlanStatusPill status={row.status} />
-  );
   if (detail === undefined)
     return (
-      <li className="word-review__row" data-row-key={row.key}>
+      <li className="word-review__row" data-row-key={rowKey}>
         <Row
           ref={toggleRef}
           variant="list"
@@ -144,7 +154,7 @@ function RowShell({
           interactive={false}
           tabIndex={-1}
           className="word-review__row-toggle"
-          leading={icon}
+          leading={leading}
           description={description}
           trailing={
             <span className="word-plan-row__trailing">
@@ -162,7 +172,7 @@ function RowShell({
       className={
         open ? "word-review__row word-review__row--open" : "word-review__row"
       }
-      data-row-key={row.key}
+      data-row-key={rowKey}
     >
       <Row
         ref={toggleRef}
@@ -173,7 +183,7 @@ function RowShell({
         // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
         aria-controls={`${id}-detail`}
         onClick={() => onOpenChange(!open)}
-        leading={icon}
+        leading={leading}
         description={description}
         trailing={
           <span className="word-plan-row__trailing">
@@ -191,6 +201,24 @@ function RowShell({
         </div>
       )}
     </li>
+  );
+}
+
+interface ShellProps
+  extends Omit<WordReviewRowProps, "rowKey" | "leading" | "pill"> {
+  row: WordPlanRow;
+  icon: ReactNode;
+}
+function RowShell({ row, icon, ...props }: ShellProps) {
+  return (
+    <WordReviewRow
+      {...props}
+      rowKey={row.key}
+      leading={icon}
+      pill={
+        row.status !== "unchanged" && <WordPlanStatusPill status={row.status} />
+      }
+    />
   );
 }
 

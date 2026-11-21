@@ -7,12 +7,18 @@ import {
 } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
-import { recordPartsTurn } from "../../../test/mocks/word/partsTurn";
+import {
+  recordPartsTurn,
+  wordCaptureJournal,
+} from "../../../test/mocks/word/partsTurn";
 import { wordDocumentFileToOoxml } from "../wordDocumentPackage";
 import {
   assembleWordParts,
   parseWordPartOps,
   parseWordPartsPlan,
+  wordPartRows,
+  wordPartsApplied,
+  wordPartsChangedInWord,
   wordPartsFromContent,
   wordPartsWithout,
 } from "../wordDocumentParts";
@@ -23,7 +29,7 @@ import {
 import { wordInPlaceCapabilities } from "../wordInPlaceCapabilities";
 import { routeWordDocumentPlan } from "../wordInPlaceRoute";
 
-import type { WordPartOp } from "../wordDocumentParts";
+import type { WordPartOp, WordPartsDraft } from "../wordDocumentParts";
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -222,15 +228,112 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
       { rows: new Set(), structure: true },
       snapshot,
     );
-    expect(
-      reordered.plan.rows.map((row) => [row.refs[0], row.action]),
-    ).toEqual([
-      ["b1", "keep"],
-      ["b99", "keep"],
-      ["b144", "rewrite"],
-      ["b179", "keep"],
-      ["b215", "keep"],
-    ]);
+    expect(reordered.plan.rows.map((row) => [row.refs[0], row.action])).toEqual(
+      [
+        ["b1", "keep"],
+        ["b99", "keep"],
+        ["b144", "rewrite"],
+        ["b179", "keep"],
+        ["b215", "keep"],
+      ],
+    );
     expect([...reordered.parts.keys()]).toEqual([2]);
+  });
+
+  it("keeps a merge of neighbouring sections as its own row when the reordering is left out", () => {
+    const snapshot = capture();
+    const parsed = parseWordPartsPlan(
+      {
+        intent: "A moved passage, and § 6 and § 7 as one section.",
+        rows: rows([
+          ["b1-b98", "keep"],
+          ["b215-b230", "keep"],
+          ["b99-b143", "keep"],
+          ["b144-b178,b179-b214", "rewrite"],
+          ["b231-b422", "keep"],
+        ]),
+      },
+      snapshot,
+    );
+    if ("issues" in parsed) throw new Error(JSON.stringify(parsed.issues));
+    const merged = parsed.plan.rows[3];
+    const part = [{ kind: "keep" as const, refs: merged.refs }];
+    const draft: WordPartsDraft = {
+      id: "d",
+      revision: 1,
+      readToken: "read",
+      plan: parsed.plan,
+      parts: new Map([[3, part]]),
+    };
+    expect(wordPartRows(draft, snapshot)[3].title).toContain(" – ");
+    const flat = wordPartsWithout(
+      parsed.plan,
+      draft.parts,
+      { rows: new Set(), structure: true },
+      snapshot,
+    );
+    const at = flat.plan.rows.findIndex((row) => row.refs[0] === "b144");
+    expect(flat.plan.rows[at]).toMatchObject({ action: "rewrite" });
+    expect(flat.plan.rows[at].refs).toEqual(merged.refs);
+    expect(flat.parts.get(at)).toBe(part);
+    expect(flat.rows[at]).toBe(3);
+  });
+
+  it("names each review row of what Apply writes by its section plan row, also once rows are re-sorted", async () => {
+    const snapshot = capture();
+    const ref = inPlaceParagraph(snapshot);
+    const turn = await recordPartsTurn(snapshot, {
+      plan: {
+        intent: "§ 7 before § 5, and § 6 in plainer wording.",
+        rows: rows([
+          ["b1-b98", "keep"],
+          ["b179-b214", "keep"],
+          ["b99-b143", "keep"],
+          ["b144-b178", "rewrite"],
+          ["b215-b422", "keep"],
+        ]),
+      },
+      parts: [{ row: 4, ops: opsReplacing(ref) }],
+    });
+    const { draft } = wordPartsFromContent(turn.content, snapshot)!;
+    for (const structure of [false, true]) {
+      const applied = wordPartsApplied(draft, snapshot, {
+        rows: new Set(),
+        structure,
+      });
+      const written = applied.plan.entries.find(
+        (entry) => entry.kind === "replace",
+      );
+      if (written?.kind !== "replace") throw new Error("no replace");
+      expect(applied.sectionRowOf(`output:${written.blocks[0].id}`)).toBe(4);
+      expect(applied.sectionRowOf(`replaced:${ref}`)).toBe(4);
+      expect(applied.sectionRowOf("keep:b180")).toBe(2);
+    }
+  });
+
+  it("drops a rename only when Word changed its heading, not the section's text", () => {
+    const snapshot = capture();
+    const parsed = parseWordPartsPlan(
+      {
+        intent: "Renumber § 6.",
+        rows: [
+          { source: "b1-b143", action: "keep" },
+          {
+            source: "b144-b178",
+            action: "keep",
+            title: "§ 6 Neue Überschrift",
+          },
+          { source: "b179-b422", action: "keep" },
+        ],
+      },
+      snapshot,
+    );
+    if ("issues" in parsed) throw new Error(JSON.stringify(parsed.issues));
+    const draft = { plan: parsed.plan, parts: new Map() };
+    const { capture: read, edit } = wordCaptureJournal(snapshot);
+    edit("b150");
+    expect([...wordPartsChangedInWord(draft, snapshot, read)]).toEqual([]);
+    edit("b144");
+    expect([...wordPartsChangedInWord(draft, snapshot, read)]).toEqual([1]);
   });
 });

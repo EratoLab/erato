@@ -1,16 +1,12 @@
 import {
   canonicalWordPlan,
-  isAcceptedWordSectionPlan,
-  wordBodyRef,
-  wordPartSourceIndexes,
   wordPartsProgress,
 } from "@erato/frontend/word-review";
 import { useMemo } from "react";
 
 import {
-  assembleWordParts,
+  wordPartsApplied,
   wordPartsFromContent,
-  wordPartsWithout,
 } from "../utils/wordDocumentParts";
 
 import type { WordReviewState } from "../utils/wordReviewState";
@@ -24,31 +20,29 @@ import type {
 
 export interface WordPlanParts {
   progress: WordPartsProgress;
-  /** Each section plan row's review rows, by row number. */
-  changes: ReadonlyMap<number, readonly WordPlanRow[]>;
   /** The draft rebuilt from the message's calls gives the accepted plan exactly, so rows can be
    * left out of Apply. */
   editable: boolean;
   /** The plan Apply writes with the left-out rows as they were; undefined while none is. */
   applied?: string;
+  /** The section plan row (from 1) a review row of the plan Apply writes belongs to. */
+  sectionRowOf?: (reviewRowKey: string) => number | undefined;
 }
 
-const object = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const OUTPUT_ROW = /^output:r(\d+)_/u;
-const SOURCE_ROW = /^(?:replaced|deleted):(.+)$/u;
-
-/** The section plan row a review row of the assembled plan came from: block ids carry the row,
- * removed blocks are found by their ref. */
-function sectionRowOf(
-  key: string,
-  rowOf: ReadonlyMap<string, number>,
-): number | undefined {
-  const output = OUTPUT_ROW.exec(key);
-  if (output) return Number(output[1]);
-  const source = SOURCE_ROW.exec(key);
-  return source ? rowOf.get(source[1]) : undefined;
+/** The review rows of the plan Apply writes, by the section plan row they belong to. */
+export function wordPartsChangesByRow(
+  review: WordPlanReview | null | undefined,
+  sectionRowOf: ((reviewRowKey: string) => number | undefined) | undefined,
+): Map<number, WordPlanRow[]> {
+  const byRow = new Map<number, WordPlanRow[]>();
+  if (!sectionRowOf) return byRow;
+  for (const row of review?.rows ?? []) {
+    if (row.family === "unchanged") continue;
+    const owner = sectionRowOf(row.key);
+    if (owner !== undefined)
+      byRow.set(owner, [...(byRow.get(owner) ?? []), row]);
+  }
+  return byRow;
 }
 
 /**
@@ -59,98 +53,65 @@ export function useWordPlanParts({
   content,
   messageContent,
   snapshot,
-  review,
+  live,
   leftOut,
 }: {
   /** The accepted plan, as the card's fence carries it. */
   content: string;
   messageContent: readonly ContentPart[] | undefined;
-  /** The live capture the plan was written against; without it nothing can be left out. */
+  /** The capture the card reviews against: the live one, or one rebuilt from the chat. */
   snapshot: WordAuthoringSnapshot | undefined;
-  /** The accepted plan's review. */
-  review: WordPlanReview | null | undefined;
+  /** `snapshot` is the live capture the plan was written against; only then can rows be left out. */
+  live: boolean;
   leftOut: WordReviewState["partsLeftOut"];
 }): WordPlanParts | undefined {
   const progress = useMemo(() => {
     const found = wordPartsProgress(messageContent, false);
     return found?.finished ? found : undefined;
   }, [messageContent]);
-  const changes = useMemo(() => {
-    const rowOf = new Map<string, number>();
-    const plan =
-      progress && messageContent?.findLast(isAcceptedWordSectionPlan);
-    const rows =
-      plan?.content_type === "tool_use" &&
-      object(plan.input) &&
-      Array.isArray(plan.input.rows)
-        ? (plan.input.rows as unknown[])
-        : [];
-    rows.forEach((row, k) =>
-      wordPartSourceIndexes(object(row) ? row.source : undefined)?.forEach(
-        (index) => rowOf.set(wordBodyRef(index), k + 1),
-      ),
-    );
-    const byRow = new Map<number, WordPlanRow[]>();
-    for (const row of review?.rows ?? []) {
-      if (row.family === "unchanged") continue;
-      const owner = sectionRowOf(row.key, rowOf);
-      if (owner !== undefined)
-        byRow.set(owner, [...(byRow.get(owner) ?? []), row]);
-    }
-    return byRow;
-  }, [progress, messageContent, review]);
   const rebuilt = useMemo(() => {
     if (!progress || !snapshot) return undefined;
     const found = wordPartsFromContent(messageContent, snapshot);
     if (!found) return undefined;
-    const { plan, parts } = wordPartsWithout(
-      found.draft.plan,
-      found.draft.parts,
-      { rows: found.changed, structure: false },
-      snapshot,
-    );
-    const assembled = assembleWordParts(
-      snapshot,
-      found.draft.readToken,
-      plan,
-      parts,
-    ).plan;
+    const accepted = wordPartsApplied(found.draft, snapshot, {
+      rows: found.changed,
+      structure: found.reorderingLeftOut,
+    });
+    let exact = false;
     try {
-      return canonicalWordPlan(assembled) ===
-        canonicalWordPlan(JSON.parse(content))
-        ? found
-        : undefined;
+      exact =
+        canonicalWordPlan(accepted.plan) ===
+        canonicalWordPlan(JSON.parse(content));
     } catch {
-      return undefined;
+      // A fence that does not parse is never left out of.
     }
+    return { ...found, accepted, exact };
   }, [progress, snapshot, messageContent, content]);
+  const editable = live && !!rebuilt?.exact;
   const applied = useMemo(() => {
     if (
+      !editable ||
       !rebuilt ||
       !snapshot ||
       !leftOut ||
       (!leftOut.rows.length && !leftOut.structure)
     )
       return undefined;
-    const { plan, parts } = wordPartsWithout(
-      rebuilt.draft.plan,
-      rebuilt.draft.parts,
-      {
-        rows: new Set([...rebuilt.changed, ...leftOut.rows.map((n) => n - 1)]),
-        structure: leftOut.structure,
-      },
-      snapshot,
-    );
-    return JSON.stringify(
-      assembleWordParts(snapshot, rebuilt.draft.readToken, plan, parts).plan,
-    );
-  }, [rebuilt, snapshot, leftOut]);
+    return wordPartsApplied(rebuilt.draft, snapshot, {
+      rows: new Set([...rebuilt.changed, ...leftOut.rows.map((n) => n - 1)]),
+      structure: leftOut.structure || rebuilt.reorderingLeftOut,
+    });
+  }, [editable, rebuilt, snapshot, leftOut]);
   return progress
     ? {
         progress,
-        changes,
-        editable: !!rebuilt,
-        ...(applied ? { applied } : {}),
+        editable,
+        ...(applied ? { applied: JSON.stringify(applied.plan) } : {}),
+        ...(rebuilt
+          ? {
+              sectionRowOf: (applied ?? rebuilt.accepted).sectionRowOf,
+            }
+          : {}),
       }
     : undefined;
 }
