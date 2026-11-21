@@ -3371,24 +3371,12 @@ impl AppConfig {
         }
     }
 
-    /// The speech provider read aloud uses, or `None` while the feature is off.
-    pub fn read_aloud_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
-        if !self.audio_read_aloud.enabled {
-            return None;
-        }
-        let id = self.audio_read_aloud.speech_provider.as_deref()?;
-        let id = self.resolve_speech_provider_id(id).ok()?;
-        Some((id, self.speech_providers.provider.get(id)?))
-    }
-
-    /// The speech provider conversational mode reads replies back with, or
-    /// `None` while conversational mode cannot speak.
-    pub fn conversational_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
-        if !self.audio_conversational.transcription.enabled {
-            return None;
-        }
-        let id = self.audio_conversational.speech_provider.as_deref()?;
-        let id = self.resolve_speech_provider_id(id).ok()?;
+    /// The active provider behind a configured speech provider id.
+    pub fn speech_provider<'a>(
+        &'a self,
+        id: Option<&'a str>,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        let id = self.resolve_speech_provider_id(id?).ok()?;
         Some((id, self.speech_providers.provider.get(id)?))
     }
 
@@ -3565,47 +3553,55 @@ impl AppConfig {
     }
 }
 
-fn validate_audio_feature_config(
+/// The checks an enabled audio feature's section must pass, at startup and
+/// when a live switch turns it on.
+pub fn check_audio_feature_config(
     app_config: &AppConfig,
     config_key: &str,
     audio_config: &AudioTranscriptionConfig,
-) {
+) -> Result<(), Report> {
     if !audio_config.enabled {
-        return;
+        return Ok(());
     }
 
     if audio_config.max_recording_duration_seconds == 0 {
-        panic!(
+        return Err(eyre!(
             "Invalid `{config_key}.max_recording_duration_seconds`: value must be greater than 0."
-        );
+        ));
     }
     if audio_config.chunk_duration_seconds == 0 {
-        panic!("Invalid `{config_key}.chunk_duration_seconds`: value must be greater than 0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.chunk_duration_seconds`: value must be greater than 0."
+        ));
     }
     if audio_config.chunk_duration_seconds > audio_config.max_recording_duration_seconds {
-        panic!(
+        return Err(eyre!(
             "Invalid `{config_key}.chunk_duration_seconds`: value must be less than or equal to `{config_key}.max_recording_duration_seconds`."
-        );
+        ));
     }
     if audio_config.max_attempts == 0 {
-        panic!("Invalid `{config_key}.max_attempts`: value must be greater than 0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.max_attempts`: value must be greater than 0."
+        ));
     }
     if !(0.0..=1.0).contains(&audio_config.min_unique_word_ratio) {
-        panic!("Invalid `{config_key}.min_unique_word_ratio`: value must be between 0.0 and 1.0.");
+        return Err(eyre!(
+            "Invalid `{config_key}.min_unique_word_ratio`: value must be between 0.0 and 1.0."
+        ));
     }
     if audio_config.tokens_per_word <= 0.0 || audio_config.output_token_buffer_factor <= 0.0 {
-        panic!(
+        return Err(eyre!(
             "Invalid {config_key} token sizing config: `tokens_per_word` and `output_token_buffer_factor` must be greater than 0."
-        );
+        ));
     }
     if let (Some(min_output_tokens), Some(max_output_tokens)) = (
         audio_config.min_output_tokens,
         audio_config.max_output_tokens,
     ) && min_output_tokens > max_output_tokens
     {
-        panic!(
+        return Err(eyre!(
             "Invalid {config_key} token sizing config: `min_output_tokens` must be less than or equal to `max_output_tokens`."
-        );
+        ));
     }
 
     let configured_audio_provider = if let Some(provider_id) =
@@ -3613,19 +3609,20 @@ fn validate_audio_feature_config(
     {
         let resolved_id = app_config
             .resolve_chat_provider_id(provider_id)
-            .unwrap_or_else(|error| panic!("Invalid {config_key} provider: {error}"));
+            .map_err(|error| eyre!("Invalid {config_key} provider: {error}"))?;
         let provider = app_config.get_chat_provider(resolved_id);
         if !provider.model_capabilities.supports_audio_input {
-            panic!(
+            return Err(eyre!(
                 "{config_key}.chat_provider_id '{}' does not have `model_capabilities.supports_audio_input = true`.",
                 provider_id
-            );
+            ));
         }
         if !audio_provider_kind_supports_binary_audio(&provider.provider_kind) {
-            panic!(
+            return Err(eyre!(
                 "{config_key}.chat_provider_id '{}' uses provider_kind '{}', which does not support audio input through the current adapter.",
-                provider_id, provider.provider_kind
-            );
+                provider_id,
+                provider.provider_kind
+            ));
         }
         Some(provider)
     } else if let Some(chat_providers) = &app_config.chat_providers {
@@ -3646,10 +3643,21 @@ fn validate_audio_feature_config(
     };
 
     if configured_audio_provider.is_none() {
-        panic!(
+        return Err(eyre!(
             "{config_key} is enabled, but no chat provider has `model_capabilities.supports_audio_input = true`.\n\n\
 Enable {config_key} with at least one provider setting `supports_audio_input = true` in `chat_providers.providers.<provider_id>.model_capabilities`."
-        );
+        ));
+    }
+    Ok(())
+}
+
+fn validate_audio_feature_config(
+    app_config: &AppConfig,
+    config_key: &str,
+    audio_config: &AudioTranscriptionConfig,
+) {
+    if let Err(error) = check_audio_feature_config(app_config, config_key, audio_config) {
+        panic!("{error}");
     }
 }
 
@@ -3893,14 +3901,28 @@ mod audio_config_tests {
             },
             ..Default::default()
         };
-        assert!(config.read_aloud_speech_provider().is_none());
+        assert!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .is_none()
+        );
         config.audio_read_aloud.enabled = true;
-        assert_eq!(config.read_aloud_speech_provider().unwrap().0, "voice");
+        assert_eq!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .unwrap()
+                .0,
+            "voice"
+        );
         // Conversational mode stays off: read aloud does not depend on it.
         assert!(!config.audio_conversational.transcription.enabled);
         assert_eq!(config.audio_conversational.speech_provider, None);
         config.audio_read_aloud.speech_provider = Some("missing".into());
-        assert!(config.read_aloud_speech_provider().is_none());
+        assert!(
+            VoiceSwitches::from_app_config(&config)
+                .read_aloud_speech_provider(&config)
+                .is_none()
+        );
     }
 
     #[test]
@@ -10457,6 +10479,265 @@ impl TeamsNudgeSendWindowConfig {
                 "Teams bot `inactivity_nudge.send_window.time_zone` is not an IANA time zone: {error}"
             )
         })
+    }
+}
+
+/// The voice features' on/off switches, the part of them that can change
+/// while the process runs. Layered from the runtime sources like
+/// `McpRuntimeConfig`, so the admin panel's `erato.toml` override switches
+/// them without a restart; everything else about the features stays as
+/// configured at startup. A key no source sets keeps its startup value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, HeapSize)]
+pub struct VoiceSwitches {
+    /// `audio_conversational.enabled`.
+    pub conversational: bool,
+    /// `audio_read_aloud.enabled`.
+    pub read_aloud: bool,
+    /// `approval_voice_commands.enabled`.
+    pub voice_commands: bool,
+    /// `approval_voice_decisions.enabled`: a later source may only switch
+    /// deciding by voice off, never on, and it is off whenever voice
+    /// commands are.
+    pub voice_decisions: bool,
+}
+
+impl VoiceSwitches {
+    #[must_use]
+    pub fn from_app_config(config: &AppConfig) -> Self {
+        Self {
+            conversational: config.audio_conversational.transcription.enabled,
+            read_aloud: config.audio_read_aloud.enabled,
+            voice_commands: config.approval_voice_commands.enabled,
+            voice_decisions: config.approval_voice_decisions.enabled
+                && config.approval_voice_commands.enabled,
+        }
+    }
+
+    /// The switches as the runtime sources layer them over `startup`,
+    /// checked as at startup for each feature they switch on. A refusal
+    /// still carries the switches the sources turn off.
+    pub fn from_toml_sources(
+        sources: &[ConfigSourceFile],
+        startup: &AppConfig,
+    ) -> Result<Self, VoiceSwitchesRefused> {
+        let schema = runtime_sources(sources).map_err(|error| VoiceSwitchesRefused {
+            error,
+            at_most: Self::ALL_ON,
+        })?;
+        let read = |path: &str, startup: bool| match schema.get::<bool>(path) {
+            Ok(value) => Ok(value),
+            Err(ConfigError::NotFound(_)) => Ok(startup),
+            Err(error) => Err(eyre!("`{path}` must be true or false: {error}")),
+        };
+        let conversational = read(
+            "audio_conversational.enabled",
+            startup.audio_conversational.transcription.enabled,
+        );
+        let read_aloud = read("audio_read_aloud.enabled", startup.audio_read_aloud.enabled);
+        let voice_commands = read(
+            "approval_voice_commands.enabled",
+            startup.approval_voice_commands.enabled,
+        );
+        let voice_decisions = read(
+            "approval_voice_decisions.enabled",
+            startup.approval_voice_decisions.enabled,
+        );
+        // A value that is not a bool keeps a switch as it was, except
+        // deciding by voice, which it turns off.
+        let at_most = Self {
+            conversational: *conversational.as_ref().unwrap_or(&true),
+            read_aloud: *read_aloud.as_ref().unwrap_or(&true),
+            voice_commands: *voice_commands.as_ref().unwrap_or(&true),
+            voice_decisions: *voice_decisions.as_ref().unwrap_or(&false)
+                && *voice_commands.as_ref().unwrap_or(&true),
+        };
+        let refused = |error| VoiceSwitchesRefused { error, at_most };
+        let voice_commands = voice_commands.map_err(refused)?;
+        let switches = Self {
+            conversational: conversational.map_err(refused)?,
+            read_aloud: read_aloud.map_err(refused)?,
+            voice_commands,
+            voice_decisions: startup.approval_voice_decisions.enabled
+                && voice_commands
+                && voice_decisions.map_err(refused)?,
+        };
+        let mut config = startup.clone();
+        switches.apply_to(&mut config);
+        if switches.conversational {
+            check_audio_feature_config(
+                &config,
+                "audio_conversational",
+                &config.audio_conversational.transcription,
+            )
+            .map_err(refused)?;
+        }
+        if switches.read_aloud && switches.read_aloud_speech_provider(&config).is_none() {
+            return Err(refused(eyre!(
+                "audio_read_aloud.enabled requires an active audio_read_aloud.speech_provider"
+            )));
+        }
+        config.validate_approval_voice_commands().map_err(refused)?;
+        config
+            .validate_approval_voice_decisions()
+            .map_err(refused)?;
+        Ok(switches)
+    }
+
+    const ALL_ON: Self = Self {
+        conversational: true,
+        read_aloud: true,
+        voice_commands: true,
+        voice_decisions: true,
+    };
+
+    pub fn apply_to(&self, config: &mut AppConfig) {
+        config.audio_conversational.transcription.enabled = self.conversational;
+        config.audio_read_aloud.enabled = self.read_aloud;
+        config.approval_voice_commands.enabled = self.voice_commands;
+        config.approval_voice_decisions.enabled = self.voice_decisions;
+    }
+
+    /// The speech provider conversational mode reads replies back with, or
+    /// `None` while conversational mode is off or cannot speak.
+    #[must_use]
+    pub fn conversational_speech_provider<'a>(
+        &self,
+        config: &'a AppConfig,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        self.conversational
+            .then(|| config.speech_provider(config.audio_conversational.speech_provider.as_deref()))
+            .flatten()
+    }
+
+    /// The speech provider finished messages are read aloud with, or `None`
+    /// while read aloud is off or has no active provider.
+    #[must_use]
+    pub fn read_aloud_speech_provider<'a>(
+        &self,
+        config: &'a AppConfig,
+    ) -> Option<(&'a str, &'a SpeechProviderConfig)> {
+        self.read_aloud
+            .then(|| config.speech_provider(config.audio_read_aloud.speech_provider.as_deref()))
+            .flatten()
+    }
+}
+
+/// Runtime sources the voice switches cannot follow: a switch turned on
+/// without what it needs, or a value that is not a bool.
+#[derive(Debug)]
+pub struct VoiceSwitchesRefused {
+    pub error: Report,
+    /// What the sources allow each switch at most: off where they turn it
+    /// off, so turning a switch off never waits for another to be fixed.
+    at_most: VoiceSwitches,
+}
+
+impl VoiceSwitchesRefused {
+    /// `previous`, with every switch the sources turn off turned off.
+    #[must_use]
+    pub fn keep(&self, previous: VoiceSwitches) -> VoiceSwitches {
+        let voice_commands = previous.voice_commands && self.at_most.voice_commands;
+        VoiceSwitches {
+            conversational: previous.conversational && self.at_most.conversational,
+            read_aloud: previous.read_aloud && self.at_most.read_aloud,
+            voice_commands,
+            voice_decisions: previous.voice_decisions
+                && self.at_most.voice_decisions
+                && voice_commands,
+        }
+    }
+}
+
+#[cfg(test)]
+mod voice_switches_tests {
+    use super::*;
+
+    fn layered(startup: &AppConfig, toml: &str) -> Result<VoiceSwitches, VoiceSwitchesRefused> {
+        VoiceSwitches::from_toml_sources(
+            &[ConfigSourceFile {
+                source_filename: "admin.toml".into(),
+                contents: toml.into(),
+            }],
+            startup,
+        )
+    }
+
+    fn deciding() -> AppConfig {
+        let mut config = AppConfig::default();
+        config.approval_voice_commands.enabled = true;
+        config.approval_voice_decisions.enabled = true;
+        config
+    }
+
+    #[test]
+    fn unset_keys_keep_the_startup_switches() {
+        let startup = deciding();
+        assert_eq!(
+            layered(&startup, "").unwrap(),
+            VoiceSwitches::from_app_config(&startup)
+        );
+    }
+
+    #[test]
+    fn deciding_by_voice_can_only_be_switched_off() {
+        let startup = deciding();
+        let off = layered(&startup, "[approval_voice_decisions]\nenabled = false\n").unwrap();
+        assert!(off.voice_commands && !off.voice_decisions);
+        let commands_off =
+            layered(&startup, "[approval_voice_commands]\nenabled = false\n").unwrap();
+        assert!(!commands_off.voice_commands && !commands_off.voice_decisions);
+
+        let mut startup = deciding();
+        startup.approval_voice_decisions.enabled = false;
+        let on = layered(&startup, "[approval_voice_decisions]\nenabled = true\n").unwrap();
+        assert!(on.voice_commands && !on.voice_decisions);
+    }
+
+    #[test]
+    fn a_feature_switched_on_without_what_it_needs_is_refused() {
+        let startup = AppConfig::default();
+        assert!(layered(&startup, "[audio_read_aloud]\nenabled = true\n").is_err());
+        assert!(layered(&startup, "[audio_conversational]\nenabled = true\n").is_err());
+        assert!(layered(&startup, "[audio_read_aloud]\nenabled = \"maybe\"\n").is_err());
+        let off = layered(&startup, "[audio_read_aloud]\nenabled = false\n").unwrap();
+        assert!(!off.read_aloud);
+    }
+
+    #[test]
+    fn a_refused_save_still_switches_off_what_it_turns_off() {
+        let startup = deciding();
+        let previous = VoiceSwitches::from_app_config(&startup);
+        let refused = layered(
+            &startup,
+            "[approval_voice_decisions]\nenabled = false\n[audio_read_aloud]\nenabled = true\n",
+        )
+        .unwrap_err();
+        assert_eq!(
+            refused.keep(previous),
+            VoiceSwitches {
+                voice_decisions: false,
+                ..previous
+            }
+        );
+        let commands_off = layered(
+            &startup,
+            "[approval_voice_commands]\nenabled = false\n[audio_conversational]\nenabled = true\n",
+        )
+        .unwrap_err()
+        .keep(previous);
+        assert!(!commands_off.voice_commands && !commands_off.voice_decisions);
+
+        let unreadable = layered(
+            &startup,
+            "[approval_voice_decisions]\nenabled = \"maybe\"\n",
+        )
+        .unwrap_err()
+        .keep(previous);
+        assert!(unreadable.voice_commands && !unreadable.voice_decisions);
+        let unreadable = layered(&startup, "[audio_read_aloud]\nenabled = \"maybe\"\n")
+            .unwrap_err()
+            .keep(previous);
+        assert_eq!(unreadable, previous);
     }
 }
 

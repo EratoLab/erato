@@ -360,6 +360,17 @@ impl AppState {
                 &config.integrations.entra_id.group_overage,
             )?;
 
+        let rechecked = std::time::Instant::now();
+        for dropped in crate::services::approval_voice_commands::recheck::recheck_configured(
+            &mut config.approval_voice_commands.words,
+            &mut config.approval_voice_decisions.phrases,
+        ) {
+            tracing::warn!("Voice-command startup check: {dropped}.");
+        }
+        tracing::info!(
+            elapsed_ms = rechecked.elapsed().as_millis(),
+            "Voice-command words rechecked against the sentence and attack sets"
+        );
         let voice_command_words = Arc::new(
             crate::services::approval_voice_commands::CommandWordsByLanguage::from_config(
                 &config.approval_voice_commands.words,
@@ -373,6 +384,11 @@ impl AppState {
         }
         for note in notes {
             tracing::info!("Hesitation words: {note}.");
+        }
+        for dropped in
+            voice_command_words.check_wait_lines(&mut config.audio_conversational.wait_lines)
+        {
+            tracing::warn!("Wait line dropped: {dropped}.");
         }
         let speech_readings = Arc::new(
             crate::services::speech::readings::ReadingsByLanguage::from_config(
@@ -424,11 +440,18 @@ impl AppState {
         self.reloadable.read().await.mcp.clone()
     }
 
+    /// The voice features' switches as last reloaded. Read them on every
+    /// use, never from `config`: the admin panel switches them live.
+    pub async fn voice_switches(&self) -> crate::config::VoiceSwitches {
+        self.reloadable.read().await.voice_switches
+    }
+
     /// Clone the startup config with the active runtime settings applied.
     pub async fn effective_config(&self) -> AppConfig {
         let mut config = self.config.clone();
         let reloadable = self.reloadable.read().await;
         reloadable.mcp.config.apply_to(&mut config);
+        reloadable.voice_switches.apply_to(&mut config);
         config.i18n.language.clone_from(&reloadable.i18n.language);
         config.frontend.translation_po_compilation_mode =
             reloadable.i18n.translation_po_compilation_mode;

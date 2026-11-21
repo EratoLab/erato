@@ -1,6 +1,6 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
 pub use self::axum::serve_files_with_script;
-use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy};
+use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, VoiceSwitches};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
 use crate::distribution::frontend_bundles::{
@@ -187,6 +187,7 @@ pub struct ServedFrontend {
 #[derive(Debug, erato_memory::HeapSize)]
 pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
+    configured_voices: ConfiguredVoices,
     branding: crate::distribution::branding::BrandingAssets,
 }
 
@@ -289,6 +290,7 @@ pub fn build_frontend_registry(
 
     FrontendRegistry {
         frontends,
+        configured_voices: ConfiguredVoices::of(config),
         branding: distribution.branding.clone(),
     }
 }
@@ -323,6 +325,54 @@ fn build_content_security_policy(config: &AppConfig) -> Option<HeaderValue> {
         HeaderValue::from_str(&content_security_policy)
             .expect("generated Content-Security-Policy header should be valid"),
     )
+}
+
+/// Whether a voice is configured for conversational mode and for read
+/// aloud, so a feature switched on while Erato runs speaks only with one.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, erato_memory::HeapSize)]
+pub struct ConfiguredVoices {
+    conversational: bool,
+    read_aloud: bool,
+}
+
+impl ConfiguredVoices {
+    fn of(config: &AppConfig) -> Self {
+        let voice = |id: &Option<String>| config.speech_provider(id.as_deref()).is_some();
+        Self {
+            conversational: voice(&config.audio_conversational.speech_provider),
+            read_aloud: voice(&config.audio_read_aloud.speech_provider),
+        }
+    }
+}
+
+/// The page's voice switches. Injected per request from the live switches,
+/// so the admin panel switches a voice feature without a restart.
+fn voice_switch_environment(
+    voices: ConfiguredVoices,
+    switches: VoiceSwitches,
+) -> [(&'static str, Value); 5] {
+    [
+        (
+            FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED,
+            Value::Bool(switches.conversational),
+        ),
+        (
+            "SPEECH_ENABLED",
+            Value::Bool(switches.conversational && voices.conversational),
+        ),
+        (
+            "APPROVAL_VOICE_COMMANDS_ENABLED",
+            Value::Bool(switches.voice_commands),
+        ),
+        (
+            "APPROVAL_VOICE_DECISIONS_ENABLED",
+            Value::Bool(switches.voice_decisions),
+        ),
+        (
+            "READ_ALOUD_ENABLED",
+            Value::Bool(switches.read_aloud && voices.read_aloud),
+        ),
+    ]
 }
 
 /// The confirmation phrase each language approves with, as shown, once a
@@ -675,10 +725,12 @@ fn build_frontend_environment_with(
         FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(config.audio_dictation.max_recording_duration_seconds.into()),
     );
-    env.additional_environment.insert(
-        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED.to_string(),
-        Value::Bool(config.audio_conversational.transcription.enabled),
-    );
+    for (key, value) in voice_switch_environment(
+        ConfiguredVoices::of(config),
+        VoiceSwitches::from_app_config(config),
+    ) {
+        env.additional_environment.insert(key.to_string(), value);
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS.to_string(),
         Value::Number(
@@ -762,27 +814,6 @@ fn build_frontend_environment_with(
                 .into(),
         ),
     );
-    env.additional_environment.insert(
-        "SPEECH_ENABLED".to_string(),
-        Value::Bool(
-            config.audio_conversational.transcription.enabled
-                && config
-                    .audio_conversational
-                    .speech_provider
-                    .as_ref()
-                    .is_some_and(|id| config.resolve_speech_provider_id(id).is_ok()),
-        ),
-    );
-    env.additional_environment.insert(
-        "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
-        Value::Bool(config.approval_voice_commands.enabled),
-    );
-    env.additional_environment.insert(
-        "APPROVAL_VOICE_DECISIONS_ENABLED".to_string(),
-        Value::Bool(
-            config.approval_voice_commands.enabled && config.approval_voice_decisions.enabled,
-        ),
-    );
     if let Some(phrases) = approval_voice_phrases {
         env.additional_environment
             .insert("APPROVAL_VOICE_PHRASES".to_string(), phrases.clone());
@@ -812,10 +843,6 @@ fn build_frontend_environment_with(
             serde_json::to_value(&config.spoken_number_words).unwrap_or(Value::Null),
         );
     }
-    env.additional_environment.insert(
-        "READ_ALOUD_ENABLED".to_string(),
-        Value::Bool(config.read_aloud_speech_provider().is_some()),
-    );
     // Always inject max upload size (use configured value or default)
     let max_upload_size = config
         .max_upload_size_bytes()
@@ -1360,7 +1387,7 @@ pub mod axum {
             return Ok(response);
         }
 
-        let frontend_environment = frontend.environment.clone();
+        let mut frontend_environment = frontend.environment.clone();
         let component_kits = frontend.component_kits.clone();
         let import_map_json = frontend.import_map_json.clone();
         let content_security_policy = frontend.content_security_policy.clone();
@@ -1464,6 +1491,14 @@ pub mod axum {
             headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
 
         if is_html && should_inject_environment {
+            let switches = reloadable.read().await.voice_switches;
+            for (key, value) in
+                voice_switch_environment(frontend_registry.configured_voices, switches)
+            {
+                frontend_environment
+                    .additional_environment
+                    .insert(key.to_string(), value);
+            }
             // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
@@ -1713,6 +1748,117 @@ mod tests {
                 Some(&Value::Bool(expected))
             );
         }
+    }
+
+    #[test]
+    fn the_page_gets_the_live_voice_switches_not_the_startup_ones() {
+        let live = VoiceSwitches {
+            conversational: true,
+            read_aloud: true,
+            voice_commands: true,
+            voice_decisions: false,
+        };
+        let environment: std::collections::HashMap<_, _> =
+            voice_switch_environment(ConfiguredVoices::default(), live)
+                .into_iter()
+                .collect();
+        assert_eq!(
+            environment[FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            environment["APPROVAL_VOICE_COMMANDS_ENABLED"],
+            Value::Bool(true)
+        );
+        assert_eq!(
+            environment["APPROVAL_VOICE_DECISIONS_ENABLED"],
+            Value::Bool(false)
+        );
+        // Without a voice configured, switching speech on speaks nothing.
+        assert_eq!(environment["SPEECH_ENABLED"], Value::Bool(false));
+        assert_eq!(environment["READ_ALOUD_ENABLED"], Value::Bool(false));
+        let voices = ConfiguredVoices {
+            conversational: true,
+            read_aloud: true,
+        };
+        let spoken: std::collections::HashMap<_, _> =
+            voice_switch_environment(voices, live).into_iter().collect();
+        assert_eq!(spoken["SPEECH_ENABLED"], Value::Bool(true));
+        assert_eq!(spoken["READ_ALOUD_ENABLED"], Value::Bool(true));
+    }
+
+    #[tokio::test]
+    async fn a_served_page_carries_the_switches_of_the_last_reload() {
+        use ::axum::{Extension, body::Body, http::Request};
+        use http_body_util::BodyExt;
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(
+            web.join("index.html"),
+            "<html><head></head><body></body></html>",
+        )
+        .unwrap();
+        std::fs::write(web.join("404.html"), "Not Found").unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web.display().to_string();
+        let distribution = Distribution::load(&config);
+        let registry = std::sync::Arc::new(build_frontend_registry(
+            &config,
+            &distribution,
+            &Default::default(),
+        ));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
+        let page = || async {
+            let response = serve_files_with_script(
+                Extension(registry.clone()),
+                Extension(DeploymentVersion(None)),
+                Extension(reloadable.clone()),
+                Request::builder()
+                    .uri("/index.html")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+            String::from_utf8(
+                response
+                    .into_body()
+                    .collect()
+                    .await
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec(),
+            )
+            .unwrap()
+        };
+        assert!(
+            page()
+                .await
+                .contains("window.APPROVAL_VOICE_COMMANDS_ENABLED = false;")
+        );
+
+        let switched = VoiceSwitches {
+            voice_commands: true,
+            voice_decisions: true,
+            ..VoiceSwitches::from_app_config(&config)
+        };
+        reloadable.write().await.voice_switches = switched;
+        let served = page().await;
+        assert!(
+            served.contains("window.APPROVAL_VOICE_COMMANDS_ENABLED = true;"),
+            "{served}"
+        );
+        assert!(
+            served.contains("window.APPROVAL_VOICE_DECISIONS_ENABLED = true;"),
+            "{served}"
+        );
     }
 
     #[test]
@@ -2595,6 +2741,7 @@ mod tests {
     #[test]
     fn specific_mount_path_matches_before_root() {
         let registry = FrontendRegistry {
+            configured_voices: ConfiguredVoices::default(),
             frontends: vec![
                 served_frontend("/public/platform-office-addin", true),
                 served_frontend("/office-addin", true),
@@ -2614,6 +2761,7 @@ mod tests {
     #[test]
     fn disabled_specific_mount_path_does_not_fall_back_to_root() {
         let registry = FrontendRegistry {
+            configured_voices: ConfiguredVoices::default(),
             frontends: vec![
                 served_frontend("/office-addin", false),
                 served_frontend("/", true),

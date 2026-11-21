@@ -138,9 +138,7 @@ impl ReadingsByLanguage {
 
     /// The readings for a language tag ("de-AT"), else for its primary subtag ("de").
     pub fn get(&self, language: &str) -> Option<Arc<Readings>> {
-        let tag = language.trim().to_ascii_lowercase().replace('_', "-");
-        let primary = tag.split('-').next().unwrap_or_default();
-        self.0.get(&tag).or_else(|| self.0.get(primary)).cloned()
+        erato_config::language_words::by_tag(language, |tag| self.0.get(tag)).cloned()
     }
 }
 

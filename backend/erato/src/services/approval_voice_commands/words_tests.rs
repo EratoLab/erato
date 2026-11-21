@@ -1,6 +1,7 @@
 //! Words a language package adds: they work on a card in that language and
 //! can never weaken the guards.
 
+use super::corpus::attacks;
 use super::model::Answer;
 use super::phrase::match_phrase;
 use super::tests::{SentenceSet, heldout_set, sentence_set};
@@ -358,15 +359,6 @@ fn a_script_without_spaces_never_decides() {
             );
         }
     }
-}
-
-fn attacks() -> Vec<(&'static str, &'static str)> {
-    include_str!("attacks.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|line| line.split_once('|').expect("language|words"))
-        .collect()
 }
 
 fn decision(meaning: Option<VoiceMeaning>) -> Option<VoiceMeaning> {
