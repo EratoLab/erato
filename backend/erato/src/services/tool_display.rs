@@ -431,7 +431,7 @@ fn without_approval_argument<'a>(
 /// calls by a name qualified with its server (see `mcp_tool_names`); `None`
 /// for a tool it calls by that name already.
 pub fn own_tool_name(tool: &ManagedTool) -> Option<String> {
-    tool.qualified_name.as_ref()?;
+    tool.offered_as.as_ref()?;
     Some(sanitize_display_text(&tool.tool.name, MAX_DISPLAY_NAME_CHARS).text)
         .filter(|name| !name.is_empty())
 }
@@ -480,13 +480,13 @@ mod tests {
             tool: Tool::new("search\u{202E}", "Searches.", JsonObject::new()),
             approval_argument: None,
             destructive_hint_source: Default::default(),
-            qualified_name: None,
+            offered_as: None,
         };
         let config = McpRuntimeConfig::default();
         assert_eq!(own_tool_name(&tool), None);
         assert_eq!(preparing_call_display(&config, &tool), None);
 
-        tool.qualified_name = Some("crm_eu__search_0a1b2c3d".into());
+        tool.offered_as = Some("crm_eu__search_0a1b2c3d".into());
         assert_eq!(own_tool_name(&tool).as_deref(), Some("search"));
         let preparing = preparing_call_display(&config, &tool).unwrap();
         assert_eq!(preparing.tool_name.as_deref(), Some("search"));

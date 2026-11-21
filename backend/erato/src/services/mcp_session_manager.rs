@@ -1174,7 +1174,7 @@ impl McpSessionManager {
                     tool: tool.tool,
                     approval_argument: tool.approval_argument,
                     destructive_hint_source: tool.sources.destructive_hint,
-                    qualified_name: None,
+                    offered_as: None,
                 });
             }
         }
@@ -1531,16 +1531,17 @@ pub struct ManagedTool {
     pub approval_argument: Option<String>,
     /// Who set the tool's destructive hint, which a card names.
     pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
-    /// Set when another server or one of Erato's own tools uses the same bare
-    /// name (see `mcp_tool_names`): the model sees and calls the tool under
-    /// this name instead. The server is always called with `tool.name`.
-    pub qualified_name: Option<String>,
+    /// The name the model is offered the tool under, set only where it is not
+    /// `tool.name`: when another server or one of Erato's own tools uses the
+    /// same bare name, it is a name qualified with the server (see
+    /// `mcp_tool_names`). The server is always called with `tool.name`.
+    pub offered_as: Option<String>,
 }
 
 impl ManagedTool {
     /// The name the tool is offered to the model under and dispatched by.
     pub fn model_name(&self) -> &str {
-        self.qualified_name.as_deref().unwrap_or(&self.tool.name)
+        self.offered_as.as_deref().unwrap_or(&self.tool.name)
     }
 }
 

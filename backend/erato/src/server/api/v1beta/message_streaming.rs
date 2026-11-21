@@ -13772,7 +13772,7 @@ mod tests {
             server_id: server_id.to_string(),
             tool,
             destructive_hint_source: Default::default(),
-            qualified_name: None,
+            offered_as: None,
         }
     }
 

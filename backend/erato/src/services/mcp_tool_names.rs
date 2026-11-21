@@ -117,7 +117,7 @@ pub fn assign_model_names(tools: &mut [ManagedTool], builtin_names: &[&str]) -> 
     let builtin: HashSet<&str> = builtin_names.iter().copied().collect();
     let mut servers_by_name: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for tool in tools.iter_mut() {
-        tool.qualified_name = None;
+        tool.offered_as = None;
         servers_by_name
             .entry(tool.tool.name.to_string())
             .or_default()
@@ -150,7 +150,7 @@ pub fn assign_model_names(tools: &mut [ManagedTool], builtin_names: &[&str]) -> 
         .collect();
     let candidates: Vec<(String, bool)> = pairs
         .iter()
-        .map(|(server_id, tool_name)| plain_qualified_name(server_id, tool_name))
+        .map(|(server_id, tool_name)| plain_offered_name(server_id, tool_name))
         .collect();
     // Two faithful names are the same text only when a separator inside a
     // server id or tool name makes them so (`a__b` + `c`, `a` + `b__c`).
@@ -176,7 +176,7 @@ pub fn assign_model_names(tools: &mut [ManagedTool], builtin_names: &[&str]) -> 
         }
         let (server_id, tool_name) = *pair;
         let name = (0u32..)
-            .map(|attempt| digest_qualified_name(candidate, server_id, tool_name, attempt))
+            .map(|attempt| digest_offered_name(candidate, server_id, tool_name, attempt))
             .find(|name| !taken.contains(name))
             .expect("an unused digest");
         taken.insert(name.clone());
@@ -185,7 +185,7 @@ pub fn assign_model_names(tools: &mut [ManagedTool], builtin_names: &[&str]) -> 
 
     for tool in tools.iter_mut() {
         if let Some(name) = assigned.get(&(tool.server_id.as_str(), &*tool.tool.name)) {
-            tool.qualified_name = Some(name.clone());
+            tool.offered_as = Some(name.clone());
         }
     }
 
@@ -246,7 +246,7 @@ pub fn warn_about(collisions: &[NameCollision]) {
 /// `<server>__<tool>` with every character a provider would refuse replaced by
 /// `_`, and whether that is the server id and tool name exactly, fits and
 /// starts the way every provider accepts.
-fn plain_qualified_name(server_id: &str, tool_name: &str) -> (String, bool) {
+fn plain_offered_name(server_id: &str, tool_name: &str) -> (String, bool) {
     let name = format!("{}{SEPARATOR}{}", sanitize(server_id), sanitize(tool_name));
     let faithful = name == format!("{server_id}{SEPARATOR}{tool_name}")
         && name.len() <= MAX_NAME_LEN
@@ -257,7 +257,7 @@ fn plain_qualified_name(server_id: &str, tool_name: &str) -> (String, bool) {
 /// The plain name, cut to leave room, prefixed with `_` when it does not start
 /// with a letter, and ended with `_` and a digest of the exact server id and
 /// tool name, so names that read the same after cleaning stay apart.
-fn digest_qualified_name(plain: &str, server_id: &str, tool_name: &str, attempt: u32) -> String {
+fn digest_offered_name(plain: &str, server_id: &str, tool_name: &str, attempt: u32) -> String {
     let mut hasher = Sha256::new();
     hasher.update(server_id.as_bytes());
     hasher.update([0]);
@@ -308,7 +308,7 @@ mod tests {
             tool: Tool::new(name.to_string(), "", serde_json::Map::new()),
             approval_argument: None,
             destructive_hint_source: Default::default(),
-            qualified_name: None,
+            offered_as: None,
         }
     }
 
@@ -340,7 +340,7 @@ mod tests {
                 ("files", "read_file", "read_file")
             ]
         );
-        assert!(tools.iter().all(|tool| tool.qualified_name.is_none()));
+        assert!(tools.iter().all(|tool| tool.offered_as.is_none()));
     }
 
     #[test]
@@ -528,56 +528,13 @@ mod tests {
         assert!(names[2].2.starts_with("_1crm__lookup_"));
     }
 
+    /// Pinned: a change to the digest renames tools in running chats.
     #[test]
-    fn a_name_is_the_same_on_every_run() {
-        let mut first = vec![tool("crm.eu", "search"), tool("crm_us", "search")];
-        let mut second = first.clone();
-        assign_model_names(&mut first, &[]);
-        assign_model_names(&mut second, &[]);
-        assert_eq!(model_names(&first), model_names(&second));
-        // Pinned: a change to the digest renames tools in running chats.
-        assert_eq!(first[0].model_name(), "crm_eu__search_54d2a42a");
-        assert_eq!(first[1].model_name(), "crm_us__search");
-    }
-
-    #[test]
-    fn a_call_is_dispatched_to_the_server_its_name_names() {
-        let mut tools = vec![
-            tool("crm_eu", "search"),
-            tool("crm_us", "search"),
-            tool("crm_us", "get_record"),
-        ];
+    fn offered_names_are_pinned() {
+        let mut tools = vec![tool("crm.eu", "search"), tool("crm_us", "search")];
         assign_model_names(&mut tools, &[]);
-        let by_name = by_model_name(tools);
-        assert_eq!(by_name.len(), 3);
-        let us = &by_name["crm_us__search"];
-        assert_eq!(
-            (us.server_id.as_str(), &*us.tool.name),
-            ("crm_us", "search")
-        );
-        let eu = &by_name["crm_eu__search"];
-        assert_eq!(
-            (eu.server_id.as_str(), &*eu.tool.name),
-            ("crm_eu", "search")
-        );
-        assert_eq!(by_name["get_record"].server_id, "crm_us");
-        assert!(!by_name.contains_key("search"));
-    }
-
-    #[test]
-    fn the_model_is_offered_each_tool_once_under_its_model_name() {
-        let mut tools = vec![
-            tool("crm_eu", "search"),
-            tool("crm_us", "search"),
-            tool("crm_us", "get_record"),
-        ];
-        assign_model_names(&mut tools, &[]);
-        let offered: Vec<String> =
-            crate::services::mcp_manager::convert_mcp_tools_to_genai_tools(tools, false)
-                .iter()
-                .map(|tool| tool.name.to_string())
-                .collect();
-        assert_eq!(offered, ["crm_eu__search", "crm_us__search", "get_record"]);
+        assert_eq!(tools[0].model_name(), "crm_eu__search_54d2a42a");
+        assert_eq!(tools[1].model_name(), "crm_us__search");
     }
 
     /// The mock MCP server in process, recording each `tools/call` as its path

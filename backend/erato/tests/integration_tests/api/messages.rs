@@ -9006,7 +9006,8 @@ async fn stored_parts(app_state: &erato::state::AppState, message_id: Uuid) -> V
 /// Two servers that offer the same tools: the model sees each tool under a
 /// name qualified with its server, and a call reaches the server its name
 /// names, under the tool's own name. Only the second server's `read_file`
-/// fails, so a call routed there would not succeed.
+/// fails, so a call routed there would not succeed. Switching one server off
+/// for the chat does not rename the other's tools.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -9020,13 +9021,18 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
 ) {
     const README: &str = "This is a mock README file.";
     let recorder = RequestBodyRecorder::new();
+    let answered = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
-    mocks.mock(|when, then| {
-        when.post()
-            .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[README], &[]));
-        mock_llm_sse_response(then, build_openai_text_streaming_response(&["ROUTED"]));
-    });
+    {
+        let answered = answered.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[README], &[]))
+                .matcher(answered);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["ROUTED"]));
+        });
+    }
     {
         let recorder = recorder.clone();
         mocks.mock(move |when, then| {
@@ -9107,6 +9113,21 @@ async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_serve
         tool_use["output"].to_string().contains(README),
         "{tool_use}"
     );
+
+    // Names are given before the chat's switches apply, so with the other
+    // server off, `files` keeps the names the model called it by.
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id from the first turn");
+    put_chat_disabled_servers(&server, &chat_id, &["broken_files"]).await;
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": chat_id, "user_message": "and again" }))
+        .await;
+    response.assert_status_ok();
+    let offers = recorded_tool_offers(&answered.bodies());
+    assert_eq!(offers.len(), 2, "{offers:?}");
+    assert_eq!(offers[1], vec!["files__list_files", "files__read_file"]);
+    assert_eq!(extract_full_text(&parse_sse_events(&response)), "ROUTED");
 }
 
 const QUALIFIED_PROBE: &str = "mock_mcp_approval_copy__publish_approval_probe";
@@ -9115,7 +9136,8 @@ const PROBE_PUBLISHED: &str = "approval probe published";
 /// A turn whose model calls the approval probe of the second of two servers
 /// that serve it, by its qualified name, and parks on the card; and the
 /// approval id. Once the call's result is in, the model answers
-/// `QUALIFIED-APPROVED`.
+/// `QUALIFIED-APPROVED`, provided the call is replayed under the name it
+/// called.
 async fn park_a_qualified_call(
     pool: Pool<Postgres>,
 ) -> (erato::state::AppState, TestServer, Uuid, String) {
@@ -9125,7 +9147,7 @@ async fn park_a_qualified_call(
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
-            .matcher(BodyContainsMatcher::new(&[PUBLISHED], &[]));
+            .matcher(BodyContainsMatcher::new(&[PUBLISHED, QUALIFIED], &[]));
         mock_llm_sse_response(
             then,
             build_openai_text_streaming_response(&["QUALIFIED-APPROVED"]),

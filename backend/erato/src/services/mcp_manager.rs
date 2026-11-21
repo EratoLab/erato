@@ -1143,7 +1143,7 @@ mod tests {
                 tool,
                 approval_argument: Some("hasUserApproved".to_string()),
                 destructive_hint_source: Default::default(),
-                qualified_name: None,
+                offered_as: None,
             }],
             false,
         );
@@ -1204,7 +1204,7 @@ mod tests {
                 tool: mcp_tool,
                 approval_argument: None,
                 destructive_hint_source: Default::default(),
-                qualified_name: None,
+                offered_as: None,
             }],
             false,
         );
