@@ -106,4 +106,45 @@ describe("seedDecisionParts", () => {
     expect(part).toMatchObject({ reason: null });
     expect(part).not.toHaveProperty("change_request");
   });
+
+  it("seeds a call the model made by a qualified name as the server writes it", () => {
+    const display = {
+      title: "Search records",
+      description: "Searches the records.",
+      description_truncated: false,
+      server_name: "CRM EU",
+      tool_name: "search",
+    };
+    for (const decision of ["approve", "reject"] as const) {
+      const [, row] = seedDecisionParts(
+        [
+          {
+            item: {
+              approval_id: "call-2",
+              tool_call_id: "call-2",
+              tool_name: "search",
+              called_as: "crm_eu__search",
+              display,
+              input: { query: "invoices" },
+            },
+            decision,
+          },
+        ],
+        "mcp_tool",
+        "2026-11-09T10:00:00Z",
+      );
+      expect(row).toMatchObject({
+        content_type: "tool_use",
+        tool_name: "crm_eu__search",
+        display: {
+          title: "Search records",
+          server_name: "CRM EU",
+          tool_name: "search",
+        },
+      });
+      expect(
+        (row as { display?: { description?: string } }).display?.description,
+      ).toBeUndefined();
+    }
+  });
 });

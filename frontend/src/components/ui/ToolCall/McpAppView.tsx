@@ -11,6 +11,7 @@ import { useGetMcpServerAppView } from "@/lib/generated/v1betaApi/v1betaApiCompo
 import { saveViewDownload } from "@/lib/mcpApps/download";
 import { viewHostContext } from "@/lib/mcpApps/hostContext";
 import { isRecord } from "@/lib/toolCallGist/serverText";
+import { shownToolName } from "@/lib/toolCallGist/toolName";
 
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ViewDownload } from "@/lib/mcpApps/download";
@@ -318,7 +319,7 @@ const McpAppFrame = ({
   const notice = notShown && !withFiles && <NotShownNotice />;
   if (!data || !pageUrl || failed) return notice || null;
 
-  const toolName = part.tool_name ?? "";
+  const toolName = shownToolName(part);
   const fileName = download?.file.name ?? "";
   return (
     <>

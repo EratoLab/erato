@@ -1399,6 +1399,7 @@ mod deciding_by_voice {
             approval_id: approval_id.to_string(),
             tool_call_id: format!("call_{approval_id}"),
             tool_name: "update_task".to_string(),
+            called_as: None,
             display: label.map(|label| ToolDisplayMetadata {
                 label: Some(label),
                 ..serde_json::from_value(

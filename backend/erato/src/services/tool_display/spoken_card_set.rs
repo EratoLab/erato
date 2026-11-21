@@ -101,6 +101,7 @@ fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::To
                     description: None,
                     description_truncated: false,
                     server_name: Some(config.mcp_server_display_name(server)),
+                    tool_name: None,
                     label: None,
                     read_only: false,
                     closed_world: false,

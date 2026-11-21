@@ -59,7 +59,7 @@ pub(super) async fn on_message(bot: Arc<TeamsBot>, host: Host, activity: Activit
 }
 
 async fn handle_message(bot: Arc<TeamsBot>, host: Host, activity: Activity, allow_sign_in: bool) {
-    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };
@@ -75,7 +75,7 @@ async fn handle_message(bot: Arc<TeamsBot>, host: Host, activity: Activity, allo
 /// reports is stored first, so the stored language that decides is never
 /// older than this activity and the bot does not switch language from one
 /// reply to the next.
-async fn sender_and_language(bot: &TeamsBot, host: &Host, activity: &Activity) -> (Sender, Lang) {
+async fn sender_and_language(host: &Host, activity: &Activity) -> (Sender, Lang) {
     let sender = match activity.from_aad_object_id() {
         Some(entra_object_id) => host.find_user(entra_object_id).await,
         None => Ok(None),
@@ -91,11 +91,7 @@ async fn sender_and_language(bot: &TeamsBot, host: &Host, activity: &Activity) -
         remember_client_locale(host, user_id, activity).await;
     }
     let lang = host
-        .reply_language(
-            user_id,
-            activity.client_locale().locale.as_deref(),
-            &bot.settings.default_language,
-        )
+        .reply_language(user_id, activity.client_locale().locale.as_deref())
         .await;
     (sender, lang)
 }
@@ -470,7 +466,7 @@ fn approval_error_text(error: StartError, lang: Lang) -> String {
 
 /// An edit is only a proposal. It never starts a generation or repeats tools.
 pub(super) async fn on_message_edit(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
-    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };
@@ -1968,9 +1964,7 @@ pub(super) async fn deliver_proactive(
     let needs_files = !completion.requested_ids().is_empty();
     for conversation in conversations {
         // Nothing to answer: the result is in the conversation owner's language.
-        let lang = host
-            .stored_language(conversation.user_id, &bot.settings.default_language)
-            .await;
+        let lang = host.stored_language(conversation.user_id).await;
         let session = if needs_files {
             proactive_session(
                 bot,
@@ -2056,7 +2050,7 @@ fn unknown_user_text(bot: &TeamsBot, lang: Lang) -> String {
 /// Someone has the bot in a personal chat for the first time: greet them and,
 /// if Erato does not know them yet, say what to do before the first question.
 pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
-    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };

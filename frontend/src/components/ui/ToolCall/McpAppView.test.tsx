@@ -437,6 +437,24 @@ describe("McpAppView", () => {
     expect(frame).toHaveAttribute("referrerpolicy", "origin");
     expect(frame).toHaveAttribute("aria-hidden", "true");
     expect(frame.style.height).toBe("0px");
+    expect(frame).toHaveAttribute("title", "Interactive view of show_counter");
+  });
+
+  it("names the frame by the tool's own name when the model called it by a qualified one", async () => {
+    renderView({
+      ...call(),
+      tool_name: "apps__show_counter",
+      display: {
+        title: "Counter",
+        description_truncated: false,
+        server_name: "Apps",
+        tool_name: "show_counter",
+      },
+    });
+
+    const { frame } = await loadedFrame();
+
+    expect(frame).toHaveAttribute("title", "Interactive view of show_counter");
   });
 
   it("hands the view its HTML and CSP, then the call's input and result, and follows its height", async () => {

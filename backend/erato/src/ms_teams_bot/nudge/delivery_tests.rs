@@ -1514,7 +1514,7 @@ async fn a_german_user_gets_the_confirmation_in_german(pool: sqlx::PgPool) {
     const OID: &str = "4a1b3c5d-0000-4000-8000-0000000d0e0f";
     let (user, item) =
         confirmed_reminder(&state, &host, &base, "bestaetigt", OID, Some("de-DE")).await;
-    let lang = host.stored_language(user.id, "en").await;
+    let lang = host.stored_language(user.id).await;
     let target = ReplyTarget {
         connector: &bot.connector,
         service_url: &base,

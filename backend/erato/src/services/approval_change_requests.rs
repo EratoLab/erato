@@ -184,6 +184,7 @@ mod tests {
                 approval_id: call_id.into(),
                 tool_call_id: call_id.into(),
                 tool_name: tool.into(),
+                called_as: None,
                 display: None,
                 input: json!({}),
                 child: None,
