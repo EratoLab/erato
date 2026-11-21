@@ -373,6 +373,27 @@ export function acceptedWordPlanFromHistory(
   return { toolCallId: part.tool_call_id, content: contentJson, plan: parsed };
 }
 
+/**
+ * The parts an earlier attempt of the request changed that its accepted plan leaves out, by their
+ * own titles, as the add-in returned them on acceptance. Empty for a plan accepted at once.
+ */
+export function wordPlanNotInProposal(
+  content: readonly ContentPart[] | undefined,
+): string[] {
+  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
+  const part = accepted.length === 1 ? accepted[0] : undefined;
+  const output = part?.content_type === "tool_use" ? part.output : undefined;
+  const names =
+    object(output) && object(output.result)
+      ? output.result.notInProposal
+      : undefined;
+  return Array.isArray(names)
+    ? names.filter(
+        (name): name is string => typeof name === "string" && !!name.trim(),
+      )
+    : [];
+}
+
 export interface WordHistoryParagraph {
   /** As the request rendered it: line breaks folded, whitespace trimmed. */
   text: string;

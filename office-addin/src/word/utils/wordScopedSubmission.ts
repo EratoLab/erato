@@ -11,7 +11,7 @@ import {
 import {
   MAX_WORD_SCOPED_CHANGES,
   MAX_WORD_SCOPED_SOURCES,
-  WORD_FULL_PLAN_RULE,
+  WORD_SCOPED_NEEDS_COMPLETE_READ,
   WORD_SCOPED_SIZE,
   WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN,
 } from "./wordAuthoringContract";
@@ -185,18 +185,24 @@ export function expandWordScopedSubmission(
     (read ? undefined : completeReadTargets(snapshot, input.readToken));
   if (input.snapshot !== snapshot.token || !targets)
     return unread("/readToken", WORD_SCOPED_TOKEN_MESSAGE);
+  // After a complete read the caller's maxPlanBytes check is the limit, as for a full plan.
   if (
+    scope &&
     new TextEncoder().encode(JSON.stringify(input)).length >
-    MAX_WORD_SCOPE_BYTES
-  )
-    return fail(
+      MAX_WORD_SCOPE_BYTES
+  ) {
+    if (snapshot.completeReadIssue)
+      return fail(
+        "/scoped_edit",
+        `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN}`,
+      );
+    // too-large asks for a read, so the complete read uses the recovery read allowance.
+    throw new WordScopedSubmissionError(
       "/scoped_edit",
-      `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${
-        snapshot.completeReadIssue
-          ? WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN
-          : `${WORD_FULL_PLAN_RULE} A full plan needs a complete read.`
-      }`,
+      "too-large",
+      WORD_SCOPED_NEEDS_COMPLETE_READ,
     );
+  }
   const edit = input.scoped_edit;
   if (
     !only(input, ["snapshot", "readToken", "scoped_edit"]) ||

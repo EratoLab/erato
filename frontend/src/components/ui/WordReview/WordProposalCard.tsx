@@ -62,7 +62,25 @@ export interface WordProposalCardProps {
   cardRef?: ComponentProps<typeof WordReviewCard>["cardRef"];
   /** Whether a plan without a snapshot is drawn from its own data. */
   showSavedPlan?: boolean;
+  /** Parts an earlier attempt of the request changed that this plan leaves out, by title. */
+  notInProposal?: readonly string[];
   adapter?: WordProposalAdapter;
+}
+
+const NAMED_PARTS = 5;
+
+/** One plain line naming the parts a smaller retry left out; never refs. */
+function wordNotInProposalText(names: readonly string[]): string {
+  const listed = names.slice(0, NAMED_PARTS).join(", ");
+  return names.length > NAMED_PARTS
+    ? t({
+        id: "officeAddin.word.proposal.notInProposalMore",
+        message: `Not in this proposal: ${listed} and other sections`,
+      })
+    : t({
+        id: "officeAddin.word.proposal.notInProposal",
+        message: `Not in this proposal: ${listed}`,
+      });
 }
 
 export function WordProposalCard({
@@ -74,6 +92,7 @@ export function WordProposalCard({
   testId = "word-proposal-card",
   cardRef,
   showSavedPlan = true,
+  notInProposal,
   adapter,
 }: WordProposalCardProps) {
   const detailsId = useId();
@@ -135,6 +154,14 @@ export function WordProposalCard({
           review={derived}
           onLocate={snapshot ? adapter?.locate : undefined}
         />
+      )}
+      {!!notInProposal?.length && (
+        <p
+          className="word-review__hint [overflow-wrap:anywhere]"
+          data-testid="word-plan-not-in-proposal"
+        >
+          {wordNotInProposalText(notInProposal)}
+        </p>
       )}
       {status?.notice}
     </WordReviewCard>

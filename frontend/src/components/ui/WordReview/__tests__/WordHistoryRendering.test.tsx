@@ -200,6 +200,22 @@ describe("Word chats shown outside Word", () => {
       within(card).getByRole("button", { name: "Copy text" }),
     ).toBeVisible();
     expect(within(card).queryByText(/^Saved draft/)).toBeNull();
+    expect(within(card).queryByTestId("word-plan-not-in-proposal")).toBeNull();
+  });
+
+  it("names on the read-only card the sections an accepted retry left out", async () => {
+    const messages = messagesOf(retryAccepted);
+    const last = messages[messages.length - 1];
+    const accepted = last.content.filter(isSubmit).at(-1)!;
+    (
+      accepted as unknown as { output: { result: Record<string, unknown> } }
+    ).output.result.notInProposal = ["§ 6 Lieferung", "§ 11 Kündigung"];
+    renderChat(messages);
+
+    const card = await screen.findByTestId("word-history-plan");
+    expect(
+      within(card).getByTestId("word-plan-not-in-proposal"),
+    ).toHaveTextContent("Not in this proposal: § 6 Lieferung, § 11 Kündigung");
   });
 
   it("keeps the accepted submission as the one step that names the proposal", async () => {

@@ -307,10 +307,6 @@ describe("a plan that writes what changed since the capture", () => {
     expect([
       ...wordPlanWrittenBlocks(
         {
-          version: 1,
-          snapshot: doc.snapshot.token,
-          readToken: "scoped",
-          scope: "body",
           entries: order.map((ref) => ({ kind: "keep", source: [ref] })),
           deleted: [],
         },

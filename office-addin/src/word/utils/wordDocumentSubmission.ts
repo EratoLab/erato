@@ -27,6 +27,11 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
+import {
+  wordNotInProposalReceipt,
+  wordPartsNotInProposal,
+  wordSubmissionBlocks,
+} from "./wordPlanCoverage";
 import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
 import {
   expandWordScopedSubmission,
@@ -61,6 +66,19 @@ export function createWordDocumentSubmissionExecutor(
     const result = await execute(input, context);
     if (result.ok) return result;
     const snapshot = context && session.snapshotForSubmission(context);
+    if (
+      context &&
+      snapshot &&
+      object(input) &&
+      input.snapshot === snapshot.token
+    )
+      session.drafts.refused(
+        context.toolCallId,
+        wordSubmissionBlocks(
+          "draft_id" in input ? session.drafts.latestDraft : input,
+          snapshot,
+        ),
+      );
     const unavailable =
       !snapshot ||
       snapshot.revoked ||
@@ -263,14 +281,26 @@ function createSubmissionExecutor(
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;
-        if (
+        const expanded =
           "draft_id" in input ||
           "table_cell" in input ||
-          "scoped_edit" in input
-        )
+          "scoped_edit" in input;
+        // A smaller retry must not drop parts silently (ERMAIN-1287).
+        const notInProposal = wordNotInProposalReceipt(
+          wordPartsNotInProposal(
+            snapshot,
+            session.drafts.refusedAttempts,
+            wordSubmissionBlocks(kind ? submitted : value, snapshot),
+          ),
+        );
+        if (expanded || notInProposal)
           result = {
             ...prepared,
-            result: { ...(prepared.result as object), plan: value },
+            result: {
+              ...(prepared.result as object),
+              ...(expanded ? { plan: value } : {}),
+              ...notInProposal,
+            },
           };
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the

@@ -5563,6 +5563,16 @@ msgstr "Proponowane zmiany w dokumencie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposal"
+msgstr "Poza tą propozycją: {listed}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
+msgid "officeAddin.word.proposal.notInProposalMore"
+msgstr "Poza tą propozycją: {listed} i inne sekcje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.openInWord"
 msgstr "Otwórz ten czat w Wordzie z dokumentem, aby zastosować zmiany."
 

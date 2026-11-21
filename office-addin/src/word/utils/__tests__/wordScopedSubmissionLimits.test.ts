@@ -57,7 +57,7 @@ async function scopedSubmit(
 }
 
 const FULL_PLAN_RULE =
-  "Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.";
+  "Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON after a target read). Otherwise submit only the changes with scoped_edit, also after a complete read, where a scoped_edit may be as large as a full plan.";
 
 const text = (value: string, id = "new"): WordPlanBlock => ({
   id,
@@ -278,13 +278,14 @@ describe("scoped submission limits", { timeout: 30_000 }, () => {
         },
       ],
     };
-    const oversized = rejection(
-      await scopedSubmit(fresh(), { ref: "b1" }, oversizedEdit),
+    const oversized = await scopedSubmit(fresh(), { ref: "b1" }, oversizedEdit);
+    expect(rejection(oversized)).toBe(
+      "Scoped submission exceeds 24 KiB (about 24,000 characters of JSON), the limit after a target read. Complete the full read and resubmit the same scoped_edit with its final readToken; after a complete read it may be as large as a full plan.",
     );
-    expect(oversized).toContain(
-      "exceeds 24 KiB (about 24,000 characters of JSON)",
-    );
-    expect(oversized).toContain(FULL_PLAN_RULE);
+    expect(oversized).toMatchObject({
+      validationErrors: [{ code: "too-large" }],
+      submissionFeedback: { recovery: "read_current_context" },
+    });
 
     const tooLarge = fresh();
     tooLarge.completeReadIssue = "too-large";
@@ -300,7 +301,7 @@ describe("scoped submission limits", { timeout: 30_000 }, () => {
   it("tells the model the same limits the checks and the backend schema enforce", () => {
     // The tool description in erato-action-facets.toml carries these exact phrases.
     expect(WORD_AUTHORING_CONTRACT.scopedEdit.input).toContain(
-      "at most 16 changes per collection (body, objects, stories, sections), 16 source refs per change and 24 KiB (about 24,000 characters of JSON) per submission",
+      "at most 16 changes per collection (body, objects, stories, sections) and 16 source refs per change; after a target read at most 24 KiB (about 24,000 characters of JSON) per submission, after a complete read as much as a full plan (256 KiB)",
     );
     expect(WORD_AUTHORING_CONTRACT.scopedEdit.input).toContain(
       "blocks per change have no count limit",

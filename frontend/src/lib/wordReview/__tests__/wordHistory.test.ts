@@ -11,6 +11,7 @@ import {
   wordHistoryProposalKey,
   wordMessageLineage,
   wordParagraphsFromDocumentText,
+  wordPlanNotInProposal,
   wordSnapshotFromHistory,
   WORD_READ_TOOL,
 } from "../wordHistory";
@@ -234,6 +235,27 @@ describe("Word plans restored from chat history", () => {
       ).toBeUndefined();
     },
   );
+});
+
+describe("parts a smaller retry left out", () => {
+  it("are read from the accepted call's receipt only", () => {
+    const [, assistant] = messagesOf(retryAccepted);
+    expect(wordPlanNotInProposal(assistant.content)).toEqual([]);
+    const accepted = toolUses(assistant)[2];
+    const output = accepted.output as unknown as {
+      result: Record<string, unknown>;
+    };
+    output.result.notInProposal = ["§ 6 Lieferung", 7, " ", "§ 11 Kündigung"];
+    expect(wordPlanNotInProposal(assistant.content)).toEqual([
+      "§ 6 Lieferung",
+      "§ 11 Kündigung",
+    ]);
+    expect(
+      wordPlanNotInProposal(
+        assistant.content.filter((part) => part !== accepted),
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("Word read fragments", () => {
