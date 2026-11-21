@@ -19,10 +19,16 @@ import {
   checkWordPart,
   wordPartsReferenceIssues,
   wordPartsUncoveredSections,
+  wordSectionLabels,
 } from "../wordPartChecks";
 
+import type { SectionBlock } from "../../../test/mocks/word/sectionFixtures";
+import type { WordPartRow } from "../wordDocumentParts";
 import type { WordPartAllow } from "../wordPartChecks";
-import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentPlan,
+} from "@erato/frontend/word-review";
 
 const T1 = JSON.parse(
   readFileSync(`${WORD_PARTS_FIXTURES}/t1-parts.json`, "utf8"),
@@ -230,7 +236,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
         path: "/ops",
         code: "kept-unchanged",
         message:
-          "This part leaves 27 of the row's 39 paragraphs unchanged (kept: b315-b321,b323-b336,b338-b342,b349). Rewrite them as the row's change says, or, if they stay as they are on purpose, send the part again with allow: [\"kept-unchanged\"].",
+          "This part leaves 27 of the row's 39 body paragraphs unchanged (kept: b315-b321,b323-b336,b338-b342,b349). Rewrite them as the row's change says, or, if they stay as they are on purpose, send the part again with allow: [\"kept-unchanged\"].",
       },
     ]);
     expect(found["P-verbatim-T1-V4-sol-t1__S6"]).toEqual([
@@ -248,7 +254,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
     ]);
   });
 
-  it("refuses at finish new references to sections the change moves or merges, naming the row", async () => {
+  it("refuses at finish new references to sections the change moves or merges, naming the row, and leaves the row out when the finish comes again", async () => {
     const probeCase = PROBE.cases.find((c) => c.id.startsWith("X-X2"))!;
     const { doc, draft_id } = await planned();
     partsReceipt(
@@ -268,18 +274,63 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
       );
     const revision = await writeStructureRows(doc, draft_id);
     const refused = partsRejection(await doc.finish(draft_id, revision));
+    const leave = `Send row 4 again with write_document_section, or finish again at revision ${revision} to leave it unchanged; the card then says so.`;
     expect(refused?.validationErrors).toEqual([
       {
         path: "",
         code: "cross-reference",
-        message:
-          'Row 4 (§ 6 Lieferung und Logistik): at /ops/5/text line 7 refers to § 10 Haftung, whose heading this change deletes; refer to the section that now holds its text, or leave the reference out; at /ops/7/text line 10 adds a reference to § 12 Notfall- und Eskalationsmanagement, which this change moves and the original row does not refer to; leave it out, or, if the request asks for it, send the row again with allow: ["cross-reference"]. Send row 4 again with write_document_section.',
+        message: `Row 4 (§ 6 Lieferung und Logistik), at /ops/5/text line 7: Refers to § 10 Haftung, whose heading this change deletes; refer to the section that now holds its text, or leave the reference out. ${leave}`,
+      },
+      {
+        path: "",
+        code: "cross-reference",
+        message: `Row 4 (§ 6 Lieferung und Logistik), at /ops/7/text line 10: Adds a reference to § 12 Notfall- und Eskalationsmanagement, which this change moves and the original row does not refer to; leave it out, or, if the request asks for it, send the row again with allow: ["cross-reference"]. ${leave}`,
       },
     ]);
-    expect(partsRejection(await doc.finish(draft_id, revision))).toMatchObject({
-      validationErrors: [{ code: "no-progress" }, { code: "cross-reference" }],
-      submissionFeedback: { terminal: true },
-    });
+    const finished = await doc.finish(draft_id, revision);
+    expect(finished.ok, JSON.stringify(finished)).toBe(true);
+    const result = (finished as { result: Record<string, unknown> }).result;
+    expect(result.notInProposal).toEqual(["§ 6 Lieferung und Logistik"]);
+    expect(result.rows).toContainEqual(
+      expect.objectContaining({ row: 4, status: "not_written" }),
+    );
+    const plan = result.plan as WordDocumentPlan;
+    expect(
+      plan.entries.some((e) => e.kind === "keep" && e.source.includes("b157")),
+    ).toBe(true);
+  });
+
+  it("names unwritten rows and the checks' findings in one refusal, and a fixed row finishes", async () => {
+    const probeCase = PROBE.cases.find((c) => c.id.startsWith("X-X2"))!;
+    const { doc, draft_id } = await planned();
+    partsReceipt(
+      await doc.write(
+        draft_id,
+        ROW[5],
+        probeOps(doc.snapshot, 5, PROBE.parts["C-T1-V4-sol-t2__S5"].after),
+      ),
+    );
+    const { revision } = partsReceipt(
+      await doc.write(draft_id, ROW[6], caseOps(doc.snapshot, probeCase)),
+    );
+    expect(
+      partsRejection(
+        await doc.finish(draft_id, revision),
+      )?.validationErrors?.map(({ code }) => code),
+    ).toEqual(["rows-not-written", "cross-reference"]);
+    const fixed = partsReceipt(
+      await doc.write(
+        draft_id,
+        ROW[6],
+        probeOps(doc.snapshot, 6, PROBE.parts["C-T1-V4-sol-t2__S6"].after),
+      ),
+    );
+    const finished = await doc.finish(draft_id, fixed.revision);
+    expect(finished.ok, JSON.stringify(finished)).toBe(true);
+    expect(
+      (finished as { result: { notInProposal: string[] } }).result
+        .notInProposal,
+    ).toHaveLength(3);
   });
 
   it("names announced sections that end up unchanged (T3)", async () => {
@@ -355,7 +406,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
     ]);
   });
 
-  it("refuses the T1 writer's own slips, and names on the row what a part allows", async () => {
+  it("refuses the T1 writer's own slips, and lists on the receipt what a part allows", async () => {
     const { doc, draft_id } = await planned(T1.plan.terms);
     const findings: Record<number, string[]> = {};
     for (const part of T1.parts) {
@@ -493,7 +544,6 @@ describe("code checks in an English document", () => {
         parts,
         new Map([[r, new Set(allow)]]),
         assembly,
-        () => "Section 2 Payment",
       ),
     };
   };
@@ -546,8 +596,10 @@ describe("code checks in an English document", () => {
     expect(references.issues).toEqual([
       expect.objectContaining({
         code: "cross-reference",
-        message: expect.stringContaining(
-          "at /ops/1/text line 1 adds a reference to Section 3 Term, which this change moves",
+        path: "/ops/1/text",
+        line: 1,
+        message: expect.stringMatching(
+          /^Adds a reference to Section 3 Term, which this change moves/,
         ),
       }),
     ]);
@@ -591,7 +643,7 @@ describe("code checks in an English document", () => {
         ],
       ).references.issues[0].message,
     ).toBe(
-      "Row 2 (Section 2 Payment): at /ops/1/text line 1 refers to Section 3 Term, which this change deletes; leave the reference out. Send row 2 again with write_document_section.",
+      "Refers to Section 3 Term, which this change deletes; leave the reference out.",
     );
     expect(
       write(
@@ -604,7 +656,7 @@ describe("code checks in an English document", () => {
         ],
       ).references.issues[0].message,
     ).toBe(
-      "Row 2 (Section 2 Payment): at /ops/1/text line 1 refers to Section 3 Term, which this change renumbers to Section 4; use Section 4. Send row 2 again with write_document_section.",
+      "Refers to Section 3 Term, which this change renumbers to Section 4; use Section 4.",
     );
   });
 
@@ -616,18 +668,435 @@ describe("code checks in an English document", () => {
         "Rewrite Section 2 in plain English and move Section 3 before it.",
       ),
     ).toEqual([]);
+    const keep = (...sources: string[]) => ({
+      ...plan.plan,
+      rows: sources.map((source) => ({
+        action: "keep" as const,
+        refs: wordPartRefs(source, snapshot) as string[],
+      })),
+    });
     expect(
       wordPartsUncoveredSections(
         snapshot,
-        {
-          ...plan.plan,
-          rows: plan.plan.rows.map((row) => ({
-            ...row,
-            action: "keep" as const,
-          })),
-        },
+        keep("b1-b2", "b3-b5", "b6-b7"),
         "Rewrite Section 1 and Section 2.",
       ).map(({ title }) => title),
     ).toEqual(["Section 1 Scope", "Section 2 Payment"]);
+    expect(
+      wordPartsUncoveredSections(
+        snapshot,
+        keep("b1-b2", "b6-b7", "b3-b5"),
+        "Swap Section 2 and Section 3.",
+      ),
+    ).toEqual([]);
+  });
+
+  it("counts a moved section as moved whatever its size, and a swap on both sides", () => {
+    const sections = (count: number, long: number) =>
+      sectionSnapshot(
+        Array.from({ length: count }, (_, k) => [
+          {
+            type: "heading" as const,
+            level: 1,
+            styleRef: "Heading1",
+            text: `Section ${k + 1} Part ${k + 1}`,
+          },
+          ...Array.from({ length: k === long ? 10 : 1 }, (_, n) => ({
+            type: "paragraph" as const,
+            text: `Text ${n + 1} of part ${k + 1}.`,
+          })),
+        ]).flat(),
+      );
+    const doc = sections(5, 1);
+    const rowsOf = (...sections: number[]) => {
+      const starts = doc.blocks.flatMap((b, k) =>
+        b.type === "heading" ? [k] : [],
+      );
+      return {
+        intent: "Order.",
+        terms: [],
+        rows: sections.map((n) => ({
+          action: "keep" as const,
+          refs: doc.blocks
+            .slice(starts[n - 1], starts[n] ?? doc.blocks.length)
+            .map((b) => b.ref),
+        })),
+      };
+    };
+    expect(
+      wordPartsUncoveredSections(
+        doc,
+        rowsOf(1, 3, 4, 5, 2),
+        "Move Section 2 to the end.",
+      ),
+    ).toEqual([]);
+    expect(
+      wordPartsUncoveredSections(
+        doc,
+        rowsOf(1, 4, 3, 2, 5),
+        "Swap Section 2 and Section 4; Section 3 stays.",
+      ).map(({ title }) => title),
+    ).toEqual(["Section 3 Part 3"]);
+  });
+});
+
+/** References the original text already makes, across a delete, a swap with new numbers and a
+ * shift after a merge. */
+describe("references at finish", () => {
+  const snapshot = sectionSnapshot([
+    {
+      type: "heading",
+      level: 1,
+      styleRef: "Heading1",
+      text: "Section 1 Scope",
+    },
+    {
+      type: "paragraph",
+      text: "(1) The Supplier delivers the Goods under Section 3 and Section 4.",
+    },
+    { type: "heading", level: 1, styleRef: "Heading1", text: "Section 2 Fees" },
+    { type: "paragraph", text: "(1) The fee is EUR 1,200 per month." },
+    { type: "heading", level: 1, styleRef: "Heading1", text: "Section 3 Term" },
+    { type: "paragraph", text: "(1) The contract runs for 2 years." },
+    {
+      type: "heading",
+      level: 1,
+      styleRef: "Heading1",
+      text: "Section 4 Notice",
+    },
+    { type: "paragraph", text: "(1) Notice is due 3 months ahead." },
+  ]);
+  const rewrite = {
+    action: "rewrite" as const,
+    refs: ["b1", "b2"],
+    change: "Plain English.",
+  };
+  const found = (
+    rows: WordPartRow[],
+    text: string,
+  ): { line?: number; message: string }[] => {
+    const sections = { intent: "Order.", terms: [], rows: [rewrite, ...rows] };
+    const parsed = parseWordPartOps(
+      [{ keep: "b1" }, { replace: "b2", text }],
+      0,
+      rewrite,
+      snapshot,
+    );
+    if (!("ops" in parsed)) throw new Error(JSON.stringify(parsed.issues));
+    const parts = new Map([[0, parsed.ops]]);
+    const assembly = assembleWordParts(snapshot, "token", sections, parts);
+    expect(
+      checkWordPart({
+        snapshot,
+        plan: sections,
+        row: 0,
+        ops: parsed.ops,
+        assembly,
+        allow: new Set(),
+      }).issues,
+    ).toEqual([]);
+    return wordPartsReferenceIssues(
+      snapshot,
+      sections,
+      parts,
+      new Map(),
+      assembly,
+    ).issues.map(({ message }) => ({ message }));
+  };
+  const keep = (refs: string[], title?: string): WordPartRow => ({
+    action: "keep",
+    refs,
+    ...(title ? { title } : {}),
+  });
+
+  it("refuses a kept reference to a section the change deletes", () => {
+    expect(
+      found(
+        [
+          keep(["b3", "b4"]),
+          { action: "delete", refs: ["b5", "b6"], reason: "Obsolete." },
+          keep(["b7", "b8"]),
+        ],
+        "(1) The Supplier delivers the Goods as Section 3 and Section 4 say.",
+      ),
+    ).toEqual([
+      {
+        message:
+          "Refers to Section 3 Term, which this change deletes; leave the reference out.",
+      },
+    ]);
+  });
+
+  it("refuses old numbers in a swap with new numbers, and takes the new ones", () => {
+    const swapped = [
+      keep(["b5", "b6"], "Section 2 Term"),
+      keep(["b3", "b4"], "Section 3 Fees"),
+      keep(["b7", "b8"]),
+    ];
+    expect(
+      found(
+        swapped,
+        "(1) The Supplier delivers the Goods as Section 3 and Section 4 say.",
+      ),
+    ).toEqual([
+      {
+        message:
+          "Refers to Section 3 Term, which this change renumbers to Section 2; use Section 2.",
+      },
+    ]);
+    expect(
+      found(
+        swapped,
+        "(1) The Supplier delivers the Goods as Section 2 and Section 4 say.",
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses old numbers after a merge shifts the sections, and takes the new ones", () => {
+    const merged = [
+      keep(["b3", "b4"]),
+      {
+        action: "delete" as const,
+        refs: ["b5"],
+        reason: "Merged into Section 2.",
+      },
+      keep(["b6"]),
+      keep(["b7", "b8"], "Section 3 Notice"),
+    ];
+    expect(
+      found(
+        merged,
+        "(1) The Supplier delivers the Goods as Section 3 and Section 4 say.",
+      ),
+    ).toEqual([
+      {
+        message:
+          "Refers to Section 3 Term, whose heading this change deletes; refer to the section that now holds its text, or leave the reference out.",
+      },
+      {
+        message:
+          "Refers to Section 4 Notice, which this change renumbers to Section 3; use Section 3.",
+      },
+    ]);
+    expect(
+      found(
+        merged,
+        "(1) The Supplier delivers the Goods as Section 2 and Section 3 say.",
+      ),
+    ).toEqual([]);
+  });
+
+  it("has no section numbers where Word numbers the headings itself", () => {
+    const numbered = sectionSnapshot(
+      ["Scope", "Fees", "Term"].flatMap((title): SectionBlock[] => [
+        {
+          type: "list-item",
+          list: "7",
+          ordered: true,
+          level: 0,
+          outlineLevel: 1,
+          styleRef: "Heading1",
+          text: title,
+        },
+        { type: "paragraph", text: `The ${title.toLowerCase()} applies.` },
+      ]),
+    );
+    expect(wordSectionLabels(numbered)).toEqual([]);
+  });
+
+  it("refuses a new reference to either side of a swap", () => {
+    expect(
+      found(
+        [keep(["b7", "b8"]), keep(["b5", "b6"]), keep(["b3", "b4"])],
+        "(1) The Supplier delivers the Goods as Section 3 and Section 4 say, for the fee in Section 2.",
+      ),
+    ).toEqual([
+      {
+        message: expect.stringMatching(
+          /^Adds a reference to Section 2 Fees, which this change moves/,
+        ),
+      },
+    ]);
+  });
+
+  it("takes a kept reference across a move", () => {
+    expect(
+      found(
+        [keep(["b5", "b6"]), keep(["b3", "b4"]), keep(["b7", "b8"])],
+        "(1) The Supplier delivers the Goods as Section 3 and Section 4 say.",
+      ),
+    ).toEqual([]);
+  });
+});
+
+/** One rewrite row over a few blocks, the way the read shows them. */
+describe("part checks on lists, runs and merges", () => {
+  const issues = (blocks: SectionBlock[], ops: unknown[]) => {
+    const snapshot = sectionSnapshot(blocks);
+    const row: WordPartRow = {
+      action: "rewrite",
+      refs: snapshot.blocks.map((b) => b.ref),
+      change: "Plain English.",
+    };
+    const plan = { intent: "Plain English.", terms: [], rows: [row] };
+    const parsed = parseWordPartOps(ops, 0, row, snapshot);
+    if (!("ops" in parsed)) throw new Error(JSON.stringify(parsed.issues));
+    const assembly = assembleWordParts(
+      snapshot,
+      "token",
+      plan,
+      new Map([[0, parsed.ops]]),
+    );
+    return checkWordPart({
+      snapshot,
+      plan,
+      row: 0,
+      ops: parsed.ops,
+      assembly,
+      allow: new Set(),
+    }).issues.map(({ code, message }) => `${code}: ${message}`);
+  };
+  const title: SectionBlock = {
+    type: "heading",
+    level: 1,
+    styleRef: "Heading1",
+    text: "Section 1 Duties",
+  };
+  const item = (text: string): SectionBlock => ({
+    type: "list-item",
+    list: "1",
+    level: 0,
+    text,
+  });
+
+  it("reads a clause number after a tab, as the read shows it", () => {
+    expect(
+      issues(
+        [
+          title,
+          { type: "paragraph", text: "\t(1) The fee is due within 30 days." },
+        ],
+        [
+          { keep: "b1" },
+          { replace: "b2", text: "(1) You pay the fee within 30 days." },
+        ],
+      ),
+    ).toEqual([]);
+  });
+
+  it("takes a list turned into a numbered one as a change, and a retyped one as a repeat", () => {
+    const blocks = [
+      title,
+      { type: "paragraph" as const, text: "The Supplier must:" },
+      item("deliver on time"),
+      item("pack safely"),
+    ];
+    expect(
+      issues(blocks, [
+        { keep: "b1" },
+        { replace: "b2", text: "The Supplier does the following:" },
+        { replace: "b3-b4", text: "1. deliver on time\n2. pack safely" },
+      ]),
+    ).toEqual([]);
+    expect(
+      issues(blocks, [
+        { keep: "b1" },
+        { replace: "b2", text: "The Supplier does the following:" },
+        { replace: "b3-b4", text: "- deliver on time\n- pack safely" },
+      ]),
+    ).toEqual([
+      expect.stringMatching(
+        /^row-scope: Lines 1–2 repeat b3-b4 word for word\./,
+      ),
+      expect.stringMatching(
+        /^kept-unchanged: This part leaves 2 of the row's 3 body paragraphs unchanged\./,
+      ),
+    ]);
+  });
+
+  it("finds a repeat where Word split a bold span", () => {
+    expect(
+      issues(
+        [
+          title,
+          {
+            type: "paragraph",
+            text: "(2) Late payment accrues interest of 5 percent.",
+            runs: [
+              { text: "(2) " },
+              { text: "Late ", bold: true },
+              { text: "payment", bold: true, color: "000000" },
+              { text: " accrues interest of 5 percent." },
+            ],
+          },
+          { type: "paragraph", text: "(3) Invoices are sent monthly." },
+        ],
+        [
+          { keep: "b1" },
+          {
+            replace: "b2-b3",
+            text: "(2) **Late payment** accrues interest of 5 percent.\n(3) We send invoices each month.",
+          },
+        ],
+      ),
+    ).toEqual([
+      expect.stringMatching(/^row-scope: Line 1 repeats b2 word for word\./),
+    ]);
+  });
+
+  it("counts list items among the paragraphs a row leaves unchanged", () => {
+    const items = ["one", "two", "three", "four", "five", "six"].map((n) =>
+      item(`Duty ${n}.`),
+    );
+    expect(
+      issues(
+        [
+          title,
+          { type: "paragraph", text: "The Supplier must:" },
+          ...items.slice(0, 4),
+        ],
+        [
+          { keep: "b1-b2" },
+          {
+            replace: "b3-b6",
+            text: "- Do one.\n- Do two.\n- Do three.\n- Do four.",
+          },
+        ],
+      ),
+    ).toEqual([]);
+    expect(
+      issues(
+        [title, ...items],
+        [
+          { keep: "b1-b5" },
+          { replace: "b6", text: "- Do five." },
+          { keep: "b7" },
+        ],
+      ),
+    ).toEqual([
+      expect.stringMatching(
+        /^kept-unchanged: This part leaves 5 of the row's 6 body paragraphs unchanged \(kept: b2-b5,b7\)\./,
+      ),
+    ]);
+  });
+
+  it("takes the numbers of a paragraph merged into another", () => {
+    expect(
+      issues(
+        [
+          title,
+          { type: "paragraph", text: "(1) The fee of EUR 1,200 is due." },
+          { type: "paragraph", text: "(2) It is due within 30 days." },
+        ],
+        [
+          { keep: "b1" },
+          {
+            replace: "b2",
+            text: "(1) The fee of EUR 1,200 is due within 30 days.",
+          },
+          { delete: "b3", reason: "Merged into (1)." },
+        ],
+      ),
+    ).toEqual([]);
   });
 });

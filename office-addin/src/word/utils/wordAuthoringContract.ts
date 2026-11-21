@@ -7,6 +7,14 @@ import {
  * description state the same numbers. Blocks per change have no count limit (ERMAIN-1193). */
 export const MAX_WORD_SCOPED_CHANGES = 16;
 export const MAX_WORD_SCOPED_SOURCES = 16;
+/** The code checks a part may waive when its change is intended (wordPartChecks.ts). */
+export const WORD_PART_ALLOWS = [
+  "numbers",
+  "clause-numbering",
+  "term",
+  "kept-unchanged",
+  "cross-reference",
+] as const;
 const WORD_SCOPED_JSON = `about ${Math.floor(MAX_WORD_SCOPE_BYTES / 1000)},000 characters of JSON`;
 export const WORD_SCOPED_SIZE = `${MAX_WORD_SCOPE_BYTES / 1024} KiB (${WORD_SCOPED_JSON})`;
 /** The 24 KiB cap holds only after a target read; after a complete read a sparse change is
@@ -71,8 +79,7 @@ export const WORD_AUTHORING_CONTRACT = {
   parts: {
     plan: "plan_document_sections {snapshot,readToken,intent,terms?,rows:[{source:'b1-b57,b60',action:'keep'|'rewrite'|'delete',change?,title?,reason?}]}. Rows are in output order and hold every body block exactly once: their order moves blocks, and several ranges in one rewrite row merge them. A rewrite row says its change, a delete row its reason; title renames the heading a keep row starts with, which then takes the built-in heading style of its level. Sending it again replaces it and keeps the parts of rewrite rows with the same blocks.",
     part: "write_document_section {snapshot,draft_id,row,ops:[{keep:refs}|{replace:refs,text}|{insert:text}|{delete:refs,reason}],allow?} per rewrite row. The ops use every block of the row exactly once, in output order. A rejected part changes nothing: send it again whole.",
-    checks:
-      "Each part is compared with the original: numbers and amounts, clause numbers such as (1), the section plan's terms, blocks repeated word for word, and a row that leaves more than half of its paragraphs unchanged. Finish also checks references to sections the change moves, merges or renumbers. allow lists a check (numbers, clause-numbering, term, kept-unchanged, cross-reference) whose change is intended, only when its error offers it; the card names it on the row.",
+    checks: `Each part is compared with the original: numbers and amounts, clause numbers such as (1), the section plan's terms, blocks repeated word for word, and a row that leaves more than half of its body paragraphs (paragraphs and list items) unchanged. Finish checks every part again, and references to sections the change deletes, moves or renumbers; a finish sent again unchanged after such a refusal leaves those rows as they are. allow lists a check (${WORD_PART_ALLOWS.join(", ")}) whose change is intended, only when its error offers it; the receipt lists it as allowed.`,
     text: "New text is plain text. One non-empty line is one block. # to ###### is a heading of that level. '- ' is a bullet and '1. ' a numbered item, two spaces of indent per level; a new list always starts at 1, a blank line between items keeps the list, and a later '1.' starts a new one. '| a | b |' is a table row; a |---| line after the first row makes it the header row. **bold** and *italic* work inside a line. A \\ at the start of a line keeps the line as text. A line that replaces a paragraph takes that paragraph's style; new tables take the document's table style. Anything else (other formatting, styles, continuing a list, merged cells, fields) is kept by reference or goes through scoped_edit.",
     finish:
       "submit_document_plan {snapshot,readToken,draft_id,revision,finish:true} with the latest receipt's revision checks the whole change and stages it like a full plan.",

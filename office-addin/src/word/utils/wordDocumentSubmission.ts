@@ -37,7 +37,7 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
-import { wordPartsFinishIssues } from "./wordPartChecks";
+import { wordPartsFinishChecks } from "./wordPartChecks";
 import {
   WORD_LEFT_OUT_EARLIER,
   wordNotInProposalGroups,
@@ -308,20 +308,10 @@ function createSubmissionExecutor(
           serialized,
           finish.result,
         );
-      const checks =
+      const checked =
         finish &&
-        wordPartsFinishIssues(snapshot, finish.draft, finish.assembly, (r) =>
+        wordPartsFinishChecks(snapshot, finish, (r) =>
           wordPartRowTitle(finish.draft.plan.rows[r], snapshot),
-        );
-      if (checks?.length)
-        return session.drafts.remember(
-          context.toolCallId,
-          serialized,
-          sparseRejection(input, {
-            ok: false,
-            error: "Document plan finish rejected.",
-            validationErrors: checks,
-          }),
         );
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
@@ -350,8 +340,8 @@ function createSubmissionExecutor(
         expansion?.plan ??
         (kind === "table_cell"
           ? expandWordTableCellSubmission(submitted, snapshot)
-          : finish
-            ? finish.assembly.plan
+          : checked
+            ? checked.assembly.plan
             : session.drafts.materialize(submitted));
       const prepared = await prepareWordDocumentSubmission(
         value,
@@ -375,6 +365,36 @@ function createSubmissionExecutor(
       );
       if (changed)
         return session.drafts.remember(context.toolCallId, serialized, changed);
+      // One refusal names what the checks found and what the pipeline refuses.
+      const finishRejected =
+        finish && checked && !prepared.ok
+          ? wordPartsFinishRejected(
+              prepared,
+              { draft: finish.draft, assembly: checked.assembly },
+              snapshot,
+            )
+          : undefined;
+      if (checked?.issues.length) {
+        checked.refused();
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          sparseRejection(input, {
+            ok: false,
+            error: "Document plan finish rejected.",
+            validationErrors: [
+              ...checked.issues,
+              ...((finishRejected?.ok === false &&
+                finishRejected.validationErrors) ||
+                []),
+            ].slice(0, 16),
+            ...(finishRejected?.ok === false &&
+            finishRejected.submissionFeedback
+              ? { submissionFeedback: finishRejected.submissionFeedback }
+              : {}),
+          }),
+        );
+      }
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;
@@ -393,6 +413,12 @@ function createSubmissionExecutor(
               wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
             ),
             reason: "which the section plan announced but no part wrote",
+          },
+          {
+            parts: (checked?.leftOut ?? []).map((r) =>
+              wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+            ),
+            reason: "whose part the finish checks refused",
           },
           {
             parts: sectionPlan
@@ -423,17 +449,15 @@ function createSubmissionExecutor(
                 ? {
                     rows: wordPartRows(finish.draft, snapshot, {
                       finished: true,
+                      leftOut: checked?.leftOut,
                     }),
                   }
                 : {}),
               ...notInProposal,
             },
           };
-      } else if (finish) {
-        result = sparseRejection(
-          input,
-          wordPartsFinishRejected(prepared, finish, snapshot),
-        );
+      } else if (finishRejected) {
+        result = sparseRejection(input, finishRejected);
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the
         // expanded plan the model never saw.
