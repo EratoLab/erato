@@ -208,6 +208,7 @@ test(
       "mcp-apps@example.com",
     );
     try {
+      const sandboxPage = page.waitForResponse(SANDBOX_PAGE);
       const message = await callCounterTool(page);
 
       const frame = message.getByTestId("mcp-app-view");
@@ -222,6 +223,12 @@ test(
       await expect(frame).toHaveCSS("border-top-width", "0px");
       await expect(frame).toHaveCSS("padding-top", "0px");
       await expect(frame).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      // The backend serves the sandbox page keyed to its origin, and the
+      // page never scrolls around the view.
+      expect((await sandboxPage).headers()["origin-agent-cluster"]).toBe("?1");
+      await expect(
+        message.frameLocator('[data-testid="mcp-app-view"]').locator("html"),
+      ).toHaveCSS("overflow-y", "hidden");
 
       await page.reload();
       await chatIsReadyToChat(page, { expectAssistantResponse: true });
@@ -382,6 +389,117 @@ test(
       // The page announces itself again and the app sends it the view anew.
       await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
       expect(refusals).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "A reopened chat keeps the place of its MCP Apps view at the view's height, with a placeholder while the view is slow to show",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const message = await callCounterTool(page);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      const box = message.getByTestId("mcp-app-view-box");
+      await expect(box).not.toHaveAttribute("aria-busy");
+      const height = await box.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      );
+      expect(height).toBeGreaterThan(0);
+
+      // The view is slow to arrive after the reload.
+      await page.route(
+        "**/api/v1beta/me/mcp_servers/*/app_view*",
+        async (route) => {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await route.continue();
+        },
+      );
+      await page.reload();
+      const reopened = page.getByTestId("message-assistant").last();
+      const keptBox = reopened.getByTestId("mcp-app-view-box");
+      await expect(keptBox).toHaveAttribute("aria-busy", "true", {
+        timeout: 15000,
+      });
+      const keptHeight = await keptBox.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      );
+      expect(Math.abs(keptHeight - height)).toBeLessThanOrEqual(1);
+      await expect(
+        reopened.getByTestId("mcp-app-view-placeholder"),
+      ).toBeVisible();
+
+      await expect(viewCount(reopened)).toHaveText("41", { timeout: 15000 });
+      await expect(
+        reopened.getByTestId("mcp-app-view-placeholder"),
+      ).toHaveCount(0);
+      await expect(keptBox).not.toHaveAttribute("aria-busy");
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "A step says within seconds that its MCP Apps view could not be shown when the sandbox origin does not serve the sandbox page",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      await page.route(SANDBOX_PAGE, (route) =>
+        route.fulfill({
+          status: 404,
+          contentType: "text/plain",
+          body: "Not found",
+        }),
+      );
+
+      const message = await callCounterTool(page);
+
+      // Long before the last fallback of 30 seconds.
+      await expect(message.getByTestId("mcp-app-view-not-shown")).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(message.getByTestId("mcp-app-view-box")).toHaveCSS(
+        "height",
+        "0px",
+      );
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "A step says within seconds that its MCP Apps view could not be shown when the view loads but never initializes",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      await replaceView(page, "<!doctype html><p>No handshake.</p>", {});
+
+      const message = await callCounterTool(page);
+
+      await expect(message.getByTestId("mcp-app-view-not-shown")).toBeVisible({
+        timeout: 15000,
+      });
+      const view = message
+        .frameLocator('[data-testid="mcp-app-view"]')
+        .frameLocator("iframe")
+        .locator("p");
+      await expect(view).toHaveText("No handshake.");
     } finally {
       await context.close();
     }

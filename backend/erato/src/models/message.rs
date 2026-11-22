@@ -1882,6 +1882,11 @@ pub struct VoiceDecisionRecord {
 pub enum ContentPart {
     CompactionMarker(ContentPartCompactionMarker),
     Text(ContentPartText),
+    /// What the voice said for a reply in conversational audio mode, kept
+    /// apart from the written answer in the `Text` parts after it. Not part
+    /// of the message's text: titles, search, read aloud and exports use the
+    /// written answer only.
+    Spoken(ContentPartSpoken),
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
     ToolApprovalRequest(ContentPartToolApprovalRequest),
@@ -2017,6 +2022,11 @@ pub struct ContentPartText {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ContentPartSpoken {
+    pub text: String,
+}
+
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default, erato_memory::HeapSize,
 )]
@@ -2091,7 +2101,29 @@ pub struct ContentPartTurnInstructionMarker {
 #[serde(untagged)]
 pub enum StoredTurnInstructionKind {
     Known(erato_config::config::TurnInstructionKind),
+    Builtin(BuiltinTurnInstruction),
     Unknown(String),
+}
+
+/// A turn instruction whose text is built in, not configured: its wording
+/// and the server's handling of the reply change together.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltinTurnInstruction {
+    /// Write a spoken part in `<spoken>…</spoken>`, then the written answer.
+    SpokenAndWritten,
 }
 
 /// The structured-brief fields of a delegated run, copied from the chat's
@@ -2250,6 +2282,7 @@ impl MessageSchema {
             .iter()
             .filter_map(|part| match part {
                 ContentPart::Text(text) => Some(text.text.as_str()),
+                ContentPart::Spoken(_) => None,
                 ContentPart::Reasoning(_) => None,
                 ContentPart::ToolUse(_) => None,
                 ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => None,
@@ -3117,6 +3150,7 @@ impl InputMessage {
     pub fn full_text(&self) -> String {
         match &self.content {
             ContentPart::Text(content) => content.text.to_string(),
+            ContentPart::Spoken(_) => String::new(),
             ContentPart::Reasoning(_) => String::new(),
             ContentPart::ToolUse(_) => String::new(),
             ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => {

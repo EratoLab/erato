@@ -5,12 +5,20 @@
 //! could run script on the app's origin through it.
 use crate::state::AppState;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, StatusCode, Uri, header, uri::Authority};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, Uri, header, uri::Authority};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use percent_encoding::percent_decode_str;
 
 const SANDBOX_PAGE_FILE: &str = "mcp-apps-sandbox.html";
+
+/// Asks the browser to key the sandbox page, and the views it shows, to their
+/// own origin rather than their site. Over HTTPS or on localhost, desktop
+/// Chromium then runs the views of each sandbox origin in a process of their
+/// own, apart from the app's and from other sandbox origins, also when the
+/// sandbox origin is on the app's site (a hint: Chromium on low-memory
+/// Android and in WebView may not).
+const ORIGIN_AGENT_CLUSTER: HeaderName = HeaderName::from_static("origin-agent-cluster");
 
 /// Whether `path` names the sandbox page, wherever a frontend is mounted and
 /// however the path is encoded or cased.
@@ -57,14 +65,26 @@ fn serves_sandbox_page<'a>(
         .is_some_and(|authority| sandbox_origins.any(|origin| is_authority_of(origin, authority)))
 }
 
+/// The sandbox page as served: keyed to its origin (`Origin-Agent-Cluster`).
+fn as_sandbox_page(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(ORIGIN_AGENT_CLUSTER, HeaderValue::from_static("?1"));
+    response
+}
+
 /// Answers 404 for the sandbox page unless the request came in on the host of
-/// an enabled `mcp_servers.<id>.mcp_apps.sandbox_origin`.
+/// an enabled `mcp_servers.<id>.mcp_apps.sandbox_origin`, and serves it there
+/// with `Origin-Agent-Cluster: ?1`.
 pub async fn on_sandbox_hosts_only(
     State(app_state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Response {
-    if is_sandbox_page_path(request.uri().path()) {
+    if !is_sandbox_page_path(request.uri().path()) {
+        return next.run(request).await;
+    }
+    let served = {
         let mcp = app_state.mcp_state().await;
         let sandbox_origins = mcp
             .config
@@ -72,11 +92,12 @@ pub async fn on_sandbox_hosts_only(
             .values()
             .filter(|server| server.mcp_apps.enabled)
             .filter_map(|server| server.mcp_apps.sandbox_origin.as_deref());
-        if !serves_sandbox_page(request.headers(), request.uri(), sandbox_origins) {
-            return StatusCode::NOT_FOUND.into_response();
-        }
+        serves_sandbox_page(request.headers(), request.uri(), sandbox_origins)
+    };
+    if !served {
+        return StatusCode::NOT_FOUND.into_response();
     }
-    next.run(request).await
+    as_sandbox_page(next.run(request).await)
 }
 
 #[cfg(test)]
@@ -153,6 +174,30 @@ mod tests {
         headers.insert("x-forwarded-host", "erato.example.com".parse().unwrap());
         headers.insert("host", "mcp-apps.example.net".parse().unwrap());
         assert!(!serves_sandbox_page(&headers, &uri, [SANDBOX].into_iter()));
+    }
+
+    #[test]
+    fn the_served_sandbox_page_is_keyed_to_its_origin() {
+        let mut served = "page".into_response();
+        served
+            .headers_mut()
+            .insert(header::CONTENT_TYPE, HeaderValue::from_static("text/html"));
+        let page = as_sandbox_page(served);
+
+        assert_eq!(page.status(), StatusCode::OK);
+        assert_eq!(page.headers()["origin-agent-cluster"], "?1");
+        // What the frontend's file service set stays.
+        assert_eq!(page.headers()[header::CONTENT_TYPE], "text/html");
+        // A header the service set already is replaced, never repeated.
+        let again = as_sandbox_page(page);
+        assert_eq!(
+            again
+                .headers()
+                .get_all("origin-agent-cluster")
+                .iter()
+                .collect::<Vec<_>>(),
+            ["?1"]
+        );
     }
 
     #[test]

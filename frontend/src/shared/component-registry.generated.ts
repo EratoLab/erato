@@ -456,6 +456,7 @@ export { ParkedTaskNotice } from "@/components/ui/Message/ParkedTaskNotice";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
 export type { ReadAloudButtonProps } from "@/components/ui/Message/ReadAloudButton";
 export { SidecarReviewItem } from "@/components/ui/Message/SidecarReviewItem";
+export { SpokenReply } from "@/components/ui/Message/SpokenReply";
 export { StopWaitingAction } from "@/components/ui/Message/StopWaitingAction";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";
@@ -489,6 +490,8 @@ export type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConv
 export { JsonDisplay } from "@/components/ui/ToolCall/JsonDisplay";
 export type { JsonDisplayProps } from "@/components/ui/ToolCall/JsonDisplay";
 export { McpAppView } from "@/components/ui/ToolCall/McpAppView";
+export { VIEW_HEIGHT_TIMEOUT_MS } from "@/components/ui/ToolCall/McpAppView";
+export { VIEW_PLACEHOLDER_DELAY_MS } from "@/components/ui/ToolCall/McpAppView";
 export { VIEW_START_TIMEOUT_MS } from "@/components/ui/ToolCall/McpAppView";
 export type { McpAppViewProps } from "@/components/ui/ToolCall/McpAppView";
 export { McpAppViewFiles } from "@/components/ui/ToolCall/McpAppViewFiles";

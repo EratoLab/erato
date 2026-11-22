@@ -7605,6 +7605,113 @@ export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   });
 };
 
+export type ReplySpeechStyleError = Fetcher.ErrorWrapper<undefined>;
+
+export type ReplySpeechStyleVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchReplySpeechStyle = (
+  variables: ReplySpeechStyleVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/reply-speech-style",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function replySpeechStyleQuery(variables: ReplySpeechStyleVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ReplySpeechStyleResponse>;
+};
+
+export function replySpeechStyleQuery(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ReplySpeechStyleResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function replySpeechStyleQuery(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/reply-speech-style",
+      operationId: "replySpeechStyle",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchReplySpeechStyle(variables, signal),
+  };
+}
+
+export const useSuspenseReplySpeechStyle = <
+  TData = Schemas.ReplySpeechStyleResponse,
+>(
+  variables: ReplySpeechStyleVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReplySpeechStyleResponse,
+      ReplySpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    TData
+  >({
+    ...replySpeechStyleQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useReplySpeechStyle = <TData = Schemas.ReplySpeechStyleResponse,>(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReplySpeechStyleResponse,
+      ReplySpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    TData
+  >({
+    ...replySpeechStyleQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type ListScheduledItemsQueryParams = {
   tab?: Schemas.ScheduledItemsTab;
 };
@@ -10236,6 +10343,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/recent_chats";
       operationId: "recentChats";
       variables: RecentChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/reply-speech-style";
+      operationId: "replySpeechStyle";
+      variables: ReplySpeechStyleVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/scheduled-items";
