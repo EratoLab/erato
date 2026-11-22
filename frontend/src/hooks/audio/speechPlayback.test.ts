@@ -97,6 +97,37 @@ describe("speech playback", () => {
     expect(starts[1]).toBeGreaterThan(starts[0]);
     expect(p.useSpeechPlayback.getState().playing).toBe(true);
   });
+  it("plays a continuation of the same message in full, though it numbers from 0", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse("chat-1");
+    for (let sequence = 0; sequence < 3; sequence++)
+      p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
+    p.endSpeechResponse("chat-1", "m1");
+    starts.length = 0;
+    // The answer after the last decision on a card.
+    p.beginSpeechResponse("chat-1");
+    for (let sequence = 0; sequence < 5; sequence++)
+      p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(5);
+  });
+  it("a resumed continuation does not say again what it already said", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse("chat-1");
+    for (let sequence = 0; sequence < 4; sequence++)
+      p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
+    p.beginSpeechResponse("chat-1");
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+    p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+    starts.length = 0;
+    // The resume replays the continuation from its first event.
+    for (let sequence = 0; sequence < 4; sequence++)
+      p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+  });
   it("ignores other responses and stops immediately when disabled", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
