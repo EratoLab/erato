@@ -25716,7 +25716,9 @@ async fn resume_parked_generation(
             ),
             action_facet_args: generation_parameters.action_facet_args.clone(),
         });
-    let (end_content, generation_metadata) = stream_generate_chat_completion(
+    // Boxed: inline, the generation state is copied into every continuation
+    // wrapper's frame, which overflows the test thread stack in debug builds.
+    let (end_content, generation_metadata) = Box::pin(stream_generate_chat_completion(
         tx.clone(),
         app_state,
         policy,
@@ -25764,7 +25766,7 @@ async fn resume_parked_generation(
         task_tool_budgets_for_chat(&chat),
         resume,
         split_reply,
-    )
+    ))
     .await?;
     // Written even when the generation reported no metadata of its own, and
     // before the content: this is what releases the claim taken above, and a
