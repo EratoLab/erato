@@ -576,7 +576,32 @@ function ensureHeading(doc: Document, level: number): string {
   return headingId;
 }
 
-function newList(doc: Document, ordered: boolean): string {
+function listLevel(doc: Document, level: number, ordered: boolean): Element {
+  const lvl = make(doc, "lvl");
+  lvl.setAttributeNS(W, "w:ilvl", String(level));
+  lvl.append(
+    make(doc, "start", "1"),
+    make(doc, "numFmt", ordered ? "decimal" : "bullet"),
+    make(doc, "lvlText", ordered ? `%${level + 1}.` : "•"),
+    make(doc, "lvlJc", "left"),
+  );
+  const props = make(doc, "pPr");
+  const ind = make(doc, "ind");
+  ind.setAttributeNS(W, "w:left", String((level + 1) * 720));
+  ind.setAttributeNS(W, "w:hanging", "360");
+  props.append(ind);
+  lvl.append(props);
+  return lvl;
+}
+
+/** A new list's levels all take the first item's type until an item of a level sets its own. */
+interface NewList {
+  numId: string;
+  abstract: Element;
+  levels: Set<number>;
+}
+
+function newList(doc: Document, level: number, ordered: boolean): NewList {
   const numbering = ensurePart(doc, "numbering");
   const next = (name: string, attribute: string) =>
     String(
@@ -590,30 +615,28 @@ function newList(doc: Document, ordered: boolean): string {
   const abstract = make(doc, "abstractNum");
   abstract.setAttributeNS(W, "w:abstractNumId", abstractId);
   abstract.append(make(doc, "multiLevelType", "multilevel"));
-  for (let level = 0; level < 9; level++) {
-    const lvl = make(doc, "lvl");
-    lvl.setAttributeNS(W, "w:ilvl", String(level));
-    lvl.append(
-      make(doc, "start", "1"),
-      make(doc, "numFmt", ordered ? "decimal" : "bullet"),
-      make(doc, "lvlText", ordered ? `%${level + 1}.` : "•"),
-      make(doc, "lvlJc", "left"),
-    );
-    const props = make(doc, "pPr");
-    const ind = make(doc, "ind");
-    ind.setAttributeNS(W, "w:left", String((level + 1) * 720));
-    ind.setAttributeNS(W, "w:hanging", "360");
-    props.append(ind);
-    lvl.append(props);
-    abstract.append(lvl);
-  }
+  for (let k = 0; k < 9; k++) abstract.append(listLevel(doc, k, ordered));
   const num = make(doc, "num");
   num.setAttributeNS(W, "w:numId", numId);
   num.append(make(doc, "abstractNumId", abstractId));
   const firstNum = all(numbering, "num")[0];
   numbering.insertBefore(abstract, firstNum ?? null);
   numbering.append(num);
-  return numId;
+  return { numId, abstract, levels: new Set([level]) };
+}
+
+function setListLevel(
+  doc: Document,
+  list: NewList,
+  level: number,
+  ordered: boolean,
+) {
+  if (list.levels.has(level)) return;
+  list.levels.add(level);
+  const old = all(list.abstract, "lvl").find(
+    (lvl) => attr(lvl, "ilvl") === String(level),
+  );
+  old?.replaceWith(listLevel(doc, level, ordered));
 }
 
 export function compileWordDocumentPlan(
@@ -627,7 +650,7 @@ export function compileWordDocumentPlan(
   const attribution = wordCommentAttribution(doc);
   // Captured list names refer to numbering instances, including their restart
   // overrides. Reusing the instance continues kept items in that same list.
-  const lists = new Map(
+  const lists = new Map<string, string | NewList>(
     snapshot.blocks
       .filter((b) => b.type === "list-item" && b.list)
       .map((b) => [b.list!, b.list!.slice("existing-".length)]),
@@ -766,11 +789,16 @@ export function compileWordDocumentPlan(
         if (b.type === "list-item" && b.list) {
           if (b.list.startsWith("existing-") && !lists.has(b.list))
             throw new Error("Unknown captured list");
-          if (!lists.has(b.list)) lists.set(b.list, newList(doc, !!b.ordered));
+          const level = b.level ?? 0;
+          let list = lists.get(b.list);
+          if (list === undefined)
+            lists.set(b.list, (list = newList(doc, level, !!b.ordered)));
+          else if (typeof list !== "string")
+            setListLevel(doc, list, level, !!b.ordered);
           const num = make(doc, "numPr");
           num.append(
-            make(doc, "ilvl", String(b.level ?? 0)),
-            make(doc, "numId", lists.get(b.list)),
+            make(doc, "ilvl", String(level)),
+            make(doc, "numId", typeof list === "string" ? list : list.numId),
           );
           props.append(num);
         }

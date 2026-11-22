@@ -78,7 +78,7 @@ outside notification coverage; restart application replicas after maintenance.
 Expiry still prevents indefinite cached reuse.
 
 Run `just test_policy` for OPA and
-`DATABASE_URL=... RUST_MIN_STACK=8388608 cargo test -p erato --lib policy::` for
+`DATABASE_URL=... RUST_MIN_STACK=16777216 cargo test -p erato --lib policy::` for
 policy/cache tests. SQLx creates isolated databases and applies the Sqitch files.
 Tests cover warm zero-query access, batched concurrent misses, authentication
 without a database, generation/publication races, expiry, reconnect fencing,

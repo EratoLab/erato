@@ -39,6 +39,12 @@ interface SpeechState {
    * spoken on its own then, but waits to be asked for.
    */
   quietTurn?: string;
+  /**
+   * The reply's spoken part has all its audio and the written answer is
+   * streaming: once the voice is quiet the microphone may listen, and what
+   * the user says waits until the answer is complete.
+   */
+  spokenPartDone: boolean;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -47,6 +53,7 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   paused: false,
   blocked: false,
   failed: false,
+  spokenPartDone: false,
 }));
 const sequences = new Map<string, number>();
 let activeMessage: string | undefined;
@@ -65,6 +72,37 @@ const UNDERRUN_HOLD_MS = 1500;
 /** The reply's stream has ended: no more audio comes for it. */
 let audioEnded = true;
 let underrunTimer: ReturnType<typeof setTimeout> | undefined;
+/**
+ * The spoken parts of the reply so far, counted when their first text and
+ * when their last audio arrive. A part's end comes after its audio, so it
+ * can arrive after the next model call has begun.
+ */
+let partsBegun = 0;
+let partsEnded = 0;
+/** Within the current model call: a spoken part is open, it spoke, it wrote. */
+let partOpen = false;
+let callSpoke = false;
+let callWrote = false;
+const resetParts = () => {
+  partsBegun = 0;
+  partsEnded = 0;
+  partOpen = false;
+  callSpoke = false;
+  callWrote = false;
+};
+/**
+ * Once the current model call's spoken part is said and its written answer
+ * streams, the voice says no more for the reply.
+ */
+const markSpokenPartDone = () => {
+  if (
+    callSpoke &&
+    callWrote &&
+    partsEnded >= partsBegun &&
+    !useSpeechPlayback.getState().spokenPartDone
+  )
+    useSpeechPlayback.setState({ spokenPartDone: true });
+};
 const clearUnderrun = () => {
   clearTimeout(underrunTimer);
   underrunTimer = undefined;
@@ -199,7 +237,9 @@ export function beginSpeechResponse(streamKey?: string) {
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
   audioEnded = !accepting;
+  resetParts();
   useSpeechPlayback.setState({
+    spokenPartDone: false,
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
     quietTurn: undefined,
@@ -230,6 +270,55 @@ export function endSpeechResponse(streamKey?: string, messageId?: string) {
     clearUnderrun();
     useSpeechPlayback.setState({ playing: false });
   }
+}
+
+/**
+ * The reply speaks a spoken part: its audio is still to come, so a dry spell
+ * between its sentences does not count as quiet.
+ */
+export function spokenPartBegins(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  if (!partOpen) {
+    partOpen = true;
+    partsBegun += 1;
+    callSpoke = true;
+    callWrote = false;
+  }
+  if (accepting) audioEnded = false;
+  if (useSpeechPlayback.getState().spokenPartDone)
+    useSpeechPlayback.setState({ spokenPartDone: false });
+}
+
+/** A spoken part has sent its last audio. */
+export function spokenPartEnds(streamKey?: string, messageId?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  partsEnded += 1;
+  // The end of an earlier call's part: the current call may still speak.
+  if (!callSpoke || partsEnded < partsBegun) return;
+  endSpeechResponse(streamKey, messageId);
+  markSpokenPartDone();
+}
+
+/** Written text arrived: after a spoken part, the written answer has begun. */
+export function writtenPartArrives(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  partOpen = false;
+  callWrote = true;
+  markSpokenPartDone();
+}
+
+/**
+ * The model calls a tool: the next call may speak again, or reply without
+ * a spoken part, which the voice then reads as it streams.
+ */
+export function replyCallsTool(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  partOpen = false;
+  callSpoke = false;
+  callWrote = false;
+  if (accepting) audioEnded = false;
+  if (useSpeechPlayback.getState().spokenPartDone)
+    useSpeechPlayback.setState({ spokenPartDone: false });
 }
 
 /** The user stopped the voice: quiet for the rest of this turn. */

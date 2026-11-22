@@ -198,6 +198,22 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
         ?.validationErrors?.[0],
     ).toMatchObject({ path: "/ops/0/keep", code: "source-ownership" });
     expect(
+      rejection(
+        await doc.write(draft_id, 5, [
+          { keep: "b350-b353" },
+          { keep: "b359-b380" },
+          { replace: "b354-b358", text: "Neu." },
+        ]),
+      )?.validationErrors,
+    ).toEqual([
+      {
+        path: "/ops/1/keep",
+        code: "source-order",
+        message:
+          "b359 is out of order; the ops use row 5's blocks in the order of its source, b350-b380. To move blocks, change the row order in the section plan.",
+      },
+    ]);
+    expect(
       rejection(await doc.write(draft_id, 1, [{ keep: "b1-b98" }]))
         ?.validationErrors?.[0],
     ).toMatchObject({ path: "/row", code: "row-action" });

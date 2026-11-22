@@ -1827,6 +1827,7 @@ msgstr "Lire la carte"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Réécouter la réponse audio"
 
@@ -3228,6 +3229,11 @@ msgstr "Veuillez prendre un moment pour vérifier l'historique du chat afin d'y 
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.warning.title"
 msgstr "La conversation peut contenir des informations sensibles"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.spoken_reply.label"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -5136,6 +5142,186 @@ msgid "officeAddin.word.layout.width"
 msgstr "Largeur de page"
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.changedInWord"
+msgstr "Modifié dans Word pendant qu’Erato écrivait"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.checking"
+msgstr "Vérification…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.didntGetTo"
+msgstr "Erato n’a pas eu le temps de traiter {gaps}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.finishing"
+msgstr "Vérification de l’ensemble de la modification…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.include"
+msgstr "Réintégrer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.includeReordering"
+msgstr "Réintégrer la nouvelle organisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leaveOut"
+msgstr "Laisser de côté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leaveOutReordering"
+msgstr "Laisser de côté la nouvelle organisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leftOut"
+msgstr "Laissé de côté"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leftOutWithReordering"
+msgstr "Laissé de côté avec la nouvelle organisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.merged"
+msgstr "Fusionné en une seule section : {name}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.merges"
+msgstr "{merges, plural, one {# fusion} other {# fusions}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.moves"
+msgstr "{moves, plural, one {# déplacement} other {# déplacements}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesAfter"
+msgstr "{name} vient maintenant après {after}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesElsewhere"
+msgstr "{name} change de place."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesFirst"
+msgstr "{name} vient maintenant en premier."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.namedMore"
+msgstr "{more, plural, one {{listed} et # autre section} other {{listed} et # autres sections}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.notWritten"
+msgstr "Non rédigé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.progress"
+msgstr "{total, plural, one {Sections prêtes : {ready} sur #} other {Sections prêtes : {ready} sur #}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.ready"
+msgstr "Prêt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redo"
+msgstr "Refaire {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redoAfterApply"
+msgstr "Appliquez le reste, puis demandez à Erato de refaire {redone}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redoNext"
+msgstr "Demandez à Erato de refaire {redone} dans votre prochain message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renamed"
+msgstr "{name} est renommé {newTitle}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renames"
+msgstr "{renames, plural, one {# titre renommé} other {# titres renommés}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reorderAfterApply"
+msgstr "Appliquez le reste, puis demandez à Erato de réorganiser à nouveau les sections."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reorderingChangedInWord"
+msgstr "La nouvelle organisation remplace tout le document, qui a entre-temps été modifié dans Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.rows"
+msgstr "Sections"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.structure"
+msgstr "Structure"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.untitled"
+msgstr "Texte sans titre"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.waiting"
+msgstr "En attente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissing"
+msgstr "Rédiger les sections manquantes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingAfterApply"
+msgstr "Appliquez le reste, puis demandez à Erato de rédiger les sections manquantes."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingNext"
+msgstr "Demandez à Erato de rédiger les sections manquantes dans votre prochain message."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writing"
+msgstr "Rédaction…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.written"
+msgstr "Rédigé"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planAction.insert"
 msgstr "Insérer les paragraphes"
@@ -5173,6 +5359,7 @@ msgstr "Modifications"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.planReview.checkInWord"
 msgstr "Les objets, la pagination et l’apparence des pages ne sont pas affichés ici. Vérifiez-les dans Word après l’application."
 
@@ -6106,6 +6293,61 @@ msgstr "Tester le microphone"
 #: src/components/ui/Settings/MicTestPanel.tsx
 msgid "preferences.dialog.audio.test.stop"
 msgstr "Arrêter le test"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Utiliser le réglage de mon organisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.locked"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.natural"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.precise"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.saveFailed"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

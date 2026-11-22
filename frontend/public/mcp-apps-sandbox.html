@@ -31,6 +31,14 @@
     margin: 0;
     height: 100%;
     width: 100%;
+    /*
+      The page never scrolls. The view's frame keeps an iframe's default
+      150px as its least height, so a view that sizes itself to its viewport
+      when it starts never finds it 0px tall; where the app's frame is
+      shorter, as for a view that asks for less, the rest is cut off instead
+      of showing a scrollbar.
+    */
+    overflow: hidden;
     background-color: transparent;
   }
   body {
@@ -94,6 +102,10 @@
   const SANDBOX_PREFIX = "ui/notifications/sandbox-";
   const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
   const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  // Not in the spec: this page tells the app that the view's document has
+  // loaded, so the app knows to expect the view's ui/initialize. A view never
+  // sends or receives a message with the sandbox prefix through this page.
+  const RESOURCE_LOADED = "ui/notifications/sandbox-resource-loaded";
   const HOST_CONTEXT_CHANGED = "ui/notifications/host-context-changed";
 
   // Whether a declared domain covers `name`, whatever its scheme or port: the
@@ -199,6 +211,12 @@
     // frame would lose the view.
     inner.srcdoc = html;
     inner.addEventListener("load", viewArrived, { once: true });
+    inner.addEventListener("load", () => {
+      window.parent.postMessage(
+        { jsonrpc: "2.0", method: RESOURCE_LOADED, params: {} },
+        HOST_ORIGIN,
+      );
+    });
     (document.body || document.documentElement).appendChild(inner);
   };
 

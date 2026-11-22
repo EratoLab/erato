@@ -22,6 +22,7 @@ pub mod ms_office;
 pub mod office_host_report;
 pub mod policy_engine_middleware;
 pub mod read_aloud;
+pub mod reply_speech_style;
 pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
@@ -269,6 +270,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/approval-speech-style",
             get(approval_speech_style::approval_speech_style),
+        )
+        .route(
+            "/reply-speech-style",
+            get(reply_speech_style::reply_speech_style),
         )
         .route("/wait-lines", get(wait_lines::wait_lines))
         .route(
@@ -570,6 +575,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         read_aloud::speak_approval,
         approval_voice_commands::interpret_approval_voice_command,
         approval_speech_style::approval_speech_style,
+        reply_speech_style::reply_speech_style,
         wait_lines::wait_lines,
         wait_lines::progress_speech,
         message_text_actions::explain_message_text,
@@ -642,6 +648,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         crate::services::approval_voice_commands::CardPieceState,
         approval_speech_style::ApprovalSpeechStyleResponse,
         approval_speech_style::ApprovalSpeechStyleSource,
+        reply_speech_style::ReplySpeechStyleResponse,
+        reply_speech_style::ReplySpeechStyleSource,
+        erato_config::reply_speech::ReplySpeechWording,
         wait_lines::WaitLinesResponse,
         wait_lines::WaitLinesSource,
         wait_lines::WaitLinesTiming,
@@ -1118,6 +1127,11 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_wait_lines_amount: Option<Option<String>>,
+    /// How replies are spoken in conversation: `natural` or `precise`, like
+    /// the amount.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_reply_speech_wording: Option<Option<String>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "de")]
@@ -1220,6 +1234,7 @@ pub async fn update_profile_preferences(
     let approval_speech_amount = style_patch(request.preference_approval_speech_amount)?;
     let approval_speech_wording = style_patch(request.preference_approval_speech_wording)?;
     let wait_lines_amount = style_patch(request.preference_wait_lines_amount)?;
+    let reply_speech_wording = style_patch(request.preference_reply_speech_wording)?;
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
@@ -1240,6 +1255,7 @@ pub async fn update_profile_preferences(
             approval_speech_amount,
             approval_speech_wording,
             wait_lines_amount,
+            reply_speech_wording,
         },
     )
     .await
@@ -1291,6 +1307,10 @@ pub async fn update_profile_preferences(
         .and_then(models::user_preference::parse_style_name);
     profile.preference_wait_lines_amount = updated_prefs
         .wait_lines_amount
+        .as_deref()
+        .and_then(models::user_preference::parse_style_name);
+    profile.preference_reply_speech_wording = updated_prefs
+        .reply_speech_wording
         .as_deref()
         .and_then(models::user_preference::parse_style_name);
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(

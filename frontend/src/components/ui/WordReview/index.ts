@@ -6,6 +6,11 @@ export {
 } from "./WordProposalCard";
 export { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 export {
+  WordPartsReview,
+  type WordPartsLeftOut,
+  type WordPartsReviewProps,
+} from "./WordPartsReview";
+export {
   WordPlanChangeRow,
   type WordPlanChangeRowProps,
 } from "./WordPlanChangeRow";

@@ -276,9 +276,11 @@ export function wordNotInProposalReceipt(
 }
 
 /** Left-out parts with why each was meant to change; a part named in an earlier group is not
- * named again. */
+ * named again. `lead` is a sentence the note starts with, for something left out that is not a
+ * part, such as the reordering. */
 export function wordNotInProposalGroups(
   groups: readonly { parts: readonly WordLeftOutPart[]; reason: string }[],
+  lead?: string,
 ): { notInProposal: string[]; notInProposalNote: string } | undefined {
   const seen = new Set<string>();
   const named = groups
@@ -292,7 +294,13 @@ export function wordNotInProposalGroups(
       }),
     }))
     .filter(({ parts }) => parts.length);
-  if (!named.length) return undefined;
+  if (!named.length)
+    return lead
+      ? {
+          notInProposal: [],
+          notInProposalNote: `${lead} The card tells the user the same; say so when you describe this proposal.`,
+        }
+      : undefined;
   const spoken = (part: WordLeftOutPart) =>
     part.title !== undefined
       ? `"${part.title}"`
@@ -300,7 +308,7 @@ export function wordNotInProposalGroups(
         ? wordPassageName(part.passage)
         : "a part without text";
   const note = (count: number) =>
-    `Not in this proposal: ${named
+    `${lead ? `${lead} ` : ""}Not in this proposal: ${named
       .map(
         ({ parts, reason }) =>
           `${wordNamedParts(parts.map(spoken), count)}, ${reason}`,

@@ -100,6 +100,25 @@ describe("structural plan ownership and schema", () => {
     });
     expect(validateWordDocumentPlan(p, s)).toBe("invalid");
   });
+  it("takes a marker type per level of a new list, but only one per level", () => {
+    const s = readySnapshot();
+    const p = examplePlan(s.token);
+    const item = (id: string, level: number, ordered: boolean) => ({
+      id,
+      type: "list-item" as const,
+      list: "steps",
+      level,
+      ordered,
+      text: id,
+    });
+    p.entries.push({
+      kind: "insert",
+      blocks: [item("l1", 0, false), item("l2", 1, true), item("l3", 0, false)],
+    });
+    expect(validateWordDocumentPlan(p, s)).toBeNull();
+    p.entries.push({ kind: "insert", blocks: [item("l4", 1, false)] });
+    expect(validateWordDocumentPlan(p, s)).toBe("invalid");
+  });
 });
 
 describe("new blocks without ids (ERMAIN-1194)", () => {

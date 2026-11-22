@@ -1,5 +1,9 @@
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
-import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
+import {
+  AppBridge,
+  INITIALIZE_METHOD,
+  SANDBOX_PROXY_READY_METHOD,
+} from "@modelcontextprotocol/ext-apps/app-bridge";
 
 import { viewDownloadOf } from "./download";
 import { MAX_VIEW_HEIGHT } from "./hostContext";
@@ -14,6 +18,26 @@ import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- protocol identity, not UI text
 const HOST_INFO = { name: "Erato", version: "1.0.0" };
+
+/**
+ * Not in the spec: the sandbox page sends it when the view's document has
+ * loaded in its frame.
+ */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- protocol method
+const RESOURCE_LOADED = "ui/notifications/sandbox-resource-loaded";
+
+/**
+ * How long after the frame has loaded a page the page may take to announce
+ * itself as the sandbox page (`sandbox-proxy-ready`). The sandbox page sends
+ * it as it loads, but it can reach the app just after the frame's load event.
+ */
+export const PAGE_READY_GRACE_MS = 1_000;
+
+/**
+ * How long after the view's document has loaded the view may take to send
+ * its `ui/initialize`.
+ */
+export const VIEW_INITIALIZE_GRACE_MS = 5_000;
 
 /**
  * How long a view may take to answer `ui/resource-teardown` before it is
@@ -31,6 +55,8 @@ class SandboxFrameTransport implements Transport {
   onclose?: () => void;
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
+  /** Sees every message the frame sends, before the bridge does. */
+  onreceive?: (message: JSONRPCMessage) => void;
 
   private readonly frame: HTMLIFrameElement;
   private readonly origin: string;
@@ -49,7 +75,9 @@ class SandboxFrameTransport implements Transport {
       return;
     }
     const parsed = JSONRPCMessageSchema.safeParse(event.data);
-    if (parsed.success) this.onmessage?.(parsed.data);
+    if (!parsed.success) return;
+    this.onreceive?.(parsed.data);
+    this.onmessage?.(parsed.data);
   };
 
   start() {
@@ -110,13 +138,24 @@ export interface ViewEvents {
    * user confirmed and it was saved.
    */
   onDownload: (file: ViewDownload) => Promise<boolean>;
+  /**
+   * The view has not started and gives no sign that it will: the frame
+   * loaded a page that did not announce itself as the sandbox page within
+   * `PAGE_READY_GRACE_MS` (another page or an error page, a page the browser
+   * would not frame, or a sandbox page that refused to run), or the view's
+   * document loaded and the view sent no `ui/initialize` within
+   * `VIEW_INITIALIZE_GRACE_MS`. Said once at most, and never once the view
+   * has initialized; a view that starts later still initializes.
+   */
+  onStalled: () => void;
 }
 
 /**
  * Shows a call's view in `frame`: loads the sandbox page at `sandboxPageUrl`
  * into it, hands it the view, answers the view's `ui/initialize` with
  * `hostContext`, then sends the call's input and result and follows the
- * view's size changes. Render-only but for saving a file: the bridge has no
+ * view's size changes, and says early when the view stalls on its way there
+ * (`events.onStalled`). Render-only but for saving a file: the bridge has no
  * MCP client and declares one capability, `downloadFile`. It answers
  * `ui/download-file` for a PNG or SVG the view holds, which the user
  * confirms in `events.onDownload`, with `isError` for any other file or when
@@ -151,6 +190,18 @@ export function connectView(
   let disconnected: Promise<void> | undefined;
   // A context handed over before the handshake, sent once it is done.
   let pending: McpUiHostContext | undefined;
+  // What the view has shown of itself so far, for `events.onStalled`.
+  let pageReady = false;
+  let viewStarted = false;
+  let stalled = false;
+  /** Says the view stalled, unless `started` holds after `ms`. */
+  const stallUnless = (started: () => boolean, ms: number) => {
+    setTimeout(() => {
+      if (closed || initialized || stalled || started()) return;
+      stalled = true;
+      events.onStalled();
+    }, ms);
+  };
 
   bridge.onsandboxready = () => {
     void bridge
@@ -177,13 +228,34 @@ export function connectView(
     frame,
     new URL(sandboxPageUrl).origin,
   );
+  // As each message comes in, before the bridge handles it.
+  transport.onreceive = (message) => {
+    if (!("method" in message)) return;
+    if (message.method === SANDBOX_PROXY_READY_METHOD) {
+      pageReady = true;
+    } else if (message.method === INITIALIZE_METHOD) {
+      viewStarted = true;
+    } else if (message.method === RESOURCE_LOADED && !viewStarted) {
+      stallUnless(() => viewStarted, VIEW_INITIALIZE_GRACE_MS);
+    }
+  };
+  // Every page the frame loads once it is pointed at the sandbox page.
+  const onPageLoad = () => {
+    if (closed) {
+      frame.removeEventListener("load", onPageLoad);
+    } else if (!pageReady) {
+      stallUnless(() => pageReady, PAGE_READY_GRACE_MS);
+    }
+  };
   void bridge
     .connect(transport)
     .then(() => {
       // Loaded only once the bridge listens, so the page's ready message is
       // never missed. A bridge that cannot connect leaves the frame empty,
       // and it stays out of sight.
-      if (!closed) frame.src = sandboxPageUrl;
+      if (closed) return;
+      frame.addEventListener("load", onPageLoad);
+      frame.src = sandboxPageUrl;
     })
     .catch(() => undefined);
 

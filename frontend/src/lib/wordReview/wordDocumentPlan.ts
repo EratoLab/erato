@@ -787,6 +787,8 @@ export function validateWordDocumentPlan(
         }
       }
       if (block.type === "list-item" && block.list) {
+        // One Word list gives each of its levels its own marker type.
+        const levelKey = `${block.list}:${block.level ?? 0}`;
         if (block.list.startsWith("existing-")) {
           const source = snapshot.blocks.find(
             (source) =>
@@ -800,16 +802,13 @@ export function validateWordDocumentPlan(
               "list-reference",
               "Continue a captured list using its returned list name, level and ordered value; use a new group name to create a separate list.",
             );
-        } else if (
-          lists.has(block.list) &&
-          lists.get(block.list) !== block.ordered
-        )
+        } else if (lists.has(levelKey) && lists.get(levelKey) !== block.ordered)
           return reject(
             `${blockPath}/ordered`,
             "list-consistency",
-            "All items in one list group must use the same ordered value.",
+            "All items on one level of a list group must use the same ordered value.",
           );
-        lists.set(block.list, !!block.ordered);
+        lists.set(levelKey, !!block.ordered);
       }
       pending.push(...wordBlockChildEntries(block, blockPath));
     }

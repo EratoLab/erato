@@ -1,10 +1,30 @@
 use super::replay_policy::ToolReplayPolicy;
 use crate::config::TurnInstructionKind;
-use crate::models::message::{GenerationInputMessages, InputMessage};
+use crate::models::message::{
+    BuiltinTurnInstruction, GenerationInputMessages, InputMessage, StoredTurnInstructionKind,
+};
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
+
+/// A turn instruction placed right before the user's words: one configured
+/// under `turn_instructions.<type>`, or one whose text is built in. The
+/// configured ones come first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum TurnInstruction {
+    Configured(TurnInstructionKind),
+    Builtin(BuiltinTurnInstruction),
+}
+
+impl TurnInstruction {
+    pub fn stored(self) -> StoredTurnInstructionKind {
+        match self {
+            Self::Configured(kind) => StoredTurnInstructionKind::Known(kind),
+            Self::Builtin(kind) => StoredTurnInstructionKind::Builtin(kind),
+        }
+    }
+}
 
 /// Contains the latest user input data for prompt composition.
 ///
@@ -32,9 +52,9 @@ pub struct PromptCompositionUserInput {
     /// Optional action facet requested by the user for this generation.
     pub action_facet: Option<ActionFacetUserInput>,
 
-    /// Turn instruction types that apply to this turn and have text
-    /// configured. The set's order is the order they are placed in.
-    pub turn_instructions: BTreeSet<TurnInstructionKind>,
+    /// Turn instructions that apply to this turn. The set's order is the
+    /// order they are placed in.
+    pub turn_instructions: BTreeSet<TurnInstruction>,
 
     /// Validated delegation targets from the user's assistant mentions.
     /// Non-empty only on mention-carrying turns; drives the request-scoped
@@ -115,7 +135,7 @@ pub enum AbstractChatSequencePart {
     /// Turn instruction of one type (request-scoped). A marker like
     /// `ActionFacetPrompt`: the text is rendered in the resolver step from
     /// `turn_instructions.<type>`.
-    TurnInstruction { kind: TurnInstructionKind },
+    TurnInstruction { kind: TurnInstruction },
 
     /// Run directive of a delegated chat, carrying the structured-brief fields
     /// and the run mode off the chat's provenance envelope. Rendered in the

@@ -67,6 +67,9 @@ export interface WordProposalCardProps {
   /** Parts an earlier attempt of the request changed that this plan leaves out, by title. */
   notInProposal?: readonly string[];
   adapter?: WordProposalAdapter;
+  /** Drawn in place of the plan review, such as a change in parts by its rows; it then carries
+   * the adapter's apply control itself, on top. */
+  body?: ReactNode;
 }
 
 /** Names the parts a smaller retry left out, never refs; the model learns of them only next turn. */
@@ -103,6 +106,7 @@ export function WordProposalCard({
   showSavedPlan = true,
   notInProposal,
   adapter,
+  body,
 }: WordProposalCardProps) {
   const detailsId = useId();
   const derived = useMemo(
@@ -130,7 +134,7 @@ export function WordProposalCard({
       footer={
         adapter ? (
           <>
-            {adapter.apply}
+            {!body && adapter.apply}
             <div className="word-review__actions">
               {status?.onToggleDetails && (
                 <WordReviewDetailsToggle
@@ -156,14 +160,15 @@ export function WordProposalCard({
         )
       }
     >
-      {(snapshot !== undefined || showSavedPlan) && (
-        <WordDocumentPlanReview
-          plan={plan}
-          snapshot={snapshot}
-          review={derived}
-          onLocate={snapshot ? adapter?.locate : undefined}
-        />
-      )}
+      {body ??
+        ((snapshot !== undefined || showSavedPlan) && (
+          <WordDocumentPlanReview
+            plan={plan}
+            snapshot={snapshot}
+            review={derived}
+            onLocate={snapshot ? adapter?.locate : undefined}
+          />
+        ))}
       {!!notInProposal?.length && (
         <p
           className="word-review__hint [overflow-wrap:anywhere]"

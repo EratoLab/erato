@@ -5329,6 +5329,36 @@ msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Er
 #~ msgstr "Seitenbreite"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.applyLater"
+msgstr "Sie können die Änderung übernehmen, sobald Erato fertig ist."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.parts.consent"
+msgstr "Die unten geprüften Änderungen übernehmen?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.label"
+msgstr "Dokumentänderungen in Teilen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.stopped"
+msgstr "Erato hat vor dem Abschluss aufgehört, daher gibt es nichts zu übernehmen. Senden Sie Ihre Anfrage erneut, um fortzufahren."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleStopped"
+msgstr "Änderungen nicht fertig"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleWriting"
+msgstr "Die Änderungen werden geschrieben"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Absätze einfügen"

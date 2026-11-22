@@ -1,7 +1,11 @@
 use super::*;
 use crate::config::{ActionFacetConfig, AppConfig, TurnInstructionKind};
+use crate::models::message::BuiltinTurnInstruction;
 use crate::server::api::v1beta::file_resolution::resolve_directive_markers_with_config;
-use crate::services::prompt_composition::{AbstractChatSequence, turn_instructions_for_turn};
+use crate::services::prompt_composition::{
+    AbstractChatSequence, TurnInstruction, turn_instructions_for_turn,
+};
+use erato_config::reply_speech::ReplySpeechWording;
 
 fn config() -> AppConfig {
     let mut config = AppConfig::default();
@@ -57,7 +61,7 @@ async fn compose_turn(
     selected: &[&str],
     action: Option<&str>,
     files: &[Uuid],
-    turn_instructions: &[TurnInstructionKind],
+    turn_instructions: &[TurnInstruction],
 ) -> (AbstractChatSequence, GenerationInputMessages) {
     let config = config();
     let action = action.map(|value| ActionFacetUserInput {
@@ -686,13 +690,17 @@ async fn context_rebase_replaces_baseline_including_hidden_only_head() {
 }
 
 const SPOKEN: &str = "turn:\"spoken_reply\"";
+const PROTOCOL: &str = "turn:\"spoken_and_written\"";
 
 #[tokio::test]
 async fn turn_instruction_is_last_before_the_user_message_and_never_replays() {
     let mut repo = MockMessageRepository::new();
     let u1 = Uuid::new_v4();
     repo.add_message(u1, None, MessageRole::User, "U1");
-    let spoken = [TurnInstructionKind::SpokenReply];
+    let spoken = [
+        TurnInstruction::Builtin(BuiltinTurnInstruction::SpokenAndWritten),
+        TurnInstruction::Configured(TurnInstructionKind::SpokenReply),
+    ];
     let (_, first) = compose_turn(&repo, u1, &["alpha"], Some("first"), &[], &spoken).await;
     assert_eq!(
         labels(&first),
@@ -703,6 +711,7 @@ async fn turn_instruction_is_last_before_the_user_message_and_never_replays() {
                 reminder("alpha instructions"),
                 "action:first".into(),
                 SPOKEN.into(),
+                PROTOCOL.into(),
                 "U1".into(),
             ],
         ]
@@ -743,7 +752,7 @@ async fn turn_instruction_is_last_before_the_user_message_and_never_replays() {
     let (_, spoken_again) = compose_turn(&repo, u2, &["alpha"], None, &[], &spoken).await;
     assert_eq!(
         labels(&spoken_again),
-        [history, vec![SPOKEN.into(), "U2".into()]].concat()
+        [history, vec![SPOKEN.into(), PROTOCOL.into(), "U2".into()]].concat()
     );
 }
 
@@ -779,6 +788,26 @@ fn turn_instruction_renders_its_configured_prompt_or_nothing() {
     );
     assert_eq!(resolved.messages[0].role, MessageRole::User);
 
+    let resolved =
+        resolve_directive_markers_with_config(&config, turn("spoken_and_written".into()));
+    assert_eq!(
+        labels(&resolved),
+        [
+            reminder(crate::services::speech::reply_split::SPOKEN_AND_WRITTEN_PROTOCOL),
+            "U1".into()
+        ]
+    );
+    config.turn_instructions.spoken_reply.prompt = None;
+    let resolved =
+        resolve_directive_markers_with_config(&config, turn("spoken_and_written".into()));
+    assert_eq!(
+        labels(&resolved),
+        [
+            reminder(&crate::services::speech::reply_split::protocol_text(false)),
+            "U1".into()
+        ]
+    );
+
     // A type removed after the snapshot was stored still loads and adds nothing.
     let retired = turn("retired_type".into());
     let reloaded =
@@ -790,15 +819,34 @@ fn turn_instruction_renders_its_configured_prompt_or_nothing() {
 }
 
 #[test]
-fn a_turn_instruction_applies_only_when_its_condition_holds_and_text_is_set() {
+fn a_spoken_reply_keeps_the_configured_style_and_natural_adds_the_protocol() {
+    let natural = Some(ReplySpeechWording::Natural);
+    let protocol = TurnInstruction::Builtin(BuiltinTurnInstruction::SpokenAndWritten);
     let mut config = config().turn_instructions;
-    assert!(turn_instructions_for_turn(&config, true).is_empty());
-    config.spoken_reply.prompt = Some("Answer as speech.".into());
-    assert!(turn_instructions_for_turn(&config, false).is_empty());
     assert_eq!(
-        turn_instructions_for_turn(&config, true)
+        turn_instructions_for_turn(&config, natural)
             .into_iter()
             .collect::<Vec<_>>(),
-        [TurnInstructionKind::SpokenReply]
+        [protocol]
+    );
+    assert!(turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise)).is_empty());
+    config.spoken_reply.prompt = Some("Answer as speech.".into());
+    assert!(turn_instructions_for_turn(&config, None).is_empty());
+    assert_eq!(
+        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise))
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [TurnInstruction::Configured(
+            TurnInstructionKind::SpokenReply
+        )]
+    );
+    assert_eq!(
+        turn_instructions_for_turn(&config, natural)
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [
+            TurnInstruction::Configured(TurnInstructionKind::SpokenReply),
+            protocol
+        ]
     );
 }

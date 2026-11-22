@@ -1,17 +1,30 @@
 import {
+  isAcceptedWordPartsFinish,
+  isAcceptedWordSectionPart,
+  isAcceptedWordSectionPlan,
   wordDocumentTableStyle,
+  wordIndexRuns,
+  wordPartsLayout,
   wordPlainTextBlocks,
+  wordPlanRowOwners,
 } from "@erato/frontend/word-review";
 
 import { wordBlockIndex, wordCaptureSections } from "./wordDocumentOutline";
 import { wordLeftOutPartName, wordTitledEntry } from "./wordPlanCoverage";
 import { wordBlockTitle, wordPassageStart } from "./wordPlanDocumentChanges";
+import { wordWrittenChanges } from "./wordReadFreshness";
 import { WORD_PLAN_PATH, WORD_PLAN_PATH_IN_TEXT } from "./wordScopedSubmission";
 
 import type { WordPartAllow } from "./wordPartChecks";
 import type { WordLeftOutPart } from "./wordPlanCoverage";
-import type { ClientToolExecutionResult } from "@erato/frontend/library";
+import type { WordReadCapture } from "./wordReadFreshness";
 import type {
+  ClientToolExecutionResult,
+  ContentPart,
+} from "@erato/frontend/library";
+import type {
+  WordPartReceiptStatus,
+  WordPartsReorderingLeftOut,
   WordPlainTextOrigin,
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -401,9 +414,11 @@ export function parseWordPartOps(
         },
       ],
     };
-  const inRow = new Set(row.refs);
+  const placeInRow = new Map(row.refs.map((ref, at) => [ref, at]));
   const used = new Map<string, number>();
   const ops: WordPartOp[] = [];
+  let next = 0;
+  let outOfOrder = false;
   const take = (spec: unknown, path: string, k: number): string[] => {
     const refs = wordPartRefs(spec, snapshot);
     if (typeof refs === "string") {
@@ -411,7 +426,8 @@ export function parseWordPartOps(
       return [];
     }
     for (const ref of refs) {
-      if (!inRow.has(ref)) {
+      const place = placeInRow.get(ref);
+      if (place === undefined) {
         issue(
           path,
           "source-ownership",
@@ -429,6 +445,16 @@ export function parseWordPartOps(
         return [];
       }
       used.set(ref, k);
+      // Moves live in the section plan only, so the card's Structure row and Apply's route agree.
+      if (place !== next && !outOfOrder) {
+        outOfOrder = true;
+        issue(
+          path,
+          "source-order",
+          `${ref} is out of order; the ops use row ${rowIndex + 1}'s blocks in the order of its source, ${wordPartRanges(row.refs, snapshot)}. To move blocks, change the row order in the section plan.`,
+        );
+      }
+      next = place + 1;
     }
     return refs;
   };
@@ -766,19 +792,26 @@ export const wordUnwrittenRows = (draft: WordPartsDraft): number[] =>
     row.action === "rewrite" && !draft.parts.has(r) ? [r] : [],
   );
 
-/** `leftOut`: written rows a finish leaves unchanged, since the finish checks refused their part. */
+/** `changed`: rows the finish left out because they changed in Word while Erato wrote them.
+ * `leftOut`: written rows a finish leaves unchanged, since the finish checks refused their part. */
 export function wordPartRows(
   draft: WordPartsDraft,
   snapshot: WordAuthoringSnapshot,
   {
     finished = false,
+    changed,
     leftOut,
-  }: { finished?: boolean; leftOut?: readonly number[] } = {},
+  }: {
+    finished?: boolean;
+    changed?: ReadonlySet<number>;
+    leftOut?: readonly number[];
+  } = {},
 ) {
   const sections = wordCaptureSections(snapshot);
   const index = wordBlockIndex(snapshot);
   return draft.plan.rows.map((row, r) => {
-    const written = draft.parts.has(r) && !leftOut?.includes(r);
+    const written =
+      draft.parts.has(r) && !leftOut?.includes(r) && !changed?.has(r);
     const allowed = written ? draft.waived.get(r) : undefined;
     return {
       row: r + 1,
@@ -789,8 +822,9 @@ export function wordPartRows(
         : wordPartRowTitle(row, snapshot),
       ...(row.title ? { new_title: row.title } : {}),
       paragraphs: row.refs.length,
-      status:
-        row.action === "keep"
+      status: (changed?.has(r)
+        ? "changed_in_word"
+        : row.action === "keep"
           ? "kept"
           : row.action === "delete"
             ? "deleted"
@@ -798,7 +832,7 @@ export function wordPartRows(
               ? "ready"
               : finished
                 ? "not_written"
-                : "waiting",
+                : "waiting") satisfies WordPartReceiptStatus,
       // Changes a check found and the part said were intended, for the rows card (ERMAIN-1297).
       ...(allowed?.length ? { allowed } : {}),
     };
@@ -911,5 +945,226 @@ export function wordPartsFinishRejected(
       { kind: "finish" },
       (r) => wordPartRowTitle(draft.plan.rows[r], snapshot),
     ),
+  };
+}
+
+/** The finish receipt's `reordering` when the finish left the reordering out. */
+export const WORD_PARTS_REORDERING_LEFT_OUT =
+  "changed_in_word" satisfies WordPartsReorderingLeftOut;
+
+/** Section plan rows (from 0) and the reordering left out of a change in parts. */
+export interface WordPartsLeaveOut {
+  rows: ReadonlySet<number>;
+  structure: boolean;
+}
+
+/**
+ * The section plan and parts with rows left out as they were: a rewrite or delete row keeps its
+ * blocks. Leaving out the reordering puts every row back in document order and leaves out the
+ * renames and the rows whose text joins blocks from different places (`wordPartsLayout`).
+ * `rows` gives the section plan row (from 0) each of the returned rows came from.
+ */
+export function wordPartsWithout(
+  plan: WordPartsPlan,
+  parts: ReadonlyMap<number, WordPartOp[]>,
+  leaveOut: WordPartsLeaveOut,
+  snapshot: WordAuthoringSnapshot,
+): {
+  plan: WordPartsPlan;
+  parts: Map<number, WordPartOp[]>;
+  rows: number[];
+} {
+  const index = wordBlockIndex(snapshot);
+  const positions = plan.rows.map((row) =>
+    row.refs.map((ref) => index.get(ref)!),
+  );
+  const merged = new Set(
+    leaveOut.structure
+      ? wordPartsLayout(
+          plan.rows.map((row, r) => ({
+            action: row.action,
+            refs: positions[r],
+          })),
+        ).merged
+      : [],
+  );
+  const rows = plan.rows.map(
+    (row, r): WordPartRow =>
+      leaveOut.rows.has(r) ||
+      merged.has(r) ||
+      (leaveOut.structure && row.title !== undefined)
+        ? { action: "keep", refs: row.refs }
+        : row,
+  );
+  if (!leaveOut.structure)
+    return {
+      plan: { ...plan, rows },
+      parts: new Map([...parts].filter(([r]) => rows[r]?.action === "rewrite")),
+      rows: rows.map((_, r) => r),
+    };
+  const pieces: {
+    row: WordPartRow;
+    from: number;
+    origin: number;
+    part?: WordPartOp[];
+  }[] = [];
+  rows.forEach((row, r) => {
+    if (row.action === "rewrite") {
+      pieces.push({
+        row,
+        from: positions[r][0],
+        origin: r,
+        part: parts.get(r),
+      });
+      return;
+    }
+    for (const run of wordIndexRuns(positions[r]))
+      pieces.push({
+        row: { ...row, refs: run.map((at) => snapshot.blocks[at].ref) },
+        from: run[0],
+        origin: r,
+      });
+  });
+  pieces.sort((a, b) => a.from - b.from);
+  return {
+    plan: { ...plan, rows: pieces.map((piece) => piece.row) },
+    parts: new Map(
+      pieces.flatMap((piece, k) =>
+        piece.part ? [[k, piece.part] as const] : [],
+      ),
+    ),
+    rows: pieces.map((piece) => piece.origin),
+  };
+}
+
+/**
+ * The plan Apply writes for a change in parts with `leaveOut` kept as it was, and the section plan
+ * row (from 1) each of its review rows belongs to, from the assembler's own record of where each
+ * entry came from.
+ */
+export function wordPartsApplied(
+  draft: Pick<WordPartsDraft, "plan" | "parts" | "readToken">,
+  snapshot: WordAuthoringSnapshot,
+  leaveOut: WordPartsLeaveOut,
+): {
+  plan: WordDocumentPlan;
+  sectionRowOf: (reviewRowKey: string) => number | undefined;
+} {
+  const { plan, parts, rows } = wordPartsWithout(
+    draft.plan,
+    draft.parts,
+    leaveOut,
+    snapshot,
+  );
+  const assembly = assembleWordParts(snapshot, draft.readToken, plan, parts);
+  const owner = (origin: WordPartOrigin) => rows[origin.row] + 1;
+  return {
+    plan: assembly.plan,
+    sectionRowOf: wordPlanRowOwners(assembly.plan, {
+      entries: assembly.entries.map(owner),
+      deleted: assembly.deleted.map(owner),
+    }),
+  };
+}
+
+/** Rows the draft changes whose written blocks the user or a co-author changed in Word since the
+ * capture; changes the journal cannot place count for nothing, as Apply's live check guards those.
+ * A rename writes only the section's heading. */
+export function wordPartsChangedInWord(
+  draft: Pick<WordPartsDraft, "plan" | "parts">,
+  snapshot: WordAuthoringSnapshot,
+  capture: WordReadCapture | undefined,
+): Set<number> {
+  const changed = new Set<number>();
+  const changes = wordWrittenChanges(snapshot, capture, "document");
+  if (!changes) return changed;
+  const hit = new Set(changes.blocks);
+  const index = wordBlockIndex(snapshot);
+  draft.plan.rows.forEach((row, r) => {
+    const written =
+      row.action === "delete" ||
+      (row.action === "rewrite" && draft.parts.has(r))
+        ? row.refs
+        : row.title !== undefined
+          ? [renamedHeading(row, snapshot)?.ref ?? []].flat()
+          : [];
+    if (written.some((ref) => hit.has(index.get(ref)!))) changed.add(r);
+  });
+  return changed;
+}
+
+/**
+ * The draft a message's accepted section plan and parts staged, rebuilt from the stored calls as
+ * the pane's store kept it, with what its accepted finish left out: the rows that changed in Word,
+ * and the reordering when the document changed. Undefined when a call does not parse against
+ * `snapshot`.
+ */
+export function wordPartsFromContent(
+  content: readonly ContentPart[] | undefined,
+  snapshot: WordAuthoringSnapshot,
+):
+  | { draft: WordPartsDraft; changed: Set<number>; reorderingLeftOut: boolean }
+  | undefined {
+  const store = new WordPartsDraftStore();
+  let draftId: string | undefined;
+  let finished: Record<string, unknown> | undefined;
+  for (const part of content ?? []) {
+    if (part.content_type !== "tool_use" || !object(part.input)) continue;
+    const result =
+      object(part.output) && object(part.output.result)
+        ? part.output.result
+        : {};
+    if (isAcceptedWordSectionPlan(part)) {
+      const parsed = parseWordPartsPlan(part.input, snapshot);
+      if ("issues" in parsed || typeof part.input.readToken !== "string")
+        return undefined;
+      draftId = result.draft_id as string;
+      store.open(parsed.plan, part.input.readToken);
+      finished = undefined;
+    } else if (
+      draftId &&
+      store.current &&
+      isAcceptedWordSectionPart(part, draftId)
+    ) {
+      const r = (result.row as number) - 1;
+      const row = store.current.plan.rows[r] as WordPartRow | undefined;
+      if (row?.action !== "rewrite" || part.input.row !== r + 1)
+        return undefined;
+      const parsed = parseWordPartOps(part.input.ops, r, row, snapshot);
+      if ("issues" in parsed) return undefined;
+      store.write(store.current, r, parsed.ops, {
+        allow: new Set(
+          (Array.isArray(part.input.allow) ? part.input.allow : []).filter(
+            (code): code is WordPartAllow => typeof code === "string",
+          ),
+        ),
+        waived: Array.isArray(result.allowed)
+          ? (result.allowed as WordPartAllow[])
+          : [],
+      });
+    } else if (store.current && isAcceptedWordPartsFinish(part))
+      finished = result;
+  }
+  const draft = store.current;
+  if (!draft) return undefined;
+  const changed = new Set<number>();
+  if (Array.isArray(finished?.rows))
+    finished.rows.forEach((row: unknown, r) => {
+      if (
+        object(row) &&
+        row.status === ("changed_in_word" satisfies WordPartReceiptStatus)
+      )
+        changed.add(r);
+      // A written part the finish checks left out is not in the accepted plan.
+      else if (
+        object(row) &&
+        row.status === ("not_written" satisfies WordPartReceiptStatus)
+      )
+        draft.parts.delete(r);
+    });
+  return {
+    draft,
+    changed,
+    reorderingLeftOut: finished?.reordering === WORD_PARTS_REORDERING_LEFT_OUT,
   };
 }
