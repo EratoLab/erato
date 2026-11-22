@@ -1561,7 +1561,7 @@ export function wordFullDocumentDifferingParts(
  * restore verification after strict comparison failed. With `replaced`, the package the write wrote
  * over, both sides leave out what WORD_HOUSEKEEPING's "proofing-language" names, and Word's entry
  * styles that package already held ("placeholder-entries"); the written side leaves out the indent
- * Word adds to a table the write styled ("table-indent"). */
+ * Word adds to a styled table the write added ("table-indent"). */
 export function wordFullDocumentDifferences(
   expectedXml: string,
   actualXml: string,
@@ -1598,8 +1598,10 @@ export function wordFullDocumentDifferences(
       removeWordRedetectedLanguage(actual.doc, parsed) -
         removeWordRedetectedLanguage(expected.doc, parsed),
     );
-    indents = removeWordAddedTableIndents(expected.roots, actual.roots, () =>
-      wordPackageRoots(parsed()),
+    indents = removeWordAddedTableIndents(
+      actual.roots,
+      () => wordPackageRoots(parsed()),
+      expected.roots,
     );
   }
   const counts: WordHousekeepingCounts = redetected

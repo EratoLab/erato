@@ -14,6 +14,7 @@ import {
   realisticWordPackageXml,
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
+import { verifyDifferingParts } from "../wordApplyDiagnostics";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -478,13 +479,21 @@ describe("a new table in the document's table style", () => {
   // Word PC gives such a table an indent that offsets its 1/2 pt left border (-8 in compatibility mode 12).
   const LEFT_BORDER =
     '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
-  const source = realisticSnapshot(
-    realisticWordPackageXml().replace(
-      '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
-      `<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>${LEFT_BORDER}`,
-    ),
-  );
-  const planWith = (format: WordTableFormatting): WordDocumentPlan => {
+  const KEPT_PROPERTIES =
+    '<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/></w:tblPr>';
+  const sourceWith = (keptProperties = KEPT_PROPERTIES) =>
+    realisticSnapshot(
+      realisticWordPackageXml()
+        .replace(
+          '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+          `<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>${LEFT_BORDER}`,
+        )
+        .replace(KEPT_PROPERTIES, keptProperties),
+    );
+  const planWith = (
+    format: WordTableFormatting,
+    source: WordAuthoringSnapshot,
+  ): WordDocumentPlan => {
     const refs = source.blocks.map((b) => b.ref);
     const status = source.blocks.findIndex((b) => b.text.startsWith("Status"));
     return {
@@ -541,11 +550,12 @@ describe("a new table in the document's table style", () => {
       if (width) width.after(element);
       else properties.append(element);
     };
-  const write = (
+  const writeOver = (
+    source: WordAuthoringSnapshot,
     format: WordTableFormatting,
     ...edits: ((doc: Document) => void)[]
   ) => {
-    const plan = planWith(format);
+    const plan = planWith(format, source);
     const compiled = compileWordDocumentPlan(plan, source);
     const written = captureWordAuthoringSnapshot(
       editWordPackage(compiled, (doc) => edits.forEach((edit) => edit(doc))),
@@ -556,6 +566,11 @@ describe("a new table in the document's table style", () => {
     );
     return verifyWordPlanWrite(plan, source, written);
   };
+  const source = sourceWith();
+  const write = (
+    format: WordTableFormatting,
+    ...edits: ((doc: Document) => void)[]
+  ) => writeOver(source, format, ...edits);
   const NEW = 0;
   const KEPT = 1;
 
@@ -579,8 +594,23 @@ describe("a new table in the document's table style", () => {
     });
   });
 
+  it("verifies it next to a table that already has the same properties and no indent", () => {
+    const twin = sourceWith(
+      '<w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="5000" w:type="pct"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>',
+    );
+    expect(
+      writeOver(twin, { styleRef: "TableGrid" }, indent(NEW, "-8")),
+    ).toEqual({
+      ok: true,
+      tier: "strict",
+      adjustments: [],
+      housekeeping: { "table-indent": 1 },
+    });
+  });
+
   it.each([
     ["an indent past its left border", indent(NEW, "-120")],
+    ["an indent to the right past half its left border", indent(NEW, "6")],
     [
       "another table property",
       (doc: Document) => {
@@ -607,6 +637,26 @@ describe("a new table in the document's table style", () => {
       ok: false,
       reason: "output-mismatch",
     });
+  });
+
+  it("names the first real difference of a failed write, past Word's indent", () => {
+    const compiled = compileWordDocumentPlan(
+      planWith({ styleRef: "TableGrid" }, source),
+      source,
+    );
+    const written = editWordPackage(compiled, (doc) => {
+      indent(NEW, "-8")(doc);
+      all(body(doc), "t").find(
+        (t) => t.textContent === "Closing paragraph.",
+      )!.textContent = "Closing paragraph, edited.";
+    });
+    const [withReplaced, without] = [source.ooxml, undefined].map(
+      (replaced) =>
+        verifyDifferingParts(compiled, written, replaced).locations ?? [],
+    );
+    expect(without[0]).toContain("w:tblPr");
+    expect(withReplaced).toHaveLength(1);
+    expect(withReplaced[0]).not.toContain("w:tbl");
   });
 
   it("still fails the write on an indent given to a new table without a style", () => {
