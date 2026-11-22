@@ -1,14 +1,10 @@
-import {
-  useFileCapabilities,
-  useFileUploadStore,
-  useUploadFeature,
-} from "@erato/frontend/library";
+import { useFileUploadStore, useUploadFeature } from "@erato/frontend/library";
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useModelTakesSlidePictures } from "./useModelTakesSlidePictures";
 import {
   MAX_SLIDE_PICTURES,
-  modelTakesSlidePictures,
   renderSelectedSlidePictures,
 } from "../utils/powerpointSlidePicture";
 
@@ -84,8 +80,8 @@ const slideLabel = ({ slideId, slideNumber }: PictureSlide) =>
   `slide ${slideNumber ?? "?"} (id ${slideId})`;
 
 /**
- * For the model, in the facet's selection text: image parts reach it without their file name, and
- * the selection is read at send time, so this is the only place that says which slide a picture shows.
+ * For the model, in the facet's selection text: a picture's file name gives only the slide's
+ * position, and the selection is read at send time, so this is where a picture is tied to its slide.
  */
 export function describeSlidePictures(
   slides: readonly PictureSlide[],
@@ -127,23 +123,14 @@ export function usePowerPointSlidePictures({
   // A staged picture keeps the check alive after the offer itself is gone, e.g. on a model switch.
   const checksModel =
     uploadEnabled && !!modelId && (enabled || stagedPictures.length > 0);
-  const capabilities = useFileCapabilities(
-    { queryParams: { model_id: modelId } },
-    {
-      enabled: checksModel,
-      staleTime: Infinity,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
+  const { takes: modelTakes, known: modelKnown } = useModelTakesSlidePictures(
+    modelId,
+    checksModel,
   );
-  const modelTakes = modelTakesSlidePictures(capabilities.data);
   const available = enabled && checksModel && modelTakes;
   // The composer keeps staged files across a model switch and sends them all the same.
   const modelCannotRead =
-    checksModel &&
-    stagedPictures.length > 0 &&
-    capabilities.data !== undefined &&
-    !modelTakes;
+    checksModel && stagedPictures.length > 0 && modelKnown && !modelTakes;
 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<ComposerNotice | null>(null);

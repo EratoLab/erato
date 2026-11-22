@@ -15,7 +15,7 @@ use genai::chat::ToolName as GenaiToolName;
 use rmcp::model::CallToolRequestParams;
 use sea_orm::EntityTrait;
 use sea_orm::prelude::Uuid;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Default)]
@@ -42,6 +42,38 @@ pub struct ManagedToolCall {
     pub tool: rmcp::model::Tool,
     /// Set when the tool declares the server's consent argument.
     pub approval_argument: Option<ApprovalArgument>,
+}
+
+impl ManagedToolCall {
+    /// A call of `tool` that no gate asked the user about, so with no user
+    /// decision for its consent argument.
+    pub fn ungated(tool: &ManagedTool, tool_call: GenaiToolCall) -> Self {
+        Self {
+            server_id: tool.server_id.clone(),
+            tool_call,
+            tool: tool.tool.clone(),
+            approval_argument: tool.approval_argument.clone().map(|name| ApprovalArgument {
+                name,
+                user_approved: false,
+            }),
+        }
+    }
+}
+
+/// Route a GenAI tool call to the server of the tool it names among
+/// `offered`: the tools the model was offered, keyed by the names it calls
+/// them by (see `mcp_tool_names::by_model_name`).
+pub fn convert_tool_call_to_managed_tool_call(
+    offered: &HashMap<String, ManagedTool>,
+    tool_call: GenaiToolCall,
+) -> Result<ManagedToolCall, Report> {
+    match offered.get(tool_call.fn_name.as_str()) {
+        Some(tool) => Ok(ManagedToolCall::ungated(tool, tool_call)),
+        None => Err(eyre!(
+            "Tool with name '{}' not found in any MCP server",
+            tool_call.fn_name
+        )),
+    }
 }
 
 /// The consent argument Erato fills in at dispatch: the server's name for it
@@ -175,9 +207,12 @@ impl McpServers {
     }
 
     /// A call's details with the view its tool declares (`view_uri`, see
-    /// `mcp_apps::view_uri`) and the result's `structuredContent` for it, when
-    /// the server enables MCP Apps and the view is accepted; otherwise
-    /// `details` as they are.
+    /// `mcp_apps::view_uri`) and the result's `structuredContent` and `_meta`
+    /// (`result_meta`) for it, when the server enables MCP Apps and the view
+    /// is accepted, or marked `view_unavailable` when it is not; `details` as
+    /// they are when the tool declares no view or the server does not enable
+    /// MCP Apps.
+    #[allow(clippy::too_many_arguments)]
     pub async fn with_app_view(
         &self,
         chat_id: Uuid,
@@ -186,21 +221,28 @@ impl McpServers {
         auth_context: &McpRequestAuthContext<'_>,
         details: Option<ToolResultDetails>,
         structured_content: Option<&serde_json::Value>,
+        result_meta: Option<&rmcp::model::MetaObject>,
     ) -> Option<ToolResultDetails> {
         let Some(uri) = view_uri else {
             return details;
         };
-        let Some(mut view) = self
+        if !self.session_manager.mcp_apps_enabled(server_id).await {
+            return details;
+        }
+        let mut details = details.unwrap_or_default();
+        match self
             .session_manager
             .app_view_for_call(chat_id, server_id, uri, auth_context)
             .await
-        else {
-            return details;
-        };
-        view.structured_content =
-            crate::services::mcp_apps::structured_content_for_view(structured_content);
-        let mut details = details.unwrap_or_default();
-        details.view = Some(view);
+        {
+            Some(mut view) => {
+                view.structured_content =
+                    crate::services::mcp_apps::structured_content_for_view(structured_content);
+                view.meta = crate::services::mcp_apps::result_meta_for_view(result_meta);
+                details.view = Some(Box::new(view));
+            }
+            None => details.view_unavailable = true,
+        }
         Some(details)
     }
 
@@ -237,40 +279,6 @@ impl McpServers {
             .await
     }
 
-    /// Convert a GenAI tool call to a managed tool call by finding the server that provides the tool
-    pub async fn convert_tool_call_to_managed_tool_call(
-        &self,
-        chat_id: Uuid,
-        tool_call: GenaiToolCall,
-        auth_context: &McpRequestAuthContext<'_>,
-    ) -> Result<ManagedToolCall, Report> {
-        let all_tools = self.list_tools(chat_id, auth_context).await?;
-
-        let managed_tool = all_tools
-            .iter()
-            .find(|tool| tool.tool.name == tool_call.fn_name.as_str());
-
-        if let Some(managed_tool) = managed_tool {
-            Ok(ManagedToolCall {
-                server_id: managed_tool.server_id.clone(),
-                tool_call,
-                tool: managed_tool.tool.clone(),
-                // No gate ran for this call, so no user decision exists for it.
-                approval_argument: managed_tool.approval_argument.clone().map(|name| {
-                    ApprovalArgument {
-                        name,
-                        user_approved: false,
-                    }
-                }),
-            })
-        } else {
-            Err(eyre!(
-                "Tool with name '{}' not found in any MCP server",
-                tool_call.fn_name
-            ))
-        }
-    }
-
     /// Call a tool on the appropriate MCP server and return the raw MCP
     /// result, without naming the surface the call comes from.
     pub async fn call_tool(
@@ -297,7 +305,8 @@ impl McpServers {
         >,
     ) -> Result<rmcp::model::CallToolResult, Report> {
         let mut params = CallToolRequestParams::default();
-        params.name = managed_tool_call.tool_call.fn_name.clone().into();
+        // The server's own name: the model may have called a qualified one.
+        params.name = managed_tool_call.tool.name.clone();
         let mut tool_args = managed_tool_call.tool_call.fn_arguments.clone();
         convert_mcp_tool_call_file_fields(
             &serde_json::Value::Object(managed_tool_call.tool.input_schema.as_ref().clone()),
@@ -332,6 +341,7 @@ pub fn convert_mcp_tools_to_genai_tools(
     managed_mcp_tools
         .into_iter()
         .map(|managed_tool| {
+            let name = managed_tool.model_name().to_string();
             let tool = managed_tool.tool;
 
             // Convert Arc<JsonObject> to serde_json::Value
@@ -369,7 +379,7 @@ pub fn convert_mcp_tools_to_genai_tools(
             sanitize_tool_schema_extensions(&mut input_schema_value);
 
             GenaiTool {
-                name: GenaiToolName::Custom(tool.name.to_string()),
+                name: GenaiToolName::Custom(name),
                 description,
                 schema: Some(input_schema_value),
                 strict: if omit_tool_strict { None } else { Some(false) },
@@ -878,11 +888,19 @@ fn json_pointer_escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
 }
 
-fn parse_erato_file_upload_uri(uri: &str) -> Option<Uuid> {
+fn parse_erato_file_upload_uri(value: &str) -> Option<Uuid> {
     const ERATO_FILE_URI_PREFIX: &str = "erato-file://";
-    let file_id = uri.strip_prefix(ERATO_FILE_URI_PREFIX)?;
+    // Only decode enough for a URI
+    // containing a UUID (including its longer urn:uuid: representation).
+    let mut buffer = [0u8; ERATO_FILE_URI_PREFIX.len() + 45];
+    let uri = if value.starts_with(ERATO_FILE_URI_PREFIX) {
+        value
+    } else {
+        let len = STANDARD.decode_slice(value, &mut buffer).ok()?;
+        std::str::from_utf8(&buffer[..len]).ok()?
+    };
 
-    Uuid::parse_str(file_id).ok()
+    Uuid::parse_str(uri.strip_prefix(ERATO_FILE_URI_PREFIX)?).ok()
 }
 
 async fn resolve_file_upload_to_base64(
@@ -924,15 +942,12 @@ async fn convert_mcp_tool_call_file_fields(
     }
 
     let value_paths = expand_value_paths(tool_call_arguments, &schema_paths);
-    if value_paths.is_empty() {
-        return Ok(());
-    }
-
-    let Some(app_state) = auth_context.app_state else {
-        return Ok(());
-    };
-
+    let mut seen = HashSet::new();
     for path in value_paths {
+        // Multiple schema branches can mark the same argument.
+        if !seen.insert(path.clone()) {
+            continue;
+        }
         let pointer = if path.is_empty() {
             String::new()
         } else {
@@ -945,24 +960,22 @@ async fn convert_mcp_tool_call_file_fields(
             )
         };
 
-        let pointer_text = tool_call_arguments
-            .pointer(&pointer)
-            .and_then(|value| value.as_str());
-        let Some(pointer_text) = pointer_text else {
-            continue;
-        };
-
-        let Some(file_upload_id) = parse_erato_file_upload_uri(pointer_text) else {
-            continue;
-        };
+        let target = tool_call_arguments
+            .pointer_mut(&pointer)
+            .ok_or_else(|| eyre!("Missing MCP file argument at '{pointer}'"))?;
+        let file_upload_id = target.as_str().and_then(parse_erato_file_upload_uri)
+            .ok_or_else(|| eyre!("Invalid MCP file argument at '{pointer}'. Supply an uploaded file reference as erato-file://<UUID> or its base64 encoding."))?;
+        let app_state = auth_context
+            .app_state
+            .ok_or_eyre("Cannot resolve MCP file references without application state")?;
 
         let encoded =
             resolve_file_upload_to_base64(app_state, file_upload_id, auth_context.access_token)
-                .await?;
-
-        if let Some(target) = tool_call_arguments.pointer_mut(&pointer) {
-            *target = serde_json::Value::String(encoded);
-        }
+                .await
+                .wrap_err_with(|| {
+                    format!("Could not resolve MCP file argument at '{pointer}' ({file_upload_id})")
+                })?;
+        *target = serde_json::Value::String(encoded);
     }
 
     Ok(())
@@ -1130,6 +1143,7 @@ mod tests {
                 tool,
                 approval_argument: Some("hasUserApproved".to_string()),
                 destructive_hint_source: Default::default(),
+                offered_as: None,
             }],
             false,
         );
@@ -1190,6 +1204,7 @@ mod tests {
                 tool: mcp_tool,
                 approval_argument: None,
                 destructive_hint_source: Default::default(),
+                offered_as: None,
             }],
             false,
         );
@@ -1290,5 +1305,32 @@ mod tests {
                 .is_some()
         );
         assert!(parse_erato_file_upload_uri("not-a-file-uri").is_none());
+    }
+
+    #[test]
+    fn parse_erato_file_upload_uri_accepts_a_base64_encoded_handle() {
+        let uri = "erato-file://edec99ea-2d22-4988-b205-564956428c30";
+        let encoded = "ZXJhdG8tZmlsZTovL2VkZWM5OWVhLTJkMjItNDk4OC1iMjA1LTU2NDk1NjQyOGMzMA==";
+        let expected = super::Uuid::parse_str(&uri["erato-file://".len()..]).unwrap();
+        assert_eq!(parse_erato_file_upload_uri(encoded), Some(expected));
+        // Ordinary base64 file contents (%PDF-1.7) are not a handle.
+        assert_eq!(parse_erato_file_upload_uri("JVBERi0xLjc="), None);
+    }
+
+    #[tokio::test]
+    async fn invalid_mcp_file_argument_reports_the_field_and_expected_handle() {
+        let schema = json!({"properties":{"files":{"items":{"properties":{"data_base64":{
+            "chat.erato/file_content_field": true, "contentEncoding":"base64"
+        }}}}}});
+        for invalid in [json!("not a handle"), json!("JVBERi0xLjc="), json!(null)] {
+            let mut args = json!({"files":[{"data_base64":invalid}]});
+            let error =
+                super::convert_mcp_tool_call_file_fields(&schema, &mut args, &Default::default())
+                    .await
+                    .unwrap_err()
+                    .to_string();
+            assert!(error.contains("/files/0/data_base64"));
+            assert!(error.contains("erato-file://<UUID>"));
+        }
     }
 }

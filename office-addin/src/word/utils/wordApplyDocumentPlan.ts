@@ -1026,7 +1026,7 @@ async function applyFullDocument(
           before,
           afterFingerprint,
           diagnostic: diagnostic("verify", verification.reason, undefined, {
-            ...verifyDifferingParts(compiled, after.ooxml),
+            ...verifyDifferingParts(compiled, after.ooxml, live.ooxml),
             ...(actual.issue ? { snapshotIssue: actual.issue } : {}),
             ...failedTier(verification),
             ...packageStats([
@@ -1098,9 +1098,7 @@ async function revertFullDocument(
       await context.sync();
       const written = wordWrittenPackageFingerprint(live.ooxml, original.ooxml);
       const contentChanged = written.fingerprint !== expectedAfter;
-      const checked: WordHousekeepingCounts = written.redetected
-        ? { "proofing-language": written.redetected }
-        : {};
+      const checked = written.housekeeping;
       const urlChanged =
         live.documentUrl !== original.documentUrl ||
         currentWordDocumentUrl() !== live.documentUrl;
@@ -1187,7 +1185,7 @@ async function revertFullDocument(
           status: "interrupted",
           afterFingerprint,
           diagnostic: diagnostic("restore", verification.reason, undefined, {
-            ...verifyDifferingParts(original.ooxml, after.ooxml),
+            ...verifyDifferingParts(original.ooxml, after.ooxml, live.ooxml),
             ...failedTier(verification),
             ...packageStats([
               ["live", live.ooxml],

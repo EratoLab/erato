@@ -9,6 +9,7 @@ use crate::policy::prelude::*;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
 use crate::services::file_processing_cached;
 use crate::services::file_storage::{SharepointContext, is_missing_permissions_error};
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use crate::state::AppState;
 use async_trait::async_trait;
 use eyre::{Context, ContextCompat, OptionExt, Report};
@@ -247,15 +248,11 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
     async fn get_system_prompt(
         &self,
         chat_provider_config: &ChatProviderConfig,
-        preferred_language: Option<&str>,
-        user_preference_nickname: Option<&str>,
-        user_preference_job_title: Option<&str>,
-        user_preference_assistant_custom_instructions: Option<&str>,
-        user_preference_assistant_additional_information: Option<&str>,
+        mut ctx: SystemPromptContext<'_>,
     ) -> Result<Option<String>, Report> {
         // The chat owner's zone, so the "now" placeholders show their local
         // date and time.
-        let time_zone = match Uuid::parse_str(self.subject.user_id()) {
+        ctx.time_zone = match Uuid::parse_str(self.subject.user_id()) {
             Ok(user_id) => crate::models::user_preference::user_time_zone(
                 &self.app_state.db,
                 &user_id,
@@ -268,15 +265,7 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
             Err(_) => None,
         };
         self.app_state
-            .get_system_prompt(
-                chat_provider_config,
-                preferred_language,
-                user_preference_nickname,
-                user_preference_job_title,
-                user_preference_assistant_custom_instructions,
-                user_preference_assistant_additional_information,
-                time_zone,
-            )
+            .get_system_prompt(chat_provider_config, &ctx)
             .await
     }
 

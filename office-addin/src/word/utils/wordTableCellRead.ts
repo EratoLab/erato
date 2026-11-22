@@ -17,6 +17,12 @@ import type {
   WordTableCellScope,
 } from "@erato/frontend/word-review";
 
+export const WORD_TABLE_CELL_READ_KEYS: readonly string[] = [
+  "snapshot",
+  "documentIdentity",
+  "table_cell",
+];
+
 const PAGE_SIZE = 5;
 const CELL_BYTES = 4096;
 const SNIPPET_BYTES = 256;
@@ -74,9 +80,7 @@ export function readWordTableCell(
   const textKeys = ["nearbyText", "header", "rowLabel", "text", "sourceRef"];
   const indexKeys = ["rowIndex", "cellIndex", "offset"];
   if (
-    Object.keys(input).some(
-      (k) => !["snapshot", "documentIdentity", "table_cell"].includes(k),
-    ) ||
+    Object.keys(input).some((k) => !WORD_TABLE_CELL_READ_KEYS.includes(k)) ||
     !object(query) ||
     !Object.keys(query).length ||
     Object.keys(query).some((k) => ![...textKeys, ...indexKeys].includes(k)) ||

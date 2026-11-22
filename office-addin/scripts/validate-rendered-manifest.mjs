@@ -18,6 +18,8 @@ const MANIFESTS = [
   },
   { name: "manifest-document.xml", launchEvents: false },
   { name: "manifest-document.xml", launchEvents: false, sharepoint: true },
+  { name: "manifest-presentation.xml", launchEvents: false },
+  { name: "manifest-presentation.xml", launchEvents: false, sharepoint: true },
 ];
 
 // Synthetic values in the shape the backend renders. The version is the one
@@ -71,7 +73,9 @@ function render({ manifest, template, withLaunchEvents }) {
   const end = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->";
   if (manifest.sharepoint) {
     if (!rendered.includes(start) || !rendered.includes(end)) {
-      throw new Error("Word template is missing its command section markers");
+      throw new Error(
+        `${manifest.name} is missing its command section markers`,
+      );
     }
     rendered =
       rendered.slice(0, rendered.indexOf(start)) +
@@ -129,10 +133,20 @@ function render({ manifest, template, withLaunchEvents }) {
   return rendered;
 }
 
+// Optional manifest names narrow the run, e.g. `manifest-presentation.xml`.
+const only = process.argv.slice(2);
+const selected = MANIFESTS.filter(
+  (manifest) => only.length === 0 || only.includes(manifest.name),
+);
+if (selected.length === 0) {
+  console.error(`No served manifest is named ${only.join(", ")}`);
+  process.exit(1);
+}
+
 const outDir = mkdtempSync(join(tmpdir(), "erato-manifest-"));
 const validator = join(root, "node_modules/.bin/office-addin-manifest");
 let failed = false;
-for (const manifest of MANIFESTS) {
+for (const manifest of selected) {
   const template = readFileSync(
     join(root, "manifests", manifest.templateName ?? manifest.name),
     "utf8",

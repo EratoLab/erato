@@ -7,7 +7,10 @@ import {
 } from "../wordImageAssets";
 
 const metadata = vi.hoisted(() => vi.fn());
-vi.mock("@erato/frontend/library", () => ({ fetchGetFile: metadata }));
+vi.mock("@erato/frontend/library", () => ({
+  fetchGetFile: metadata,
+  fetchWithAuthRecovery: (send: () => Promise<Response>) => send(),
+}));
 const png =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
 const bytes = Uint8Array.from(atob(png), (s) => s.charCodeAt(0));

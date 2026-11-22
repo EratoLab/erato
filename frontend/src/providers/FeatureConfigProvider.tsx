@@ -77,12 +77,34 @@ interface AudioDictationFeatureConfig {
 /** Configuration for conversational audio features */
 interface AudioConversationalFeatureConfig {
   speechEnabled?: boolean;
+  /** Whether a waiting approval card listens for what the user says about it. */
+  voiceCommandsEnabled?: boolean;
+  /** Whether such a card may be decided by voice; only the phrase approves. */
+  voiceDecisionsEnabled?: boolean;
   /** Whether conversational audio mode is enabled */
   enabled: boolean;
   /** Maximum recording duration in seconds for conversational audio captures */
   maxRecordingDurationSeconds: number;
   /** Silence in milliseconds that ends a spoken turn; 1800 when omitted. */
   endOfTurnSilenceMs?: number;
+  /** The same while an approval card listens for a command; 1000 when omitted. */
+  cardEndOfTurnSilenceMs?: number;
+  /** Speech the voice detector counts before a turn can end; 250 when omitted. */
+  minSpeechMs?: number;
+  /** The same while an approval card listens; 64 when omitted. */
+  cardMinSpeechMs?: number;
+  /** Audio a voice starting from silence waits for; 400 when omitted. */
+  voiceStartBufferMs?: number;
+  /** The longest it waits for it; 350 when omitted. */
+  voiceStartMaxWaitMs?: number;
+  /** Words that end no conversational turn on their own; a base when omitted. */
+  hesitationWords?: string[];
+  /** The whole list of each language that has its own. */
+  hesitationsByLanguage?: Partial<Record<string, string[]>>;
+  /** The user can speak over the voice, and the voice yields. */
+  talkOverVoice?: boolean;
+  /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
+  talkOverVoiceMinSpeechMs?: number;
 }
 
 /**
@@ -129,6 +151,8 @@ interface AssistantsFeatureConfig {
   delegationTasksApprovalMode: DelegationTasksApprovalMode;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
+  /** Whether the direct Share dialog offers the organization target */
+  enableDirectOrganizationSharing: boolean;
   usageViewEnabled: boolean;
   toolsMenuDescriptionDisplay: AssistantToolsMenuDescriptionDisplay;
   /** Whether recent assistants should be shown in the sidebar */
@@ -352,6 +376,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationTasksAllowAsync: false,
     delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
+    enableDirectOrganizationSharing: true,
     usageViewEnabled: false,
     toolsMenuDescriptionDisplay: "truncated",
     showRecentItems: false,
@@ -474,10 +499,25 @@ function createFeatureConfig(
     },
     audioConversational: {
       speechEnabled: environment.speechEnabled ?? false,
+      voiceCommandsEnabled: environment.approvalVoiceCommandsEnabled ?? false,
+      voiceDecisionsEnabled:
+        (environment.approvalVoiceCommandsEnabled ?? false) &&
+        (environment.approvalVoiceDecisionsEnabled ?? false),
       enabled: Boolean(environment.audioConversationalEnabled),
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
       endOfTurnSilenceMs: environment.audioConversationalEndOfTurnSilenceMs,
+      cardEndOfTurnSilenceMs:
+        environment.audioConversationalCardEndOfTurnSilenceMs,
+      minSpeechMs: environment.audioConversationalMinSpeechMs,
+      cardMinSpeechMs: environment.audioConversationalCardMinSpeechMs,
+      voiceStartBufferMs: environment.audioConversationalVoiceStartBufferMs,
+      voiceStartMaxWaitMs: environment.audioConversationalVoiceStartMaxWaitMs,
+      hesitationWords: environment.audioConversationalHesitationWords,
+      hesitationsByLanguage: environment.audioConversationalHesitations,
+      talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
+      talkOverVoiceMinSpeechMs:
+        environment.audioConversationalTalkOverVoiceMinSpeechMs,
     },
     auth: {
       showLogout: !environment.disableLogout,
@@ -498,6 +538,8 @@ function createFeatureConfig(
       delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
       delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
+      enableDirectOrganizationSharing:
+        environment.assistantsEnableDirectOrganizationSharing ?? true,
       usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
       toolsMenuDescriptionDisplay:
         environment.assistantsToolsMenuDescriptionDisplay ?? "truncated",

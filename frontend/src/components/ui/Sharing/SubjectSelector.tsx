@@ -35,6 +35,7 @@ interface SubjectSelectorProps {
   existingGrants?: ShareGrant[];
   /** Filter to show only users, only groups, or all (default: "all") */
   subjectTypeFilter?: SubjectTypeFilter;
+  allowOrganizationTarget?: boolean;
 }
 
 /**
@@ -51,6 +52,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     className = "",
     existingGrants = [],
     subjectTypeFilter = "all",
+    allowOrganizationTarget = true,
   }) => {
     const { _ } = useLingui();
     const [searchQuery, setSearchQuery] = useState("");
@@ -111,6 +113,7 @@ export const SubjectSelector = memo<SubjectSelectorProps>(
     }, [filteredSubjects, subjectTypeFilter]);
 
     const hasAvailableOrganizationTarget =
+      allowOrganizationTarget &&
       subjectTypeFilter !== "user" &&
       !grantedSubjectIds.has(organizationTarget.id);
 

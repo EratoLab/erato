@@ -1,4 +1,11 @@
-import { wordBuiltInParagraphStyle } from "@erato/frontend/word-review";
+import {
+  WORD_OUTLINE_HEADER,
+  WORD_OUTLINE_START_OF_DOCUMENT,
+  WORD_OUTLINE_TITLE_CHARS,
+  wordBuiltInParagraphStyle,
+  wordOutlineLine,
+  wordOutlineOmission,
+} from "@erato/frontend/word-review";
 
 import { HEADING_OUTLINE_BUDGET_BYTES } from "./buildWordDocumentArgs";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
@@ -7,11 +14,11 @@ import { WORD_READ_PAGE_BYTES } from "./wordReadFragments";
 import type { WordReadableSourceBlock } from "./wordAuthoringReadData";
 import type {
   WordAuthoringSnapshot,
+  WordOutlineTag,
   WordSourceBlock,
 } from "@erato/frontend/word-review";
 
 const MAX_OUTLINE_ENTRIES = 300;
-const TITLE_CHARS = 80;
 /** A span the headings leave larger than three pages gets the fallback outline inside it. */
 const FALLBACK_SPAN_BYTES = 3 * WORD_READ_PAGE_BYTES;
 /** A slice ends at its last clause start once it holds this much (ERMAIN-1005 F0). */
@@ -24,11 +31,7 @@ const TOP_LEVEL_NUMBER = /^(§\s*)?(\d+)\.?\s+\S/u;
 const CLAUSE_NUMBER = /^(§\s*)?\d+(\.\d+)*\.?\s+\S/u;
 /** The capture's own fallback for a heading style it finds no outline level for. */
 const HEADING_STYLE_ID = /^Heading([1-9])$/i;
-/** The title of the part before the first heading, which has none of its own. */
-export const START_OF_DOCUMENT = "(start of document)";
-
-/** H: a heading; S: a numbered section; P: a part of about 20 KiB where nothing else structures a span. */
-export type WordOutlineTag = "H" | "S" | "P";
+export const START_OF_DOCUMENT = WORD_OUTLINE_START_OF_DOCUMENT;
 
 export interface WordOutlineEntry {
   ref: string;
@@ -81,7 +84,9 @@ export function wordBlockIndex(
 export const wordOutlineKib = (bytes: number) => Math.round(bytes / 102.4) / 10;
 
 export const wordOutlineTitle = (text: string) =>
-  Array.from(text.replace(/\s+/gu, " ").trim()).slice(0, TITLE_CHARS).join("");
+  Array.from(text.replace(/\s+/gu, " ").trim())
+    .slice(0, WORD_OUTLINE_TITLE_CHARS)
+    .join("");
 const isParagraph = (b: WordSourceBlock) => b.type !== "native";
 const isEmptyParagraph = (b: WordSourceBlock) =>
   isParagraph(b) && !b.text.trim();
@@ -370,14 +375,6 @@ export function wordSectionExtent(
   return { from: index, to: next?.from ?? sections.bytes.length };
 }
 
-export function wordOutlineLine(entry: WordOutlineEntry): string {
-  const tag = entry.tag === "H" ? `H${entry.level}` : entry.tag;
-  return `[${entry.ref}|${tag}|${entry.kib.toFixed(1)} KiB|${entry.paragraphs} ¶] ${entry.title}`;
-}
-
-const OUTLINE_HEADER =
-  "Each line: [ref|H<level> heading, S numbered section or P part|size|paragraphs] title";
-
 /** heading_outline for a capture too large for a complete read, within 8 KiB and 300 entries:
  * the deepest level goes first, then the tail. */
 export function wordDocumentOutlineText(
@@ -387,17 +384,18 @@ export function wordDocumentOutlineText(
   if (!outline.length) return "";
   const lines = outline.map(wordOutlineLine);
   const lineBytes = lines.map((l) => encoder.encode(l).length + 1);
-  const omission = (count: number) =>
-    `${count} more ${count === 1 ? "entry is" : "entries are"} left out; section:{ref, throughRef} reads any range of blocks.`;
-  const fits = (kept: number[], bytes: number) => {
+  const fits = (kept: number[], bytes: number, endsBefore?: string) => {
     const omitted = outline.length - kept.length;
     return (
       kept.length <= MAX_OUTLINE_ENTRIES &&
-      bytes + (omitted ? encoder.encode(omission(omitted)).length + 1 : 0) <=
+      bytes +
+        (omitted
+          ? encoder.encode(wordOutlineOmission(omitted, endsBefore)).length + 1
+          : 0) <=
         HEADING_OUTLINE_BUDGET_BYTES
     );
   };
-  const header = encoder.encode(OUTLINE_HEADER).length;
+  const header = encoder.encode(WORD_OUTLINE_HEADER).length;
   const total = (kept: number[]) =>
     kept.reduce((sum, k) => sum + lineBytes[k], header);
   let kept = outline.map((_, k) => k);
@@ -409,11 +407,16 @@ export function wordDocumentOutlineText(
     kept = kept.filter((k) => outline[k].level !== deepest);
     bytes = total(kept);
   }
-  while (kept.length && !fits(kept, bytes)) bytes -= lineBytes[kept.pop()!];
+  let endsBefore: string | undefined;
+  while (kept.length && !fits(kept, bytes, endsBefore)) {
+    const cut = kept.pop()!;
+    bytes -= lineBytes[cut];
+    endsBefore = outline[cut].ref;
+  }
   const omitted = outline.length - kept.length;
   return [
-    OUTLINE_HEADER,
+    WORD_OUTLINE_HEADER,
     ...kept.map((k) => lines[k]),
-    ...(omitted ? [omission(omitted)] : []),
+    ...(omitted ? [wordOutlineOmission(omitted, endsBefore)] : []),
   ].join("\n");
 }

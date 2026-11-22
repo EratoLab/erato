@@ -51,6 +51,29 @@ describe("MarkdownPreviewInput", () => {
     ).toBeInTheDocument();
   });
 
+  it("preserves link handling and renders raw HTML as text", () => {
+    render(
+      <MarkdownPreviewInput
+        {...defaultProps}
+        value={
+          "[Guide](https://example.com/guide)\n\n[Unsupported URL](javascript:noop)\n\n<button>Raw HTML</button>"
+        }
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+
+    const link = screen.getByRole("link", { name: "Guide" });
+    expect(link).toHaveAttribute("href", "https://example.com/guide");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(
+      screen.getByText("Unsupported URL").getAttribute("href"),
+    ).toBeFalsy();
+    expect(screen.getByText("<button>Raw HTML</button>")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Raw HTML" })).toBeNull();
+  });
+
   it("keeps validation errors visible in the preview", () => {
     render(
       <MarkdownPreviewInput

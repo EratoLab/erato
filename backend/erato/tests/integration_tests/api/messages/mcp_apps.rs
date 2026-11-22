@@ -3,8 +3,8 @@
 //! through its own route, and the model sees none of it.
 use super::*;
 use mock_mcp_server::{
-    COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_MARKER, COUNTER_VIEW_URI, VIEW_MIME_TYPE,
-    counter_view_ui_meta,
+    COUNTER_RESULT_META_MARKER, COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_MARKER,
+    COUNTER_VIEW_URI, VIEW_MIME_TYPE, counter_result_meta, counter_view_ui_meta,
 };
 use std::sync::{Arc, Mutex};
 
@@ -165,11 +165,13 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
         "server_id": "charts",
         "uri": COUNTER_VIEW_URI,
         "structured_content": {"start": 3},
+        "meta": counter_result_meta(3),
     });
 
     // The stream and the stored row name the view, with the result's
-    // structuredContent for it, beside the call's input and output; the
-    // calls whose views are refused still succeed, without.
+    // structuredContent and its `_meta`, unchanged, for it, beside the call's
+    // input and output; the calls whose views are refused still succeed,
+    // marked as without one, so the web app can say so.
     let updates = final_updates(&events);
     assert_eq!(updates["call_counter"]["status"], "success", "{era}");
     assert_eq!(updates["call_counter"]["result_details"]["view"], view);
@@ -183,8 +185,9 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
     for refused in ["call_wrong_type", "call_oversized"] {
         assert_eq!(rows[refused]["status"], "success", "{era} {refused}");
         assert_eq!(rows[refused]["output"], json!("Counter started at 0."));
-        assert!(rows[refused].get("result_details").is_none(), "{era}");
-        assert!(updates[refused].get("result_details").is_none(), "{era}");
+        let unavailable = json!({"view_unavailable": true});
+        assert_eq!(rows[refused]["result_details"], unavailable, "{era}");
+        assert_eq!(updates[refused]["result_details"], unavailable, "{era}");
     }
     // Static outputs are untouched: no file part was added.
     assert_eq!(
@@ -197,16 +200,23 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
     );
 
     // Nothing of the view reached the model, neither in the tools it was
-    // offered nor in the results it read back.
+    // offered nor in the results it read back, the result's `_meta` included.
     let bodies = setup.recorder.bodies();
     assert!(bodies.iter().any(|body| body.contains(RESULT)), "{era}");
     for body in &bodies {
-        for hidden in [COUNTER_VIEW_MARKER, "ui://", VIEW_MIME_TYPE, "resourceUri"] {
+        for hidden in [
+            COUNTER_VIEW_MARKER,
+            COUNTER_RESULT_META_MARKER,
+            "ui://",
+            VIEW_MIME_TYPE,
+            "resourceUri",
+            "view_unavailable",
+        ] {
             assert!(!body.contains(hidden), "{era}: {hidden} in {body}");
         }
     }
 
-    // A reopened chat still names the view.
+    // A reopened chat still names the view, with the result's `_meta`.
     let row = Messages::find_by_id(message_id)
         .one(&setup.state.db)
         .await
@@ -324,12 +334,13 @@ async fn with_mcp_apps_off_nothing_changes(pool: Pool<Postgres>) {
     assert!(
         offered_tools(&on.recorder)
             .as_array()
-            .is_some_and(|tools| tools.len() == 4)
+            .is_some_and(|tools| tools.len() == 7)
     );
 }
 
 /// The backend serves the sandbox page only on the host of a sandbox origin
-/// whose server enables views, never on the app's own host.
+/// whose server enables views, never on the app's own host, and serves it
+/// keyed to its origin (`Origin-Agent-Cluster: ?1`).
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -349,20 +360,33 @@ async fn the_sandbox_page_is_served_on_an_enabled_sandbox_origin_host_only(pool:
             ),
         );
         let server = TestServer::new(app.into_make_service()).unwrap();
-        let status = async |path: &str, host: &str| {
-            server
-                .get(path)
-                .add_header("x-forwarded-host", host)
-                .await
-                .status_code()
+        let get = async |path: &str, host: &str| {
+            let response = server.get(path).add_header("x-forwarded-host", host).await;
+            let origin_agent_cluster = response
+                .maybe_header("origin-agent-cluster")
+                .map(|value| value.to_str().unwrap().to_owned());
+            (response.status_code(), origin_agent_cluster)
         };
 
-        assert_eq!(status(PAGE, "mcp-apps.example.com").await, on_sandbox_host);
-        assert_eq!(status(PAGE, APP_HOST).await, http::StatusCode::NOT_FOUND);
+        let on_sandbox_host_header =
+            (on_sandbox_host == http::StatusCode::OK).then(|| "?1".to_owned());
         assert_eq!(
-            status("/public/common/MCP-Apps-Sandbox%2Ehtml", APP_HOST).await,
-            http::StatusCode::NOT_FOUND
+            get(PAGE, "mcp-apps.example.com").await,
+            (on_sandbox_host, on_sandbox_host_header)
         );
-        assert_eq!(status("/", APP_HOST).await, http::StatusCode::OK);
+        assert_eq!(
+            get(PAGE, APP_HOST).await,
+            (http::StatusCode::NOT_FOUND, None)
+        );
+        assert_eq!(
+            get("/public/common/MCP-Apps-Sandbox%2Ehtml", APP_HOST).await,
+            (http::StatusCode::NOT_FOUND, None)
+        );
+        // Every other page is served as before.
+        assert_eq!(get("/", APP_HOST).await, (http::StatusCode::OK, None));
+        assert_eq!(
+            get("/", "mcp-apps.example.com").await,
+            (http::StatusCode::OK, None)
+        );
     }
 }

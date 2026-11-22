@@ -3,8 +3,10 @@ import { createElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
+import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
 import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
+import * as waitLines from "@/hooks/audio/waitLines";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import {
@@ -115,6 +117,19 @@ vi.mock("@/utils/sse/sseClient", () => {
       // Return a cleanup function
       return vi.fn();
     }),
+  };
+});
+
+vi.mock("@/hooks/audio/waitLines", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/audio/waitLines")>();
+  return {
+    ...actual,
+    waitTurnAnswered: vi.fn(actual.waitTurnAnswered),
+    waitTurnAudio: vi.fn(actual.waitTurnAudio),
+    waitTurnSpeaks: vi.fn(actual.waitTurnSpeaks),
+    waitTurnSpokenEnd: vi.fn(actual.waitTurnSpokenEnd),
+    waitTurnTool: vi.fn(actual.waitTurnTool),
   };
 });
 
@@ -1684,6 +1699,60 @@ describe("useChatMessaging", () => {
       }
     });
 
+    it("renews a session that lapsed while offline before the stop goes out again", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      const recover = vi.fn().mockResolvedValue(true);
+      setAuthRecoveryHandler(recover);
+      const abortAnswers = [
+        () => Promise.reject(new TypeError("Failed to fetch")),
+        () =>
+          Promise.resolve(
+            new Response("<html>sign in</html>", {
+              status: 403,
+              headers: { "content-type": "text/html" },
+            }),
+          ),
+      ];
+      const fetchMock = vi.mocked(global.fetch);
+      fetchMock.mockImplementation((url) => {
+        const answer =
+          url === "/api/v1beta/me/messages/abortstream"
+            ? abortAnswers.shift()
+            : undefined;
+        return answer ? answer() : Promise.resolve(new Response("{}"));
+      });
+      try {
+        const { result } = await startDroppedAnswer();
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() =>
+          expect(
+            fetchMock.mock.calls.filter(
+              ([url]) => url === "/api/v1beta/me/messages/abortstream",
+            ),
+          ).toHaveLength(3),
+        );
+        expect(recover).toHaveBeenCalledWith("abort-stream");
+      } finally {
+        setAuthRecoveryHandler(null);
+        waitUntilOnline.mockRestore();
+      }
+    });
+
     it("ends the turn when the stop request hangs", async () => {
       vi.mocked(global.fetch).mockReturnValueOnce(new Promise(() => {}));
       const { result } = await startDroppedAnswer();
@@ -2198,6 +2267,53 @@ describe("useChatMessaging", () => {
     mockInvalidateQueries.mockClear();
     await toolUpdate("cancel_reminder", "success");
     expect(mockInvalidateQueries).toHaveBeenCalledWith(scheduledRefresh);
+  });
+
+  it("lets a spoken part pause the wait lines and the written answer end them", async () => {
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+    await startStreaming("brief me on the account");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-spoken-1",
+    });
+    vi.mocked(waitLines.waitTurnAnswered).mockClear();
+    const delta = (message_type: string, new_text: string) =>
+      sendSSEEvent({
+        message_type,
+        message_id: "assistant-spoken-1",
+        content_index: 0,
+        new_text,
+      });
+
+    await delta("spoken_delta", "I'll check the account and the visit notes.");
+    await sendSSEEvent({
+      message_type: "audio_delta",
+      message_id: "assistant-spoken-1",
+      sequence: 0,
+      audio: "AQIDBA==",
+      sample_rate: 24000,
+    });
+    await sendSSEEvent({
+      message_type: "spoken_end",
+      message_id: "assistant-spoken-1",
+    });
+    await sendSSEEvent({
+      message_type: "tool_call_update",
+      message_id: "assistant-spoken-1",
+      content_index: 1,
+      tool_call_id: "call-read",
+      tool_name: "crm_query",
+      status: "in_progress",
+      output: {},
+    });
+    expect(waitLines.waitTurnSpeaks).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnAudio).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnSpokenEnd).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnTool).toHaveBeenCalled();
+    expect(waitLines.waitTurnAnswered).not.toHaveBeenCalled();
+
+    await delta("text_delta", "Here is the briefing.");
+    expect(waitLines.waitTurnAnswered).toHaveBeenCalledOnce();
   });
 
   it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {

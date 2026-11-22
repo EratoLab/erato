@@ -21,8 +21,9 @@ import {
   transformEmailFencesForCopy,
   useActiveModelSelection,
   useChatCanEdit,
-  useChatContext,
   useChatHeader,
+  useChatSession,
+  useChatTranscript,
   useConversationDropzone,
   useFileCapabilitiesContext,
   useFileUploadStore,
@@ -36,6 +37,7 @@ import {
   useUploadFeature,
   type ActionFacetRequest,
   type AssistantMention,
+  type ChatContextValue,
   type ChatInputControlsHandle,
   type ChatMessageProps,
   type DelegatedRunsSectionProps,
@@ -87,6 +89,19 @@ export interface AddinSendPreparation {
   onAbandoned?: () => void;
 }
 
+/** An earlier message about to run again, as it was sent. */
+export interface AddinRerunRequest {
+  message: string;
+  inputFileIds: string[];
+  actionFacetId?: string;
+}
+
+/** A host's step for a regenerate or edit, so the run gets the host context as it is now.
+ * Undefined runs it with the context stored on the message; "busy" drops the request. */
+export type AddinRerunPreparer = (
+  request: AddinRerunRequest,
+) => AddinSendPreparation | "busy" | undefined;
+
 export interface AddinChatInputRenderProps {
   ref: MutableRefObject<ChatInputControlsHandle | null>;
   onSendMessage: (
@@ -105,6 +120,8 @@ export interface AddinChatInputRenderProps {
   ) => void;
   onFilePreview: (file: FileUploadItem) => void;
   handleFileAttachments: (files: FileUploadItem[]) => void;
+  /** Where the host input registers its step for regenerates and edits. */
+  rerunPreparationRef?: MutableRefObject<AddinRerunPreparer | null>;
   chatId: string | null;
   assistantId?: string;
   isLoading: boolean;
@@ -124,6 +141,7 @@ export interface AddinChatController {
   assistantId?: string;
   maxFiles: number;
   chatInputControlsRef: MutableRefObject<ChatInputControlsHandle | null>;
+  rerunPreparationRef: MutableRefObject<AddinRerunPreparer | null>;
   chatInputControls: {
     setDraftMessage: (message: string, options?: { focus?: boolean }) => void;
     appendToDraft: (block: string) => void;
@@ -136,15 +154,15 @@ export interface AddinChatController {
     clearQueuedMessage: () => void;
   };
   hostCallbacksRef: MutableRefObject<AddinChatHostCallbacks>;
-  messages: ReturnType<typeof useChatContext>["messages"];
+  messages: ChatContextValue["messages"];
   messageOrder: string[];
   modelSwitches: ReturnType<typeof useModelSwitches>;
   isMessagingLoading: boolean;
   isPendingResponse: boolean;
-  chats: ReturnType<typeof useChatContext>["chats"];
+  chats: ChatContextValue["chats"];
   currentChatId: string | null;
-  createNewChat: ReturnType<typeof useChatContext>["createNewChat"];
-  refetchHistory: ReturnType<typeof useChatContext>["refetchHistory"];
+  createNewChat: ChatContextValue["createNewChat"];
+  refetchHistory: ChatContextValue["refetchHistory"];
   profile: ReturnType<typeof useProfile>["profile"];
   acceptedFileTypes: ReturnType<typeof getSupportedFileTypes>;
   availableModels: ReturnType<
@@ -223,6 +241,7 @@ function useAddinChatController({
   maxFiles: number;
 }): AddinChatController {
   const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
+  const rerunPreparationRef = useRef<AddinRerunPreparer | null>(null);
   const hostCallbacksRef = useRef<AddinChatHostCallbacks>({});
   const chatInputControls = useMemo(
     () => ({
@@ -264,7 +283,11 @@ function useAddinChatController({
     [],
   );
 
-  const chat = useChatContext();
+  // The session keeps its identity while a reply streams, so the handlers
+  // built on it, and the edit context, do too; handlers read the messages
+  // through getTranscript.
+  const chat = useChatSession();
+  const { messages, messageOrder } = useChatTranscript();
   const { profile } = useProfile();
   const { capabilities } = useFileCapabilitiesContext();
   // In the pane a chat opens through the session controller, the same path
@@ -278,18 +301,22 @@ function useAddinChatController({
     () => ({ onOpenOrigin: openChatById }),
     [openChatById],
   );
-  const { header: chatHeader, composerLocked } = useChatHeader(
+  const { header: chatHeader, composerLocked: runLocked } = useChatHeader(
     chat.currentChatId,
     runHeaderOptions,
   );
+  // A regenerate or edit whose host step is still reading holds the composer like a send does.
+  const [rerunning, setRerunning] = useState(false);
+  const rerunningRef = useRef(false);
+  const composerLocked = runLocked || rerunning;
   const openDelegatedRun = useCallback<
     NonNullable<DelegatedRunsSectionProps["onOpenRun"]>
   >((run) => openChatById(run.id), [openChatById]);
   const { availableModels, selectedModel, setSelectedModel, isSelectionReady } =
     useActiveModelSelection({ initialModel: chat.currentChatLastModel });
   const modelSwitches = useModelSwitches(
-    chat.messages,
-    chat.messageOrder,
+    messages,
+    messageOrder,
     availableModels,
   );
   const acceptedFileTypes = useMemo(
@@ -386,20 +413,86 @@ function useAddinChatController({
     [assistantId, chat, snapshotDraft],
   );
   const cancelEdit = useCallback(() => setEditingMessageId(null), []);
+  /** Runs `start` after the host's rerun step, with the action facet it prepared; false when the
+   * request was refused. A dropped step runs nothing. */
+  const rerun = useCallback(
+    (
+      request: AddinRerunRequest | undefined,
+      before: () => void,
+      start: (actionFacet?: ActionFacetRequest) => void,
+    ): boolean => {
+      if (rerunningRef.current) return false;
+      const prepare = request && rerunPreparationRef.current?.(request);
+      if (prepare === "busy") return false;
+      // The host's own callback first: the rerun step stages what it captures after it.
+      before();
+      if (!prepare) {
+        start();
+        return true;
+      }
+      rerunningRef.current = true;
+      setRerunning(true);
+      const settle = () => {
+        rerunningRef.current = false;
+        setRerunning(false);
+      };
+      void prepare.run(new AbortController().signal).then(
+        (prepared) => {
+          settle();
+          if (prepared) start(prepared.actionFacet);
+          else prepare.onAbandoned?.();
+        },
+        () => {
+          settle();
+          prepare.onAbandoned?.();
+        },
+      );
+      return true;
+    },
+    [],
+  );
+  const rerunRequest = useCallback(
+    (
+      userMessageId: string | undefined,
+      overrides?: Partial<AddinRerunRequest>,
+    ): AddinRerunRequest | undefined => {
+      const original = userMessageId
+        ? chat.getTranscript().messages[userMessageId]
+        : undefined;
+      if (!original || original.role !== "user") return undefined;
+      return {
+        message: extractTextFromContent(original.content),
+        inputFileIds: original.input_files_ids ?? [],
+        actionFacetId: original.action_facet_id,
+        ...overrides,
+      };
+    },
+    [chat],
+  );
   const handleEditSubmit = useCallback(
     (messageId: string, newContent: string, replaceInputFileIds: string[]) => {
       if (chat.isPendingResponse) return;
-      chatInputControlsRef.current?.clearQueuedMessage();
-      setEditingMessageId(null);
-      hostCallbacksRef.current.beforeEdit?.(messageId);
-      void chat.editMessage(
-        messageId,
-        newContent,
-        replaceInputFileIds,
-        activeSelectedFacetIds,
+      // The editor stays open until the edit goes out, so a dropped one keeps its text.
+      rerun(
+        rerunRequest(messageId, {
+          message: newContent,
+          inputFileIds: replaceInputFileIds,
+        }),
+        () => hostCallbacksRef.current.beforeEdit?.(messageId),
+        (actionFacet) => {
+          chatInputControlsRef.current?.clearQueuedMessage();
+          setEditingMessageId(null);
+          void chat.editMessage(
+            messageId,
+            newContent,
+            replaceInputFileIds,
+            activeSelectedFacetIds,
+            actionFacet,
+          );
+        },
       );
     },
-    [activeSelectedFacetIds, chat],
+    [activeSelectedFacetIds, chat, rerun, rerunRequest],
   );
   // An edit sends the stored facet again only while the server still offers
   // it, so the editor shows its chip only then.
@@ -433,10 +526,22 @@ function useAddinChatController({
   );
   const handleRegenerate = useCallback(
     (assistantMessageId: string) => {
-      hostCallbacksRef.current.beforeRegenerate?.(assistantMessageId);
-      void chat.regenerateMessage(assistantMessageId, activeSelectedFacetIds);
+      if (chat.isPendingResponse) return;
+      rerun(
+        rerunRequest(
+          chat.getTranscript().messages[assistantMessageId]
+            ?.previous_message_id,
+        ),
+        () => hostCallbacksRef.current.beforeRegenerate?.(assistantMessageId),
+        (actionFacet) =>
+          void chat.regenerateMessage(
+            assistantMessageId,
+            activeSelectedFacetIds,
+            actionFacet,
+          ),
+      );
     },
-    [activeSelectedFacetIds, chat],
+    [activeSelectedFacetIds, chat, rerun, rerunRequest],
   );
 
   const preview = useFilePreviewModal();
@@ -457,7 +562,9 @@ function useAddinChatController({
     async (action: MessageAction): Promise<boolean> => {
       if (action.type !== "copy") return false;
       const textContent = transformEmailFencesForCopy(
-        extractTextFromContent(chat.messages[action.messageId]?.content),
+        extractTextFromContent(
+          chat.getTranscript().messages[action.messageId]?.content,
+        ),
       );
       if (!textContent) return false;
       try {
@@ -482,10 +589,10 @@ function useAddinChatController({
         }
       }
     },
-    [chat.messages],
+    [chat],
   );
   const standardMessageActionHandler = useStandardMessageActions({
-    messages: chat.messages,
+    messages,
     onBeginEdit: setEditingMessageId,
     handleRegenerate,
     handleFeedbackSubmit: feedback.handleFeedbackSubmit,
@@ -520,10 +627,11 @@ function useAddinChatController({
     assistantId,
     maxFiles,
     chatInputControlsRef,
+    rerunPreparationRef,
     chatInputControls,
     hostCallbacksRef,
-    messages: chat.messages,
-    messageOrder: chat.messageOrder,
+    messages,
+    messageOrder,
     modelSwitches,
     isMessagingLoading: chat.isMessagingLoading,
     isPendingResponse: chat.isPendingResponse,
@@ -720,6 +828,7 @@ export function AddinChatCoreView({
     onSendMessage: controller.handleSendMessage,
     onFilePreview: controller.openPreviewModal,
     handleFileAttachments: () => {},
+    rerunPreparationRef: controller.rerunPreparationRef,
     chatId: controller.currentChatId,
     assistantId: controller.assistantId,
     isLoading: controller.isMessagingLoading,

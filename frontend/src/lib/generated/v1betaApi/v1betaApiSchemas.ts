@@ -102,6 +102,41 @@ export type ApplyUserToolApprovalSettingsBatchRequest = {
 };
 
 /**
+ * One piece of the spoken card, without what it says.
+ */
+export type ApprovalCardPiece = {
+  /**
+   * For a detail or a long text: the field's name as the card shows it.
+   */
+  field?: null | undefined;
+  id: string;
+  /**
+   * The card must say this piece before a decision counts: a loss, a
+   * consequence, recipients outside.
+   */
+  must_say?: boolean;
+  role: ApprovalCardPieceRole;
+  state: ApprovalCardPieceState;
+};
+
+/**
+ * What a piece of the spoken card is, as the card that speaks it names it.
+ */
+export type ApprovalCardPieceRole =
+  | "count"
+  | "what"
+  | "item"
+  | "detail"
+  | "outside"
+  | "more"
+  | "text"
+  | "consequence"
+  | "request"
+  | "pointer";
+
+export type ApprovalCardPieceState = "heard" | "cut_short" | "not_said";
+
+/**
  * One decision of a continuation, naming the approval it answers.
  */
 export type ApprovalDecisionItem = {
@@ -109,6 +144,11 @@ export type ApprovalDecisionItem = {
    * @example call_abc123
    */
   approval_id: string;
+  /**
+   * The user's words for `request_change`, as they typed or said them.
+   * Refused on any other decision.
+   */
+  change_request?: string;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -116,6 +156,12 @@ export type ApprovalDecisionItem = {
    * take it; it sends the decision with that host's `X-Erato-Executor`.
    */
   scope_position?: Record<string, any>;
+  /**
+   * For `approve` or `reject` said by voice: the receipt the voice command
+   * endpoint gave for it. It must be for this card as it is now, and is
+   * taken once. A tap carries none.
+   */
+  voice_receipt?: string;
 };
 
 /**
@@ -147,10 +193,26 @@ export type ApprovalDecisionsError = {
  */
 export type ApprovalItem = {
   approval_id: string;
+  /**
+   * The name the model called the tool by, set only where it is not
+   * `tool_name`: a name qualified with the MCP server. The continued call
+   * is stored and replayed under it.
+   */
+  called_as?: string;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
   input: Value;
+  /**
+   * The item of an earlier stop on the same message this one replaces: the
+   * user asked for that call to be changed and this is the model's
+   * corrected call of the same tool on the same server.
+   */
+  replaces_approval_id?: string | null | undefined;
   tool_call_id: string;
+  /**
+   * The tool as its MCP server or Erato names it: what the card shows and
+   * a standing decision is stored for.
+   */
   tool_name: string;
 };
 
@@ -192,6 +254,186 @@ export type ApprovalScopeLineage = {
    */
   position: Record<string, any>;
   scope_id: string;
+};
+
+/**
+ * How much a spoken card says.
+ */
+export type ApprovalSpeechAmount = "full" | "short";
+
+/**
+ * What a client says about the approval it shows.
+ */
+export type ApprovalSpeechRequest = {
+  /**
+   * The spoken card's pieces in the order they are said: plain sentences,
+   * at most 16 of them, each at most 400 and all together at most 2000
+   * characters.
+   */
+  pieces: string[];
+};
+
+export type ApprovalSpeechStyleResponse = {
+  amount: ApprovalSpeechAmount;
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * Details a short reading says before it holds back the rest.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  short_details: number;
+  source: ApprovalSpeechStyleSource;
+  /**
+   * Whether the caller may choose their own amount and wording.
+   */
+  user_choice: boolean;
+  wording: ApprovalSpeechWording;
+};
+
+/**
+ * Where the caller's reading style comes from.
+ */
+export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
+
+/**
+ * How a spoken card is worded.
+ */
+export type ApprovalSpeechWording = "precise" | "natural";
+
+export type ApprovalVoiceCommand = {
+  decision?: ApprovalVoiceDecision;
+  meaning: ApprovalVoiceMeaning;
+  /**
+   * For `repeat` and `read_text`: the piece meant. Null when the words do
+   * not say which and the card has no single candidate.
+   */
+  piece_id?: null | undefined;
+  source: ApprovalVoiceCommandSource;
+};
+
+export type ApprovalVoiceCommandRequest = {
+  /**
+   * The approval the card asks about; deciding by voice needs it.
+   */
+  approval_id?: string;
+  /**
+   * The piece being spoken, or the last one spoken.
+   */
+  current_piece_id?: string;
+  /**
+   * The language of the words as a tag such as `de`; the user's language
+   * when omitted.
+   */
+  language?: string;
+  /**
+   * The spoken card's pieces in the order they are said, at most 16.
+   */
+  pieces: ApprovalCardPiece[];
+  question?: ApprovalVoiceQuestion;
+  signals?: ApprovalVoiceSignals;
+  /**
+   * What the user said, as transcribed. At most 300 characters.
+   */
+  transcript: string;
+};
+
+/**
+ * Where the meaning came from.
+ */
+export type ApprovalVoiceCommandSource = "rules" | "model" | "none";
+
+export type ApprovalVoiceDecision = {
+  /**
+   * With `accepted`: the receipt the decision carries as `voice_receipt`.
+   */
+  receipt?: string;
+  status: ApprovalVoiceDecisionStatus;
+};
+
+export type ApprovalVoiceDecisionStatus =
+  | "accepted"
+  | "phrase_needed"
+  | "screen_only"
+  | "not_yet"
+  | "say_again";
+
+export type ApprovalVoiceMeaning =
+  | "skip"
+  | "rest"
+  | "repeat"
+  | "read_text"
+  | "stop"
+  | "change"
+  | "new_request"
+  | "approve"
+  | "reject"
+  | "noise"
+  | "unclear";
+
+/**
+ * What the voice just asked about the card, when the user's words may
+ * answer it.
+ */
+export type ApprovalVoiceQuestion = "which_text";
+
+/**
+ * What the device measured about the recording the words came from. Times
+ * are milliseconds since the Unix epoch on the device's clock.
+ */
+export type ApprovalVoiceSignals = {
+  /**
+   * The first detector frame heard as speech.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  first_speech_at_ms?: number;
+  /**
+   * The recording was opened while the voice spoke.
+   */
+  over_voice?: boolean;
+  /**
+   * All detector frames of the recording, in milliseconds.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  recorded_ms: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  recording_ended_at_ms: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  recording_started_at_ms: number;
+  /**
+   * When the card's request to decide was heard in full.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  request_heard_at_ms?: number;
+  /**
+   * Detector frames heard as speech, in milliseconds.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_ms: number;
+  /**
+   * When the voice last stopped speaking before the recording.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  voice_stopped_at_ms: number;
 };
 
 /**
@@ -485,6 +727,9 @@ export type AssistantHubVersion = {
   assistant: AssistantHubAssistantSnapshot;
   assistant_id: string;
   audience_grants: ShareGrant[];
+  can_make_current: boolean;
+  can_publish: boolean;
+  can_unpublish: boolean;
   category_ids: string[];
   /**
    * @format date-time
@@ -497,6 +742,7 @@ export type AssistantHubVersion = {
   hub_assistant_id: string;
   is_current_published_version: boolean;
   is_published: boolean;
+  is_submission_owner: boolean;
   keywords: string[];
   long_description: string;
   /**
@@ -778,6 +1024,25 @@ export type CallLineage = {
    * @format uuid
    */
   requesting_message_id: string;
+};
+
+/**
+ * Body of the `409` `continuestream` answers to a decision that names no
+ * approval while the open card is the corrected call of a change request.
+ *
+ * A client that sends no `approval_id` may still show the card it replaced,
+ * on another tab or device, so its answer cannot be meant for this one. The
+ * client reloads the message and shows the card named here.
+ */
+export type CardChangedError = {
+  /**
+   * The approval that is open now.
+   */
+  approval_id: string;
+  /**
+   * Always `card_changed`.
+   */
+  code: string;
 };
 
 /**
@@ -1352,6 +1617,9 @@ export type ContentPart =
   | (ContentPartText & {
       content_type: "text";
     })
+  | (ContentPartSpoken & {
+      content_type: "spoken";
+    })
   | (ContentPartReasoning & {
       content_type: "reasoning";
     })
@@ -1496,6 +1764,10 @@ export type ContentPartReasoning = {
   text?: string;
 };
 
+export type ContentPartSpoken = {
+  text: string;
+};
+
 /**
  * A delivered task result, as it sits in the conversation.
  *
@@ -1586,6 +1858,7 @@ export type ContentPartToolApproval = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+  voice?: VoiceDecisionRecord;
 };
 
 /**
@@ -1623,6 +1896,10 @@ export type ContentPartToolApprovalRequest = {
 export type ContentPartToolRejection = {
   approval_id?: null | undefined;
   /**
+   * The user's words when `reason` is `change_requested`.
+   */
+  change_request?: string | null | undefined;
+  /**
    * @format uuid
    */
   child_chat_id?: null | undefined;
@@ -1632,8 +1909,9 @@ export type ContentPartToolRejection = {
    */
   never_allow?: boolean;
   /**
-   * Why the call was rejected when the user did not decide it directly.
-   * The only value is `withdrawn`.
+   * Why the call was rejected when the user did not simply deny it:
+   * `withdrawn` when the user took the question back, `change_requested`
+   * when they asked for the call to be different.
    */
   reason?: string | null | undefined;
   rejected_at: string;
@@ -1642,6 +1920,7 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+  voice?: VoiceDecisionRecord;
 };
 
 export type ContentPartTurnInstructionMarker = {
@@ -1660,6 +1939,11 @@ export type ContentPartTurnInstructionMarker = {
  * to guess which call the user answered.
  */
 export type ContinueStreamRequest = {
+  /**
+   * Read the continued answer back, as `conversational_audio_back` does on
+   * a submitted message.
+   */
+  conversational_audio_back?: boolean;
   decision?: null | ToolApprovalDecision;
   decisions?: ApprovalDecisionItem[];
   /**
@@ -2985,6 +3269,16 @@ export type MessageSubmitStreamingResponseMessage =
       message_id: string;
       message_type: "audio_error";
     }
+  | (MessageSubmitStreamingResponseMessageTextDelta & {
+      message_type: "spoken_delta";
+    })
+  | {
+      /**
+       * @format uuid
+       */
+      message_id: string;
+      message_type: "spoken_end";
+    }
   | (MessageSubmitStreamingResponseChatCreated & {
       message_type: "chat_created";
     })
@@ -3188,6 +3482,28 @@ export type OccurrenceTime = {
    * @example 2026-11-13T10:00:00
    */
   local: string;
+};
+
+/**
+ * What an Office add-in pane runs on, sent once when the pane has started and signed in.
+ */
+export type OfficeHostReportRequest = {
+  /**
+   * PowerPoint only: the highest PowerPoint API set the pane detected, or `none`.
+   */
+  api_set?: string;
+  /**
+   * `Office.HostType` as `Office.onReady` reports it, e.g. `PowerPoint`.
+   */
+  host: string;
+  /**
+   * `Office.PlatformType`, e.g. `PC`, `Mac` or `OfficeOnline`.
+   */
+  platform?: string;
+  /**
+   * PowerPoint only: the pane's read tier, `full`, `basic` or `none`.
+   */
+  tier?: string;
 };
 
 export type OperationError = {
@@ -3425,6 +3741,8 @@ export type PendingToolCall = {
   fn_name: string;
 };
 
+export type PhraseMatchKind = "exact" | "variant";
+
 export type PolicyGuideConfig = {
   /**
    * Describes the false predicate: content is allowed under this policy.
@@ -3455,6 +3773,13 @@ export type PolicyGuidesConfig = {
   policies: {
     [key: string]: PolicyGuideConfig;
   };
+};
+
+export type ProgressSpeechRequest = {
+  /**
+   * The line, composed by the client from the tool call's label.
+   */
+  text: string;
 };
 
 /**
@@ -3510,6 +3835,14 @@ export type ReadAloudStreamEvent =
       audio: string;
       message_type: "audio_delta";
       /**
+       * The piece of a spoken approval card the audio belongs to; absent
+       * when a message is read aloud.
+       *
+       * @format int32
+       * @minimum 0
+       */
+      piece?: number;
+      /**
        * @format int32
        * @minimum 0
        */
@@ -3519,6 +3852,14 @@ export type ReadAloudStreamEvent =
        * @minimum 0
        */
       sequence: number;
+    }
+  | {
+      message_type: "piece_done";
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      piece: number;
     }
   | {
       message_type: "done";
@@ -3815,6 +4156,36 @@ export type RepeatRule = {
    */
   weekdays?: DayOfWeek[];
 };
+
+export type ReplySpeechStyleResponse = {
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * Whether the chat shows what the voice said: the spoken text, folded,
+   * and a play button where the recording was kept. The caller may always
+   * choose it for themselves: it changes only what they see.
+   */
+  show_in_chat: boolean;
+  show_in_chat_source: ReplySpeechStyleSource;
+  source: ReplySpeechStyleSource;
+  /**
+   * Whether the caller may choose their own wording.
+   */
+  user_choice: boolean;
+  wording: ReplySpeechWording;
+};
+
+/**
+ * Where the caller's reply wording comes from.
+ */
+export type ReplySpeechStyleSource = "deployment" | "audience" | "user";
+
+/**
+ * How a reply in conversational audio mode is spoken.
+ */
+export type ReplySpeechWording = "natural" | "precise";
 
 export type ResolveShareLinkResponse = {
   owner_display_name?: null | undefined;
@@ -4240,6 +4611,7 @@ export type SubmissionReason =
   | "attempts_exhausted"
   | "model_stopped"
   | "recovery_reads_exhausted"
+  | "part_calls_exhausted"
   | "terminal_validation"
   | "context_unavailable"
   | "capability_unavailable"
@@ -4556,7 +4928,8 @@ export type ToolApprovalDecision =
   | "approve_always"
   | "reject_always"
   | "withdraw"
-  | "approve_context";
+  | "approve_context"
+  | "request_change";
 
 /**
  * Which surface a durable approval stop belongs to. `McpTool` is the
@@ -4624,6 +4997,7 @@ export type ToolCallAction =
   | "upsert"
   | "archive"
   | "upload"
+  | "read"
   | "other";
 
 /**
@@ -4897,6 +5271,12 @@ export type ToolCallEffect = {
    */
   name: string;
   /**
+   * The value sits in an object inside the record, such as a record
+   * created with it: its name and codes belong to that object, so spoken
+   * names never apply to it.
+   */
+  nested?: boolean;
+  /**
    * A name the call gives a record nobody read in this chat (see
    * `record_unread`): a card reads it as a new value, never as the name of
    * the record being changed.
@@ -5067,7 +5447,20 @@ export type ToolCallLabel = {
    */
   items?: ToolCallLabelItem[];
   object_kind: ToolCallObjectKind;
+  read?: ToolCallRead;
   source: ToolCallLabelSource;
+  /**
+   * What people call this call's fields, coded values and tables, by
+   * language tag, from the server's spoken vocabularies, for words spoken
+   * aloud. Keyed by the names as this label carries them: an effect's
+   * `raw_name` and its values' `text`, a read condition's `column` and its
+   * values' `text` (as `table.column` when the condition names one of
+   * several tables; a coded value of an unnamed table has none), a read's
+   * table. No card reads it.
+   */
+  spoken_names?: {
+    [key: string]: ToolCallSpokenNames;
+  };
   warnings?: ToolCallLabelWarning[];
 };
 
@@ -5201,6 +5594,98 @@ export type ToolCallOpaque = {
 
 export type ToolCallOpaqueKind = "sql" | "shell" | "instruction" | "code";
 
+/**
+ * A call that only reads, by the rules alone and only where every check a
+ * label passes agrees: a search when `item.title` holds the text it looks
+ * for, one or a few items when `item.id` names them, otherwise a list.
+ * Values are read and resolved as on a label, so a machine ID is named only
+ * by `resolved`, and a consent flag or a name the model typed next to an ID
+ * is never in it. Its verb, `read`, is in the closed list of actions but is
+ * never sent on a label: a read's label keeps `other`.
+ */
+export type ToolCallRead = {
+  /**
+   * Conditions narrow what it reads beyond the item, other than paging or
+   * sorting.
+   */
+  filtered?: boolean;
+  item?: ToolCallLabelItem;
+  object_kind: ToolCallObjectKind;
+  query?: ToolCallReadQuery;
+  warnings?: ToolCallLabelWarning[];
+};
+
+export type ToolCallReadCondition = {
+  column: string;
+  operator: ToolCallReadOperator;
+  /**
+   * The table the column belongs to, when the statement reads several
+   * and names it.
+   */
+  table?: string;
+  /**
+   * The values it compares with, read as label values: a machine ID is
+   * named only by `resolved`. `between` has two.
+   */
+  values?: ToolCallLabelValue[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  values_omitted?: number;
+};
+
+export type ToolCallReadOperator =
+  | "equals"
+  | "not_equals"
+  | "less"
+  | "at_most"
+  | "greater"
+  | "at_least"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+  | "is_empty"
+  | "is_not_empty"
+  | "in"
+  | "not_in"
+  | "between"
+  | "other";
+
+/**
+ * The parts of a plain SQL read the voice says: the tables, the conditions
+ * simple enough to say, and a limit. Names are as the statement wrote them,
+ * display-cleaned.
+ */
+export type ToolCallReadQuery = {
+  /**
+   * Conditions joined by AND that compare one column with values, in the
+   * statement's order.
+   */
+  conditions?: ToolCallReadCondition[];
+  /**
+   * Conditions it applies beyond `conditions`: past the cap, or not a
+   * simple comparison.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  conditions_omitted?: number;
+  /**
+   * The most rows it returns, from TOP, LIMIT or FETCH.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  tables?: string[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  tables_omitted?: number;
+};
+
 export type ToolCallRecipientGroup = {
   /**
    * @format int32
@@ -5261,6 +5746,39 @@ export type ToolCallRecipients = {
   unchecked?: number;
 };
 
+/**
+ * One language's words for the names a call uses. A name without an entry
+ * is not here and is spoken as the card shows it.
+ */
+export type ToolCallSpokenNames = {
+  /**
+   * By field, then by value.
+   */
+  choices?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  fields?: {
+    [key: string]: string;
+  };
+  /**
+   * A field's own natural sentence variants, by sentence type (`changed`,
+   * `set`, `updated`) and then by field, keyed like `fields`.
+   */
+  sentences?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  /**
+   * What the records of a table are called, in the plural.
+   */
+  tables?: {
+    [key: string]: string;
+  };
+};
+
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
 /**
@@ -5279,6 +5797,10 @@ export type ToolCallTextChange = {
    */
   lines: number;
   name: string;
+  /**
+   * See [`ToolCallEffect::nested`].
+   */
+  nested?: boolean;
   path: string;
   raw_name: string;
   /**
@@ -5315,6 +5837,12 @@ export type ToolCallValueMeaningSource =
  * select a tool, evaluate policy or execute a call.
  */
 export type ToolDisplayMetadata = {
+  /**
+   * Whether the tool says it reaches nothing outside its server
+   * (`openWorldHint: false`) by the annotations the approval policy read
+   * for this call. Unknown counts as open. Set on MCP calls only.
+   */
+  closed_world?: boolean;
   description?: string | null | undefined;
   description_truncated: boolean;
   label?: ToolCallLabel;
@@ -5330,6 +5858,13 @@ export type ToolDisplayMetadata = {
    */
   server_name?: string;
   title: string;
+  /**
+   * The tool's own name on its MCP server, set only when the model calls
+   * it by a name qualified with the server because another server or one
+   * of Erato's own tools has the same name. The call's `tool_name` is then
+   * that qualified name; show this one instead.
+   */
+  tool_name?: string;
 };
 
 /**
@@ -5337,14 +5872,14 @@ export type ToolDisplayMetadata = {
  * links. Its structured content and embedded resources are not kept.
  */
 export type ToolResultDetails = {
-  /**
-   * Set by Erato when a call failed without an answer from the tool that
-   * Erato could read: the row's error text is then Erato's, never the
-   * tool's.
-   */
   failure?: ToolCallFailure;
   links?: ToolResultLink[];
   view?: ToolResultView;
+  /**
+   * Set instead of `view` when the tool declares a view and its server
+   * enables `mcp_apps`, but the view was refused or could not be read.
+   */
+  view_unavailable?: boolean;
 };
 
 /**
@@ -5372,9 +5907,15 @@ export type ToolResultLink = {
  * Where the web app gets a call's view: `GET
  * /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
  * HTML and its `_meta.ui`. The view is shown with the call's `input`, its
- * `output` and `structured_content`.
+ * `output`, `structured_content` and `meta`.
  */
 export type ToolResultView = {
+  /**
+   * The result's `_meta` as the server returned it, which the view gets
+   * unchanged with the result. Kept only here, for the view, like
+   * `structured_content`: the model never reads it.
+   */
+  meta?: Record<string, any>;
   server_id: string;
   /**
    * The call's `structuredContent`, which a view takes its data from. Kept
@@ -5606,6 +6147,17 @@ export type UpdateProfilePreferencesRequest = {
   };
   client_tool_file_approval?: null | ClientToolFileApproval;
   /**
+   * How much approval cards say aloud: `full` or `short`. Explicit
+   * `null` follows the organisation again. Kept even where the user may
+   * not choose, and then not used.
+   */
+  preference_approval_speech_amount?: string | null | undefined;
+  /**
+   * How approval cards are worded aloud: `precise` or `natural`, like the
+   * amount.
+   */
+  preference_approval_speech_wording?: string | null | undefined;
+  /**
    * Additional contextual information about the user for the assistant.
    */
   preference_assistant_additional_information?: string | null | undefined;
@@ -5631,6 +6183,16 @@ export type UpdateProfilePreferencesRequest = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string | null | undefined;
+  /**
+   * Whether the chat shows what the voice said in conversation; `null`
+   * follows the organisation again.
+   */
+  preference_reply_speech_show_in_chat?: boolean | null | undefined;
+  /**
+   * How replies are spoken in conversation: `natural` or `precise`, like
+   * the amount.
+   */
+  preference_reply_speech_wording?: string | null | undefined;
   /**
    * Set `true` to explicitly clear the start screen (welcome screen even
    * though an audience pin exists), `false` to inherit again. Clearing
@@ -5659,6 +6221,11 @@ export type UpdateProfilePreferencesRequest = {
    * @example Europe/Berlin
    */
   preference_time_zone?: string;
+  /**
+   * What the voice says while the user waits: `normal`, `long_only` or
+   * `off`, like the amount.
+   */
+  preference_wait_lines_amount?: string | null | undefined;
 };
 
 export type UsageBucket = {
@@ -5717,6 +6284,8 @@ export type UserProfile = {
    * The user's profile picture URL.
    */
   picture?: string;
+  preference_approval_speech_amount?: ApprovalSpeechAmount;
+  preference_approval_speech_wording?: ApprovalSpeechWording;
   /**
    * Additional contextual information about the user for the assistant.
    */
@@ -5743,6 +6312,12 @@ export type UserProfile = {
    */
   preference_nickname?: string;
   /**
+   * Whether the chat shows what the voice said, as the user chose; absent
+   * follows the organisation.
+   */
+  preference_reply_speech_show_in_chat?: boolean;
+  preference_reply_speech_wording?: ReplySpeechWording;
+  /**
    * True when the user explicitly cleared their start screen. This is
    * deliberately distinct from "never set": a clear must keep suppressing
    * an admin's audience pin, while "never set" inherits it.
@@ -5767,6 +6342,7 @@ export type UserProfile = {
    * time, are resolved in it.
    */
   preference_time_zone?: string;
+  preference_wait_lines_amount?: WaitLinesAmount;
   /**
    * The user's preferred language.
    *
@@ -5808,3 +6384,237 @@ export type UserToolApprovalSettingsResponse = {
 export type UserToolDecision = "always_allow" | "ask" | "denied";
 
 export type Value = void;
+
+export type VoiceDecisionOutcome = "approved" | "refused";
+
+/**
+ * A piece of the spoken card and what the user had heard of it.
+ */
+export type VoiceDecisionPiece = {
+  id: string;
+  role: ApprovalCardPieceRole;
+  state: ApprovalCardPieceState;
+};
+
+/**
+ * How a decision was given by voice, kept with the decision for audits and
+ * for tuning. Never the audio. Times are RFC 3339: `matched_at` by the
+ * server's clock, the others by the device's.
+ */
+export type VoiceDecisionRecord = {
+  /**
+   * From the request heard to the first speech of the answer.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  answer_latency_ms?: number;
+  approval_id: string;
+  /**
+   * What the card asked about: the call's tool and arguments, hashed.
+   */
+  card_digest: string;
+  language: string;
+  match_kind?: PhraseMatchKind;
+  matched_at: string;
+  /**
+   * The words as matched: the phrase folded, a refusal in lower case,
+   * at most 100 characters.
+   */
+  matched_words: string;
+  outcome: VoiceDecisionOutcome;
+  pieces: VoiceDecisionPiece[];
+  recording_ended_at: string;
+  recording_started_at: string;
+  request_heard_at?: string;
+  /**
+   * The phrase an approval needed, by its id.
+   */
+  required_phrase?: string;
+  /**
+   * The share of the recording's detector frames heard as speech, in
+   * thousandths.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_frames_permille: number;
+  /**
+   * How long the speech detector heard speech in the recording.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  speech_ms: number;
+  user_id: string;
+  voice_stopped_at: string;
+};
+
+/**
+ * Body of the `409` `continuestream` answers to a decision by voice whose
+ * `voice_receipt` is unknown, used, expired, or for another card or
+ * decision. Nothing was decided; the card waits on screen.
+ */
+export type VoiceReceiptRefusedError = {
+  /**
+   * Always `voice_receipt_refused`.
+   */
+  code: string;
+};
+
+/**
+ * One fixed line, ready to play.
+ */
+export type WaitLineAudio = {
+  /**
+   * Base64 of signed 16-bit little-endian mono PCM.
+   */
+  audio: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  sample_rate: number;
+  slot: WaitLineSlot;
+  text: string;
+};
+
+/**
+ * The slots of a language's lines.
+ */
+export type WaitLineSlot = "opener" | "opener_short" | "still" | "long";
+
+/**
+ * Templates for a running tool call's line. `search` holds `{search}`;
+ * `items` and `list` hold `{table}`. Absent ones say nothing.
+ */
+export type WaitLineToolTemplates = {
+  items?: string;
+  list?: string;
+  search?: string;
+};
+
+/**
+ * How much the voice says while the user waits.
+ */
+export type WaitLinesAmount = "normal" | "long_only" | "off";
+
+export type WaitLinesResponse = {
+  amount: WaitLinesAmount;
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * A configured line could not be said and is missing from `lines`. A
+   * client then asks again without `known`, so the line is tried again.
+   */
+  incomplete: boolean;
+  /**
+   * The language the lines are in: the language the voice speaks to the
+   * caller.
+   */
+  language: string;
+  /**
+   * Empty when the amount is `off`, in a language without lines, or when
+   * the voice could not say them.
+   */
+  lines: WaitLineAudio[];
+  source: WaitLinesSource;
+  timing: WaitLinesTiming;
+  tools: WaitLineToolTemplates;
+  /**
+   * The caller already has this `version`: `lines` is left empty and
+   * nothing is synthesised.
+   */
+  unchanged: boolean;
+  /**
+   * Whether the caller may choose their own amount.
+   */
+  user_choice: boolean;
+  /**
+   * Changes whenever anything here changes: the voice, the language, the
+   * words, the timings or the amount. A client keeps its lines only as
+   * long as this stays the same.
+   */
+  version: string;
+  /**
+   * Changes whenever the voice that says the lines changes.
+   */
+  voice: string;
+};
+
+/**
+ * Where the caller's amount comes from.
+ */
+export type WaitLinesSource = "deployment" | "audience" | "user";
+
+/**
+ * When lines are due, in milliseconds from the end of the user's speech
+ * unless said otherwise.
+ */
+export type WaitLinesTiming = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  first_after_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  long_after_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  max_per_turn: number;
+  /**
+   * From the end of one line to the start of the next.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  min_gap_ms: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  still_after_ms: number;
+  /**
+   * Silence before the "still on it" line, from the end of the last line.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_quiet_ms: number;
+  /**
+   * How many "still on it" lines at most after the long line.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_max: number;
+  /**
+   * After the long line, between "still on it" lines; `0` says it no more.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  still_repeat_ms: number;
+  /**
+   * Turns with an opener before the opener comes from the short set; `0`
+   * never shortens.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  taper_after_turns: number;
+  /**
+   * From the start of a tool call.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  tool_after_ms: number;
+};

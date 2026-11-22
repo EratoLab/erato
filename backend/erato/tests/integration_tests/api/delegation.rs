@@ -1,6 +1,8 @@
 //! Tests for the delegation backend: provenance envelope, `seed_chat_lineage`,
 //! and the ContextRebase behavior of prompt composition.
 
+mod conditional_custom_instructions;
+
 use crate::test_app_state;
 use crate::test_utils::{
     Event, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
@@ -11337,6 +11339,11 @@ async fn me_profile(
             preference_starting_assistant_cleared: false,
             preference_time_zone: None,
             preference_language: None,
+            preference_approval_speech_amount: None,
+            preference_approval_speech_wording: None,
+            preference_wait_lines_amount: None,
+            preference_reply_speech_wording: None,
+            preference_reply_speech_show_in_chat: None,
         },
         oidc_token: TEST_JWT_TOKEN.to_string(),
         id_token_claims: json!({}),

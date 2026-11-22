@@ -21,6 +21,7 @@ static NUMBER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[(\d+)\]").unwra
 pub struct FileSource {
     pub id: String,
     pub name: String,
+    pub generated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -66,16 +67,30 @@ fn references(text: &str) -> Vec<Reference> {
         .filter(|(_, definition)| file_url(&definition.dest).is_some())
         .map(|(_, definition)| definition.span.clone())
         .collect();
-    let mut image_destinations = HashSet::new();
+    let mut image_reference = None;
     for (event, range) in parser.into_offset_iter() {
         match event {
             Event::Start(Tag::CodeBlock(_)) => code = true,
             Event::End(TagEnd::CodeBlock) => code = false,
             Event::Start(Tag::Image { dest_url, .. }) => {
                 image = true;
-                image_destinations.insert(dest_url.into_string());
+                if file_url(&dest_url).is_some() {
+                    image_reference = Some(Reference {
+                        range,
+                        uri: dest_url.into_string(),
+                        label: String::new(),
+                    });
+                }
             }
-            Event::End(TagEnd::Image) => image = false,
+            Event::End(TagEnd::Image) => {
+                image = false;
+                if let Some(reference) = image_reference.take() {
+                    result.push(reference);
+                }
+            }
+            Event::Text(value) | Event::Code(value) if image_reference.is_some() => {
+                image_reference.as_mut().unwrap().label.push_str(&value);
+            }
             Event::Start(Tag::Link { dest_url, .. }) if !image => {
                 link = Some(Reference {
                     range,
@@ -133,15 +148,7 @@ fn references(text: &str) -> Vec<Reference> {
         }
     }
     // Converted reference-style links no longer need their hidden definition.
-    // Keep definitions also used by an image, which this feature does not alter.
-    for range in link_definitions {
-        if !image_destinations
-            .iter()
-            .any(|uri| text[range.clone()].contains(uri))
-        {
-            removed.push(range);
-        }
-    }
+    removed.extend(link_definitions);
     for (label, range) in footnotes {
         if let Some(reference) = definitions.get(&label) {
             result.push(Reference {
@@ -168,6 +175,17 @@ pub fn referenced_file_ids(text: &str) -> HashSet<String> {
         .collect()
 }
 
+pub(super) fn image_ids(text: &str) -> HashSet<uuid::Uuid> {
+    Parser::new_ext(text, Options::ENABLE_FOOTNOTES)
+        .filter_map(|event| {
+            let Event::Start(Tag::Image { dest_url, .. }) = event else {
+                return None;
+            };
+            file_url(&dest_url)?.host_str()?.parse().ok()
+        })
+        .collect()
+}
+
 /// Convert only known file references. Unknown IDs stay readable without a
 /// broken link or made-up citation. General MCP provenance is a separate feature.
 pub fn render(
@@ -176,7 +194,14 @@ pub fn render(
     public_base_url: Option<&str>,
     lang: Lang,
 ) -> (String, Vec<Citation>) {
-    render_with_limit(text, sources, public_base_url, MAX_CITATIONS, lang)
+    render_with_limit(
+        text,
+        sources,
+        public_base_url,
+        MAX_CITATIONS,
+        lang,
+        |_, _, _| false,
+    )
 }
 
 pub fn details(
@@ -185,15 +210,16 @@ pub fn details(
     public_base_url: Option<&str>,
     lang: Lang,
 ) -> String {
-    render_with_limit(text, sources, public_base_url, 0, lang).0
+    render_with_limit(text, sources, public_base_url, 0, lang, |_, _, _| false).0
 }
 
-fn render_with_limit(
+pub(super) fn render_with_limit(
     text: &str,
     sources: &[FileSource],
     public_base_url: Option<&str>,
     limit: usize,
     lang: Lang,
+    mut place_image: impl FnMut(&FileSource, &str, &mut String) -> bool,
 ) -> (String, Vec<Citation>) {
     let references = references(text);
     let files: HashMap<_, _> = sources
@@ -234,6 +260,18 @@ fn render_with_limit(
             }));
             continue;
         };
+        let image = text[reference.range.clone()].starts_with("![");
+        if image && file.generated && place_image(file, &reference.label, &mut output) {
+            continue;
+        }
+        if file.generated || image {
+            output.push_str(&escape_label(if reference.label.is_empty() {
+                &file.name
+            } else {
+                &reference.label
+            }));
+            continue;
+        }
         let location = location(&url, &file.name);
         let key = (file.id.clone(), location.clone());
         let source_url = source_url(public_base_url, &file.id, location.as_deref());
@@ -310,7 +348,7 @@ fn location(url: &Url, filename: &str) -> Option<String> {
     (name == key && value > 0).then(|| format!("{key}={value}"))
 }
 
-fn source_url(base: Option<&str>, id: &str, location: Option<&str>) -> Option<String> {
+pub(super) fn source_url(base: Option<&str>, id: &str, location: Option<&str>) -> Option<String> {
     let mut url = Url::parse(base?).ok()?;
     if !matches!(url.scheme(), "https" | "http")
         || !url.username().is_empty()

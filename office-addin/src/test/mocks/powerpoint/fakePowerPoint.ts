@@ -42,11 +42,13 @@ export interface FakeSlide {
 
 export interface FakeDeck {
   slides: FakeSlide[];
-  selectedSlideIds?: string[];
   /**
-   * Comes first in getSelectedSlides, as in PowerPoint, the rest in deck order. Defaults to the
-   * first of `selectedSlideIds`.
+   * getSelectedSlides lists the active slide first (Microsoft's reference), then the others in
+   * this order. Measured on Windows: a script that went to slide 4 and selected 4, 6, 2 got back
+   * 4, 6, 2, so the others are not in deck order. A selection made by clicking is not measured.
    */
+  selectedSlideIds?: string[];
+  /** The slide on screen; defaults to the first of `selectedSlideIds`. */
   activeSlideId?: string;
   selectedShapeIds?: string[];
   selectedText?: string;
@@ -438,17 +440,16 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
         slides: presentation(),
         getSelectedSlides: () => {
           if (deck.selectionFails) fail("no selection in this view");
-          const active = deck.activeSlideId ?? deck.selectedSlideIds?.[0];
-          const selected = deck.slides.filter((slide) =>
-            deck.selectedSlideIds?.includes(slide.id),
+          const ids = deck.selectedSlideIds ?? [];
+          const active = deck.activeSlideId ?? ids[0];
+          const ordered = [
+            ...ids.filter((id) => id === active),
+            ...ids.filter((id) => id !== active),
+          ];
+          const selected = ordered.flatMap((id) =>
+            deck.slides.filter((slide) => slide.id === id),
           );
-          return collection(
-            state,
-            [
-              ...selected.filter((slide) => slide.id === active),
-              ...selected.filter((slide) => slide.id !== active),
-            ].map(slideProxy),
-          );
+          return collection(state, selected.map(slideProxy));
         },
         getSelectedShapes: () => {
           const byId = shapesById();

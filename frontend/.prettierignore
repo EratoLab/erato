@@ -2,3 +2,5 @@ pnpm-lock.yaml
 src/lib/generated
 src/locales
 .pnpm-store
+# Written by the backend label test and the spoken card test
+src/lib/toolCallGist/fixtures/spokenCards

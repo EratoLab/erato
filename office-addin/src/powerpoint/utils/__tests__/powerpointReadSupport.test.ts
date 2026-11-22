@@ -4,6 +4,7 @@ import { requirementsUpTo } from "../../../test/mocks/powerpoint/fakePowerPoint"
 import {
   currentPowerPointReadSupport,
   logPowerPointReadSupport,
+  powerpointHostReportDetails,
   powerpointReadSupport,
   resetPowerPointReadSupportLogForTests,
 } from "../powerpointReadSupport";
@@ -70,13 +71,15 @@ describe("PowerPoint read support", () => {
   });
 
   it.each([
-    ["PC", true, true],
-    ["Mac", true, true],
-    ["iOS", true, false],
-    ["PC", false, false],
+    ["PC", "1.10", true, true, true],
+    ["PC", "1.5", true, true, false],
+    ["Mac", "1.10", true, true, false],
+    ["OfficeOnline", "1.10", true, true, false],
+    ["iOS", "1.10", true, false, false],
+    ["PC", "1.10", false, false, false],
   ])(
-    "reads the whole file on %s only where the compressed file set is reported (%s)",
-    (platform, compressedFile, expected) => {
+    "reads the whole file on %s at %s only where the compressed file set is reported (%s); only the measured host (Windows, full tier) takes it as current",
+    (platform, set, compressedFile, expected, current) => {
       const office = (
         globalThis as unknown as {
           Office: { context: Record<string, unknown> };
@@ -87,12 +90,16 @@ describe("PowerPoint read support", () => {
         isSetSupported: (name: string, version?: string) =>
           name === "CompressedFile"
             ? compressedFile
-            : requirementsUpTo("1.10")(name, version),
+            : requirementsUpTo(set)(name, version),
       };
       office.context.document = { getFileAsync: () => {} };
       office.context.diagnostics = { platform };
       try {
-        expect(currentPowerPointReadSupport().presentationFile).toBe(expected);
+        expect(currentPowerPointReadSupport()).toMatchObject({
+          presentationFile: expected,
+          fileIsCurrent: current,
+          exportKeepsNotes: platform === "PC" && set === "1.10",
+        });
       } finally {
         for (const key of Object.keys(office.context))
           delete office.context[key];
@@ -100,6 +107,28 @@ describe("PowerPoint read support", () => {
       }
     },
   );
+
+  it("reports the API set and tier the pane detected", () => {
+    const office = (
+      globalThis as unknown as { Office: { context: Record<string, unknown> } }
+    ).Office;
+    const saved = { ...office.context };
+    office.context.requirements = { isSetSupported: requirementsUpTo("1.5") };
+    try {
+      expect(powerpointHostReportDetails()).toEqual({
+        apiSet: "1.5",
+        tier: "basic",
+      });
+      office.context.requirements = { isSetSupported: () => false };
+      expect(powerpointHostReportDetails()).toEqual({
+        apiSet: "none",
+        tier: "none",
+      });
+    } finally {
+      for (const key of Object.keys(office.context)) delete office.context[key];
+      Object.assign(office.context, saved);
+    }
+  });
 
   it("is full exactly when every 1.10 switch is on", () => {
     for (const set of ["1.3", "1.4", "1.5", "1.8", "1.9", "1.10"]) {

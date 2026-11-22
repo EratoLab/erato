@@ -32,6 +32,8 @@ pub struct OfferedClientTool {
     pub inbox_only: bool,
     pub timeout_ms: Option<u64>,
     pub submission: Option<SubmissionPolicy>,
+    /// Set when an offered submission lists this tool in `part_tools`.
+    pub part: Option<PartPolicy>,
     /// Set only when a delegated run is offered the tool under its grant.
     pub grant: Option<GrantedCall>,
     /// The page said the app behind `executor` runs in strict mode: in the
@@ -69,13 +71,54 @@ pub struct GrantedCall {
     pub approval_scope: Option<crate::services::approval_scope::ScopeKey>,
 }
 
+/// What the arguments of a submission or part call go through before
+/// dispatch: decoding of arrays and objects sent as strings, then the schema.
 #[derive(Clone)]
-pub struct SubmissionPolicy {
+pub struct ArgumentCheck {
     validator: Arc<jsonschema::Validator>,
     /// One per alternative of a root `anyOf`, whose own failure names no field.
     alternatives: Arc<[Alternative]>,
     schema: Arc<Value>,
+}
+
+#[derive(Clone)]
+pub struct SubmissionPolicy {
+    arguments: ArgumentCheck,
     pub max_attempts: u32,
+}
+
+/// A tool whose calls stage one part of a submission's draft.
+#[derive(Clone)]
+pub struct PartPolicy {
+    pub arguments: ArgumentCheck,
+    /// The qualified name of the submission tool that finishes the draft.
+    pub submission: String,
+    key: String,
+}
+
+/// Longest part name kept in the correction state.
+const MAX_PART_KEY_CHARS: usize = 64;
+
+impl PartPolicy {
+    /// The part a call writes, from its `part_key` argument: `2`, `2.0` and
+    /// `"2"` name the same part.
+    pub fn key_of(&self, input: &Value) -> Option<String> {
+        input.pointer(&self.key).map(|value| {
+            let key = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number
+                    .as_f64()
+                    .filter(|value| value.fract() == 0.0 && value.abs() < 1e15)
+                    .map_or_else(|| number.to_string(), |value| (value as i64).to_string()),
+                other => other.to_string(),
+            };
+            bounded(&key, MAX_PART_KEY_CHARS)
+        })
+    }
+
+    pub fn key_pointer(&self) -> &str {
+        &self.key
+    }
 }
 
 struct Alternative {
@@ -120,6 +163,12 @@ impl OfferedClientTool {
             policy
                 .recovery_read_tools
                 .retain(|name| saved_policy.recovery_read_tools.contains(name));
+            policy
+                .part_tools
+                .retain(|name| saved_policy.part_tools.contains(name));
+            policy.max_part_calls = policy.max_part_calls.min(saved_policy.max_part_calls);
+            policy.max_row_tries = policy.max_row_tries.min(saved_policy.max_row_tries);
+            policy.part_key = saved_policy.part_key.clone();
             restored.submission = Some(policy);
         }
         restored
@@ -130,13 +179,9 @@ impl OfferedClientTool {
             .submission
             .as_ref()
             .map(|submission| {
-                erato_config::client_tool_schema::compile(schema).map(|validator| {
-                    SubmissionPolicy {
-                        validator: Arc::new(validator),
-                        alternatives: compile_alternatives(schema).into(),
-                        schema: Arc::new(schema.clone()),
-                        max_attempts: submission.max_attempts,
-                    }
+                ArgumentCheck::compile(schema).map(|arguments| SubmissionPolicy {
+                    arguments,
+                    max_attempts: submission.max_attempts,
                 })
             })
             .transpose()?;
@@ -146,9 +191,18 @@ impl OfferedClientTool {
             inbox_only: false,
             timeout_ms: config.timeout_ms,
             submission,
+            part: None,
             grant: None,
             executor_strict_mode: false,
         })
+    }
+
+    /// The checks this tool's call arguments get before dispatch, if any.
+    pub fn argument_check(&self) -> Option<&ArgumentCheck> {
+        self.submission
+            .as_ref()
+            .map(|submission| &submission.arguments)
+            .or_else(|| self.part.as_ref().map(|part| &part.arguments))
     }
 
     /// Whether the Erato desktop app will ask the user about this tool's
@@ -343,7 +397,58 @@ fn bound_issues(issues: Vec<ClientToolValidationIssue>) -> Vec<ClientToolValidat
         .collect()
 }
 
-impl SubmissionPolicy {
+/// Gives each offered part tool its part policy, from the offered submission
+/// that lists it. A part tool whose submission is not offered stays an
+/// ordinary client tool.
+pub fn link_part_tools(offered: &mut HashMap<String, OfferedClientTool>) -> Result<(), String> {
+    let owners = offered
+        .values()
+        .filter(|tool| tool.submission.is_some())
+        .filter_map(|tool| {
+            let submission = tool.config.submission.as_ref()?;
+            (!submission.part_tools.is_empty()).then(|| {
+                (
+                    tool.config.qualified_name(),
+                    submission.part_tools.clone(),
+                    submission.part_key.clone(),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    if owners.is_empty() {
+        return Ok(());
+    }
+    for tool in offered.values_mut() {
+        if tool.submission.is_some() {
+            continue;
+        }
+        let qualified = tool.config.qualified_name();
+        let Some((owner, _, key)) = owners
+            .iter()
+            .find(|(_, parts, _)| parts.contains(&qualified))
+        else {
+            continue;
+        };
+        let schema = serde_json::from_str::<Value>(&tool.config.parameters)
+            .map_err(|error| format!("Invalid part tool schema for '{qualified}': {error}"))?;
+        tool.part = Some(PartPolicy {
+            arguments: ArgumentCheck::compile(&schema)?,
+            submission: owner.clone(),
+            key: key.clone(),
+        });
+    }
+    Ok(())
+}
+
+impl ArgumentCheck {
+    pub fn compile(schema: &Value) -> Result<Self, String> {
+        Ok(Self {
+            validator: Arc::new(erato_config::client_tool_schema::compile(schema)?),
+            alternatives: compile_alternatives(schema).into(),
+            schema: Arc::new(schema.clone()),
+        })
+    }
+
     /// Decodes arrays and objects sent as JSON strings where the schema admits
     /// only those; returns the decoded JSON Pointers.
     pub fn decode_stringified(&self, input: &mut Value) -> Vec<String> {
@@ -451,6 +556,16 @@ impl SubmissionPolicy {
         }
         issues
     }
+}
+
+impl SubmissionPolicy {
+    pub fn decode_stringified(&self, input: &mut Value) -> Vec<String> {
+        self.arguments.decode_stringified(input)
+    }
+
+    pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
+        self.arguments.validate(input)
+    }
 
     pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
         matches!(
@@ -481,13 +596,13 @@ pub fn decode_stringified_submission_arguments(
         let genai::chat::ContentPart::ToolCall(call) = part else {
             continue;
         };
-        let Some(submission) = offered
+        let Some(arguments) = offered
             .get(&call.fn_name)
-            .and_then(|tool| tool.submission.as_ref())
+            .and_then(OfferedClientTool::argument_check)
         else {
             continue;
         };
-        let decoded = submission.decode_stringified(&mut call.fn_arguments);
+        let decoded = arguments.decode_stringified(&mut call.fn_arguments);
         if !decoded.is_empty() {
             tracing::info!(
                 tool = %call.fn_name,
@@ -969,6 +1084,104 @@ mod tests {
             .unwrap()
             .submission
             .unwrap()
+    }
+
+    fn offered_parts(with_submission: bool) -> HashMap<String, OfferedClientTool> {
+        let submit = ClientToolConfig {
+            name: "submit_draft".into(),
+            submission: Some(crate::config::ClientToolSubmissionConfig {
+                part_tools: vec!["client/write_part".into()],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let part_schema = json!({"type":"object","properties":{"row":{"type":"integer"},
+            "lines":{"type":"array","items":{"type":"string"}}},"required":["row"]});
+        let write = ClientToolConfig {
+            name: "write_part".into(),
+            parameters: part_schema.to_string(),
+            ..Default::default()
+        };
+        let other = ClientToolConfig {
+            name: "read_context".into(),
+            ..Default::default()
+        };
+        let mut offered = HashMap::new();
+        for (config, schema) in [(write, part_schema), (other, json!({"type":"object"}))]
+            .into_iter()
+            .chain(with_submission.then(|| (submit, json!({"type":"object"}))))
+        {
+            offered.insert(
+                config.name.clone(),
+                OfferedClientTool::prepare(&config, &schema).unwrap(),
+            );
+        }
+        link_part_tools(&mut offered).unwrap();
+        offered
+    }
+
+    #[test]
+    fn a_part_tool_is_linked_only_while_its_submission_is_offered() {
+        let offered = offered_parts(true);
+        let part = offered["write_part"].part.as_ref().unwrap();
+        assert_eq!(part.submission, "client/submit_draft");
+        assert!(offered["read_context"].part.is_none());
+        assert!(offered["submit_draft"].part.is_none());
+        assert!(offered_parts(false)["write_part"].part.is_none());
+
+        for row in [json!(2), json!(2.0), json!("2")] {
+            assert_eq!(part.key_of(&json!({ "row": row })).as_deref(), Some("2"));
+        }
+        assert_eq!(part.key_of(&json!({"row":2.5})).as_deref(), Some("2.5"));
+        assert_eq!(part.key_of(&json!({})), None);
+        let mut input = json!({"row":2,"lines":"[\"a\",\"b\"]"});
+        let check = offered["write_part"].argument_check().unwrap();
+        assert_eq!(check.decode_stringified(&mut input), vec!["/lines"]);
+        assert!(check.validate(&input).is_none());
+        let Some(ClientToolOutcome::ValidationFailed(issues, None)) =
+            check.validate(&json!({"row":"two"}))
+        else {
+            panic!("a schema failure");
+        };
+        assert_eq!(issues[0].path, "/row");
+    }
+
+    #[test]
+    fn a_resumed_turn_keeps_the_narrower_part_budgets() {
+        let part_budgets = |tools: &[&str], calls: u32, tries: u32, key: &str| ClientToolConfig {
+            name: "submit_draft".into(),
+            submission: Some(crate::config::ClientToolSubmissionConfig {
+                part_tools: tools.iter().map(|tool| tool.to_string()).collect(),
+                max_part_calls: calls,
+                max_row_tries: tries,
+                part_key: key.into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let saved = part_budgets(&["client/a", "client/b"], 20, 3, "/row");
+        let current = part_budgets(&["client/b", "client/c"], 40, 2, "/part");
+        let restored = OfferedClientTool::restore_config(&saved, &current)
+            .submission
+            .unwrap();
+        assert_eq!(restored.part_tools, ["client/b"]);
+        assert_eq!(restored.max_part_calls, 20);
+        assert_eq!(restored.max_row_tries, 2);
+        assert_eq!(restored.part_key, "/row");
+    }
+
+    #[test]
+    fn a_submission_without_part_tools_stores_the_same_settings_as_before() {
+        assert_eq!(
+            serde_json::to_value(crate::config::ClientToolSubmissionConfig::default()).unwrap(),
+            json!({"max_attempts":3,"recovery_read_tools":[],"max_recovery_reads":32,"native_schema":"auto"})
+        );
+        assert_eq!(
+            serde_json::to_value(crate::services::client_operations::ToolCallCharge::default())
+                .unwrap(),
+            json!({"budget_refusal":null,"submission_attempt":null,"submission_mixed_batch":false,
+                "recovery_read":false,"operation_identity":null})
+        );
     }
 
     fn issues(policy: &SubmissionPolicy, mut input: Value) -> Vec<(String, String, String)> {

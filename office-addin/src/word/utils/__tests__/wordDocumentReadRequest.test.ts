@@ -51,6 +51,40 @@ describe("Word send ownership", () => {
     expect(mock.store!.listenerCount()).toBe(0);
   });
 
+  it("binds a capture taken for a regenerate to the new reply, not the one it replaces", async () => {
+    const session = new WordDocumentReadSession();
+    const s = readySnapshot();
+    session.activate(s);
+    mock.store!.setState({
+      streams: { "chat-A": { currentMessageId: "a1", isStreaming: false } },
+    });
+    bindWordDocumentReadRequest(session, s.token, "chat-A");
+    mock.store!.setState({
+      streams: { "chat-A": { currentMessageId: null, isStreaming: false } },
+    });
+    mock.store!.setState({
+      streams: { "chat-A": { currentMessageId: "a2", isStreaming: true } },
+    });
+
+    expect(
+      (
+        await session.execute(
+          { snapshot: s.token },
+          { ...context, messageId: "a1" },
+        )
+      ).ok,
+    ).toBe(false);
+    expect(
+      (
+        await session.execute(
+          { snapshot: s.token },
+          { ...context, messageId: "a2" },
+        )
+      ).ok,
+    ).toBe(true);
+    expect(mock.store!.listenerCount()).toBe(0);
+  });
+
   it("releases a failed send before a later task reaction starts", async () => {
     const session = new WordDocumentReadSession();
     const s = readySnapshot();

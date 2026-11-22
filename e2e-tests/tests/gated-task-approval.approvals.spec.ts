@@ -112,7 +112,8 @@ test("parks a task child on its gated call and finishes the run in the origin ch
   await expect(approval).toHaveAttribute("data-item-count", "1");
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
-  await expect(item).toContainText(GATED_TOOL);
+  // The card names the call by the tool's title; the item keeps its name.
+  await expect(item).toHaveAttribute("data-tool-name", GATED_TOOL);
   await expect(item).toContainText(GATED_SERVER_NAME);
   // The child chat the decision covers, which is what makes this the origin's
   // surface for another chat's question rather than its own. Matched as an id

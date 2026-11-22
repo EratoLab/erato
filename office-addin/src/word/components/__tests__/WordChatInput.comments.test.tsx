@@ -46,7 +46,11 @@ import {
   WORD_SEND_SKIP_OFFER_MS,
 } from "../WordChatInput";
 
-import type { AddinChatInputRenderProps } from "../../../core/AddinChatCore";
+import type {
+  AddinChatInputRenderProps,
+  AddinRerunPreparer,
+  AddinSendPreparation,
+} from "../../../core/AddinChatCore";
 import type {
   CommentHost,
   CommentHostOptions,
@@ -1573,6 +1577,32 @@ describe("WordChatInput comment context", () => {
       expect(threads.map((t) => t.id)).toContain(refOf("T1"));
       expect(threads.length).toBeLessThanOrEqual(7);
       expect(threads.filter((t) => "text_before" in t)).toEqual([]);
+    });
+
+    it("rerun a document message with the document alone, caret or not", async () => {
+      install({ selection: { tag: "T1P", offset: 25 } });
+      host.capture.mockResolvedValue(documentBuild());
+      const rerun = { current: null as AddinRerunPreparer | null };
+      render(
+        <WordChatInput
+          chatInputProps={{ ...props(), rerunPreparationRef: rerun }}
+          documentIdentity={IDENTITY}
+          stagePendingCapture={(capture) => staged.push(capture)}
+        />,
+      );
+      let step: ReturnType<AddinRerunPreparer>;
+      act(() => {
+        step = rerun.current!({
+          message: "Again",
+          inputFileIds: [],
+          actionFacetId: "word_document_review",
+        });
+      });
+      const result = await finish(
+        (step as AddinSendPreparation).run(new AbortController().signal),
+      );
+      expect(result?.actionFacet?.id).toMatch(/^word_document_/);
+      expect(gestures()).toMatchObject({ document: true, picked: null });
     });
 
     it("reach no document-wide comment when the caret's thread replaces the document", async () => {

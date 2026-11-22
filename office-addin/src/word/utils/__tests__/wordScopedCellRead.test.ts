@@ -272,7 +272,13 @@ describe("bounded table-cell reads", () => {
         ),
       ).toMatchObject({
         ok: false,
-        validationErrors: [{ code: "snapshot-mismatch" }],
+        validationErrors: [
+          { code: "snapshot-mismatch" },
+          {
+            code: "snapshot-mismatch",
+            message: `This request's snapshot and documentIdentity: ${JSON.stringify({ snapshot: state.snapshot.token, documentIdentity: state.snapshot.identity })}`,
+          },
+        ],
       });
       expect(state.snapshot.readScopes?.size).toBe(0);
     },

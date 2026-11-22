@@ -9,20 +9,36 @@
   (examples/basic-host/src/sandbox.ts, Copyright (c) Model Context Protocol a
   Series of LF Projects, LLC, MIT License). Unlike the reference, which gets
   the view's CSP as an HTTP header, this page is a static file: it applies the
-  CSP to itself before it creates the view's frame, which inherits it.
+  CSP to itself before it creates the view's frame, which inherits it. And
+  it loads the view as that frame's srcdoc, where the reference writes it in.
 
   The page has no <head> tag on purpose: Erato's server adds its frontend
   settings to the <head> of the pages it serves, and this page carries none.
 -->
 <meta charset="utf-8" />
-<meta name="color-scheme" content="light dark" />
 <title>MCP Apps sandbox</title>
+<!--
+  The color scheme of the host context's theme at every frame level: where a
+  frame's scheme and its page's differ, the browser paints an opaque backdrop
+  behind the page. The app's frame states the theme's scheme, this page
+  takes it from the host context it relays, and the view's frame inherits
+  it, so a view that states its theme's scheme, as the MCP Apps SDK's
+  applyDocumentTheme does, shows no backdrop.
+-->
 <style>
   html,
   body {
     margin: 0;
     height: 100%;
     width: 100%;
+    /*
+      The page never scrolls. The view's frame keeps an iframe's default
+      150px as its least height, so a view that sizes itself to its viewport
+      when it starts never finds it 0px tall; where the app's frame is
+      shorter, as for a view that asks for less, the rest is cut off instead
+      of showing a scrollbar.
+    */
+    overflow: hidden;
     background-color: transparent;
   }
   body {
@@ -45,11 +61,21 @@
       "This page only runs in the frame of the app it belongs to.",
     );
   }
-  if (!document.referrer) {
-    throw new Error("No referrer: the origin of the embedding app is unknown.");
+  // The embedding app's origin: messages are taken from it and sent to it
+  // only. The browser's own record of the parent's origin where it keeps one
+  // (`location.ancestorOrigins`); else the referrer. A referrer alone is not
+  // enough: when this page reloads itself, some browsers send its own URL as
+  // the referrer, and the page would take itself for the app.
+  const parentOrigin = window.location.ancestorOrigins?.[0];
+  const HOST_ORIGIN =
+    parentOrigin && parentOrigin !== "null"
+      ? parentOrigin
+      : document.referrer
+        ? new URL(document.referrer).origin
+        : "";
+  if (!HOST_ORIGIN) {
+    throw new Error("The origin of the embedding app is unknown.");
   }
-  // The embedding app's origin: messages are taken from it and sent to it only.
-  const HOST_ORIGIN = new URL(document.referrer).origin;
   const HOST_NAME = new URL(HOST_ORIGIN).hostname;
   const OWN_ORIGIN = window.location.origin;
   const OWN_NAME = window.location.hostname;
@@ -76,6 +102,11 @@
   const SANDBOX_PREFIX = "ui/notifications/sandbox-";
   const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
   const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  // Not in the spec: this page tells the app that the view's document has
+  // loaded, so the app knows to expect the view's ui/initialize. A view never
+  // sends or receives a message with the sandbox prefix through this page.
+  const RESOURCE_LOADED = "ui/notifications/sandbox-resource-loaded";
+  const HOST_CONTEXT_CHANGED = "ui/notifications/host-context-changed";
 
   // Whether a declared domain covers `name`, whatever its scheme or port: the
   // host itself, a wildcard over it, or a network scheme on its own.
@@ -137,6 +168,23 @@
   };
 
   let inner = null;
+  // What the app sends the view before the view's document is in its frame.
+  // The frame loads its srcdoc after this page sets it; until then its window
+  // is the empty document it starts with, which would drop the messages.
+  let held = [];
+
+  const toView = (data) => {
+    if (held) held.push(data);
+    else inner.contentWindow?.postMessage(data, OWN_ORIGIN);
+  };
+
+  // The view's document has loaded or sent its first message: what the app
+  // sent before goes to it now, in order.
+  const viewArrived = () => {
+    const earlier = held;
+    held = null;
+    earlier?.forEach(toView);
+  };
 
   const load = ({ html, csp }) => {
     if (inner || typeof html !== "string") return;
@@ -149,15 +197,43 @@
 
     inner = document.createElement("iframe");
     inner.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    // A name of its own on every load, so no frame of an earlier load matches
+    // it: a browser that restores frames by name or position on a reload
+    // could otherwise put an earlier load's view, under that load's policy,
+    // in this frame instead of the view this load was sent.
+    inner.name = `view-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    // The view as the frame's srcdoc, never written into it: its document is
+    // about:srcdoc, so a reload of the frame shows the view again, under this
+    // page's policy, which a srcdoc document inherits. Written into the frame,
+    // the view's document would have this page's URL, and a reload of the
+    // frame would lose the view.
+    inner.srcdoc = html;
+    inner.addEventListener("load", viewArrived, { once: true });
+    inner.addEventListener("load", () => {
+      window.parent.postMessage(
+        { jsonrpc: "2.0", method: RESOURCE_LOADED, params: {} },
+        HOST_ORIGIN,
+      );
+    });
     (document.body || document.documentElement).appendChild(inner);
-    const doc = inner.contentDocument;
-    doc.open();
-    doc.write(html);
-    doc.close();
   };
 
   const isSandboxMessage = (data) =>
     typeof data?.method === "string" && data.method.startsWith(SANDBOX_PREFIX);
+
+  // The theme of the host context the app sends the view, in the answer to
+  // its ui/initialize and in what changes later, as this page's scheme.
+  const followTheme = (data) => {
+    const theme =
+      data?.method === HOST_CONTEXT_CHANGED
+        ? data.params?.theme
+        : data?.result?.hostContext?.theme;
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.style.colorScheme = theme;
+    }
+  };
 
   window.addEventListener("message", (event) => {
     if (event.source === window.parent) {
@@ -165,11 +241,15 @@
       if (event.data?.method === RESOURCE_READY) {
         load(event.data.params ?? {});
       } else if (!isSandboxMessage(event.data)) {
-        inner?.contentWindow?.postMessage(event.data, OWN_ORIGIN);
+        followTheme(event.data);
+        if (inner) toView(event.data);
       }
     } else if (inner && event.source === inner.contentWindow) {
-      if (event.origin !== OWN_ORIGIN || isSandboxMessage(event.data)) return;
-      window.parent.postMessage(event.data, HOST_ORIGIN);
+      if (event.origin !== OWN_ORIGIN) return;
+      viewArrived();
+      if (!isSandboxMessage(event.data)) {
+        window.parent.postMessage(event.data, HOST_ORIGIN);
+      }
     }
   });
 

@@ -1,0 +1,710 @@
+//! Conversational audio and approvals: the card a spoken turn stops on is
+//! spoken (`POST /me/messages/{message_id}/approval-speech`), and the answer
+//! after the decision is read back like the turn before it.
+
+use super::reminder_tools::{
+    answer_turn, extract_answer, next_friday, parked, reminder, setup_with_config, tool_turn,
+};
+use super::*;
+use crate::test_utils::build_openai_narrated_tool_calls_streaming_response;
+use erato::config::McpToolApprovalPreset;
+use erato::services::scheduled_items;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+const INSTRUCTION: &str = "Answer as speech.";
+
+/// Records the request and never matches, so the mocks after it answer.
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+struct Spy(RequestBodyRecorder);
+
+impl mocktail::matchers::Matcher for Spy {
+    fn name(&self) -> &str {
+        "spy"
+    }
+
+    fn matches(&self, request: &mocktail::prelude::Request) -> bool {
+        mocktail::matchers::Matcher::matches(&self.0, request);
+        false
+    }
+}
+
+/// An audio.cpp-style voice that answers every request with the same PCM.
+async fn mock_speech() -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+    let requests = Arc::new(AtomicUsize::new(0));
+    let counter = requests.clone();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let app = Router::new().route(
+        "/audio/speech",
+        axum::routing::post(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+            async {
+                axum::response::Response::builder()
+                    .header("content-type", "audio/pcm")
+                    .body(axum::body::Body::from(vec![1, 2, 3, 4]))
+                    .unwrap()
+            }
+        }),
+    );
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (format!("http://{address}"), requests, server)
+}
+
+fn speak_with(config: &mut erato::config::AppConfig, speech_url: &str) {
+    config.speech_providers.provider.insert(
+        "voice".into(),
+        serde_json::from_value(json!({
+            "provider_kind": "audio_cpp", "model_name": "local", "voice": "voice",
+            "base_url": speech_url
+        }))
+        .unwrap(),
+    );
+    config.audio_conversational.transcription.enabled = true;
+    config.audio_conversational.speech_provider = Some("voice".into());
+    config.turn_instructions.spoken_reply.prompt = Some(INSTRUCTION.into());
+}
+
+/// Sends a message to `chat_id`, read back or typed.
+async fn send(server: &TestServer, chat_id: Uuid, text: &str, spoken: bool) -> Vec<Value> {
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "existing_chat_id": chat_id,
+            "user_message": text,
+            "conversational_audio_back": spoken,
+        }))
+        .await;
+    response.assert_status_ok();
+    events(&response)
+}
+
+fn events(response: &axum_test::TestResponse) -> Vec<Value> {
+    parse_sse_events(response)
+        .into_iter()
+        .filter_map(|event| serde_json::from_str(&event.data).ok())
+        .collect()
+}
+
+fn has_audio(events: &[Value]) -> bool {
+    events
+        .iter()
+        .any(|event| event["message_type"] == "audio_delta")
+}
+
+async fn speak_card(
+    server: &TestServer,
+    token: &str,
+    message_id: Uuid,
+    pieces: Value,
+) -> axum_test::TestResponse {
+    server
+        .post(&format!(
+            "/api/v1beta/me/messages/{message_id}/approval-speech"
+        ))
+        .with_bearer_token(token)
+        .json(&json!({ "pieces": pieces }))
+        .await
+}
+
+/// A reminder cancel the model asks for in a chat of its own, answered with
+/// `answer` once the user decides.
+async fn cancel_in_new_chat(
+    state: &erato::state::AppState,
+    llm: &MockServer,
+    user_id: Uuid,
+    name: &str,
+    call: &str,
+    answer: &'static str,
+) -> Uuid {
+    let item = scheduled_items::create_checked(
+        state,
+        user_id,
+        reminder(name, next_friday(), 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    {
+        let mut mocks = llm.mocks();
+        tool_turn(
+            &mut mocks,
+            &[name],
+            (call, "cancel_reminder", json!({"reminder_id": item.id})),
+        );
+        answer_turn(&mut mocks, call, answer);
+    }
+    seed_origin_chat(&state.db).await
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_open_approval_is_spoken_piece_by_piece_and_nothing_else_is(pool: Pool<Postgres>) {
+    let (speech_url, speech_requests, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| speak_with(config, &speech_url),
+    )
+    .await;
+    let chat_id = cancel_in_new_chat(
+        &state,
+        &llm,
+        user_id,
+        "Angebot nachfassen",
+        "call_cancel",
+        "Erledigt.",
+    )
+    .await;
+    send(&server, chat_id, "Lösch Angebot nachfassen", true).await;
+    let (message_id, request) = parked(&state, chat_id).await;
+    let spoken_before = speech_requests.load(Ordering::SeqCst);
+
+    let response = speak_card(
+        &server,
+        TEST_JWT_TOKEN,
+        message_id,
+        json!([
+            "Auf dem Bildschirm wartet eine Entscheidung.",
+            "Bitte auf dem Bildschirm bestätigen."
+        ]),
+    )
+    .await;
+    response.assert_status_ok();
+    assert_eq!(
+        events(&response),
+        [
+            json!({"message_type": "audio_delta", "sequence": 0, "audio": "AQIDBA==", "sample_rate": 24000, "piece": 0}),
+            json!({"message_type": "piece_done", "piece": 0}),
+            json!({"message_type": "audio_delta", "sequence": 1, "audio": "AQIDBA==", "sample_rate": 24000, "piece": 1}),
+            json!({"message_type": "piece_done", "piece": 1}),
+            json!({"message_type": "done"}),
+        ]
+    );
+    assert_eq!(speech_requests.load(Ordering::SeqCst), spoken_before + 2);
+
+    // Nothing is stored on the message.
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !stored
+            .raw_message
+            .to_string()
+            .contains("audio_file_pointer")
+    );
+
+    // Caps: pieces, piece length, total length; and something to say.
+    let refused = [
+        (json!(vec!["Eins."; 17]), 413),
+        (json!(["a".repeat(401)]), 413),
+        (json!(vec!["b".repeat(400); 6]), 413),
+        (json!([]), 400),
+        (json!(["Gut.", "  "]), 400),
+    ];
+    for (pieces, status) in refused {
+        let response = speak_card(&server, TEST_JWT_TOKEN, message_id, pieces.clone()).await;
+        assert_eq!(response.status_code().as_u16(), status, "{pieces}");
+    }
+
+    // Another user's request answers as if the message did not exist.
+    let stranger = JwtTokenBuilder::new()
+        .subject("spoken-approvals-stranger")
+        .email("stranger@example.com")
+        .name("stranger")
+        .build();
+    speak_card(&server, &stranger, message_id, json!(["Hallo."]))
+        .await
+        .assert_status_not_found();
+
+    // Once decided, the stop has nothing left to speak about.
+    let decided = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+        }))
+        .await;
+    decided.assert_status_ok();
+    speak_card(&server, TEST_JWT_TOKEN, message_id, json!(["Hallo."]))
+        .await
+        .assert_status(axum::http::StatusCode::CONFLICT);
+    speech.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_card_is_not_spoken_without_conversational_speech(pool: Pool<Postgres>) {
+    let (speech_url, speech_requests, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| {
+            speak_with(config, &speech_url);
+            // A voice for read aloud alone does not speak cards.
+            config.audio_conversational.transcription.enabled = false;
+            config.audio_read_aloud.enabled = true;
+            config.audio_read_aloud.speech_provider = Some("voice".into());
+        },
+    )
+    .await;
+    let chat_id = cancel_in_new_chat(
+        &state,
+        &llm,
+        user_id,
+        "Angebot nachfassen",
+        "call_cancel",
+        "Erledigt.",
+    )
+    .await;
+    send(&server, chat_id, "Lösch Angebot nachfassen", false).await;
+    let (message_id, _) = parked(&state, chat_id).await;
+
+    speak_card(&server, TEST_JWT_TOKEN, message_id, json!(["Hallo."]))
+        .await
+        .assert_status_not_found();
+    assert_eq!(speech_requests.load(Ordering::SeqCst), 0);
+    speech.abort();
+}
+
+/// The answer after a decision is read back when the continuation asks for
+/// it, and the spoken-reply instruction of the turn it continues still
+/// applies: the continuation reuses that turn's stored prompt.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_answer_after_a_decision_is_spoken_like_the_turn_it_continues(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| speak_with(config, &speech_url),
+    )
+    .await;
+    let spoken_chat = cancel_in_new_chat(
+        &state,
+        &llm,
+        user_id,
+        "Gesprochen",
+        "call_spoken",
+        "Gesprochen erledigt.",
+    )
+    .await;
+    let typed_chat = cancel_in_new_chat(
+        &state,
+        &llm,
+        user_id,
+        "Getippt",
+        "call_typed",
+        "Getippt erledigt.",
+    )
+    .await;
+    // Sees every model request first and answers none.
+    let recorder = RequestBodyRecorder::new();
+    let spy = Spy(recorder.clone());
+    llm.mocks().mock_with_options(0, None, move |when, then| {
+        when.post().path("/v1/chat/completions").matcher(spy);
+        then.status(http::StatusCode::INTERNAL_SERVER_ERROR);
+    });
+
+    let decide = |chat_id: Uuid, spoken: bool| {
+        let state = state.clone();
+        let server = &server;
+        async move {
+            let (message_id, request) = parked(&state, chat_id).await;
+            let response = server
+                .post("/api/v1beta/me/messages/continuestream")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({
+                    "message_id": message_id,
+                    "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+                    "conversational_audio_back": spoken,
+                }))
+                .await;
+            response.assert_status_ok();
+            events(&response)
+        }
+    };
+
+    send(&server, spoken_chat, "Lösch Gesprochen", true).await;
+    let continued = decide(spoken_chat, true).await;
+    assert_eq!(extract_answer(&continued), "Gesprochen erledigt.");
+    assert!(has_audio(&continued), "{continued:?}");
+    // Without `keep_reply_audio` the voice is only streamed, never stored.
+    let stored = Messages::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(spoken_chat))
+        .all(&state.db)
+        .await
+        .unwrap();
+    assert!(!stored.is_empty());
+    assert!(stored.iter().all(|message| {
+        !message
+            .raw_message
+            .to_string()
+            .contains("audio_file_pointer")
+    }));
+    assert!(
+        erato::db::entity::file_uploads::Entity::find()
+            .all(&state.db)
+            .await
+            .unwrap()
+            .iter()
+            .all(|file| file.audio_synthesis.is_none())
+    );
+
+    send(&server, typed_chat, "Lösch Getippt", false).await;
+    let continued = decide(typed_chat, false).await;
+    assert_eq!(extract_answer(&continued), "Getippt erledigt.");
+    assert!(!has_audio(&continued), "{continued:?}");
+
+    let bodies = recorder.bodies();
+    let continuation = |call: &str| -> Vec<String> {
+        bodies
+            .iter()
+            .filter(|body| body.contains(call) && body.contains("\"role\":\"tool\""))
+            .cloned()
+            .collect()
+    };
+    let spoken = continuation("call_spoken");
+    let typed = continuation("call_typed");
+    assert!(!spoken.is_empty() && !typed.is_empty());
+    assert!(spoken.iter().all(|body| body.contains(INSTRUCTION)));
+    assert!(typed.iter().all(|body| !body.contains(INSTRUCTION)));
+    speech.abort();
+}
+
+/// The usual spoken turn says a sentence before its call. Its recording must
+/// not end the message after the approval request, or the stop is no longer
+/// seen as waiting for a decision; and the answer after the decision is a
+/// second recording, stored apart from the first.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_sentence_before_the_call_keeps_the_stop_and_its_own_recording(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| {
+            speak_with(config, &speech_url);
+            config.audio_conversational.keep_reply_audio = true;
+        },
+    )
+    .await;
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Vorgelesen", next_friday(), 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    {
+        let mut mocks = llm.mocks();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["Lösch Vorgelesen"],
+                    &["call_narrated"],
+                ));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "Ich lösche die Erinnerung.",
+                    &[(
+                        "call_narrated",
+                        "cancel_reminder",
+                        json!({"reminder_id": item.id}),
+                    )],
+                ),
+            );
+        });
+        answer_turn(&mut mocks, "call_narrated", "Erledigt.");
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    send(&server, chat_id, "Lösch Vorgelesen", true).await;
+
+    // `parked` finds the message whose last part is the approval request.
+    let (message_id, request) = parked(&state, chat_id).await;
+    // The chat's state is written as the generation ends, just after the stream.
+    let mut generation_state = None;
+    for _ in 0..50 {
+        generation_state = chats::Entity::find_by_id(chat_id)
+            .one(&state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state;
+        if generation_state.as_deref() == Some("awaiting_approval") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
+    let audio_parts = |raw: &Value| -> Vec<Uuid> {
+        raw["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|part| part["content_type"] == "audio_file_pointer")
+            .map(|part| part["file_upload_id"].as_str().unwrap().parse().unwrap())
+            .collect()
+    };
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(audio_parts(&stored.raw_message).len(), 1);
+
+    let response = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+            "conversational_audio_back": true,
+        }))
+        .await;
+    response.assert_status_ok();
+    let continued = events(&response);
+    assert_eq!(extract_answer(&continued), "Erledigt.");
+
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let files = audio_parts(&stored.raw_message);
+    assert_eq!(files.len(), 2, "{}", stored.raw_message);
+    let mut paths = Vec::new();
+    for file in files {
+        let record = erato::db::entity::file_uploads::Entity::find_by_id(file)
+            .one(&state.db)
+            .await
+            .unwrap()
+            .expect("the recording's file record");
+        paths.push(record.file_storage_path);
+    }
+    assert_ne!(paths[0], paths[1], "each recording has a path of its own");
+    speech.abort();
+}
+
+/// The spoken, text and tool parts of a stored message, in order.
+async fn reply_parts(state: &erato::state::AppState, message_id: Uuid) -> Vec<(String, String)> {
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    stored.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|part| {
+            let kind = part["content_type"].as_str()?;
+            matches!(kind, "spoken" | "text" | "tool_use").then(|| {
+                (
+                    kind.to_string(),
+                    part["text"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+        })
+        .collect()
+}
+
+fn natural(config: &mut erato::config::AppConfig, speech_url: &str) {
+    speak_with(config, speech_url);
+    config.audio_conversational.reply_speech.wording =
+        erato_config::reply_speech::ReplySpeechWording::Natural;
+}
+
+fn part(kind: &str, text: &str) -> (String, String) {
+    (kind.to_string(), text.to_string())
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn each_model_call_of_a_natural_reply_speaks_its_own_part(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, _, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| natural(config, &speech_url),
+    )
+    .await;
+    {
+        let mut mocks = llm.mocks();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["Was steht an?"], &["call_list"]));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "<spoken>Ich schaue nach.</spoken>",
+                    &[("call_list", "list_reminders", json!({}))],
+                ),
+            );
+        });
+        answer_turn(
+            &mut mocks,
+            "call_list",
+            "<spoken>Nichts für diese Woche.</spoken>Für diese Woche sind keine Erinnerungen geplant.",
+        );
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    let events = send(&server, chat_id, "Was steht an?", true).await;
+    let spoken: String = events
+        .iter()
+        .filter(|event| event["message_type"] == "spoken_delta")
+        .filter_map(|event| event["new_text"].as_str())
+        .collect();
+    assert_eq!(spoken, "Ich schaue nach.Nichts für diese Woche.");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "spoken_end")
+            .count(),
+        2
+    );
+    assert_eq!(
+        extract_answer(&events),
+        "Für diese Woche sind keine Erinnerungen geplant."
+    );
+    let message_id: Uuid = events
+        .iter()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .and_then(|event| event["message_id"].as_str())
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [
+            part("spoken", "Ich schaue nach."),
+            part("tool_use", ""),
+            part("spoken", "Nichts für diese Woche."),
+            part("text", "Für diese Woche sind keine Erinnerungen geplant."),
+        ]
+    );
+    speech.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_spoken_part_before_an_approval_stays_spoken_after_the_decision(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| natural(config, &speech_url),
+    )
+    .await;
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Vorgelesen", next_friday(), 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let recorder = RequestBodyRecorder::new();
+    {
+        let mut mocks = llm.mocks();
+        let spy = Spy(recorder.clone());
+        mocks.mock_with_options(0, None, move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(spy);
+            then.status(http::StatusCode::INTERNAL_SERVER_ERROR);
+        });
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["Lösch Vorgelesen"],
+                    &["call_narrated"],
+                ));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "<spoken>Ich lösche die Erinnerung.</spoken>",
+                    &[(
+                        "call_narrated",
+                        "cancel_reminder",
+                        json!({"reminder_id": item.id}),
+                    )],
+                ),
+            );
+        });
+        answer_turn(
+            &mut mocks,
+            "call_narrated",
+            "<spoken>Erledigt.</spoken>Die Erinnerung Vorgelesen ist gelöscht.",
+        );
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    send(&server, chat_id, "Lösch Vorgelesen", true).await;
+    let (message_id, request) = parked(&state, chat_id).await;
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [part("spoken", "Ich lösche die Erinnerung.")]
+    );
+
+    let response = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+            "conversational_audio_back": true,
+        }))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(
+        extract_answer(&events(&response)),
+        "Die Erinnerung Vorgelesen ist gelöscht."
+    );
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [
+            part("spoken", "Ich lösche die Erinnerung."),
+            part("tool_use", ""),
+            part("spoken", "Erledigt."),
+            part("text", "Die Erinnerung Vorgelesen ist gelöscht."),
+        ]
+    );
+    let continuation: Vec<String> = recorder
+        .bodies()
+        .into_iter()
+        .filter(|body| body.contains("\"role\":\"tool\""))
+        .collect();
+    assert!(!continuation.is_empty());
+    for body in continuation {
+        assert!(body.contains("<spoken>Ich lösche die Erinnerung.</spoken>"));
+        assert!(body.contains("Begin your reply with <spoken>"));
+    }
+    speech.abort();
+}

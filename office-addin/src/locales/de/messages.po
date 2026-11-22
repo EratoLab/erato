@@ -1476,6 +1476,51 @@ msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
 msgstr "Damit Erato Layout, Diagramme und Bilder sieht"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.chooseDistribution"
+msgstr "Wähle die Verteilungsmethode für das PowerPoint-Add-in, um das passende Manifest und die Installationsanleitung zu erhalten."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.desktopRedirectUriInstruction"
+msgstr "Füge in der App-Registrierung in Entra ID den SPA-Umleitungs-URI hinzu. PowerPoint unter Windows und auf dem Mac meldet sich darüber an:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.distributionGuidance"
+msgstr "Wähle das Microsoft 365 Admin Center für Benutzer mit Exchange Online-Postfächern und geeigneten Microsoft 365-Abonnementlizenzen. Wähle den SharePoint-App-Katalog für Umgebungen mit lokalen Exchange-Postfächern oder ohne zentrale Bereitstellung. Die Verteilung über einen SharePoint-Katalog erfordert einen Katalogadministrator und unterstützt PowerPoint auf dem Mac nicht."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.downloadSelectedManifest"
+msgstr "PowerPoint-Manifest herunterladen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.integratedOpen"
+msgstr "Starte PowerPoint neu, sobald die Bereitstellung die Benutzer erreicht hat, und öffne Erato über die Schaltfläche im Menüband."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointOpen"
+msgstr "Öffne in PowerPoint den Dialog für Office-Add-ins und wähle „Meine Organisation“, um Erato hinzuzufügen. Bei dieser Verteilungsmethode gibt es keine Erato-Schaltfläche im Menüband; öffne Erato über die Add-in-Liste. PowerPoint im Web kann einen SharePoint Online-Katalog verwenden."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointTrust"
+msgstr "Öffne in PowerPoint unter Windows Datei → Optionen → Trust Center → Einstellungen für das Trust Center → Kataloge vertrauenswürdiger Add-Ins. Füge die URL der Katalogwebsite hinzu, aktiviere „Im Menü anzeigen“ und starte PowerPoint neu."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.supportedVersions"
+msgstr "Unterstützte Versionen: PowerPoint in Microsoft 365 unter Windows, auf dem Mac und im Web sowie PowerPoint in Office LTSC 2024. PowerPoint 2016 und 2019 können das Add-in ebenfalls anzeigen, etwa aus einem SharePoint-App-Katalog, können seinen Aufgabenbereich aber wahrscheinlich nicht öffnen und werden nicht unterstützt."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.webSignInInstruction"
+msgstr "PowerPoint im Web bietet keine Office-Anmeldung für Add-ins. Benutzer melden sich deshalb in einem Pop-up über die oauth2-proxy-Anmeldung dieser Bereitstellung an. Diese Anmeldung nutzt den Web-Umleitungs-URI des Proxys, den jede Bereitstellung bereits für die Erato-Web-App registriert. Der Proxy muss <0>cookie_samesite = \"none\"</0> setzen, damit das Sitzungscookie das Add-in in PowerPoint erreicht:"
+
+#. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.attached"
 msgstr "{attachedCount, plural, one {Folienbild angehängt.} other {# Folienbilder angehängt.}}"
@@ -5284,6 +5329,26 @@ msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Er
 #~ msgstr "Seitenbreite"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.parts.consent"
+msgstr "Die unten geprüften Änderungen übernehmen?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.label"
+msgstr "Dokumentänderungen in Teilen"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.stopped"
+msgstr "Erato hat vor dem Abschluss aufgehört, daher gibt es nichts zu übernehmen. Senden Sie Ihre Anfrage erneut, um fortzufahren."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleStopped"
+msgstr "Änderungen nicht fertig"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Absätze einfügen"
@@ -5826,6 +5891,11 @@ msgstr "Die oben geprüften Änderungen anwenden?"
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planTitle.summary"
 #~ msgstr "Als neue Fassung umschreiben"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.receipt.proposed"
+msgstr "Vorgeschlagen: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx
@@ -6958,6 +7028,11 @@ msgstr "Dokument wird gelesen…"
 #: src/word/components/WordChatInput.tsx
 msgid "officeAddin.word.send.readingSelection"
 msgstr "Auswahl wird gelesen…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordComposerNotice.ts
+msgid "officeAddin.word.send.rerunNotIncluded"
+msgstr "Erato hat das Dokument nicht von Word erhalten und Ihre Anfrage deshalb nicht erneut ausgeführt. Lassen Sie Word geöffnet und versuchen Sie es noch einmal."
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordComposerNotice.ts

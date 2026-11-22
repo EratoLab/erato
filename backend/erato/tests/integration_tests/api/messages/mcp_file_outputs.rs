@@ -59,7 +59,12 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
             "name": "generate_files", "inputSchema": {"type": "object"}
         }]}),
         "tools/list" => json!({"tools": [{
-            "name": "generate_files", "inputSchema": {"type": "object"},
+            "name": "generate_files", "inputSchema": {"type": "object", "properties": {
+                "files": {"type": "array", "items": {"type": "object", "properties": {
+                    "data_base64": {"type": "string", "contentEncoding": "base64",
+                                    "chat.erato/file_content_field": true}
+                }}}
+            }},
             "outputSchema": {
                 "type": "object", "properties": {
                     "files": {"type": "array", "items": {"$ref": "#/$defs/File"}}
@@ -1010,4 +1015,124 @@ async fn extensionless_image_and_unsupported_text_reach_model(pool: Pool<Postgre
         2,
     )
     .await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn invalid_mcp_file_argument_reaches_model_and_chat_history(pool: Pool<Postgres>) {
+    const ERROR: &str = "Invalid MCP file argument at '/files/0/data_base64'";
+    const CALL_ID: &str = "call_invalid_file";
+    const REPLY: &str = "Please select an uploaded file.";
+    let fixture = Fixture {
+        output: file_output(),
+        protocol: erato::config::McpProtocolMode::Legacy,
+        structured: false,
+        details: false,
+        is_error: false,
+        storage_failure: false,
+        calls: Arc::default(),
+        reads: Arc::default(),
+        files: Arc::default(),
+        mime_types: Arc::default(),
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new()
+        .route("/mcp", post(mcp))
+        .with_state(fixture.clone());
+    let mcp_task = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let continuation = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[ERROR], &[]))
+            .matcher(continuation);
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&[REPLY]));
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &[ERROR]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                CALL_ID,
+                "generate_files",
+                json!({"files": [{"data_base64": "invalid file argument"}]}),
+            )]),
+        );
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    config.mcp_servers.clear();
+    config.mcp_servers.insert(
+        "files".into(),
+        mcp_server_config(&url, "/mcp", McpServerAuthenticationConfig::None),
+    );
+    config.mcp_server_permissions.rules.insert(
+        "files".into(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".into()],
+        },
+    );
+    config.mcp_servers_global.approval.enabled = false;
+    let state = test_app_state(config, pool).await;
+    get_or_create_user(&state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let server = app_server(state);
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"user_message": "Process this file"}))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(fixture.calls.load(Ordering::SeqCst), 0);
+
+    let requests = recorder.bodies();
+    assert_eq!(requests.len(), 1, "the model must receive a continuation");
+    let request: Value = serde_json::from_str(&requests[0]).unwrap();
+    let tool_message = request["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "tool" && message["tool_call_id"] == CALL_ID)
+        .expect("continuation must include a tool response for the failed call");
+    let content = tool_message["content"].to_string();
+    assert!(content.contains(ERROR), "{tool_message}");
+    assert!(content.contains("erato-file://<UUID>"), "{tool_message}");
+
+    let events = parse_sse_events(&response);
+    let chat_id = extract_chat_id(&events).unwrap();
+    let message_id = assistant_message_id_from_events(&events);
+    let history = server
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    history.assert_status_ok();
+    let history: Value = history.json();
+    let assistant = history["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == message_id)
+        .unwrap();
+    let tool = assistant["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| {
+            part["content_type"] == "tool_use"
+                && part["tool_call_id"]
+                    .as_str()
+                    .is_some_and(|id| id.ends_with(&format!(":{CALL_ID}")))
+        })
+        .expect("failed tool call must be saved in chat history");
+    assert_eq!(tool["status"], "error", "{tool}");
+    assert!(tool["output"]["error"].as_str().unwrap().contains(ERROR));
+    assert!(assistant["content"].to_string().contains(REPLY));
+    mcp_task.abort();
 }

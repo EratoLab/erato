@@ -38,6 +38,18 @@ async fn setup_with_approval(
     language: &str,
     preset: Option<McpToolApprovalPreset>,
 ) -> (AppState, TestServer, Uuid, Uuid, MockServer) {
+    setup_with_config(pool, mocks, reachable, language, preset, |_| {}).await
+}
+
+/// `setup_with_approval` with `configure` applied to the config last.
+pub(super) async fn setup_with_config(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    reachable: bool,
+    language: &str,
+    preset: Option<McpToolApprovalPreset>,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (AppState, TestServer, Uuid, Uuid, MockServer) {
     let (mut config, llm) = setup_mock_llm_server_with_mocks(mocks).await;
     config.scheduled_deliveries.enabled = true;
     if let Some(preset) = preset {
@@ -57,6 +69,7 @@ async fn setup_with_approval(
         .system_prompt = Some(PromptSourceSpecification::Static {
         content: "It is now {{erato_inject_now_datetime}}.".into(),
     });
+    configure(&mut config);
     let mut state = test_app_state(config, pool).await;
     let mut registry = DeliveryRegistry::new();
     registry.register_producer(Arc::new(ReminderProducer::new(None, "en")));
@@ -89,7 +102,7 @@ async fn personal_conversation(db: &DatabaseConnection, user_id: Uuid) {
 }
 
 /// The Friday at least two days ahead, so it is never today or tomorrow.
-fn next_friday() -> NaiveDate {
+pub(super) fn next_friday() -> NaiveDate {
     let mut day = Utc::now().with_timezone(&BERLIN).date_naive() + Duration::days(2);
     while day.weekday() != Weekday::Fri {
         day += Duration::days(1);
@@ -99,7 +112,7 @@ fn next_friday() -> NaiveDate {
 
 /// A model turn that calls one tool: once the request holds every `after`
 /// call and not yet `call`'s own id.
-fn tool_turn(mocks: &mut MockSet, after: &[&str], call: (&str, &str, Value)) {
+pub(super) fn tool_turn(mocks: &mut MockSet, after: &[&str], call: (&str, &str, Value)) {
     let (call_id, name, arguments) = call;
     let after: Vec<String> = after.iter().map(|id| id.to_string()).collect();
     let call_id = call_id.to_string();
@@ -118,7 +131,7 @@ fn tool_turn(mocks: &mut MockSet, after: &[&str], call: (&str, &str, Value)) {
     });
 }
 
-fn answer_turn(mocks: &mut MockSet, after: &str, text: &'static str) {
+pub(super) fn answer_turn(mocks: &mut MockSet, after: &str, text: &'static str) {
     let after = after.to_string();
     mocks.mock(move |when, then| {
         when.post()
@@ -169,7 +182,7 @@ async fn upcoming(server: &TestServer) -> Vec<Value> {
         .clone()
 }
 
-fn reminder(name: &str, date: NaiveDate, hour: u32) -> ItemRequest {
+pub(super) fn reminder(name: &str, date: NaiveDate, hour: u32) -> ItemRequest {
     ItemRequest {
         item_type: ScheduledItemType::Reminder,
         name: name.into(),
@@ -325,7 +338,7 @@ async fn a_reminder_created_in_chat_is_the_forms_item(pool: Pool<Postgres>) {
     );
 }
 
-fn extract_answer(events: &[Value]) -> String {
+pub(super) fn extract_answer(events: &[Value]) -> String {
     events
         .iter()
         .filter(|event| event["message_type"] == "text_delta")
@@ -475,7 +488,7 @@ async fn no_reminder_tools_without_a_delivery_channel(pool: Pool<Postgres>) {
 }
 
 /// The assistant row the chat's turn parked on, and its approval request.
-async fn parked(state: &AppState, chat_id: Uuid) -> (Uuid, Value) {
+pub(super) async fn parked(state: &AppState, chat_id: Uuid) -> (Uuid, Value) {
     let rows = Messages::find()
         .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
         .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
@@ -817,7 +830,7 @@ async fn a_cancel_in_teams_is_approved_in_teams(pool: Pool<Postgres>) {
         let mut completion = None;
         while let Some(update) = updates.recv().await {
             match update {
-                GenerationUpdate::Completed(done) => completion = Some(done),
+                GenerationUpdate::Completed(done) => completion = Some(*done),
                 GenerationUpdate::Failed(error) => panic!("generation failed: {error}"),
                 _ => {}
             }

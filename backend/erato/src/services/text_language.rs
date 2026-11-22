@@ -17,8 +17,7 @@ pub enum Lang {
 impl Lang {
     /// `de`, `de-AT` or `de_CH` is German; any other tag is English.
     pub fn from_tag(tag: &str) -> Self {
-        let primary = tag.trim().split(['-', '_']).next().unwrap_or_default();
-        if primary.eq_ignore_ascii_case("de") {
+        if erato_config::language_words::primary_subtag(tag) == "de" {
             Self::De
         } else {
             Self::En

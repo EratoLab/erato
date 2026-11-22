@@ -729,6 +729,27 @@ export const gistUnreadRecordLine = (gist: Gist): string => {
 };
 
 /**
+ * What a call without a line of its own does, as one sentence: the tool's
+ * title or name in the title slot and, when known, its server in the
+ * destination slot, so both render as written, and for a call over rows how
+ * many. Without a server it is the title alone.
+ */
+export const toolCallSentence = (hasServer: boolean, rows?: number): string => {
+  const title = GIST_TITLE_SLOT;
+  const server = GIST_WHERE_SLOT;
+  if (!hasServer) return title;
+  return rows === undefined
+    ? t({ id: "toolGist.callSentence", message: `${title} in ${server}` })
+    : t({
+        id: "toolGist.callSentence.rows",
+        message: plural(rows, {
+          one: `${title} in ${server}: # row`,
+          other: `${title} in ${server}: # rows`,
+        }),
+      });
+};
+
+/**
  * After the places a source line lists, how many values they are read from,
  * where the unlisted ones cannot be counted as places.
  */

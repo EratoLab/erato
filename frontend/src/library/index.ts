@@ -422,6 +422,8 @@ export {
   useChatContext,
   useChatSession,
   useChatTranscript,
+  useChatTranscriptSelector,
+  useOptionalChatSession,
   type ChatContextValue,
   type ChatSessionValue,
   type ChatTranscriptValue,
@@ -556,6 +558,8 @@ export {
   type ChatHistoryTypeFilter,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 export { setClientPlatform } from "@/lib/clientPlatform";
+export { reportOfficeHostStart } from "@/lib/officeHostReport";
+export type { OfficeHostReport } from "@/lib/officeHostReport";
 export {
   buildInfiniteChatsQueryKey,
   buildRecentChatsFilterParams,
@@ -731,6 +735,8 @@ export {
 } from "@/utils/adapters/messageAdapter";
 export { getIdToken, setIdToken } from "@/auth/tokenStore";
 export {
+  fetchWithAuthRecovery,
+  isSignedOutResponse,
   setAuthRecoveryHandler,
   tryRecoverAuth,
   type AuthRecoveryHandler,

@@ -1,0 +1,2721 @@
+{
+  "_about": "Scenarios of the spoken approval card (design section 9): each has a stable id, its kind of card and what the card holds, and the call shapes it is made of. Later steps add dimensions to the scenarios, not new sets.",
+  "tags": {
+    "kind": [
+      "create",
+      "update",
+      "delete",
+      "read",
+      "send",
+      "run",
+      "batch",
+      "queue",
+      "several_stops",
+      "builtin_tool",
+      "task_plan",
+      "tool_call_limit",
+      "move",
+      "archive",
+      "share",
+      "upsert",
+      "comment",
+      "generic"
+    ],
+    "holds": [
+      "short_fields",
+      "many_fields",
+      "long_text",
+      "dictated_unchanged",
+      "dictated_changed",
+      "loss",
+      "permanent_delete",
+      "unread_record",
+      "outside_recipients",
+      "warning",
+      "search_text",
+      "one_filter",
+      "several_filters",
+      "record_by_id",
+      "no_filter",
+      "long_values",
+      "limit",
+      "not_a_plain_read"
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "create-01-task-long-description",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "create-01-task-long-description"
+      ]
+    },
+    {
+      "id": "create-02-appointment",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-02-appointment"
+      ]
+    },
+    {
+      "id": "create-03-contact",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-03-contact"
+      ]
+    },
+    {
+      "id": "create-04-email-two-contacts",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "long_text"
+      ],
+      "calls": [
+        "create-04-email-two-contacts"
+      ]
+    },
+    {
+      "id": "create-05-task-many-fields",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-05-task-many-fields"
+      ]
+    },
+    {
+      "id": "create-06-task-unread-regarding",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "unread_record"
+      ],
+      "calls": [
+        "create-06-task-unread-regarding"
+      ]
+    },
+    {
+      "id": "create-07-phonecall",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-07-phonecall"
+      ]
+    },
+    {
+      "id": "create-08-opportunity-amounts",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-08-opportunity-amounts"
+      ]
+    },
+    {
+      "id": "create-09-note-very-long",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "create-09-note-very-long"
+      ]
+    },
+    {
+      "id": "create-10-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-10-account"
+      ]
+    },
+    {
+      "id": "create-11-batch-rows",
+      "kind": [
+        "create",
+        "batch"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-11-batch-rows"
+      ]
+    },
+    {
+      "id": "create-12-hidden-characters",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "warning"
+      ],
+      "calls": [
+        "create-12-hidden-characters"
+      ]
+    },
+    {
+      "id": "create-13-long-title",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-13-long-title"
+      ]
+    },
+    {
+      "id": "create-14-list-entries",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-14-list-entries"
+      ]
+    },
+    {
+      "id": "create-15-nested-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-15-nested-account"
+      ]
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-16-account-with-opportunity"
+      ]
+    },
+    {
+      "id": "update-01-date-and-probability",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-01-date-and-probability"
+      ]
+    },
+    {
+      "id": "update-02-coded-value",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-02-coded-value"
+      ]
+    },
+    {
+      "id": "update-03-lookup",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-03-lookup"
+      ]
+    },
+    {
+      "id": "update-04-emptied-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "loss"
+      ],
+      "calls": [
+        "update-04-emptied-fields"
+      ]
+    },
+    {
+      "id": "update-05-record-nobody-read",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "unread_record"
+      ],
+      "calls": [
+        "update-05-record-nobody-read"
+      ]
+    },
+    {
+      "id": "update-06-many-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "update-06-many-fields"
+      ]
+    },
+    {
+      "id": "update-07-reschedule-appointment",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-07-reschedule-appointment"
+      ]
+    },
+    {
+      "id": "update-08-long-text",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "update-08-long-text"
+      ]
+    },
+    {
+      "id": "update-09-task-status-codes",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-09-task-status-codes"
+      ]
+    },
+    {
+      "id": "update-14-case-priority",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-14-case-priority"
+      ]
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-15-task-nested-case"
+      ]
+    },
+    {
+      "id": "update-10-contact-two-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-10-contact-two-fields"
+      ]
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "many_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-11-fifteen-emptied"
+      ]
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-12-list-replace-unknown"
+      ]
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-13-list-only-adds"
+      ]
+    },
+    {
+      "id": "delete-01-task-created-earlier",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-01-task-created-earlier"
+      ]
+    },
+    {
+      "id": "delete-02-appointment",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-02-appointment"
+      ]
+    },
+    {
+      "id": "delete-03-record-nobody-read",
+      "kind": [
+        "delete"
+      ],
+      "holds": [
+        "unread_record"
+      ],
+      "calls": [
+        "delete-03-record-nobody-read"
+      ]
+    },
+    {
+      "id": "delete-04-contact",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-04-contact"
+      ]
+    },
+    {
+      "id": "delete-05-account",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-05-account"
+      ]
+    },
+    {
+      "id": "delete-06-batch-pages",
+      "kind": [
+        "delete",
+        "batch"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-06-batch-pages"
+      ]
+    },
+    {
+      "id": "delete-07-file-permanent",
+      "kind": [
+        "delete"
+      ],
+      "holds": [
+        "permanent_delete"
+      ],
+      "calls": [
+        "delete-07-file-permanent"
+      ]
+    },
+    {
+      "id": "delete-08-file-trash",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-08-file-trash"
+      ]
+    },
+    {
+      "id": "delete-09-single-page",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-09-single-page"
+      ]
+    },
+    {
+      "id": "delete-10-file-by-id-only",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-10-file-by-id-only"
+      ]
+    },
+    {
+      "id": "send-01-mail-several-recipients",
+      "kind": [
+        "send"
+      ],
+      "holds": [
+        "long_text",
+        "outside_recipients"
+      ],
+      "calls": [
+        "send-01-mail-several-recipients"
+      ]
+    },
+    {
+      "id": "send-02-slack-message",
+      "kind": [
+        "send"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "send-02-slack-message"
+      ]
+    },
+    {
+      "id": "move-01-pages",
+      "kind": [
+        "move",
+        "batch"
+      ],
+      "holds": [],
+      "calls": [
+        "move-01-pages"
+      ]
+    },
+    {
+      "id": "archive-01-note",
+      "kind": [
+        "archive"
+      ],
+      "holds": [],
+      "calls": [
+        "archive-01-note"
+      ]
+    },
+    {
+      "id": "share-01-file-outside",
+      "kind": [
+        "share"
+      ],
+      "holds": [
+        "short_fields",
+        "outside_recipients"
+      ],
+      "calls": [
+        "share-01-file-outside"
+      ]
+    },
+    {
+      "id": "upsert-01-company",
+      "kind": [
+        "upsert"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "upsert-01-company"
+      ]
+    },
+    {
+      "id": "comment-01-page",
+      "kind": [
+        "comment"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "comment-01-page"
+      ]
+    },
+    {
+      "id": "upload-01-file",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "upload-01-file"
+      ]
+    },
+    {
+      "id": "run-01-sql",
+      "kind": [
+        "run"
+      ],
+      "holds": [],
+      "calls": [
+        "run-01-sql"
+      ]
+    },
+    {
+      "id": "read-01-search",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "search_text"
+      ],
+      "calls": [
+        "read-01-search"
+      ]
+    },
+    {
+      "id": "read-02-query",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter",
+        "limit"
+      ],
+      "calls": [
+        "read-02-query"
+      ]
+    },
+    {
+      "id": "read-03-sql-several-filters",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-03-sql-several-filters"
+      ]
+    },
+    {
+      "id": "read-04-sql-record-by-id",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id"
+      ],
+      "calls": [
+        "read-04-sql-record-by-id"
+      ]
+    },
+    {
+      "id": "read-05-sql-no-filter",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "no_filter",
+        "limit"
+      ],
+      "calls": [
+        "read-05-sql-no-filter"
+      ]
+    },
+    {
+      "id": "read-06-sql-long-values",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "long_values",
+        "several_filters"
+      ],
+      "calls": [
+        "read-06-sql-long-values"
+      ]
+    },
+    {
+      "id": "read-07-retrieve-record",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id"
+      ],
+      "calls": [
+        "read-07-retrieve-record"
+      ]
+    },
+    {
+      "id": "read-08-sql-join",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-08-sql-join"
+      ]
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-15-sql-join-two-states"
+      ]
+    },
+    {
+      "id": "read-09-sql-record-nobody-read",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id",
+        "unread_record"
+      ],
+      "calls": [
+        "read-09-sql-record-nobody-read"
+      ]
+    },
+    {
+      "id": "read-10-list-filtered",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-10-list-filtered"
+      ]
+    },
+    {
+      "id": "read-11-sql-related-record",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-11-sql-related-record"
+      ]
+    },
+    {
+      "id": "read-12-sql-select-into",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "not_a_plain_read"
+      ],
+      "calls": [
+        "read-12-sql-select-into"
+      ]
+    },
+    {
+      "id": "read-13-search-long-text",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "search_text",
+        "long_values"
+      ],
+      "calls": [
+        "read-13-search-long-text"
+      ]
+    },
+    {
+      "id": "read-14-sql-glossary",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-14-sql-glossary"
+      ]
+    },
+    {
+      "id": "generic-01-word-comment-delete",
+      "kind": [
+        "generic"
+      ],
+      "holds": [],
+      "calls": [
+        "generic-01-word-comment-delete"
+      ]
+    },
+    {
+      "id": "generic-02-sync-remote-page",
+      "kind": [
+        "generic"
+      ],
+      "holds": [],
+      "calls": [
+        "generic-02-sync-remote-page"
+      ]
+    },
+    {
+      "id": "stops-01-three-tasks-one-at-a-time",
+      "kind": [
+        "several_stops",
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "queue-01-task",
+        "queue-02-task",
+        "queue-03-task"
+      ]
+    },
+    {
+      "id": "stops-02-search-then-create",
+      "kind": [
+        "several_stops",
+        "read",
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "read-01-search",
+        "create-01-task-long-description"
+      ]
+    },
+    {
+      "id": "queue-01-three-task-children",
+      "kind": [
+        "queue",
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "approval_kind": "delegated_task",
+      "calls": [
+        "queue-01-task",
+        "queue-02-task",
+        "queue-03-task"
+      ]
+    },
+    {
+      "id": "builtin-01-cancel-reminder",
+      "kind": [
+        "builtin_tool"
+      ],
+      "holds": [],
+      "approval_kind": "builtin_tool",
+      "calls": []
+    },
+    {
+      "id": "task-plan-01",
+      "kind": [
+        "task_plan"
+      ],
+      "holds": [],
+      "approval_kind": "task_plan",
+      "calls": []
+    },
+    {
+      "id": "tool-call-limit-01",
+      "kind": [
+        "tool_call_limit"
+      ],
+      "holds": [],
+      "approval_kind": "tool_call_limit",
+      "calls": []
+    }
+  ],
+  "servers": {
+    "dynamics": {
+      "display_name": "Dynamics 365",
+      "glossary": {
+        "field_names": {
+          "estimatedclosedate": "Estimated close date",
+          "closeprobability": "Probability",
+          "risklevel": "Risk level"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Low",
+            "2": "Medium",
+            "3": "High"
+          }
+        },
+        "vocabularies": [
+          "customer",
+          "dataverse"
+        ]
+      }
+    },
+    "notion": {
+      "display_name": "Notion"
+    },
+    "outlook": {
+      "display_name": "Outlook"
+    },
+    "drive": {
+      "display_name": "Google Drive"
+    },
+    "slack": {
+      "display_name": "Slack"
+    },
+    "crm": {
+      "display_name": "CRM"
+    },
+    "warehouse": {
+      "display_name": "Data warehouse"
+    },
+    "word": {
+      "display_name": "Word"
+    }
+  },
+  "history": {
+    "dynamics": [
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT name, opportunityid, customerid, parentcontactid, estimatedclosedate, closeprobability, risklevel, description, telephone1 FROM opportunity",
+          "top": 5
+        },
+        "output": [
+          {
+            "name": "Line 4 Retrofit",
+            "opportunityid": "5f0c2a10-0000-4000-8000-00000000a001",
+            "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "parentcontactid": "5f0c2a10-0000-4000-8000-00000000b001",
+            "estimatedclosedate": "2026-12-01T00:00:00",
+            "closeprobability": 10,
+            "risklevel": 1,
+            "description": "Umbau der Linie 4 auf die neue Steuerung.",
+            "telephone1": "+49 89 1234 567"
+          },
+          {
+            "name": "Ersatzteil-Rahmenvertrag",
+            "opportunityid": "5f0c2a10-0000-4000-8000-00000000a002",
+            "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "parentcontactid": null,
+            "estimatedclosedate": "2027-02-01T00:00:00",
+            "closeprobability": 30,
+            "risklevel": 2,
+            "description": null,
+            "telephone1": null
+          }
+        ]
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT fullname, contactid, parentcustomerid, jobtitle, telephone1 FROM contact WHERE parentcustomerid = '5f0c2a10-0000-4000-8000-00000000c001'"
+        },
+        "output": [
+          {
+            "fullname": "Anna Müller",
+            "contactid": "5f0c2a10-0000-4000-8000-00000000b001",
+            "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "jobtitle": "Werksleiterin",
+            "telephone1": "+49 89 1234 500"
+          },
+          {
+            "fullname": "Ben Schmidt",
+            "contactid": "5f0c2a10-0000-4000-8000-00000000b002",
+            "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "jobtitle": "Einkauf",
+            "telephone1": null
+          }
+        ]
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT name, accountid FROM account WHERE accountid = '5f0c2a10-0000-4000-8000-00000000c001'"
+        },
+        "output": [
+          {
+            "name": "Beispiel Industrie GmbH",
+            "accountid": "5f0c2a10-0000-4000-8000-00000000c001"
+          }
+        ]
+      },
+      {
+        "tool_name": "create_record",
+        "input": {
+          "tablename": "task",
+          "item": {
+            "subject": "Technisches Layout abstimmen",
+            "scheduledend": "2026-11-20",
+            "regardingobjectid": {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+              "relatedTable": "opportunity"
+            }
+          }
+        },
+        "output": "Created record with ID 5f0c2a10-0000-4000-8000-00000000d001."
+      },
+      {
+        "tool_name": "create_record",
+        "input": {
+          "tablename": "appointment",
+          "item": {
+            "subject": "Werksbesuch Linie 4",
+            "scheduledstart": "2026-11-24T09:00:00",
+            "scheduledend": "2026-11-24T11:00:00"
+          }
+        },
+        "output": "Created record with ID 5f0c2a10-0000-4000-8000-00000000d002."
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT subject, activityid, scheduledstart, scheduledend, location FROM appointment WHERE activityid = '5f0c2a10-0000-4000-8000-00000000d002'"
+        },
+        "output": [
+          {
+            "subject": "Werksbesuch Linie 4",
+            "activityid": "5f0c2a10-0000-4000-8000-00000000d002",
+            "scheduledstart": "2026-11-24T09:00:00",
+            "scheduledend": "2026-11-24T11:00:00",
+            "location": "Werk Augsburg"
+          }
+        ]
+      }
+    ],
+    "notion": [
+      {
+        "tool_name": "notion-search",
+        "input": {
+          "query": "Projekte"
+        },
+        "output": {
+          "results": [
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e1",
+              "title": "Projekte 2026"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e2",
+              "title": "Archiv"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e3",
+              "title": "Kickoff Line 4"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e4",
+              "title": "Wochenbericht KW 44"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e5",
+              "title": "Wochenbericht KW 45"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "calls": [
+    {
+      "id": "create-01-task-long-description",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Technisches Layout abstimmen",
+          "description": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+          "scheduledend": "2030-01-15",
+          "prioritycode": 2,
+          "regardingobjectid": {
+            "name": "Line four, as the model typed it",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-02-appointment",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "item": {
+          "subject": "Begehung Linie 4",
+          "location": "Werk Augsburg",
+          "scheduledstart": "2030-01-20T10:30:00",
+          "scheduledend": "2030-01-20T12:00:00",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-03-contact",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "contact",
+        "item": {
+          "firstname": "Clara",
+          "lastname": "Weber",
+          "jobtitle": "Projektleiterin",
+          "emailaddress1": "clara.weber@beispiel-industrie.de",
+          "parentcustomerid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+            "relatedTable": "account"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-04-email-two-contacts",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "email",
+        "item": {
+          "subject": "Termin für die Begehung",
+          "description": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
+          "to": [
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+              "relatedTable": "contact"
+            },
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+              "relatedTable": "contact"
+            }
+          ],
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-05-task-many-fields",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot nachfassen",
+          "scheduledend": "2030-01-22",
+          "prioritycode": 2,
+          "percentcomplete": 0,
+          "actualdurationminutes": 30,
+          "category": "Vertrieb",
+          "subcategory": "Nachfassen",
+          "statecode": 0,
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a002",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-06-task-unread-regarding",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Rückruf vereinbaren",
+          "scheduledend": "2030-01-16",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-07-phonecall",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "phonecall",
+        "item": {
+          "subject": "Rückfrage zur Stillstandszeit",
+          "phonenumber": "+49 89 1234 500",
+          "scheduledend": "2030-01-14T15:00:00",
+          "description": "Kurz klären, ob zwei Tage Stillstand reichen."
+        }
+      }
+    },
+    {
+      "id": "create-08-opportunity-amounts",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 5 Modernisierung",
+          "estimatedvalue": 185000,
+          "estimatedclosedate": "2030-06-30",
+          "closeprobability": 40,
+          "customerid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+            "relatedTable": "account"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-09-note-very-long",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "annotation",
+        "item": {
+          "subject": "Gesprächsnotiz Werksbesuch",
+          "notetext": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
+          "objectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-10-account",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "account",
+        "item": {
+          "name": "Muster Maschinenbau AG",
+          "telephone1": "+49 821 555 0100",
+          "websiteurl": "https://www.muster-maschinenbau.example",
+          "address1_city": "Augsburg"
+        }
+      }
+    },
+    {
+      "id": "create-11-batch-rows",
+      "server": "notion",
+      "tool": "notion-create-pages",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "parent": {
+          "data_source_id": "5f0c2a10-0000-4000-8000-0000000000e1"
+        },
+        "pages": [
+          {
+            "properties": {
+              "Name": "Zeichnungen prüfen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Stillstand abschätzen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Schulung planen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Angebot schreiben",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Termin Elektroplaner",
+              "Status": "Offen"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "create-12-hidden-characters",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot​ freigeben",
+          "scheduledend": "2030-01-12"
+        }
+      }
+    },
+    {
+      "id": "create-13-long-title",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner und dem Einkauf, einschließlich der Frage, ob die Schaltschränke am bisherigen Platz bleiben können oder in den neuen Anbau verlegt werden müssen, und der Abschätzung der Stillstandszeit getrennt nach mechanischem Umbau, Verdrahtung, Inbetriebnahme und Schulung der Mitarbeiter aus der Frühschicht und der Spätschicht.",
+          "scheduledend": "2030-01-12"
+        }
+      }
+    },
+    {
+      "id": "create-14-list-entries",
+      "server": "crm",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "fields": {
+          "name": "Linie 5 Service",
+          "tags": [
+            "Retrofit",
+            "Linie 4",
+            "Service",
+            "Ersatzteile"
+          ]
+        }
+      }
+    },
+    {
+      "id": "create-15-nested-account",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 6",
+          "parentaccountid": {
+            "name": "Neue Firma",
+            "statecode": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "account",
+        "item": {
+          "name": "Neue Firma",
+          "opportunity_customer_accounts": [
+            {
+              "name": "Linie 7",
+              "statecode": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "update-01-date-and-probability",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "estimatedclosedate": "2030-01-15",
+          "closeprobability": 60
+        }
+      }
+    },
+    {
+      "id": "update-02-coded-value",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "risklevel": 3
+        }
+      }
+    },
+    {
+      "id": "update-03-lookup",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "parentcontactid": {
+            "name": "Typed by the model",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+            "relatedTable": "contact"
+          }
+        }
+      }
+    },
+    {
+      "id": "update-04-emptied-fields",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "telephone1": null,
+          "description": "",
+          "closeprobability": 50
+        }
+      }
+    },
+    {
+      "id": "update-05-record-nobody-read",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+        "item": {
+          "risklevel": 2
+        }
+      }
+    },
+    {
+      "id": "update-06-many-fields",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "estimatedclosedate": "2030-03-31",
+          "closeprobability": 75,
+          "risklevel": 2,
+          "estimatedvalue": 240000,
+          "stepname": "Angebot",
+          "budgetstatus": 2,
+          "purchasetimeframe": 1
+        }
+      }
+    },
+    {
+      "id": "update-07-reschedule-appointment",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d002",
+        "item": {
+          "scheduledstart": "2026-11-26T14:00:00",
+          "scheduledend": "2026-11-26T16:00:00"
+        }
+      }
+    },
+    {
+      "id": "update-08-long-text",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "description": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme."
+        }
+      }
+    },
+    {
+      "id": "update-09-task-status-codes",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001",
+        "item": {
+          "statecode": 1,
+          "statuscode": 5
+        }
+      }
+    },
+    {
+      "id": "update-14-case-priority",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "incident",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
+        "item": {
+          "prioritycode": 1
+        }
+      }
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a015",
+        "item": {
+          "prioritycode": 1,
+          "regardingobjectid_incident_task": {
+            "title": "Linie 6 steht",
+            "prioritycode": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "update-10-contact-two-fields",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "contact",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+        "item": {
+          "jobtitle": "Technische Leiterin",
+          "telephone1": "+49 89 1234 510"
+        }
+      }
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "telephone1": null,
+          "description": null,
+          "stepname": null,
+          "budgetamount": null,
+          "customerneed": null,
+          "proposedsolution": null,
+          "currentsituation": null,
+          "qualificationcomments": null,
+          "quotecomments": null,
+          "decisionmaker": null,
+          "pursuitdecision": null,
+          "purchaseprocess": null,
+          "timeline": null,
+          "new_competitor": null,
+          "new_region": null,
+          "closeprobability": 20
+        }
+      }
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "server": "crm",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "id": "c_17",
+        "fields": {
+          "tags": [
+            "Retrofit",
+            "Linie 4"
+          ],
+          "stage": "Angebot"
+        }
+      }
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "server": "crm",
+      "tool": "update_record",
+      "description": "Updates a record. It only adds labels.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "id": "c_17",
+        "labels": [
+          "Retrofit",
+          "Service"
+        ]
+      }
+    },
+    {
+      "id": "delete-01-task-created-earlier",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-02-appointment",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d002",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-03-record-nobody-read",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-04-contact",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "contact",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-05-account",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "account",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-06-batch-pages",
+      "server": "notion",
+      "tool": "notion-delete-pages",
+      "description": "Deletes pages. Deleted pages are moved to the trash and can be restored for 30 days.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e3",
+          "5f0c2a10-0000-4000-8000-0000000000e4",
+          "5f0c2a10-0000-4000-8000-0000000000e5",
+          "5f0c2a10-0000-4000-8000-0000000000f1",
+          "5f0c2a10-0000-4000-8000-0000000000f2",
+          "5f0c2a10-0000-4000-8000-0000000000f3",
+          "5f0c2a10-0000-4000-8000-0000000000f4",
+          "5f0c2a10-0000-4000-8000-0000000000f5",
+          "5f0c2a10-0000-4000-8000-0000000000f6",
+          "5f0c2a10-0000-4000-8000-0000000000f7",
+          "5f0c2a10-0000-4000-8000-0000000000f8",
+          "5f0c2a10-0000-4000-8000-0000000000f9"
+        ]
+      }
+    },
+    {
+      "id": "delete-07-file-permanent",
+      "server": "drive",
+      "tool": "delete_file",
+      "description": "Permanently deletes a file. This cannot be undone.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "1aB2cD3eF4",
+        "fileName": "Angebot Linie 4 v3.docx"
+      }
+    },
+    {
+      "id": "delete-08-file-trash",
+      "server": "drive",
+      "tool": "trash_file",
+      "description": "Moves a file to the trash. It can be restored from the trash.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "6VcJ",
+        "fileName": "Entwurf Zeitplan.xlsx"
+      }
+    },
+    {
+      "id": "delete-09-single-page",
+      "server": "notion",
+      "tool": "notion-delete-pages",
+      "description": "Deletes pages. Deleted pages are moved to the trash and can be restored for 30 days.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e3"
+        ]
+      }
+    },
+    {
+      "id": "delete-10-file-by-id-only",
+      "server": "drive",
+      "tool": "delete_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "1zY9xW8vU7"
+      }
+    },
+    {
+      "id": "send-01-mail-several-recipients",
+      "server": "outlook",
+      "tool": "send_mail",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "to": [
+          "anna.mueller@beispiel-industrie.de",
+          "ben.schmidt@beispiel-industrie.de"
+        ],
+        "cc": [
+          "kollege@example.com",
+          "einkauf@lieferant.example"
+        ],
+        "subject": "Zusammenfassung Werksbesuch Linie 4",
+        "body": "Hallo zusammen, anbei die Zusammenfassung unseres Werksbesuchs. Wir haben die Engstellen an der Übergabe zwischen Presse und Förderband besprochen und vereinbart, dass wir bis Mitte Januar eine Abschätzung der Stillstandszeit liefern. Die Zeichnungen der Fördertechnik kommen bis Ende November. Bitte gebt Bescheid, wenn etwas fehlt oder falsch ist. Viele Grüße"
+      }
+    },
+    {
+      "id": "send-02-slack-message",
+      "server": "slack",
+      "tool": "post_message",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "channel": "vertrieb-sued",
+        "text": "Begehung Linie 4 ist am 20. Januar bestätigt."
+      }
+    },
+    {
+      "id": "move-01-pages",
+      "server": "notion",
+      "tool": "notion-move-pages",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "page_or_database_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e4",
+          "5f0c2a10-0000-4000-8000-0000000000e5"
+        ],
+        "new_parent": {
+          "page_id": "5f0c2a10-0000-4000-8000-0000000000e2"
+        }
+      }
+    },
+    {
+      "id": "archive-01-note",
+      "server": "notion",
+      "tool": "archive_note",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "note_id": "u_8",
+        "title": "Kickoff Line 4"
+      }
+    },
+    {
+      "id": "share-01-file-outside",
+      "server": "drive",
+      "tool": "share_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "fileId": "6VcJ",
+        "fileName": "Zeitplan Linie 4.xlsx",
+        "emailAddress": "planer@extern.example",
+        "role": "writer",
+        "sendNotificationEmail": true
+      }
+    },
+    {
+      "id": "upsert-01-company",
+      "server": "crm",
+      "tool": "crm.records.upsert",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "record": {
+          "object_type": "company",
+          "data": {
+            "attributes": {
+              "company": {
+                "legal_name": "Muster Maschinenbau AG",
+                "website": "muster-maschinenbau.example",
+                "segment": "Mittelstand"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "comment-01-page",
+      "server": "notion",
+      "tool": "notion-create-comment",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "page_id": "5f0c2a10-0000-4000-8000-0000000000e3",
+        "markdown": "Bitte bis Freitag die Zeichnungen ergänzen."
+      }
+    },
+    {
+      "id": "upload-01-file",
+      "server": "notion",
+      "tool": "notion-create-file-upload",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "filename": "Zeichnungen-Foerdertechnik.pdf",
+        "content_type": "application/pdf"
+      }
+    },
+    {
+      "id": "run-01-sql",
+      "server": "warehouse",
+      "tool": "execute_sql",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "query": "UPDATE opportunities SET stage = 'lost' WHERE close_date < '2025-01-01' AND stage = 'open'"
+      }
+    },
+    {
+      "id": "read-01-search",
+      "server": "dynamics",
+      "tool": "search",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "query": "Müller GmbH",
+        "limit": 10
+      }
+    },
+    {
+      "id": "read-02-query",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT name, estimatedclosedate FROM opportunity WHERE statecode = 0",
+        "top": 10
+      }
+    },
+    {
+      "id": "read-03-sql-several-filters",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT subject, scheduledend FROM task WHERE statecode = 0 AND prioritycode = 2 AND scheduledend < '2030-01-31' AND subject LIKE '%Angebot%'"
+      }
+    },
+    {
+      "id": "read-04-sql-record-by-id",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT name, estimatedclosedate, closeprobability FROM opportunity WHERE opportunityid = '5f0c2a10-0000-4000-8000-00000000a001'"
+      }
+    },
+    {
+      "id": "read-05-sql-no-filter",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT TOP 50 name, telephone1 FROM account ORDER BY name"
+      }
+    },
+    {
+      "id": "read-06-sql-long-values",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT subject FROM task WHERE description = 'Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal' AND prioritycode IN (0, 1, 2, 3, 4, 5)"
+      }
+    },
+    {
+      "id": "read-07-retrieve-record",
+      "server": "dynamics",
+      "tool": "retrieve_record",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001"
+      }
+    },
+    {
+      "id": "read-08-sql-join",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT o.name, o.estimatedclosedate FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE a.name = N'Beispiel Industrie GmbH'"
+      }
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT o.name FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE o.statecode = 1 AND a.statecode = 1"
+      }
+    },
+    {
+      "id": "read-09-sql-record-nobody-read",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT * FROM opportunity WHERE opportunityid = '5f0c2a10-0000-4000-8000-00000000a009'"
+      }
+    },
+    {
+      "id": "read-10-list-filtered",
+      "server": "crm",
+      "tool": "list_tasks",
+      "annotations": {},
+      "arguments": {
+        "filter": {
+          "status": "open"
+        },
+        "limit": 20
+      }
+    },
+    {
+      "id": "read-11-sql-related-record",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT subject, scheduledend FROM task WHERE regardingobjectid = '5f0c2a10-0000-4000-8000-00000000a001' AND statecode = 0"
+      }
+    },
+    {
+      "id": "read-12-sql-select-into",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT name INTO #kopie FROM account"
+      }
+    },
+    {
+      "id": "read-13-search-long-text",
+      "server": "notion",
+      "tool": "notion-search",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "query": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+      }
+    },
+    {
+      "id": "read-14-sql-glossary",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT name FROM opportunity WHERE risklevel = 3 AND estimatedclosedate <= '2026-12-31'"
+      }
+    },
+    {
+      "id": "generic-01-word-comment-delete",
+      "server": "word",
+      "tool": "word_submit_comment_changes",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "changes": [
+          {
+            "op": "delete",
+            "text": null,
+            "anchor": null,
+            "target": "fmta",
+            "thread": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "generic-02-sync-remote-page",
+      "server": "notion",
+      "tool": "sync_page",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_id": "5f0c2a10-0000-4000-8000-0000000000e3",
+        "mode": "delete_remote"
+      }
+    },
+    {
+      "id": "queue-01-task",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Zeichnungen anfordern",
+          "scheduledend": "2030-01-10",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "queue-02-task",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot nachfassen",
+          "scheduledend": "2030-01-20",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "queue-03-task",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Schulung planen",
+          "scheduledend": "2030-02-03",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    }
+  ],
+  "spoken_vocabularies": {
+    "customer": {
+      "de": {
+        "field_names": {
+          "risklevel": "Risikostufe"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Niedrig",
+            "2": "Mittel",
+            "3": "Hoch"
+          }
+        }
+      },
+      "en": {
+        "field_names": {
+          "risklevel": "Risk level"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Low",
+            "2": "Medium",
+            "3": "High"
+          }
+        }
+      }
+    },
+    "dataverse": {
+      "de": {
+        "field_names": {
+          "subject": "Betreff",
+          "description": "Beschreibung",
+          "name": "Name",
+          "firstname": "Vorname",
+          "lastname": "Nachname",
+          "fullname": "Name",
+          "jobtitle": "Position",
+          "emailaddress1": "E-Mail",
+          "telephone1": "Telefon",
+          "mobilephone": "Mobiltelefon",
+          "phonenumber": "Telefonnummer",
+          "websiteurl": "Website",
+          "address1_city": "Ort",
+          "address1_postalcode": "Postleitzahl",
+          "address1_line1": "Straße",
+          "address1_country": "Land",
+          "parentcustomerid": "Firma",
+          "parentcontactid": "Kontakt",
+          "parentaccountid": "Übergeordnete Firma",
+          "customerid": "Kunde",
+          "ownerid": "Besitzer",
+          "regardingobjectid": "Bezug",
+          "objectid": "Bezug",
+          "notetext": "Notiz",
+          "statecode": "Status",
+          "statuscode": "Statusgrund",
+          "prioritycode": "Priorität",
+          "percentcomplete": "Prozent abgeschlossen",
+          "scheduledstart": "Beginn",
+          "scheduledend": "Ende",
+          "task.scheduledend": "Fälligkeitsdatum",
+          "task.scheduledstart": "Startdatum",
+          "phonecall.scheduledend": "Fälligkeitsdatum",
+          "email.scheduledend": "Fälligkeitsdatum",
+          "letter.scheduledend": "Fälligkeitsdatum",
+          "fax.scheduledend": "Fälligkeitsdatum",
+          "actualdurationminutes": "Dauer in Minuten",
+          "scheduleddurationminutes": "Geplante Dauer in Minuten",
+          "location": "Ort",
+          "category": "Kategorie",
+          "subcategory": "Unterkategorie",
+          "estimatedclosedate": "Voraussichtliches Abschlussdatum",
+          "actualclosedate": "Tatsächliches Abschlussdatum",
+          "closeprobability": "Wahrscheinlichkeit",
+          "estimatedvalue": "Geschätzter Umsatz",
+          "actualvalue": "Tatsächlicher Umsatz",
+          "budgetamount": "Budget",
+          "budgetstatus": "Budgetstatus",
+          "purchasetimeframe": "Kaufzeitrahmen",
+          "purchaseprocess": "Kaufprozess",
+          "currentsituation": "Aktuelle Situation",
+          "customerneed": "Kundenbedarf",
+          "proposedsolution": "Vorgeschlagene Lösung",
+          "qualificationcomments": "Qualifizierungskommentare",
+          "quotecomments": "Angebotskommentare",
+          "stepname": "Phase",
+          "industrycode": "Branche",
+          "numberofemployees": "Anzahl der Mitarbeiter",
+          "revenue": "Jahresumsatz",
+          "createdon": "Erstellt am",
+          "modifiedon": "Geändert am"
+        },
+        "choice_labels": {
+          "opportunity.statecode": {
+            "0": "Offen",
+            "1": "Gewonnen",
+            "2": "Verloren"
+          },
+          "account.statecode": {
+            "0": "Aktiv",
+            "1": "Inaktiv"
+          },
+          "contact.statecode": {
+            "0": "Aktiv",
+            "1": "Inaktiv"
+          },
+          "lead.statecode": {
+            "0": "Offen",
+            "1": "Qualifiziert",
+            "2": "Disqualifiziert"
+          },
+          "task.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "phonecall.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "email.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen"
+          },
+          "appointment.statecode": {
+            "0": "Offen",
+            "1": "Abgeschlossen",
+            "2": "Abgebrochen",
+            "3": "Geplant"
+          },
+          "task.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "email.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "appointment.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "phonecall.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "letter.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "fax.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "incident.prioritycode": {
+            "1": "Hoch",
+            "2": "Normal",
+            "3": "Niedrig"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Sofort",
+            "1": "Dieses Quartal",
+            "2": "Nächstes Quartal",
+            "3": "Dieses Jahr",
+            "4": "Unbekannt"
+          },
+          "lead.purchasetimeframe": {
+            "0": "Sofort",
+            "1": "Dieses Quartal",
+            "2": "Nächstes Quartal",
+            "3": "Dieses Jahr",
+            "4": "Unbekannt"
+          }
+        },
+        "table_names": {
+          "opportunity": "Verkaufschancen",
+          "account": "Firmen",
+          "contact": "Kontakte",
+          "lead": "Leads",
+          "task": "Aufgaben",
+          "appointment": "Termine",
+          "phonecall": "Telefonanrufe",
+          "email": "E-Mails",
+          "annotation": "Notizen",
+          "activitypointer": "Aktivitäten",
+          "incident": "Fälle",
+          "quote": "Angebote",
+          "salesorder": "Aufträge",
+          "invoice": "Rechnungen",
+          "product": "Produkte",
+          "systemuser": "Benutzer"
+        },
+        "sentences": {
+          "changed": {
+            "opportunity.estimatedclosedate": "Der Abschluss verschiebt sich {from} {to}.",
+            "lead.estimatedclosedate": "Der Abschluss verschiebt sich {from} {to}.",
+            "opportunity.closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+            "opportunity.estimatedvalue": "Der geschätzte Umsatz geht {from} {to}.",
+            "lead.estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+          },
+          "set": {
+            "task.scheduledend": "Fällig am {value}.",
+            "task.prioritycode": "Mit Priorität {value}.",
+            "opportunity.estimatedclosedate": "Abschluss voraussichtlich am {value}.",
+            "lead.estimatedclosedate": "Abschluss voraussichtlich am {value}."
+          }
+        }
+      },
+      "en": {
+        "field_names": {
+          "subject": "Subject",
+          "description": "Description",
+          "name": "Name",
+          "firstname": "First name",
+          "lastname": "Last name",
+          "fullname": "Name",
+          "jobtitle": "Job title",
+          "emailaddress1": "Email",
+          "telephone1": "Phone",
+          "mobilephone": "Mobile phone",
+          "phonenumber": "Phone number",
+          "websiteurl": "Website",
+          "address1_city": "City",
+          "address1_postalcode": "Postal code",
+          "address1_line1": "Street",
+          "address1_country": "Country",
+          "parentcustomerid": "Company",
+          "parentcontactid": "Contact",
+          "parentaccountid": "Parent account",
+          "customerid": "Customer",
+          "ownerid": "Owner",
+          "regardingobjectid": "Regarding",
+          "objectid": "Regarding",
+          "notetext": "Note",
+          "statecode": "Status",
+          "statuscode": "Status reason",
+          "prioritycode": "Priority",
+          "percentcomplete": "Percent complete",
+          "scheduledstart": "Start",
+          "scheduledend": "End",
+          "task.scheduledend": "Due date",
+          "task.scheduledstart": "Start date",
+          "phonecall.scheduledend": "Due date",
+          "email.scheduledend": "Due date",
+          "letter.scheduledend": "Due date",
+          "fax.scheduledend": "Due date",
+          "actualdurationminutes": "Duration in minutes",
+          "scheduleddurationminutes": "Planned duration in minutes",
+          "location": "Location",
+          "category": "Category",
+          "subcategory": "Subcategory",
+          "estimatedclosedate": "Estimated close date",
+          "actualclosedate": "Actual close date",
+          "closeprobability": "Probability",
+          "estimatedvalue": "Estimated revenue",
+          "actualvalue": "Actual revenue",
+          "budgetamount": "Budget",
+          "budgetstatus": "Budget status",
+          "purchasetimeframe": "Purchase timeframe",
+          "purchaseprocess": "Purchase process",
+          "currentsituation": "Current situation",
+          "customerneed": "Customer need",
+          "proposedsolution": "Proposed solution",
+          "qualificationcomments": "Qualification comments",
+          "quotecomments": "Quote comments",
+          "stepname": "Pipeline phase",
+          "industrycode": "Industry",
+          "numberofemployees": "Number of employees",
+          "revenue": "Annual revenue",
+          "createdon": "Created on",
+          "modifiedon": "Modified on"
+        },
+        "choice_labels": {
+          "opportunity.statecode": {
+            "0": "Open",
+            "1": "Won",
+            "2": "Lost"
+          },
+          "account.statecode": {
+            "0": "Active",
+            "1": "Inactive"
+          },
+          "contact.statecode": {
+            "0": "Active",
+            "1": "Inactive"
+          },
+          "lead.statecode": {
+            "0": "Open",
+            "1": "Qualified",
+            "2": "Disqualified"
+          },
+          "task.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "phonecall.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "email.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled"
+          },
+          "appointment.statecode": {
+            "0": "Open",
+            "1": "Completed",
+            "2": "Canceled",
+            "3": "Scheduled"
+          },
+          "task.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "email.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "appointment.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "phonecall.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "letter.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "fax.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "incident.prioritycode": {
+            "1": "High",
+            "2": "Normal",
+            "3": "Low"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Immediate",
+            "1": "This quarter",
+            "2": "Next quarter",
+            "3": "This year",
+            "4": "Unknown"
+          },
+          "lead.purchasetimeframe": {
+            "0": "Immediate",
+            "1": "This quarter",
+            "2": "Next quarter",
+            "3": "This year",
+            "4": "Unknown"
+          }
+        },
+        "table_names": {
+          "opportunity": "opportunities",
+          "account": "accounts",
+          "contact": "contacts",
+          "lead": "leads",
+          "task": "tasks",
+          "appointment": "appointments",
+          "phonecall": "phone calls",
+          "email": "emails",
+          "annotation": "notes",
+          "activitypointer": "activities",
+          "incident": "cases",
+          "quote": "quotes",
+          "salesorder": "orders",
+          "invoice": "invoices",
+          "product": "products",
+          "systemuser": "users"
+        },
+        "sentences": {
+          "changed": {
+            "opportunity.estimatedclosedate": "The close date moves {from} {to}.",
+            "lead.estimatedclosedate": "The close date moves {from} {to}.",
+            "opportunity.closeprobability": "The probability goes {from} {to}.",
+            "opportunity.estimatedvalue": "The estimated revenue goes {from} {to}.",
+            "lead.estimatedvalue": "The estimated revenue goes {from} {to}."
+          },
+          "set": {
+            "task.scheduledend": "Due on {value}.",
+            "task.prioritycode": "{value} priority.",
+            "opportunity.estimatedclosedate": "Expected to close on {value}.",
+            "lead.estimatedclosedate": "Expected to close on {value}."
+          }
+        }
+      }
+    }
+  }
+}

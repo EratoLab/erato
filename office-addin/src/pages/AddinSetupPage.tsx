@@ -34,7 +34,8 @@ const TEAMS_ADMIN_SETUP_POLICIES_URL =
   "https://admin.teams.microsoft.com/policies/app-setup";
 
 type OfficeProduct = "outlook" | "teams" | "word" | "excel" | "powerpoint";
-type WordDistribution = "integrated-apps" | "sharepoint";
+type DocumentProduct = "word" | "powerpoint";
+type DocumentDistribution = "integrated-apps" | "sharepoint";
 
 type ExchangeSetup = "exchange-online" | "exchange-server";
 
@@ -55,10 +56,15 @@ const PRODUCT_OPTIONS: ProductOption[] = [
   { id: "teams", label: "Teams", selectable: true },
   { id: "word", label: "Word", selectable: true },
   { id: "excel", label: "Excel", selectable: false },
-  { id: "powerpoint", label: "PowerPoint", selectable: false },
+  { id: "powerpoint", label: "PowerPoint", selectable: true },
 ];
 
 const DOCUMENT_MANIFEST_PATH = "manifest-document.xml";
+const PRESENTATION_MANIFEST_PATH = "manifest-presentation.xml";
+
+function isDocumentProduct(product: OfficeProduct): product is DocumentProduct {
+  return product === "word" || product === "powerpoint";
+}
 
 const EXCHANGE_SETUP_OPTIONS: ExchangeSetupOption[] = [
   {
@@ -88,6 +94,9 @@ function getManifestPath(
   if (product === "word") {
     return DOCUMENT_MANIFEST_PATH;
   }
+  if (product === "powerpoint") {
+    return PRESENTATION_MANIFEST_PATH;
+  }
   if (product === "teams") {
     return "teams/manifest.json";
   }
@@ -100,12 +109,16 @@ function getManifestPath(
 /** Both Exchange variants are sideloaded with the filename shown in the instructions. */
 function getDownloadFilename(
   product: OfficeProduct,
-  distribution: WordDistribution | null,
+  distribution: DocumentDistribution | null,
 ): string {
   if (product === "word")
     return distribution === "sharepoint"
       ? "manifest-document-sharepoint.xml"
       : DOCUMENT_MANIFEST_PATH;
+  if (product === "powerpoint")
+    return distribution === "sharepoint"
+      ? "manifest-presentation-sharepoint.xml"
+      : PRESENTATION_MANIFEST_PATH;
   if (product === "teams") return "erato-teams-app.zip";
   return "manifest.xml";
 }
@@ -113,13 +126,13 @@ function getDownloadFilename(
 function getManifestUrl(
   product: OfficeProduct,
   exchangeSetup: ExchangeSetup,
-  distribution: WordDistribution | null,
+  distribution: DocumentDistribution | null,
 ): string {
   const url = new URL(
     getManifestPath(product, exchangeSetup),
     window.location.href,
   );
-  if (product === "word" && distribution)
+  if (isDocumentProduct(product) && distribution)
     url.searchParams.set("distribution", distribution);
   return url.toString();
 }
@@ -133,18 +146,18 @@ export function AddinSetupPage() {
     useState<OfficeProduct>("outlook");
   const [selectedExchangeSetup, setSelectedExchangeSetup] =
     useState<ExchangeSetup>("exchange-online");
-  const [wordDistribution, setWordDistribution] =
-    useState<WordDistribution | null>(null);
+  const [documentDistribution, setDocumentDistribution] =
+    useState<DocumentDistribution | null>(null);
   const [loadedManifestUrl, setLoadedManifestUrl] = useState<string | null>(
     null,
   );
   const manifestUrl =
-    selectedProduct === "word" && !wordDistribution
+    isDocumentProduct(selectedProduct) && !documentDistribution
       ? null
       : getManifestUrl(
           selectedProduct,
           selectedExchangeSetup,
-          wordDistribution,
+          documentDistribution,
         );
   const manifestReady =
     manifestUrl !== null && loadedManifestUrl === manifestUrl;
@@ -237,7 +250,10 @@ export function AddinSetupPage() {
         const url = window.URL.createObjectURL(await response.blob());
         const link = document.createElement("a");
         link.href = url;
-        link.download = getDownloadFilename(selectedProduct, wordDistribution);
+        link.download = getDownloadFilename(
+          selectedProduct,
+          documentDistribution,
+        );
         link.click();
         window.URL.revokeObjectURL(url);
       } catch (downloadError) {
@@ -259,7 +275,7 @@ export function AddinSetupPage() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = getDownloadFilename(selectedProduct, wordDistribution);
+    link.download = getDownloadFilename(selectedProduct, documentDistribution);
     link.click();
 
     window.URL.revokeObjectURL(url);
@@ -302,6 +318,11 @@ export function AddinSetupPage() {
                 Choose how to distribute the Word add-in to generate its
                 manifest and installation instructions.
               </Trans>
+            ) : selectedProduct === "powerpoint" ? (
+              <Trans id="officeAddin.powerpoint.setup.chooseDistribution">
+                Choose how to distribute the PowerPoint add-in to generate its
+                manifest and installation instructions.
+              </Trans>
             ) : selectedExchangeSetup === "exchange-online" ? (
               <Trans id="officeAddin.setup.exchangeOnline.copy">
                 Download the XML below as <code>manifest.xml</code>, then upload
@@ -324,21 +345,28 @@ export function AddinSetupPage() {
           onSelectProduct={setSelectedProduct}
         />
 
-        {selectedProduct === "word" && (
-          <WordDistributionSelector
-            value={wordDistribution}
-            onChange={setWordDistribution}
+        {isDocumentProduct(selectedProduct) && (
+          <DocumentDistributionSelector
+            product={selectedProduct}
+            value={documentDistribution}
+            onChange={setDocumentDistribution}
           />
         )}
 
         {selectedProduct === "teams" ? (
           <TeamsInstructions bot={teamsBot} />
-        ) : selectedProduct === "word" ? (
+        ) : isDocumentProduct(selectedProduct) ? (
           <>
-            {wordDistribution && (
-              <WordInstructions distribution={wordDistribution} />
+            {documentDistribution && (
+              <DocumentInstructions
+                product={selectedProduct}
+                distribution={documentDistribution}
+              />
             )}
-            <WordAuthenticationInstructions spaRedirectUri={spaRedirectUri} />
+            <DocumentAuthenticationInstructions
+              product={selectedProduct}
+              spaRedirectUri={spaRedirectUri}
+            />
           </>
         ) : selectedExchangeSetup === "exchange-online" ? (
           <ExchangeOnlineInstructions spaRedirectUri={spaRedirectUri} />
@@ -366,6 +394,10 @@ export function AddinSetupPage() {
               <Trans id="officeAddin.word.setup.downloadSelectedManifest">
                 Download Word manifest
               </Trans>
+            ) : selectedProduct === "powerpoint" ? (
+              <Trans id="officeAddin.powerpoint.setup.downloadSelectedManifest">
+                Download PowerPoint manifest
+              </Trans>
             ) : (
               <Trans id="officeAddin.setup.downloadButton">
                 Download manifest.xml
@@ -383,11 +415,11 @@ export function AddinSetupPage() {
                 Open Integrated Apps
               </Trans>
             </a>
-          ) : selectedProduct === "word" ? (
-            wordDistribution ? (
+          ) : isDocumentProduct(selectedProduct) ? (
+            documentDistribution ? (
               <a
                 href={
-                  wordDistribution === "sharepoint"
+                  documentDistribution === "sharepoint"
                     ? SHAREPOINT_CATALOG_DOCS_URL
                     : INTEGRATED_APPS_URL
                 }
@@ -395,7 +427,7 @@ export function AddinSetupPage() {
                 rel="noreferrer"
                 className="office-setup-button office-setup-button--secondary"
               >
-                {wordDistribution === "sharepoint" ? (
+                {documentDistribution === "sharepoint" ? (
                   <Trans id="officeAddin.word.setup.openCatalogDocs">
                     Open app catalog docs
                   </Trans>
@@ -545,12 +577,14 @@ function SetupSelectors({
   );
 }
 
-function WordDistributionSelector({
+function DocumentDistributionSelector({
+  product,
   value,
   onChange,
 }: {
-  value: WordDistribution | null;
-  onChange: (value: WordDistribution) => void;
+  product: DocumentProduct;
+  value: DocumentDistribution | null;
+  onChange: (value: DocumentDistribution) => void;
 }) {
   return (
     <div className="office-setup-selectors">
@@ -584,25 +618,48 @@ function WordDistributionSelector({
         </div>
       </div>
       <p className="office-setup-copy">
-        <Trans id="officeAddin.word.setup.distributionGuidance">
-          Choose Microsoft 365 admin center for users with Exchange Online
-          mailboxes and eligible Microsoft 365 subscription licences. Choose
-          SharePoint app catalog for environments with on-premises Exchange
-          mailboxes or without centralized deployment. SharePoint catalog
-          distribution requires a catalog administrator and does not support
-          Word on Mac.
-        </Trans>
+        {product === "powerpoint" ? (
+          <Trans id="officeAddin.powerpoint.setup.distributionGuidance">
+            Choose Microsoft 365 admin center for users with Exchange Online
+            mailboxes and eligible Microsoft 365 subscription licences. Choose
+            SharePoint app catalog for environments with on-premises Exchange
+            mailboxes or without centralized deployment. SharePoint catalog
+            distribution requires a catalog administrator and does not support
+            PowerPoint on Mac.
+          </Trans>
+        ) : (
+          <Trans id="officeAddin.word.setup.distributionGuidance">
+            Choose Microsoft 365 admin center for users with Exchange Online
+            mailboxes and eligible Microsoft 365 subscription licences. Choose
+            SharePoint app catalog for environments with on-premises Exchange
+            mailboxes or without centralized deployment. SharePoint catalog
+            distribution requires a catalog administrator and does not support
+            Word on Mac.
+          </Trans>
+        )}
       </p>
+      {product === "powerpoint" && (
+        <p className="office-setup-copy">
+          <Trans id="officeAddin.powerpoint.setup.supportedVersions">
+            Supported versions: PowerPoint in Microsoft 365 on Windows, Mac and
+            the web, and PowerPoint in Office LTSC 2024. PowerPoint 2016 and
+            2019 may list the add-in as well, for example from a SharePoint app
+            catalog, but probably cannot open its pane and are not supported.
+          </Trans>
+        </p>
+      )}
     </div>
   );
 }
 
-function WordInstructions({
+function DocumentInstructions({
+  product,
   distribution,
 }: {
-  distribution: WordDistribution;
+  product: DocumentProduct;
+  distribution: DocumentDistribution;
 }) {
-  const filename = getDownloadFilename("word", distribution);
+  const filename = getDownloadFilename(product, distribution);
   return (
     <ol className="office-setup-steps">
       <li>
@@ -619,19 +676,36 @@ function WordInstructions({
             </Trans>
           </li>
           <li>
-            <Trans id="officeAddin.word.setup.sharepointTrust">
-              In Word on Windows, open File → Options → Trust Center → Trust
-              Center Settings → Trusted Add-in Catalogs. Add the catalog site
-              URL, select Show in Menu, and restart Word.
-            </Trans>
+            {product === "powerpoint" ? (
+              <Trans id="officeAddin.powerpoint.setup.sharepointTrust">
+                In PowerPoint on Windows, open File → Options → Trust Center →
+                Trust Center Settings → Trusted Add-in Catalogs. Add the catalog
+                site URL, select Show in Menu, and restart PowerPoint.
+              </Trans>
+            ) : (
+              <Trans id="officeAddin.word.setup.sharepointTrust">
+                In Word on Windows, open File → Options → Trust Center → Trust
+                Center Settings → Trusted Add-in Catalogs. Add the catalog site
+                URL, select Show in Menu, and restart Word.
+              </Trans>
+            )}
           </li>
           <li>
-            <Trans id="officeAddin.word.setup.sharepointOpen">
-              Open the Office add-ins dialog in Word and select My Organization
-              to add Erato. This distribution method has no Erato ribbon button;
-              open it from the add-ins list. Word on the web can use a
-              SharePoint Online catalog.
-            </Trans>
+            {product === "powerpoint" ? (
+              <Trans id="officeAddin.powerpoint.setup.sharepointOpen">
+                Open the Office add-ins dialog in PowerPoint and select My
+                Organization to add Erato. This distribution method has no Erato
+                ribbon button; open it from the add-ins list. PowerPoint on the
+                web can use a SharePoint Online catalog.
+              </Trans>
+            ) : (
+              <Trans id="officeAddin.word.setup.sharepointOpen">
+                Open the Office add-ins dialog in Word and select My
+                Organization to add Erato. This distribution method has no Erato
+                ribbon button; open it from the add-ins list. Word on the web
+                can use a SharePoint Online catalog.
+              </Trans>
+            )}
           </li>
         </>
       ) : (
@@ -644,10 +718,17 @@ function WordInstructions({
             </Trans>
           </li>
           <li>
-            <Trans id="officeAddin.word.setup.integratedOpen">
-              After deployment reaches the users, restart Word and open Erato
-              from its ribbon button.
-            </Trans>
+            {product === "powerpoint" ? (
+              <Trans id="officeAddin.powerpoint.setup.integratedOpen">
+                After deployment reaches the users, restart PowerPoint and open
+                Erato from its ribbon button.
+              </Trans>
+            ) : (
+              <Trans id="officeAddin.word.setup.integratedOpen">
+                After deployment reaches the users, restart Word and open Erato
+                from its ribbon button.
+              </Trans>
+            )}
           </li>
         </>
       )}
@@ -655,9 +736,11 @@ function WordInstructions({
   );
 }
 
-function WordAuthenticationInstructions({
+function DocumentAuthenticationInstructions({
+  product,
   spaRedirectUri,
 }: {
+  product: DocumentProduct;
   spaRedirectUri: string;
 }) {
   const proxyCallbackUri = `${window.location.origin}/oauth2/callback`;
@@ -670,21 +753,39 @@ function WordAuthenticationInstructions({
       </summary>
       <ol className="office-setup-steps">
         <li>
-          <Trans id="officeAddin.word.setup.desktopRedirectUriInstruction">
-            In the Entra ID app registration, add the SPA redirect URI. Word on
-            Windows and Mac sign in through it:
-          </Trans>
+          {product === "powerpoint" ? (
+            <Trans id="officeAddin.powerpoint.setup.desktopRedirectUriInstruction">
+              In the Entra ID app registration, add the SPA redirect URI.
+              PowerPoint on Windows and Mac sign in through it:
+            </Trans>
+          ) : (
+            <Trans id="officeAddin.word.setup.desktopRedirectUriInstruction">
+              In the Entra ID app registration, add the SPA redirect URI. Word
+              on Windows and Mac sign in through it:
+            </Trans>
+          )}
           <CopyableCodeField content={spaRedirectUri} />
         </li>
         <li>
-          <Trans id="officeAddin.word.setup.webSignInInstruction">
-            Word on the web has no Office sign-in for add-ins, so users sign in
-            through this deployment&apos;s oauth2-proxy login in a popup. That
-            login uses the proxy&apos;s web redirect URI, which every deployment
-            already registers for the Erato web app. The proxy must set{" "}
-            <code>cookie_samesite = &quot;none&quot;</code> so the session
-            cookie reaches the add-in inside Word:
-          </Trans>
+          {product === "powerpoint" ? (
+            <Trans id="officeAddin.powerpoint.setup.webSignInInstruction">
+              PowerPoint on the web has no Office sign-in for add-ins, so users
+              sign in through this deployment&apos;s oauth2-proxy login in a
+              popup. That login uses the proxy&apos;s web redirect URI, which
+              every deployment already registers for the Erato web app. The
+              proxy must set <code>cookie_samesite = &quot;none&quot;</code> so
+              the session cookie reaches the add-in inside PowerPoint:
+            </Trans>
+          ) : (
+            <Trans id="officeAddin.word.setup.webSignInInstruction">
+              Word on the web has no Office sign-in for add-ins, so users sign
+              in through this deployment&apos;s oauth2-proxy login in a popup.
+              That login uses the proxy&apos;s web redirect URI, which every
+              deployment already registers for the Erato web app. The proxy must
+              set <code>cookie_samesite = &quot;none&quot;</code> so the session
+              cookie reaches the add-in inside Word:
+            </Trans>
+          )}
           <CopyableCodeField content={proxyCallbackUri} />
         </li>
       </ol>

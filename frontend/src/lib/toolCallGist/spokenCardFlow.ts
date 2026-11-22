@@ -1,0 +1,580 @@
+/* eslint-disable lingui/no-unlocalized-strings -- utterance and event names of this module */
+import type { SpokenPiece } from "./spokenCard";
+
+/**
+ * What the voice says next on a spoken approval card, as a pure function of
+ * the card's pieces, what has been heard of each, and what just happened.
+ * The player and the controls only follow it. Nothing is planned ahead: what
+ * comes next is read off the pieces' states at every step, so a later event
+ * can never leave a stale plan behind. The rules of the design hold for
+ * every sequence of events:
+ *
+ * - nothing is said twice in one reading unless the listener asks for it;
+ * - a piece heard in full once stays heard, whatever happens to a repeat;
+ * - the request to decide is never started while a loss or consequence has
+ *   not been heard in full: that piece comes first, however often it is
+ *   skipped;
+ * - no event decides the card: it waits until a decision closes it;
+ * - in a short reading, pieces held back are said only when the listener
+ *   asks for the rest, and the voice says how many it held back.
+ */
+
+export type SpokenPieceState = "pending" | "playing" | "heard" | "cut";
+
+/** One thing the voice says: a piece of the card, or a sentence about them. */
+export type SpokenUtterance =
+  | { type: "piece"; index: number }
+  /** Before the rest: how many pieces follow ("Noch zwei Dinge"). */
+  | { type: "count"; count: number }
+  /** The rest was asked for and nothing is left ("Das war alles"). */
+  | { type: "nothing_left" }
+  /**
+   * In a short reading, in place of the pieces held back: how many fields
+   * or conditions are not said, and that they are on screen.
+   */
+  | { type: "held"; count: number; kind: "field" | "condition" }
+  /** A long text the piece at `index` names, read out on request. */
+  | { type: "text"; index: number }
+  /** A sentence about what the voice cannot do (yet); the card stays as it is. */
+  | { type: "notice"; notice: SpokenNotice };
+
+/**
+ * What the voice says instead of acting: a decision asked for by voice that
+ * is made on screen; the words that approve by voice, after a near miss; a
+ * refusal by voice; a change it is making, or cannot make; what came of a
+ * change; words it did not understand; a long text asked for on a card
+ * without one; listening that is not available.
+ */
+export type SpokenNotice =
+  | { kind: "decide_on_screen"; decision: "approve" | "reject" }
+  /** Deciding by voice is on, but this card is approved on screen. */
+  | { kind: "confirm_on_screen" }
+  /** Deciding by voice is on, but this card is declined on screen. */
+  | { kind: "decline_on_screen" }
+  /** A near miss: the phrase that approves. */
+  | { kind: "say_phrase" }
+  /** The phrase, but not from a recording that may approve: once more. */
+  | { kind: "say_phrase_again" }
+  /** A refusal not from a recording that may decide: once more. */
+  | { kind: "say_again" }
+  /** Near misses again: the screen, without teaching further. */
+  | { kind: "phrase_on_screen" }
+  /** Refused by voice; said before the refusal goes out. */
+  | { kind: "declined" }
+  /** A decision by voice did not go through; the card waits on screen. */
+  | { kind: "decision_failed" }
+  /** `others`: other approvals of the stop are still open on screen. */
+  | { kind: "change_on_screen"; reason: "card" | "others" }
+  | { kind: "changing" }
+  | { kind: "change_failed" }
+  /** The card was decided or replaced meanwhile, elsewhere. */
+  | { kind: "change_conflict" }
+  /** The answer to a change came without a card; `several`: after many rounds. */
+  | { kind: "change_no_card"; several: boolean }
+  | { kind: "new_request_on_screen" }
+  | { kind: "unclear"; hasText: boolean }
+  | { kind: "no_text" }
+  /** The card has several long texts and the words named none: which one. */
+  | { kind: "which_text"; fields: string[] }
+  | { kind: "unavailable" };
+
+export type SpokenCardEvent =
+  /** Say the card from its start: on its own, or when asked to again. */
+  | { type: "start" }
+  /** What was being said has played to its end. */
+  | { type: "finished" }
+  /** The voice could not say it. */
+  | { type: "failed" }
+  /** Skip what is being said and go on. */
+  | { type: "skip" }
+  /** Only what was not heard yet, with how much that is first. */
+  | { type: "rest" }
+  /** The piece being said, or the one named, again. */
+  | { type: "repeat"; index?: number }
+  /** How much this short reading holds back, again. */
+  | { type: "held" }
+  /** Read out the long text the piece named, or the card's first one, names. */
+  | { type: "read"; index?: number }
+  /** Quiet; the card keeps waiting. */
+  | { type: "stop" }
+  /** Say `notice`; afterwards the voice is quiet and the card waits. */
+  | { type: "notice"; notice: SpokenNotice }
+  /**
+   * A decision was taken, or the card was replaced: the voice ends.
+   * `withdrawn` is a card taken back for a change, which no decision closed.
+   */
+  | { type: "closed"; withdrawn?: boolean };
+
+export interface SpokenCardFlow {
+  /** Where each piece stands in the current reading. */
+  states: SpokenPieceState[];
+  /** Each piece heard in full at least once, in any reading. */
+  heard: boolean[];
+  /**
+   * Losses and consequences not heard in full yet, in order. While any is
+   * left the request is not said, and a decision by voice must not count.
+   */
+  owed: number[];
+  /** What is being said, or null while the voice is quiet. */
+  playing: SpokenUtterance | null;
+  /** Bumped each time something starts, so a piece said again is told apart. */
+  started: number;
+  /** The last piece said to its end, for "again" while nothing plays. */
+  last: number | null;
+  /** The last piece that was being said, to its end or cut short. */
+  previous: number | null;
+  /**
+   * The piece whose long text was read out last, while nothing but the
+   * request was said after it: "again" then means that text.
+   */
+  lastRead: number | null;
+  /** The voice failed: nothing was heard, so the pointer sentence can stand in. */
+  failed: "fallback" | "notice" | null;
+  /** Decided or replaced: no event says anything any more. */
+  closed: boolean;
+  /** Closed because it was taken back for a change, not decided. */
+  withdrawn: boolean;
+  /** The rest was asked for: pieces held back join this reading. */
+  released: boolean;
+  /** This reading has said how many pieces it holds back. */
+  heldSaid: boolean;
+}
+
+const owedOf = (
+  pieces: readonly SpokenPiece[],
+  heard: readonly boolean[],
+): number[] =>
+  pieces.flatMap((piece, index) =>
+    piece.mustSay && !heard[index] ? [index] : [],
+  );
+
+export const spokenCardFlow = (
+  pieces: readonly SpokenPiece[],
+): SpokenCardFlow => {
+  const heard = pieces.map(() => false);
+  return {
+    states: pieces.map(() => "pending"),
+    heard,
+    owed: owedOf(pieces, heard),
+    playing: null,
+    started: 0,
+    last: null,
+    previous: null,
+    lastRead: null,
+    failed: null,
+    closed: false,
+    withdrawn: false,
+    released: false,
+    heldSaid: false,
+  };
+};
+
+/**
+ * Whether a piece names a long text that can be read out on request: one
+ * said by its length, and the user's dictation, said by how it relates.
+ */
+export const namesLongText = (piece: SpokenPiece): boolean =>
+  piece.role === "text" &&
+  (piece.readOut !== undefined ||
+    (piece.values?.some((source) => source.slot === "words") ?? false));
+
+/** The pieces whose long text can be read out, in the card's order. */
+export const longTexts = (pieces: readonly SpokenPiece[]): number[] =>
+  pieces.flatMap((piece, index) => (namesLongText(piece) ? [index] : []));
+
+const requestOf = (pieces: readonly SpokenPiece[]): number =>
+  pieces.findIndex((piece) => piece.role === "request");
+
+/**
+ * The pieces still to say in this reading, in order: those not said yet,
+ * then any loss or consequence cut short before it was heard, then the
+ * request.
+ */
+export const piecesAhead = (
+  pieces: readonly SpokenPiece[],
+  states: readonly SpokenPieceState[],
+  heard: readonly boolean[],
+  released = true,
+): number[] => {
+  const request = requestOf(pieces);
+  const pending = pieces.flatMap((piece, index) =>
+    states[index] === "pending" &&
+    index !== request &&
+    (released || piece.held === undefined)
+      ? [index]
+      : [],
+  );
+  const due = pieces.flatMap((piece, index) =>
+    piece.mustSay && states[index] === "cut" && !heard[index] ? [index] : [],
+  );
+  return [
+    ...pending,
+    ...due,
+    ...(request !== -1 && states[request] === "pending" ? [request] : []),
+  ];
+};
+
+const pieceOf = (utterance: SpokenUtterance | null): number | null =>
+  utterance?.type === "piece" ? utterance.index : null;
+
+/** `index` set to `state`, unless it was heard in full before. */
+const withState = (
+  flow: SpokenCardFlow,
+  index: number,
+  state: SpokenPieceState,
+): SpokenCardFlow => ({
+  ...flow,
+  states: flow.states.map((current, at) =>
+    at === index
+      ? flow.heard[at] && state !== "playing"
+        ? "heard"
+        : state
+      : current,
+  ),
+});
+
+/** The piece being said leaves off: heard to its end, or cut short. */
+const leave = (
+  flow: SpokenCardFlow,
+  outcome: "heard" | "cut" | "pending",
+): SpokenCardFlow => {
+  const index = pieceOf(flow.playing);
+  if (index === null) return flow;
+  const next =
+    outcome === "heard"
+      ? { ...flow, heard: flow.heard.map((value, at) => value || at === index) }
+      : flow;
+  return withState({ ...next, previous: index }, index, outcome);
+};
+
+/**
+ * Starts `utterance`, or falls quiet when there is none. The request waits
+ * for every loss and consequence not heard yet: the first of them is said
+ * instead, and the request follows it.
+ */
+const begin = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+  utterance: SpokenUtterance | null,
+): SpokenCardFlow => {
+  if (utterance === null) return { ...flow, playing: null };
+  let next = flow;
+  let said = utterance;
+  const request = requestOf(pieces);
+  if (pieceOf(utterance) === request) {
+    const owed = owedOf(pieces, flow.heard).at(0);
+    if (owed !== undefined) {
+      next = {
+        ...next,
+        states: next.states.map((state, at) =>
+          at === request ? "pending" : state,
+        ),
+      };
+      said = { type: "piece", index: owed };
+    }
+  }
+  const playing = pieceOf(said);
+  return {
+    ...(playing === null ? next : withState(next, playing, "playing")),
+    playing: said,
+    started: next.started + 1,
+  };
+};
+
+/**
+ * The pieces a short reading holds back and has not said, and how many
+ * fields or conditions they stand for: a held "more" piece counts its own.
+ */
+const heldBack = (pieces: readonly SpokenPiece[], flow: SpokenCardFlow) => {
+  const indices = pieces.flatMap((piece, index) =>
+    piece.held !== undefined &&
+    flow.states[index] === "pending" &&
+    !flow.heard[index]
+      ? [index]
+      : [],
+  );
+  const count = indices.reduce((sum, index) => {
+    const piece = pieces[index];
+    if (piece.role !== "more") return sum + 1;
+    const counted = piece.values?.find(
+      (source) => source.slot === "count",
+    )?.value;
+    return sum + (counted?.kind === "number" ? counted.value : 1);
+  }, 0);
+  return { indices, count };
+};
+
+/**
+ * Goes on with the first piece still to say in this reading. A short reading
+ * says how much it holds back where the first held piece would have been.
+ */
+const advance = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+): SpokenCardFlow => {
+  const next = piecesAhead(pieces, flow.states, flow.heard, flow.released).at(
+    0,
+  );
+  if (!flow.released && !flow.heldSaid) {
+    const held = heldBack(pieces, flow);
+    const first = held.indices.at(0);
+    if (first !== undefined && (next === undefined || next > first)) {
+      return begin(
+        pieces,
+        { ...flow, heldSaid: true },
+        {
+          type: "held",
+          count: held.count,
+          kind: pieces[first].held ?? "field",
+        },
+      );
+    }
+  }
+  return begin(
+    pieces,
+    flow,
+    next === undefined ? null : { type: "piece", index: next },
+  );
+};
+
+const longTextTarget = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+  index: number | undefined,
+): number | undefined => {
+  if (index !== undefined) {
+    return index in pieces && namesLongText(pieces[index]) ? index : undefined;
+  }
+  const playing = pieceOf(flow.playing);
+  if (playing !== null && namesLongText(pieces[playing])) return playing;
+  // Never a guess by order: with several texts, the listener asks which.
+  const texts = longTexts(pieces);
+  return texts.length === 1 ? texts[0] : undefined;
+};
+
+/** What the listener interrupted is not skipped: it follows from its start. */
+const interrupt = (flow: SpokenCardFlow, target: number | null) =>
+  pieceOf(flow.playing) === target ? flow : leave(flow, "pending");
+
+const step = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+  event: SpokenCardEvent,
+): SpokenCardFlow => {
+  switch (event.type) {
+    case "start":
+      // A new reading says every piece again; what was heard stays heard.
+      return advance(pieces, {
+        ...flow,
+        states: pieces.map(() => "pending"),
+        playing: null,
+        failed: null,
+        released: false,
+        heldSaid: false,
+      });
+    case "finished": {
+      const { playing } = flow;
+      if (playing === null) return flow;
+      if (playing.type === "notice") return { ...flow, playing: null };
+      let next = leave(flow, "heard");
+      if (playing.type === "text") {
+        next = withState(
+          {
+            ...next,
+            heard: next.heard.map((value, at) => value || at === playing.index),
+          },
+          playing.index,
+          "heard",
+        );
+      }
+      return advance(pieces, {
+        ...next,
+        last: pieceOf(playing) ?? flow.last,
+      });
+    }
+    case "skip": {
+      const { playing } = flow;
+      // Quiet, "go on" says what is left of this reading; with nothing left
+      // it is the rest: "that was all", and the request again.
+      if (playing === null) {
+        return piecesAhead(pieces, flow.states, flow.heard, flow.released)
+          .length === 0
+          ? step(pieces, flow, { type: "rest" })
+          : advance(pieces, flow);
+      }
+      let next = leave(flow, "cut");
+      // A text read on request is skipped to its end; its piece is done.
+      if (playing.type === "text" && next.states[playing.index] === "pending") {
+        next = withState(next, playing.index, "cut");
+      }
+      return advance(pieces, next);
+    }
+    case "rest": {
+      let next: SpokenCardFlow = { ...leave(flow, "cut"), released: true };
+      const request = requestOf(pieces);
+      // Only what was never heard in full; it ends with the request, said
+      // again if it was heard.
+      next = {
+        ...next,
+        states: next.states.map((state, at) =>
+          at === request
+            ? "pending"
+            : state === "pending" && next.heard[at]
+              ? "heard"
+              : state,
+        ),
+      };
+      const content = piecesAhead(pieces, next.states, next.heard).filter(
+        (index) => index !== request,
+      );
+      return begin(
+        pieces,
+        next,
+        content.length === 0
+          ? { type: "nothing_left" }
+          : { type: "count", count: content.length },
+      );
+    }
+    case "held": {
+      const held = heldBack(pieces, flow);
+      const first = held.indices.at(0);
+      if (flow.released || first === undefined) return flow;
+      return begin(pieces, interrupt(flow, null), {
+        type: "held",
+        count: held.count,
+        kind: pieces[first].held ?? "field",
+      });
+    }
+    case "repeat": {
+      // Again, while it says how much it holds back, is that sentence.
+      if (event.index === undefined && flow.playing?.type === "held")
+        return step(pieces, flow, { type: "held" });
+      const target =
+        event.index ?? pieceOf(flow.playing) ?? flow.lastRead ?? flow.last;
+      if (target === null || !(target in pieces)) return flow;
+      // Again, at the request to decide, is the card's content: the whole
+      // card from its start, not the request alone.
+      if (target === requestOf(pieces))
+        return step(pieces, flow, { type: "start" });
+      // Again, right after a text was read out, is the text.
+      if (target === flow.lastRead && flow.playing === null)
+        return step(pieces, flow, { type: "read", index: target });
+      return begin(pieces, interrupt(flow, target), {
+        type: "piece",
+        index: target,
+      });
+    }
+    case "read": {
+      const target = longTextTarget(pieces, flow, event.index);
+      if (target === undefined) return flow;
+      const next =
+        pieceOf(flow.playing) === target
+          ? leave(flow, "heard")
+          : interrupt(flow, null);
+      return begin(pieces, next, { type: "text", index: target });
+    }
+    case "stop":
+      return { ...leave(flow, "cut"), playing: null };
+    case "notice":
+      return begin(pieces, interrupt(flow, null), {
+        type: "notice",
+        notice: event.notice,
+      });
+    case "failed": {
+      const next = leave(flow, "cut");
+      return {
+        ...next,
+        playing: null,
+        failed: next.heard.some(Boolean) ? "notice" : "fallback",
+      };
+    }
+    case "closed":
+      return {
+        ...leave(flow, "cut"),
+        playing: null,
+        closed: true,
+        withdrawn: event.withdrawn === true,
+      };
+  }
+};
+
+/** The card after `event`; `playing` and `started` tell the player what to say. */
+export const spokenCardStep = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+  event: SpokenCardEvent,
+): SpokenCardFlow => {
+  if (flow.closed) return flow;
+  const next = step(pieces, flow, event);
+  if (next === flow) return flow;
+  return {
+    ...next,
+    owed: owedOf(pieces, next.heard),
+    lastRead: lastReadAfter(pieces, flow, next, event),
+  };
+};
+
+/** A text read out stays "the last one" until other content is said. */
+const lastReadAfter = (
+  pieces: readonly SpokenPiece[],
+  before: SpokenCardFlow,
+  after: SpokenCardFlow,
+  event: SpokenCardEvent,
+): number | null => {
+  if (event.type === "start") return null;
+  const started = after.started !== before.started;
+  const now = pieceOf(after.playing);
+  if (started && now !== null && now !== requestOf(pieces)) return null;
+  const left =
+    before.playing?.type === "text" && after.playing !== before.playing
+      ? before.playing.index
+      : null;
+  return left ?? after.lastRead;
+};
+
+/** A piece's state as the voice command endpoint takes it. */
+export type HeardState = "heard" | "cut_short" | "not_said";
+
+/**
+ * What the listener has heard of each piece: heard in full once, in any
+ * reading; cut short; or not said yet, which includes the piece being said.
+ */
+export const heardStates = (flow: SpokenCardFlow): HeardState[] =>
+  flow.states.map((state, index) =>
+    flow.heard[index] ? "heard" : state === "cut" ? "cut_short" : "not_said",
+  );
+
+/** The piece being said or read out, or else the last one that was. */
+export const currentPiece = (flow: SpokenCardFlow): number | null =>
+  pieceOf(flow.playing) ??
+  (flow.playing?.type === "text" ? flow.playing.index : null) ??
+  flow.lastRead ??
+  flow.previous;
+
+/**
+ * Whether a decision said by voice may count: the card is waiting, its
+ * request to decide was heard, and nothing is owed. `owed` lists what must
+ * be said first. A refusal runs nothing, so it does not wait for what the
+ * call does and on which record, only for a loss, a consequence or
+ * recipients outside. A card without a request (the pointer sentence) is
+ * decided on screen.
+ */
+export const voiceDecisionGate = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+  decision: "approve" | "reject" = "approve",
+): { ready: boolean; owed: number[] } => {
+  const request = requestOf(pieces);
+  const asked = request !== -1 && flow.heard[request];
+  const owed =
+    decision === "approve"
+      ? flow.owed
+      : flow.owed.filter(
+          (index) =>
+            pieces[index].role !== "what" && pieces[index].role !== "item",
+        );
+  return {
+    ready: !flow.closed && asked && owed.length === 0,
+    owed,
+  };
+};

@@ -46,6 +46,8 @@ export interface ChangeEffect {
   link: boolean;
   /** A name the call gives a record nobody read in this chat: a new value, not its name. */
   newName: boolean;
+  /** The value sits in an object inside the record: spoken names never apply to it. */
+  nested: boolean;
 }
 
 export interface ChangeText {
@@ -57,6 +59,8 @@ export interface ChangeText {
   lines: number;
   chars: number;
   before?: ChangeValue;
+  /** See {@link ChangeEffect.nested}. */
+  nested: boolean;
 }
 
 export interface ChangeRecipientGroup {
@@ -309,6 +313,7 @@ class Reader {
       list: raw.list === true,
       link: raw.link === true,
       newName: raw.new_name === true,
+      nested: raw.nested === true,
     };
   }
 
@@ -334,6 +339,7 @@ class Reader {
           lines: countOf(entry.lines),
           chars: countOf(entry.chars),
           before: this.value(entry.before),
+          nested: entry.nested === true,
         },
       ];
     });
@@ -648,6 +654,16 @@ export const listReplaceIsUnknown = (change: GistChange): boolean =>
 export const toolSaysOnlyAdds = (change: GistChange): boolean =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
   change.notes.includes("tool_says_adds_to_list");
+
+/**
+ * Whether what a value adds to a list is only the tool's word: items it says
+ * it adds, or a list under the tool's note that it only adds.
+ */
+export const addsOnToolsWord = (
+  change: GistChange,
+  effect: ChangeEffect,
+): boolean =>
+  effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list);
 
 /** Whether the description says something a card should show. */
 export const changeSaysSomething = (change: GistChange): boolean =>

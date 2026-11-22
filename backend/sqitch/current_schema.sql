@@ -836,10 +836,19 @@ CREATE TABLE public.user_preferences (
     teams_nudges_opted_out_at timestamp with time zone,
     time_zone text,
     language text,
+    approval_speech_amount text,
+    approval_speech_wording text,
+    wait_lines_amount text,
+    reply_speech_wording text,
+    reply_speech_show_in_chat boolean,
+    CONSTRAINT user_preferences_approval_speech_amount_check CHECK ((approval_speech_amount = ANY (ARRAY['full'::text, 'short'::text]))),
+    CONSTRAINT user_preferences_approval_speech_wording_check CHECK ((approval_speech_wording = ANY (ARRAY['precise'::text, 'natural'::text]))),
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
+    CONSTRAINT user_preferences_reply_speech_wording_check CHECK ((reply_speech_wording = ANY (ARRAY['natural'::text, 'precise'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
-    CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL)))))
+    CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL))))),
+    CONSTRAINT user_preferences_wait_lines_amount_check CHECK ((wait_lines_amount = ANY (ARRAY['normal'::text, 'long_only'::text, 'off'::text])))
 );
 
 
@@ -895,6 +904,24 @@ COMMENT ON COLUMN public.users.subject IS 'The unique identifier for the user at
 --
 
 COMMENT ON COLUMN public.users.email IS 'The user''s email address (optional, as not all IdPs may provide it)';
+
+
+--
+-- Name: voice_decision_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.voice_decision_receipts (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    user_id uuid NOT NULL,
+    message_id uuid NOT NULL,
+    approval_id text NOT NULL,
+    card_digest text NOT NULL,
+    outcome text NOT NULL,
+    record jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT voice_decision_receipts_outcome_check CHECK ((outcome = ANY (ARRAY['approved'::text, 'refused'::text])))
+);
 
 
 --
@@ -1263,6 +1290,14 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: voice_decision_receipts voice_decision_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.voice_decision_receipts
+    ADD CONSTRAINT voice_decision_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1739,6 +1774,20 @@ CREATE INDEX temp_chat_generations_heartbeat_idx ON public.temp_chat_generations
 --
 
 CREATE UNIQUE INDEX users_entra_object_id_unique ON public.users USING btree (entra_object_id) WHERE (entra_object_id IS NOT NULL);
+
+
+--
+-- Name: voice_decision_receipts_card; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX voice_decision_receipts_card ON public.voice_decision_receipts USING btree (user_id, message_id, approval_id);
+
+
+--
+-- Name: voice_decision_receipts_expires; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX voice_decision_receipts_expires ON public.voice_decision_receipts USING btree (expires_at);
 
 
 --
@@ -2298,6 +2347,22 @@ ALTER TABLE ONLY public.user_preferences
 
 ALTER TABLE ONLY public.user_tool_approval_settings
     ADD CONSTRAINT user_tool_approval_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: voice_decision_receipts voice_decision_receipts_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.voice_decision_receipts
+    ADD CONSTRAINT voice_decision_receipts_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+
+--
+-- Name: voice_decision_receipts voice_decision_receipts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.voice_decision_receipts
+    ADD CONSTRAINT voice_decision_receipts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

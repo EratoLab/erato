@@ -3,9 +3,10 @@ use crate::matcher::{
     CiteFilesResponseConfig, DelegateToAssistantResponseConfig, ErrorResponseConfig, ImageMock,
     LongRunningResponseConfig, MatchRule, MatchRuleAnyMessageContainsAudioContent,
     MatchRuleAnySystemMessageWithPattern, MatchRuleAnyUserMessageInCurrentTurnWithPattern,
-    MatchRuleLastMessageIsUserWithPattern, MatchRuleUserMessagePattern, Mock,
-    RandomOneLinerResponseConfig, ResponseConfig, StaticResponseConfig, ToolCallDef,
-    ToolCallResponseConfig, ToolCallsResponseConfig, ToolTraceResponseConfig,
+    MatchRuleAnyUserMessageWithPattern, MatchRuleLastMessageIsUserWithPattern,
+    MatchRuleUserMessagePattern, Mock, RandomOneLinerResponseConfig, ResponseConfig,
+    StaticResponseConfig, ToolCallDef, ToolCallResponseConfig, ToolCallsResponseConfig,
+    ToolTraceResponseConfig,
 };
 use rand::Rng;
 use serde_json::json;
@@ -1690,7 +1691,10 @@ pub fn get_default_mocks() -> Vec<Mock> {
                     pattern: "cite files".to_string(),
                 },
             )],
-            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig { delay_ms: 50 }),
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig {
+                delay_ms: 50,
+                as_images: false,
+            }),
         },
         Mock {
             name: "Greeting".to_string(),
@@ -2209,6 +2213,41 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "McpAppsImageToolCall".to_string(),
+            description:
+                "Returns a tool call to show_counter_with_image, whose result carries a PNG file beside its MCP Apps view"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp apps image".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "show_counter_with_image".to_string(),
+                arguments: r#"{"start":41}"#.to_string(),
+                delay_ms: 100,
+            }),
+        },
+        // After the call above: the answer shows the file the call returned
+        // as a Markdown image, as a model may. The prompt is matched in any
+        // user message, as the request after the tool result ends with the
+        // user messages that carry the returned file.
+        Mock {
+            name: "McpAppsImageInAnswer".to_string(),
+            description:
+                "Answers show_counter_with_image's result with its PNG file as a Markdown image"
+                    .to_string(),
+            match_rules: vec![MatchRule::AnyUserMessageWithPattern(
+                MatchRuleAnyUserMessageWithPattern {
+                    pattern: "mcp apps image in answer".to_string(),
+                },
+            )],
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig {
+                delay_ms: 50,
+                as_images: true,
+            }),
+        },
+        Mock {
             name: "McpApprovalPolicyToolCall".to_string(),
             description:
                 "Returns an open-world MCP call that must be approved under the restrictive preset"
@@ -2327,6 +2366,55 @@ mod tests {
                 assert_eq!(config.body["error"]["code"], "content_filter");
             }
             _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[test]
+    fn test_mcp_apps_image_in_answer_calls_the_tool_then_shows_its_file() {
+        use crate::matcher::{ChatCompletionRequest, Matcher};
+
+        let matcher = Matcher::new(get_default_mocks());
+        let prompt = serde_json::json!({"role": "user", "content": "mcp apps image in answer"});
+        let first: ChatCompletionRequest =
+            serde_json::from_value(serde_json::json!({"messages": [prompt]})).unwrap();
+        match matcher.match_request(&first, "test0002") {
+            ResponseConfig::ToolCall(config) => {
+                assert_eq!(config.tool_name, "show_counter_with_image");
+            }
+            _ => panic!("Expected ToolCall response"),
+        }
+
+        // As erato sends it: the tool result, then the returned file as a
+        // user message with its text and one with only its image.
+        let link = "erato-file://11111111-2222-3333-4444-555555555555";
+        let second: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "messages": [
+                prompt,
+                {"role": "assistant", "content": null, "tool_calls": [{"id": "call-1"}]},
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-1",
+                    "content": format!("{{\"images\":[{{\"data_base64\":\"{link}\",\"file_name\":\"counter.png\"}}]}}"),
+                },
+                {
+                    "role": "user",
+                    "content": format!("File: file name: counter.png file reference: {link} File contents --- ---"),
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}],
+                },
+            ]
+        }))
+        .unwrap();
+        match matcher.match_request(&second, "test0003") {
+            ResponseConfig::Static(config) => {
+                assert_eq!(
+                    config.chunks.join(""),
+                    format!("Here is the file:\n\n![File]({link})")
+                );
+            }
+            _ => panic!("Expected Static response"),
         }
     }
 

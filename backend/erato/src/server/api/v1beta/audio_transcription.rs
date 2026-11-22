@@ -415,7 +415,7 @@ async fn handle_dictation_control_frame(
             mode,
         } => {
             let selected_audio_feature = mode.audio_feature();
-            ensure_audio_feature_enabled(app_state, selected_audio_feature)?;
+            ensure_audio_feature_enabled(app_state, selected_audio_feature).await?;
             let resolved_chunk_duration_ms = requested_chunk_duration_ms.unwrap_or_else(|| {
                 selected_audio_feature
                     .config(app_state)
@@ -957,11 +957,15 @@ fn ensure_audio_transcription_enabled(app_state: &AppState) -> Result<(), Report
     }
 }
 
-fn ensure_audio_feature_enabled(
+async fn ensure_audio_feature_enabled(
     app_state: &AppState,
     audio_feature: AudioFeature,
 ) -> Result<(), Report> {
-    if audio_feature.config(app_state).enabled {
+    let enabled = match audio_feature {
+        AudioFeature::Conversational => app_state.voice_switches().await.conversational,
+        _ => audio_feature.config(app_state).enabled,
+    };
+    if enabled {
         Ok(())
     } else {
         Err(eyre::eyre!("{} is not enabled", audio_feature.config_key()))

@@ -822,11 +822,31 @@ messages only a preview or a truncated body. With either cache value, older docu
 have reached the device; with `cacheObservations`, documents that left the
 cache stay searchable.
 
-No range is claimed until the source has been enumerated completely once. Without
+`inventoryComplete` and `searchableDocuments` are optional for older v1 servers.
+The count includes visible indexed or empty receipts, including undated documents.
+A positive count means indexed content can be searched even before the first
+complete enumeration. Clients MUST NOT suppress queries or discard hits because
+a date range is unavailable.
+
+When inventory is incomplete and searchable documents exist, `unavailableReason`
+is `inventory_incomplete`; `from` and `through` are null. Clients MUST describe
+this as partial search availability, without promising contiguous date coverage
+or saying that nothing is searchable. Known extraction backlog and unknown
+inventory are separate: a drained backlog does not make inventory complete.
+`discovery[].state` can be `partial`; its lifecycle is `indexing` while known
+work remains and `partial` once it drains. Disabled, stopped, unavailable and
+blocked processing take precedence. An inventory warning alone MUST NOT turn
+useful partial progress into a blocked source after repeated partial rescans.
+Raw scan failure details remain available for diagnostics. Incomplete scans MUST
+continue to preserve unseen documents and defer deletion reconciliation.
+
+No range is claimed while the source inventory is incomplete. Without
 a claim, `from` and `through` are null, `olderPending` counts every unprocessed
 dated document, and `unavailableReason` says why. `from` is null exactly when
 `unavailableReason` is set. Common reasons are `not_enumerated`,
-`no_searchable_documents`, `source_disabled` and `index_not_initialized`.
+`no_searchable_documents`, `no_dated_searchable_documents`, `source_disabled` and
+`index_not_initialized`. A source with searchable documents but no usable dates
+uses `no_dated_searchable_documents`; clients MUST retain its hits.
 Counts are null only when they cannot be read.
 
 `dateBasis`, `inventory` and `unavailableReason` are open strings. A client that
@@ -1290,14 +1310,17 @@ latest **source scan**, not source discovery (finding stores/accounts on disk).
 New implementations additionally report optional `lifecycle`, `lastEnumeratedAt`
 and `health` fields. Clients use `lifecycle` for the primary source label and
 retain the legacy derivation when it is absent. Existing translated row labels
-map `scanning` to Scanning, `indexing` to Indexing and `current` to Up to date.
+map `scanning` to Scanning, `indexing` to Indexing, `partial` to Partial coverage
+and `current` to Up to date.
 
 The durable initial milestone is a completed enumeration, including an inventory
 that changed only at final validation. An early failure or a partial batch does
 not establish this milestone. The milestone survives attempts and process
 restart; a deliberate catalog reset establishes a new initial enumeration.
 Rebuilding only the search generation retains catalog inventory evidence.
-Until the milestone the lifecycle remains `scanning`, even when extraction runs.
+Before the milestone, an incomplete inventory reported as `source_inventory_incomplete`
+uses `indexing` while known extraction work remains and `partial` after it drains.
+Other initial scans remain `scanning`.
 After it, outstanding revisions, worker gaps, pacing, document retry delays and
 routine rescans remain `indexing`. `current` additionally requires no pending
 revisions/deletions and a stable successful inventory verified in the last two
@@ -1307,7 +1330,9 @@ claims remain independent and conservative.
 
 Disabled/stopped/unavailable sources have explicit lifecycle states. Five
 consecutive failed scans spanning at least fifteen minutes escalate to `blocked`,
-including recoverable store-change failures. These counters survive restart and
+including recoverable store-change failures. Inventory incompleteness alone does
+not cause this escalation; blocked document work and stalled active scans still do.
+These counters survive restart and
 are cleared by a successful authoritative scan. Detailed attempt errors remain
 available immediately; transient errors do not replace Scanning or Indexing.
 Document work blocked by the indexer also escalates. A later successful scan

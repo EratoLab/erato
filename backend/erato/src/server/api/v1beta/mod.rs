@@ -1,4 +1,7 @@
 #![allow(deprecated)]
+pub(crate) mod approval_access;
+pub mod approval_speech_style;
+pub mod approval_voice_commands;
 pub mod assistant_hub;
 pub mod assistant_usage;
 pub mod assistants;
@@ -16,8 +19,10 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod message_text_actions;
 pub mod ms_office;
+pub mod office_host_report;
 pub mod policy_engine_middleware;
 pub mod read_aloud;
+pub mod reply_speech_style;
 pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
@@ -25,6 +30,7 @@ pub mod sharepoint;
 pub mod starting_assistant;
 pub mod token_usage;
 pub mod user_tool_approval_settings;
+pub mod wait_lines;
 
 use self::client_operations::*;
 
@@ -87,13 +93,13 @@ use crate::server::api::v1beta::message_streaming::{
     __path_continue_message_sse, __path_edit_message_sse, __path_message_submit_sse,
     __path_react_to_task_result_sse, __path_regenerate_message_sse, __path_resume_message_sse,
     AbortStreamRequest, AbortStreamResponse, ActionFacetRequest, AlreadyContinuedError,
-    ChildrenWaitingError, ClientToolParkRequest, ClientToolParkResponse, ClientToolResultRequest,
-    ClientToolResultResponse, CoveredByParentError, EditMessageRequest,
+    CardChangedError, ChildrenWaitingError, ClientToolParkRequest, ClientToolParkResponse,
+    ClientToolResultRequest, ClientToolResultResponse, CoveredByParentError, EditMessageRequest,
     EditMessageStreamingResponseMessage, GenerationRunningError, MessageSubmitRequest,
     MessageSubmitStreamingResponseMessage, NothingToReactError, ReactToTaskResultRequest,
-    ResumeStreamRequest, abort_message_stream, client_tool_park, client_tool_result,
-    continue_message_sse, edit_message_sse, message_submit_sse, platform_from_headers,
-    react_to_task_result_sse, regenerate_message_sse, resume_message_sse,
+    ResumeStreamRequest, VoiceReceiptRefusedError, abort_message_stream, client_tool_park,
+    client_tool_result, continue_message_sse, edit_message_sse, message_submit_sse,
+    platform_from_headers, react_to_task_result_sse, regenerate_message_sse, resume_message_sse,
 };
 use crate::server::api::v1beta::share_grants::{
     CreateShareGrantRequest, CreateShareGrantResponse, ListShareGrantsResponse, ShareGrant,
@@ -253,6 +259,27 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/messages/{message_id}/speech",
             post(read_aloud::read_message_aloud),
         )
+        .route(
+            "/messages/{message_id}/approval-speech",
+            post(read_aloud::speak_approval),
+        )
+        .route(
+            "/messages/{message_id}/approval-voice-command",
+            post(approval_voice_commands::interpret_approval_voice_command),
+        )
+        .route(
+            "/approval-speech-style",
+            get(approval_speech_style::approval_speech_style),
+        )
+        .route(
+            "/reply-speech-style",
+            get(reply_speech_style::reply_speech_style),
+        )
+        .route("/wait-lines", get(wait_lines::wait_lines))
+        .route(
+            "/messages/{message_id}/progress-speech",
+            post(wait_lines::progress_speech),
+        )
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route(
@@ -284,6 +311,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
+        .route(
+            "/office-host-report",
+            post(office_host_report::office_host_report),
+        )
         .route(
             "/desktop-sidecar/organization-configuration",
             get(desktop_sidecar::organization_configuration),
@@ -541,6 +572,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::token_usage_estimate,
         prompt_optimizer,
         read_aloud::read_message_aloud,
+        read_aloud::speak_approval,
+        approval_voice_commands::interpret_approval_voice_command,
+        approval_speech_style::approval_speech_style,
+        reply_speech_style::reply_speech_style,
+        wait_lines::wait_lines,
+        wait_lines::progress_speech,
         message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
         available_models,
@@ -552,6 +589,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         mcp_servers::disconnect_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
+        office_host_report::office_host_report,
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,
@@ -600,6 +638,29 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chat_history_compaction::CompactChatRequest,
         chat_history_compaction::CompactChatResponse,
         read_aloud::ReadAloudStreamEvent,
+        read_aloud::ApprovalSpeechRequest,
+        approval_voice_commands::ApprovalVoiceCommandRequest,
+        crate::services::approval_voice_commands::VoiceCommand,
+        crate::services::approval_voice_commands::VoiceMeaning,
+        crate::services::approval_voice_commands::VoiceCommandSource,
+        crate::services::approval_voice_commands::CardPiece,
+        crate::services::approval_voice_commands::CardPieceRole,
+        crate::services::approval_voice_commands::CardPieceState,
+        approval_speech_style::ApprovalSpeechStyleResponse,
+        approval_speech_style::ApprovalSpeechStyleSource,
+        reply_speech_style::ReplySpeechStyleResponse,
+        reply_speech_style::ReplySpeechStyleSource,
+        erato_config::reply_speech::ReplySpeechWording,
+        wait_lines::WaitLinesResponse,
+        wait_lines::WaitLinesSource,
+        wait_lines::WaitLinesTiming,
+        wait_lines::WaitLineAudio,
+        wait_lines::WaitLineToolTemplates,
+        wait_lines::ProgressSpeechRequest,
+        erato_config::wait_lines::WaitLinesAmount,
+        erato_config::wait_lines::WaitLineSlot,
+        crate::config::ApprovalSpeechAmount,
+        crate::config::ApprovalSpeechWording,
         Chat,
         RecentChat,
         FacetInfo,
@@ -634,6 +695,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         AbortStreamResponse,
         GenerationRunningError,
         AlreadyContinuedError,
+        CardChangedError,
+        VoiceReceiptRefusedError,
         ChildrenWaitingError,
         CoveredByParentError,
         ReactToTaskResultRequest,
@@ -727,6 +790,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_text_actions::MessageExplainCompleted,
         message_text_actions::MessageExplainFailed,
         budget::BudgetStatusResponse,
+        office_host_report::OfficeHostReportRequest,
         crate::config::DesktopSidecarOrganizationConfigurationResponse,
         desktop_sidecar::DesktopSidecarDistributionResponse,
         desktop_sidecar::DesktopSidecarDistributionTargetResponse,
@@ -1047,10 +1111,45 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "Europe/Berlin")]
     pub preference_time_zone: Option<String>,
+    /// How much approval cards say aloud: `full` or `short`. Explicit
+    /// `null` follows the organisation again. Kept even where the user may
+    /// not choose, and then not used.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_approval_speech_amount: Option<Option<String>>,
+    /// How approval cards are worded aloud: `precise` or `natural`, like the
+    /// amount.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_approval_speech_wording: Option<Option<String>>,
+    /// What the voice says while the user waits: `normal`, `long_only` or
+    /// `off`, like the amount.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_wait_lines_amount: Option<Option<String>>,
+    /// How replies are spoken in conversation: `natural` or `precise`, like
+    /// the amount.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_reply_speech_wording: Option<Option<String>>,
+    /// Whether the chat shows what the voice said in conversation; `null`
+    /// follows the organisation again.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_reply_speech_show_in_chat: Option<Option<bool>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "de")]
     pub preference_language: Option<String>,
+}
+
+fn deserialize_patch_optional_bool<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<bool>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Some(Option::<bool>::deserialize(deserializer)?))
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -1135,6 +1234,22 @@ pub async fn update_profile_preferences(
         })
         .transpose()?;
 
+    fn style_patch<T: serde::de::DeserializeOwned>(
+        patch: Option<Option<String>>,
+    ) -> Result<Option<Option<T>>, StatusCode> {
+        match patch {
+            None => Ok(None),
+            Some(None) => Ok(Some(None)),
+            Some(Some(name)) => models::user_preference::parse_style_name(&name)
+                .map(|value| Some(Some(value)))
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY),
+        }
+    }
+    let approval_speech_amount = style_patch(request.preference_approval_speech_amount)?;
+    let approval_speech_wording = style_patch(request.preference_approval_speech_wording)?;
+    let wait_lines_amount = style_patch(request.preference_wait_lines_amount)?;
+    let reply_speech_wording = style_patch(request.preference_reply_speech_wording)?;
+
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
         &user_id,
@@ -1151,6 +1266,11 @@ pub async fn update_profile_preferences(
             starting_assistant_cleared: request.preference_starting_assistant_cleared,
             time_zone,
             language,
+            approval_speech_amount,
+            approval_speech_wording,
+            wait_lines_amount,
+            reply_speech_wording,
+            reply_speech_show_in_chat: request.preference_reply_speech_show_in_chat,
         },
     )
     .await
@@ -1192,6 +1312,23 @@ pub async fn update_profile_preferences(
     profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
     profile.preference_time_zone = updated_prefs.time_zone;
     profile.preference_language = updated_prefs.language;
+    profile.preference_approval_speech_amount = updated_prefs
+        .approval_speech_amount
+        .as_deref()
+        .and_then(models::user_preference::parse_style_name);
+    profile.preference_approval_speech_wording = updated_prefs
+        .approval_speech_wording
+        .as_deref()
+        .and_then(models::user_preference::parse_style_name);
+    profile.preference_wait_lines_amount = updated_prefs
+        .wait_lines_amount
+        .as_deref()
+        .and_then(models::user_preference::parse_style_name);
+    profile.preference_reply_speech_wording = updated_prefs
+        .reply_speech_wording
+        .as_deref()
+        .and_then(models::user_preference::parse_style_name);
+    profile.preference_reply_speech_show_in_chat = updated_prefs.reply_speech_show_in_chat;
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );

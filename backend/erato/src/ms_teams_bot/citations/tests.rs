@@ -12,6 +12,7 @@ fn details(text: &str, sources: &[FileSource], base: Option<&str>) -> String {
 
 fn sources() -> Vec<FileSource> {
     vec![FileSource {
+        generated: false,
         id: FILE.into(),
         name: "Annual report.pdf".into(),
     }]
@@ -43,7 +44,7 @@ fn footnotes_reference_links_and_bare_uris_work_without_citing_code_or_images() 
     assert!(!text.contains("[^source]"), "{text}");
     assert!(text.contains(&format!("`[example](erato-file://{FILE})`")));
     assert!(text.contains(&format!("```text\nerato-file://{FILE}\n```")));
-    assert!(text.contains(&format!("![image](erato-file://{FILE})")));
+    assert!(text.ends_with("image"));
     assert_eq!(citations.len(), 1);
     assert!(citations[0].appearance.get("url").is_none());
 }
@@ -54,7 +55,19 @@ fn unresolved_files_do_not_get_source_metadata_and_external_links_are_untouched(
     let (text, citations) = render(input, &sources(), Some("https://erato.example"));
     assert_eq!(text, "Private and [Web](https://example.com)");
     assert!(citations.is_empty());
-    assert!(referenced_file_ids("`erato-file://secret` ![x](erato-file://secret)").is_empty());
+    assert!(
+        referenced_file_ids("`erato-file://ignored` ![x](erato-file://secret)")
+            == HashSet::from(["secret".into()])
+    );
+}
+
+#[test]
+fn linked_generated_images_keep_the_outer_web_link() {
+    let input = format!("[![chart][plot]](https://example.com)\n\n[plot]: erato-file://{FILE}");
+    let (text, citations) = render(&input, &sources(), None);
+    assert_eq!(text, "[chart](https://example.com)");
+    assert!(citations.is_empty());
+    assert_eq!(referenced_file_ids(&input), HashSet::from([FILE.into()]));
 }
 
 #[test]
@@ -72,6 +85,7 @@ fn existing_number_markers_are_not_reinterpreted_as_file_citations() {
 fn more_than_twenty_sources_keep_clickable_links_and_bounded_titles() {
     let files: Vec<_> = (0..21)
         .map(|i| FileSource {
+            generated: false,
             id: format!("00000000-0000-0000-0000-{i:012}"),
             name: "界".repeat(100),
         })

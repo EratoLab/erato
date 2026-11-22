@@ -1,17 +1,20 @@
-use crate::config::AssistantHubConfig;
+use crate::config::{
+    AssistantHubActionPermissionsConfig, AssistantHubActionRole, AssistantHubConfig,
+};
 use crate::db::entity::prelude::*;
 use crate::db::entity::{
     assistant_file_uploads, assistant_hub_assistant_versions, assistant_hub_assistants,
     assistant_hub_reviews, assistants, users,
 };
-use crate::models::share_grant;
+use crate::models::{assistant, share_grant};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::prelude::*;
 use chrono::Utc;
 use eyre::{ContextCompat, Report, WrapErr, eyre};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, IntoActiveModel,
-    Order, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
+    IntoActiveModel, Order, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set,
+    TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
@@ -47,6 +50,62 @@ pub struct HubVersionRecord {
     pub version: assistant_hub_assistant_versions::Model,
     pub assistant: assistants::Model,
     pub creator: users::Model,
+}
+
+#[derive(Clone, Copy)]
+pub enum HubPublicationAction {
+    Publish,
+    Unpublish,
+    MakeCurrent,
+}
+
+impl HubPublicationAction {
+    fn roles(self, permissions: &AssistantHubActionPermissionsConfig) -> &[AssistantHubActionRole] {
+        match self {
+            Self::Publish => &permissions.publish,
+            Self::Unpublish => &permissions.unpublish,
+            Self::MakeCurrent => &permissions.make_current,
+        }
+    }
+
+    pub fn is_allowed(
+        self,
+        config: &AssistantHubConfig,
+        is_editor: bool,
+        is_reviewer: bool,
+    ) -> bool {
+        config.enabled
+            && self
+                .roles(&config.action_permissions)
+                .iter()
+                .any(|role| match role {
+                    AssistantHubActionRole::Editors => is_editor,
+                    AssistantHubActionRole::Reviewers => is_reviewer,
+                })
+    }
+
+    pub fn changes_version(self, version: &assistant_hub_assistant_versions::Model) -> bool {
+        version.status == STATUS_REVIEW_ACCEPTED
+            && match self {
+                Self::Publish => !version.is_published,
+                Self::Unpublish => version.is_published,
+                Self::MakeCurrent => version.is_published && !version.is_current_published_version,
+            }
+    }
+}
+
+pub async fn editable_source_ids(
+    policy: &PolicyEngine,
+    subject: &Subject,
+    source_ids: &[Uuid],
+) -> Result<Vec<Uuid>, Report> {
+    if source_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    policy
+        .filter_authorized_ids(subject, ResourceKind::Assistant, source_ids, Action::Update)
+        .await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,28 +196,6 @@ fn ensure_reviewer(config: &AssistantHubConfig, groups: &[String]) -> Result<(),
     }
 
     Ok(())
-}
-
-async fn ensure_creator_or_reviewer(
-    conn: &DatabaseConnection,
-    config: &AssistantHubConfig,
-    subject: &Subject,
-    groups: &[String],
-    hub_assistant_id: Uuid,
-) -> Result<assistant_hub_assistants::Model, Report> {
-    let hub_assistant = AssistantHubAssistants::find_by_id(hub_assistant_id)
-        .one(conn)
-        .await?
-        .wrap_err("Assistant hub assistant not found")?;
-    let user_id = user_uuid(subject)?;
-
-    if hub_assistant.owner_user_id == user_id || config.can_review(groups) {
-        return Ok(hub_assistant);
-    }
-
-    Err(eyre!(
-        "Access denied: User cannot manage this assistant hub item"
-    ))
 }
 
 async fn validate_source_assistant(
@@ -520,23 +557,39 @@ pub async fn submit_version(
 
 pub async fn list_my_hub_versions(
     conn: &DatabaseConnection,
+    policy: &PolicyEngine,
     config: &AssistantHubConfig,
     subject: &Subject,
 ) -> Result<Vec<HubVersionRecord>, Report> {
     ensure_enabled(config)?;
     let user_id = user_uuid(subject)?;
-    let hub_assistants = AssistantHubAssistants::find()
-        .filter(assistant_hub_assistants::Column::OwnerUserId.eq(user_id))
-        .all(conn)
-        .await?;
-    let hub_ids: Vec<Uuid> = hub_assistants.iter().map(|hub| hub.id).collect();
-
-    if hub_ids.is_empty() {
-        return Ok(Vec::new());
+    let mut visible_hubs =
+        Condition::any().add(assistant_hub_assistants::Column::OwnerUserId.eq(user_id));
+    if config
+        .action_permissions
+        .includes_role(AssistantHubActionRole::Editors)
+    {
+        let shared_sources: Vec<_> =
+            assistant::get_user_assistants(conn, policy, subject, "shared_with_user", true)
+                .await?
+                .into_iter()
+                .map(|assistant| assistant.id)
+                .collect();
+        let editable_sources = editable_source_ids(policy, subject, &shared_sources).await?;
+        if !editable_sources.is_empty() {
+            visible_hubs = visible_hubs
+                .add(assistant_hub_assistants::Column::SourceAssistantId.is_in(editable_sources));
+        }
     }
 
     let versions = AssistantHubAssistantVersions::find()
-        .filter(assistant_hub_assistant_versions::Column::AssistantHubAssistantId.is_in(hub_ids))
+        .inner_join(AssistantHubAssistants)
+        .filter(visible_hubs)
+        .filter(
+            Condition::any()
+                .add(assistant_hub_assistants::Column::OwnerUserId.eq(user_id))
+                .add(assistant_hub_assistant_versions::Column::Status.eq(STATUS_REVIEW_ACCEPTED)),
+        )
         .order_by_desc(assistant_hub_assistant_versions::Column::SubmittedAt)
         .all(conn)
         .await?;
@@ -569,7 +622,7 @@ fn review_status_sort_order(status: &str) -> u8 {
 }
 
 async fn records_for_versions(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     versions: Vec<assistant_hub_assistant_versions::Model>,
 ) -> Result<Vec<HubVersionRecord>, Report> {
     let mut records = Vec::with_capacity(versions.len());
@@ -884,110 +937,103 @@ pub async fn withdraw_version(
         .wrap_err("Updated assistant hub version not found")
 }
 
-pub async fn set_published(
+pub async fn update_version_publication(
     conn: &DatabaseConnection,
+    policy: &PolicyEngine,
     config: &AssistantHubConfig,
     subject: &Subject,
     groups: &[String],
     version_id: Uuid,
-    is_published: bool,
+    action: HubPublicationAction,
 ) -> Result<HubVersionRecord, Report> {
     ensure_enabled(config)?;
-    let version = AssistantHubAssistantVersions::find_by_id(version_id)
+    let (_, hub_assistant) = AssistantHubAssistantVersions::find_by_id(version_id)
+        .find_also_related(AssistantHubAssistants)
         .one(conn)
         .await?
         .wrap_err("Assistant hub version not found")?;
-    ensure_creator_or_reviewer(
-        conn,
-        config,
-        subject,
-        groups,
-        version.assistant_hub_assistant_id,
-    )
-    .await?;
+    let hub_assistant = hub_assistant.wrap_err("Assistant hub assistant not found")?;
 
+    let is_reviewer = config.can_review(groups);
+    if !action.is_allowed(config, false, is_reviewer) {
+        let is_editor = action.is_allowed(config, true, false)
+            && !editable_source_ids(policy, subject, &[hub_assistant.source_assistant_id])
+                .await?
+                .is_empty();
+        if !is_editor {
+            return Err(eyre!(
+                "Access denied: User cannot perform this assistant hub action"
+            ));
+        }
+    }
+
+    // Serialize publication changes across versions of the same Hub assistant.
+    let txn = conn.begin().await?;
+    AssistantHubAssistants::find_by_id(hub_assistant.id)
+        .lock_exclusive()
+        .one(&txn)
+        .await?
+        .wrap_err("Assistant hub assistant not found")?;
+    let version = AssistantHubAssistantVersions::find_by_id(version_id)
+        .lock_exclusive()
+        .one(&txn)
+        .await?
+        .wrap_err("Assistant hub version not found")?;
     if version.status != STATUS_REVIEW_ACCEPTED {
-        return Err(eyre!("Only review-accepted versions can be published"));
+        return Err(eyre!(
+            "Only review-accepted versions can change publication state"
+        ));
     }
-
-    let should_mark_current = is_published;
-    if should_mark_current {
-        let clear_current = assistant_hub_assistant_versions::ActiveModel {
-            is_current_published_version: Set(false),
-            ..Default::default()
-        };
-        AssistantHubAssistantVersions::update_many()
-            .set(clear_current)
-            .filter(
-                assistant_hub_assistant_versions::Column::AssistantHubAssistantId
-                    .eq(version.assistant_hub_assistant_id),
-            )
-            .exec(conn)
-            .await?;
-    }
-
-    let mut active = version.into_active_model();
-    active.is_published = Set(is_published);
-    active.published_at = Set(is_published.then(|| Utc::now().into()));
-    active.is_current_published_version = Set(should_mark_current);
-    let version = active.update(conn).await?;
-
-    records_for_versions(conn, vec![version])
-        .await?
-        .into_iter()
-        .next()
-        .wrap_err("Updated assistant hub version not found")
-}
-
-pub async fn set_current_published_version(
-    conn: &DatabaseConnection,
-    config: &AssistantHubConfig,
-    subject: &Subject,
-    groups: &[String],
-    version_id: Uuid,
-) -> Result<HubVersionRecord, Report> {
-    ensure_enabled(config)?;
-    let version = AssistantHubAssistantVersions::find_by_id(version_id)
-        .one(conn)
-        .await?
-        .wrap_err("Assistant hub version not found")?;
-    ensure_creator_or_reviewer(
-        conn,
-        config,
-        subject,
-        groups,
-        version.assistant_hub_assistant_id,
-    )
-    .await?;
-
-    if version.status != STATUS_REVIEW_ACCEPTED || !version.is_published {
+    if matches!(action, HubPublicationAction::MakeCurrent) && !version.is_published {
         return Err(eyre!(
             "Only published review-accepted versions can be current"
         ));
     }
 
-    let clear_current = assistant_hub_assistant_versions::ActiveModel {
-        is_current_published_version: Set(false),
-        ..Default::default()
+    let version = if action.changes_version(&version) {
+        let mark_current = !matches!(action, HubPublicationAction::Unpublish);
+        if mark_current {
+            AssistantHubAssistantVersions::update_many()
+                .col_expr(
+                    assistant_hub_assistant_versions::Column::IsCurrentPublishedVersion,
+                    sea_orm::sea_query::Expr::value(false),
+                )
+                .filter(
+                    assistant_hub_assistant_versions::Column::AssistantHubAssistantId
+                        .eq(hub_assistant.id),
+                )
+                .filter(
+                    assistant_hub_assistant_versions::Column::IsCurrentPublishedVersion.eq(true),
+                )
+                .exec(&txn)
+                .await?;
+        }
+
+        let mut active = version.into_active_model();
+        active.is_current_published_version = Set(mark_current);
+        match action {
+            HubPublicationAction::Publish => {
+                active.is_published = Set(true);
+                active.published_at = Set(Some(Utc::now().into()));
+            }
+            HubPublicationAction::Unpublish => {
+                active.is_published = Set(false);
+                active.published_at = Set(None);
+            }
+            HubPublicationAction::MakeCurrent => {}
+        }
+        active.update(&txn).await?
+    } else {
+        version
     };
-    AssistantHubAssistantVersions::update_many()
-        .set(clear_current)
-        .filter(
-            assistant_hub_assistant_versions::Column::AssistantHubAssistantId
-                .eq(version.assistant_hub_assistant_id),
-        )
-        .exec(conn)
-        .await?;
 
-    let mut active = version.into_active_model();
-    active.is_current_published_version = Set(true);
-    let version = active.update(conn).await?;
-
-    records_for_versions(conn, vec![version])
+    let record = records_for_versions(&txn, vec![version])
         .await?
         .into_iter()
         .next()
-        .wrap_err("Updated assistant hub version not found")
+        .wrap_err("Updated assistant hub version not found")?;
+    txn.commit().await?;
+    Ok(record)
 }
 
 pub async fn set_featured(

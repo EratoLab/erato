@@ -1,3 +1,4 @@
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import { withClientCallLock } from "@/lib/clientOperations/operationLock";
 import { operationExecutorBinding } from "@/lib/clientOperations/registration";
@@ -211,16 +212,20 @@ async function requestPark(
   binding: ExecutorBinding,
 ): Promise<boolean> {
   try {
-    const response = await fetch("/api/v1beta/me/messages/clienttoolpark", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...deps.getAuthHeaders(),
-        ...(deps.extraHeaders ?? {}),
-        "X-Erato-Executor": JSON.stringify(binding),
-      },
-      body: JSON.stringify(base),
-    });
+    const response = await fetchWithAuthRecovery(
+      () =>
+        fetch("/api/v1beta/me/messages/clienttoolpark", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...deps.getAuthHeaders(),
+            ...(deps.extraHeaders ?? {}),
+            "X-Erato-Executor": JSON.stringify(binding),
+          },
+          body: JSON.stringify(base),
+        }),
+      "client-tool-park",
+    );
     if (!response.ok) {
       console.warn(
         `[client_tool_call] park request returned ${response.status}`,
@@ -266,18 +271,26 @@ async function postClientToolResult(
   binding: ExecutorBinding | undefined,
 ): Promise<void> {
   try {
+    // The call times out on the server within its budget, so a lapsed session is renewed and the
+    // result sent again at once rather than lost.
     const response = await sendWithRetries(
       () =>
-        fetch("/api/v1beta/me/messages/clienttoolresult", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...deps.getAuthHeaders(),
-            ...(deps.extraHeaders ?? {}),
-            ...(binding ? { "X-Erato-Executor": JSON.stringify(binding) } : {}),
-          },
-          body: JSON.stringify(body),
-        }),
+        fetchWithAuthRecovery(
+          () =>
+            fetch("/api/v1beta/me/messages/clienttoolresult", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...deps.getAuthHeaders(),
+                ...(deps.extraHeaders ?? {}),
+                ...(binding
+                  ? { "X-Erato-Executor": JSON.stringify(binding) }
+                  : {}),
+              },
+              body: JSON.stringify(body),
+            }),
+          "client-tool-result",
+        ),
       deps.executor ? EXECUTOR_RESULT_RETRY_MS : [],
     );
     if (response.ok) {

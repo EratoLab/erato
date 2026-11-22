@@ -121,6 +121,26 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     ).toBeInTheDocument();
   });
 
+  it("speaks for the section plan and parts of a change in parts", async () => {
+    const { unmount } = await renderNotice(
+      message(
+        [
+          tool("plan_document_sections", { status: "success", result: {} }),
+          timedOut("write_document_section"),
+        ],
+        { submission_outcome: unresolved("timeout") },
+      ),
+    );
+    expect(screen.getByText(NO_RESPONSE)).toBeInTheDocument();
+    unmount();
+    await renderNotice(
+      message([rejected("plan_document_sections", "wrong-request")], {
+        submission_outcome: unresolved("context_unavailable"),
+      }),
+    );
+    expect(screen.getByText(RELOADED)).toBeInTheDocument();
+  });
+
   it("says Word didn't respond when no pane was connected to run the plan", async () => {
     await renderNotice(
       message(
@@ -194,6 +214,24 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     await renderNotice(message([timedOut("read_document_blocks")]), "de");
     expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
       "Erato konnte das Dokument nicht lesen, weil Word nicht geantwortet hat. Falls die Antwort das Dokument braucht, lass Word geöffnet und sende die Nachricht noch einmal.",
+    );
+  });
+});
+
+describe("SubmissionNotice reasons", () => {
+  it("says the part limit was reached, not that correction attempts ran out", async () => {
+    await renderNotice(
+      message([], {
+        submission_outcome: {
+          status: "unresolved",
+          reason: "part_calls_exhausted",
+          attempts_used: 0,
+          max_attempts: 5,
+        },
+      }),
+    );
+    expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
+      "No valid proposal was preparedErato reached the limit of parts it can write in one request; ask for a smaller change.",
     );
   });
 });

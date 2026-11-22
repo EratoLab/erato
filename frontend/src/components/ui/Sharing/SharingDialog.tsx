@@ -44,7 +44,8 @@ export function SharingDialog({
   hasSharepointFiles = false,
 }: SharingDialogProps) {
   const { _ } = useLingui();
-  const { enableEditSharing } = useAssistantsFeature();
+  const { enableEditSharing, enableDirectOrganizationSharing } =
+    useAssistantsFeature();
 
   // State for selected subjects
   const [selectedSubjects, setSelectedSubjects] = useState<
@@ -305,6 +306,7 @@ export function SharingDialog({
             onToggleSubject={handleToggleSubject}
             existingGrants={grants ?? []}
             subjectTypeFilter={subjectTypeFilter}
+            allowOrganizationTarget={enableDirectOrganizationSharing}
           />
           <div className="mt-3 flex justify-end">
             <Button

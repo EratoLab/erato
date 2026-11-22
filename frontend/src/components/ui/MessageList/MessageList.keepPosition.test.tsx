@@ -46,6 +46,9 @@ const contentHeight = (content: HTMLElement) =>
   ) + spacerHeight(content.lastElementChild as HTMLElement);
 
 let resizeTicks: Array<() => void> = [];
+// What a card shows can shrink without its message changing, like an older
+// Word card folding.
+let foldedIds = new Set<string>();
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -54,6 +57,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   resizeTicks = [];
+  foldedIds = new Set();
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -115,9 +119,11 @@ const renderList = (list: ChatMessage[], sessionId = "chat-1") => {
           onMessageAction={vi.fn(async () => true)}
           messageRenderer={({ message: entry }) => (
             <div data-row>
-              {entry.content
-                .map((part) => ("text" in part ? part.text : ""))
-                .join("")}
+              {foldedIds.has(entry.id)
+                ? "folded"
+                : entry.content
+                    .map((part) => ("text" in part ? part.text : ""))
+                    .join("")}
             </div>
           )}
         />
@@ -207,6 +213,19 @@ describe("MessageList keeps the reading position", () => {
     view.update([message("b1", "user", 0, "other")], "chat-2");
 
     expect(view.container.scrollTop).toBe(0);
+  });
+
+  it("leaves a card that folds without its message changing to the browser", () => {
+    const view = renderList([question, answer(READ_SO_FAR)]);
+    view.scrollToEnd();
+    const readingAt = view.container.scrollTop;
+
+    foldedIds.add("a1");
+    view.update([question, answer(READ_SO_FAR)]);
+
+    const content = view.container.querySelector<HTMLElement>(".mx-auto")!;
+    expect(spacerHeight(content.lastElementChild as HTMLElement)).toBe(0);
+    expect(view.container.scrollTop).toBeLessThan(readingAt);
   });
 
   it("lets go after a while when the answer does not come back", () => {

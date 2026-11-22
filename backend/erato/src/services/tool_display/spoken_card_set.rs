@@ -1,0 +1,272 @@
+//! The scenarios the spoken approval card is written and heard against: each
+//! with a stable id, its kind of card and what the card holds, and the calls
+//! it is made of, labelled here exactly as a chat labels them. The frontend
+//! composes its spoken cards from the generated file, so a change to the
+//! labels shows up there.
+//!
+//! Regenerate with `SPOKEN_CARD_SET_WRITE=1 cargo nextest run -p erato spoken_card_set`.
+
+use super::*;
+use crate::models::message::{
+    ContentPart, GenerationInputMessages, MessageRole, ToolCallStatus, ToolUse,
+};
+use crate::services::prompt_composition::transforms::replay_assistant_content;
+use rmcp::model::{JsonObject, Tool, ToolAnnotations};
+use serde_json::{Value, json};
+use std::collections::BTreeMap;
+
+const INPUT: &str = include_str!("spoken_card_set.json");
+const OUTPUT_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/calls.json"
+);
+
+#[derive(serde::Deserialize)]
+struct Set {
+    tags: Tags,
+    scenarios: Vec<Scenario>,
+    servers: BTreeMap<String, Value>,
+    #[serde(default)]
+    spoken_vocabularies: Value,
+    history: BTreeMap<String, Vec<Step>>,
+    calls: Vec<Call>,
+}
+
+#[derive(serde::Deserialize)]
+struct Tags {
+    kind: Vec<String>,
+    holds: Vec<String>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Scenario {
+    id: String,
+    kind: Vec<String>,
+    holds: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    approval_kind: Option<String>,
+    /// `consecutive_stops`: the calls stop the turn one after another, as
+    /// parallel calls of the model do; else they are asked together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shape: Option<String>,
+    calls: Vec<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct Step {
+    tool_name: String,
+    input: Value,
+    output: Value,
+}
+
+#[derive(serde::Deserialize)]
+struct Call {
+    id: String,
+    server: String,
+    tool: String,
+    #[serde(default)]
+    description: String,
+    annotations: Value,
+    arguments: Value,
+}
+
+fn runtime_config(servers: &BTreeMap<String, Value>, vocabularies: &Value) -> McpRuntimeConfig {
+    let mut config = McpRuntimeConfig {
+        spoken_vocabularies: serde_json::from_value(vocabularies.clone()).unwrap_or_default(),
+        ..McpRuntimeConfig::default()
+    };
+    for (id, server) in servers {
+        let mut server = server.clone();
+        server["transport_type"] = json!("streamable_http");
+        server["url"] = json!(format!("https://{id}.example/mcp"));
+        config
+            .mcp_servers
+            .insert(id.clone(), serde_json::from_value(server).unwrap());
+    }
+    config
+}
+
+/// What a chat on `server` had read before the call: the results of `steps`.
+fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::ToolResultContext {
+    let messages = steps
+        .iter()
+        .enumerate()
+        .flat_map(|(index, step)| {
+            let tool = ToolUse {
+                tool_call_id: format!("{server}-history-{index}"),
+                status: ToolCallStatus::Success,
+                tool_name: step.tool_name.clone(),
+                display: Some(ToolDisplayMetadata {
+                    title: step.tool_name.clone(),
+                    description: None,
+                    description_truncated: false,
+                    server_name: Some(config.mcp_server_display_name(server)),
+                    tool_name: None,
+                    label: None,
+                    read_only: false,
+                    closed_world: false,
+                }),
+                input: Some(step.input.clone()),
+                output: Some(step.output.clone()),
+                ..Default::default()
+            };
+            replay_assistant_content(&MessageRole::Assistant, vec![ContentPart::ToolUse(tool)])
+        })
+        .collect();
+    label::ToolResultContext::from_messages(&GenerationInputMessages { messages })
+        .with_organization(Some("daniel@beispiel-industrie.de"), &[])
+}
+
+fn generated() -> Value {
+    let set: Set = serde_json::from_str(INPUT).unwrap();
+    let config = runtime_config(&set.servers, &set.spoken_vocabularies);
+    let calls: Vec<Value> = set
+        .calls
+        .iter()
+        .map(|call| {
+            let steps = set
+                .history
+                .get(&call.server)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let mut tool = Tool::new(
+                call.tool.clone(),
+                call.description.clone(),
+                JsonObject::new(),
+            );
+            tool.annotations = Some(serde_json::from_value::<ToolAnnotations>(
+                call.annotations.clone(),
+            ))
+            .transpose()
+            .unwrap();
+            let display = mcp_tool_call_display(
+                &config,
+                &call.server,
+                &tool,
+                &call.arguments,
+                None,
+                &context(&config, &call.server, steps),
+            );
+            json!({
+                "id": call.id,
+                "tool_name": call.tool,
+                "server_id": call.server,
+                "input": call.arguments,
+                "display": display,
+            })
+        })
+        .collect();
+    json!({ "scenarios": set.scenarios, "calls": calls })
+}
+
+#[test]
+fn every_scenario_is_tagged_from_the_vocabulary_and_names_known_calls() {
+    let set: Set = serde_json::from_str(INPUT).unwrap();
+    let calls: Vec<&str> = set.calls.iter().map(|call| call.id.as_str()).collect();
+    let mut ids = std::collections::HashSet::new();
+    for scenario in &set.scenarios {
+        assert!(ids.insert(&scenario.id), "{} twice", scenario.id);
+        assert!(!scenario.kind.is_empty(), "{}", scenario.id);
+        for kind in &scenario.kind {
+            assert!(set.tags.kind.contains(kind), "{}: {kind}", scenario.id);
+        }
+        for holds in &scenario.holds {
+            assert!(set.tags.holds.contains(holds), "{}: {holds}", scenario.id);
+        }
+        for call in &scenario.calls {
+            assert!(calls.contains(&call.as_str()), "{}: {call}", scenario.id);
+        }
+    }
+}
+
+#[test]
+fn the_spoken_card_set_matches_its_labels() {
+    let text = format!("{}\n", serde_json::to_string_pretty(&generated()).unwrap());
+    if std::env::var_os("SPOKEN_CARD_SET_WRITE").is_some() {
+        std::fs::write(OUTPUT_PATH, &text).unwrap();
+        return;
+    }
+    let stored = std::fs::read_to_string(OUTPUT_PATH).unwrap_or_default();
+    assert!(
+        stored == text,
+        "{OUTPUT_PATH} is out of date; regenerate it with SPOKEN_CARD_SET_WRITE=1"
+    );
+}
+
+/// A coded value is named by its own table's word: a case's priority 1 is
+/// High (not an activity's Normal), and a join that filters two tables on
+/// the same code names each by its table.
+#[test]
+fn spoken_choices_follow_the_table_of_the_value() {
+    let generated = generated();
+    let names = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]["spoken_names"]
+            .clone()
+    };
+    let case = names("update-14-case-priority");
+    assert_eq!(case["de"]["choices"]["prioritycode"]["1"], "Hoch");
+    assert_eq!(case["en"]["choices"]["prioritycode"]["1"], "High");
+    let join = names("read-15-sql-join-two-states");
+    assert_eq!(
+        join["de"]["choices"]["opportunity.statecode"]["1"],
+        "Gewonnen"
+    );
+    assert_eq!(join["de"]["choices"]["account.statecode"]["1"], "Inaktiv");
+    assert!(join["de"]["choices"].get("statecode").is_none());
+}
+
+/// A value inside a nested object of the record, such as an account created
+/// with an opportunity or a case written through a task, has that object's
+/// fields and codes: it is marked nested and gives the call's table no entry.
+#[test]
+fn a_nested_effect_is_never_named_from_the_outer_table() {
+    let generated = generated();
+    let label = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]
+            .clone()
+    };
+    let nested = |label: &Value, path: &str| {
+        label["change"]["effects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|effect| effect["path"] == path)
+            .unwrap_or_else(|| panic!("{path}"))["nested"]
+            == true
+    };
+    let create = label("create-15-nested-account");
+    assert!(nested(&create, "/item/parentaccountid/name"));
+    assert!(nested(&create, "/item/parentaccountid/statecode"));
+    // The opportunity's name is its title; the account's name and state 1
+    // (Inactive, never the opportunity's Won) get no entry.
+    assert!(create.get("spoken_names").is_none());
+    // Microsoft's deep insert through a collection: one opportunity created
+    // with the account, its state 1 (Won) never the account's Inactive.
+    let account = label("create-16-account-with-opportunity");
+    assert!(nested(
+        &account,
+        "/item/opportunity_customer_accounts/0/statecode"
+    ));
+    assert!(account.get("spoken_names").is_none());
+    let update = label("update-15-task-nested-case");
+    assert!(!nested(&update, "/item/prioritycode"));
+    assert!(nested(
+        &update,
+        "/item/regardingobjectid_incident_task/prioritycode"
+    ));
+    // The task's priority 1 is Normal; the case's 1 (High) gets no entry.
+    assert_eq!(
+        update["spoken_names"]["de"]["choices"]["prioritycode"],
+        json!({ "1": "Normal" })
+    );
+}

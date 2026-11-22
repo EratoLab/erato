@@ -18,6 +18,8 @@ pub mod mcp_servers;
 pub mod message_feedback;
 pub mod message_text_actions;
 pub mod messages;
+pub mod office_addin_manifests;
+pub mod office_host_report;
 pub mod read_aloud;
 pub mod scheduled_items;
 pub mod sharepoint;

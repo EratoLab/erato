@@ -1,5 +1,8 @@
 import type { V1betaApiContext } from "./v1betaApiContext";
-import { tryRecoverAuth } from "../../../auth/authRecovery";
+import {
+  isSignedOutResponse,
+  tryRecoverAuth,
+} from "../../../auth/authRecovery";
 import { mergeApiAuthHeaders } from "../../../auth/apiRequestAuth";
 import {
   connectivity,
@@ -126,13 +129,13 @@ export async function v1betaApiFetch<
     readTimeout.responded();
     connectivity.reportNetworkSuccess();
     if (!response.ok) {
-      // On a 401, ask the (optionally) registered recovery handler to refresh
-      // the session, then replay the request exactly once. Falls straight
-      // through for the web app (tryRecoverAuth returns false with no handler).
+      // Turned away as signed out (a 401, or the proxy's 403 sign-in page): ask the (optionally)
+      // registered recovery handler to refresh the session, then replay the request exactly once.
+      // Falls straight through for the web app (tryRecoverAuth returns false with no handler).
       if (
-        response.status === 401 &&
+        isSignedOutResponse(response) &&
         allowAuthRetry &&
-        (await tryRecoverAuth("rest-401"))
+        (await tryRecoverAuth(`rest-${response.status}`))
       ) {
         return v1betaApiFetch<
           TData,

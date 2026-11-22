@@ -1,5 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
 import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
@@ -13,6 +13,8 @@ import {
   WordPlanStatusPill,
 } from "./WordPlanChangeRow";
 import {
+  toggledKeys,
+  useWordReviewJumpFocus,
   WordCheckFirst,
   WordDisclosure,
   WordReviewHeader,
@@ -154,10 +156,15 @@ function groupTitle(group: WordPlanGroup): string {
   return (
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty heading falls back too
     group.heading?.text ||
-    t({
-      id: "officeAddin.word.authoring.opening",
-      message: "Opening content",
-    })
+    (group.sectionUnknown
+      ? t({
+          id: "officeAddin.word.planReview.sectionUnknown",
+          message: "Section not known",
+        })
+      : t({
+          id: "officeAddin.word.authoring.opening",
+          message: "Opening content",
+        }))
   );
 }
 
@@ -242,36 +249,14 @@ export function WordDocumentPlanReview({
       ),
   );
   const [filter, setFilter] = useState<GroupFilter>("changed");
-  const [focusKey, setFocusKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!focusKey) return;
-    const target = Array.from(
-      containerRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ??
-        [],
-    ).find((item) => item.dataset.rowKey === focusKey);
-    // A restructured plan draws its text as one preview instead of rows.
-    const focusable =
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
-      target?.querySelector<HTMLElement>("button, [tabindex]") ??
-      containerRef.current?.querySelector<HTMLElement>("[data-jump-target]");
-    focusable?.focus();
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in jsdom
-    focusable?.scrollIntoView?.({ block: "nearest" });
-    setFocusKey(null);
-  }, [focusKey]);
+  // A restructured plan draws its text as one preview instead of rows: its jump target.
+  const setFocusKey = useWordReviewJumpFocus(containerRef);
 
   const toggle = (
     set: (update: (prev: ReadonlySet<string>) => ReadonlySet<string>) => void,
     key: string,
     open: boolean,
-  ) =>
-    set((prev) => {
-      const next = new Set(prev);
-      if (open) next.add(key);
-      else next.delete(key);
-      return next;
-    });
+  ) => set((prev) => toggledKeys(prev, key, open));
   const rowsProps = {
     snapshot,
     onLocate,
@@ -391,25 +376,28 @@ export function WordDocumentPlanReview({
             </section>
           )}
           <PlanRows rows={bodyRows} {...rowsProps} />
-          {review.size === "medium" && !restructured && snapshot && (
-            <WordDisclosure
-              className="word-plan-review__section"
-              label={t({
-                id: "officeAddin.word.planReview.showPreview",
-                message: "Preview the result",
-              })}
-              openLabel={t({
-                id: "officeAddin.word.planReview.hidePreview",
-                message: "Hide preview",
-              })}
-            >
-              <WordPlanOutputPreview
-                output={review.output ?? []}
-                snapshot={snapshot}
-                checkInWordShown={review.checkInWord}
-              />
-            </WordDisclosure>
-          )}
+          {review.size === "medium" &&
+            !restructured &&
+            snapshot &&
+            review.output && (
+              <WordDisclosure
+                className="word-plan-review__section"
+                label={t({
+                  id: "officeAddin.word.planReview.showPreview",
+                  message: "Preview the result",
+                })}
+                openLabel={t({
+                  id: "officeAddin.word.planReview.hidePreview",
+                  message: "Hide preview",
+                })}
+              >
+                <WordPlanOutputPreview
+                  output={review.output}
+                  snapshot={snapshot}
+                  checkInWordShown={review.checkInWord}
+                />
+              </WordDisclosure>
+            )}
         </>
       )}
       {!!review.partsRows.length && (

@@ -178,4 +178,96 @@ describe("buildContinueStreamBody", () => {
       shows_limit_and_builtin_child_items: true,
     });
   });
+
+  it("asks for the continued answer to be read back only when the turn was", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        approvalIds: ["a", "b"],
+        readBack: true,
+      }),
+    ).toMatchObject({ conversational_audio_back: true });
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        readBack: true,
+      }),
+    ).toMatchObject({ conversational_audio_back: true });
+    expect(
+      buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),
+    ).not.toHaveProperty("conversational_audio_back");
+  });
+
+  it("names the approval of a change request and carries the user's words", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "request_change",
+        itemDecisions: [
+          {
+            approvalId: "call-a",
+            decision: "request_change",
+            changeRequest: "nimm den 22.",
+          },
+        ],
+        readBack: true,
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        {
+          approval_id: "call-a",
+          decision: "request_change",
+          change_request: "nimm den 22.",
+        },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+      conversational_audio_back: true,
+    });
+  });
+
+  it("sends the words with a change request only", () => {
+    const body = buildContinueStreamBody({
+      messageId: "message-1",
+      decision: "approve",
+      itemDecisions: [
+        { approvalId: "call-a", decision: "approve", changeRequest: "x" },
+        {
+          approvalId: "call-b",
+          decision: "request_change",
+          changeRequest: "ohne Anna",
+        },
+      ],
+    });
+    expect(body.decisions).toEqual([
+      { approval_id: "call-a", decision: "approve" },
+      {
+        approval_id: "call-b",
+        decision: "request_change",
+        change_request: "ohne Anna",
+      },
+    ]);
+  });
+
+  it("names a single decision said by voice, with its receipt", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        itemDecisions: [
+          { approvalId: "call-a", decision: "approve", voiceReceipt: "r-1" },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        { approval_id: "call-a", decision: "approve", voice_receipt: "r-1" },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
 });

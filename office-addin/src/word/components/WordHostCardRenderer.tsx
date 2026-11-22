@@ -16,11 +16,13 @@ import {
   editedParagraphCount,
   editExcerpt,
   parseWordEdits,
+  WORD_PARTS_FENCE,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import { WordCommentChangesCard } from "./WordCommentChangesCard";
+import { WordDocumentPartsCard } from "./WordDocumentPartsCard";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
@@ -39,6 +41,7 @@ import {
 import { WordSelectionCard } from "./WordSelectionCard";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
@@ -73,6 +76,8 @@ export function WordHostCardRenderer({
   language,
   content,
 }: HostCardCodeBlockProps) {
+  if (language === WORD_PARTS_FENCE)
+    return <WordDocumentPartsCard key={content} callId={content} />;
   const entry = wordActionForFence(language);
   if (!entry) {
     return <RawFence content={content} />;
@@ -123,6 +128,9 @@ function RawFence({ content }: { content: string }) {
   );
 }
 
+const wordInsertTitleText = () =>
+  t({ id: "officeAddin.word.review.insertTitle", message: "Insert text" });
+
 function WordActionCard({
   entry,
   content,
@@ -170,6 +178,12 @@ function WordActionCard({
     capture,
     expectedIdentity: artifact?.itemIdentity,
     currentIdentity: documentIdentity,
+  });
+  // A capture rebuilt from history is no copy to write to either.
+  const copyGone = useWordCopyGone({
+    generating: isGenerating,
+    hasCopy: !!capture,
+    revoked: !gate.allowed && gate.reason === "no-capture",
   });
   const [tracking, setTracking] = useState<WordTrackingMode>("unknown");
   const [revertConfirmation, setRevertConfirmation] = useState(false);
@@ -454,7 +468,8 @@ function WordActionCard({
     review.status === "done" ||
     review.status === "denied" ||
     review.status === "reverted";
-  const collapsed = completed && !review.detailsExpanded;
+  const folds = completed || (idle && copyGone);
+  const collapsed = folds && !review.detailsExpanded;
   const applyLabel =
     payload.kind === "edits"
       ? total === 1
@@ -558,13 +573,13 @@ function WordActionCard({
               ? wordEditsTitleText(
                   editedParagraphCount(payload.edits, capture?.paragraphsSent),
                 )
-              : undefined
+              : wordInsertTitleText()
           }
         />
       }
       footer={
         <>
-          {(idle || applying) && offeredActions.length > 0 && (
+          {(idle || applying) && !copyGone && offeredActions.length > 0 && (
             <>
               <p className="word-review__hint">
                 {payload.kind === "edits"
@@ -625,7 +640,7 @@ function WordActionCard({
             />
           )}
           <div className="word-review__actions">
-            {completed && (
+            {folds && (
               <WordReviewDetailsToggle
                 collapsed={collapsed}
                 controls={detailsId}
@@ -742,12 +757,7 @@ function WordActionCard({
           onLocate={onLocate}
         />
       ) : (
-        <WordReviewHeader
-          title={t({
-            id: "officeAddin.word.review.insertTitle",
-            message: "Insert text",
-          })}
-        >
+        <WordReviewHeader title={wordInsertTitleText()}>
           <pre className="word-review__text">{payload.text}</pre>
           {blockedReason && (
             <Alert

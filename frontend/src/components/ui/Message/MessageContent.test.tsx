@@ -21,8 +21,9 @@ import {
 import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { chatDetailQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
-import { ChatContext } from "@/providers/ChatProvider";
+import { ChatContextProviders } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { testChatValue } from "@/test/chatContextValue";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
@@ -36,6 +37,10 @@ const mermaidMock = vi.hoisted(() => ({
 }));
 
 vi.mock("mermaid", () => ({ default: mermaidMock }));
+const voiceTraces = vi.hoisted(() => ({ shown: true }));
+vi.mock("@/hooks/audio/voiceTraces", () => ({
+  useVoiceTracesShown: (needed: boolean) => needed && voiceTraces.shown,
+}));
 
 import type {
   ChatDetail,
@@ -1646,6 +1651,39 @@ describe("MessageContent", () => {
       }
     });
 
+    it("renders a pending submitted card while its call is still being written", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        renderWithTheme(
+          <MessageContent
+            content={[{ ...toolUseContent({}), status: "preparing" }]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCard: {
+                toolCallId: "tool-call-123",
+                language: "editor-draft",
+                content: "Planning",
+                pending: true,
+              },
+            }}
+            isStreaming
+          />,
+        );
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "Planning",
+        );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("renders one submitted card when a model also echoes the legacy fence", () => {
       const original = componentRegistry.HostCardCodeBlock;
       componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
@@ -2087,6 +2125,37 @@ describe("MessageContent", () => {
         screen.queryByTestId("task-plan-approval"),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("a submission written in parts", () => {
+  const call = (id: string, output: Record<string, unknown>): ContentPart =>
+    ({
+      ...(toolUseContent({}) as unknown as Record<string, unknown>),
+      tool_call_id: id,
+      tool_name: id === "finish" ? "submit_draft" : "write_section",
+      output,
+    }) as unknown as ContentPart;
+  const part = { tries_remaining: 2, calls_remaining: 30 };
+
+  it("shows one step when Erato writes text between its part calls", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          call("plan", { status: "success", part }),
+          ...textContent("Now the second section."),
+          call("part-2", { status: "success", part }),
+          call("finish", {
+            status: "success",
+            submission: { status: "accepted", attempts_remaining: 4 },
+          }),
+          ...textContent("Ready to apply."),
+        ]}
+      />,
+    );
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(screen.getByText("Now the second section.")).toBeInTheDocument();
   });
 });
 
@@ -2782,13 +2851,9 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     const reviewEnded = markAwaitingReview("chat");
     try {
       renderWithQueryClient(
-        <ChatContext.Provider
-          value={
-            { currentChatId: "chat" } as React.ContextType<typeof ChatContext>
-          }
-        >
+        <ChatContextProviders value={testChatValue({ currentChatId: "chat" })}>
           <MessageContent messageId="message-1" content={[pending]} />
-        </ChatContext.Provider>,
+        </ChatContextProviders>,
       );
       expect(screen.getByRole("status")).toHaveTextContent(
         "Ready for review in the Erato desktop app",
@@ -2884,20 +2949,18 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
     );
     return renderWithTheme(
       <QueryClientProvider client={queryClient}>
-        <ChatContext.Provider
-          value={
-            {
-              currentChatId: "task-chat",
-              refetchMessages: async () => undefined,
-            } as unknown as React.ContextType<typeof ChatContext>
-          }
+        <ChatContextProviders
+          value={testChatValue({
+            currentChatId: "task-chat",
+            refetchMessages: async () => undefined,
+          })}
         >
           <MessageContent
             messageId="task-message"
             content={[pending]}
             readOnly={readOnly}
           />
-        </ChatContext.Provider>
+        </ChatContextProviders>
       </QueryClientProvider>,
     );
   };
@@ -2983,7 +3046,7 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
   });
 });
 
-it("renders persisted speech for explicit replay without autoplay", () => {
+it("offers persisted speech as a compact replay button that shows its length", () => {
   renderWithTheme(
     <MessageContent
       content={[
@@ -2995,10 +3058,111 @@ it("renders persisted speech for explicit replay without autoplay", () => {
       ]}
     />,
   );
-  const audio = screen.getByLabelText("Replay audio response");
+  const button = screen.getByRole("button", { name: "Replay audio response" });
+  const audio = document.querySelector("audio");
   expect(audio).toHaveAttribute("src", "https://storage.example/speech.wav");
-  expect(audio).toHaveAttribute("controls");
+  expect(audio).toHaveAttribute("preload", "metadata");
+  expect(audio).not.toHaveAttribute("controls");
   expect(audio).not.toHaveAttribute("autoplay");
+  Object.defineProperty(audio, "duration", { value: 72.4 });
+  fireEvent.loadedMetadata(audio!);
+  expect(button).toHaveTextContent("1:12");
+  expect(button).toHaveAccessibleName("Replay audio response, 1:12");
+});
+
+it("says when a stored recording cannot be played", async () => {
+  renderWithTheme(
+    <MessageContent
+      content={[
+        {
+          content_type: "audio_file_pointer",
+          file_upload_id: "expired-speech",
+          download_url: "https://storage.example/expired.wav",
+        },
+        { content_type: "audio_file_pointer", file_upload_id: "no-url" },
+      ]}
+    />,
+  );
+  const [expired, missing] = screen.getAllByTestId("spoken-reply-replay");
+  expect(missing).toBeDisabled();
+  expect(
+    screen.getByText("The recording is not available."),
+  ).toBeInTheDocument();
+
+  const audio = document.querySelector("audio")!;
+  audio.play = vi.fn(() => Promise.reject(new Error("403")));
+  fireEvent.click(expired);
+  expect(
+    await screen.findByText(
+      "The recording could not be played. Reload the chat to try again.",
+    ),
+  ).toBeInTheDocument();
+});
+
+describe("a reply spoken in conversation mode", () => {
+  const reply: ContentPart[] = [
+    { content_type: "spoken", text: "Morgen um zwei." },
+    { content_type: "text", text: "Der Termin ist **morgen um 14:00**." },
+  ];
+
+  it("shows what is spoken apart from the written answer while it streams", () => {
+    renderWithTheme(<MessageContent content={reply} isStreaming />);
+    expect(screen.getByTestId("spoken-reply-live")).toHaveTextContent(
+      "Spoken: Morgen um zwei.",
+    );
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+
+  it("shows nothing of the voice unless the user's setting asks for it", () => {
+    voiceTraces.shown = false;
+    renderWithTheme(
+      <MessageContent
+        content={[
+          ...reply,
+          {
+            content_type: "audio_file_pointer",
+            file_upload_id: "saved-speech",
+            download_url: "https://storage.example/speech.wav",
+          },
+        ]}
+      />,
+    );
+    voiceTraces.shown = true;
+    expect(screen.queryByTestId("spoken-reply")).toBeNull();
+    expect(screen.queryByText(/Spoken/)).toBeNull();
+    expect(document.querySelector("audio")).toBeNull();
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+
+  it("folds the spoken text without a replay where no recording was kept", () => {
+    renderWithTheme(<MessageContent content={reply} />);
+    expect(screen.getByTestId("spoken-reply")).toHaveTextContent(
+      "Spoken: Morgen um zwei.",
+    );
+    expect(screen.queryByLabelText("Replay audio response")).toBeNull();
+  });
+
+  it("folds the spoken text as the caption of the replay", () => {
+    renderWithTheme(
+      <MessageContent
+        content={[
+          ...reply,
+          {
+            content_type: "audio_file_pointer",
+            file_upload_id: "saved-speech",
+            download_url: "https://storage.example/speech.wav",
+          },
+        ]}
+      />,
+    );
+    const audio = screen.getByLabelText("Replay audio response");
+    const caption = document.getElementById(
+      audio.getAttribute("aria-describedby") ?? "",
+    );
+    expect(caption).toHaveTextContent("Morgen um zwei.");
+    expect(screen.getAllByLabelText("Replay audio response")).toHaveLength(1);
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
 });
 
 describe("reminders scheduled from the chat", () => {

@@ -1,5 +1,9 @@
+import { t } from "@lingui/core/macro";
+import { Download } from "iconoir-react";
 import { useMemo } from "react";
 
+import { Button } from "@/components/ui/Controls/Button";
+import { AttachmentTile } from "@/components/ui/FileUpload/AttachmentTile";
 import { AttachmentTileList } from "@/components/ui/FileUpload/AttachmentTileList";
 import { AudioTranscriptExcerpt } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
 import {
@@ -15,6 +19,7 @@ import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
 
 import { messageAttachmentFileIds } from "./messageAttachmentFileIds";
 
+import type { AttachmentTileProps } from "@/components/ui/FileUpload/AttachmentTile";
 import type { AttachmentTileItem } from "@/components/ui/FileUpload/AttachmentTileList";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { UiChatMessage } from "@/utils/adapters/messageAdapter";
@@ -32,6 +37,7 @@ export interface MessageAttachmentsProps {
     file: FileUploadItem,
     relatedFiles?: readonly FileUploadItem[],
   ) => void;
+  showDownload?: boolean;
 }
 
 export interface MessageAttachmentFiles {
@@ -144,6 +150,41 @@ export const useMessageAttachmentFiles = (
   return { ...useAttachmentTiles(fileIds, filesById), relatedFiles };
 };
 
+const renderDownloadableAttachment = (props: AttachmentTileProps) => {
+  const { file } = props;
+  if (
+    !("download_url" in file) ||
+    !file.download_url ||
+    file.file_contents_unavailable_missing_permissions
+  ) {
+    return <AttachmentTile {...props} />;
+  }
+
+  const { download_url: downloadUrl } = file;
+  const filename = getFileName(file);
+  const label = t({
+    id: "chat.file.download_output",
+    message: `Download ${filename}`,
+  });
+
+  return (
+    <div className="flex min-w-0 max-w-full items-center gap-1">
+      <AttachmentTile {...props} className="min-w-0 shrink" />
+      <Button
+        variant="secondary"
+        geometry="icon"
+        size="md"
+        className="shrink-0"
+        icon={<Download className="size-5" aria-hidden="true" />}
+        aria-label={label}
+        title={label}
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- window.open options
+        onClick={() => window.open(downloadUrl, "_blank", "noopener")}
+      />
+    </div>
+  );
+};
+
 /**
  * Attachments of a sent message, drawn with the shared tile.
  *
@@ -157,8 +198,12 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
   filesById,
   relatedFiles,
   onFilePreview,
+  showDownload = false,
 }) => {
   const { items, teamsGrouping } = useAttachmentTiles(fileIds, filesById);
+  const renderAttachment = showDownload
+    ? renderDownloadableAttachment
+    : undefined;
 
   if (items.length === 0) {
     return null;
@@ -181,6 +226,7 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
           <AttachmentTileList
             items={ungrouped}
             size="medium"
+            renderAttachment={renderAttachment}
             onActivate={
               onFilePreview
                 ? (item) =>
@@ -198,6 +244,7 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
     <AttachmentTileList
       items={items}
       size="medium"
+      renderAttachment={renderAttachment}
       expandable
       className={transcribed.length > 0 ? undefined : "mt-2"}
       onActivate={

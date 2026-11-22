@@ -10,6 +10,25 @@ use crate::services::template_rendering::contexts::system_prompt::SystemPromptCo
 /// Context for rendering system prompts.
 type PlaceholderFn = for<'a> fn(&SystemPromptContext<'a>) -> String;
 
+const PROFILE_TEXT_PLACEHOLDERS: [(&str, PlaceholderFn); 4] = [
+    (
+        "erato_inject_user_preference_nickname",
+        render_user_preference_nickname,
+    ),
+    (
+        "erato_inject_user_preference_job_title",
+        render_user_preference_job_title,
+    ),
+    (
+        "erato_inject_user_preference_assistant_custom_instructions",
+        render_user_preference_assistant_custom_instructions,
+    ),
+    (
+        "erato_inject_user_preference_assistant_additional_information",
+        render_user_preference_assistant_additional_information,
+    ),
+];
+
 #[derive(Clone, Debug)]
 pub struct SystemPromptRenderer {
     placeholder_registry: HashMap<String, PlaceholderFn>,
@@ -37,23 +56,6 @@ impl SystemPromptRenderer {
             "erato_inject_preferred_language_en",
             render_preferred_language_name,
         );
-        renderer.register_placeholder(
-            "erato_inject_user_preference_nickname",
-            render_user_preference_nickname,
-        );
-        renderer.register_placeholder(
-            "erato_inject_user_preference_job_title",
-            render_user_preference_job_title,
-        );
-        renderer.register_placeholder(
-            "erato_inject_user_preference_assistant_custom_instructions",
-            render_user_preference_assistant_custom_instructions,
-        );
-        renderer.register_placeholder(
-            "erato_inject_user_preference_assistant_additional_information",
-            render_user_preference_assistant_additional_information,
-        );
-
         renderer
     }
 
@@ -62,15 +64,25 @@ impl SystemPromptRenderer {
     }
 
     pub fn render<'a>(&self, template: &str, ctx: &SystemPromptContext<'a>) -> String {
-        if self.placeholder_registry.is_empty() {
-            return template.to_string();
-        }
-
         let mut context_values = Map::new();
 
         for (placeholder_name, placeholder_value) in &self.placeholder_registry {
             let value = placeholder_value(ctx);
             context_values.insert(placeholder_name.clone(), Value::String(value));
+        }
+
+        for (name, render) in PROFILE_TEXT_PLACEHOLDERS {
+            let value = render(ctx);
+            let without_assistant = if ctx.has_assistant {
+                String::new()
+            } else {
+                value.clone()
+            };
+            context_values.insert(name.to_string(), Value::String(value));
+            context_values.insert(
+                format!("{name}_no_assistant"),
+                Value::String(without_assistant),
+            );
         }
 
         let mut handlebars = Handlebars::new();
@@ -409,6 +421,49 @@ mod tests {
         let template = "Info: {{erato_inject_user_preference_assistant_additional_information}}";
         let result = renderer.render(template, &SystemPromptContext::default());
         assert_eq!(result, "Info: ");
+    }
+
+    #[test]
+    fn profile_text_companions_render_only_without_an_assistant() {
+        let renderer = SystemPromptRenderer::new();
+        let profile = SystemPromptContext {
+            user_preference_nickname: Some("Max & Alex"),
+            user_preference_job_title: Some("R&D Engineer"),
+            user_preference_assistant_custom_instructions: Some("Use <examples>\nKeep them short."),
+            user_preference_assistant_additional_information: Some("Based in \"Berlin\""),
+            ..Default::default()
+        };
+        let cases = [
+            ("nickname", "Max & Alex"),
+            ("job_title", "R&D Engineer"),
+            (
+                "assistant_custom_instructions",
+                "Use <examples>\nKeep them short.",
+            ),
+            ("assistant_additional_information", "Based in \"Berlin\""),
+        ];
+        for (field, saved) in cases {
+            let name = format!("erato_inject_user_preference_{field}");
+            let template = format!("{{{{{name}}}}}|{{{{{name}_no_assistant}}}}");
+            for has_assistant in [false, true] {
+                let ctx = SystemPromptContext {
+                    has_assistant,
+                    ..profile
+                };
+                let expected_companion = if has_assistant { "" } else { saved };
+                assert_eq!(
+                    renderer.render(&template, &ctx),
+                    format!("{saved}|{expected_companion}"),
+                    "{field}, has_assistant={has_assistant}",
+                );
+
+                let unset = SystemPromptContext {
+                    has_assistant,
+                    ..Default::default()
+                };
+                assert_eq!(renderer.render(&template, &unset), "|", "{field}");
+            }
+        }
     }
 
     #[test]
