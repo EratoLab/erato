@@ -80,6 +80,9 @@ pub struct UpdateUserPreferencesInput {
     /// How replies are spoken in conversation; `Some(None)` follows the
     /// organisation again.
     pub reply_speech_wording: Option<Option<erato_config::reply_speech::ReplySpeechWording>>,
+    /// Whether the chat shows what the voice said; `Some(None)` follows the
+    /// organisation again.
+    pub reply_speech_show_in_chat: Option<Option<bool>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
@@ -374,6 +377,9 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.reply_speech_wording {
             model.reply_speech_wording = ActiveValue::Set(value.map(style_name));
         }
+        if let Some(value) = input.reply_speech_show_in_chat {
+            model.reply_speech_show_in_chat = ActiveValue::Set(value);
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -421,6 +427,7 @@ async fn upsert_user_preferences_row(
             reply_speech_wording: ActiveValue::Set(
                 input.reply_speech_wording.flatten().map(style_name),
             ),
+            reply_speech_show_in_chat: ActiveValue::Set(input.reply_speech_show_in_chat.flatten()),
             ..Default::default()
         };
 

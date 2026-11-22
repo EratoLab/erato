@@ -2299,18 +2299,14 @@ export const MessageContent = memo(function MessageContent({
 
         if (part.content_type === "audio_file_pointer") {
           if (spoken) return null;
+          // A reply read word for word: the written answer is what was said.
           return (
-            // The adjacent assistant message provides the full spoken text.
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <audio
+            <SpokenReply
               key={`audio-${part.file_upload_id}`}
-              controls
-              preload="none"
-              src={part.download_url ?? undefined}
-              aria-label={t({
-                id: "chat.audio_replay",
-                message: "Replay audio response",
-              })}
+              texts={[]}
+              audioUrl={part.download_url ?? undefined}
+              hasAudio
+              isStreaming={false}
             />
           );
         }

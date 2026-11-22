@@ -1826,10 +1826,14 @@ msgid "chat.audio_read_card"
 msgstr "Lire la carte"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Réécouter la réponse audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.stop"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -6352,6 +6356,16 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.saveFailed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.label"
 msgstr ""
 
 #. js-lingui-explicit-id

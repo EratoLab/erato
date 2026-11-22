@@ -37,6 +37,10 @@ const mermaidMock = vi.hoisted(() => ({
 }));
 
 vi.mock("mermaid", () => ({ default: mermaidMock }));
+const voiceTraces = vi.hoisted(() => ({ shown: true }));
+vi.mock("@/hooks/audio/voiceTraces", () => ({
+  useVoiceTracesShown: (needed: boolean) => needed && voiceTraces.shown,
+}));
 
 import type {
   ChatDetail,
@@ -2978,7 +2982,7 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
   });
 });
 
-it("renders persisted speech for explicit replay without autoplay", () => {
+it("offers persisted speech as a compact replay button that shows its length", () => {
   renderWithTheme(
     <MessageContent
       content={[
@@ -2990,10 +2994,15 @@ it("renders persisted speech for explicit replay without autoplay", () => {
       ]}
     />,
   );
-  const audio = screen.getByLabelText("Replay audio response");
+  const button = screen.getByRole("button", { name: "Replay audio response" });
+  const audio = document.querySelector("audio");
   expect(audio).toHaveAttribute("src", "https://storage.example/speech.wav");
-  expect(audio).toHaveAttribute("controls");
+  expect(audio).toHaveAttribute("preload", "metadata");
+  expect(audio).not.toHaveAttribute("controls");
   expect(audio).not.toHaveAttribute("autoplay");
+  Object.defineProperty(audio, "duration", { value: 72.4 });
+  fireEvent.loadedMetadata(audio!);
+  expect(button).toHaveTextContent("1:12");
 });
 
 describe("a reply spoken in conversation mode", () => {
@@ -3008,6 +3017,35 @@ describe("a reply spoken in conversation mode", () => {
       "Spoken: Morgen um zwei.",
     );
     expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+
+  it("shows nothing of the voice unless the user's setting asks for it", () => {
+    voiceTraces.shown = false;
+    renderWithTheme(
+      <MessageContent
+        content={[
+          ...reply,
+          {
+            content_type: "audio_file_pointer",
+            file_upload_id: "saved-speech",
+            download_url: "https://storage.example/speech.wav",
+          },
+        ]}
+      />,
+    );
+    voiceTraces.shown = true;
+    expect(screen.queryByTestId("spoken-reply")).toBeNull();
+    expect(screen.queryByText(/Spoken/)).toBeNull();
+    expect(document.querySelector("audio")).toBeNull();
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+
+  it("folds the spoken text without a replay where no recording was kept", () => {
+    renderWithTheme(<MessageContent content={reply} />);
+    expect(screen.getByTestId("spoken-reply")).toHaveTextContent(
+      "Spoken: Morgen um zwei.",
+    );
+    expect(screen.queryByLabelText("Replay audio response")).toBeNull();
   });
 
   it("folds the spoken text as the caption of the replay", () => {

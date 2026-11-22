@@ -42,6 +42,11 @@ pub struct ReplySpeechConfig {
     /// audience setting says otherwise. Defaults to `true`.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
+    /// Whether the chat shows what the voice said, folded above the written
+    /// answer, with a play button when the recording is kept. Defaults to
+    /// `false`: the chat shows the written answer only.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub show_in_chat: bool,
 }
 
 impl Default for ReplySpeechConfig {
@@ -49,6 +54,7 @@ impl Default for ReplySpeechConfig {
         Self {
             wording: ReplySpeechWording::Precise,
             user_choice: true,
+            show_in_chat: false,
         }
     }
 }
@@ -72,6 +78,10 @@ fn shaped_reply_speech(written: Written) -> (ReplySpeechConfig, Vec<String>) {
             ("user_choice", Written::Flag(flag)) => config.user_choice = flag,
             ("user_choice", _) => dropped.push(format!(
                 "{PLACE}.user_choice is not `true` or `false`; the default is used"
+            )),
+            ("show_in_chat", Written::Flag(flag)) => config.show_in_chat = flag,
+            ("show_in_chat", _) => dropped.push(format!(
+                "{PLACE}.show_in_chat is not `true` or `false`; the default is used"
             )),
             (other, _) => dropped.push(format!("{PLACE}.{other} is not known and is ignored")),
         }
@@ -109,6 +119,7 @@ mod tests {
         assert_eq!(config, ReplySpeechConfig::default());
         assert_eq!(config.wording, ReplySpeechWording::Precise);
         assert!(config.user_choice);
+        assert!(!config.show_in_chat);
         assert!(dropped.is_empty());
     }
 
@@ -126,5 +137,11 @@ mod tests {
         let (config, dropped) = shaped(serde_json::json!({"wording": "natural"}));
         assert_eq!(config.wording, ReplySpeechWording::Natural);
         assert!(dropped.is_empty());
+
+        let (config, dropped) = shaped(serde_json::json!({"show_in_chat": "yes"}));
+        assert!(!config.show_in_chat);
+        assert_eq!(dropped.len(), 1, "{dropped:?}");
+        let (config, _) = shaped(serde_json::json!({"show_in_chat": true}));
+        assert!(config.show_in_chat);
     }
 }

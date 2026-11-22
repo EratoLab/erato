@@ -1826,10 +1826,14 @@ msgid "chat.audio_read_card"
 msgstr "Read the card aloud"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.stop"
+msgstr "Stop the replay"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -6353,6 +6357,16 @@ msgstr "Replies in conversation"
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.saveFailed"
 msgstr "The voice setting could not be saved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.description"
+msgstr "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.label"
+msgstr "Show what the voice said in the chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

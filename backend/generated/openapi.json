@@ -13498,12 +13498,17 @@
         "required": [
           "wording",
           "source",
-          "user_choice"
+          "user_choice",
+          "show_in_chat"
         ],
         "properties": {
           "audience": {
             "type": "string",
             "description": "The audience whose value applies, by its display name."
+          },
+          "show_in_chat": {
+            "type": "boolean",
+            "description": "Whether the chat shows what the voice said: the spoken text, folded,\nand a play button where the recording was kept."
           },
           "source": {
             "$ref": "#/components/schemas/ReplySpeechStyleSource",
@@ -16536,6 +16541,13 @@
             ],
             "description": "Preferred name to address the user with."
           },
+          "preference_reply_speech_show_in_chat": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the chat shows what the voice said in conversation; `null`\nfollows the organisation again."
+          },
           "preference_reply_speech_wording": {
             "type": [
               "string",
@@ -16684,6 +16696,10 @@
           "preference_nickname": {
             "type": "string",
             "description": "Preferred name to address the user with."
+          },
+          "preference_reply_speech_show_in_chat": {
+            "type": "boolean",
+            "description": "Whether the chat shows what the voice said, as the user chose; absent\nfollows the organisation."
           },
           "preference_reply_speech_wording": {
             "$ref": "#/components/schemas/ReplySpeechWording",

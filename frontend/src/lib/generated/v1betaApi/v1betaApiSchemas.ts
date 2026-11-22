@@ -4158,6 +4158,11 @@ export type ReplySpeechStyleResponse = {
    * The audience whose value applies, by its display name.
    */
   audience?: string;
+  /**
+   * Whether the chat shows what the voice said: the spoken text, folded,
+   * and a play button where the recording was kept.
+   */
+  show_in_chat: boolean;
   source: ReplySpeechStyleSource;
   /**
    * Whether the caller may choose their own wording.
@@ -6173,6 +6178,11 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_nickname?: string | null | undefined;
   /**
+   * Whether the chat shows what the voice said in conversation; `null`
+   * follows the organisation again.
+   */
+  preference_reply_speech_show_in_chat?: null | undefined;
+  /**
    * How replies are spoken in conversation: `natural` or `precise`, like
    * the amount.
    */
@@ -6295,6 +6305,11 @@ export type UserProfile = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
+  /**
+   * Whether the chat shows what the voice said, as the user chose; absent
+   * follows the organisation.
+   */
+  preference_reply_speech_show_in_chat?: boolean;
   preference_reply_speech_wording?: ReplySpeechWording;
   /**
    * True when the user explicitly cleared their start screen. This is

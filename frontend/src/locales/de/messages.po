@@ -1826,10 +1826,14 @@ msgid "chat.audio_read_card"
 msgstr "Karte vorlesen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Audioantwort erneut abspielen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.stop"
+msgstr "Wiedergabe beenden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -6353,6 +6357,16 @@ msgstr "Antworten im Gespräch"
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.saveFailed"
 msgstr "Die Spracheinstellung konnte nicht gespeichert werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.description"
+msgstr "Fügt über jeder Antwort im Gespräch eine eingeklappte Zeile „Gesprochen“ hinzu, mit einer Abspieltaste, wo deine Organisation die Aufnahme speichert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.label"
+msgstr "Im Chat zeigen, was die Stimme gesagt hat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

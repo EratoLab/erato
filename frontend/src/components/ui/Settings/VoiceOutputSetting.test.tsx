@@ -11,7 +11,12 @@ import { VoiceOutputSetting } from "./VoiceOutputSetting";
 import type { Messages } from "@lingui/core";
 
 const api = vi.hoisted(() => ({
-  replies: { wording: "natural", user_choice: true, source: "user" },
+  replies: {
+    wording: "natural",
+    user_choice: true,
+    source: "user",
+    show_in_chat: false,
+  },
   cards: { wording: "precise", user_choice: false },
   update: vi.fn(async () => ({})),
 }));
@@ -24,6 +29,8 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchUpdateProfilePreferences: api.update,
   fetchApprovalSpeechStyle: vi.fn(),
 }));
+const refreshVoiceTraces = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/hooks/audio/voiceTraces", () => ({ refreshVoiceTraces }));
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -80,5 +87,20 @@ describe("voice output setting", () => {
         body: { preference_reply_speech_wording: null },
       }),
     );
+  });
+
+  it("shows what the voice said in the chat only when the user asks for it", async () => {
+    renderSetting();
+    const box = screen.getByRole("checkbox", {
+      name: "Show what the voice said in the chat",
+    });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_show_in_chat: true },
+      }),
+    );
+    expect(refreshVoiceTraces).toHaveBeenCalled();
   });
 });

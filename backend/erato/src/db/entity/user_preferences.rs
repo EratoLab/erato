@@ -39,6 +39,7 @@ pub struct Model {
     pub wait_lines_amount: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub reply_speech_wording: Option<String>,
+    pub reply_speech_show_in_chat: Option<bool>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

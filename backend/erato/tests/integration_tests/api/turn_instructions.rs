@@ -328,6 +328,7 @@ async fn the_users_choice_and_an_audience_lock_apply_at_turn_time(pool: Pool<Pos
                 reply_speech: Some(AudienceReplySpeech {
                     wording: Some(ReplySpeechWording::Natural),
                     user_choice: Some(false),
+                    show_in_chat: None,
                 }),
             },
         )]

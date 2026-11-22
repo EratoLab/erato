@@ -695,6 +695,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "audio_conversational.keep_reply_audio": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "audio_conversational.max_attempts": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
@@ -754,6 +760,12 @@
     "introduced_in": "0.6.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
+  },
+  "audio_conversational.reply_speech.show_in_chat": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
   },
   "audio_conversational.reply_speech.user_choice": {
     "default_value_security": "unreviewed",

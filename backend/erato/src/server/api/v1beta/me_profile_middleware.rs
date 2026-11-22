@@ -134,6 +134,11 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_reply_speech_wording: Option<erato_config::reply_speech::ReplySpeechWording>,
+    /// Whether the chat shows what the voice said, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_reply_speech_show_in_chat: Option<bool>,
 }
 
 impl UserProfile {
@@ -164,6 +169,7 @@ impl UserProfile {
             preference_approval_speech_wording: None,
             preference_wait_lines_amount: None,
             preference_reply_speech_wording: None,
+            preference_reply_speech_show_in_chat: None,
         }
     }
 
@@ -246,6 +252,7 @@ impl UserProfile {
                 .reply_speech_wording
                 .as_deref()
                 .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_reply_speech_show_in_chat = prefs.reply_speech_show_in_chat;
             self.client_tool_decisions =
                 crate::models::user_preference::client_tool_decisions_from_json(
                     &prefs.client_tool_decisions,

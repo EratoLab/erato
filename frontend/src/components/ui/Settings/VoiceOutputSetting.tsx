@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { forgetSpokenStyle } from "@/hooks/audio/spokenStyle";
+import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
 import {
   approvalSpeechStyleQuery,
   fetchUpdateProfilePreferences,
@@ -11,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
 import { toast } from "../Toast";
 
@@ -115,7 +117,7 @@ export function VoiceOutputSetting() {
         | "preference_approval_speech_wording"
         | "preference_approval_speech_amount",
         string | null
-      >
+      > & { preference_reply_speech_show_in_chat: boolean }
     >,
   ) => {
     setSaving(true);
@@ -125,6 +127,7 @@ export function VoiceOutputSetting() {
       await fetchUpdateProfilePreferences({ body });
       forgetSpokenStyle();
       await Promise.all([
+        refreshVoiceTraces(),
         queryClient.invalidateQueries({
           queryKey: replySpeechStyleQuery({}).queryKey,
         }),
@@ -182,6 +185,28 @@ export function VoiceOutputSetting() {
           void save({ preference_reply_speech_wording: null })
         }
       />
+      {replies.data && (
+        <div className="space-y-1">
+          <Checkbox
+            checked={replies.data.show_in_chat}
+            onCheckedChange={(shown) =>
+              void save({ preference_reply_speech_show_in_chat: shown })
+            }
+            disabled={saving || !replies.data.user_choice}
+            label={t({
+              id: "preferences.dialog.audio.voice.showInChat.label",
+              message: "Show what the voice said in the chat",
+            })}
+          />
+          <p className="pl-6 text-sm text-theme-fg-secondary">
+            {t({
+              id: "preferences.dialog.audio.voice.showInChat.description",
+              message:
+                "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording.",
+            })}
+          </p>
+        </div>
+      )}
       <WordingRow
         heading={t({
           id: "preferences.dialog.audio.voice.cards.heading",
