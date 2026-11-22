@@ -20,6 +20,7 @@ use crate::models::message::{
     ContentPartTurnInstructionMarker, GenerationInputMessages, GenerationParameters, InputMessage,
     MessageRole, MessageSchema,
 };
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
 use std::collections::{BTreeSet, HashMap};
@@ -180,11 +181,15 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         let system_prompt = prompt_provider
             .get_system_prompt(
                 chat_provider_config,
-                preferred_language,
-                user_preference_nickname,
-                user_preference_job_title,
-                user_preference_assistant_custom_instructions,
-                user_preference_assistant_additional_information,
+                SystemPromptContext {
+                    has_assistant: assistant_config.is_some(),
+                    preferred_language,
+                    user_preference_nickname,
+                    user_preference_job_title,
+                    user_preference_assistant_custom_instructions,
+                    user_preference_assistant_additional_information,
+                    ..Default::default()
+                },
             )
             .await?;
         if let Some(prompt) = system_prompt {

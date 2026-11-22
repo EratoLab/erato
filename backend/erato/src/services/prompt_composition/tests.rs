@@ -27,6 +27,7 @@ mod test_cases {
     };
     use crate::server::api::v1beta::message_streaming::{FileContent, FileContentsForGeneration};
     use crate::services::genai::into_openai_request_parts;
+    use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
     use async_trait::async_trait;
     use eyre::{OptionExt, Report, eyre};
     use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
@@ -281,11 +282,7 @@ mod test_cases {
         async fn get_system_prompt(
             &self,
             _chat_provider_config: &ChatProviderConfig,
-            _preferred_language: Option<&str>,
-            _user_preference_nickname: Option<&str>,
-            _user_preference_job_title: Option<&str>,
-            _user_preference_assistant_custom_instructions: Option<&str>,
-            _user_preference_assistant_additional_information: Option<&str>,
+            _ctx: SystemPromptContext<'_>,
         ) -> Result<Option<String>, Report> {
             Ok(self.system_prompt.clone())
         }

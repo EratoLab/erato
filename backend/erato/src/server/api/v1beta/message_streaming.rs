@@ -67,6 +67,7 @@ use crate::services::prompt_guardrails::{
 };
 use crate::services::sentry::capture_report;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use crate::services::tool_arguments::{
     ToolArgumentStreams, tool_call_content_index, upsert_tool_use, without_preparing_tools,
 };
@@ -12905,13 +12906,19 @@ pub async fn generate_chat_summary(
                 .chat_providers
                 .as_ref()
                 .map(|chat_providers| &chat_providers.summary),
-            Some(&me_user.preferred_language),
-            me_user.preference_nickname.as_deref(),
-            me_user.preference_job_title.as_deref(),
-            me_user.preference_assistant_custom_instructions.as_deref(),
-            me_user
-                .preference_assistant_additional_information
-                .as_deref(),
+            &SystemPromptContext {
+                has_assistant: chat.assistant_id.is_some(),
+                preferred_language: Some(&me_user.preferred_language),
+                user_preference_nickname: me_user.preference_nickname.as_deref(),
+                user_preference_job_title: me_user.preference_job_title.as_deref(),
+                user_preference_assistant_custom_instructions: me_user
+                    .preference_assistant_custom_instructions
+                    .as_deref(),
+                user_preference_assistant_additional_information: me_user
+                    .preference_assistant_additional_information
+                    .as_deref(),
+                ..Default::default()
+            },
         )
         .await?;
 

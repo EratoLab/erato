@@ -1,6 +1,8 @@
 //! Tests for the delegation backend: provenance envelope, `seed_chat_lineage`,
 //! and the ContextRebase behavior of prompt composition.
 
+mod conditional_custom_instructions;
+
 use crate::test_app_state;
 use crate::test_utils::{
     Event, JwtTokenBuilder, RequestBodyRecorder, TEST_JWT_TOKEN, TEST_USER_ISSUER,
