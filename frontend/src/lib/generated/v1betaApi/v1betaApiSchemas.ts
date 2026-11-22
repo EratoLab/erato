@@ -727,6 +727,9 @@ export type AssistantHubVersion = {
   assistant: AssistantHubAssistantSnapshot;
   assistant_id: string;
   audience_grants: ShareGrant[];
+  can_make_current: boolean;
+  can_publish: boolean;
+  can_unpublish: boolean;
   category_ids: string[];
   /**
    * @format date-time
@@ -739,6 +742,7 @@ export type AssistantHubVersion = {
   hub_assistant_id: string;
   is_current_published_version: boolean;
   is_published: boolean;
+  is_submission_owner: boolean;
   keywords: string[];
   long_description: string;
   /**

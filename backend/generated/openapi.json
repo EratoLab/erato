@@ -6931,6 +6931,10 @@
           "status",
           "is_published",
           "is_current_published_version",
+          "can_publish",
+          "can_unpublish",
+          "can_make_current",
+          "is_submission_owner",
           "featured",
           "version_number",
           "long_description",
@@ -6957,6 +6961,15 @@
             "items": {
               "$ref": "#/components/schemas/ShareGrant"
             }
+          },
+          "can_make_current": {
+            "type": "boolean"
+          },
+          "can_publish": {
+            "type": "boolean"
+          },
+          "can_unpublish": {
+            "type": "boolean"
           },
           "category_ids": {
             "type": "array",
@@ -6990,6 +7003,9 @@
             "type": "boolean"
           },
           "is_published": {
+            "type": "boolean"
+          },
+          "is_submission_owner": {
             "type": "boolean"
           },
           "keywords": {
