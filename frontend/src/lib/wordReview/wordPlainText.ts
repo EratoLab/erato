@@ -323,13 +323,11 @@ export function wordPlainTextBlocks(
       // "1." after other numbers starts a new list, which then shows 1. as written.
       const restart = number === 1 && !!group && group.next > 1 && !group.lazy;
       if (group?.ordered !== ordered || restart) {
-        // A sublist joins its parent's list, where Word numbers it from 1 under each parent item;
-        // only a level of the other marker type, or a restart, needs a list of its own.
+        // A sublist joins its parent's list, numbered from 1 under each parent item; a switch or
+        // restart under the same item gets its own, as the parent's list would count on.
         const parent = groups[level - 1]?.list;
         const list =
-          parent &&
-          !restart &&
-          (parent.ordered.get(level) ?? ordered) === ordered
+          parent && !group && (parent.ordered.get(level) ?? ordered) === ordered
             ? parent
             : { name: `${idPrefix}_list${++lists}`, ordered: new Map() };
         list.ordered.set(level, ordered);

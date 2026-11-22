@@ -101,6 +101,24 @@ describe("the plain-text form", () => {
     ]);
   });
 
+  it("gives a level that switches back to its first marker type under the same item a list of its own", () => {
+    expect(items("- A\n  1. x\n  2. y\n  - note\n  1. z")).toEqual([
+      ["r1_1_list1", 0, false, "A"],
+      ["r1_1_list1", 1, true, "x"],
+      ["r1_1_list1", 1, true, "y"],
+      ["r1_1_list2", 1, false, "note"],
+      ["r1_1_list3", 1, true, "z"],
+    ]);
+    expect(items("1. A\n  1. x\n  2. y\n  1. z\n  - q\n  1. r")).toEqual([
+      ["r1_1_list1", 0, true, "A"],
+      ["r1_1_list1", 1, true, "x"],
+      ["r1_1_list1", 1, true, "y"],
+      ["r1_1_list2", 1, true, "z"],
+      ["r1_1_list3", 1, false, "q"],
+      ["r1_1_list4", 1, true, "r"],
+    ]);
+  });
+
   it("names the line of a number Word would show differently", () => {
     expect(convert("3. Lieferung").issues).toEqual([
       {
