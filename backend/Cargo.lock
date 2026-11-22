@@ -2848,7 +2848,7 @@ dependencies = [
  "infer 0.19.0",
  "insta",
  "jemalloc_pprof",
- "jsonschema",
+ "jsonschema 0.32.1",
  "jsonwebtoken 10.4.0",
  "linkify",
  "lol_html",
@@ -2946,7 +2946,7 @@ dependencies = [
  "eyre",
  "facet",
  "humantime",
- "jsonschema",
+ "jsonschema 0.32.1",
  "png",
  "regex",
  "secrecy",
@@ -3135,6 +3135,17 @@ name = "fancy-regex"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e24cb5a94bcae1e5408b0effca5cd7172ea3c5755049c5f3af4cd283a165298"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "998b056554fbe42e03ae0e152895cd1a7e1002aec800fdc6635d20270260c46f"
 dependencies = [
  "bit-set",
  "regex-automata",
@@ -4723,7 +4734,33 @@ dependencies = [
  "num-traits",
  "once_cell",
  "percent-encoding",
- "referencing",
+ "referencing 0.30.0",
+ "regex",
+ "regex-syntax",
+ "serde",
+ "serde_json",
+ "uuid-simd",
+]
+
+[[package]]
+name = "jsonschema"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24690c68dfcdde5980d676b0f1820981841016b1f29eecb4c42ad48ab4118681"
+dependencies = [
+ "ahash",
+ "base64 0.22.1",
+ "bytecount",
+ "email_address",
+ "fancy-regex 0.16.2",
+ "fraction",
+ "idna",
+ "itoa",
+ "num-cmp",
+ "num-traits",
+ "once_cell",
+ "percent-encoding",
+ "referencing 0.32.1",
  "regex",
  "regex-syntax",
  "serde",
@@ -7537,6 +7574,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "referencing"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a3d769362109497b240e66462606bc28af68116436c8669bac17069533b908e"
+dependencies = [
+ "ahash",
+ "fluent-uri",
+ "once_cell",
+ "parking_lot",
+ "percent-encoding",
+ "serde_json",
+]
+
+[[package]]
 name = "regex"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7582,7 +7633,7 @@ dependencies = [
  "chrono-tz",
  "data-encoding",
  "globset",
- "jsonschema",
+ "jsonschema 0.30.0",
  "lazy_static",
  "msvc_spectre_libs",
  "rand 0.9.4",

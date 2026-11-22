@@ -2489,6 +2489,10 @@ impl AppConfig {
                                 qualified, error
                             );
                         }
+                        refuse_doubled_recursion(
+                            &format!("Client tool '{qualified}' submission schema"),
+                            &value,
+                        );
                     }
                 }
                 Ok(_) => panic!(
@@ -8701,6 +8705,17 @@ fn configured_non_submission_tool<'a>(
         .find(|tool| tool.qualified_name() == name && tool.submission.is_none())
 }
 
+/// Panics when a failed check of a schema checked before dispatch would
+/// reach one subschema more than once for the same value at every nesting
+/// level.
+fn refuse_doubled_recursion(subject: &str, schema: &serde_json::Value) {
+    if let Some(at) = crate::client_tool_schema::doubled_recursion(schema) {
+        panic!(
+            "{subject}: two parts of the schema lead back to {at} through the same property, so a failed check would repeat it at every nesting level and grow exponentially with the depth. Keep the recursive property in one place, for example next to the anyOf, and set it to true in the alternatives."
+        );
+    }
+}
+
 /// Panics unless the part tools of a submission are configured non-submission,
 /// non-durable tools with compiling schemas that belong to this submission
 /// only, are no recovery read and are never offered to a delegated task, and
@@ -8752,9 +8767,15 @@ fn validate_submission_parts(
         }
         let compiled = serde_json::from_str::<serde_json::Value>(&part.parameters)
             .map_err(|error| error.to_string())
-            .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| ()));
-        if let Err(error) = compiled {
-            panic!("Client tool '{qualified}' part tool '{name}' has an invalid schema: {error}");
+            .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| schema));
+        match compiled {
+            Ok(schema) => refuse_doubled_recursion(
+                &format!("Client tool '{qualified}' part tool '{name}' schema"),
+                &schema,
+            ),
+            Err(error) => panic!(
+                "Client tool '{qualified}' part tool '{name}' has an invalid schema: {error}"
+            ),
         }
         if let Some(other) = tools.values().find(|other| {
             other.qualified_name() != qualified

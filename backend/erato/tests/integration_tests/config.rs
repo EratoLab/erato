@@ -3713,6 +3713,38 @@ parameters = '{"type":"object","properties":{"title":{"type":"typo"}}}'
     );
 }
 
+#[test]
+#[should_panic(
+    expected = "submission schema: two parts of the schema lead back to #/$defs/block through the same property"
+)]
+fn submission_config_rejects_alternatives_that_recurse_through_the_same_property() {
+    migrate_config_with_action_facets(
+        r##"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object","properties":{"blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}},"$defs":{"block":{"anyOf":[{"type":"object","properties":{"type":{"const":"list"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}},{"type":"object","properties":{"type":{"const":"table"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}}]}}}'
+[client_tools.tools.submit.submission]
+"##,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "submission schema: two parts of the schema lead back to #/$defs/node through the same property"
+)]
+fn submission_config_rejects_an_alternative_that_recurses_like_the_keywords_beside_it() {
+    migrate_config_with_action_facets(
+        r##"
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object","properties":{"root":{"$ref":"#/$defs/node"}},"$defs":{"node":{"type":"object","properties":{"type":{"type":"string"},"children":{"type":"array","items":{"$ref":"#/$defs/node"}}},"anyOf":[{"properties":{"type":{"const":"list"},"children":{"type":"array","items":{"$ref":"#/$defs/node"}}}},{"properties":{"type":{"const":"para"}}}]}}}'
+[client_tools.tools.submit.submission]
+"##,
+    );
+}
+
 const PART_TOOLS: &str = r#"
 [client_tools.tools.write]
 name = "write_part"
@@ -3746,6 +3778,17 @@ fn part_tools_are_opt_in_with_their_own_budgets() {
 )]
 fn part_tools_must_be_configured() {
     migrate_config_with_action_facets(&PART_TOOLS.replace("client/write_part", "client/missing"));
+}
+
+#[test]
+#[should_panic(
+    expected = "part tool 'client/write_part' schema: two parts of the schema lead back to #/$defs/block through the same property"
+)]
+fn part_tool_schemas_reject_alternatives_that_recurse_through_the_same_property() {
+    migrate_config_with_action_facets(&PART_TOOLS.replace(
+        r#"parameters = '{"type":"object","properties":{"row":{"type":"integer"}}}'"#,
+        r##"parameters = '{"type":"object","properties":{"blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}},"$defs":{"block":{"anyOf":[{"type":"object","properties":{"type":{"const":"list"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}},{"type":"object","properties":{"type":{"const":"table"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}}]}}}'"##,
+    ));
 }
 
 #[test]
