@@ -4600,6 +4600,7 @@ export type SubmissionReason =
   | "attempts_exhausted"
   | "model_stopped"
   | "recovery_reads_exhausted"
+  | "part_calls_exhausted"
   | "terminal_validation"
   | "context_unavailable"
   | "capability_unavailable"

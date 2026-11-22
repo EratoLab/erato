@@ -8148,6 +8148,37 @@ the remaining attempt count. A successful executor returns a small receipt in
 `result`; the accepted arguments and receipt are persisted without an additional
 model call. The host's review UI can restore the draft from those records.
 
+#### Parts of a submission
+
+A large draft can arrive in parts before the submission call that finishes it.
+List the tools that stage those parts in `part_tools`:
+
+```toml
+[client_tools.tools.submit_draft.submission]
+max_attempts = 5
+part_tools = ["editor/plan_sections", "editor/write_section"]
+max_part_calls = 40
+max_row_tries = 3
+part_key = "/row"
+```
+
+A part call is checked against its own tool's schema like a submission, goes
+to the same client, and continues generation. It uses neither a submission
+attempt nor the ordinary tool budget. Only the submission call finishes the
+draft and ends generation when accepted. After a part call, one text reply
+before the submission call gets one reminder; a second one ends with an
+unresolved outcome.
+
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.part_tools.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_part_calls */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.max_row_tries */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.part_key */}
+
+- **`part_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools whose calls stage parts of this submission's draft. A part tool belongs to one submission, cannot be durable, cannot be a recovery read of any submission and cannot set `child_access = "read"`. Without part tools, the other part settings have no effect.
+- **`max_part_calls`** _(default: 40, range: 1–200)_ - Part calls per request across all part tools. The calls past the limit in the model turn that reached it are refused and ask for the submission call; a part call in a later turn ends with the unresolved reason `part_calls_exhausted`.
+- **`max_row_tries`** _(default: 3, range: 1–10)_ - Calls per part, including accepted calls and calls the schema or the client rejected. A part past its tries is refused without reaching the client, and the other parts go on.
+- **`part_key`** _(default: `"/row"`)_ - JSON Pointer to the argument that names the part a call writes; `2`, `2.0` and `"2"` name the same part. The calls of a part tool without that argument count as one part, such as a section plan.
+
 ### Compact replay of earlier client tool calls
 
 By default, every client tool call from earlier in a chat is sent to the model

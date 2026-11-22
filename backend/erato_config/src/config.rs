@@ -2469,15 +2469,20 @@ impl AppConfig {
                             );
                         }
                         for name in &submission.recovery_read_tools {
-                            if !config.client_tools.tools.values().any(|read| {
-                                read.qualified_name() == *name && read.submission.is_none()
-                            }) {
+                            if configured_non_submission_tool(&config.client_tools.tools, name)
+                                .is_none()
+                            {
                                 panic!(
                                     "Client tool '{}' recovery read '{}' must name a configured non-submission client tool.",
                                     qualified, name
                                 );
                             }
                         }
+                        validate_submission_parts(
+                            &qualified,
+                            submission,
+                            &config.client_tools.tools,
+                        );
                         if let Err(error) = crate::client_tool_schema::compile(&value) {
                             panic!(
                                 "Client tool '{}' has an invalid submission schema: {}",
@@ -8502,6 +8507,38 @@ pub struct ClientToolSubmissionConfig {
     /// request before inference. Schemas are never silently rewritten.
     #[serde(default)]
     pub native_schema: ClientToolNativeSchema,
+    /// Qualified names of configured non-submission client tools whose calls
+    /// stage parts of the draft that a call of this tool finishes. A part
+    /// call is checked against its own schema, does not end generation and
+    /// uses neither an attempt nor the ordinary tool budget. Default: none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub part_tools: Vec<String>,
+    /// Part calls per request, across all part tools. Must be 1–200.
+    /// Default: 40.
+    #[serde(
+        default = "default_submission_max_part_calls",
+        skip_serializing_if = "is_default_submission_max_part_calls"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_part_calls: u32,
+    /// Calls per part, the part being named by `part_key`. Must be 1–10.
+    /// Default: 3.
+    #[serde(
+        default = "default_submission_max_row_tries",
+        skip_serializing_if = "is_default_submission_max_row_tries"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_row_tries: u32,
+    /// JSON Pointer to the argument of a part call that names its part. The
+    /// calls of a part tool without that argument share one part. Default:
+    /// `/row`.
+    #[serde(
+        default = "default_submission_part_key",
+        skip_serializing_if = "is_default_submission_part_key"
+    )]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub part_key: String,
 }
 
 fn default_submission_max_attempts() -> u32 {
@@ -8512,6 +8549,30 @@ fn default_submission_recovery_reads() -> u32 {
     32
 }
 
+fn default_submission_max_part_calls() -> u32 {
+    40
+}
+
+fn is_default_submission_max_part_calls(value: &u32) -> bool {
+    *value == default_submission_max_part_calls()
+}
+
+fn default_submission_max_row_tries() -> u32 {
+    3
+}
+
+fn is_default_submission_max_row_tries(value: &u32) -> bool {
+    *value == default_submission_max_row_tries()
+}
+
+fn default_submission_part_key() -> String {
+    "/row".into()
+}
+
+fn is_default_submission_part_key(value: &str) -> bool {
+    value == default_submission_part_key()
+}
+
 impl Default for ClientToolSubmissionConfig {
     fn default() -> Self {
         Self {
@@ -8519,6 +8580,10 @@ impl Default for ClientToolSubmissionConfig {
             recovery_read_tools: Vec::new(),
             max_recovery_reads: default_submission_recovery_reads(),
             native_schema: ClientToolNativeSchema::Auto,
+            part_tools: Vec::new(),
+            max_part_calls: default_submission_max_part_calls(),
+            max_row_tries: default_submission_max_row_tries(),
+            part_key: default_submission_part_key(),
         }
     }
 }
@@ -8532,6 +8597,85 @@ pub enum ClientToolNativeSchema {
     Auto,
     Off,
     Required,
+}
+
+fn configured_non_submission_tool<'a>(
+    tools: &'a HashMap<String, ClientToolConfig>,
+    name: &str,
+) -> Option<&'a ClientToolConfig> {
+    tools
+        .values()
+        .find(|tool| tool.qualified_name() == name && tool.submission.is_none())
+}
+
+/// Panics unless the part tools of a submission are configured non-submission,
+/// non-durable tools with compiling schemas that belong to this submission
+/// only, are no recovery read and are never offered to a delegated task, and
+/// the part budgets are in range.
+fn validate_submission_parts(
+    qualified: &str,
+    submission: &ClientToolSubmissionConfig,
+    tools: &HashMap<String, ClientToolConfig>,
+) {
+    if submission.part_tools.is_empty() {
+        return;
+    }
+    if !(1..=200).contains(&submission.max_part_calls) {
+        panic!("Client tool '{qualified}' submission.max_part_calls must be 1–200.");
+    }
+    if !(1..=10).contains(&submission.max_row_tries) {
+        panic!("Client tool '{qualified}' submission.max_row_tries must be 1–10.");
+    }
+    if !submission.part_key.starts_with('/') || submission.part_key.len() > 128 {
+        panic!(
+            "Client tool '{qualified}' submission.part_key must be a JSON Pointer such as \"/row\"."
+        );
+    }
+    for name in &submission.part_tools {
+        if let Some(reader) = tools.values().find(|reader| {
+            reader
+                .submission
+                .as_ref()
+                .is_some_and(|reader| reader.recovery_read_tools.contains(name))
+        }) {
+            panic!(
+                "Client tool '{name}' is a part tool of '{qualified}' and a recovery read of '{}'.",
+                reader.qualified_name()
+            );
+        }
+        let Some(part) = configured_non_submission_tool(tools, name) else {
+            panic!(
+                "Client tool '{qualified}' part tool '{name}' must name a configured non-submission client tool."
+            );
+        };
+        if part.durable.is_some() {
+            panic!("Client tool '{qualified}' part tool '{name}' cannot be durable.");
+        }
+        // Only the coordinator writes a draft; a delegated task never gets its submission.
+        if part.child_access == ClientToolChildAccess::Read {
+            panic!(
+                "Client tool '{qualified}' part tool '{name}' cannot set child_access = \"read\"."
+            );
+        }
+        let compiled = serde_json::from_str::<serde_json::Value>(&part.parameters)
+            .map_err(|error| error.to_string())
+            .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| ()));
+        if let Err(error) = compiled {
+            panic!("Client tool '{qualified}' part tool '{name}' has an invalid schema: {error}");
+        }
+        if let Some(other) = tools.values().find(|other| {
+            other.qualified_name() != qualified
+                && other
+                    .submission
+                    .as_ref()
+                    .is_some_and(|other| other.part_tools.contains(name))
+        }) {
+            panic!(
+                "Client tool '{name}' is a part tool of both '{qualified}' and '{}'.",
+                other.qualified_name()
+            );
+        }
+    }
 }
 
 /// Default namespace for a client tool when none is configured.

@@ -3237,6 +3237,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.partCallsExhausted"
+msgstr "Osiągnięto limit części, które Erato może napisać w jednej prośbie; poproś o mniejszą zmianę."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
 msgid "chat.submission.word.noRequestSession"
 msgstr ""
 

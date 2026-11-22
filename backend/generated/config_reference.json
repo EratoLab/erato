@@ -2037,15 +2037,39 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.submission.max_part_calls": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.submission.max_recovery_reads": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.submission.max_row_tries": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.submission.native_schema": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.part_key": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.part_tools.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

@@ -7441,6 +7441,9 @@ async fn stream_generate_chat_completion<'a>(
         app_state.config.generation.max_tool_calls_per_message,
         &initial_message_content,
     );
+    let mut offered_client_tools = offered_client_tools;
+    crate::services::client_tools::link_part_tools(&mut offered_client_tools)
+        .map_err(|error| eyre!(error))?;
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
@@ -7763,12 +7766,10 @@ async fn stream_generate_chat_completion<'a>(
     macro_rules! persist_correction {
         () => {
             if let Some(correction) = submission_correction.as_ref() {
-                let name = correction
-                    .tool
-                    .rsplit('/')
-                    .next()
-                    .expect("qualified submission name");
-                submission_attempts.insert(name.to_owned(), correction.outcome.attempts_used);
+                submission_attempts.insert(
+                    correction.model_name().to_owned(),
+                    correction.outcome.attempts_used,
+                );
             }
             if submission_correction.is_some()
                 && let Some(task) = streaming_task
@@ -7845,11 +7846,13 @@ async fn stream_generate_chat_completion<'a>(
         let batch_call_count = unfinished_tool_calls.len();
         // Reserve semantic attempts before either ordinary budgets or task approval can park a batch.
         for call in &unfinished_tool_calls {
-            if allowed_tool_names.contains(&call.fn_name)
-                && let Some(tool) = offered_client_tools
-                    .get(&call.fn_name)
-                    .filter(|tool| tool.submission.is_some())
-            {
+            let Some(tool) = offered_client_tools
+                .get(&call.fn_name)
+                .filter(|_| allowed_tool_names.contains(&call.fn_name))
+            else {
+                continue;
+            };
+            if tool.submission.is_some() {
                 let correction = submission_correction.get_or_insert_with(|| {
                     crate::services::submission_correction::SubmissionCorrection::new(tool)
                 });
@@ -7858,6 +7861,29 @@ async fn stream_generate_chat_completion<'a>(
                 if charge.submission_attempt.is_none() {
                     let attempt = correction.charge_submission();
                     charge.submission_attempt = Some(attempt);
+                }
+            } else if let Some(part) = &tool.part
+                && let Some(owner) = offered_client_tools.values().find(|owner| {
+                    owner.submission.is_some() && owner.config.qualified_name() == part.submission
+                })
+                && !tool_charges
+                    .get(&call.call_id)
+                    .is_some_and(|charge| charge.part_call.is_some())
+            {
+                let correction = submission_correction.get_or_insert_with(|| {
+                    crate::services::submission_correction::SubmissionCorrection::new(owner)
+                });
+                // A part of another submission than the open one is an
+                // ordinary call.
+                if correction.is_part(tool) {
+                    let (number, try_number) = correction.charge_part(
+                        &tool.config.qualified_name(),
+                        part.key_of(&call.fn_arguments),
+                        current_turn,
+                    );
+                    let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                    charge.part_call = Some(number);
+                    charge.part_try = Some(try_number);
                 }
             }
         }
@@ -9341,7 +9367,9 @@ async fn stream_generate_chat_completion<'a>(
                     )
                     .await;
                     if tool_charges.get(&call_id).is_some_and(|charge| {
-                        charge.submission_attempt.is_some() || charge.recovery_read
+                        charge.submission_attempt.is_some()
+                            || charge.recovery_read
+                            || charge.part_call.is_some()
                     }) && let Some(correction) = submission_correction.as_mut()
                     {
                         correction.stop(crate::services::submission_correction::SubmissionReason::CapabilityUnavailable);
@@ -9366,6 +9394,13 @@ async fn stream_generate_chat_completion<'a>(
                     .get(&call_id)
                     .and_then(|charge| charge.submission_attempt)
                     .unwrap_or(0);
+                // Charged only as a part of the open submission.
+                let part = tool_policy.and_then(|policy| policy.part.as_ref()).zip(
+                    tool_charges
+                        .get(&call_id)
+                        .and_then(|charge| charge.part_call.zip(charge.part_try)),
+                );
+                let part_key = part.and_then(|(part, _)| part.key_of(&tool_input));
                 // A live granted call never parks durably and never waits for
                 // the inbox: it is live on the grant's executor or it fails. A
                 // durable one parks at once for the grant's binding.
@@ -9419,6 +9454,18 @@ async fn stream_generate_chat_completion<'a>(
                         ], None))
                     } else { submission.validate(&tool_input) }
                 });
+                if let Some((part, (number, try_number))) = part
+                    && let Some(correction) = submission_correction.as_ref()
+                {
+                    let key_path = if part_key.is_some() {
+                        part.key_pointer()
+                    } else {
+                        ""
+                    };
+                    validation_failure = correction
+                        .part_refusal(number, try_number, key_path)
+                        .or_else(|| part.arguments.validate(&tool_input));
+                }
                 let durable_request = if app_state.config.client_tools.durable_operations_enabled {
                     tool_policy.and_then(|policy| {
                         let kind = operation_kind?;
@@ -9496,7 +9543,8 @@ async fn stream_generate_chat_completion<'a>(
                 if let Some(request) = &durable_request {
                     task.register_client_operation(request.clone()).await?;
                 }
-                let live_submission = submission.is_some()
+                // Parts go where the submission that finishes their draft goes.
+                let live_submission = (submission.is_some() || part.is_some())
                     && durable_request.is_none()
                     && task.uses_shared_client_transport();
                 if validation_failure.is_none()
@@ -9548,6 +9596,7 @@ async fn stream_generate_chat_completion<'a>(
                             && validation_failure.is_none()
                             && durable_request.is_none()
                             && submission.is_none()
+                            && part.is_none()
                             && !policy.inbox_only
                     })
                     .and_then(|policy| policy.executor.as_ref())
@@ -9992,20 +10041,36 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
-                    response_text = output_value.to_string();
                     if let Some(correction) = submission_correction.as_mut() {
                         correction.record(&outcome);
                         output_value["submission_outcome"] =
                             serde_json::to_value(&correction.outcome)?;
-                        if !correction.pending() && correction.outcome.status != crate::services::submission_correction::SubmissionStatus::Accepted {
-                            output_value["submission"] = json!({"status":"failed", "attempts_remaining":0});
-                        }
-                        response_text = output_value.to_string();
                     }
-                    if submission_correction
+                }
+                if part.is_some()
+                    && let Some(correction) = submission_correction.as_mut()
+                {
+                    correction.record_part(&outcome);
+                    output_value["part"] = correction.part_budget(
+                        &tool_policy.expect("offered part").config.qualified_name(),
+                        part_key.as_deref(),
+                    );
+                }
+                if submission.is_some() || part.is_some() {
+                    if let Some(correction) = submission_correction
                         .as_ref()
-                        .is_some_and(|correction| !correction.pending())
+                        .filter(|correction| !correction.pending())
                     {
+                        output_value["submission_outcome"] =
+                            serde_json::to_value(&correction.outcome)?;
+                        // A part call is no attempt, so only a submission is marked failed.
+                        if submission.is_some()
+                            && correction.outcome.status
+                                != crate::services::submission_correction::SubmissionStatus::Accepted
+                        {
+                            output_value["submission"] =
+                                json!({"status":"failed", "attempts_remaining":0});
+                        }
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -10020,6 +10085,7 @@ async fn stream_generate_chat_completion<'a>(
                             non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
                     }
+                    response_text = output_value.to_string();
                 }
                 persist_correction!();
                 let tool_error =
@@ -12283,11 +12349,13 @@ async fn stream_generate_chat_completion<'a>(
                 let progresses = calls.iter().any(|call| {
                     allowed_tool_names.contains(&call.fn_name)
                         && offered_client_tools.get(&call.fn_name).is_some_and(|tool| {
-                            tool.submission.is_some() || correction.is_declared_read(tool)
+                            tool.submission.is_some()
+                                || correction.is_part(tool)
+                                || correction.is_declared_read(tool)
                         })
                 });
                 if !progresses {
-                    let retry = correction.no_progress(current_turn);
+                    let retry = correction.no_progress(current_turn, calls.is_empty());
                     if !retry {
                         break 'loop_call_turns Ok((
                             current_message_content,
@@ -12645,10 +12713,13 @@ async fn stream_generate_chat_completion<'a>(
         }
     }
     completion.map(|(content, mut metadata)| {
-        if let Some(correction) = submission_correction {
+        if let Some(outcome) = submission_correction
+            .as_ref()
+            .and_then(|correction| correction.shown_outcome())
+        {
             metadata
                 .get_or_insert_with(GenerationMetadata::default)
-                .submission_outcome = Some(correction.outcome);
+                .submission_outcome = Some(outcome.clone());
         }
         (without_preparing_tools(&content), metadata)
     })
@@ -25645,7 +25716,9 @@ async fn resume_parked_generation(
             ),
             action_facet_args: generation_parameters.action_facet_args.clone(),
         });
-    let (end_content, generation_metadata) = stream_generate_chat_completion(
+    // Boxed: inline, the generation state is copied into every continuation
+    // wrapper's debug frame, about 1.6 MiB more stack for a resumed turn.
+    let (end_content, generation_metadata) = Box::pin(stream_generate_chat_completion(
         tx.clone(),
         app_state,
         policy,
@@ -25693,7 +25766,7 @@ async fn resume_parked_generation(
         task_tool_budgets_for_chat(&chat),
         resume,
         split_reply,
-    )
+    ))
     .await?;
     // Written even when the generation reported no metadata of its own, and
     // before the content: this is what releases the claim taken above, and a

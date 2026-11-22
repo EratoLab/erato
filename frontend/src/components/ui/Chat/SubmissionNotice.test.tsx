@@ -197,3 +197,21 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     );
   });
 });
+
+describe("SubmissionNotice reasons", () => {
+  it("says the part limit was reached, not that correction attempts ran out", async () => {
+    await renderNotice(
+      message([], {
+        submission_outcome: {
+          status: "unresolved",
+          reason: "part_calls_exhausted",
+          attempts_used: 0,
+          max_attempts: 5,
+        },
+      }),
+    );
+    expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
+      "No valid proposal was preparedErato reached the limit of parts it can write in one request; ask for a smaller change.",
+    );
+  });
+});

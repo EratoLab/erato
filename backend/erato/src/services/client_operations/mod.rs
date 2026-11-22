@@ -437,6 +437,12 @@ pub struct ToolCallCharge {
     #[serde(default)]
     pub recovery_read: bool,
     pub operation_identity: Option<OperationIdentity>,
+    /// A part call of the submission: its number among the request's part
+    /// calls, and among its part's tries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_call: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_try: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
