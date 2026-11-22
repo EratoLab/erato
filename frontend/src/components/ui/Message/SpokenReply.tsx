@@ -128,12 +128,13 @@ export function SpokenReply({
 
   return (
     <details
-      className="mb-3 text-sm text-theme-fg-muted"
+      className="group mb-3 text-sm text-theme-fg-muted"
       data-testid="spoken-reply"
     >
       <summary className="cursor-pointer truncate">
-        <span className="font-medium">{label}: </span>
-        {said}
+        <span className="font-medium">{label}</span>
+        {/* Open, the text below is the whole of it. */}
+        <span className="group-open:hidden">: {said}</span>
       </summary>
       <div className="mt-1 flex flex-col items-start gap-2">
         <p id={captionId} className="whitespace-pre-wrap">
