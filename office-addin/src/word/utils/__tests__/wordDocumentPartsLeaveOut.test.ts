@@ -151,7 +151,10 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
     ).toBe(canonicalWordPlan(accepted));
     const progress = wordPartsProgress(turn.content, false)!;
     expect(progress.finished).toBeDefined();
-    expect(progress.structure?.moves.map((move) => move.title)).toEqual([
+    const moved = new Set(progress.structure?.moved);
+    expect(
+      progress.rows.filter((row) => moved.has(row.row)).map((row) => row.title),
+    ).toEqual([
       "§ 7 Preise und Zahlungsbedingungen",
       "§ 12 Notfall- und Eskalationsmanagement",
     ]);

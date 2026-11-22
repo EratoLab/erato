@@ -172,6 +172,35 @@ describe("buildWordArtifact", () => {
     ).toBeUndefined();
   });
 
+  it("shows the parts card from the section plan's first arguments while Erato writes it", () => {
+    const writing = {
+      content_type: "tool_use",
+      tool_call_id: "call-plan",
+      tool_name: "plan_document_sections",
+      status: "preparing",
+      input: '{"snapshot":"s","readToken":"t","intent":"Pla',
+    } as unknown as ContentPart;
+    const build = (generating: boolean) =>
+      buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: {
+          clientActions: ["word.apply_document_plan"],
+          alwaysAskActions: [],
+        },
+        content: [writing],
+        messageId: "m1",
+        capture,
+        generating,
+      })?.submittedCard;
+    expect(build(true)).toEqual({
+      toolCallId: "call-plan",
+      content: "call-plan",
+      language: "erato-word-document-parts",
+      pending: true,
+    });
+    expect(build(false)).toBeUndefined();
+  });
+
   it("returns nothing when the facet advertises no action this build implements", () => {
     expect(
       buildWordArtifact({

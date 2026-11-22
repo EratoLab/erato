@@ -1,4 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
@@ -14,7 +15,7 @@ import { UndoIcon } from "@/components/ui/icons";
 
 import "./wordReview.css";
 
-import { storyLabel } from "./wordPlanLabels";
+import { storyLabel, wordNotChangedText } from "./wordPlanLabels";
 
 import type { WordPlanRisk } from "@/lib/wordReview/wordPlanReview";
 import type { ComponentProps, ReactNode, RefObject } from "react";
@@ -101,7 +102,11 @@ export function WordReviewCard({
       aria-label={label}
       className="word-review focus-ring"
       data-testid={testId}
-      footer={<div className="word-review__footer">{footer}</div>}
+      footer={
+        footer == null ? undefined : (
+          <div className="word-review__footer">{footer}</div>
+        )
+      }
     >
       {collapsed && receipt}
       <div id={detailsId} hidden={collapsed}>
@@ -138,6 +143,25 @@ export function WordReviewHeader({
       {scope && <p className="word-review__hint">{scope}</p>}
       {children}
     </div>
+  );
+}
+
+/** The one line naming what a proposal leaves as it was. */
+export function WordNotChangedLine({
+  names,
+  className,
+}: {
+  names: readonly string[];
+  className?: string;
+}) {
+  if (!names.length) return null;
+  return (
+    <p
+      className={clsx("word-review__hint [overflow-wrap:anywhere]", className)}
+      data-testid="word-plan-not-changed"
+    >
+      {wordNotChangedText(names)}
+    </p>
   );
 }
 

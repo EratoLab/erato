@@ -95,6 +95,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
             content: message.content,
             messageId: id,
             capture,
+            generating: message.status === "sending",
           }),
         withHostArtifact,
       );

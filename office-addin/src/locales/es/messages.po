@@ -5329,11 +5329,6 @@ msgstr "Este cambio requiere reescribir todo el documento, algo que Erato no pue
 #~ msgstr "Ancho de página"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.applyLater"
-msgstr "Podrá aplicar el cambio cuando Erato haya terminado."
-
-#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.parts.consent"
 msgstr "¿Aplicar los cambios revisados abajo?"
@@ -5352,11 +5347,6 @@ msgstr "Erato se detuvo antes de terminar, así que no hay nada que aplicar. Env
 #: src/word/components/WordDocumentPartsCard.tsx
 msgid "officeAddin.word.parts.titleStopped"
 msgstr "Cambios sin terminar"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.titleWriting"
-msgstr "Escribiendo los cambios"
 
 #. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
@@ -5901,6 +5891,11 @@ msgstr "¿Aplicar los cambios revisados arriba?"
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planTitle.summary"
 #~ msgstr "Reescribir como nueva versión"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.receipt.proposed"
+msgstr "Propuesto: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx

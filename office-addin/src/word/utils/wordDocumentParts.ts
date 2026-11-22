@@ -445,7 +445,7 @@ export function parseWordPartOps(
         return [];
       }
       used.set(ref, k);
-      // Moves live in the section plan only, so the card's Structure row and Apply's route agree.
+      // Moves live in the section plan only, so the card's rows and Apply's route agree.
       if (place !== next && !outOfOrder) {
         outOfOrder = true;
         issue(

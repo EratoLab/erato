@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   wordPartSourceIndexes,
   wordPartsLayout,
+  wordPartsPlanningCall,
   wordPartsProgress,
+  wordPartsReorders,
   wordPartsSectionPlanCall,
 } from "../wordPartsProgress";
 
@@ -88,18 +90,17 @@ describe("the parts card's rows", () => {
     const progress = wordPartsProgress(content, true)!;
     expect(wordPartsSectionPlanCall(content)).toBe("plan");
     expect(progress.rows.map((row) => [row.title, row.state])).toEqual(
-      SIX_TITLES.map((title) => [title, "waiting"]),
+      SIX_TITLES.map((title) => [title, "writing"]),
     );
     expect(progress).toMatchObject({
       callId: "plan",
       intent: "Plain wording.",
-      finishing: false,
       stopped: false,
     });
     expect(progress.structure).toBeUndefined();
   });
 
-  it("goes Waiting, Writing, Checking, Ready, and a quiet fix shows as Writing", () => {
+  it("shows a row writing until a part for it is accepted, a quiet fix included", () => {
     const content = [
       sectionPlan(SIX, SIX_TITLES),
       accepted("p1", 1),
@@ -127,10 +128,10 @@ describe("the parts card's rows", () => {
     expect(states(true)).toEqual([
       "ready",
       "writing",
-      "checking",
       "writing",
-      "waiting",
-      "waiting",
+      "writing",
+      "writing",
+      "writing",
     ]);
     expect(states(false)).toEqual([
       "ready",
@@ -143,7 +144,7 @@ describe("the parts card's rows", () => {
     expect(wordPartsProgress(content, false)!.stopped).toBe(true);
   });
 
-  it("keeps a row ready when a resend of it is refused, and shows the resend while it runs", () => {
+  it("keeps a row ready when a resend of it is refused", () => {
     const resend = tool("p1b", "write_document_section", "error", {
       snapshot: "s",
       draft_id: "draft-1",
@@ -151,11 +152,11 @@ describe("the parts card's rows", () => {
       ops: [],
     });
     const content = [sectionPlan(SIX, SIX_TITLES), accepted("p1", 1), resend];
-    expect(wordPartsProgress(content, true)!.rows[0].state).toBe("writing");
+    expect(wordPartsProgress(content, true)!.rows[0].state).toBe("ready");
     expect(wordPartsProgress(content, false)!.rows[0].state).toBe("ready");
   });
 
-  it("names the moves, merges and renames of the structure by the rows' own titles", () => {
+  it("lists a kept section that moves or gets a new title as a row, and counts the structure", () => {
     const rows: Row[] = [
       { source: "b1-b10", action: "keep" },
       { source: "b31-b40", action: "keep", title: "§ 2 Lagerung" },
@@ -175,21 +176,19 @@ describe("the parts card's rows", () => {
       "§ 8 Schluss",
     ];
     const progress = wordPartsProgress([sectionPlan(rows, titles)], true)!;
-    expect(progress.rows.map((row) => [row.title, row.state])).toEqual([
-      ["§ 3 Lieferung", "waiting"],
-      ["§ 5 Haftung, § 7 Gewährleistung", "waiting"],
-      ["§ 6 Sonstiges", "ready"],
+    expect(
+      progress.rows.map((row) => [row.title, row.action, row.state]),
+    ).toEqual([
+      ["§ 4 Lagerung", "keep", "ready"],
+      ["§ 3 Lieferung", "rewrite", "writing"],
+      ["§ 2 Abnahme", "keep", "ready"],
+      ["§ 5 Haftung, § 7 Gewährleistung", "rewrite", "writing"],
+      ["§ 6 Sonstiges", "delete", "ready"],
     ]);
     expect(progress.structure).toEqual({
-      moves: [
-        { row: 2, title: "§ 4 Lagerung", after: "§ 1 Gegenstand" },
-        { row: 3, title: "§ 3 Lieferung", after: "§ 2 Lagerung" },
-      ],
-      merges: [{ row: 5, title: "§ 5 Haftung, § 7 Gewährleistung" }],
-      renames: [
-        { row: 2, title: "§ 4 Lagerung", newTitle: "§ 2 Lagerung" },
-        { row: 4, title: "§ 2 Abnahme", newTitle: "§ 4 Abnahme" },
-      ],
+      moved: [2, 3],
+      merged: [5],
+      renamed: [2, 4],
     });
   });
 
@@ -317,12 +316,9 @@ describe("the parts card's rows", () => {
       ["§ 4 Preise, § 6 Zahlung", "ready"],
       ["§ 7 Schluss", "ready"],
     ]);
-    expect(progress.structure).toEqual({
-      moves: [],
-      merges: [{ row: 4, title: "§ 4 Preise, § 6 Zahlung" }],
-      renames: [],
-    });
+    expect(progress.structure).toEqual({ moved: [], merged: [4], renamed: [] });
     expect(progress.reorderingLeftOut).toBeUndefined();
+    expect(wordPartsReorders(progress)).toBe(true);
 
     const mergeKept = wordPartsProgress(
       [
@@ -333,12 +329,13 @@ describe("the parts card's rows", () => {
       ],
       false,
     )!;
-    expect(mergeKept.structure?.merges).toEqual([]);
-    expect(mergeKept.structure?.moves).toHaveLength(1);
+    expect(mergeKept.structure?.merged).toEqual([]);
+    expect(mergeKept.structure?.moved).toHaveLength(1);
     expect(mergeKept.reorderingLeftOut).toBe("changed_in_word");
+    expect(wordPartsReorders(mergeKept)).toBe(false);
   });
 
-  it("says when the finish is being checked, and follows only the latest section plan", () => {
+  it("follows only the latest section plan", () => {
     const replanned = sectionPlan(SIX.slice(0, 2), SIX_TITLES.slice(0, 2), {
       id: "plan-2",
       status: (row) => (row.source === "b1-b10" ? "ready" : "waiting"),
@@ -357,9 +354,24 @@ describe("the parts card's rows", () => {
     ];
     const progress = wordPartsProgress(content, true)!;
     expect(progress.callId).toBe("plan-2");
-    expect(progress.rows.map((row) => row.state)).toEqual(["ready", "waiting"]);
-    expect(progress.finishing).toBe(true);
-    expect(wordPartsProgress(content, false)!.finishing).toBe(false);
+    expect(progress.rows.map((row) => row.state)).toEqual(["ready", "writing"]);
+  });
+
+  it("names the section plan Erato is writing until one is accepted", () => {
+    const writing = tool(
+      "plan",
+      "plan_document_sections",
+      "preparing",
+      '{"snapshot":"s","readToken":"t","intent":"Plain',
+    );
+    expect(wordPartsPlanningCall([writing], true)).toBe("plan");
+    expect(wordPartsPlanningCall([writing], false)).toBeUndefined();
+    const refused = tool("plan", "plan_document_sections", "error", {}, {});
+    const again = tool("plan-2", "plan_document_sections", "in_progress", {});
+    expect(wordPartsPlanningCall([refused, again], true)).toBe("plan-2");
+    expect(
+      wordPartsPlanningCall([sectionPlan(SIX, SIX_TITLES), again], true),
+    ).toBeUndefined();
   });
 
   it("is absent without an accepted section plan", () => {

@@ -67,8 +67,6 @@ export interface WordReviewState {
   wholeDocumentRefusal?: WordWholeDocumentRefusal;
   /** Comment changes: the rows the user ticked, each row's latest outcome, and Revert. */
   comments?: WordCommentCardState;
-  /** A change in parts: the section plan rows (from 1) and the reordering left out of Apply. */
-  partsLeftOut?: { rows: readonly number[]; structure: boolean };
 }
 
 export interface WordCommentCardState {

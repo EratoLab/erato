@@ -78,6 +78,15 @@ export type LogicalStep =
       /** Stable React key derived from the tool_call_id. */
       key: string;
       part: ToolUse & { content_type: "tool_use" };
+    }
+  | {
+      kind: "submission";
+      /** Derived from the step's first part call, so it stays while the step grows. */
+      key: string;
+      /** The rows the step opens to: everything but the calls the step got past. */
+      steps: LogicalStep[];
+      /** Every call of the step, those it got past included, for its status. */
+      calls: (ToolUse & { content_type: "tool_use" })[];
     };
 
 /**

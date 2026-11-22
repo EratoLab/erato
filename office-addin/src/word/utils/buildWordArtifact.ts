@@ -2,6 +2,7 @@ import {
   acceptedWordCommentSubmission,
   acceptedWordPlanFromHistory,
   WORD_PARTS_FENCE,
+  wordPartsPlanningCall,
   wordPartsSectionPlanCall,
 } from "@erato/frontend/word-review";
 
@@ -42,6 +43,8 @@ export function buildWordArtifact(args: {
   content: ContentPart[] | undefined;
   messageId: string;
   capture: WordDocumentCapture | undefined;
+  /** The message is still being written. */
+  generating?: boolean;
 }): HostArtifact | undefined {
   const allowedClientActions = args.clientActionInfo?.clientActions;
   const offerable = offerableWordClientActionsForFacet(
@@ -60,9 +63,15 @@ export function buildWordArtifact(args: {
     comments && offerable.includes(comments.action) ? comments : undefined;
   // A change in parts shows its rows from the accepted section plan until the finish's plan card;
   // an accepted submission of another kind has the Apply and wins over an unfinished one.
-  const sectionPlan =
-    !plan && !commentCard && offerable.includes(WORD_SUBMIT_PLAN_ACTION)
-      ? wordPartsSectionPlanCall(args.content)
+  const parts =
+    !plan && !commentCard && offerable.includes(WORD_SUBMIT_PLAN_ACTION);
+  const sectionPlan = parts
+    ? wordPartsSectionPlanCall(args.content)
+    : undefined;
+  // From the section plan's first streamed arguments the card says that Erato plans the change.
+  const planning =
+    parts && !sectionPlan
+      ? wordPartsPlanningCall(args.content, !!args.generating)
       : undefined;
   const submitted = plan
     ? { ...plan, language: WORD_PLAN_FENCE }
@@ -72,13 +81,20 @@ export function buildWordArtifact(args: {
           content: sectionPlan,
           language: WORD_PARTS_FENCE,
         }
-      : commentCard
+      : planning
         ? {
-            toolCallId: commentCard.toolCallId,
-            content: commentCard.toolCallId,
-            language: WORD_COMMENT_CARD_FENCES[commentCard.action],
+            toolCallId: planning,
+            content: planning,
+            language: WORD_PARTS_FENCE,
+            pending: true,
           }
-        : undefined;
+        : commentCard
+          ? {
+              toolCallId: commentCard.toolCallId,
+              content: commentCard.toolCallId,
+              language: WORD_COMMENT_CARD_FENCES[commentCard.action],
+            }
+          : undefined;
   const proposedClientAction = plan
     ? WORD_SUBMIT_PLAN_ACTION
     : commentCard
@@ -96,6 +112,7 @@ export function buildWordArtifact(args: {
             toolCallId: submitted.toolCallId,
             content: submitted.content,
             language: submitted.language,
+            ...("pending" in submitted ? { pending: true } : {}),
           },
         }
       : {}),

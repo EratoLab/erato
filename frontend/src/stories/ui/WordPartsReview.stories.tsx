@@ -1,10 +1,18 @@
 import { useState } from "react";
 
 import { Button } from "../../components/ui/Controls/Button";
-import { WordPartsReview } from "../../components/ui/WordReview/WordPartsReview";
-import { WordReviewCard } from "../../components/ui/WordReview/WordReviewCardParts";
+import {
+  WordPartsReview,
+  wordPartsPlanningText,
+  wordPartsReorderingText,
+  wordPartsTitleText,
+} from "../../components/ui/WordReview/WordPartsReview";
+import {
+  WordReviewCard,
+  WordReviewDetailsToggle,
+  WordReviewGenerating,
+} from "../../components/ui/WordReview/WordReviewCardParts";
 
-import type { WordPartsLeftOut } from "../../components/ui/WordReview/WordPartsReview";
 import type {
   WordPartsProgress,
   WordPartsRowState,
@@ -12,26 +20,12 @@ import type {
 import type { Meta, StoryObj } from "@storybook/react";
 
 const TITLES = [
-  "§ 1 Gegenstand des Vertrags",
-  "§ 2 Begriffsbestimmungen",
   "§ 3 Lieferung und Versand an die Standorte Halden und Ostrup",
-  "§ 4 Lagerung",
   "§ 5 Abnahme",
   "§ 6 Preise und Zahlungsbedingungen",
-  "§ 7 Haftung",
-  "§ 8 Gewährleistung",
-  "§ 9 Qualitätssicherung",
-  "§ 10 Notfall- und Eskalationsmanagement",
+  "§ 7 Haftung, § 8 Gewährleistung",
   "§ 11 Gewährleistung für Ersatzteile",
-  "§ 12 Datenschutz und Informationssicherheit",
-  "§ 13 Geheimhaltung",
   "§ 14 Versicherung",
-  "§ 15 Höhere Gewalt",
-  "§ 16 Laufzeit und Kündigung",
-  "§ 17 Abtretung",
-  "§ 18 Anwendbares Recht",
-  "§ 19 Gerichtsstand",
-  "§ 20 Schlussbestimmungen",
 ];
 
 function progress(
@@ -50,45 +44,34 @@ function progress(
       title: TITLES[k],
       state,
     })),
-    structure: {
-      moves: [
-        {
-          row: 5,
-          title: "§ 6 Preise und Zahlungsbedingungen",
-          after: "§ 3 Lieferung und Versand an die Standorte Halden und Ostrup",
-        },
-        { row: 6, title: "§ 4 Lagerung", after: "§ 5 Abnahme" },
-      ],
-      merges: [],
-      renames: [
-        {
-          row: 5,
-          title: "§ 6 Preise und Zahlungsbedingungen",
-          newTitle: "§ 4 Preise und Zahlungsbedingungen",
-        },
-      ],
-    },
-    finishing: false,
+    structure: { moved: [4], merged: [5], renamed: [] },
     stopped: false,
     ...extra,
   };
 }
 
+const READY = TITLES.map(() => "ready" as const);
+
+const LABEL = "Document changes in parts";
+
+/** The card in the 360 px pane, Apply on top once Erato finished. */
 function PartsCard({
   value,
-  editable = false,
+  planning = false,
 }: {
   value: WordPartsProgress;
-  editable?: boolean;
+  planning?: boolean;
 }) {
-  const [leftOut, setLeftOut] = useState<WordPartsLeftOut>({
-    rows: new Set(),
-    structure: false,
-  });
+  if (planning)
+    return (
+      <div style={{ width: 360 }}>
+        <WordReviewGenerating label={wordPartsPlanningText()} />
+      </div>
+    );
   return (
     <div style={{ width: 360 }}>
       <WordReviewCard
-        label="Document changes in parts"
+        label={LABEL}
         testId="word-parts-story"
         collapsed={false}
         detailsId="word-parts-story-details"
@@ -96,33 +79,16 @@ function PartsCard({
       >
         <WordPartsReview
           progress={value}
-          title={
-            value.finished ? "Changes in 20 sections" : "Writing the changes"
-          }
+          title={wordPartsTitleText(value) ?? LABEL}
           top={
             value.finished && (
-              <Button type="button" variant="primary">
-                Apply changes
-              </Button>
+              <>
+                <p className="word-review__hint">{wordPartsReorderingText()}</p>
+                <Button type="button" variant="primary">
+                  Apply changes
+                </Button>
+              </>
             )
-          }
-          leftOut={editable ? leftOut : undefined}
-          onLeaveOut={
-            editable
-              ? (target, out) =>
-                  setLeftOut((prev) =>
-                    target === "structure"
-                      ? { ...prev, structure: out }
-                      : {
-                          ...prev,
-                          rows: new Set(
-                            out
-                              ? [...prev.rows, target]
-                              : [...prev.rows].filter((row) => row !== target),
-                          ),
-                        },
-                  )
-              : undefined
           }
         />
       </WordReviewCard>
@@ -138,7 +104,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A large Word change written in parts, in the 360 px pane: the section plan's rows from the first minute, filling as Erato writes; after the finish, Apply on top and Leave out per row and for the reordering.",
+          "A large Word change written in parts, in the 360 px pane: one line while Erato plans it, then one heading, the intent, how many sections are ready and each section's title marked writing or ready; after the finish, the same heading and intent, Apply on top, one line for what stays as it was and only the sections that change.",
       },
     },
   },
@@ -147,25 +113,85 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const WRITING: WordPartsRowState[] = [
-  "ready",
-  "ready",
-  "writing",
-  ...Array.from({ length: 17 }, () => "waiting" as const),
-];
-
-export const TwentyRowsWhileWriting: Story = {
-  args: { value: progress(WRITING) },
+export const Planning: Story = {
+  args: { value: progress([]), planning: true },
 };
 
-export const TwentyRowsFinished: Story = {
+export const WritingThreeOfSix: Story = {
+  args: {
+    value: progress([
+      "ready",
+      "ready",
+      "ready",
+      "writing",
+      "writing",
+      "writing",
+    ]),
+  },
+};
+
+export const Ready: Story = {
+  args: { value: progress(READY, { finished: "finish" }) },
+};
+
+export const ReadyWithNotChanged: Story = {
   args: {
     value: progress(
-      TITLES.map((_, k) =>
-        k === 10 ? "not-written" : k === 4 ? "changed-in-word" : "ready",
+      READY.map((state, k) =>
+        k === 1 ? "changed-in-word" : k === 4 ? "not-written" : state,
       ),
       { finished: "finish" },
     ),
-    editable: true,
   },
+};
+
+/** Every card but the newest open proposal folds to its one line, also after a reload. */
+function FoldedCards() {
+  const [open, setOpen] = useState<string>();
+  const ready = progress(READY, { finished: "finish" });
+  const cards = [
+    { id: "older", line: "Proposed: Changes in 6 sections" },
+    { id: "applied", line: "Applied: Change 3 paragraphs" },
+    { id: "declined", line: "Proposal declined. Nothing was written." },
+  ];
+  return (
+    <div style={{ width: 360, display: "grid", gap: 12 }}>
+      {cards.map(({ id, line }) => {
+        const collapsed = open !== id;
+        const details = `word-parts-story-${id}`;
+        return (
+          <WordReviewCard
+            key={id}
+            label="Proposed document changes"
+            testId={`word-parts-story-${id}`}
+            collapsed={collapsed}
+            detailsId={details}
+            receipt={
+              <div className="word-review__receipt" role="status">
+                <strong>{line}</strong>
+              </div>
+            }
+            footer={
+              <div className="word-review__actions">
+                <WordReviewDetailsToggle
+                  collapsed={collapsed}
+                  controls={details}
+                  onToggle={() => setOpen(collapsed ? id : undefined)}
+                />
+              </div>
+            }
+          >
+            <WordPartsReview
+              progress={ready}
+              title={wordPartsTitleText(ready) ?? LABEL}
+            />
+          </WordReviewCard>
+        );
+      })}
+    </div>
+  );
+}
+
+export const FoldedOlderCards: StoryObj<typeof FoldedCards> = {
+  render: () => <FoldedCards />,
 };

@@ -564,11 +564,13 @@ describe("structural document review", () => {
       { wrapper: Conversation },
     );
     expect(
-      await screen.findByTestId("word-plan-not-in-proposal"),
-    ).toHaveTextContent("Not in this proposal: Plan, Notes");
+      await screen.findByTestId("word-plan-not-changed"),
+    ).toHaveTextContent(
+      "Not changed: Plan, Notes. Ask for them in your next message.",
+    );
   });
 
-  it("restores a saved submission for inspection after a pane reload without enabling Apply", async () => {
+  it("folds a saved submission after a pane reload to what it proposed, without Apply, and opens it for inspection", async () => {
     const state = setup();
     mock.artifact.submittedCard = {
       toolCallId: "saved",
@@ -589,23 +591,31 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: Conversation },
     );
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      "Proposed: Change 5 items",
+    );
+    expect(screen.queryByText(/^Applied/)).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Change 5 items" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByRole("heading", { name: "Change 5 items" }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
     expect(screen.getByText("Recommendation")).toBeVisible();
     expect(
       screen.getByText(/original document is not available in this session/),
     ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
-    expect(screen.queryByTestId("word-plan-not-in-proposal")).toBeNull();
+    expect(screen.queryByTestId("word-plan-not-changed")).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
 
-  it("reviews a reloaded plan in full against the read stored in the chat, without enabling Apply", async () => {
+  it("reviews a reloaded plan in full against the read stored in the chat once opened, without Apply", async () => {
     const state = setup(CHAPTERS, (snapshot) =>
       bodyPlan(
         snapshot,
@@ -636,6 +646,7 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: Conversation },
     );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("Check first")).toBeVisible();
     expect(
       screen.getByRole("button", {
@@ -645,9 +656,7 @@ describe("structural document review", () => {
     expect(
       screen.queryByText(/original document is not available in this session/),
     ).toBeNull();
-    const apply = screen.getByRole("button", { name: "Apply changes" });
-    expect(apply).toBeDisabled();
-    fireEvent.click(apply);
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
 
@@ -683,6 +692,7 @@ describe("structural document review", () => {
         { wrapper: Conversation },
       );
 
+      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
       expect(
         screen.getByText(/original document is not available in this session/),
       ).toBeVisible();
@@ -710,9 +720,7 @@ describe("structural document review", () => {
         ),
       ).toBeVisible();
       expect(within(unread).getAllByText("Revised 1.")[0]).toBeVisible();
-      expect(
-        screen.getByRole("button", { name: "Apply changes" }),
-      ).toBeDisabled();
+      expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     },
   );
 
@@ -2259,13 +2267,17 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(word.insert).not.toHaveBeenCalled();
   });
 
-  it("stay refused after a later turn revokes their snapshot", async () => {
+  it("fold once a later turn revokes their snapshot, and stay refused when opened", async () => {
     const { snapshot, refresh } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
     });
     await act(async () => {});
     snapshot.revoked = true;
     refresh();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
     expect(
@@ -2275,20 +2287,26 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(screen.queryByText(/no longer active/)).toBeNull();
   });
 
-  it("leave an in-place plan a later turn revoked with a disabled Apply and the expired notice", async () => {
+  it("fold an in-place plan a later turn revoked to what it proposed, with the expired notice and no Apply", async () => {
     const { snapshot, refresh } = await mountRealistic(
       (s) => statusRewritePlan(s, "Status: revised."),
       { profile: "word-web" },
     );
     await act(async () => {});
+    expect(applyButton()).toBeEnabled();
     snapshot.revoked = true;
     refresh();
-    expect(applyButton()).toBeDisabled();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByText(
         "This document snapshot is no longer active. Include the document in a new request.",
       ),
     ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
 
   it("keeps the organization wording where a desktop deployment turns the import off", async () => {

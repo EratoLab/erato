@@ -5,6 +5,10 @@ import {
   isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
+import {
+  groupSubmissionSteps,
+  submissionSpan,
+} from "@/lib/trace/submissionSteps";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { shallowEqual } from "@/utils/chat/stableValues";
 
@@ -21,7 +25,12 @@ import { railIconFor } from "./icons";
 import { ReasoningStep } from "./steps/ReasoningStep";
 import { ToolStatusPill } from "./steps/ToolStatusPill";
 import { ToolUseStep } from "./steps/ToolUseStep";
-import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
+import {
+  isTraceablePart,
+  type BaseStepProps,
+  type LogicalStep,
+  type TraceablePart,
+} from "./types";
 import { approvalStopState } from "../Message/approvalItems";
 
 import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
@@ -288,6 +297,8 @@ const TraceTimeline = ({
           maskReasoningText,
           toolDecisions,
           review: status === "waiting" ? waitingCall?.review : undefined,
+          hasLaterContent,
+          waitingCall,
         });
 
         return (
@@ -316,11 +327,13 @@ const TraceTimeline = ({
 /**
  * Expand a contiguous run of trace-eligible parts into a flat list of logical
  * steps. Reasoning parts split on `**Header**\n\n` boundaries via
- * `parseReasoningSegments`; tool_use parts pass through 1:1.
+ * `parseReasoningSegments`; tool_use parts pass through 1:1, except the calls
+ * of a submission written in parts, which become one step.
  */
-export const flattenToLogicalSteps = (
-  parts: TraceablePart[],
-): LogicalStep[] => {
+export const flattenToLogicalSteps = (parts: TraceablePart[]): LogicalStep[] =>
+  groupSubmissionSteps(stepsOf(parts));
+
+const stepsOf = (parts: TraceablePart[]): LogicalStep[] => {
   const out: LogicalStep[] = [];
   parts.forEach((part, partIndex) => {
     switch (part.content_type) {
@@ -374,6 +387,36 @@ export const flattenToLogicalSteps = (
   return out;
 };
 
+/**
+ * One submission written in parts, as one row: its card shows the progress, so the row only says
+ * that Erato writes the changes and how that ended. Once ended, the user can open it to the calls
+ * it is made of.
+ */
+const SubmissionStep = ({
+  status,
+  isStreaming,
+  isCollapsed,
+  isLastStep,
+  children,
+}: BaseStepProps & { children?: ReactNode }) => (
+  <div data-testid="trace-submission-step" data-step-status={status}>
+    <TraceStep
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- content discriminator
+      railIcon={railIconFor("tool_use", status)}
+      hasTrailingRailLine={!isLastStep}
+      title={t({
+        id: "trace.submission.writing",
+        message: "Writing the changes",
+      })}
+      titleSlot={<ToolStatusPill status={status} />}
+      autoCollapse={isCollapsed}
+      isActive={status === "running" && isStreaming}
+    >
+      {children}
+    </TraceStep>
+  </div>
+);
+
 interface RenderStepArgs {
   step: LogicalStep;
   status: ReturnType<typeof stepStatus>;
@@ -385,6 +428,8 @@ interface RenderStepArgs {
   toolDecisions: Record<string, ToolDecision>;
   /** Where the waiting step's review in the Erato desktop app stands. */
   review: SidecarReviewLink["state"] | undefined;
+  hasLaterContent: boolean;
+  waitingCall: WaitingCall | undefined;
 }
 
 /**
@@ -444,6 +489,31 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           maskReasoningText={args.maskReasoningText}
         />
       );
+    case "submission":
+      // While Erato writes, the step is only its line: the card shows the progress.
+      return (
+        <SubmissionStep
+          status={args.status}
+          isStreaming={args.isStreaming}
+          isCollapsed={args.isCollapsed}
+          isLastStep={args.isLastStep}
+        >
+          {args.status === "running" ||
+          args.status === "waiting" ? undefined : (
+            <TraceTimeline
+              logicalSteps={args.step.steps}
+              isTraceActive={args.isStreaming}
+              hasLaterContent={args.hasLaterContent}
+              renderMarkdown={args.renderMarkdown}
+              showDoneMarker={false}
+              showThinkingPlaceholder={false}
+              maskReasoningText={args.maskReasoningText}
+              toolDecisions={args.toolDecisions}
+              waitingCall={args.waitingCall}
+            />
+          )}
+        </SubmissionStep>
+      );
     case "tool_use":
       return (
         <TraceToolUseStep
@@ -474,7 +544,13 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
  * (non-trace) or a `Trace` cluster.
  */
 export type TraceCluster =
-  | { kind: "trace"; parts: TraceablePart[]; startIndex: number }
+  | {
+      kind: "trace";
+      parts: TraceablePart[];
+      startIndex: number;
+      /** The last content index the cluster covers, parts moved after it included. */
+      endIndex: number;
+    }
   | { kind: "passthrough"; part: ContentPart; index: number };
 
 export const groupIntoTraceClusters = (
@@ -489,14 +565,28 @@ export const groupIntoTraceClusters = (
         : [],
     ),
   );
+  // Text or a card between the calls of a submission in parts follows its one step.
+  const span = submissionSpan(content);
+  let deferred: TraceCluster[] = [];
   let buffer: TraceablePart[] = [];
   let bufferStart = 0;
+  let bufferEnd = 0;
 
   const flush = () => {
     if (buffer.length > 0) {
-      out.push({ kind: "trace", parts: buffer, startIndex: bufferStart });
+      out.push({
+        kind: "trace",
+        parts: buffer,
+        startIndex: bufferStart,
+        endIndex:
+          span && bufferStart <= span.from && bufferEnd >= span.from
+            ? Math.max(bufferEnd, span.to)
+            : bufferEnd,
+      });
       buffer = [];
     }
+    out.push(...deferred);
+    deferred = [];
   };
 
   content.forEach((part, index) => {
@@ -516,7 +606,12 @@ export const groupIntoTraceClusters = (
       isBudgetDecision
     ) {
       if (buffer.length === 0) bufferStart = index;
+      bufferEnd = index;
       buffer.push(part);
+      return;
+    }
+    if (span && index > span.from && index <= span.to) {
+      deferred.push({ kind: "passthrough", part, index });
       return;
     }
     flush();

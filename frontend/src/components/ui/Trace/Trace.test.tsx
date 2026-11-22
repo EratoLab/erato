@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -451,7 +451,7 @@ describe("tool budget approvals", () => {
         reasoningPart("Continuing"),
       ];
       expect(groupIntoTraceClusters(parts)).toEqual([
-        { kind: "trace", parts, startIndex: 0 },
+        { kind: "trace", parts, startIndex: 0, endIndex: 3 },
       ]);
       renderTrace(parts, { isStreaming });
       expect(screen.getByText("Tool-call budget")).toBeInTheDocument();
@@ -464,7 +464,7 @@ describe("tool budget approvals", () => {
   it("leaves pending budget requests available to the approval-card renderer", () => {
     const request = budgetRequest();
     expect(groupIntoTraceClusters([toolUsePart(), request])).toEqual([
-      { kind: "trace", parts: [toolUsePart()], startIndex: 0 },
+      { kind: "trace", parts: [toolUsePart()], startIndex: 0, endIndex: 0 },
       { kind: "passthrough", part: request, index: 1 },
     ]);
   });
@@ -489,9 +489,14 @@ describe("tool budget approvals", () => {
     expect(
       groupIntoTraceClusters([...parts, text, reasoningPart("More")]),
     ).toEqual([
-      { kind: "trace", parts, startIndex: 0 },
+      { kind: "trace", parts, startIndex: 0, endIndex: 2 },
       { kind: "passthrough", part: text, index: 3 },
-      { kind: "trace", parts: [reasoningPart("More")], startIndex: 4 },
+      {
+        kind: "trace",
+        parts: [reasoningPart("More")],
+        startIndex: 4,
+        endIndex: 4,
+      },
     ]);
   });
 });
@@ -569,5 +574,278 @@ describe("Trace — long thinking", () => {
     expect(
       screen.queryByTestId("trace-step-live-window"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Trace — a submission written in parts", () => {
+  const PART = { tries_remaining: 2, calls_remaining: 30 };
+  const call = (
+    id: string,
+    name: string,
+    status: "success" | "error" | "preparing",
+    output: Record<string, unknown> | null,
+    extra: Record<string, unknown> = {},
+  ): ContentPart =>
+    ({
+      content_type: "tool_use",
+      status,
+      tool_call_id: id,
+      tool_name: name,
+      input: {},
+      output,
+      progress_message: null,
+      started_at: null,
+      ended_at: null,
+      ...extra,
+    }) as unknown as ContentPart;
+  const read = (id: string) =>
+    call(id, "read_pages", "success", { status: "success", result: {} });
+  const plan = call("plan", "plan_sections", "success", {
+    status: "success",
+    result: { draft_id: "d" },
+    part: PART,
+  });
+  const redone = call("part-2a", "write_section", "error", {
+    status: "error",
+    validation_errors: [
+      { path: "/ops", code: "numbers", message: "A number changed." },
+    ],
+    part: PART,
+  });
+  const written = (id: string) =>
+    call(id, "write_section", "success", {
+      status: "success",
+      result: {},
+      part: PART,
+    });
+  const finish = call("finish", "submit_draft", "success", {
+    status: "success",
+    result: {},
+    submission: { status: "accepted", attempts_remaining: 4 },
+    submission_outcome: {
+      status: "accepted",
+      attempts_used: 1,
+      max_attempts: 5,
+    },
+  });
+  const step = () => screen.getByTestId("trace-submission-step");
+
+  beforeEach(() => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+  });
+
+  it("shows the reads and parts as one folded step, with no red row for a part sent again", () => {
+    const { container } = renderTrace([
+      reasoningPart("**Reading**\n\nThe whole contract first."),
+      read("read-1"),
+      read("read-2"),
+      plan,
+      redone,
+      written("part-2b"),
+      read("read-3"),
+      written("part-3"),
+      finish,
+    ]);
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(step()).toHaveAttribute("data-step-status", "done");
+    expect(screen.getByText("Writing the changes")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(container.querySelector(".bg-theme-error-bg")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-tool-status='error']"),
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(7);
+    for (const row of container.querySelectorAll(
+      "[data-testid='tool-call-item']",
+    ))
+      expect(step()).toContainElement(row as HTMLElement);
+    const toggle = screen.getByRole("button", { name: /Writing the changes/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says Failed on the step for a real end failure, with only the call that ended it inside", () => {
+    const ended = call("part-3", "write_section", "error", {
+      status: "cancelled",
+      reason: "timeout",
+      part: { tries_remaining: 2, calls_remaining: 28 },
+      submission_outcome: {
+        status: "unresolved",
+        reason: "timeout",
+        attempts_used: 0,
+        max_attempts: 5,
+      },
+    });
+    const { container } = renderTrace([
+      read("read-1"),
+      plan,
+      redone,
+      written("part-2b"),
+      ended,
+    ]);
+    expect(step()).toHaveAttribute("data-step-status", "error");
+    expect(
+      screen.getByRole("button", { name: /Writing the changes/ }),
+    ).toHaveTextContent("Failed");
+    const failed = container.querySelectorAll("[data-tool-status='error']");
+    expect(failed).toHaveLength(1);
+    expect(step()).toContainElement(failed[0] as HTMLElement);
+  });
+
+  it("takes in the part Erato is still writing, and is only its line while the turn runs", () => {
+    const { container } = renderTrace(
+      [
+        read("read-1"),
+        plan,
+        written("part-2"),
+        call("part-3", "write_section", "preparing", null),
+      ],
+      { isStreaming: true },
+    );
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(step()).toHaveAttribute("data-step-status", "running");
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(step()).toHaveTextContent(/^Writing the changesRunning$/);
+    expect(step().querySelector("button")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(0);
+    cleanup();
+
+    renderTrace(
+      [
+        read("read-1"),
+        plan,
+        written("part-2"),
+        call("part-3", "write_section", "preparing", null),
+      ],
+      { waitingCall: { toolCallId: "part-3" } },
+    );
+    expect(step()).toHaveAttribute("data-step-status", "waiting");
+    expect(step().querySelector("button")).toBeNull();
+  });
+
+  it("leaves another server's call and a submission without parts as rows of their own", () => {
+    const { container } = renderTrace([
+      call(
+        "ticket",
+        "create_ticket",
+        "success",
+        { status: "success" },
+        { display: { title: "Create ticket", server_name: "Tracker" } },
+      ),
+      read("read-1"),
+      plan,
+      written("part-2"),
+      finish,
+    ]);
+    const group = step();
+    expect(group.querySelector("[data-tool-name='create_ticket']")).toBeNull();
+    expect(
+      container.querySelector("[data-tool-name='create_ticket']"),
+    ).not.toBeNull();
+    cleanup();
+
+    const small = renderTrace([read("read-1"), finish]);
+    expect(screen.queryByTestId("trace-submission-step")).toBeNull();
+    expect(
+      small.container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(2);
+  });
+
+  it("reads part accounting only on Erato's own calls", () => {
+    const { container } = renderTrace([
+      call(
+        "erp",
+        "get_part",
+        "success",
+        { part: { tries_remaining: 1, calls_remaining: 1 } },
+        { display: { title: "Get part", server_name: "ERP" } },
+      ),
+      call("own", "lookup_part", "error", { part: { id: 7 } }),
+    ]);
+    expect(screen.queryByTestId("trace-submission-step")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-tool-status='error']"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps another server's call and a budget decision between parts as rows of their own", () => {
+    const { container } = renderTrace([
+      read("read-1"),
+      plan,
+      call(
+        "lookup",
+        "lookup_customer",
+        "error",
+        { status: "error" },
+        { display: { title: "Look up customer", server_name: "CRM" } },
+      ),
+      budgetRequest(),
+      budgetDecision(true),
+      redone,
+      written("part-2b"),
+      finish,
+    ]);
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    const group = step();
+    const lookup = container.querySelector(
+      "[data-tool-name='lookup_customer']",
+    );
+    expect(lookup).toHaveAttribute("data-tool-status", "error");
+    expect(group).not.toContainElement(lookup as HTMLElement);
+    expect(group).not.toHaveTextContent("Tool-call budget");
+    expect(screen.getByText("Tool-call budget")).toBeInTheDocument();
+    expect(group).toHaveAttribute("data-step-status", "done");
+  });
+
+  it("says Interrupted for a finished turn whose submission never ended", () => {
+    renderTrace([read("read-1"), plan, written("part-2")]);
+    expect(step()).toHaveAttribute("data-step-status", "interrupted");
+    expect(
+      screen.getByRole("button", { name: /Writing the changes/ }),
+    ).toHaveTextContent("Interrupted");
+  });
+
+  it("keeps the step whole when Erato writes text between part calls", () => {
+    const text: ContentPart = { content_type: "text", text: "Now § 3." };
+    const after: ContentPart = { content_type: "text", text: "Done." };
+    expect(
+      groupIntoTraceClusters([
+        read("read-1"),
+        plan,
+        text,
+        written("part-2"),
+        finish,
+        after,
+      ]),
+    ).toEqual([
+      {
+        kind: "trace",
+        parts: [read("read-1"), plan, written("part-2"), finish],
+        startIndex: 0,
+        endIndex: 4,
+      },
+      { kind: "passthrough", part: text, index: 2 },
+      { kind: "passthrough", part: after, index: 5 },
+    ]);
+    const writing = call("part-3", "write_section", "preparing", null);
+    expect(
+      groupIntoTraceClusters([read("read-1"), plan, text, writing]),
+    ).toEqual([
+      {
+        kind: "trace",
+        parts: [read("read-1"), plan, writing],
+        startIndex: 0,
+        endIndex: 3,
+      },
+      { kind: "passthrough", part: text, index: 2 },
+    ]);
   });
 });

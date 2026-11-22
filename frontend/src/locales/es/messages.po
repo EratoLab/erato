@@ -5142,99 +5142,30 @@ msgid "officeAddin.word.layout.width"
 msgstr "Ancho de página"
 
 #. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.changedInWord"
-msgstr "Cambiado en Word mientras Erato escribía"
+#. placeholder {0}: names.length
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.notChanged"
+msgstr "{0, plural, one {Sin cambios: {listed}. Pídelo en tu próximo mensaje.} other {Sin cambios: {listed}. Pídelos en tu próximo mensaje.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.notChanged.more"
+msgstr "{more, plural, one {Sin cambios: {listed} y # más. Pídelos en tu próximo mensaje.} other {Sin cambios: {listed} y # más. Pídelos en tu próximo mensaje.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.checking"
-msgstr "Comprobando…"
+msgid "officeAddin.word.parts.moved"
+msgstr "Movido"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.didntGetTo"
-msgstr "Erato no llegó a {gaps}."
+msgid "officeAddin.word.parts.order"
+msgstr "el orden de las secciones"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.failedChecks"
-msgstr "El nuevo texto de Erato no superó la comprobación, así que la sección se queda como está"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.finishing"
-msgstr "Comprobando todo el cambio…"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.include"
-msgstr "Volver a incluir"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.includeReordering"
-msgstr "Volver a incluir la reordenación"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.leaveOut"
-msgstr "Dejar fuera"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.leaveOutReordering"
-msgstr "Dejar fuera la reordenación"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.leftOut"
-msgstr "Dejado fuera"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.leftOutWithReordering"
-msgstr "Dejado fuera con la reordenación"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.merged"
-msgstr "Unido en una sola sección: {name}."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.merges"
-msgstr "{merges, plural, one {# unión} other {# uniones}}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.moves"
-msgstr "{moves, plural, one {# traslado} other {# traslados}}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.movesAfter"
-msgstr "{name} va ahora después de {after}."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.movesElsewhere"
-msgstr "{name} cambia de lugar."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.movesFirst"
-msgstr "{name} va ahora al principio."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.namedMore"
-msgstr "{more, plural, one {{listed} y # sección más} other {{listed} y # secciones más}}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.notWritten"
-msgstr "Sin escribir"
+msgid "officeAddin.word.parts.planning"
+msgstr "Erato está planificando los cambios…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5248,38 +5179,18 @@ msgstr "Listo"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.redo"
-msgstr "Rehacer {name}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.redoAfterApply"
-msgstr "Aplica el resto y luego pide a Erato que rehaga {redone}."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.redoNext"
-msgstr "Pide a Erato en tu próximo mensaje que rehaga {redone}."
+msgid "officeAddin.word.parts.reasonChangedInWord"
+msgstr "cambiado en Word"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.renamed"
-msgstr "{name} pasa a llamarse {newTitle}."
+msgstr "Renombrado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.renames"
-msgstr "{renames, plural, one {# título cambiado} other {# títulos cambiados}}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.reorderAfterApply"
-msgstr "Aplica el resto y luego pide a Erato que vuelva a reordenar las secciones."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.reorderingChangedInWord"
-msgstr "La reordenación sustituye todo el documento, que mientras tanto cambió en Word"
+msgid "officeAddin.word.parts.reordering"
+msgstr "Reordenar sustituye todo el documento; Deshacer solo lo revierte por completo."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5288,8 +5199,8 @@ msgstr "Secciones"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.structure"
-msgstr "Estructura"
+msgid "officeAddin.word.parts.title"
+msgstr "{count, plural, one {Cambios en # sección} other {Cambios en # secciones}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5298,33 +5209,13 @@ msgstr "Texto sin título"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.waiting"
-msgstr "En espera"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.writeMissing"
-msgstr "Escribir las secciones que faltan"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.writeMissingAfterApply"
-msgstr "Aplica el resto y luego pide a Erato que escriba las secciones que faltan."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.writeMissingNext"
-msgstr "Pide a Erato en tu próximo mensaje que escriba las secciones que faltan."
+msgid "officeAddin.word.parts.withReason"
+msgstr "{name} ({reason})"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.writing"
 msgstr "Escribiendo…"
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.written"
-msgstr "Escrito"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
@@ -5364,7 +5255,6 @@ msgstr "Cambios"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
-#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.planReview.checkInWord"
 msgstr "Los objetos, la paginación y el aspecto de las páginas no se muestran aquí. Revísalos en Word después de aplicar."
 
@@ -5779,17 +5669,7 @@ msgid "officeAddin.word.proposal.label"
 msgstr "Cambios propuestos en el documento"
 
 #. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordProposalCard.tsx
-msgid "officeAddin.word.proposal.notInProposal"
-msgstr "No incluido en esta propuesta: {listed}. Pide el resto en tu próximo mensaje."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordProposalCard.tsx
-msgid "officeAddin.word.proposal.notInProposalMore"
-msgstr "No incluido en esta propuesta: {listed} y otras partes. Pide el resto en tu próximo mensaje."
-
-#. js-lingui-explicit-id
-#: src/components/ui/WordReview/WordProposalCard.tsx
+#: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.proposal.notInProposalNoText"
 msgstr "una parte sin texto"
 
@@ -11309,6 +11189,11 @@ msgstr "Pensamiento completado"
 #: src/components/ui/Trace/steps/ReasoningStep.tsx
 msgid "trace.reasoning.title"
 msgstr "Pensando"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/Trace.tsx
+msgid "trace.submission.writing"
+msgstr "Escribiendo los cambios"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx

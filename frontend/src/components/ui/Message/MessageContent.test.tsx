@@ -1647,6 +1647,39 @@ describe("MessageContent", () => {
       }
     });
 
+    it("renders a pending submitted card while its call is still being written", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        renderWithTheme(
+          <MessageContent
+            content={[{ ...toolUseContent({}), status: "preparing" }]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCard: {
+                toolCallId: "tool-call-123",
+                language: "editor-draft",
+                content: "Planning",
+                pending: true,
+              },
+            }}
+            isStreaming
+          />,
+        );
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "Planning",
+        );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("renders one submitted card when a model also echoes the legacy fence", () => {
       const original = componentRegistry.HostCardCodeBlock;
       componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
@@ -2088,6 +2121,37 @@ describe("MessageContent", () => {
         screen.queryByTestId("task-plan-approval"),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("a submission written in parts", () => {
+  const call = (id: string, output: Record<string, unknown>): ContentPart =>
+    ({
+      ...(toolUseContent({}) as unknown as Record<string, unknown>),
+      tool_call_id: id,
+      tool_name: id === "finish" ? "submit_draft" : "write_section",
+      output,
+    }) as unknown as ContentPart;
+  const part = { tries_remaining: 2, calls_remaining: 30 };
+
+  it("shows one step when Erato writes text between its part calls", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          call("plan", { status: "success", part }),
+          ...textContent("Now the second section."),
+          call("part-2", { status: "success", part }),
+          call("finish", {
+            status: "success",
+            submission: { status: "accepted", attempts_remaining: 4 },
+          }),
+          ...textContent("Ready to apply."),
+        ]}
+      />,
+    );
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(screen.getByText("Now the second section.")).toBeInTheDocument();
   });
 });
 
