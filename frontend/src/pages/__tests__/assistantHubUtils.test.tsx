@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -60,6 +60,9 @@ const categories = [
     id: "marketing",
   },
 ];
+
+const markdownDescription =
+  "A **bold phrase**.\n\nAnother paragraph.\n\n- First item\n- [Read the guide](https://example.com/guide)";
 
 describe("AssistantHubDiff", () => {
   beforeEach(() => {
@@ -198,23 +201,54 @@ describe("AssistantHubVersionCard", () => {
       document.querySelector('[data-ui="assistant-hub-card-rating-icon"]'),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    { layout: "public", showStatusBadge: false },
+    { layout: "management", showStatusBadge: true },
+  ])(
+    "renders a clamped text excerpt on the $layout card",
+    ({ showStatusBadge }) => {
+      renderCard(showStatusBadge, {
+        ...acceptedVersion,
+        long_description: showStatusBadge ? "" : markdownDescription,
+        assistant: {
+          ...acceptedVersion.assistant,
+          description: showStatusBadge
+            ? markdownDescription
+            : "Snapshot description",
+        },
+      });
+
+      const button = screen.getByRole("button", { name: /Accepted assistant/ });
+      const excerpt = within(button).getByText(
+        "A bold phrase. Another paragraph. First item Read the guide",
+      );
+      expect(excerpt).toHaveClass("line-clamp-3");
+      expect(excerpt.querySelector("a, strong")).toBeNull();
+      expect(screen.getAllByRole("button")).toEqual([button]);
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("AssistantHubVersionOverviewSection", () => {
+  const renderOverview = (version: AssistantHubVersion) =>
+    render(
+      <I18nProvider i18n={i18n}>
+        <AssistantHubVersionOverviewSection
+          version={version}
+          categories={categories}
+        />
+      </I18nProvider>,
+    );
+
   beforeEach(() => {
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
   });
 
   it("renders the Hub detail identity, rating, and description hierarchy", () => {
-    render(
-      <I18nProvider i18n={i18n}>
-        <AssistantHubVersionOverviewSection
-          version={acceptedVersion}
-          categories={categories}
-        />
-      </I18nProvider>,
-    );
+    renderOverview(acceptedVersion);
 
     const header = document.querySelector<HTMLElement>(
       '[data-ui="assistant-hub-overview-header"]',
@@ -247,4 +281,58 @@ describe("AssistantHubVersionOverviewSection", () => {
     );
     expect(description).toHaveTextContent("Long assistant description");
   });
+
+  it.each([
+    {
+      source: "the Hub description",
+      longDescription: markdownDescription,
+      snapshotDescription: "Snapshot description",
+    },
+    {
+      source: "the snapshot when the Hub description is empty",
+      longDescription: "",
+      snapshotDescription: markdownDescription,
+    },
+  ])(
+    "renders Markdown from $source",
+    ({ longDescription, snapshotDescription }) => {
+      renderOverview({
+        ...acceptedVersion,
+        long_description: longDescription,
+        assistant: {
+          ...acceptedVersion.assistant,
+          description: snapshotDescription,
+        },
+      });
+
+      const bold = screen.getByText("bold phrase");
+      expect(bold.tagName).toBe("STRONG");
+      expect(bold.closest("p")).toHaveTextContent("A bold phrase.");
+      expect(screen.getByText("Another paragraph.").tagName).toBe("P");
+      const list = screen.getByRole("list");
+      expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+      expect(within(list).getByText("First item")).toBeInTheDocument();
+      const link = within(list).getByRole("link", { name: "Read the guide" });
+      expect(link).toHaveAttribute("href", "https://example.com/guide");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+      expect(
+        screen.queryByText("Snapshot description"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["", undefined])(
+    "keeps the description heading with an empty Hub description and a snapshot description of %s",
+    (description) => {
+      renderOverview({
+        ...acceptedVersion,
+        long_description: "",
+        assistant: { ...acceptedVersion.assistant, description },
+      });
+
+      const heading = screen.getByRole("heading", { name: "Description" });
+      expect(heading.parentElement).toHaveTextContent(/^Description$/);
+    },
+  );
 });

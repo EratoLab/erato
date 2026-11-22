@@ -126,6 +126,9 @@ importers:
       fuse.js:
         specifier: ^7.1.0
         version: 7.1.0
+      hast-util-to-text:
+        specifier: ^4.0.2
+        version: 4.0.2
       iconoir-react:
         specifier: ^7.11.0
         version: 7.11.0(react@19.2.7)
@@ -280,6 +283,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.2.0
         version: 16.2.0(@testing-library/dom@10.4.0)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@types/hast':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14

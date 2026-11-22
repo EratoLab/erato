@@ -13,6 +13,7 @@ import { TabRail } from "@/components/ui/Controls/TabRail";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { Input } from "@/components/ui/Input";
+import { MarkdownExcerpt } from "@/components/ui/Markdown/ReadOnlyMarkdown";
 import { SharingDialog, SharingErrorBoundary } from "@/components/ui/Sharing";
 import { toast } from "@/components/ui/Toast";
 import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
@@ -719,7 +720,7 @@ function AssistantListCard({
         </div>
         {assistant.description && (
           <p className="mt-2 line-clamp-2 text-sm text-theme-fg-secondary">
-            {assistant.description}
+            <MarkdownExcerpt>{assistant.description}</MarkdownExcerpt>
           </p>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">

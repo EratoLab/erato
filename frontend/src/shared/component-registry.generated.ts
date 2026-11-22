@@ -375,6 +375,8 @@ export { Input } from "@/components/ui/Input/Input";
 export type { InputGeometry } from "@/components/ui/Input/Input";
 export type { InputProps } from "@/components/ui/Input/Input";
 export { Logo } from "@/components/ui/Logo";
+export { MarkdownExcerpt } from "@/components/ui/Markdown/ReadOnlyMarkdown";
+export { ReadOnlyMarkdown } from "@/components/ui/Markdown/ReadOnlyMarkdown";
 export { ActionConfirmationCard } from "@/components/ui/Message/ActionConfirmationCard";
 export type { ActionConfirmationStatus } from "@/components/ui/Message/ActionConfirmationCard";
 export { ACTION_FACET_ARG_KEYS } from "@/components/ui/Message/ActionFacetContext";
