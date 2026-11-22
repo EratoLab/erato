@@ -532,6 +532,17 @@ pub async fn submit_version(
         .await?
         .wrap_err("Assistant hub creator not found")?;
 
+    let audience_grants = if config.force_whole_organization_audience {
+        let organization = share_grant::ShareSubject::organization();
+        vec![HubAudienceGrantInput {
+            subject_type: organization.subject_type.to_string(),
+            subject_id_type: organization.subject_id_type.to_string(),
+            subject_id: organization.subject_id.to_string(),
+            role: "viewer".to_string(),
+        }]
+    } else {
+        audience_grants
+    };
     for grant in audience_grants {
         share_grant::create_share_grant(
             conn,

@@ -26,12 +26,14 @@ import {
 
 import AssistantHubSubmitPage from "../AssistantHubSubmitPage";
 
+import type { AssistantHubAudienceGrantInput } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
-const hubConfig = {
+const defaultHubConfig = {
   enabled: true,
   enable_categories: true,
   default_share_with_whole_organization: false,
+  force_whole_organization_audience: false,
   categories: [
     { id: "productivity", display_name: "Productivity" },
     { id: "research", display_name: "Research" },
@@ -53,6 +55,13 @@ const reviewVersionsKey = [
   "versions",
 ];
 
+const organizationViewerGrant = {
+  subject_type: "organization",
+  subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
+  subject_id: ORGANIZATION_SUBJECT_ID,
+  role: "viewer",
+};
+
 const submittedVersion = (versionId: string, submittedAt: string) => ({
   version_id: versionId,
   assistant_id: `${versionId}-clone`,
@@ -66,8 +75,10 @@ const submittedVersion = (versionId: string, submittedAt: string) => ({
   is_current_published_version: false,
 });
 
+let hubConfig: typeof defaultHubConfig;
 let myVersions: ReturnType<typeof submittedVersion>[];
-let loadedShareGrants: Set<string>;
+let isLoadingMyVersions: boolean;
+let loadedShareGrants: Map<string, AssistantHubAudienceGrantInput[]>;
 const submitVersion = vi.fn();
 const previewDiff = vi.fn();
 
@@ -97,16 +108,18 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useAssistantHubConfig: () => ({ data: hubConfig, isLoading: false }),
   useGetAssistant: () => ({ data: assistant, isLoading: false, error: null }),
   useListMyAssistantHubVersions: () => ({
-    data: { versions: myVersions },
-    isLoading: false,
+    data: isLoadingMyVersions ? undefined : { versions: myVersions },
+    isLoading: isLoadingMyVersions,
   }),
   useListShareGrants: (
     variables: typeof skipToken | { queryParams: { resource_id: string } },
-  ) =>
-    variables === skipToken ||
-    loadedShareGrants.has(variables.queryParams.resource_id)
-      ? { data: { grants: [] }, isLoading: false }
-      : { data: undefined, isLoading: true },
+  ) => {
+    const grants =
+      variables === skipToken
+        ? []
+        : loadedShareGrants.get(variables.queryParams.resource_id);
+    return { data: grants && { grants }, isLoading: grants === undefined };
+  },
   usePreviewAssistantHubSubmissionDiff: () =>
     useMutation({ mutationFn: previewDiff }),
   useSubmitAssistantHubVersion: () =>
@@ -150,8 +163,10 @@ const settle = () =>
 
 describe("AssistantHubSubmitPage", () => {
   beforeEach(() => {
+    hubConfig = { ...defaultHubConfig };
     myVersions = [];
-    loadedShareGrants = new Set();
+    isLoadingMyVersions = false;
+    loadedShareGrants = new Map();
     submitVersion.mockReset();
     submitVersion.mockResolvedValue({ version: { version_id: "new" } });
     previewDiff.mockReset();
@@ -208,20 +223,85 @@ describe("AssistantHubSubmitPage", () => {
     );
 
     expect(screen.getByText("Full organization")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Research" }));
     fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
 
     await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
     expect(submitVersion.mock.calls[0][0].body.audience_grants).toEqual([
-      {
-        subject_type: "organization",
-        subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
-        subject_id: ORGANIZATION_SUBJECT_ID,
-        role: "viewer",
-      },
+      organizationViewerGrant,
     ]);
   });
+
+  it("preselects the whole organization for a first submission when configured", async () => {
+    hubConfig.default_share_with_whole_organization = true;
+    renderPage();
+
+    expect(screen.getByRole("heading", { name: "Hub audience" })).toBeVisible();
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Research" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+    await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+    expect(submitVersion.mock.calls[0][0].body.audience_grants).toEqual([
+      organizationViewerGrant,
+    ]);
+  });
+
+  it("prefills the latest submission's audience over the first-submission default", async () => {
+    hubConfig.default_share_with_whole_organization = true;
+    isLoadingMyVersions = true;
+    const queryClient = new QueryClient();
+    const { rerender } = renderPage(queryClient);
+
+    const previousGrant = {
+      subject_type: "user",
+      subject_id_type: "id",
+      subject_id: "previous-viewer",
+      role: "viewer",
+    };
+    myVersions = [submittedVersion("first", "2026-01-01T00:00:00Z")];
+    loadedShareGrants.set("first-clone", [previousGrant]);
+    isLoadingMyVersions = false;
+    rerender(page(queryClient));
+
+    expect(screen.getByRole("heading", { name: "Hub audience" })).toBeVisible();
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+    await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+    expect(submitVersion.mock.calls[0][0].body.audience_grants).toEqual([
+      previousGrant,
+    ]);
+  });
+
+  it.each(["first submission", "new version"])(
+    "hides the fixed audience for a %s",
+    async (submission) => {
+      hubConfig.force_whole_organization_audience = true;
+      if (submission === "new version") {
+        myVersions = [submittedVersion("first", "2026-01-01T00:00:00Z")];
+        // Leave prior grants unloaded to verify this form can submit without them.
+      }
+
+      renderPage();
+
+      expect(
+        screen.queryByRole("heading", { name: "Hub audience" }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      if (submission === "first submission") {
+        fireEvent.click(screen.getByRole("button", { name: "Research" }));
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+      await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+      expect(
+        submitVersion.mock.calls[0][0].body.audience_grants,
+      ).toBeUndefined();
+    },
+  );
 
   it("goes to my submissions as soon as the version lands, with it cached and confirmed in a toast", async () => {
     const submitted = { version_id: "new", version_number: "1.0.0" };
@@ -295,7 +375,7 @@ describe("AssistantHubSubmitPage", () => {
 
   it("keeps the form on screen when a newer submission of this assistant arrives", () => {
     myVersions = [submittedVersion("first", "2026-01-01T00:00:00Z")];
-    loadedShareGrants = new Set(["first-clone"]);
+    loadedShareGrants.set("first-clone", []);
     const queryClient = new QueryClient();
 
     const { rerender } = renderPage(queryClient);

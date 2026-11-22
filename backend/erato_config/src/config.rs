@@ -7206,6 +7206,12 @@ pub struct AssistantHubConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub default_share_with_whole_organization: bool,
 
+    // Use the whole organization as the fixed audience for new Assistant Hub
+    // submissions and hide the audience field. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    pub force_whole_organization_audience: bool,
+
     // Configured reviewer rules.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
@@ -7240,6 +7246,7 @@ impl Default for AssistantHubConfig {
             rating_mode: default_assistant_hub_rating_mode(),
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
+            force_whole_organization_audience: false,
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             action_permissions: AssistantHubActionPermissionsConfig::default(),
             categories: HashMap::new(),
@@ -7306,6 +7313,19 @@ mod assistant_hub_config_tests {
         .expect("config should deserialize");
 
         assert!(!config.enable_categories);
+    }
+
+    #[test]
+    fn whole_organization_audience_can_be_forced() {
+        let default_config: AssistantHubConfig =
+            serde_json::from_value(serde_json::json!({})).expect("config should deserialize");
+        let forced_config: AssistantHubConfig = serde_json::from_value(serde_json::json!({
+            "force_whole_organization_audience": true
+        }))
+        .expect("config should deserialize");
+
+        assert!(!default_config.force_whole_organization_audience);
+        assert!(forced_config.force_whole_organization_audience);
     }
 
     #[test]

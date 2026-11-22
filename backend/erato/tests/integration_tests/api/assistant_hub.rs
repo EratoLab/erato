@@ -993,26 +993,38 @@ async fn test_assistant_hub_user_reviews_are_upserted_summarized_and_visibility_
 async fn test_published_current_assistant_hub_version_is_listed_for_audience_viewer(
     pool: Pool<Postgres>,
 ) {
-    assert_assistant_hub_publication_for_audience(pool, false).await;
+    assert_assistant_hub_publication_for_audience(pool, PublicationAudience::User).await;
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_assistant_hub_publication_for_organization_when_direct_picker_is_disabled(
     pool: Pool<Postgres>,
 ) {
-    assert_assistant_hub_publication_for_audience(pool, true).await;
+    assert_assistant_hub_publication_for_audience(pool, PublicationAudience::Organization).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_publication_with_forced_organization_audience(pool: Pool<Postgres>) {
+    assert_assistant_hub_publication_for_audience(pool, PublicationAudience::ForcedOrganization)
+        .await;
+}
+
+enum PublicationAudience {
+    User,
+    Organization,
+    ForcedOrganization,
 }
 
 async fn assert_assistant_hub_publication_for_audience(
     pool: Pool<Postgres>,
-    organization_wide: bool,
+    audience: PublicationAudience,
 ) {
     let mut config = assistant_hub_app_config();
-    if organization_wide {
+    if !matches!(audience, PublicationAudience::User) {
         config.assistants.enable_direct_organization_sharing = false;
     }
-    let app_state = test_app_state(config, pool).await;
-    let server = create_test_server(app_state.clone());
+    let mut app_state = test_app_state(config, pool).await;
+    let mut server = create_test_server(app_state.clone());
 
     let owner_subject = "assistant-hub-owner";
     let viewer_subject = "assistant-hub-viewer";
@@ -1066,43 +1078,118 @@ async fn assert_assistant_hub_publication_for_audience(
     .await
     .expect("failed to create source assistant");
 
-    let (subject_type, subject_id_type, subject_id) = if organization_wide {
-        (
-            ORGANIZATION_SUBJECT_TYPE,
-            ORGANIZATION_SUBJECT_ID_TYPE,
-            ORGANIZATION_SUBJECT_ID.to_string(),
-        )
-    } else {
-        ("user", "id", viewer.id.to_string())
-    };
-    let submission_response = server
-        .post(&format!(
-            "/api/v1beta/assistant-hub/assistants/{}/versions",
-            source_assistant.id
-        ))
-        .json(&json!({
-            "long_description": "A reviewed assistant for the integration test hub.",
-            "category_ids": [STORE_CATEGORY_ID],
-            "keywords": ["published", "hub"],
-            "version_number": "1.0.0",
-            "version_comment": "Initial hub publication",
-            "creator_review_comment": "Ready for review",
-            "audience_grants": [{
-                "subject_type": subject_type,
-                "subject_id_type": subject_id_type,
-                "subject_id": subject_id,
-                "role": "viewer"
-            }]
-        }))
+    let config_response = server
+        .get("/api/v1beta/assistant-hub/config")
         .with_bearer_token(&owner_token)
         .await;
-    assert_eq!(submission_response.status_code(), http::StatusCode::CREATED);
-    let submitted: Value = submission_response.json();
-    let version_id = submitted["version"]["version_id"]
+    assert_eq!(config_response.status_code(), http::StatusCode::OK);
+    assert_eq!(
+        config_response.json::<Value>()["force_whole_organization_audience"],
+        false
+    );
+
+    let submit = async |server: &axum_test::TestServer, version_number: &str, grants: Value| {
+        let response = server
+            .post(&format!(
+                "/api/v1beta/assistant-hub/assistants/{}/versions",
+                source_assistant.id
+            ))
+            .json(&json!({
+                "long_description": "A reviewed assistant for the integration test hub.",
+                "category_ids": [STORE_CATEGORY_ID],
+                "keywords": ["published", "hub"],
+                "version_number": version_number,
+                "creator_review_comment": "Ready for review",
+                "audience_grants": grants,
+            }))
+            .with_bearer_token(&owner_token)
+            .await;
+        assert_eq!(response.status_code(), http::StatusCode::CREATED);
+        response.json::<Value>()["version"].clone()
+    };
+    let assert_grant = async |server: &axum_test::TestServer, version: &Value, expected: &Value| {
+        let assistant_id = version["assistant_id"].as_str().unwrap();
+        let response = server
+            .get(&format!(
+                "/api/v1beta/share-grants?resource_type=assistant&resource_id={assistant_id}"
+            ))
+            .with_bearer_token(&owner_token)
+            .await;
+        assert_eq!(response.status_code(), http::StatusCode::OK);
+        let body: Value = response.json();
+        let grants = body["grants"].as_array().expect("grants array");
+        assert_eq!(grants.len(), 1);
+        for field in ["subject_type", "subject_id_type", "subject_id", "role"] {
+            assert_eq!(grants[0][field], expected[field], "{field}");
+        }
+    };
+
+    let user_grant = json!({
+        "subject_type": "user",
+        "subject_id_type": "id",
+        "subject_id": viewer.id,
+        "role": "viewer",
+    });
+    let organization_grant = json!({
+        "subject_type": ORGANIZATION_SUBJECT_TYPE,
+        "subject_id_type": ORGANIZATION_SUBJECT_ID_TYPE,
+        "subject_id": ORGANIZATION_SUBJECT_ID,
+        "role": "viewer",
+    });
+    let submitted = match audience {
+        PublicationAudience::User => {
+            let version = submit(&server, "1.0.0", json!([user_grant])).await;
+            assert_grant(&server, &version, &user_grant).await;
+            version
+        }
+        PublicationAudience::Organization => {
+            let version = submit(&server, "1.0.0", json!([organization_grant])).await;
+            assert_grant(&server, &version, &organization_grant).await;
+            version
+        }
+        PublicationAudience::ForcedOrganization => {
+            let legacy_grant = json!({
+                "subject_type": "user",
+                "subject_id_type": "id",
+                "subject_id": owner.id,
+                "role": "viewer",
+            });
+            let legacy = submit(&server, "1.0.0", json!([legacy_grant])).await;
+
+            app_state
+                .config
+                .assistant_hub
+                .force_whole_organization_audience = true;
+            app_state
+                .config
+                .assistant_hub
+                .default_share_with_whole_organization = false;
+            server = create_test_server(app_state);
+            let config_response = server
+                .get("/api/v1beta/assistant-hub/config")
+                .with_bearer_token(&owner_token)
+                .await;
+            assert_eq!(config_response.status_code(), http::StatusCode::OK);
+            let config: Value = config_response.json();
+            assert_eq!(config["force_whole_organization_audience"], true);
+            assert_eq!(config["default_share_with_whole_organization"], false);
+
+            let empty_audience = submit(&server, "2.0.0", json!([])).await;
+            assert_grant(&server, &empty_audience, &organization_grant).await;
+
+            let mut editor_grant = organization_grant.clone();
+            editor_grant["role"] = json!("editor");
+            let conflicting = submit(&server, "3.0.0", json!([legacy_grant, editor_grant])).await;
+            assert_grant(&server, &conflicting, &organization_grant).await;
+            assert_grant(&server, &legacy, &legacy_grant).await;
+            conflicting
+        }
+    };
+    let version_id = submitted["version_id"]
         .as_str()
         .expect("submitted version should include version_id")
         .to_string();
-    let version_assistant_id = submitted["version"]["assistant_id"]
+    let version_assistant_id = submitted["assistant_id"]
         .as_str()
         .expect("submitted version should include assistant_id")
         .to_string();
@@ -1128,6 +1215,16 @@ async fn assert_assistant_hub_publication_for_audience(
         .with_bearer_token(&reviewer_token)
         .await;
     assert_eq!(review_response.status_code(), http::StatusCode::OK);
+
+    let viewer_before_publish_response = server
+        .get("/api/v1beta/assistant-hub/assistants")
+        .with_bearer_token(&viewer_token)
+        .await;
+    assert_eq!(
+        viewer_before_publish_response.status_code(),
+        http::StatusCode::OK
+    );
+    assert_eq!(version_count(&viewer_before_publish_response.json()), 0);
 
     let publish_response = server
         .put(&format!(

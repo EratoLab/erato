@@ -532,6 +532,12 @@ chat_provider_ids = ["test-token-limit"]
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
 
+# Assistant Hub configuration (also requires assistants.enabled = true)
+# [assistant_hub]
+# enabled = false
+# Use the whole organization as the fixed audience for new submissions and hide the audience field (default: false)
+# force_whole_organization_audience = false
+
 # Assistant Hub publication permissions
 # [assistant_hub.action_permissions]
 # Each action defaults to both roles. A caller needs any listed role.

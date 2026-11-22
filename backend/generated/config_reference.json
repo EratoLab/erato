@@ -467,6 +467,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "assistant_hub.force_whole_organization_audience": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "assistant_hub.rating_mode": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
