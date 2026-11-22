@@ -1832,8 +1832,23 @@ msgstr "Réécouter la réponse audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "Impossible de lire l'enregistrement. Rechargez le chat pour réessayer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Réécouter la réponse audio, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay.stop"
-msgstr ""
+msgstr "Arrêter la lecture"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "L'enregistrement n'est pas disponible."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -3237,7 +3252,7 @@ msgstr "La conversation peut contenir des informations sensibles"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.spoken_reply.label"
-msgstr ""
+msgstr "Dit"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -6361,12 +6376,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.showInChat.description"
-msgstr ""
+msgstr "Ajoute une ligne repliée « Dit » au-dessus de chaque réponse en conversation, avec un bouton de lecture lorsque votre organisation conserve l'enregistrement."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.showInChat.label"
-msgstr ""
+msgstr "Afficher dans le chat ce que la voix a dit"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

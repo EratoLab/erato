@@ -1136,7 +1136,6 @@ pub struct UpdateProfilePreferencesRequest {
     /// follows the organisation again.
     #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<bool>)]
     pub preference_reply_speech_show_in_chat: Option<Option<bool>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]

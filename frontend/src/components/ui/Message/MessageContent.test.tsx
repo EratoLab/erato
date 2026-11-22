@@ -3003,6 +3003,36 @@ it("offers persisted speech as a compact replay button that shows its length", (
   Object.defineProperty(audio, "duration", { value: 72.4 });
   fireEvent.loadedMetadata(audio!);
   expect(button).toHaveTextContent("1:12");
+  expect(button).toHaveAccessibleName("Replay audio response, 1:12");
+});
+
+it("says when a stored recording cannot be played", async () => {
+  renderWithTheme(
+    <MessageContent
+      content={[
+        {
+          content_type: "audio_file_pointer",
+          file_upload_id: "expired-speech",
+          download_url: "https://storage.example/expired.wav",
+        },
+        { content_type: "audio_file_pointer", file_upload_id: "no-url" },
+      ]}
+    />,
+  );
+  const [expired, missing] = screen.getAllByTestId("spoken-reply-replay");
+  expect(missing).toBeDisabled();
+  expect(
+    screen.getByText("The recording is not available."),
+  ).toBeInTheDocument();
+
+  const audio = document.querySelector("audio")!;
+  audio.play = vi.fn(() => Promise.reject(new Error("403")));
+  fireEvent.click(expired);
+  expect(
+    await screen.findByText(
+      "The recording could not be played. Reload the chat to try again.",
+    ),
+  ).toBeInTheDocument();
 });
 
 describe("a reply spoken in conversation mode", () => {

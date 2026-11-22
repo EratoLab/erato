@@ -423,3 +423,52 @@ async fn spoken_reply_reaches_the_model_only_on_a_turn_that_is_read_back(pool: P
     }
     speech.abort();
 }
+
+/// Showing what the voice said is the user's own choice, saved through the
+/// preferences and read back resolved; `null` follows the organisation again.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_user_shows_and_hides_what_the_voice_said(pool: Pool<Postgres>) {
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(MockSet::new()).await;
+    config.audio_conversational.reply_speech.user_choice = false;
+    let server = create_test_server(test_app_state(config, pool).await);
+    let style = || async {
+        server
+            .get("/api/v1beta/me/reply-speech-style")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json::<Value>()
+    };
+    let save = |value: Value| {
+        let server = &server;
+        async move {
+            server
+                .put("/api/v1beta/me/profile/preferences")
+                .with_bearer_token(TEST_JWT_TOKEN)
+                .json(&json!({ "preference_reply_speech_show_in_chat": value }))
+                .await
+                .json::<Value>()
+        }
+    };
+
+    let first = style().await;
+    assert_eq!(first["show_in_chat"], false);
+    assert_eq!(first["show_in_chat_source"], "deployment");
+
+    // The wording lock does not reach it: it changes only what this user sees.
+    let profile = save(json!(true)).await;
+    assert_eq!(profile["preference_reply_speech_show_in_chat"], true);
+    let shown = style().await;
+    assert_eq!(shown["show_in_chat"], true);
+    assert_eq!(shown["show_in_chat_source"], "user");
+    assert_eq!(shown["user_choice"], false);
+
+    let profile = save(Value::Null).await;
+    assert!(
+        profile
+            .get("preference_reply_speech_show_in_chat")
+            .is_none()
+    );
+    let back = style().await;
+    assert_eq!(back["show_in_chat"], false);
+    assert_eq!(back["show_in_chat_source"], "deployment");
+}

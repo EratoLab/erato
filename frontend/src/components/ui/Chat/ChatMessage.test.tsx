@@ -72,6 +72,11 @@ vi.mock("../Message/MessageContent", () => ({
   },
 }));
 
+const voiceTraces = vi.hoisted(() => ({ shown: false }));
+vi.mock("@/hooks/audio/voiceTraces", () => ({
+  useVoiceTracesShown: (needed: boolean) => needed && voiceTraces.shown,
+}));
+
 vi.mock("../Message/ImageLightbox", () => ({
   ImageLightbox: () => null,
 }));
@@ -1120,6 +1125,62 @@ describe("ChatMessage", () => {
       expect(seen?.map((chip) => chip.label)).toEqual([
         "“The Supplier shall deliver.”",
       ]);
+    });
+  });
+
+  describe("while a spoken reply streams", () => {
+    const speaking = (content: UiChatMessage["content"]): UiChatMessage => ({
+      id: "msg_speaking",
+      content,
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "sending",
+      loading: { state: "typing" },
+    });
+    const showsLoading = async (message: UiChatMessage) => {
+      let seen: boolean | undefined;
+      const Probe = () => {
+        seen = useChatMessageRenderer({
+          message,
+          controlsContext: {},
+          onMessageAction: async () => true,
+        }).showsLoading;
+        return null;
+      };
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+      render(
+        <I18nProvider i18n={i18n}>
+          <Probe />
+        </I18nProvider>,
+      );
+      return seen;
+    };
+    const spokenOnly = [{ content_type: "spoken" as const, text: "Danke." }];
+
+    afterEach(() => {
+      voiceTraces.shown = false;
+    });
+
+    it("keeps the loading indicator while only hidden voice parts exist", async () => {
+      expect(await showsLoading(speaking(spokenOnly))).toBe(true);
+      expect(await showsLoading(speaking([]))).toBe(true);
+    });
+
+    it("drops it once something shows", async () => {
+      expect(
+        await showsLoading(
+          speaking([
+            ...spokenOnly,
+            { content_type: "text", text: "The written answer." },
+          ]),
+        ),
+      ).toBe(false);
+      voiceTraces.shown = true;
+      expect(await showsLoading(speaking(spokenOnly))).toBe(false);
     });
   });
 

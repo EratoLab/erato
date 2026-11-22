@@ -19,7 +19,10 @@ const clock = (seconds: number) => {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 };
 
-/** A small play button with the recording's length, read from its header. */
+/**
+ * A small play button with the recording's length, read from its header. A
+ * recording that cannot be played says so next to the button.
+ */
 function ReplayButton({
   src,
   describedBy,
@@ -29,6 +32,7 @@ function ReplayButton({
 }) {
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [seconds, setSeconds] = useState<number | null>(null);
 
   const toggle = () => {
@@ -37,13 +41,39 @@ function ReplayButton({
     if (playing) {
       element.pause();
       element.currentTime = 0;
-    } else {
-      void element.play().catch(() => setPlaying(false));
+      return;
     }
+    setFailed(false);
+    void element.play().catch(() => {
+      setPlaying(false);
+      setFailed(true);
+    });
   };
 
+  const length = seconds === null ? null : clock(seconds);
+  const label = playing
+    ? t({ id: "chat.audio_replay.stop", message: "Stop the replay" })
+    : length
+      ? t({
+          id: "chat.audio_replay.length",
+          message: `Replay audio response, ${length}`,
+        })
+      : t({ id: "chat.audio_replay", message: "Replay audio response" });
+  const problem = !src
+    ? t({
+        id: "chat.audio_replay.unavailable",
+        message: "The recording is not available.",
+      })
+    : failed
+      ? t({
+          id: "chat.audio_replay.failed",
+          message:
+            "The recording could not be played. Reload the chat to try again.",
+        })
+      : null;
+
   return (
-    <>
+    <span className="inline-flex items-center gap-2">
       {/* The spoken text is the recording's caption. */}
       {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
       <audio
@@ -57,17 +87,17 @@ function ReplayButton({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
+        onError={() => {
+          setPlaying(false);
+          setFailed(true);
+        }}
       />
       <button
         type="button"
         onClick={toggle}
         disabled={!src}
         className="inline-flex items-center gap-1 rounded-full border border-theme-border px-2 py-0.5 text-xs text-theme-fg-secondary hover:bg-theme-bg-hover disabled:opacity-50"
-        aria-label={
-          playing
-            ? t({ id: "chat.audio_replay.stop", message: "Stop the replay" })
-            : t({ id: "chat.audio_replay", message: "Replay audio response" })
-        }
+        aria-label={label}
         aria-describedby={describedBy}
         data-testid="spoken-reply-replay"
       >
@@ -76,9 +106,14 @@ function ReplayButton({
         ) : (
           <PlayIcon className="size-3.5" />
         )}
-        {seconds !== null && <span>{clock(seconds)}</span>}
+        {length && <span aria-hidden>{length}</span>}
       </button>
-    </>
+      {problem && (
+        <span role="status" className="text-xs text-theme-fg-muted">
+          {problem}
+        </span>
+      )}
+    </span>
   );
 }
 

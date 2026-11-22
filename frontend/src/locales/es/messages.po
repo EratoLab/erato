@@ -1832,8 +1832,23 @@ msgstr "Volver a reproducir la respuesta de audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "No se pudo reproducir la grabación. Vuelve a cargar el chat para intentarlo de nuevo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Volver a reproducir la respuesta de audio, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay.stop"
-msgstr ""
+msgstr "Detener la reproducción"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "La grabación no está disponible."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -3237,7 +3252,7 @@ msgstr "La conversación puede contener información confidencial"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.spoken_reply.label"
-msgstr ""
+msgstr "Dicho"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -6361,12 +6376,12 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.showInChat.description"
-msgstr ""
+msgstr "Añade una línea plegada «Dicho» encima de cada respuesta en la conversación, con un botón de reproducción donde tu organización guarda la grabación."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.showInChat.label"
-msgstr ""
+msgstr "Mostrar en el chat lo que dijo la voz"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

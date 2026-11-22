@@ -3341,7 +3341,7 @@ With `precise`, the reply is read as written, as before this setting existed: `t
 
 The read-aloud button always reads the written text. A continuation after an approval keeps the form its turn started with, whatever the setting is by then.
 
-The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`, `show_in_chat`) and are listed under `setting_orders.reply_speech`; the user's own choice (`preference_reply_speech_wording`, `preference_reply_speech_show_in_chat`) where the deciding level allows it. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
+The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`, `show_in_chat`) and are listed under `setting_orders.reply_speech`; the user's own wording (`preference_reply_speech_wording`) where the deciding level allows it, and their own `preference_reply_speech_show_in_chat` always. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
 
 **Type:** `object`
 
@@ -3359,7 +3359,7 @@ Messages written in `natural` hold a `spoken` part that Erato versions before th
 
 {/* erato_toml_config_key: audio_conversational.reply_speech.user_choice */}
 
-Whether a user may choose the wording, and whether the chat shows what the voice said, for themselves, unless an audience setting says otherwise.
+Whether a user may choose the wording for themselves, unless an audience setting says otherwise. It does not limit `show_in_chat`.
 
 **Type:** `boolean` · **Default:** `true`
 
@@ -3367,7 +3367,7 @@ Whether a user may choose the wording, and whether the chat shows what the voice
 
 {/* erato_toml_config_key: audio_conversational.reply_speech.show_in_chat */}
 
-Whether the chat shows what the voice said for a reply in conversation: a muted "Spoken" line while the voice speaks, then folded above the written answer, with a small play button and the recording's length inside the fold where `keep_reply_audio` kept the recording. Off, the chat shows the written answer only, and the read-aloud button stays available on replies that have a recording. A user changes it under Settings, Audio, Voice ("Show what the voice said in the chat"). It changes only what the chat shows; what is stored is `keep_reply_audio`.
+Whether the chat shows what the voice said for a reply in conversation: a muted "Spoken" line while the voice speaks, then folded above the written answer, with a small play button and the recording's length inside the fold where `keep_reply_audio` kept the recording. Off, the chat shows the written answer only, and the read-aloud button stays available on replies that have a recording. An audience can set it like the wording. A user can always choose it for themselves under Settings, Audio, Voice ("Show what the voice said in the chat") and go back to the organization's value, since it changes only what that user sees; what is stored is `keep_reply_audio`.
 
 **Type:** `boolean` · **Default:** `false`
 

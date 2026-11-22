@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
     user_choice: true,
     source: "user",
     show_in_chat: false,
+    show_in_chat_source: "deployment",
   },
   cards: { wording: "precise", user_choice: false },
   update: vi.fn(async () => ({})),
@@ -37,7 +38,11 @@ beforeAll(() => {
   i18n.activate("en");
 });
 
-beforeEach(() => api.update.mockClear());
+const REPLIES = { ...api.replies };
+beforeEach(() => {
+  api.update.mockClear();
+  api.replies = { ...REPLIES };
+});
 
 const renderSetting = () =>
   render(
@@ -102,5 +107,28 @@ describe("voice output setting", () => {
       }),
     );
     expect(refreshVoiceTraces).toHaveBeenCalled();
+  });
+
+  it("leaves showing the trace to the user when the wording is locked", async () => {
+    api.replies = {
+      ...api.replies,
+      user_choice: false,
+      show_in_chat: true,
+      show_in_chat_source: "user",
+    };
+    renderSetting();
+    const box = screen.getByRole("checkbox", {
+      name: "Show what the voice said in the chat",
+    });
+    expect(box).toBeChecked();
+    expect(box).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use my organization's setting" }),
+    );
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_show_in_chat: null },
+      }),
+    );
   });
 });

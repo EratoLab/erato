@@ -1832,8 +1832,23 @@ msgstr "Replay audio response"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "The recording could not be played. Reload the chat to try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Replay audio response, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay.stop"
 msgstr "Stop the replay"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "The recording is not available."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

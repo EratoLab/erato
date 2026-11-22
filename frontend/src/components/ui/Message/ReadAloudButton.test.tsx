@@ -62,6 +62,7 @@ const controls = (props: Partial<MessageControlsProps> = {}) => (
 const button = () => screen.queryByRole("button", { name: "Read aloud" });
 
 beforeEach(() => {
+  traces.shown = true;
   toggleReadAloud.mockClear();
   useReadAloud.setState({
     messageId: null,
@@ -125,7 +126,6 @@ describe("read aloud button in the default message controls", () => {
     traces.shown = false;
     withFeature(controls({ readAloud: { ...READABLE, hasSpokenAudio: true } }));
     expect(button()).toBeInTheDocument();
-    traces.shown = true;
   });
 
   it("is hidden while the feature is off, also without a feature provider", () => {

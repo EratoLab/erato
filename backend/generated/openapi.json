@@ -13499,7 +13499,8 @@
           "wording",
           "source",
           "user_choice",
-          "show_in_chat"
+          "show_in_chat",
+          "show_in_chat_source"
         ],
         "properties": {
           "audience": {
@@ -13508,7 +13509,11 @@
           },
           "show_in_chat": {
             "type": "boolean",
-            "description": "Whether the chat shows what the voice said: the spoken text, folded,\nand a play button where the recording was kept."
+            "description": "Whether the chat shows what the voice said: the spoken text, folded,\nand a play button where the recording was kept. The caller may always\nchoose it for themselves: it changes only what they see."
+          },
+          "show_in_chat_source": {
+            "$ref": "#/components/schemas/ReplySpeechStyleSource",
+            "description": "Where `show_in_chat` comes from."
           },
           "source": {
             "$ref": "#/components/schemas/ReplySpeechStyleSource",

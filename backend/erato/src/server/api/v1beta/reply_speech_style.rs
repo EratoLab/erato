@@ -37,8 +37,11 @@ pub struct ReplySpeechStyleResponse {
     /// Whether the caller may choose their own wording.
     pub user_choice: bool,
     /// Whether the chat shows what the voice said: the spoken text, folded,
-    /// and a play button where the recording was kept.
+    /// and a play button where the recording was kept. The caller may always
+    /// choose it for themselves: it changes only what they see.
     pub show_in_chat: bool,
+    /// Where `show_in_chat` comes from.
+    pub show_in_chat_source: ReplySpeechStyleSource,
 }
 
 pub fn matching_audiences<'a>(
@@ -63,7 +66,8 @@ pub struct OwnReplySpeech {
 }
 
 /// Each field comes from the first audience in the order that sets it, else
-/// from the deployment; the user's own values count only where allowed.
+/// from the deployment; the user's own wording counts only where allowed, and
+/// their own `show_in_chat` always.
 pub fn resolve(
     config: &ReplySpeechConfig,
     audiences: &[(&str, &AudienceReplySpeech)],
@@ -80,23 +84,26 @@ pub fn resolve(
             config.user_choice,
             audiences.iter().map(|(_, set)| set.user_choice),
         ),
-        show_in_chat: audiences
-            .iter()
-            .find_map(|(_, set)| set.show_in_chat)
-            .unwrap_or(config.show_in_chat),
+        show_in_chat: config.show_in_chat,
+        show_in_chat_source: ReplySpeechStyleSource::Deployment,
     };
+    if let Some(shown) = audiences.iter().find_map(|(_, set)| set.show_in_chat) {
+        style.show_in_chat = shown;
+        style.show_in_chat_source = ReplySpeechStyleSource::Audience;
+    }
+    if let Some(shown) = own.show_in_chat {
+        style.show_in_chat = shown;
+        style.show_in_chat_source = ReplySpeechStyleSource::User;
+    }
     if let Some((name, _)) = audiences.first() {
         style.source = ReplySpeechStyleSource::Audience;
         style.audience = Some((*name).to_string());
     }
-    if style.user_choice {
-        if let Some(wording) = own.wording {
-            style.wording = wording;
-            style.source = ReplySpeechStyleSource::User;
-        }
-        if let Some(shown) = own.show_in_chat {
-            style.show_in_chat = shown;
-        }
+    if style.user_choice
+        && let Some(wording) = own.wording
+    {
+        style.wording = wording;
+        style.source = ReplySpeechStyleSource::User;
     }
     style
 }
@@ -232,7 +239,12 @@ mod tests {
             show_in_chat: Some(true),
             ..AudienceReplySpeech::default()
         };
-        assert!(resolve(&config, &[("Vertrieb", &shown)], OwnReplySpeech::default()).show_in_chat);
+        let by_audience = resolve(&config, &[("Vertrieb", &shown)], OwnReplySpeech::default());
+        assert!(by_audience.show_in_chat);
+        assert_eq!(
+            by_audience.show_in_chat_source,
+            ReplySpeechStyleSource::Audience
+        );
 
         let hide = OwnReplySpeech {
             wording: None,
@@ -240,14 +252,28 @@ mod tests {
         };
         let mine = resolve(&config, &[("Vertrieb", &shown)], hide);
         assert!(!mine.show_in_chat);
-        // Showing the trace is not a wording choice; the wording stays the organization's.
+        assert_eq!(mine.show_in_chat_source, ReplySpeechStyleSource::User);
         assert_eq!(mine.source, ReplySpeechStyleSource::Audience);
+    }
 
+    #[test]
+    fn a_wording_lock_leaves_showing_the_trace_to_the_user() {
         let locked = AudienceReplySpeech {
-            show_in_chat: Some(true),
+            wording: Some(ReplySpeechWording::Natural),
             user_choice: Some(false),
-            ..AudienceReplySpeech::default()
+            show_in_chat: Some(false),
         };
-        assert!(resolve(&config, &[("Vertrieb", &locked)], hide).show_in_chat);
+        let style = resolve(
+            &ReplySpeechConfig::default(),
+            &[("Vertrieb", &locked)],
+            OwnReplySpeech {
+                wording: Some(ReplySpeechWording::Precise),
+                show_in_chat: Some(true),
+            },
+        );
+        assert_eq!(style.wording, ReplySpeechWording::Natural);
+        assert!(!style.user_choice);
+        assert!(style.show_in_chat);
+        assert_eq!(style.show_in_chat_source, ReplySpeechStyleSource::User);
     }
 }

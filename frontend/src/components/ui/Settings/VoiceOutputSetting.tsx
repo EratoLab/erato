@@ -110,20 +110,9 @@ export function VoiceOutputSetting() {
   const [saving, setSaving] = useState(false);
 
   // `null` clears the user's own value: the organization's applies again.
-  const save = async (
-    patch: Partial<
-      Record<
-        | "preference_reply_speech_wording"
-        | "preference_approval_speech_wording"
-        | "preference_approval_speech_amount",
-        string | null
-      > & { preference_reply_speech_show_in_chat: boolean }
-    >,
-  ) => {
+  const save = async (body: UpdateProfilePreferencesRequest) => {
     setSaving(true);
     try {
-      // The generated request type reads these string fields as null-only.
-      const body = patch as UpdateProfilePreferencesRequest;
       await fetchUpdateProfilePreferences({ body });
       forgetSpokenStyle();
       await Promise.all([
@@ -192,7 +181,7 @@ export function VoiceOutputSetting() {
             onCheckedChange={(shown) =>
               void save({ preference_reply_speech_show_in_chat: shown })
             }
-            disabled={saving || !replies.data.user_choice}
+            disabled={saving}
             label={t({
               id: "preferences.dialog.audio.voice.showInChat.label",
               message: "Show what the voice said in the chat",
@@ -205,6 +194,21 @@ export function VoiceOutputSetting() {
                 "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording.",
             })}
           </p>
+          {replies.data.show_in_chat_source === "user" && (
+            <button
+              type="button"
+              className="pl-6 text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50"
+              onClick={() =>
+                void save({ preference_reply_speech_show_in_chat: null })
+              }
+              disabled={saving}
+            >
+              {t({
+                id: "preferences.dialog.audio.voice.followOrganization",
+                message: "Use my organization's setting",
+              })}
+            </button>
+          )}
         </div>
       )}
       <WordingRow

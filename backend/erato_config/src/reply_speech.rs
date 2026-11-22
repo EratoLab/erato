@@ -43,8 +43,9 @@ pub struct ReplySpeechConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub user_choice: bool,
     /// Whether the chat shows what the voice said, folded above the written
-    /// answer, with a play button when the recording is kept. Defaults to
-    /// `false`: the chat shows the written answer only.
+    /// answer, with a play button when the recording is kept. A user may
+    /// always choose it for themselves. Defaults to `false`: the chat shows
+    /// the written answer only.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub show_in_chat: bool,
 }

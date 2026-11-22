@@ -1832,8 +1832,23 @@ msgstr "Audioantwort erneut abspielen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "Die Aufnahme konnte nicht abgespielt werden. Lade den Chat neu, um es noch einmal zu versuchen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Audioantwort erneut abspielen, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay.stop"
 msgstr "Wiedergabe beenden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "Die Aufnahme ist nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
