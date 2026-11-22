@@ -212,14 +212,14 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
         path: "/ops/1/text",
         code: "numbers",
         message:
-          'Line 7 has 80 where b107 has 70. Keep every number and amount as the original writes it, or, if the change asks for other numbers, send the part again with allow: ["numbers"].',
+          'Line 7 has 80 where b107 has 70. Keep every number and amount as the original writes it. If changing this number is intended, send the part again with allow: ["numbers"].',
       },
     ]);
     expect(found["R-T1-V4-qwen-t1__S11"]).toContainEqual({
       path: "/ops/5/text",
       code: "clause-numbering",
       message:
-        'Line 4 has (14) where b341 has (4). Keep each paragraph\'s clause number as the original has it, or, if the change renumbers clauses on purpose, send the part again with allow: ["clause-numbering"].',
+        'Line 4 has (14) where b341 has (4). Keep each paragraph\'s clause number as the original has it. If changing the clause numbering is intended, send the part again with allow: ["clause-numbering"].',
     });
     expect(found["X-X1-T1-V4-sol-t1__S6"]).toEqual([
       expect.objectContaining({
@@ -435,7 +435,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
     });
     const row4 = await doc.write(draft_id, 4, T1.parts[1].ops);
     expect(row4.ok ? [] : row4.validationErrors?.[0]?.message).toBe(
-      'Line 1 has (1) where b158 has (5); line 2 has (2) where b159 has (6); line 3 has (3) where b160 has (7); line 4 has (4) where b161 has (8). Keep each paragraph\'s clause number as the original has it, or, if the change renumbers clauses on purpose, send the part again with allow: ["clause-numbering"].',
+      'Line 1 has (1) where b158 has (5); line 2 has (2) where b159 has (6); line 3 has (3) where b160 has (7); line 4 has (4) where b161 has (8). Keep each paragraph\'s clause number as the original has it. If changing the clause numbering is intended, send the part again with allow: ["clause-numbering"].',
     );
     const allowed = partsReceipt(
       await doc.write(draft_id, 4, T1.parts[1].ops, undefined, [
@@ -559,15 +559,15 @@ describe("code checks in an English document", () => {
     expect(part.issues.map(({ code, message }) => [code, message])).toEqual([
       [
         "numbers",
-        'Line 1 has 1,500 where b4 has 1,200. Keep every number and amount as the original writes it, or, if the change asks for other numbers, send the part again with allow: ["numbers"].',
+        'Line 1 has 1,500 where b4 has 1,200. Keep every number and amount as the original writes it. If changing this number is intended, send the part again with allow: ["numbers"].',
       ],
       [
         "clause-numbering",
-        'Line 2 has (3) where b5 has (2). Keep each paragraph\'s clause number as the original has it, or, if the change renumbers clauses on purpose, send the part again with allow: ["clause-numbering"].',
+        'Line 2 has (3) where b5 has (2). Keep each paragraph\'s clause number as the original has it. If changing the clause numbering is intended, send the part again with allow: ["clause-numbering"].',
       ],
       [
         "term",
-        'Line 1 drops Customer, which b4 has. Keep the section plan\'s terms as the document writes them, or, if the change renames a term on purpose, send the part again with allow: ["term"].',
+        'Line 1 drops Customer, which b4 has. Keep the section plan\'s terms as the document writes them. If changing this term is intended, send the part again with allow: ["term"].',
       ],
     ]);
     expect(
@@ -582,6 +582,17 @@ describe("code checks in an English document", () => {
         ["numbers"],
       ).part,
     ).toEqual({ issues: [], waived: ["numbers"] });
+    expect(
+      write([
+        { keep: "b3" },
+        {
+          replace: "b4-b5",
+          text: "(1) The Customer pays EUR 1,500 each month within 40 days.\n(2) If the Customer pays late, 5 percent interest accrues.",
+        },
+      ]).part.issues.map(({ message }) => message),
+    ).toEqual([
+      'Line 1 has 1,500 and 40 where b4 has 1,200 and 30. Keep every number and amount as the original writes it. If changing these numbers is intended, send the part again with allow: ["numbers"].',
+    ]);
   });
 
   it("refuses a new reference to a moved section, and a repeat without new formatting", () => {

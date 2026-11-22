@@ -485,11 +485,13 @@ export function checkWordPart({
   if ((missing.size || added.size) && fired("numbers"))
     for (const op of written) {
       const found: string[] = [];
+      let changed = 0;
       for (const pair of pairs(op)) {
         const { before, after } = numbersOf(pair);
         const gone = take(minus(bag(before), bag(after)), missing);
         const fresh = take(minus(bag(after), bag(before)), added);
         if (!gone.length && !fresh.length) continue;
+        changed += Math.max(gone.length, fresh.length);
         const lines = pair.targets.map((t) => t.line);
         const where = pair.sources.length ? refsOf(pair.sources) : "";
         const lead = `${found.length ? linesLabel(lines).toLowerCase() : linesLabel(lines)}`;
@@ -505,7 +507,7 @@ export function checkWordPart({
         issue(
           at(op),
           "numbers",
-          `${found.slice(0, 4).join("; ")}. Keep every number and amount as the original writes it, or, if the change asks for other numbers, send the part again with allow: ["numbers"].`,
+          `${found.slice(0, 4).join("; ")}. Keep every number and amount as the original writes it. If changing ${changed > 1 ? "these numbers" : "this number"} is intended, send the part again with allow: ["numbers"].`,
         );
     }
 
@@ -559,7 +561,7 @@ export function checkWordPart({
     issue(
       at(op),
       "clause-numbering",
-      `${capital(found.slice(0, 4).join("; "))}. Keep each paragraph's clause number as the original has it, or, if the change renumbers clauses on purpose, send the part again with allow: ["clause-numbering"].`,
+      `${capital(found.slice(0, 4).join("; "))}. Keep each paragraph's clause number as the original has it. If changing the clause numbering is intended, send the part again with allow: ["clause-numbering"].`,
     );
   }
 
@@ -603,7 +605,7 @@ export function checkWordPart({
           )
           .join(
             "; ",
-          )}. Keep the section plan's terms as the document writes them, or, if the change renames a term on purpose, send the part again with allow: ["term"].`,
+          )}. Keep the section plan's terms as the document writes them. If changing ${lost.size > 1 ? "these terms" : "this term"} is intended, send the part again with allow: ["term"].`,
       );
     }
   return {
