@@ -402,6 +402,81 @@ describe("wait lines", () => {
     expect(ctx.lines.waitLinePlaying()).toBe(true);
   });
 
+  it("names each Dynamics and Business Central read of a turn as it runs", async () => {
+    const ctx = await setup({
+      language: "en",
+      tools: {
+        search: "Searching for {search}.",
+        server: "Checking {server}.",
+      },
+    });
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(1000);
+    // "I'll pull the deal, the visit notes and the invoices…"
+    await spokenPart(ctx);
+    // Dataverse's `search_data`, its scope understood: the search text.
+    ctx.playback.replyCallsTool("s");
+    ctx.lines.waitTurnTool(
+      "s",
+      "m",
+      "search",
+      "in_progress",
+      {
+        action: "other",
+        object_kind: "other",
+        source: "generic",
+        read: {
+          object_kind: "other",
+          filtered: true,
+          item: {
+            title: {
+              pointer: "/query",
+              values: [
+                { path: "/query", text: "Retrofit Dosierlinie Werk Nord" },
+              ],
+            },
+          },
+        },
+      } as never,
+      "Dynamics",
+    );
+    // A Business Central action the label cannot describe: the server.
+    ctx.lines.waitTurnTool(
+      "s",
+      "m",
+      "orders",
+      "in_progress",
+      { action: "other", object_kind: "other", source: "generic" } as never,
+      "Business Central",
+    );
+    const asked = sse.mock.calls.map(([path, options]) => [
+      path,
+      (JSON.parse((options as { body: string }).body) as { text: string }).text,
+    ]);
+    expect(asked).toEqual([
+      [
+        "/api/v1beta/me/messages/m/progress-speech",
+        "Searching for Retrofit Dosierlinie Werk Nord.",
+      ],
+      [
+        "/api/v1beta/me/messages/m/progress-speech",
+        "Checking Business Central.",
+      ],
+    ]);
+    const first = sse.mock.calls[0][1] as {
+      onMessage: (event: { type: string; data: string }) => void;
+    };
+    first.onMessage({
+      type: "audio_delta",
+      data: JSON.stringify({ audio: "AQIDBA==", sample_rate: 24000 }),
+    });
+    first.onMessage({ type: "done", data: "" });
+    // 4 s after the spoken part, the search is still running: its line.
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(sources).toHaveLength(1);
+  });
+
   it("goes on with still on it after a spoken part and a call without a line", async () => {
     const ctx = await setup();
     ctx.playback.beginSpeechResponse("s");

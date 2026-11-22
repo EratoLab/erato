@@ -5847,6 +5847,12 @@ export type ToolDisplayMetadata = {
   description_truncated: boolean;
   label?: ToolCallLabel;
   /**
+   * Whether the call is `read_only` and nothing in it or its label does
+   * more than read, so the voice may say that it looks something up on
+   * `server_name`. Set on MCP calls only.
+   */
+  plain_read?: boolean;
+  /**
    * Whether the tool is read-only by the annotations the approval policy
    * read for this call and does not also call itself destructive. Set on
    * MCP calls only.
@@ -6486,12 +6492,14 @@ export type WaitLineSlot = "opener" | "opener_short" | "still" | "long";
 
 /**
  * Templates for a running tool call's line. `search` holds `{search}`;
- * `items` and `list` hold `{table}`. Absent ones say nothing.
+ * `items` and `list` hold `{table}`; `server` holds `{server}`, for a
+ * read-only call the others cannot name. Absent ones say nothing.
  */
 export type WaitLineToolTemplates = {
   items?: string;
   list?: string;
   search?: string;
+  server?: string;
 };
 
 /**

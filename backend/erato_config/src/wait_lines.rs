@@ -96,8 +96,9 @@ pub struct WaitLinesConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub phrases: HashMap<String, WaitLinePhrasesConfig>,
     /// Tool call line templates per language tag. `search` holds
-    /// `{search}`; `items` and `list` hold `{table}`. A template not set, or
-    /// empty, says nothing.
+    /// `{search}`; `items` and `list` hold `{table}`; `server`, said for a
+    /// read-only call none of the others can name, holds `{server}`. A
+    /// template not set, or empty, says nothing.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub tools: HashMap<String, WaitLineToolsConfig>,
 }
@@ -126,6 +127,8 @@ pub struct WaitLineToolsConfig {
     pub items: Option<String>,
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub list: Option<String>,
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub server: Option<String>,
 }
 
 pub const FIRST_AFTER_MS_RANGE: std::ops::RangeInclusive<u32> = 1500..=10_000;
@@ -195,6 +198,7 @@ pub struct WaitLineSet {
     pub search: Option<String>,
     pub items: Option<String>,
     pub list: Option<String>,
+    pub server: Option<String>,
 }
 
 /// Why `line` cannot be said as a wait line, or `None` when it can.
@@ -378,6 +382,7 @@ impl WaitLinesConfig {
                 ("search", "search", &mut tools.search),
                 ("items", "table", &mut tools.items),
                 ("list", "table", &mut tools.list),
+                ("server", "server", &mut tools.server),
             ] {
                 let Some(text) = template.as_deref() else {
                     continue;
@@ -428,11 +433,15 @@ impl WaitLinesConfig {
                 ("search", &mut tools.search),
                 ("items", &mut tools.items),
                 ("list", &mut tools.list),
+                ("server", &mut tools.server),
             ] {
                 let Some(text) = template.as_deref() else {
                     continue;
                 };
-                let said = text.replace("{search}", " ").replace("{table}", " ");
+                let said = text
+                    .replace("{search}", " ")
+                    .replace("{table}", " ")
+                    .replace("{server}", " ");
                 if let Some(why) = problem(language, &said) {
                     dropped.push(format!(
                         "{place}.tools.{language}.{name}: '{text}' is ignored: {why}"
@@ -471,6 +480,7 @@ impl WaitLinesConfig {
             search: template(tools.map(|t| &t.search)),
             items: template(tools.map(|t| &t.items)),
             list: template(tools.map(|t| &t.list)),
+            server: template(tools.map(|t| &t.server)),
         }
     }
 }
@@ -591,6 +601,7 @@ fn shaped_wait_lines(written: Written) -> (WaitLinesConfig, Vec<String>) {
                 ("search", &mut tools.search),
                 ("items", &mut tools.items),
                 ("list", &mut tools.list),
+                ("server", &mut tools.server),
             ] {
                 match templates.remove(name) {
                     None => {}
@@ -732,12 +743,14 @@ mod tests {
                     search: Some("Looking.".into()),
                     items: Some(String::new()),
                     list: Some("Checking {table} and {table}.".into()),
+                    server: Some("Checking {table}.".into()),
                 },
             )]),
             ..Default::default()
         };
         let dropped = config.drop_unusable();
-        assert_eq!(dropped.len(), 6, "{dropped:?}");
+        assert_eq!(dropped.len(), 7, "{dropped:?}");
+        assert!(dropped.iter().any(|d| d.contains("tools.en.server")));
         assert!(dropped.iter().any(|d| d.contains("asks a question")));
         assert_eq!(
             config.phrases["de"].opener.as_deref(),
@@ -801,7 +814,7 @@ mod tests {
             "max_per_turn": 2,
             "user_choice": false,
             "phrases": { "en": { "long": ["This is taking a while."] } },
-            "tools": { "en": { "search": "Searching for {search}." } }
+            "tools": { "en": { "search": "Searching for {search}.", "server": "Checking {server}." } }
         }));
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(config.amount, WaitLinesAmount::LongOnly);
@@ -811,6 +824,10 @@ mod tests {
         assert_eq!(
             config.set_for("en").search.as_deref(),
             Some("Searching for {search}.")
+        );
+        assert_eq!(
+            config.set_for("en").server.as_deref(),
+            Some("Checking {server}.")
         );
     }
 

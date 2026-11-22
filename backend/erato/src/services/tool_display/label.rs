@@ -357,6 +357,39 @@ pub fn filtered_label(
     }
 }
 
+/// Whether the voice may say only that a call looks something up on its
+/// server: the server marks it read-only (`read_only`), and either a read
+/// description says what it reads, or its label has no verb and nothing in
+/// its arguments or its card does more than read: no statement, script or
+/// batch, no recipients, no text block, no flag that acts. Says nothing of
+/// what it reads.
+pub fn plain_read_only(
+    read_only: bool,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    label: &ToolCallLabel,
+) -> bool {
+    if !read_only {
+        return false;
+    }
+    if label.read.is_some() {
+        return true;
+    }
+    let card_does_more = label.change.as_ref().is_some_and(|change| {
+        !change.texts.is_empty()
+            || change.texts_omitted > 0
+            || !change.opaque.is_empty()
+            || change.opaque_omitted > 0
+            || change.batch.is_some()
+            || change.recipients.is_some()
+            || change.flags.iter().any(|flag| !flag.dry_run)
+    });
+    matches!(label.action, ToolCallAction::Other | ToolCallAction::Read)
+        && label.warnings.is_empty()
+        && !card_does_more
+        && !rules::may_do_more_than_read(&tool.name, arguments)
+}
+
 /// The label of a call that only reads, for words spoken aloud, and whether
 /// its arguments narrow what it reads: the rules' read mapping through the
 /// cross-check and the checks every label passes. `None` when the label a
@@ -1481,6 +1514,7 @@ mod tests {
             label: Some(label),
             read_only: false,
             closed_world: false,
+            plain_read: false,
         };
         let json = serde_json::to_value(&display).unwrap();
         assert_eq!(json["label"]["action"], "create");

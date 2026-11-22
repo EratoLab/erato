@@ -28,6 +28,7 @@ fn on(server: Option<&str>) -> Option<ToolDisplayMetadata> {
         label: None,
         read_only: false,
         closed_world: false,
+        plain_read: false,
     })
 }
 
@@ -368,6 +369,7 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         label: Some(label),
         read_only: false,
         closed_world: false,
+        plain_read: false,
     });
     assert_eq!(
         name(&after(vec![labelled]), json!(TASK)).as_deref(),

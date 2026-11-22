@@ -2138,6 +2138,7 @@ fn the_test_sets_records_are_named_by_the_reads_before_them() {
                     label: None,
                     read_only: true,
                     closed_world: false,
+                    plain_read: false,
                 }),
                 input: Some(call.input),
                 output: Some(call.output),
@@ -2255,7 +2256,7 @@ fn the_test_sets_reads_get_a_read_and_every_other_call_none() {
         [
             ("testset", 4, 2),
             ("testset_dynamics", 6, 0),
-            ("testset_reads", 12, 27),
+            ("testset_reads", 13, 27),
         ]
     );
 }

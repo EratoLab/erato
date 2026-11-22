@@ -79,7 +79,8 @@ pub struct WaitLineAudio {
 }
 
 /// Templates for a running tool call's line. `search` holds `{search}`;
-/// `items` and `list` hold `{table}`. Absent ones say nothing.
+/// `items` and `list` hold `{table}`; `server` holds `{server}`, for a
+/// read-only call the others cannot name. Absent ones say nothing.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, ToSchema)]
 pub struct WaitLineToolTemplates {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -91,6 +92,9 @@ pub struct WaitLineToolTemplates {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub list: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub server: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
@@ -223,7 +227,7 @@ fn version_of(
             timing.taper_after_turns,
         ],
         set.lines,
-        [&set.search, &set.items, &set.list],
+        [&set.search, &set.items, &set.list, &set.server],
     ]);
     hasher.update(parts.to_string().as_bytes());
     hasher
@@ -391,6 +395,7 @@ pub async fn wait_lines(
             search: set.search,
             items: set.items,
             list: set.list,
+            server: set.server,
         },
     }))
 }

@@ -135,6 +135,7 @@ const fromResponse = (response: WaitLinesResponse): Loaded => {
       search: response.tools.search,
       items: response.tools.items,
       list: response.tools.list,
+      server: response.tools.server,
     },
   };
 };
@@ -311,8 +312,9 @@ export function moveWaitTurn(from: string, to: string) {
 
 /**
  * A tool call of the turn changed. A call that only reads, and whose label
- * names what it reads, gets its line asked for at once, so it is ready by
- * the time it is due.
+ * names what it reads or that the backend found to do nothing but read
+ * (`readOnlyServer`, the server's name), gets its line asked for at once,
+ * so it is ready by the time it is due.
  */
 export function waitTurnTool(
   streamKey: string,
@@ -320,6 +322,7 @@ export function waitTurnTool(
   toolCallId: string,
   status: string,
   label: ToolCallLabel | null | undefined,
+  readOnlyServer?: string,
 ) {
   const current = forTurn(streamKey);
   if (!current) return;
@@ -338,7 +341,7 @@ export function waitTurnTool(
   const text =
     !loaded || state.answerStarted || state.ended || loaded.amount === "off"
       ? null
-      : toolWaitLine(label, loaded.language, loaded.tools);
+      : toolWaitLine(label, loaded.language, loaded.tools, readOnlyServer);
   if (!text) {
     // A call without a line still counts: after a spoken part, it lets the
     // fixed lines cover the wait.

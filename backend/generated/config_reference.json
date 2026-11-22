@@ -941,6 +941,12 @@
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
+  "audio_conversational.wait_lines.tools.<key>.server": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "audio_conversational.wait_lines.user_choice": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",

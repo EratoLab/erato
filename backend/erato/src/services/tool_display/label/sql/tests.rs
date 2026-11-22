@@ -577,6 +577,11 @@ fn a_kind_table_gives_the_kind_and_a_key_gives_the_item() {
     )
     .expect("a read");
     assert_eq!(read.object_kind, ToolCallObjectKind::Task);
+    // The table stays beside the key: the voice says the records by it.
+    assert_eq!(
+        read.query.as_ref().map(|query| query.tables.clone()),
+        Some(vec!["task".to_string()])
+    );
     let id = read.item.and_then(|item| item.id).expect("an id");
     assert_eq!(id.pointer, "/querytext");
     assert!(id.values[0].machine_id);

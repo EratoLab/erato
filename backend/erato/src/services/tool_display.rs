@@ -39,6 +39,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         label: None,
         read_only: false,
         closed_world: false,
+        plain_read: false,
     }
 }
 
@@ -291,13 +292,22 @@ fn labelled_display(
         label::guarded(|| label::checked_label(server_id, tool, arguments, mapping, consent))
     })
     .or_else(|| label::guarded(|| label::generic_label(arguments)));
+    // The annotation is the server's word; a name that says something is
+    // lost wins over it.
+    let read_only =
+        shown_as_read_only(tool) && !label::rules::sounds_like_a_loss(&tool.name, arguments);
+    // Like the labellers, a panic costs only the flag.
+    let plain_read = label.as_ref().is_some_and(|label| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            label::plain_read_only(read_only, tool, arguments, label)
+        }))
+        .unwrap_or(false)
+    });
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
-        // The annotation is the server's word; a name that says something is
-        // lost wins over it.
-        read_only: shown_as_read_only(tool)
-            && !label::rules::sounds_like_a_loss(&tool.name, arguments),
+        read_only,
+        plain_read,
         closed_world: !crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
             .open_world_hint,
         ..tool_display_metadata(tool)
@@ -367,6 +377,7 @@ fn own_tool_display(
         label: Some(label),
         read_only: false,
         closed_world: false,
+        plain_read: false,
     })
 }
 
@@ -696,6 +707,85 @@ mod tests {
             assert!(!flag, "{hint:?} {destructive:?}");
             assert!(json.get("read_only").is_none());
         }
+    }
+
+    #[test]
+    fn only_a_read_only_call_that_does_nothing_more_is_a_plain_read() {
+        let plain = |name: &str, read_only: bool, arguments: serde_json::Value| {
+            let mut tool = Tool::new(name.to_string(), "", JsonObject::new());
+            tool.annotations = Some(ToolAnnotations::from_raw(
+                None,
+                Some(read_only),
+                None,
+                None,
+                None,
+            ));
+            mcp_tool_call_display(
+                &McpRuntimeConfig::default(),
+                "server",
+                &tool,
+                &arguments,
+                None,
+                &Default::default(),
+            )
+            .plain_read
+        };
+        // A Dataverse search in a scope, and a Business Central list action.
+        assert!(plain(
+            "search_data",
+            true,
+            serde_json::json!({"query": "Retrofit Dosierlinie Werk Nord", "scope": "msft_dvtablesearch_x"})
+        ));
+        assert!(plain(
+            "bc_actions_invoke",
+            true,
+            serde_json::json!({
+                "ActionName": "List_SalesOrders_PAG30028",
+                "RequestParameters": {"select": "number,status", "filter": "customerNumber eq 'K-10001'"}
+            })
+        ));
+        assert!(plain(
+            "read_query",
+            true,
+            serde_json::json!({"querytext": "SELECT name FROM account"})
+        ));
+        // The server's hint is not enough when the call does more.
+        for (name, arguments) in [
+            (
+                "read_query",
+                serde_json::json!({"querytext": "DELETE FROM account WHERE name = 'x'"}),
+            ),
+            (
+                "search",
+                serde_json::json!({"query": "Q4 plan", "notify": true}),
+            ),
+            (
+                "update_record",
+                serde_json::json!({"recordId": "r-1", "item": {"name": "x"}}),
+            ),
+            (
+                "send_email",
+                serde_json::json!({"to": "a@example.com", "body": "Hallo"}),
+            ),
+        ] {
+            assert!(!plain(name, true, arguments.clone()), "{name}: {arguments}");
+        }
+        // A name that only runs something rests on the server's word.
+        assert!(plain(
+            "run_workflow",
+            true,
+            serde_json::json!({"workflow": "nightly"})
+        ));
+        assert!(!plain(
+            "run_workflow",
+            false,
+            serde_json::json!({"workflow": "nightly"})
+        ));
+        assert!(!plain(
+            "search_data",
+            false,
+            serde_json::json!({"query": "Werk Nord", "scope": "msft_dvtablesearch_x"})
+        ));
     }
 
     #[test]
@@ -1378,6 +1468,7 @@ mod tests {
             label: Some(resolved),
             read_only: false,
             closed_world: false,
+            plain_read: false,
         };
         assert_eq!(
             child_approval_display(&child),
