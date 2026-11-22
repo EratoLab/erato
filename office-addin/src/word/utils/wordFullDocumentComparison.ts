@@ -8,6 +8,7 @@ import {
   normalizeWordPeopleList,
   normalizeWordPlaceholderEntries,
   normalizeWordRevisionIds,
+  removeWordAddedTableIndents,
   removeWordNumberingIdentity,
   removeWordRedetectedLanguage,
   wordPackageRoots,
@@ -1559,7 +1560,8 @@ export function wordFullDocumentDifferingParts(
  * The content tier adds the normalizations named by WORD_APPLY_ADJUSTMENTS; it is only for write and
  * restore verification after strict comparison failed. With `replaced`, the package the write wrote
  * over, both sides leave out what WORD_HOUSEKEEPING's "proofing-language" names, and Word's entry
- * styles that package already held ("placeholder-entries"). */
+ * styles that package already held ("placeholder-entries"); the written side leaves out the indent
+ * Word adds to a table the write styled ("table-indent"). */
 export function wordFullDocumentDifferences(
   expectedXml: string,
   actualXml: string,
@@ -1590,16 +1592,21 @@ export function wordFullDocumentDifferences(
       : undefined,
   );
   let redetected = 0;
+  let indents = 0;
   if (parsed) {
     redetected = Math.abs(
       removeWordRedetectedLanguage(actual.doc, parsed) -
         removeWordRedetectedLanguage(expected.doc, parsed),
+    );
+    indents = removeWordAddedTableIndents(expected.roots, actual.roots, () =>
+      wordPackageRoots(parsed()),
     );
   }
   const counts: WordHousekeepingCounts = redetected
     ? { "proofing-language": redetected }
     : {};
   if (placeholders) counts["placeholder-entries"] = placeholders;
+  if (indents) counts["table-indent"] = indents;
   const [expectedIds, actualIds] = [expected, actual].map((v) =>
     normalizeWordRevisionIds(
       [...v.roots.keys()].sort().map((path) => v.roots.get(path)!),

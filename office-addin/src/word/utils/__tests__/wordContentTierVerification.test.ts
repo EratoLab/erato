@@ -25,6 +25,7 @@ import {
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
+  WordTableFormatting,
 } from "@erato/frontend/word-review";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -470,5 +471,148 @@ describe("content-tier write verification", () => {
         }),
       ),
     ).toEqual({ ok: false, reason: "output-mismatch" });
+  });
+});
+
+describe("a new table in the document's table style", () => {
+  // Word PC gives such a table an indent that offsets its 1/2 pt left border (-8 in compatibility mode 12).
+  const LEFT_BORDER =
+    '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  const source = realisticSnapshot(
+    realisticWordPackageXml().replace(
+      '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+      `<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>${LEFT_BORDER}`,
+    ),
+  );
+  const planWith = (format: WordTableFormatting): WordDocumentPlan => {
+    const refs = source.blocks.map((b) => b.ref);
+    const status = source.blocks.findIndex((b) => b.text.startsWith("Status"));
+    return {
+      version: 1,
+      snapshot: source.token,
+      readToken: "read-proof",
+      scope: "document",
+      entries: [
+        { kind: "keep", source: refs.slice(0, status + 1) },
+        {
+          kind: "insert",
+          contextRefs: [refs[status]],
+          blocks: [
+            {
+              id: "deadlines",
+              type: "table",
+              text: "",
+              format,
+              rows: [
+                ["Step", "Deadline"],
+                ["Call-off", "5 working days"],
+              ].map((texts, r) => ({
+                cells: texts.map((text, c) => ({
+                  blocks: [
+                    { id: `deadlines-${r}-${c}`, type: "paragraph", text },
+                  ],
+                })),
+              })),
+            },
+          ],
+        },
+        { kind: "keep", source: refs.slice(status + 1) },
+      ],
+      deleted: [],
+    };
+  };
+  const tables = (doc: Document) =>
+    Array.from(body(doc).children).filter((e) => e.localName === "tbl");
+  const tableProperties = (doc: Document, index: number) =>
+    Array.from(tables(doc)[index].children).find(
+      (e) => e.localName === "tblPr",
+    )!;
+  /** Puts a w:tblInd where Word PC writes it, after w:tblW. */
+  const indent =
+    (index: number, w: string) =>
+    (doc: Document): void => {
+      const properties = tableProperties(doc, index);
+      const element = doc.createElementNS(W, "w:tblInd");
+      element.setAttributeNS(W, "w:w", w);
+      element.setAttributeNS(W, "w:type", "dxa");
+      const width = Array.from(properties.children).find(
+        (e) => e.localName === "tblW",
+      );
+      if (width) width.after(element);
+      else properties.append(element);
+    };
+  const write = (
+    format: WordTableFormatting,
+    ...edits: ((doc: Document) => void)[]
+  ) => {
+    const plan = planWith(format);
+    const compiled = compileWordDocumentPlan(plan, source);
+    const written = captureWordAuthoringSnapshot(
+      editWordPackage(compiled, (doc) => edits.forEach((edit) => edit(doc))),
+      source.identity,
+      "Off",
+      true,
+      "verify",
+    );
+    return verifyWordPlanWrite(plan, source, written);
+  };
+  const NEW = 0;
+  const KEPT = 1;
+
+  it.each([
+    ["the table style", { styleRef: "TableGrid" }],
+    [
+      "the table style and a header row look",
+      { styleRef: "TableGrid", firstRow: true },
+    ],
+  ])("verifies %s with the indent Word PC adds", (_name, format) => {
+    expect(write(format)).toEqual({
+      ok: true,
+      tier: "strict",
+      adjustments: [],
+    });
+    expect(write(format, indent(NEW, "-8"))).toEqual({
+      ok: true,
+      tier: "strict",
+      adjustments: [],
+      housekeeping: { "table-indent": 1 },
+    });
+  });
+
+  it.each([
+    ["an indent past its left border", indent(NEW, "-120")],
+    [
+      "another table property",
+      (doc: Document) => {
+        indent(NEW, "-8")(doc);
+        const jc = doc.createElementNS(W, "w:jc");
+        jc.setAttributeNS(W, "w:val", "center");
+        tableProperties(doc, NEW).append(jc);
+      },
+    ],
+    [
+      "another width",
+      (doc: Document) => {
+        indent(NEW, "-8")(doc);
+        all(tableProperties(doc, NEW), "tblW")[0].setAttributeNS(
+          W,
+          "w:w",
+          "2500",
+        );
+      },
+    ],
+    ["an indent on the table the plan kept", indent(KEPT, "-8")],
+  ])("still fails the write on %s", (_name, edit) => {
+    expect(write({ styleRef: "TableGrid" }, edit)).toEqual({
+      ok: false,
+      reason: "output-mismatch",
+    });
+  });
+
+  it("still fails the write on an indent given to a new table without a style", () => {
+    expect(write({ firstRow: true }, indent(NEW, "-8"))).toEqual({
+      ok: false,
+      reason: "output-mismatch",
+    });
   });
 });

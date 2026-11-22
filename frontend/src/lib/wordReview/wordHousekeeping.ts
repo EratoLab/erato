@@ -13,7 +13,8 @@ export type WordHousekeepingId =
   | "glossary-rsids"
   | "placeholder-entries"
   | "font-obfuscation-key"
-  | "view-zoom";
+  | "view-zoom"
+  | "table-indent";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -128,6 +129,16 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     probe:
       'ERMAIN-1248 native, Word for Mac 16.115.1, 2026-11-19: about 10 minutes after an import Apply, the AutoRecovery save put w:zoom w:percent="140" into a package read without it, with no paragraph event (a saved and an unsaved German document); the next import Apply on a capture taken before it went stale on /word/settings.xml alone',
     scope: "any",
+  },
+  {
+    id: "table-indent",
+    element:
+      "w:tblPr/w:tblInd in dxa, from 0 down to minus the left border's width and spacing, on a table the write gave a table style and no indent",
+    part: "/word/document.xml",
+    hosts: ["Word PC"],
+    probe:
+      "ERMAIN-1306 native, Word PC 16.0.20625, 2026-11-22 (first seen on 16.0.20527): an import gives a new table in Table Grid w:tblInd -8 for a 1/2 pt left border (-3 in compatibility mode 15), -15 for 1 1/2 pt (0 in mode 15), -45 for 1 pt with 4 pt spacing and 0 without a left border, whatever the other tables' indents; an unstyled new table gets none",
+    scope: "written",
   },
 ];
 
@@ -770,4 +781,106 @@ export function wordPackageRoots(doc: Document): WordPackageRoots {
       roots.set(part.getAttributeNS(PKG, "name") ?? "", data.firstElementChild);
   }
   return roots;
+}
+
+const canonical = (e: Element): string =>
+  JSON.stringify([
+    e.namespaceURI,
+    e.localName,
+    ownAttributes(e)
+      .map((a) => `${a.namespaceURI} ${a.localName}=${a.value}`)
+      .sort(),
+    Array.from(e.children).map(canonical),
+  ]);
+
+/** How far a table's left border reaches, in twips: its width and spacing, from the table's own
+ * w:tblBorders or else its style chain's; 0 without one, undefined when the chain can't be read. */
+function leftBorderReach(
+  properties: Element,
+  styles: ReadonlyMap<string, Element>,
+): number | undefined {
+  const leftBorder = (tblPr: Element | undefined) => {
+    const borders = tblPr && child(tblPr, "tblBorders");
+    return borders && (child(borders, "left") ?? child(borders, "start"));
+  };
+  let border = leftBorder(properties);
+  let style = styles.get(value(child(properties, "tblStyle")));
+  const seen = new Set<Element>();
+  while (!border) {
+    if (!style || seen.has(style)) return undefined;
+    seen.add(style);
+    border = leftBorder(child(style, "tblPr"));
+    const basedOn = child(style, "basedOn");
+    if (!border && !basedOn) return 0;
+    style = basedOn && styles.get(value(basedOn));
+  }
+  if (["nil", "none"].includes(value(border))) return 0;
+  const size = border.getAttributeNS(W, "sz") || "0";
+  const space = border.getAttributeNS(W, "space") || "0";
+  if (!/^\d+$/.test(size) || !/^\d+$/.test(space)) return undefined;
+  return Number(size) * 2.5 + Number(space) * 20;
+}
+
+/**
+ * table-indent: drops the w:tblInd Word adds on import to a table the write gave a table style and
+ * no indent, when it only offsets the left border (dxa, from 0 down to minus the border's width and
+ * spacing). Tables pair up part by part in document order. A table whose properties `replaced`, the
+ * package the write wrote over, already held counts as kept, and any indent Word gives it stays.
+ * Mutates `actual` and returns how many it dropped.
+ */
+export function removeWordAddedTableIndents(
+  expected: WordPackageRoots,
+  actual: WordPackageRoots,
+  replaced: WordPackageRoots | (() => WordPackageRoots),
+): number {
+  const stylesRoot = expected.get("/word/styles.xml");
+  const styles = new Map(
+    (stylesRoot ? elements(stylesRoot, "style") : [])
+      .filter((s) => s.getAttributeNS(W, "type") === "table")
+      .map((s) => [s.getAttributeNS(W, "styleId") ?? "", s]),
+  );
+  let held: Set<string> | undefined;
+  const heldBefore = (properties: Element) => {
+    held ??= new Set(
+      [
+        ...(typeof replaced === "function" ? replaced() : replaced).values(),
+      ].flatMap((root) => elements(root, "tblPr").map(canonical)),
+    );
+    return held.has(canonical(properties));
+  };
+  let dropped = 0;
+  for (const [path, root] of expected) {
+    const written = actual.get(path);
+    const tables = elements(root, "tbl");
+    const writtenTables = written ? elements(written, "tbl") : [];
+    if (tables.length !== writtenTables.length) continue;
+    tables.forEach((table, i) => {
+      const properties = child(table, "tblPr");
+      const writtenProperties = child(writtenTables[i], "tblPr");
+      const indent = writtenProperties && child(writtenProperties, "tblInd");
+      if (
+        !properties ||
+        !indent ||
+        !child(properties, "tblStyle") ||
+        child(properties, "tblInd")
+      )
+        return;
+      const width = indent.getAttributeNS(W, "w") ?? "";
+      const reach = leftBorderReach(properties, styles);
+      if (
+        indent.children.length ||
+        !onlyW(indent, ["w", "type"]) ||
+        indent.getAttributeNS(W, "type") !== "dxa" ||
+        !/^-?\d+$/.test(width) ||
+        reach === undefined ||
+        Number(width) > 0 ||
+        -Number(width) > reach ||
+        heldBefore(properties)
+      )
+        return;
+      indent.remove();
+      dropped++;
+    });
+  }
+  return dropped;
 }
