@@ -27,9 +27,16 @@ pub const APPROVAL_SPEECH_SETTING: &str = "approval_speech";
 /// resolved like approval speech.
 pub const WAIT_LINES_SETTING: &str = "wait_lines";
 
+/// The `setting_orders` key of how a reply is spoken in conversational audio
+/// mode. Like approval speech, an audience takes part only once listed under it.
+pub const REPLY_SPEECH_SETTING: &str = "reply_speech";
 /// The settings an audience sets in a block of its own, each with its own
 /// order.
-const VOICE_SETTINGS: [&str; 2] = [APPROVAL_SPEECH_SETTING, WAIT_LINES_SETTING];
+const VOICE_SETTINGS: [&str; 3] = [
+    APPROVAL_SPEECH_SETTING,
+    WAIT_LINES_SETTING,
+    REPLY_SPEECH_SETTING,
+];
 
 /// The shared resolution-contract fixture: the cases every resolver of this
 /// document must agree on. Downstream consumers keep a copy (the admin panel
@@ -241,6 +248,41 @@ pub struct ExperienceAudience {
     /// [`WAIT_LINES_SETTING`] order, field by field.
     #[serde(default, deserialize_with = "lenient_wait_lines")]
     pub wait_lines: Option<AudienceWaitLines>,
+    /// How a reply is spoken for this audience, where an admin set it,
+    /// resolved like `approval_speech` in the [`REPLY_SPEECH_SETTING`]
+    /// order. A field that does not parse is ignored on its own.
+    #[serde(default, deserialize_with = "lenient_reply_speech")]
+    pub reply_speech: Option<AudienceReplySpeech>,
+}
+
+/// A supervisor's choice for how an audience's replies are spoken.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct AudienceReplySpeech {
+    pub wording: Option<erato_config::reply_speech::ReplySpeechWording>,
+    /// Whether the audience's users may choose their own; absent keeps the
+    /// deployment's `reply_speech.user_choice`.
+    pub user_choice: Option<bool>,
+}
+
+fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<AudienceReplySpeech>, D::Error> {
+    lenient_block(
+        deserializer,
+        REPLY_SPEECH_SETTING,
+        |speech: &mut AudienceReplySpeech, key, value| {
+            Some(match key {
+                "wording" => {
+                    serde_json::from_value(value).map(|wording| speech.wording = Some(wording))
+                }
+                "user_choice" => {
+                    serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice))
+                }
+                _ => return None,
+            })
+        },
+    )
 }
 
 /// A supervisor's choice for what an audience hears while it waits.
@@ -533,6 +575,7 @@ fn voice_block_warnings(document: &ExperiencePolicyDocument) -> Vec<String> {
             .iter()
             .filter(|(_, audience)| match setting {
                 APPROVAL_SPEECH_SETTING => audience.approval_speech.is_some(),
+                REPLY_SPEECH_SETTING => audience.reply_speech.is_some(),
                 _ => audience.wait_lines.is_some(),
             })
             .map(|(name, audience)| (name.as_str(), audience.id.as_deref()))
@@ -829,6 +872,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         };
         assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
         assert!(!audience.is_active_at(expires_at));
@@ -1106,6 +1150,43 @@ mod tests {
     }
 
     #[test]
+    fn a_typo_in_one_reply_speech_field_keeps_the_others() {
+        let audience = |block: &str| {
+            let document = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "id": "aud-eng",
+                            "subjects": [{{"subject_type": "organization"}}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                            "reply_speech": {block}
+                        }}
+                    }},
+                    "priority_order": ["engineering"],
+                    "setting_orders": {{"starting_assistant": ["aud-eng"], "reply_speech": ["aud-eng"]}}
+                }}"#
+            ))
+            .unwrap_or_else(|error| panic!("{block}: {error}"));
+            document.audiences["engineering"].reply_speech.clone()
+        };
+        assert_eq!(
+            audience(r#"{"wording": "loud", "user_choice": false}"#),
+            Some(AudienceReplySpeech {
+                wording: None,
+                user_choice: Some(false),
+            })
+        );
+        assert_eq!(
+            audience(r#"{"wording": "precise", "length": 3}"#),
+            Some(AudienceReplySpeech {
+                wording: Some(erato_config::reply_speech::ReplySpeechWording::Precise),
+                user_choice: None,
+            })
+        );
+        assert_eq!(audience(r#""precise""#), None);
+    }
+
+    #[test]
     fn a_bad_approval_speech_field_costs_only_itself() {
         let empty = Some(AudienceApprovalSpeech::default());
         let locked = Some(AudienceApprovalSpeech {
@@ -1203,6 +1284,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         }
     }
 

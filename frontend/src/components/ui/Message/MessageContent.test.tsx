@@ -2996,6 +2996,43 @@ it("renders persisted speech for explicit replay without autoplay", () => {
   expect(audio).not.toHaveAttribute("autoplay");
 });
 
+describe("a reply spoken in conversation mode", () => {
+  const reply: ContentPart[] = [
+    { content_type: "spoken", text: "Morgen um zwei." },
+    { content_type: "text", text: "Der Termin ist **morgen um 14:00**." },
+  ];
+
+  it("shows what is spoken apart from the written answer while it streams", () => {
+    renderWithTheme(<MessageContent content={reply} isStreaming />);
+    expect(screen.getByTestId("spoken-reply-live")).toHaveTextContent(
+      "Spoken: Morgen um zwei.",
+    );
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+
+  it("folds the spoken text as the caption of the replay", () => {
+    renderWithTheme(
+      <MessageContent
+        content={[
+          ...reply,
+          {
+            content_type: "audio_file_pointer",
+            file_upload_id: "saved-speech",
+            download_url: "https://storage.example/speech.wav",
+          },
+        ]}
+      />,
+    );
+    const audio = screen.getByLabelText("Replay audio response");
+    const caption = document.getElementById(
+      audio.getAttribute("aria-describedby") ?? "",
+    );
+    expect(caption).toHaveTextContent("Morgen um zwei.");
+    expect(screen.getAllByLabelText("Replay audio response")).toHaveLength(1);
+    expect(screen.getByText("morgen um 14:00")).toBeInTheDocument();
+  });
+});
+
 describe("reminders scheduled from the chat", () => {
   const createReminder = (status: "success" | "error"): ContentPart =>
     ({

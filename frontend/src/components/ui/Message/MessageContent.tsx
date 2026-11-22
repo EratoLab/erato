@@ -79,6 +79,7 @@ import { MermaidBlock } from "./MermaidBlock";
 import { MessageExplainCard } from "./MessageExplainCard";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import { SidecarReviewItem } from "./SidecarReviewItem";
+import { SpokenReply } from "./SpokenReply";
 import { StopWaitingAction } from "./StopWaitingAction";
 import {
   SyntaxHighlightedCode,
@@ -823,6 +824,7 @@ function ClientToolPendingNotice({
 
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
+  part.content_type === "spoken" ||
   part.content_type === "reasoning" ||
   part.content_type === "tool_use" ||
   part.content_type === "tool_approval_request" ||
@@ -2009,6 +2011,29 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
+  // The spoken parts and the reply's recording show as one row, at the first
+  // spoken part: one recording covers every spoken part of a reply.
+  const spoken = React.useMemo(() => {
+    const firstIndex = content.findIndex(
+      (part) => part.content_type === "spoken",
+    );
+    if (firstIndex < 0) return null;
+    const audio = content.find(
+      (part) => part.content_type === "audio_file_pointer",
+    );
+    return {
+      firstIndex,
+      texts: content.flatMap((part) =>
+        part.content_type === "spoken" ? [part.text] : [],
+      ),
+      audioUrl:
+        audio?.content_type === "audio_file_pointer"
+          ? (audio.download_url ?? undefined)
+          : undefined,
+      hasAudio: audio !== undefined,
+    };
+  }, [content]);
+
   const lastRenderableIndex = React.useMemo(() => {
     for (let index = content.length - 1; index >= 0; index--) {
       if (isRenderableContentPart(content[index])) {
@@ -2259,7 +2284,21 @@ export const MessageContent = memo(function MessageContent({
           );
         }
 
+        if (part.content_type === "spoken") {
+          if (spoken?.firstIndex !== index) return null;
+          return (
+            <SpokenReply
+              key={`spoken-${index}`}
+              texts={spoken.texts}
+              audioUrl={spoken.audioUrl}
+              hasAudio={spoken.hasAudio}
+              isStreaming={isStreaming}
+            />
+          );
+        }
+
         if (part.content_type === "audio_file_pointer") {
+          if (spoken) return null;
           return (
             // The adjacent assistant message provides the full spoken text.
             // eslint-disable-next-line jsx-a11y/media-has-caption

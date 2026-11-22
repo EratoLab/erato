@@ -1827,6 +1827,7 @@ msgstr "Lire la carte"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Réécouter la réponse audio"
 
@@ -3228,6 +3229,11 @@ msgstr "Veuillez prendre un moment pour vérifier l'historique du chat afin d'y 
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.warning.title"
 msgstr "La conversation peut contenir des informations sensibles"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.spoken_reply.label"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -6106,6 +6112,61 @@ msgstr "Tester le microphone"
 #: src/components/ui/Settings/MicTestPanel.tsx
 msgid "preferences.dialog.audio.test.stop"
 msgstr "Arrêter le test"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Utiliser le réglage de mon organisation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.locked"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.natural"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.precise"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.saveFailed"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

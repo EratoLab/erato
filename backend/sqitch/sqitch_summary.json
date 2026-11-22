@@ -72,7 +72,8 @@
     "deploy/0070_add_excel_and_powerpoint_created_via.sql",
     "deploy/0071_add_approval_speech_preferences.sql",
     "deploy/0072_add_wait_lines_preference.sql",
-    "deploy/0073_add_voice_decision_receipts.sql"
+    "deploy/0073_add_voice_decision_receipts.sql",
+    "deploy/0074_add_reply_speech_preference.sql"
   ],
-  "latest_change": "e97f4dc1d1d38a53215c01bf1e8bd8418c2e3d73"
+  "latest_change": "54701e62f34c1c075254a4154487bc8ab76f7a95"
 }

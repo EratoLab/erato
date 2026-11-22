@@ -7,6 +7,7 @@ pub mod config_facet_attrs;
 pub mod config_reference;
 pub mod confirmation_phrases;
 pub mod language_words;
+pub mod reply_speech;
 pub mod spoken;
 pub mod spoken_readings;
 pub mod startup_log;

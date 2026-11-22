@@ -11340,6 +11340,7 @@ async fn me_profile(
             preference_approval_speech_amount: None,
             preference_approval_speech_wording: None,
             preference_wait_lines_amount: None,
+            preference_reply_speech_wording: None,
         },
         oidc_token: TEST_JWT_TOKEN.to_string(),
         id_token_claims: json!({}),

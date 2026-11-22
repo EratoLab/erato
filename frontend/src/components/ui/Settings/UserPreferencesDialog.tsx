@@ -24,6 +24,7 @@ import {
 } from "@/lib/mcpAuthorization";
 import {
   useAssistantsFeature,
+  useAudioConversationalFeature,
   useAudioDictationFeature,
   useAudioTranscriptionFeature,
   useUserPreferencesFeature,
@@ -53,6 +54,7 @@ import {
 import { AppearanceTabContent } from "./AppearanceTabContent";
 import { AudioInputTabContent } from "./AudioInputTabContent";
 import { TextSizeSetting } from "./TextSizeSetting";
+import { VoiceOutputSetting } from "./VoiceOutputSetting";
 import { mcpAuthorizationToastKey } from "./mcpAuthorizationToasts";
 
 import type {
@@ -98,6 +100,10 @@ export function UserPreferencesDialog({
   } = useUserPreferencesFeature();
   const { enabled: audioTranscriptionEnabled } = useAudioTranscriptionFeature();
   const { enabled: audioDictationEnabled } = useAudioDictationFeature();
+  const { enabled: audioConversationalEnabled, speechEnabled } =
+    useAudioConversationalFeature();
+  const voiceOutputSettingsEnabled =
+    audioConversationalEnabled && Boolean(speechEnabled);
   const audioInputSettingsEnabled =
     audioTranscriptionEnabled || audioDictationEnabled;
   const defaultTab: PreferencesTab = personalizationEnabled
@@ -746,6 +752,9 @@ export function UserPreferencesDialog({
                 <AudioInputTabContent
                   isActive={isOpen && activeTab === "audio"}
                 />
+                {voiceOutputSettingsEnabled && isOpen ? (
+                  <VoiceOutputSetting />
+                ) : null}
               </section>
             ) : null}
 

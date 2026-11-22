@@ -504,6 +504,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         }
     }
 
@@ -850,6 +851,7 @@ mod tests {
             provenance: None,
             approval_speech: None,
             wait_lines: None,
+            reply_speech: None,
         };
         let policy = policy_with(
             vec![

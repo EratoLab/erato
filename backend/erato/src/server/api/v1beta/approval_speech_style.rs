@@ -111,18 +111,23 @@ pub async fn approval_speech_style(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<ApprovalSpeechStyleResponse>, StatusCode> {
+    Ok(Json(resolve_for(&app_state, &me_user).await))
+}
+
+/// The caller's reading style, read from the live experience policy.
+pub async fn resolve_for(app_state: &AppState, me_user: &MeProfile) -> ApprovalSpeechStyleResponse {
     let experience_policy = { app_state.reloadable.read().await.experience_policy.clone() };
-    let identity = AudienceIdentity::from_profile(&me_user);
+    let identity = AudienceIdentity::from_profile(me_user);
     let audiences = experience_policy
         .as_ref()
         .map(|policy| matching_audiences(policy, identity, Utc::now()))
         .unwrap_or_default();
-    Ok(Json(resolve(
+    resolve(
         &app_state.config.approval_speech,
         &audiences,
         me_user.preference_approval_speech_amount,
         me_user.preference_approval_speech_wording,
-    )))
+    )
 }
 
 #[cfg(test)]
