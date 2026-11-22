@@ -90,11 +90,15 @@ class MockMediaStreamTrack extends EventTarget {
     this.readyState = "ended";
   });
 
+  constructor(private readonly echoCancellation = false) {
+    super();
+  }
+
   getSettings() {
     return {
       autoGainControl: false,
       channelCount: 1,
-      echoCancellation: false,
+      echoCancellation: this.echoCancellation,
       noiseSuppression: false,
       sampleRate: 16000,
     };
@@ -102,7 +106,11 @@ class MockMediaStreamTrack extends EventTarget {
 }
 
 class MockMediaStream {
-  private readonly track = new MockMediaStreamTrack();
+  private readonly track: MockMediaStreamTrack;
+
+  constructor(echoCancellation = false) {
+    this.track = new MockMediaStreamTrack(echoCancellation);
+  }
 
   getTracks() {
     return [this.track];
@@ -1079,7 +1087,10 @@ describe("useAudioDictationRecorder over the voice", () => {
 
 describe("useAudioDictationRecorder: a conversation keeps its microphone open", () => {
   const RATE = 16000;
-  let getUserMedia: ReturnType<typeof vi.fn<() => Promise<MockMediaStream>>>;
+  type Constraints = { audio: { echoCancellation?: boolean } };
+  let getUserMedia: ReturnType<
+    typeof vi.fn<(constraints: Constraints) => Promise<MockMediaStream>>
+  >;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -1087,7 +1098,10 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     MockAudioWorkletNode.instances.length = 0;
     vadMock.engines.length = 0;
     vadMock.createRicky0123VadEngine.mockClear();
-    getUserMedia = vi.fn(async () => new MockMediaStream());
+    getUserMedia = vi.fn(
+      async (constraints: Constraints) =>
+        new MockMediaStream(constraints.audio.echoCancellation === true),
+    );
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia },
@@ -1276,27 +1290,131 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     expect((await track(0)).stop).toHaveBeenCalled();
   });
 
-  it("times first speech from the microphone's first sample, not from when the turn was asked for", async () => {
+  /** Ends the current turn while its connection still opens. */
+  async function endWhileConnecting(hook: ReturnType<typeof render>) {
+    act(() => {
+      emitAudioSamples(new Float32Array(RATE / 2).fill(0.2));
+      hearSpeech();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+  }
+
+  async function finishConnecting(hook: ReturnType<typeof render>) {
+    act(() => MockWebSocket.instances[0].emit("open"));
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual(
+        expect.objectContaining({ type: "start" }),
+      ),
+    );
+    act(() =>
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 30_000,
+      }),
+    );
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "finish",
+      }),
+    );
+    act(() => MockWebSocket.instances[0].emitJson({ type: "completed" }));
+    await waitFor(() =>
+      expect(hook.result.current.isDictationCompleting).toBe(false),
+    );
+  }
+
+  it("closes the microphone when audio mode ends while a turn's connection opens", async () => {
+    const hook = render();
+    await listen(hook);
+    await endWhileConnecting(hook);
+    hook.rerender({ conversation: false });
+    expect((await track(0)).stop).not.toHaveBeenCalled();
+
+    await finishConnecting(hook);
+    expect((await track(0)).stop).toHaveBeenCalled();
+  });
+
+  it("closes the microphone when the page is hidden while a turn's connection opens", async () => {
+    const hook = render();
+    await listen(hook);
+    await endWhileConnecting(hook);
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await finishConnecting(hook);
+    expect((await track(0)).stop).toHaveBeenCalled();
+  });
+
+  it("closes the microphone when a turn fails", async () => {
+    const hook = render();
+    await listen(hook);
+    act(() => {
+      emitAudioSamples(new Float32Array(RATE / 2).fill(0.2));
+      hearSpeech();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    act(() => {
+      MockWebSocket.instances[0].emitJson({ type: "error", code: "refused" });
+      MockWebSocket.instances[0].close();
+    });
+    await waitFor(() =>
+      expect(hook.result.current.dictationError).not.toBeNull(),
+    );
+    expect((await track(0)).stop).toHaveBeenCalled();
+
+    await listen(hook);
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens the microphone anew when the open one does not cancel the echo", async () => {
+    getUserMedia.mockImplementation(async () => new MockMediaStream(false));
+    const hook = render();
+    await listen(hook);
+    await cancel(hook);
+    expect((await track(0)).stop).toHaveBeenCalled();
+
+    await listen(hook);
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("never stamps first speech later than it was said, however late the audio reaches the page", async () => {
+    // The turn is asked for at 10 000 and the microphone captures from
+    // 10 050. The page only sees that audio at 10 600, and the detector's
+    // frames later still: what counts is when the words were captured.
     const now = vi.spyOn(Date, "now").mockReturnValue(10_000);
     const hook = render();
     await listen(hook);
+    const capturedFrom = 10_050;
 
-    // The first audio, 100 ms of it, arrives at 10 600: it began at 10 500,
-    // behind the 300 ms of silence the detector hears first.
     now.mockReturnValue(10_600);
     act(() => emitAudioSamples(new Float32Array(RATE / 10)));
+    now.mockReturnValue(10_900);
+    // The detector hears the 300 ms of silence first, then the microphone's
+    // audio; speech starts in the microphone's fourth frame.
+    const silenceFrames = 300 / 32;
     act(() => {
-      for (let frame = 0; frame < 12; frame += 1)
+      for (let frame = 0; frame < 14; frame += 1)
         vadMock.engines[0].emit({
           type: "frame",
           frame: { samples: new Float32Array(512), sampleRate: RATE },
-          probabilities: { isSpeech: frame < 11 ? 0 : 0.9, notSpeech: 0.1 },
+          probabilities: { isSpeech: frame < 13 ? 0 : 0.9, notSpeech: 0.1 },
         });
     });
+    const saidAt = capturedFrom + (13 - silenceFrames) * 32;
 
     const signals = hook.result.current.readRecordingSignals();
     expect(signals?.startedAt).toBe(10_000);
-    expect(signals?.firstSpeechAt).toBe(10_200 + 11 * 32);
+    expect(signals?.firstSpeechAt).not.toBeNull();
+    expect(signals?.firstSpeechAt ?? Infinity).toBeLessThanOrEqual(saidAt);
     now.mockRestore();
   });
 });

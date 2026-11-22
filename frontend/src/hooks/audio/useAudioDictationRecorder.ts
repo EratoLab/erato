@@ -334,6 +334,8 @@ export function useAudioDictationRecorder({
    * default; `undefined` after a fallback, so the next turn asks again.
    */
   const microphoneDeviceRef = useRef<string | undefined>(undefined);
+  /** The open microphone was asked to cancel the voice's echo. */
+  const microphoneEchoCancelledRef = useRef(false);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
   /**
    * In-flight WebSocket during the start handshake, before the
@@ -570,6 +572,18 @@ export function useAudioDictationRecorder({
     [isMounted, setDictationBarsThrottled],
   );
 
+  /**
+   * The conversation keeps this microphone for its next turn: live, heard,
+   * the page shown, and cancelling the voice's echo, which plays into it.
+   */
+  const keepsMicrophone = useCallback(
+    (stream: MediaStream) =>
+      keepMicrophoneRef.current &&
+      microphoneEchoCancelledRef.current &&
+      microphoneUsable(stream),
+    [],
+  );
+
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
     stopVadEngine();
@@ -580,13 +594,14 @@ export function useAudioDictationRecorder({
     unwatchCaptureTrack();
 
     const stream = mediaStreamRef.current;
-    if (stream && !(keepMicrophoneRef.current && microphoneUsable(stream))) {
+    if (stream && !keepsMicrophone(stream)) {
       stream.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
     stopRecordingVisualizer();
   }, [
     clearRecordingDurationTimer,
+    keepsMicrophone,
     stopRecordingVisualizer,
     stopVadEngine,
     unwatchCaptureTrack,
@@ -1192,6 +1207,8 @@ export function useAudioDictationRecorder({
 
       const openMicrophone = async (): Promise<MediaStream> => {
         microphoneDeviceRef.current = selectedAudioInputDeviceId;
+        microphoneEchoCancelledRef.current =
+          baseAudioConstraints.echoCancellation === true;
         try {
           return await requestAudioStream(mediaDevices, {
             audio: selectedAudioInputDeviceId
@@ -1225,8 +1242,7 @@ export function useAudioDictationRecorder({
         let stream: MediaStream;
         if (
           kept &&
-          keepMicrophone &&
-          microphoneUsable(kept) &&
+          keepsMicrophone(kept) &&
           microphoneDeviceRef.current === selectedAudioInputDeviceId
         ) {
           stream = kept;
@@ -1334,20 +1350,19 @@ export function useAudioDictationRecorder({
             sampleRate: audioContext.sampleRate,
             engine: getAudioEnvironment().engine,
           });
-          const primerMs = (primerSampleCount / audioContext.sampleRate) * 1000;
-          let audioArrived = false;
+          // The first sample was captured no earlier than the recording was
+          // asked for, less what the device still held then. Timed from that
+          // bound, a first speech is never stamped later than it was said:
+          // too early costs a "say again", too late could take the voice's
+          // echo for the user.
+          const asked = recordingSignalsRef.current;
+          recordingSignalsRef.current = audioFrom(
+            asked,
+            asked.startedAt - inputLatencyMs(trackSettings),
+            (primerSampleCount / audioContext.sampleRate) * 1000,
+          );
           processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
             const input = event.data;
-            if (!audioArrived) {
-              audioArrived = true;
-              const signals = recordingSignalsRef.current;
-              if (signals)
-                recordingSignalsRef.current = audioFrom(
-                  signals,
-                  Date.now() - (input.length / audioContext.sampleRate) * 1000,
-                  primerMs,
-                );
-            }
             const gate = gateRef.current;
             const detector = gate?.catchingUp ? null : vadEngineRef.current;
             const vadFrame = detector ? new Float32Array(input) : null;
@@ -1775,8 +1790,18 @@ export function useAudioDictationRecorder({
             preDroppedRef.current = 0;
             vadEngineRef.current?.reset?.();
             // Nothing was said over the voice: the recording counts as one
-            // that opened after it, and may approve by voice.
-            recordingSignalsRef.current = recordingSignals(Date.now(), false);
+            // that opened after it, and may approve by voice. The detector
+            // still judges audio from before now: what it was handed, what
+            // the worklet holds, and what the device holds.
+            const releasedAt = Date.now();
+            const unjudged = gate ? Math.max(0, gate.fed - gate.judged) : 0;
+            recordingSignalsRef.current = audioFrom(
+              recordingSignals(releasedAt, false),
+              releasedAt -
+                ((unjudged + WORKLET_FRAME_SAMPLES) / sourceSampleRate) * 1000 -
+                inputLatencyMs(trackSettings),
+              0,
+            );
             if (gate) {
               gate.speaking = false;
               gate.realStarted = false;
@@ -1875,6 +1900,9 @@ export function useAudioDictationRecorder({
         closeQuietly(liveSessionRef.current?.socket);
         liveSessionRef.current = null;
         tearDownCaptureGraph();
+        // A cancelled turn keeps the conversation's microphone; a failed one
+        // does not.
+        if (!isAbort(error) && !sessionAbort.signal.aborted) closeMicrophone();
         if (isMounted()) {
           dispatchSession({ type: "abort" });
           // A cancel while starting or waiting for speech is no failure.
@@ -1888,6 +1916,10 @@ export function useAudioDictationRecorder({
         }
       } finally {
         startInFlightRef.current = false;
+        // The turn may have ended while it started, and audio mode or the
+        // page gone meanwhile: nothing closed the microphone then.
+        const stream = mediaStreamRef.current;
+        if (stream && !keepsMicrophone(stream)) closeIdleMicrophone();
         if (sessionAbortRef.current === sessionAbort) {
           sessionAbortRef.current = null;
         }
@@ -1903,11 +1935,13 @@ export function useAudioDictationRecorder({
     },
     [
       clearRecordingDurationTimer,
+      closeIdleMicrophone,
       closeMicrophone,
       closeQuietly,
       completeDictation,
       cutAtPause,
       enabled,
+      keepsMicrophone,
       endOfTurnSilenceMs,
       ensureAudioContextReady,
       minSpeechMs,
@@ -2002,14 +2036,35 @@ export function useAudioDictationRecorder({
   };
 }
 
-/** A microphone kept open can serve the next turn: live, heard, page shown. */
+/** The dictation worklet posts audio in frames of this many samples. */
+const WORKLET_FRAME_SAMPLES = 4096;
+/**
+ * Input latency counted at least, as on Bluetooth's call profile: browsers
+ * often report less than the device holds, or nothing.
+ */
+const MIN_INPUT_LATENCY_MS = 150;
+
+/** How long the device may hold audio before the page sees it, at least. */
+function inputLatencyMs(settings: MediaTrackSettings): number {
+  const latency = (settings as { latency?: unknown }).latency;
+  return typeof latency === "number" && Number.isFinite(latency)
+    ? Math.max(latency * 1000, MIN_INPUT_LATENCY_MS)
+    : MIN_INPUT_LATENCY_MS;
+}
+
+/** The microphone is live, heard, cancels echo, and the page is shown. */
 function microphoneUsable(stream: MediaStream): boolean {
   if (typeof document !== "undefined" && document.visibilityState === "hidden")
     return false;
   const tracks = stream.getAudioTracks();
   return (
     tracks.length > 0 &&
-    tracks.every((track) => track.readyState === "live" && !track.muted)
+    tracks.every(
+      (track) =>
+        track.readyState === "live" &&
+        !track.muted &&
+        track.getSettings().echoCancellation !== false,
+    )
   );
 }
 
