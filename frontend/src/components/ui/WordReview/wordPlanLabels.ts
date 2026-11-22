@@ -2,6 +2,7 @@ import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 
 import { editExcerpt } from "@/lib/wordReview/wordEditPlan";
+import { MAX_NOT_IN_PROPOSAL_NAMES } from "@/lib/wordReview/wordHistory";
 import {
   pointsToCentimeters,
   pointsToMillimeters,
@@ -269,6 +270,34 @@ export function formatList(
     style: type === "unit" ? "short" : "long",
     type,
   }).format(parts);
+}
+
+/** The one line for whatever a proposal leaves as it was, by the parts' own names; an empty name
+ * stands for a part without text. The user asks for them in the next message. */
+export function wordNotChangedText(names: readonly string[]): string {
+  const listed = formatList(
+    names.slice(0, MAX_NOT_IN_PROPOSAL_NAMES).map(
+      (name) =>
+        name ||
+        t({
+          id: "officeAddin.word.proposal.notInProposalNoText",
+          message: "a part without text",
+        }),
+    ),
+  );
+  const more = names.length - MAX_NOT_IN_PROPOSAL_NAMES;
+  return more > 0
+    ? t({
+        id: "officeAddin.word.notChanged.more",
+        message: plural(more, {
+          one: `Not changed: ${listed} and # more. Ask for them in your next message.`,
+          other: `Not changed: ${listed} and # more. Ask for them in your next message.`,
+        }),
+      })
+    : t({
+        id: "officeAddin.word.notChanged",
+        message: `Not changed: ${listed}. Ask for them in your next message.`,
+      });
 }
 
 export function emptyPartLabel(): string {

@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -569,5 +569,166 @@ describe("Trace — long thinking", () => {
     expect(
       screen.queryByTestId("trace-step-live-window"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("Trace — a submission written in parts", () => {
+  const PART = { tries_remaining: 2, calls_remaining: 30 };
+  const call = (
+    id: string,
+    name: string,
+    status: "success" | "error" | "preparing",
+    output: Record<string, unknown> | null,
+    extra: Record<string, unknown> = {},
+  ): ContentPart =>
+    ({
+      content_type: "tool_use",
+      status,
+      tool_call_id: id,
+      tool_name: name,
+      input: {},
+      output,
+      progress_message: null,
+      started_at: null,
+      ended_at: null,
+      ...extra,
+    }) as unknown as ContentPart;
+  const read = (id: string) =>
+    call(id, "read_pages", "success", { status: "success", result: {} });
+  const plan = call("plan", "plan_sections", "success", {
+    status: "success",
+    result: { draft_id: "d" },
+    part: PART,
+  });
+  const redone = call("part-2a", "write_section", "error", {
+    status: "error",
+    validation_errors: [
+      { path: "/ops", code: "numbers", message: "A number changed." },
+    ],
+    part: PART,
+  });
+  const written = (id: string) =>
+    call(id, "write_section", "success", {
+      status: "success",
+      result: {},
+      part: PART,
+    });
+  const finish = call("finish", "submit_draft", "success", {
+    status: "success",
+    result: {},
+    submission: { status: "accepted", attempts_remaining: 4 },
+    submission_outcome: {
+      status: "accepted",
+      attempts_used: 1,
+      max_attempts: 5,
+    },
+  });
+  const step = () => screen.getByTestId("trace-submission-step");
+
+  beforeEach(() => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+  });
+
+  it("shows the reads and parts as one step, with no red row for a part sent again", () => {
+    const { container } = renderTrace([
+      reasoningPart("**Reading**\n\nThe whole contract first."),
+      read("read-1"),
+      read("read-2"),
+      plan,
+      redone,
+      written("part-2b"),
+      read("read-3"),
+      written("part-3"),
+      finish,
+    ]);
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(step()).toHaveAttribute("data-step-status", "done");
+    expect(screen.getByText("Writing the changes")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(container.querySelector(".bg-theme-error-bg")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-tool-status='error']"),
+    ).toHaveLength(0);
+    expect(
+      container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(7);
+    for (const row of container.querySelectorAll(
+      "[data-testid='tool-call-item']",
+    ))
+      expect(step()).toContainElement(row as HTMLElement);
+  });
+
+  it("says Failed on the step for a real end failure, with only the call that ended it inside", () => {
+    const ended = call("part-3", "write_section", "error", {
+      status: "cancelled",
+      reason: "timeout",
+      part: { tries_remaining: 2, calls_remaining: 28 },
+      submission_outcome: {
+        status: "unresolved",
+        reason: "timeout",
+        attempts_used: 0,
+        max_attempts: 5,
+      },
+    });
+    const { container } = renderTrace([
+      read("read-1"),
+      plan,
+      redone,
+      written("part-2b"),
+      ended,
+    ]);
+    expect(step()).toHaveAttribute("data-step-status", "error");
+    expect(
+      screen.getByRole("button", { name: /Writing the changes/ }),
+    ).toHaveTextContent("Failed");
+    const failed = container.querySelectorAll("[data-tool-status='error']");
+    expect(failed).toHaveLength(1);
+    expect(step()).toContainElement(failed[0] as HTMLElement);
+  });
+
+  it("takes in the part Erato is still writing, and runs while the turn does", () => {
+    renderTrace(
+      [
+        read("read-1"),
+        plan,
+        written("part-2"),
+        call("part-3", "write_section", "preparing", null),
+      ],
+      { isStreaming: true },
+    );
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    expect(step()).toHaveAttribute("data-step-status", "running");
+    expect(screen.getByText("Running")).toBeInTheDocument();
+  });
+
+  it("leaves another server's call and a submission without parts as rows of their own", () => {
+    const { container } = renderTrace([
+      call(
+        "ticket",
+        "create_ticket",
+        "success",
+        { status: "success" },
+        { display: { title: "Create ticket", server_name: "Tracker" } },
+      ),
+      read("read-1"),
+      plan,
+      written("part-2"),
+      finish,
+    ]);
+    const group = step();
+    expect(group.querySelector("[data-tool-name='create_ticket']")).toBeNull();
+    expect(
+      container.querySelector("[data-tool-name='create_ticket']"),
+    ).not.toBeNull();
+    cleanup();
+
+    const small = renderTrace([read("read-1"), finish]);
+    expect(screen.queryByTestId("trace-submission-step")).toBeNull();
+    expect(
+      small.container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(2);
   });
 });

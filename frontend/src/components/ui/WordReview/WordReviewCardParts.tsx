@@ -101,7 +101,11 @@ export function WordReviewCard({
       aria-label={label}
       className="word-review focus-ring"
       data-testid={testId}
-      footer={<div className="word-review__footer">{footer}</div>}
+      footer={
+        footer == null ? undefined : (
+          <div className="word-review__footer">{footer}</div>
+        )
+      }
     >
       {collapsed && receipt}
       <div id={detailsId} hidden={collapsed}>

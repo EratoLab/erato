@@ -7,7 +7,8 @@ export {
 export { WordDocumentPlanReview } from "./WordDocumentPlanReview";
 export {
   WordPartsReview,
-  type WordPartsLeftOut,
+  wordPartsPlanningText,
+  wordPartsReorderingText,
   type WordPartsReviewProps,
 } from "./WordPartsReview";
 export {

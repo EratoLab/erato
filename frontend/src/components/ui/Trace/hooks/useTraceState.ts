@@ -1,4 +1,5 @@
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { submissionEnd } from "@/lib/trace/submissionSteps";
 
 import type { LogicalStep, TraceStepStatus } from "../types";
 
@@ -54,6 +55,23 @@ export const stepStatus = (
     // such writer left the call was abandoned mid-flight, and calling that
     // `done` would put a green check on a call that never returned.
     return isChatBusy ? "done" : "interrupted";
+  }
+  if (step.kind === "submission") {
+    // Only how the step ended is the step's outcome; a part sent again is no failure.
+    const end = submissionEnd(step.calls);
+    if (end === "unresolved") return "error";
+    if (end === "accepted") return "done";
+    const unfinished = step.calls.filter(
+      (call) => call.status !== "success" && call.status !== "error",
+    );
+    if (
+      waitingToolCallId !== undefined &&
+      unfinished.some((call) => call.tool_call_id === waitingToolCallId)
+    )
+      return "waiting";
+    if (isTraceActive) return "running";
+    if (unfinished.length > 0) return isChatBusy ? "done" : "interrupted";
+    return "done";
   }
   // reasoning
   return isLastStep && isTraceActive ? "running" : "done";

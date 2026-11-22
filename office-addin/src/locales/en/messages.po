@@ -5329,11 +5329,6 @@ msgstr "This change needs a full-document rewrite, which Erato can't verify on W
 #~ msgstr "Page width"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.applyLater"
-msgstr "You can apply the change once Erato has finished."
-
-#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.parts.consent"
 msgstr "Apply the changes reviewed below?"
@@ -5511,6 +5506,11 @@ msgstr "Applied. Erato couldn't list the document's comments afterwards, so chec
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Applied: {title}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.planReceipt.proposed"
+msgstr "Proposed: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx

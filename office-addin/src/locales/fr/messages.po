@@ -5329,11 +5329,6 @@ msgstr "Cette modification nécessite de réécrire tout le document, ce qu’Er
 #~ msgstr "Largeur de page"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.applyLater"
-msgstr "Vous pourrez appliquer la modification dès qu’Erato aura terminé."
-
-#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.parts.consent"
 msgstr "Appliquer les modifications vérifiées ci-dessous ?"
@@ -5511,6 +5506,11 @@ msgstr "Appliqué. Erato n'a pas pu lister ensuite les commentaires du document 
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Appliqué : {title}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.planReceipt.proposed"
+msgstr "Proposé : {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx

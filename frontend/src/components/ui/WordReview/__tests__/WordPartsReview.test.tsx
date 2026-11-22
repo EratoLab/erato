@@ -5,7 +5,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
@@ -58,7 +58,6 @@ const finished: WordPartsProgress = {
     merges: [{ row: 6, title: "§ 7 Haftung, § 9 Schluss" }],
     renames: [{ row: 3, title: "§ 6 Lagerung", newTitle: "§ 4 Lagerung" }],
   },
-  finishing: false,
   finished: "finish",
   stopped: false,
 };
@@ -83,97 +82,79 @@ const row = (name: string) =>
 
 afterEach(cleanup);
 
+const line = () => screen.getByTestId("word-plan-not-changed");
+
 describe("the rows of a change in parts", () => {
-  it("names each row by its own title, with the structure, gaps and states, nothing red", () => {
+  it("marks each row by its own title as ready, not changed or removed, with one line for what stays, nothing red", () => {
     const { container } = render(
       <WordPartsReview
         progress={finished}
         title="Changes in 5 sections"
         changes={new Map([[2, [change]]])}
-        leftOut={{ rows: new Set(), structure: false }}
-        onLeaveOut={vi.fn()}
       />,
       { wrapper },
     );
     expect(screen.getByText("2 of 4 sections ready")).toBeInTheDocument();
-    expect(row("Structure")).toHaveTextContent(
-      "Structure1 move, 1 merge, 1 renamed headingReady",
-    );
-    expect(row("§ 5 Abnahme")).toHaveTextContent(
-      "Changed in Word while Erato wrote itLeft out",
-    );
-    expect(row("§ 11 Gewährleistung")).toHaveTextContent("Not written");
-    expect(row("§ 12 Sonstiges")).toHaveTextContent("Removed");
     expect(
-      screen.getByText(
-        "Erato didn't get to § 11 Gewährleistung. Apply the rest, then ask Erato to write the missing sections.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Apply the rest, then ask Erato to redo § 5 Abnahme."),
-    ).toBeInTheDocument();
+      within(screen.getByRole("list", { name: "Sections" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "§ 3 LieferungReady",
+      "§ 5 AbnahmeNot changed",
+      "§ 7 Haftung, § 9 SchlussReady",
+      "§ 11 GewährleistungNot changed",
+      "§ 12 SonstigesRemoved",
+    ]);
+    expect(line()).toHaveTextContent(
+      "Not changed: § 5 Abnahme (changed in Word), § 11 Gewährleistung. Ask for them in your next message.",
+    );
     expect(container.querySelector(".bg-theme-error-bg")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /Write the missing|Redo/ }),
+      screen.queryByRole("button", {
+        name: /Leave out|Include|Redo|Write the missing|reordering/,
+      }),
     ).toBeNull();
-
-    fireEvent.click(within(row("Structure")).getByRole("button"));
-    expect(row("Structure")).toHaveTextContent(
-      "§ 6 Lagerung now comes after § 3 Lieferung.",
-    );
-    expect(row("Structure")).toHaveTextContent(
-      "Merged into one section: § 7 Haftung, § 9 Schluss.",
-    );
-    expect(row("Structure")).toHaveTextContent(
-      "§ 6 Lagerung is renamed § 4 Lagerung.",
-    );
+    expect(within(row("§ 5 Abnahme")).queryByRole("button")).toBeNull();
     fireEvent.click(within(row("§ 3 Lieferung")).getByRole("button"));
     expect(row("§ 3 Lieferung")).toHaveTextContent(
       "Lieferung innerhalb von 14 Tagen.",
     );
   });
 
-  it("leaves rows and the reordering out, with the merged rows going along", () => {
-    const onLeaveOut = vi.fn();
-    const { rerender } = render(
+  it("shows only the intent, the count and each title marked writing or ready while Erato writes", () => {
+    render(
       <WordPartsReview
-        progress={finished}
-        title="Changes"
-        leftOut={{ rows: new Set(), structure: false }}
-        onLeaveOut={onLeaveOut}
+        progress={{
+          ...finished,
+          finished: undefined,
+          rows: [
+            finished.rows[0],
+            { ...finished.rows[2], state: "writing" },
+            { ...finished.rows[3], state: "writing" },
+          ],
+        }}
+        title="Writing the changes"
       />,
       { wrapper },
     );
-    fireEvent.click(within(row("Structure")).getByRole("button"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Leave out the reordering" }),
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "1 of 3 sections ready",
     );
-    expect(onLeaveOut).toHaveBeenLastCalledWith("structure", true);
-    fireEvent.click(within(row("§ 12 Sonstiges")).getByRole("button"));
-    fireEvent.click(
-      within(row("§ 12 Sonstiges")).getByRole("button", { name: "Leave out" }),
-    );
-    expect(onLeaveOut).toHaveBeenLastCalledWith(8, true);
-
-    rerender(
-      <WordPartsReview
-        progress={finished}
-        title="Changes"
-        leftOut={{ rows: new Set([8]), structure: true }}
-        onLeaveOut={onLeaveOut}
-      />,
-    );
-    expect(row("Structure")).toHaveTextContent("Left out");
-    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
-      "Left out with the reorderingLeft out",
-    );
-    expect(row("§ 12 Sonstiges")).toHaveTextContent("Left out");
-    fireEvent.click(
-      within(row("§ 12 Sonstiges")).getByRole("button", {
-        name: "Include again",
-      }),
-    );
-    expect(onLeaveOut).toHaveBeenLastCalledWith(8, false);
+    expect(
+      screen.getByText("Plain wording; § 4 and § 6 swap places."),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("list", { name: "Sections" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "§ 3 LieferungReady",
+      "§ 7 Haftung, § 9 SchlussWriting…",
+      "§ 11 GewährleistungWriting…",
+    ]);
+    expect(screen.queryByTestId("word-plan-not-changed")).toBeNull();
+    expect(screen.queryByText("Structure")).toBeNull();
   });
 
   it("puts Check first above the Apply on top, and a risk without a row as plain text", () => {
@@ -217,7 +198,7 @@ describe("the rows of a change in parts", () => {
     );
   });
 
-  it("counts nothing as ready once Erato stopped, and shows written rows as written", () => {
+  it("counts and marks nothing once Erato stopped", () => {
     const { container } = render(
       <WordPartsReview
         progress={{
@@ -234,39 +215,32 @@ describe("the rows of a change in parts", () => {
       { wrapper },
     );
     expect(screen.queryByRole("status")).toBeNull();
-    expect(row("§ 3 Lieferung")).toHaveTextContent("Written");
+    expect(row("§ 3 Lieferung").textContent).toBe("§ 3 Lieferung");
     expect(container.querySelector(".bg-theme-success-bg")).toBeNull();
-    expect(
-      screen.getByText("Erato didn't get to § 11 Gewährleistung."),
-    ).toBeInTheDocument();
+    expect(screen.queryByTestId("word-plan-not-changed")).toBeNull();
   });
 
-  it("shows the reordering the finish left out as left out for good, with the step", () => {
+  it("names the order of the sections and the merge the finish left out, once, in the same line", () => {
     render(
       <WordPartsReview
         progress={{ ...finished, reorderingLeftOut: "changed_in_word" }}
         title="Changes"
-        leftOut={{ rows: new Set(), structure: false }}
-        onLeaveOut={vi.fn()}
+        notChanged={[
+          "§ 5 Abnahme",
+          "§ 1 Gegenstand",
+          "§ 2 Begriffe",
+          "§ 13 Geheimhaltung",
+        ]}
       />,
       { wrapper },
     );
-    expect(row("Structure")).toHaveTextContent(
-      "Reordering replaces the whole document, which changed in Word meanwhileLeft out",
+    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent("Not changed");
+    expect(line()).toHaveTextContent(
+      "Not changed: the order of the sections (changed in Word), § 5 Abnahme (changed in Word), § 7 Haftung, § 9 Schluss, § 11 Gewährleistung, § 1 Gegenstand and 2 more. Ask for them in your next message.",
     );
-    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
-      "Left out with the reordering",
-    );
-    fireEvent.click(within(row("Structure")).getByRole("button"));
-    expect(screen.queryByRole("button", { name: /reordering/ })).toBeNull();
-    expect(
-      screen.getByText(
-        "Apply the rest, then ask Erato to reorder the sections again.",
-      ),
-    ).toBeInTheDocument();
   });
 
-  it("says a row the checks left out stays as it is, and to redo it after Apply", () => {
+  it("names a row the checks refused without a reason, and adds parts the proposal names besides", () => {
     render(
       <WordPartsReview
         progress={{
@@ -278,43 +252,15 @@ describe("the rows of a change in parts", () => {
           ],
         }}
         title="Changes"
-        leftOut={{ rows: new Set(), structure: false }}
-        onLeaveOut={vi.fn()}
+        notChanged={["§ 7 Haftung, § 9 Schluss", "§ 1 Gegenstand"]}
       />,
       { wrapper },
     );
     expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
-      "Erato's new text didn't pass the checks, so the section stays as it isLeft out",
+      "§ 7 Haftung, § 9 SchlussNot changed",
     );
-    expect(
-      within(row("§ 7 Haftung, § 9 Schluss")).queryByRole("button"),
-    ).toBeNull();
-    expect(
-      screen.getByText(
-        "Apply the rest, then ask Erato to redo § 7 Haftung, § 9 Schluss.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/didn't get to/)).toBeNull();
-  });
-
-  it("offers the follow-up actions only through their hooks", () => {
-    const onRedo = vi.fn();
-    const onWriteMissing = vi.fn();
-    render(
-      <WordPartsReview
-        progress={finished}
-        title="Changes"
-        onRedo={onRedo}
-        onWriteMissing={onWriteMissing}
-      />,
-      { wrapper },
+    expect(line()).toHaveTextContent(
+      "Not changed: § 7 Haftung, § 9 Schluss, § 1 Gegenstand. Ask for them in your next message.",
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Write the missing sections" }),
-    );
-    expect(onWriteMissing).toHaveBeenCalledOnce();
-    fireEvent.click(within(row("§ 5 Abnahme")).getByRole("button"));
-    fireEvent.click(screen.getByRole("button", { name: "Redo § 5 Abnahme" }));
-    expect(onRedo).toHaveBeenCalledWith(finished.rows[1]);
   });
 });

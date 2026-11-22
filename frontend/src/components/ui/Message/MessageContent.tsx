@@ -2057,7 +2057,7 @@ export const MessageContent = memo(function MessageContent({
       (part) =>
         part.content_type === "tool_use" &&
         part.tool_call_id === submittedCard.toolCallId &&
-        part.status === "success",
+        (submittedCard.pending === true || part.status === "success"),
     );
 
   const traceDurationMs = React.useMemo(
@@ -2123,8 +2123,9 @@ export const MessageContent = memo(function MessageContent({
           // (text/image) content exists below it.
           const lastTracePartIndex =
             cluster.startIndex + cluster.parts.length - 1;
+          // A card shown while the message streams follows the work the trace still does.
           const hasLaterContent =
-            !!hasSubmittedCard ||
+            (!!hasSubmittedCard && !isStreaming) ||
             foldsWordPlan ||
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 

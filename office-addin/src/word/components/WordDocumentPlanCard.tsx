@@ -8,6 +8,7 @@ import {
   useHostArtifact,
   useWordMessageLineage,
   WordPartsReview,
+  wordPartsReorderingText,
   WordProposalCard,
   WordReviewGenerating,
   WordUndoLine,
@@ -21,6 +22,7 @@ import {
   parseWordDocumentPlan,
   validateWordDocumentPlan,
   wordHistoryProposal,
+  wordPartsReorders,
   wordPlanNotInProposal,
 } from "@erato/frontend/word-review";
 import { t } from "@lingui/core/macro";
@@ -131,16 +133,10 @@ import type {
 import type { WordCoauthoringState } from "../utils/wordCoauthoring";
 import type { WordInPlaceBackup } from "../utils/wordDocumentPackage";
 import type { WordWholeDocumentWrite } from "../utils/wordInPlaceRoute";
-import type { WordReviewState } from "../utils/wordReviewState";
 import type {
   WordDocumentPlan,
   WordPlanCommentThread,
 } from "@erato/frontend/word-review";
-
-const NOTHING_LEFT_OUT: NonNullable<WordReviewState["partsLeftOut"]> = {
-  rows: [],
-  structure: false,
-};
 
 function coauthorNotice(
   state: WordCoauthoringState | undefined,
@@ -199,32 +195,22 @@ export function WordDocumentPlanCard({
     [lineage],
   );
   const shown = liveMatches ? snapshot : (history?.snapshot ?? snapshot);
-  const acceptedPlan = useMemo(
+  const plan = useMemo(
     () =>
       history?.snapshot
         ? history.plan
         : parsed && normalizeWordDocumentPlan(parsed, shown),
     [history, parsed, shown],
   );
-  const leftOut = review.partsLeftOut ?? NOTHING_LEFT_OUT;
   const parts = useWordPlanParts({
-    content,
     messageContent: lineage.at(-1)?.content,
     snapshot: shown,
-    live: liveMatches,
-    leftOut,
   });
-  // What Apply writes: the accepted plan, or with the rows the user left out as they were.
-  const applied = parts?.applied ?? content;
-  const plan = useMemo(() => {
-    const changed = parts?.applied && parseWordDocumentPlan(parts.applied);
-    return changed ? normalizeWordDocumentPlan(changed, shown) : acceptedPlan;
-  }, [parts?.applied, shown, acceptedPlan]);
   const planReview = useMemo(
     () => plan && buildWordPlanReview(plan, shown),
     [plan, shown],
   );
-  // Rows and Check first both read the review of what Apply writes, so a jump finds its row.
+  // Rows and Check first both read the review of the plan, so a jump finds its row.
   const partsChanges = useMemo(
     () => wordPartsChangesByRow(planReview, parts?.sectionRowOf),
     [planReview, parts?.sectionRowOf],
@@ -341,6 +327,11 @@ export function WordDocumentPlanCard({
     replacedRoute === "import" || replacedRoute === "body"
       ? replacedRoute
       : undefined;
+  // A change in parts that moves sections says once what replacing the whole document means.
+  const reorderingText =
+    parts && replaces && wordPartsReorders(parts.progress)
+      ? wordPartsReorderingText()
+      : undefined;
   // Word for Mac reports Word.Coauthoring too, but its P-D-COAUTH run has not completed.
   const checkCoauthors =
     wordApplyHost(wordHostPlatform()) === "pc" && !!replaces;
@@ -383,7 +374,7 @@ export function WordDocumentPlanCard({
       });
       try {
         const outcome = await entry.execute({
-          fenceContent: applied,
+          fenceContent: content,
           capture,
           messageId,
           onStage: (applyStage) => host.updateReview(key, { applyStage }),
@@ -488,7 +479,7 @@ export function WordDocumentPlanCard({
       host,
       key,
       entry,
-      applied,
+      content,
       messageId,
       artifact,
       decisions,
@@ -712,7 +703,12 @@ export function WordDocumentPlanCard({
     host.updateReview(key, { status: "denied", capture });
   };
   const completed = ["done", "denied", "reverted"].includes(review.status);
-  const collapsed = completed && !review.detailsExpanded;
+  // The document copy the plan was written against is gone (the pane reloaded, or a later request
+  // took a new one), so the card has no Apply and folds like every card but the newest proposal.
+  const expired =
+    !snapshot || snapshot.ownerMessageId !== messageId || issue === "expired";
+  const folds = completed || (idle && !generating && expired);
+  const collapsed = folds && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
   // Only the Apply's own result: a later Revert attempt replaces the diagnostic.
   const applyStopped =
@@ -855,43 +851,19 @@ export function WordDocumentPlanCard({
               else cannotLocate();
             }
           : undefined;
-  // Rows the parts card names on their own are not repeated in the left-out line.
-  const shownGaps = new Set(
-    parts?.progress.rows.flatMap((row) =>
-      row.state === "not-written" ||
-      row.state === "changed-in-word" ||
-      row.state === "left-out"
-        ? [row.title]
-        : [],
-    ),
-  );
-  // A stored whole-document block or refusal was for the plan before; the route is worked out anew.
-  const leaveOut = (target: number | "structure", out: boolean) =>
-    host.updateReview(key, {
-      wholeDocumentBlock: undefined,
-      wholeDocumentRefusal: undefined,
-      partsLeftOut:
-        target === "structure"
-          ? { ...leftOut, structure: out }
-          : {
-              ...leftOut,
-              rows: out
-                ? [...new Set([...leftOut.rows, target])]
-                : leftOut.rows.filter((row) => row !== target),
-            },
-    });
   const applyControl = refusal ? (
     idle && <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
-  ) : confirmImport && (idle || applying) ? (
+  ) : expired && idle ? null : confirmImport && (idle || applying) ? (
     <WordImportConfirm
       key={key}
       routeText={
-        block
+        reorderingText ??
+        (block
           ? wordRoutePreviewText(
               wordWholeDocumentBlockRoute(block),
               wordPlanPassages(plan),
             )
-          : routePreview
+          : routePreview)
       }
       web={web}
       notice={coauthorsNotice}
@@ -944,7 +916,7 @@ export function WordDocumentPlanCard({
       onConfirmedChange={(checked) =>
         setCommentsTicked(checked ? commentPlan?.fingerprint : undefined)
       }
-      routeText={routePreview}
+      routeText={reorderingText ?? routePreview}
       notice={coauthorsNotice}
       applyLabel={applyLabel}
       canApply={ready && !host.operationInProgress}
@@ -963,7 +935,7 @@ export function WordDocumentPlanCard({
     <>
       {routePreview && idle && offered && (
         <p className="word-review__hint" data-testid="word-plan-route">
-          {routePreview}
+          {reorderingText ?? routePreview}
         </p>
       )}
       {(idle || applying) && offered && coauthorsNotice}
@@ -1058,7 +1030,7 @@ export function WordDocumentPlanCard({
       snapshot={shown}
       review={planReview}
       showSavedPlan={!!artifact?.submittedCard}
-      notInProposal={notInProposal.filter((name) => !shownGaps.has(name))}
+      notInProposal={parts ? undefined : notInProposal}
       body={
         parts && (
           <WordPartsReview
@@ -1077,24 +1049,17 @@ export function WordDocumentPlanCard({
             onLocate={shown ? locateSource : undefined}
             locatable={planReview.locatable}
             checkInWord={planReview.checkInWord}
-            leftOut={{
-              rows: new Set(leftOut.rows),
-              structure: leftOut.structure,
-            }}
-            onLeaveOut={
-              parts.editable && idle && offered && !generating
-                ? leaveOut
-                : undefined
-            }
+            notChanged={notInProposal}
           />
         )
       }
       adapter={{
         locate: locateSource,
         apply: applyControl,
+        // A change in parts offers only Apply and Undo; Word's own Undo and Compare do the rest.
         actions: (
           <>
-            {snapshot && (
+            {snapshot && !parts && (
               <Button
                 type="button"
                 variant="secondary"
@@ -1118,7 +1083,7 @@ export function WordDocumentPlanCard({
                 })}
               </Button>
             )}
-            {adjustedOutcome && (
+            {adjustedOutcome && !parts && (
               <Button
                 type="button"
                 variant="secondary"
@@ -1145,24 +1110,26 @@ export function WordDocumentPlanCard({
                 })}
               </Button>
             )}
-            {review.status === "done" && writtenRegions.length > 0 && (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={host.operationInProgress}
-                onClick={() =>
-                  void showWritten(
-                    writtenRegions[0],
-                    written?.mechanism === "tracked",
-                  )
-                }
-              >
-                {t({
-                  id: "officeAddin.word.authoring.showChanges",
-                  message: "Show changes in Word",
-                })}
-              </Button>
-            )}
+            {review.status === "done" &&
+              writtenRegions.length > 0 &&
+              !parts && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={host.operationInProgress}
+                  onClick={() =>
+                    void showWritten(
+                      writtenRegions[0],
+                      written?.mechanism === "tracked",
+                    )
+                  }
+                >
+                  {t({
+                    id: "officeAddin.word.authoring.showChanges",
+                    message: "Show changes in Word",
+                  })}
+                </Button>
+              )}
             {recoverySlot &&
               (review.status !== "done" ||
                 review.documentPlanStatus === "revert-stale") && (
@@ -1259,7 +1226,7 @@ export function WordDocumentPlanCard({
         ),
         status: {
           collapsed,
-          onToggleDetails: completed
+          onToggleDetails: folds
             ? () => host.updateReview(key, { detailsExpanded: collapsed })
             : undefined,
           receipt: (

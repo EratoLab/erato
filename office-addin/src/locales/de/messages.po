@@ -5329,11 +5329,6 @@ msgstr "Diese Änderung erfordert eine Neufassung des gesamten Dokuments, die Er
 #~ msgstr "Seitenbreite"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.applyLater"
-msgstr "Sie können die Änderung übernehmen, sobald Erato fertig ist."
-
-#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.parts.consent"
 msgstr "Die unten geprüften Änderungen übernehmen?"
@@ -5511,6 +5506,11 @@ msgstr "Angewendet. Erato konnte die Kommentare des Dokuments danach nicht aufli
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Angewendet: {title}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.planReceipt.proposed"
+msgstr "Vorgeschlagen: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx

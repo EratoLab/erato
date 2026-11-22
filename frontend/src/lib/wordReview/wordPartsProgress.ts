@@ -13,10 +13,9 @@ import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
  * a Structure row for what moves, read from the message's own calls so it fills while Erato writes.
  */
 
+/** `writing` until a part for the row is accepted; after the finish its receipt decides. */
 export type WordPartsRowState =
-  | "waiting"
   | "writing"
-  | "checking"
   | "ready"
   | "not-written"
   | "changed-in-word"
@@ -63,8 +62,6 @@ export interface WordPartsProgress {
   intent?: string;
   rows: WordPartsSectionRow[];
   structure?: WordPartsStructure;
-  /** A finish call is being written or checked. */
-  finishing: boolean;
   /** The accepted finish's call id. */
   finished?: string;
   /** The accepted finish left the reordering out. */
@@ -130,6 +127,28 @@ export function wordPartsSectionPlanCall(
   const part = content?.findLast(isAcceptedWordSectionPlan);
   return part?.content_type === "tool_use" ? part.tool_call_id : undefined;
 }
+
+/** The section plan call Erato is writing, or the pane is checking, while the message has no
+ * accepted one yet. */
+export function wordPartsPlanningCall(
+  content: readonly ContentPart[] | undefined,
+  generating: boolean,
+): string | undefined {
+  if (!generating || !content || content.some(isAcceptedWordSectionPlan))
+    return undefined;
+  const part = content.findLast(
+    (part) =>
+      part.content_type === "tool_use" &&
+      part.tool_name === WORD_PLAN_SECTIONS_TOOL &&
+      !!part.tool_call_id,
+  );
+  return part?.content_type === "tool_use" ? part.tool_call_id : undefined;
+}
+
+/** The change moves or merges sections, which Apply writes by replacing the whole document. */
+export const wordPartsReorders = (progress: WordPartsProgress): boolean =>
+  !progress.reorderingLeftOut &&
+  (!!progress.structure?.moves.length || !!progress.structure?.merges.length);
 
 const MAX_SOURCE_BLOCKS = 100_000;
 const RANGE = /^\s*(b[1-9]\d*)\s*(?:[-–]\s*(b[1-9]\d*))?\s*$/u;
@@ -258,24 +277,6 @@ const receiptRows = (value: unknown): ReceiptRow[] | undefined => {
   return rows;
 };
 
-const ROW_IN_PREVIEW = /"row"\s*:\s*"?(\d{1,4})\b/u;
-const FINISH_IN_PREVIEW = /"finish"\s*:\s*true/u;
-
-/** The row a part call writes; a call still being written has only a preview of its arguments. */
-function partRow(input: unknown): number | undefined {
-  if (object(input))
-    return typeof input.row === "number" && Number.isInteger(input.row)
-      ? input.row
-      : undefined;
-  const match = typeof input === "string" ? ROW_IN_PREVIEW.exec(input) : null;
-  return match ? Number(match[1]) : undefined;
-}
-
-const isFinish = (input: unknown) =>
-  object(input)
-    ? input.finish === true
-    : typeof input === "string" && FINISH_IN_PREVIEW.test(input);
-
 const FINISHED_STATES: Partial<
   Record<WordPartReceiptStatus, WordPartsRowState>
 > = {
@@ -335,8 +336,8 @@ function structureOf(
 
 /**
  * The card's rows for the message's latest accepted section plan, or undefined without one. Until
- * the finish, a row is Ready once a part for it was accepted; a rejected part is a quiet fix and
- * shows as Writing while the turn runs. After the finish, its receipt decides.
+ * the finish, a row is ready once a part for it was accepted, and writing before; a refused part is
+ * a quiet fix. After the finish, its receipt decides.
  */
 export function wordPartsProgress(
   content: readonly ContentPart[] | undefined,
@@ -352,41 +353,23 @@ export function wordPartsProgress(
   const written = new Set(
     receipt.filter((row) => row.status === "ready").map((row) => row.row),
   );
-  const active = new Map<number, "writing" | "checking" | "retry">();
-  let finishing = false;
   let finish:
     | { id: string; rows?: ReceiptRow[]; reordering?: unknown }
     | undefined;
   for (const part of content.slice(at + 1)) {
     if (part.content_type !== "tool_use") continue;
-    if (part.tool_name === WORD_WRITE_SECTION_TOOL) {
-      const row = partRow(part.input);
-      if (row === undefined) continue;
-      if (isAcceptedWordSectionPart(part, draftId)) {
-        written.add(row);
-        active.delete(row);
-      } else
-        active.set(
-          row,
-          part.status === "preparing"
-            ? "writing"
-            : part.status === "in_progress"
-              ? "checking"
-              : "retry",
-        );
-    } else if (part.tool_name === WORD_SUBMIT_PLAN_TOOL) {
-      if (isAcceptedWordPartsFinish(part)) {
-        finishing = false;
-        const result = successResult(part);
-        finish = {
-          id: part.tool_call_id ?? "",
-          rows: receiptRows(result?.rows),
-          reordering: result?.reordering,
-        };
-      } else
-        finishing =
-          (part.status === "preparing" || part.status === "in_progress") &&
-          isFinish(part.input);
+    if (isAcceptedWordSectionPart(part, draftId))
+      written.add(successResult(part)!.row as number);
+    else if (
+      part.tool_name === WORD_SUBMIT_PLAN_TOOL &&
+      isAcceptedWordPartsFinish(part)
+    ) {
+      const result = successResult(part);
+      finish = {
+        id: part.tool_call_id ?? "",
+        rows: receiptRows(result?.rows),
+        reordering: result?.reordering,
+      };
     }
   }
   const finished = (row: ReceiptRow) => {
@@ -404,11 +387,8 @@ export function wordPartsProgress(
           ? "ready"
           : "not-written")
       );
-    if (row.action === "delete") return "ready";
-    const call = generating ? active.get(row.row) : undefined;
-    if (call) return call === "retry" ? "writing" : call;
-    if (written.has(row.row)) return "ready";
-    return generating ? "waiting" : "not-written";
+    if (row.action === "delete" || written.has(row.row)) return "ready";
+    return generating ? "writing" : "not-written";
   };
   const rows = receipt.flatMap((row): WordPartsSectionRow[] =>
     row.action === "rewrite" || row.action === "delete"
@@ -440,7 +420,6 @@ export function wordPartsProgress(
       : {}),
     rows,
     ...(structure ? { structure } : {}),
-    finishing: generating && finishing,
     ...(finish ? { finished: finish.id } : {}),
     ...(structure && reorderingLeftOut ? { reorderingLeftOut } : {}),
     stopped: !finish && !generating,

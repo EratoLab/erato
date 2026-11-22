@@ -1647,6 +1647,39 @@ describe("MessageContent", () => {
       }
     });
 
+    it("renders a pending submitted card while its call is still being written", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        renderWithTheme(
+          <MessageContent
+            content={[{ ...toolUseContent({}), status: "preparing" }]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCard: {
+                toolCallId: "tool-call-123",
+                language: "editor-draft",
+                content: "Planning",
+                pending: true,
+              },
+            }}
+            isStreaming
+          />,
+        );
+        expect(screen.getByTestId("submitted-card")).toHaveTextContent(
+          "Planning",
+        );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("renders one submitted card when a model also echoes the legacy fence", () => {
       const original = componentRegistry.HostCardCodeBlock;
       componentRegistry.HostCardCodeBlock = function SubmittedCardStub({

@@ -5329,11 +5329,6 @@ msgstr "Ta zmiana wymaga przepisania całego dokumentu, czego Erato nie może zw
 #~ msgstr "Szerokość strony"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.applyLater"
-msgstr "Zmianę można zastosować, gdy Erato skończy."
-
-#. js-lingui-explicit-id
 #: src/word/components/WordDocumentPlanCard.tsx
 msgid "officeAddin.word.parts.consent"
 msgstr "Zastosować zmiany sprawdzone poniżej?"
@@ -5511,6 +5506,11 @@ msgstr "Zastosowano. Erato nie mógł potem wyświetlić listy komentarzy dokume
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Zastosowano: {title}"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.planReceipt.proposed"
+msgstr "Zaproponowano: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
