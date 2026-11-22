@@ -644,6 +644,7 @@ export type AssistantHubConfigResponse = {
   default_share_with_whole_organization: boolean;
   enable_categories: boolean;
   enabled: boolean;
+  force_whole_organization_audience: boolean;
   rating_mode: string;
 };
 

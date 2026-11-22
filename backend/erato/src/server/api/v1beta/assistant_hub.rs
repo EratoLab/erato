@@ -37,6 +37,7 @@ pub struct AssistantHubConfigResponse {
     pub can_review: bool,
     pub rating_mode: String,
     pub default_share_with_whole_organization: bool,
+    pub force_whole_organization_audience: bool,
     pub categories: Vec<AssistantHubCategory>,
 }
 
@@ -646,9 +647,8 @@ pub async fn assistant_hub_config(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<AssistantHubConfigResponse>, StatusCode> {
-    let mut categories: Vec<AssistantHubCategory> = app_state
-        .config
-        .assistant_hub
+    let config = &app_state.config.assistant_hub;
+    let mut categories: Vec<AssistantHubCategory> = config
         .categories
         .iter()
         .map(|(id, category)| AssistantHubCategory {
@@ -660,14 +660,12 @@ pub async fn assistant_hub_config(
     categories.sort_by(|a, b| a.display_name.cmp(&b.display_name));
 
     Ok(Json(AssistantHubConfigResponse {
-        enabled: app_state.config.assistant_hub.enabled,
-        enable_categories: app_state.config.assistant_hub.enable_categories,
-        can_review: app_state.config.assistant_hub.can_review(&me_user.groups),
-        rating_mode: app_state.config.assistant_hub.rating_mode.clone(),
-        default_share_with_whole_organization: app_state
-            .config
-            .assistant_hub
-            .default_share_with_whole_organization,
+        enabled: config.enabled,
+        enable_categories: config.enable_categories,
+        can_review: config.can_review(&me_user.groups),
+        rating_mode: config.rating_mode.clone(),
+        default_share_with_whole_organization: config.default_share_with_whole_organization,
+        force_whole_organization_audience: config.force_whole_organization_audience,
         categories,
     }))
 }

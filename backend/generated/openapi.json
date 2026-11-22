@@ -6665,6 +6665,7 @@
           "can_review",
           "rating_mode",
           "default_share_with_whole_organization",
+          "force_whole_organization_audience",
           "categories"
         ],
         "properties": {
@@ -6684,6 +6685,9 @@
             "type": "boolean"
           },
           "enabled": {
+            "type": "boolean"
+          },
+          "force_whole_organization_audience": {
             "type": "boolean"
           },
           "rating_mode": {

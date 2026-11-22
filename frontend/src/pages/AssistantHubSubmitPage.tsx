@@ -151,6 +151,8 @@ export default function AssistantHubSubmitPage() {
   const { data: config, isLoading: isLoadingConfig } = useAssistantHubConfig(
     {},
   );
+  const forceWholeOrganizationAudience =
+    config?.force_whole_organization_audience ?? false;
   const {
     data: assistant,
     isLoading: isLoadingAssistant,
@@ -197,7 +199,9 @@ export default function AssistantHubSubmitPage() {
   const latestSubmittedVersion = sourceVersions?.[0];
   const { data: previousShareGrants, isLoading: isLoadingPreviousShareGrants } =
     useListShareGrants(
-      latestSubmittedVersion
+      config?.enabled &&
+        !forceWholeOrganizationAudience &&
+        latestSubmittedVersion
         ? {
             queryParams: {
               resource_type: "assistant",
@@ -282,7 +286,12 @@ export default function AssistantHubSubmitPage() {
   }, [latestSubmittedVersion, prefilledFromVersionId]);
 
   useEffect(() => {
-    if (prefilledAudienceForVersionId !== null) {
+    if (
+      !config ||
+      forceWholeOrganizationAudience ||
+      isLoadingMyVersions ||
+      prefilledAudienceForVersionId !== null
+    ) {
       return;
     }
 
@@ -293,10 +302,6 @@ export default function AssistantHubSubmitPage() {
 
       setSelectedAudience(previousShareGrants.grants.map(toAudienceSubject));
       setPrefilledAudienceForVersionId(latestSubmittedVersion.version_id);
-      return;
-    }
-
-    if (isLoadingConfig || !config) {
       return;
     }
 
@@ -318,7 +323,8 @@ export default function AssistantHubSubmitPage() {
     setPrefilledAudienceForVersionId("new");
   }, [
     config,
-    isLoadingConfig,
+    forceWholeOrganizationAudience,
+    isLoadingMyVersions,
     isLoadingPreviousShareGrants,
     latestSubmittedVersion,
     prefilledAudienceForVersionId,
@@ -360,11 +366,14 @@ export default function AssistantHubSubmitPage() {
           : null,
       category_ids: categoryIds,
       keywords: toKeywordList(keywords),
-      audience_grants: selectedAudience.map(toAudienceGrantInput),
+      audience_grants: forceWholeOrganizationAudience
+        ? undefined
+        : selectedAudience.map(toAudienceGrantInput),
     };
   }, [
     categoryIds,
     creatorReviewComment,
+    forceWholeOrganizationAudience,
     keywords,
     longDescription,
     selectedAudience,
@@ -735,25 +744,27 @@ export default function AssistantHubSubmitPage() {
                 </FormField>
               </Card>
 
-              <Card variant="surface" as="section" size="lg">
-                <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
-                  {t({
-                    id: "assistantHub.submit.audience",
-                    message: "Hub audience",
-                  })}
-                </h2>
-                <p className="mb-4 text-sm text-theme-fg-secondary">
-                  {t({
-                    id: "assistantHub.submit.audienceHelp",
-                    message:
-                      "These share grants are attached to this hub version and become effective only when the accepted version is published.",
-                  })}
-                </p>
-                <SubjectSelector
-                  selectedIds={selectedAudience.map((subject) => subject.id)}
-                  onToggleSubject={toggleAudienceSubject}
-                />
-              </Card>
+              {!forceWholeOrganizationAudience && (
+                <Card variant="surface" as="section" size="lg">
+                  <h2 className="mb-2 text-lg font-semibold text-theme-fg-primary">
+                    {t({
+                      id: "assistantHub.submit.audience",
+                      message: "Hub audience",
+                    })}
+                  </h2>
+                  <p className="mb-4 text-sm text-theme-fg-secondary">
+                    {t({
+                      id: "assistantHub.submit.audienceHelp",
+                      message:
+                        "These share grants are attached to this hub version and become effective only when the accepted version is published.",
+                    })}
+                  </p>
+                  <SubjectSelector
+                    selectedIds={selectedAudience.map((subject) => subject.id)}
+                    onToggleSubject={toggleAudienceSubject}
+                  />
+                </Card>
+              )}
 
               <Card variant="surface" as="section" size="lg">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

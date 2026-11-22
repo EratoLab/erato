@@ -7139,6 +7139,23 @@ Whether to pre-select the whole organization as the audience when submitting a n
 
 **Type:** `boolean`
 
+#### `assistant_hub.force_whole_organization_audience`
+
+{/* erato_toml_config_key: assistant_hub.force_whole_organization_audience */}
+
+When enabled, the submission form hides the audience field and the server assigns a single whole-organization viewer grant to every new Assistant Hub submission, including new versions of existing Hub assistants. This setting takes precedence over `assistant_hub.default_share_with_whole_organization` and any audience from a previous version. The grant takes effect after the version is accepted and published. Previously submitted versions keep their saved grants, and direct sharing follows the Assistants sharing settings.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistant_hub]
+force_whole_organization_audience = true
+```
+
 #### `assistant_hub.categories`
 
 {/* erato_toml_config_key: assistant_hub.categories */}
