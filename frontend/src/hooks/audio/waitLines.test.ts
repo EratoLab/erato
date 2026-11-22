@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { READ_RESPONSE_TIMEOUT_MS } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
+
 import type { WaitLinesResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const fetchWaitLines = vi.fn();
@@ -295,6 +297,14 @@ describe("wait lines", () => {
     expect(sse).toHaveBeenCalledOnce();
   });
 
+  it("gives the lines longer than an ordinary read to come back", async () => {
+    await setup();
+    const [variables] = fetchWaitLines.mock.calls[0] as [
+      { readTimeoutMs?: number | null },
+    ];
+    expect(variables.readTimeoutMs).toBeGreaterThan(READ_RESPONSE_TIMEOUT_MS);
+  });
+
   it("asks at every turn and takes new lines when the voice changed", async () => {
     const { playback, lines } = await setup();
     fetchWaitLines.mockClear();
@@ -314,9 +324,9 @@ describe("wait lines", () => {
     );
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s");
-    expect(fetchWaitLines).toHaveBeenCalledWith({
-      queryParams: { known: "v1-lines" },
-    });
+    expect(fetchWaitLines).toHaveBeenCalledWith(
+      expect.objectContaining({ queryParams: { known: "v1-lines" } }),
+    );
     await vi.advanceTimersByTimeAsync(3000);
     expect(sources).toHaveLength(1);
     const next = await lines.prepareWaitLines();
@@ -337,7 +347,9 @@ describe("wait lines", () => {
     const { lines } = await setup({ incomplete: true });
     fetchWaitLines.mockClear();
     await lines.prepareWaitLines();
-    expect(fetchWaitLines).toHaveBeenCalledWith({ queryParams: {} });
+    expect(fetchWaitLines).toHaveBeenCalledWith(
+      expect.objectContaining({ queryParams: {} }),
+    );
   });
 
   it("says nothing in a turn whose lines could not be confirmed", async () => {

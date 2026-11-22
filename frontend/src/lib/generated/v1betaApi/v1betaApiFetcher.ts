@@ -20,8 +20,12 @@ const baseUrl = ""; // TODO add your baseUrl
  */
 export const READ_RESPONSE_TIMEOUT_MS = 45_000;
 
-function withReadTimeout(method: string, callerSignal?: AbortSignal) {
-  if (method.toUpperCase() !== "GET") {
+function withReadTimeout(
+  method: string,
+  timeoutMs: number | null,
+  callerSignal?: AbortSignal,
+) {
+  if (method.toUpperCase() !== "GET" || timeoutMs === null) {
     return {
       signal: callerSignal,
       timedOut: () => false,
@@ -40,7 +44,7 @@ function withReadTimeout(method: string, callerSignal?: AbortSignal) {
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, READ_RESPONSE_TIMEOUT_MS);
+  }, timeoutMs);
   return {
     signal: controller.signal,
     timedOut: () => timedOut,
@@ -86,10 +90,18 @@ export async function v1betaApiFetch<
   // registers no recovery handler (see ../../../auth/authRecovery).
   allowAuthRetry = true,
 ): Promise<TData> {
-  const { url, method, body, headers, pathParams, queryParams, signal } =
-    options;
+  const {
+    url,
+    method,
+    body,
+    headers,
+    pathParams,
+    queryParams,
+    signal,
+    readTimeoutMs = READ_RESPONSE_TIMEOUT_MS,
+  } = options;
   let error: ErrorWrapper<TError>;
-  const readTimeout = withReadTimeout(method, signal);
+  const readTimeout = withReadTimeout(method, readTimeoutMs, signal);
   // Separates fetch's own "no response" TypeError from TypeErrors thrown while
   // building the request, such as a body JSON.stringify cannot serialize.
   let requestSent = false;

@@ -8,6 +8,7 @@ import { i18n } from "@lingui/core";
 
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import { getClientPlatform } from "@/lib/clientPlatform";
+import { abortableDelay } from "@/utils/abortableDelay";
 
 import {
   forgetReview,
@@ -112,21 +113,6 @@ export class SidecarReviewEndedError extends Error {
     super(`The review of this call ended as ${state}.`);
     this.name = "SidecarReviewEndedError";
   }
-}
-
-function pause(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason);
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) onAbort();
-  });
 }
 
 /**
@@ -254,7 +240,7 @@ export async function runSidecarJob(
         onReview?.();
       }
       const early = JOB_POLL_INTERVAL_MS - (Date.now() - askedAt);
-      if (early > 0) await pause(early, signal);
+      if (early > 0) await abortableDelay(early, signal);
       askedAt = Date.now();
       status = await client.invoke(
         "jobs.status.v1",

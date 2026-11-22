@@ -1,14 +1,15 @@
 import { onlineManager } from "@tanstack/react-query";
-import { useSyncExternalStore } from "react";
 
-import { connectivity, type ConnectivityStatus } from "./connectivity";
+import { useValueStore } from "@/utils/chat/valueStore";
+
+import {
+  connectivity,
+  connectivityStatus,
+  type ConnectivityStatus,
+} from "./connectivity";
 
 export function useConnectivityStatus(): ConnectivityStatus {
-  return useSyncExternalStore(
-    connectivity.subscribe,
-    connectivity.getStatus,
-    () => "online",
-  );
+  return useValueStore(connectivityStatus);
 }
 
 let queryConnectivityInstalled = false;
@@ -24,7 +25,8 @@ export function connectQueryClientToConnectivity(): void {
   }
   queryConnectivityInstalled = true;
   onlineManager.setEventListener((setOnline) => {
-    setOnline(connectivity.getStatus() === "online");
-    return connectivity.subscribe((status) => setOnline(status === "online"));
+    const update = () => setOnline(connectivity.getStatus() === "online");
+    update();
+    return connectivity.subscribe(update);
   });
 }
