@@ -35,6 +35,7 @@ use crate::db::entity::chats;
 use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
+use crate::distribution::runtime::ReloadableAppState;
 use crate::models::chat::chat_title;
 use crate::models::user_preference::user_time_zone;
 use crate::query_metrics::named_statement_from_sql_and_values;
@@ -56,6 +57,8 @@ use sea_orm::{
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use utoipa::ToSchema;
 
 pub const REMINDER: &str = "reminder";
@@ -1020,14 +1023,33 @@ async fn advance(db: &DatabaseConnection, item_id: Uuid) -> Result<bool, Report>
 /// language, else in `default_language`.
 pub struct ReminderProducer {
     public_base_url: Option<String>,
-    default_language: String,
+    language_source: ReminderLanguage,
+}
+
+enum ReminderLanguage {
+    Fixed(String),
+    Reloadable(Arc<RwLock<ReloadableAppState>>),
 }
 
 impl ReminderProducer {
     pub fn new(public_base_url: Option<String>, default_language: &str) -> Self {
+        Self::with_language(
+            public_base_url,
+            ReminderLanguage::Fixed(default_language.to_owned()),
+        )
+    }
+
+    pub fn reloadable(
+        public_base_url: Option<String>,
+        reloadable: Arc<RwLock<ReloadableAppState>>,
+    ) -> Self {
+        Self::with_language(public_base_url, ReminderLanguage::Reloadable(reloadable))
+    }
+
+    fn with_language(public_base_url: Option<String>, language_source: ReminderLanguage) -> Self {
         Self {
             public_base_url: public_base_url.map(|url| url.trim_end_matches('/').to_string()),
-            default_language: default_language.to_string(),
+            language_source,
         }
     }
 
@@ -1120,7 +1142,17 @@ impl DeliveryProducer for ReminderProducer {
                 .remove(&chat_id),
             None => None,
         };
-        let lang = text_language::of_user(db, item.user_id, None, &self.default_language).await?;
+        let default_language = match &self.language_source {
+            ReminderLanguage::Fixed(language) => language.clone(),
+            ReminderLanguage::Reloadable(reloadable) => reloadable
+                .read()
+                .await
+                .i18n
+                .language
+                .default_language
+                .clone(),
+        };
+        let lang = text_language::of_user(db, item.user_id, None, &default_language).await?;
         // The linked chat is named under the message, as a link where the app
         // has a public URL, followed by how current the message is.
         let context = [

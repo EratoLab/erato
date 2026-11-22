@@ -106,6 +106,14 @@ export interface SearchCoverageSource {
   dateBasis: string;
   inventory: string;
   unavailableReason: string | null;
+  /**
+   * Whether the latest inventory is complete. False means no contiguous date coverage is guaranteed; searchable documents remain usable.
+   */
+  inventoryComplete?: boolean;
+  /**
+   * Visible documents with indexed or empty receipts, including undated documents. Independent of inventory completeness and the known extraction backlog.
+   */
+  searchableDocuments?: number;
   [k: string]: unknown;
 }
 export interface IndexedRangeBoundary {

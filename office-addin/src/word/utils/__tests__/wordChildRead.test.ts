@@ -107,6 +107,26 @@ describe("a delegated task's read under the server's grant", () => {
     expect(tokens.size).toBe(16);
   });
 
+  it("reads a section sent as a replay record, with the capture filled into the read", async () => {
+    const { child, snapshot } = open();
+    const ref = sectionRef(snapshot);
+    const result = okResult(
+      await child({
+        omitted_from_replay: "This call belongs to an earlier user turn.",
+        kept: { section: { ref } },
+      }),
+    );
+    expect(result).toMatchObject({ section: { ref }, access: "read-only" });
+
+    const refused = await child({
+      omitted_from_replay: "This call belongs to an earlier user turn.",
+      kept: { section: { ref }, include: ["text"] },
+    });
+    expect(refused.ok ? "" : refused.validationErrors?.[0].message).toMatch(
+      /^These arguments are a replay record .* Unexpected field: include\./,
+    );
+  });
+
   it("refuses a complete read without ending the task's read", async () => {
     const { child, snapshot } = open();
     const refused = await child({ cursor: null });

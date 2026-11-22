@@ -7,6 +7,7 @@ import docxWasmUrl from "@extend-ai/react-docx/docx_wasm_bg.wasm?url";
 import { t } from "@lingui/core/macro";
 import { useEffect, useState } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { useTheme } from "@/components/providers/ThemeProvider";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
@@ -45,7 +46,10 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ url }) => {
 
     const load = async () => {
       try {
-        const response = await fetch(url, { signal: controller.signal });
+        const response = await fetchWithAuthRecovery(
+          () => fetch(url, { signal: controller.signal }),
+          "file-preview",
+        );
         if (!response.ok) {
           throw new Error(`DOCX preview fetch failed: ${response.status}`);
         }

@@ -701,10 +701,14 @@ describe("WordSelectionCard", () => {
     );
   });
 
-  it("offers only Copy when the pane no longer holds the passage", async () => {
+  it("folds and offers only Copy when the pane no longer holds the passage", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     renderCard({ capture: null });
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      "Proposed: Rewrite of the selected passage",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByText(
         "This pane no longer holds the passage this answer was written for. Copy the proposal, or select the passage and ask again.",

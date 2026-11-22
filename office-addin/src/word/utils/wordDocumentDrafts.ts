@@ -1,5 +1,7 @@
 import { MAX_PLAN_BYTES } from "@erato/frontend/word-review";
 
+import { WordPartsDraftStore } from "./wordDocumentParts";
+
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type { WordPlanDiagnostics } from "@erato/frontend/word-review";
 
@@ -137,14 +139,33 @@ export class WordDocumentDraftStore {
     string,
     { input: string; result: ClientToolExecutionResult }
   >();
+  /** The body blocks each refused attempt of this request changed, by tool call. */
+  private attempts = new Map<string, ReadonlySet<number>>();
+  /** The section plan and parts of a change sent in parts. */
+  readonly parts = new WordPartsDraftStore();
   accepted = false;
 
   clear(): void {
+    this.parts.clear();
     this.draft = undefined;
     this.failure = undefined;
     this.sparseFailure = undefined;
     this.replies.clear();
+    this.attempts.clear();
     this.accepted = false;
+  }
+
+  /** The latest rejected full plan or repair, as materialized. */
+  get latestDraft(): Record<string, unknown> | undefined {
+    return this.draft?.value;
+  }
+
+  refused(callId: string, blocks: ReadonlySet<number>): void {
+    if (!this.accepted) this.attempts.set(callId, blocks);
+  }
+
+  get refusedAttempts(): ReadonlySet<number>[] {
+    return [...this.attempts.values()];
   }
 
   replay(callId: string, input: string): ClientToolExecutionResult | undefined {

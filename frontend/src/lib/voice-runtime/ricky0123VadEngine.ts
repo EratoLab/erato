@@ -11,6 +11,7 @@ import {
   type VoiceVadFrame,
   type VoiceVadFrameProbabilities,
   type VoiceVadModel,
+  type VoiceVadTuning,
 } from "./vadEngine";
 
 import type { VoiceRuntimeAssetOverrides } from "./assets";
@@ -25,6 +26,7 @@ type Ricky0123Model = "v5" | "legacy";
 type Ricky0123VadEngineState = "idle" | "started" | "stopped" | "destroyed";
 
 type Ricky0123VadPrivateInternals = {
+  setOptions?: (update: VoiceVadTuning) => void;
   frameProcessor?: {
     resume?: () => void;
     reset?: () => void;
@@ -132,6 +134,7 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
   private baseTimestampMs: number | null = null;
   private processedTargetSamples = 0;
   private currentFrameTimestampMs = 0;
+  private tuning: VoiceVadTuning = {};
 
   constructor(private readonly options: Ricky0123VadEngineOptions = {}) {
     this.model = toRicky0123Model(options.model);
@@ -186,6 +189,21 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
       });
     }
     this.vad = null;
+  }
+
+  configure(tuning: VoiceVadTuning): void {
+    const defined: VoiceVadTuning = {};
+    if (tuning.redemptionMs !== undefined)
+      defined.redemptionMs = tuning.redemptionMs;
+    if (tuning.minSpeechMs !== undefined)
+      defined.minSpeechMs = tuning.minSpeechMs;
+    this.tuning = { ...this.tuning, ...defined };
+    (this.vad as Ricky0123VadPrivateInternals | null)?.setOptions?.(defined);
+  }
+
+  reset(): void {
+    if (this.state !== "started") return;
+    this.resetUnderlyingState();
   }
 
   async acceptFrame(frame: VoiceVadFrame): Promise<void> {
@@ -288,14 +306,16 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
     if (this.options.negativeSpeechThreshold !== undefined) {
       options.negativeSpeechThreshold = this.options.negativeSpeechThreshold;
     }
-    if (this.options.redemptionMs !== undefined) {
-      options.redemptionMs = this.options.redemptionMs;
+    const redemptionMs = this.tuning.redemptionMs ?? this.options.redemptionMs;
+    if (redemptionMs !== undefined) {
+      options.redemptionMs = redemptionMs;
     }
     if (this.options.preSpeechPadMs !== undefined) {
       options.preSpeechPadMs = this.options.preSpeechPadMs;
     }
-    if (this.options.minSpeechMs !== undefined) {
-      options.minSpeechMs = this.options.minSpeechMs;
+    const minSpeechMs = this.tuning.minSpeechMs ?? this.options.minSpeechMs;
+    if (minSpeechMs !== undefined) {
+      options.minSpeechMs = minSpeechMs;
     }
 
     return options;

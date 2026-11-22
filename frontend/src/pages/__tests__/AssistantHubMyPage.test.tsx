@@ -53,6 +53,9 @@ const makeVersion = (
   },
   assistant_id: `${versionId}-assistant`,
   audience_grants: [],
+  can_make_current: false,
+  can_publish: overrides.status !== "submitted" && !overrides.is_published,
+  can_unpublish: false,
   category_ids: [],
   created_at: "2026-01-01T00:00:00Z",
   creator: { display_name: "Assistant creator", id: "creator" },
@@ -61,6 +64,7 @@ const makeVersion = (
   hub_assistant_id: `${versionId}-hub`,
   is_current_published_version: false,
   is_published: false,
+  is_submission_owner: true,
   keywords: [],
   long_description: "Long assistant description",
   review_average_score: null,
@@ -195,6 +199,51 @@ describe("AssistantHubMyPage", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ["owner", true],
+    ["shared editor", false],
+  ])("shows the actions allowed for the %s on each version", (_, isOwner) => {
+    myVersions = [
+      makeVersion("unpublished", { is_submission_owner: isOwner }),
+      makeVersion("previous", {
+        is_submission_owner: isOwner,
+        is_published: true,
+        can_make_current: true,
+      }),
+    ];
+
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Make current" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Unpublish" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryAllByRole("button", { name: "Submit new version" }),
+    ).toHaveLength(isOwner ? 2 : 0);
+    expect(
+      screen.queryByRole("button", { name: "Review queue" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides publication controls on the owner's versions under reviewer-only access", () => {
+    myVersions = [
+      makeVersion("unpublished", { can_publish: false }),
+      makeVersion("published", { is_published: true }),
+    ];
+
+    renderPage();
+
+    expect(
+      screen.queryByRole("button", {
+        name: /^(Publish|Unpublish|Make current)$/,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a withdrawal busy until the list has refetched, then confirms it", async () => {

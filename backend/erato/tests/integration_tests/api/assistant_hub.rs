@@ -1,8 +1,13 @@
 //! Assistant Hub API endpoint integration tests.
 
 use axum::http;
+use axum_test::{TestResponse, TestServer};
 use erato::config::{
-    AssistantHubCategoryConfig, AssistantHubReviewerPermissionsConfig, AssistantHubReviewerRule,
+    AssistantHubActionPermissionsConfig, AssistantHubActionRole, AssistantHubCategoryConfig,
+    AssistantHubReviewerPermissionsConfig, AssistantHubReviewerRule,
+};
+use erato::models::share_grant::{
+    ORGANIZATION_SUBJECT_ID, ORGANIZATION_SUBJECT_ID_TYPE, ORGANIZATION_SUBJECT_TYPE,
 };
 use erato::policy::engine::PolicyEngine;
 use serde_json::{Value, json};
@@ -45,6 +50,250 @@ fn version_count(response: &Value) -> usize {
         .as_array()
         .expect("assistant hub response should contain versions array")
         .len()
+}
+
+async fn set_published(
+    server: &TestServer,
+    token: &str,
+    version_id: &str,
+    is_published: bool,
+) -> TestResponse {
+    server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/versions/{version_id}/published"
+        ))
+        .json(&json!({ "is_published": is_published }))
+        .with_bearer_token(token)
+        .await
+}
+
+async fn make_current(server: &TestServer, token: &str, version_id: &str) -> TestResponse {
+    server
+        .put(&format!(
+            "/api/v1beta/assistant-hub/versions/{version_id}/current"
+        ))
+        .with_bearer_token(token)
+        .await
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_publication_permissions(pool: Pool<Postgres>) {
+    use AssistantHubActionRole::{Editors, Reviewers};
+    use http::StatusCode;
+
+    const MY_VERSIONS: &str = "/api/v1beta/assistant-hub/my/versions";
+    const REVIEW_VERSIONS: &str = "/api/v1beta/assistant-hub/review/versions";
+    const EDITORS_GROUP: &str = "source-assistant-editors";
+
+    let mut state = test_app_state(assistant_hub_app_config(), pool).await;
+    let default_server = create_test_server(state.clone());
+    let owner = JwtTokenBuilder::new().subject("publication-owner").build();
+    let editor = JwtTokenBuilder::new()
+        .subject("publication-editor")
+        .groups(vec![EDITORS_GROUP.to_string()])
+        .build();
+    let reviewer = JwtTokenBuilder::new()
+        .subject("publication-reviewer")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let other = JwtTokenBuilder::new().subject("publication-viewer").build();
+
+    let source = default_server
+        .post("/api/v1beta/assistants")
+        .json(&json!({
+            "name": "Publication permissions fixture",
+            "prompt": "Help out.",
+            "share_grants": [{
+                "subject_type": "organization_group",
+                "subject_id_type": "organization_group_id",
+                "subject_id": EDITORS_GROUP,
+                "role": "editor"
+            }, {
+                "subject_type": "organization",
+                "subject_id_type": "organization_id",
+                "subject_id": "__organization__",
+                "role": "viewer"
+            }]
+        }))
+        .with_bearer_token(&owner)
+        .await;
+    source.assert_status(StatusCode::CREATED);
+    let source: Value = source.json();
+    let source_id = source["id"].as_str().expect("created assistant ID");
+
+    let mut version_ids = Vec::new();
+    for version_number in ["1.0.0", "2.0.0", "3.0.0"] {
+        let submission = default_server
+            .post(&format!(
+                "/api/v1beta/assistant-hub/assistants/{source_id}/versions"
+            ))
+            .json(&json!({
+                "long_description": "Fixture for reviewing and publishing three versions",
+                "category_ids": [],
+                "keywords": [],
+                "version_number": version_number
+            }))
+            .with_bearer_token(&owner)
+            .await;
+        submission.assert_status(StatusCode::CREATED);
+        let submission: Value = submission.json();
+        version_ids.push(
+            submission["version"]["version_id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let [first, second, pending] = version_ids.as_slice() else {
+        unreachable!()
+    };
+    let pending_review = format!("/api/v1beta/assistant-hub/versions/{pending}/review");
+    for version_id in [first, second] {
+        default_server
+            .post(&format!(
+                "/api/v1beta/assistant-hub/versions/{version_id}/review"
+            ))
+            .json(&json!({ "accepted": true }))
+            .with_bearer_token(&reviewer)
+            .await
+            .assert_status_ok();
+    }
+
+    for (token, is_owner, count) in [(&owner, true, 3), (&editor, false, 2)] {
+        let list = default_server
+            .get(MY_VERSIONS)
+            .with_bearer_token(token)
+            .await;
+        list.assert_status_ok();
+        let list: Value = list.json();
+        assert_eq!(version_count(&list), count);
+        let versions = list["versions"].as_array().unwrap();
+        let first = versions
+            .iter()
+            .find(|version| version["version_id"] == *first)
+            .unwrap();
+        assert_eq!(first["is_submission_owner"], is_owner);
+        assert_eq!(first["can_publish"], true);
+        assert_eq!(first["can_unpublish"], false);
+        assert_eq!(first["can_make_current"], false);
+    }
+    for token in [&editor, &other] {
+        default_server
+            .get(REVIEW_VERSIONS)
+            .with_bearer_token(token)
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+        default_server
+            .post(&pending_review)
+            .json(&json!({ "accepted": false }))
+            .with_bearer_token(token)
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+    }
+    let other_versions: Value = default_server
+        .get(MY_VERSIONS)
+        .with_bearer_token(&other)
+        .await
+        .json();
+    assert_eq!(version_count(&other_versions), 0);
+    set_published(&default_server, &other, first, true)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    set_published(&default_server, &owner, first, true)
+        .await
+        .assert_status_ok();
+    set_published(&default_server, &editor, second, true)
+        .await
+        .assert_status_ok();
+    make_current(&default_server, &other, first)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    set_published(&default_server, &other, second, false)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    make_current(&default_server, &editor, first)
+        .await
+        .assert_status_ok();
+    make_current(&default_server, &reviewer, second)
+        .await
+        .assert_status_ok();
+
+    state.config.assistant_hub.action_permissions = AssistantHubActionPermissionsConfig {
+        publish: vec![Reviewers],
+        unpublish: vec![Reviewers],
+        make_current: vec![Reviewers],
+    };
+    let reviewer_only = create_test_server(state.clone());
+    for token in [&owner, &editor] {
+        set_published(&reviewer_only, token, first, false)
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+        make_current(&reviewer_only, token, first)
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+    }
+    make_current(&reviewer_only, &reviewer, first)
+        .await
+        .assert_status_ok();
+    set_published(&reviewer_only, &reviewer, first, false)
+        .await
+        .assert_status_ok();
+    for token in [&owner, &editor] {
+        set_published(&reviewer_only, token, first, true)
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+    }
+    set_published(&reviewer_only, &reviewer, first, true)
+        .await
+        .assert_status_ok();
+    set_published(&reviewer_only, &reviewer, first, false)
+        .await
+        .assert_status_ok();
+
+    state.config.assistant_hub.action_permissions = AssistantHubActionPermissionsConfig {
+        publish: vec![Editors],
+        unpublish: vec![Reviewers],
+        make_current: vec![],
+    };
+    let mixed = create_test_server(state);
+    mixed
+        .get(REVIEW_VERSIONS)
+        .with_bearer_token(&reviewer)
+        .await
+        .assert_status_ok();
+    mixed
+        .post(&pending_review)
+        .json(&json!({ "accepted": true }))
+        .with_bearer_token(&reviewer)
+        .await
+        .assert_status_ok();
+    set_published(&mixed, &reviewer, first, true)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    let publication = set_published(&mixed, &editor, first, true).await;
+    publication.assert_status_ok();
+    let publication: Value = publication.json();
+    assert_eq!(publication["version"]["is_current_published_version"], true);
+    assert_eq!(publication["version"]["can_unpublish"], false);
+    make_current(&mixed, &editor, second)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    make_current(&mixed, &reviewer, second)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    let repeated_publication = set_published(&mixed, &editor, second, true).await;
+    repeated_publication.assert_status_ok();
+    let repeated_publication: Value = repeated_publication.json();
+    assert_eq!(
+        repeated_publication["version"]["is_current_published_version"],
+        false
+    );
+    set_published(&mixed, &editor, first, false)
+        .await
+        .assert_status(StatusCode::FORBIDDEN);
+    set_published(&mixed, &reviewer, first, false)
+        .await
+        .assert_status_ok();
 }
 
 fn assert_average_score(value: &Value, expected: f64) {
@@ -744,7 +993,25 @@ async fn test_assistant_hub_user_reviews_are_upserted_summarized_and_visibility_
 async fn test_published_current_assistant_hub_version_is_listed_for_audience_viewer(
     pool: Pool<Postgres>,
 ) {
-    let app_state = test_app_state(assistant_hub_app_config(), pool).await;
+    assert_assistant_hub_publication_for_audience(pool, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_publication_for_organization_when_direct_picker_is_disabled(
+    pool: Pool<Postgres>,
+) {
+    assert_assistant_hub_publication_for_audience(pool, true).await;
+}
+
+async fn assert_assistant_hub_publication_for_audience(
+    pool: Pool<Postgres>,
+    organization_wide: bool,
+) {
+    let mut config = assistant_hub_app_config();
+    if organization_wide {
+        config.assistants.enable_direct_organization_sharing = false;
+    }
+    let app_state = test_app_state(config, pool).await;
     let server = create_test_server(app_state.clone());
 
     let owner_subject = "assistant-hub-owner";
@@ -799,6 +1066,15 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
     .await
     .expect("failed to create source assistant");
 
+    let (subject_type, subject_id_type, subject_id) = if organization_wide {
+        (
+            ORGANIZATION_SUBJECT_TYPE,
+            ORGANIZATION_SUBJECT_ID_TYPE,
+            ORGANIZATION_SUBJECT_ID.to_string(),
+        )
+    } else {
+        ("user", "id", viewer.id.to_string())
+    };
     let submission_response = server
         .post(&format!(
             "/api/v1beta/assistant-hub/assistants/{}/versions",
@@ -812,9 +1088,9 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
             "version_comment": "Initial hub publication",
             "creator_review_comment": "Ready for review",
             "audience_grants": [{
-                "subject_type": "user",
-                "subject_id_type": "id",
-                "subject_id": viewer.id.to_string(),
+                "subject_type": subject_type,
+                "subject_id_type": subject_id_type,
+                "subject_id": subject_id,
                 "role": "viewer"
             }]
         }))

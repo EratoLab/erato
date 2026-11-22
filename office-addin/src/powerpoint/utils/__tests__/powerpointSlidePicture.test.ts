@@ -62,10 +62,10 @@ describe("renderSelectedSlidePictures", () => {
     expect(await bytesOf(picture.file)).toBe(atob(fakePngBase64("257#")));
   });
 
-  it("renders the first slides of the selection as PowerPoint lists it, active slide first, up to the limit", async () => {
+  it("renders the first slides of the selection as PowerPoint lists them, active slide first, up to the limit", async () => {
     const host = installFakePowerPoint(
       deck({
-        selectedSlideIds: ["256#", "257#", "258#", "259#", "260#"],
+        selectedSlideIds: ["256#", "257#", "260#", "259#", "258#"],
         activeSlideId: "259#",
       }),
     );

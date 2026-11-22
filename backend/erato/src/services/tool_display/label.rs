@@ -14,6 +14,8 @@ pub mod own;
 pub mod pointer;
 mod recipients;
 pub mod rules;
+pub mod spoken;
+mod sql;
 mod words;
 
 pub use arguments::{json_strings_read, readable_arguments};
@@ -21,7 +23,7 @@ pub use context::ToolResultContext;
 
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource,
-    ToolCallLabelValue, ToolCallLabelWarning, ToolCallObjectKind,
+    ToolCallLabelValue, ToolCallLabelWarning, ToolCallObjectKind, ToolCallRead,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde::{Deserialize, Serialize};
@@ -39,6 +41,8 @@ pub const MAX_FIELD_POINTERS: usize = 16;
 /// Bytes of value text and paths in one label; values past it are counted
 /// as omitted, so the stored label stays small whatever the mapping says.
 pub const MAX_LABEL_VALUE_BYTES: usize = 16 * 1024;
+/// The same for a read's description: the voice says a few short values.
+pub const MAX_READ_VALUE_BYTES: usize = 1024;
 
 /// Where a label's parts sit in a call's arguments: pointers and closed-list
 /// choices, never values, so one mapping fits every call of the same shape
@@ -100,6 +104,8 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
             .collect(),
         source: ToolCallLabelSource::Generic,
         change: None,
+        read: None,
+        spoken_names: Default::default(),
     }
 }
 
@@ -351,6 +357,279 @@ pub fn filtered_label(
     }
 }
 
+/// The label of a call that only reads, for words spoken aloud, and whether
+/// its arguments narrow what it reads: the rules' read mapping through the
+/// cross-check and the checks every label passes. `None` when the label a
+/// card draws for the call has a verb, when its change description holds a
+/// statement, a batch or a flag that changes what the call does, when it
+/// sets an argument the rules do not understand, or when any check fails. A
+/// card never draws it.
+pub fn read_label(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    shown: &ToolCallLabel,
+) -> Option<(ToolCallLabel, bool)> {
+    let does_more = shown.change.as_ref().is_some_and(|change| {
+        !change.opaque.is_empty()
+            || change.opaque_omitted > 0
+            || change.batch.is_some()
+            || change.flags.iter().any(|flag| !flag.dry_run)
+    });
+    if shown.action != ToolCallAction::Other || does_more {
+        return None;
+    }
+    let mut mapping = rules::read_mapping(&tool.name, arguments, tool.annotations.as_ref())?;
+    // A tool that reads one thing reads the record its card names, as
+    // `get_email` with `message_id`, when the read rules name none.
+    let shown_id = shown
+        .items
+        .first()
+        .and_then(|item| item.id.as_ref())
+        .map(|slot| slot.pointer.clone())
+        .filter(|_| rules::reads_one_item(&tool.name));
+    if let Some(id) = shown_id {
+        let item = mapping.items.first();
+        let names_none = item.is_none_or(|item| item.id.is_none() && item.title.is_none());
+        if names_none && item.and_then(|item| item.target.as_deref()) != Some(id.as_str()) {
+            if mapping.items.is_empty() {
+                mapping.items.push(ToolCallLabelItemMapping::default());
+            }
+            mapping.items[0].id = Some(id);
+        }
+    }
+    let item = mapping.items.first();
+    let named: Vec<&str> = item
+        .into_iter()
+        .flat_map(|item| [&item.title, &item.id, &item.target])
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    let reads_items = item.is_some_and(|item| item.id.is_some() && item.title.is_none());
+    let filtered = rules::read_arguments(arguments, &named, reads_items, approval_argument)?;
+    if !rules::cross_check(tool, arguments, ToolCallAction::Read).is_empty() {
+        return None;
+    }
+    let recipients = rules::recipient_members(arguments);
+    let mapping = rules::with_every_recipient(&mapping, &recipients);
+    let label =
+        resolve_within(&mapping, arguments, approval_argument, MAX_READ_VALUE_BYTES).ok()?;
+    rules::shows_every_recipient(&label, &recipients).then_some((label, filtered))
+}
+
+/// What a [`read_label`] says, once names from earlier results are on it.
+pub fn read_description(read: ToolCallLabel, filtered: bool) -> ToolCallRead {
+    let item = read.items.into_iter().next().map(|item| ToolCallLabelItem {
+        fields: Vec::new(),
+        ..item
+    });
+    ToolCallRead {
+        object_kind: read.object_kind,
+        item,
+        filtered,
+        warnings: read
+            .warnings
+            .into_iter()
+            .filter(|warning| *warning == ToolCallLabelWarning::HiddenCharacters)
+            .collect(),
+        query: None,
+    }
+}
+
+/// What a call says it reads by its one SQL statement, when the statement is
+/// certainly a single plain read and nothing else in the call or the label a
+/// card draws for it does more: the tool's name, hints and other arguments
+/// pass the read checks, every other argument is one the rules understand,
+/// and the card holds that statement and no other change. Its values are
+/// read like a label's. A card never draws it.
+pub fn sql_read(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    shown: &ToolCallLabel,
+    glossary: Option<&erato_config::config::McpGlossaryConfig>,
+    mut spoken: Option<&mut spoken::SpokenNamesCollector<'_, '_>>,
+) -> Option<ToolCallRead> {
+    use crate::models::message::{ToolCallOpaqueKind, ToolCallReadCondition, ToolCallReadQuery};
+    let (pointer, text) = rules::the_sql_statement(arguments)?;
+    // A card that does not know the member as SQL shows a long statement as
+    // a text block; that block is the statement itself.
+    // Values the card lists are arguments, which `only_the_statement_is_set`
+    // holds to paging, the table and consent.
+    let only_the_statement = shown.change.as_ref().is_none_or(|change| {
+        change.texts.iter().all(|block| block.path == pointer)
+            && change.texts_omitted == 0
+            && change.recipients.is_none()
+            && change.batch.is_none()
+            && change.opaque.len() <= 1
+            && change.opaque_omitted == 0
+            && change
+                .opaque
+                .iter()
+                .all(|opaque| opaque.kind == ToolCallOpaqueKind::Sql && opaque.path == pointer)
+            && change.flags.iter().all(|flag| flag.dry_run)
+    });
+    if !matches!(shown.action, ToolCallAction::Other | ToolCallAction::Run)
+        || !only_the_statement
+        || !rules::may_read_by_statement(&tool.name, arguments, tool.annotations.as_ref())
+        // The card's own verb, run or none: a name that runs is no read verb.
+        || !rules::cross_check(tool, arguments, shown.action).is_empty()
+    {
+        return None;
+    }
+    if !rules::only_the_statement_is_set(arguments, &pointer, approval_argument) {
+        return None;
+    }
+    let mut plain = sql::plain_read(text)?;
+    // A statement that reads no table has nothing to say beyond the tool.
+    if plain.tables.is_empty() {
+        return None;
+    }
+    let key = sql::take_key_lookup(&mut plain);
+
+    let mut budget = MAX_READ_VALUE_BYTES;
+    let mut hidden = false;
+    let mut name = |text: &str| {
+        let cleaned = sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS);
+        hidden |= cleaned.hidden_characters;
+        budget = budget.saturating_sub(cleaned.text.len());
+        cleaned.text
+    };
+    let tables: Vec<String> = plain.tables.iter().map(|table| name(table)).collect();
+    if let Some(spoken) = spoken.as_deref_mut() {
+        for (shown, raw) in tables.iter().zip(&plain.tables) {
+            spoken.table(shown, raw);
+        }
+        if let [table] = plain.tables.as_slice() {
+            spoken.in_table(Some(table));
+        }
+    }
+    // The operator's names for fields and coded values, as on a write card.
+    let columns: Vec<String> = plain
+        .conditions
+        .iter()
+        .map(|condition| {
+            name(
+                glossary
+                    .and_then(|glossary| glossary.field_names.get(&condition.column))
+                    .unwrap_or(&condition.column),
+            )
+        })
+        .collect();
+    let choice = |column: &str, text: &str| {
+        glossary
+            .and_then(|glossary| glossary.choice_labels.get(column)?.get(text))
+            .cloned()
+    };
+    let mut value = |text: &str| -> Option<ToolCallLabelValue> {
+        let cleaned = sanitize_display_text(text, MAX_LABEL_VALUE_CHARS);
+        hidden |= cleaned.hidden_characters;
+        budget = budget.checked_sub(cleaned.text.len() + pointer.len())?;
+        Some(ToolCallLabelValue {
+            path: pointer.clone(),
+            machine_id: machine_id::is_machine_id(&cleaned.text),
+            text: cleaned.text,
+            truncated: cleaned.truncated,
+            resolved: None,
+        })
+    };
+    let looks_up = key.is_some();
+    let item = key.and_then(|key| {
+        Some(ToolCallLabelItem {
+            id: Some(ToolCallLabelSlot {
+                pointer: pointer.clone(),
+                name: None,
+                values: vec![value(&key)?],
+                omitted: 0,
+            }),
+            ..ToolCallLabelItem::default()
+        })
+    });
+    let mut omitted = plain.undescribed + u32::from(looks_up && item.is_none());
+    let mut conditions = Vec::new();
+    for (condition, column) in plain.conditions.into_iter().zip(columns) {
+        let values: Option<Vec<_>> = condition
+            .values
+            .iter()
+            .map(|text| value(&choice(&condition.column, text).unwrap_or_else(|| text.clone())))
+            .collect();
+        match values {
+            Some(values) if !column.is_empty() => {
+                if let Some(spoken) = spoken.as_deref_mut() {
+                    // Over several tables a word holds only for the table
+                    // the condition names, and the label keys it by that
+                    // table; a coded value of an unnamed table stays a code.
+                    let several = plain.tables.len() > 1;
+                    let key = match (several, condition.table.as_deref()) {
+                        (true, Some(table)) => {
+                            spoken.in_table(Some(table));
+                            Some(format!(
+                                "{}.{column}",
+                                sanitize_display_text(table, MAX_DISPLAY_NAME_CHARS).text
+                            ))
+                        }
+                        (true, None) => {
+                            spoken.in_table(None);
+                            None
+                        }
+                        (false, _) => Some(column.clone()),
+                    };
+                    spoken.field(key.as_deref().unwrap_or(&column), &condition.column);
+                    if let Some(key) = key {
+                        for (shown, raw) in values.iter().zip(&condition.values) {
+                            if !shown.machine_id {
+                                spoken.choice(&key, &condition.column, &shown.text, raw);
+                            }
+                        }
+                    }
+                }
+                conditions.push(ToolCallReadCondition {
+                    column,
+                    table: condition
+                        .table
+                        .as_deref()
+                        .map(|table| sanitize_display_text(table, MAX_DISPLAY_NAME_CHARS).text),
+                    operator: condition.operator,
+                    values,
+                    values_omitted: condition.values_omitted,
+                });
+            }
+            _ => omitted += 1,
+        }
+    }
+    let object_kind = match tables.as_slice() {
+        [table] => rules::table_kind(table),
+        _ => ToolCallObjectKind::Row,
+    };
+    Some(ToolCallRead {
+        object_kind,
+        filtered: !conditions.is_empty() || omitted > 0,
+        item,
+        warnings: if hidden {
+            vec![ToolCallLabelWarning::HiddenCharacters]
+        } else {
+            Vec::new()
+        },
+        query: Some(ToolCallReadQuery {
+            tables,
+            tables_omitted: plain.tables_omitted,
+            conditions,
+            conditions_omitted: omitted,
+            limit: plain.limit,
+        }),
+    })
+}
+
+/// Runs [`read_label`] or [`sql_read`] so that a bug in it costs only the read.
+pub fn guarded_read<T>(read: impl FnOnce() -> Option<T>) -> Option<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
+        .inspect_err(|_| {
+            tracing::error!("Describing a tool call without a read: reading it panicked")
+        })
+        .ok()
+        .flatten()
+}
+
 /// The mapping's label for one call. A core pointer that reaches nothing
 /// means the mapping does not fit the call, and the caller shows the generic
 /// label instead; a field that reaches nothing is only left out.
@@ -359,7 +638,15 @@ pub fn resolve_label(
     arguments: &Value,
     approval_argument: Option<&str>,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
-    let mut budget = MAX_LABEL_VALUE_BYTES;
+    resolve_within(mapping, arguments, approval_argument, MAX_LABEL_VALUE_BYTES)
+}
+
+fn resolve_within(
+    mapping: &ToolCallLabelMapping,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    mut budget: usize,
+) -> Result<ToolCallLabel, UnresolvedPointer> {
     let mut hidden = false;
     let mut reader = Reader {
         arguments,
@@ -1190,8 +1477,10 @@ mod tests {
             description: None,
             description_truncated: false,
             server_name: Some("Notion".into()),
+            tool_name: None,
             label: Some(label),
             read_only: false,
+            closed_world: false,
         };
         let json = serde_json::to_value(&display).unwrap();
         assert_eq!(json["label"]["action"], "create");

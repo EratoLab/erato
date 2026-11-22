@@ -1,9 +1,15 @@
+import { wordBodyRefIndex } from "./wordBodyRef";
 import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
 } from "./wordDocumentPlan";
 import { WORD_READ_TOOL, WORD_SUBMIT_PLAN_TOOL } from "./wordHistoryNames";
 import { isAcceptedWordSubmission } from "./wordHistoryParts";
+import {
+  parseWordOutline,
+  WORD_OUTLINE_TITLE_CHARS,
+} from "./wordOutlineFormat";
+import { wordReplayRecordRead } from "./wordReplayRecord";
 
 import type {
   WordAuthoringSnapshot,
@@ -13,6 +19,7 @@ import type {
 } from "./wordDocumentPlan";
 import type { WordEdit } from "./wordEditPlan";
 import type { WordImageAsset, WordImageAssetIssue } from "./wordImageAssetData";
+import type { WordParsedOutline } from "./wordOutlineFormat";
 import type { WordSectionSource, WordStorySource } from "./wordStories";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
@@ -21,11 +28,14 @@ export {
   WORD_ACTION_FACET_IDS,
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
+  WORD_PARTS_FENCE,
   WORD_PLAN_FENCE,
+  WORD_PLAN_SECTIONS_TOOL,
   WORD_READ_TOOL,
   WORD_REPLACE_FENCE,
   WORD_SUBMIT_PLAN_ACTION,
   WORD_SUBMIT_PLAN_TOOL,
+  WORD_WRITE_SECTION_TOOL,
 } from "./wordHistoryNames";
 
 export {
@@ -35,15 +45,44 @@ export {
 } from "./wordHistoryParts";
 
 /**
+ * What a snapshot rebuilt from section and target reads knows besides the
+ * blocks those reads returned.
+ */
+export interface WordHistoryCoverage {
+  /** Every body ref the plan, the reads and the request's outline name, in document order. */
+  order: readonly string[];
+  /** Where each section of the review starts, by ref, and the heading that titles it: none where no heading is sure. */
+  headings: ReadonlyMap<string, { text: string; level?: number } | undefined>;
+  /** Row and column titles of the cells read one by one, by `wordCellKey`. */
+  cells?: ReadonlyMap<string, { rowLabel: string; header: string }>;
+}
+
+export const wordCellKey = (
+  sourceRef: string,
+  rowIndex: number,
+  cellIndex: number,
+) => `${sourceRef}:${rowIndex}:${cellIndex}`;
+
+/**
  * A snapshot rebuilt from stored read outputs. It reviews what the model read,
  * but it has no document XML and never authorizes a write.
  */
-export type WordHistorySnapshot = WordAuthoringSnapshot & { source: "history" };
+export type WordHistorySnapshot = WordAuthoringSnapshot & {
+  source: "history";
+  /** Set when the turn read only parts of the document: `blocks` holds just those. */
+  partial?: WordHistoryCoverage;
+};
 
 export function isWordHistorySnapshot(
   snapshot: WordAuthoringSnapshot | undefined,
 ): snapshot is WordHistorySnapshot {
   return snapshot?.source === "history";
+}
+
+export function wordHistoryCoverage(
+  snapshot: WordAuthoringSnapshot | undefined,
+): WordHistoryCoverage | undefined {
+  return isWordHistorySnapshot(snapshot) ? snapshot.partial : undefined;
 }
 
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -54,46 +93,65 @@ const count = (value: unknown): value is number =>
 type HistoryMessage = Pick<Message, "content"> &
   Partial<Pick<Message, "action_facet_args">>;
 
+interface StoredRead {
+  input: Record<string, unknown>;
+  result: Record<string, unknown>;
+}
+
+/** The pane runs a read sent as a replay record; its page is the read under `kept`. */
+function storedReadInput(input: unknown): Record<string, unknown> {
+  const { call } = wordReplayRecordRead(input);
+  return object(call) ? call : {};
+}
+
+/** The successful `read_document_blocks` results for `snapshotId`, oldest first. */
+function storedReads(
+  messages: readonly HistoryMessage[],
+  snapshotId: string,
+): StoredRead[] {
+  return messages.flatMap(
+    (message) =>
+      (message.content as ContentPart[] | undefined)?.flatMap<StoredRead>(
+        (part) =>
+          part.content_type !== "tool_use" ||
+          part.tool_name !== WORD_READ_TOOL ||
+          part.status !== "success" ||
+          !object(part.output) ||
+          part.output.status !== "success" ||
+          !object(part.output.result) ||
+          part.output.result.snapshot !== snapshotId
+            ? []
+            : [
+                {
+                  input: storedReadInput(part.input),
+                  result: part.output.result,
+                },
+              ],
+      ) ?? [],
+  );
+}
+
+const PART_READS = ["section", "target", "table_cell"];
+
 interface ReadPage {
   cursor: string | null;
   result: Record<string, unknown>;
 }
 
-function readPages(
-  messages: readonly HistoryMessage[],
-  snapshotId: string,
-): ReadPage[] {
-  return messages.flatMap(
-    (message) =>
-      (message.content as ContentPart[] | undefined)?.flatMap<ReadPage>(
-        (part) => {
-          if (
-            part.content_type !== "tool_use" ||
-            part.tool_name !== WORD_READ_TOOL ||
-            part.status !== "success" ||
-            !object(part.output) ||
-            part.output.status !== "success" ||
-            !object(part.output.result) ||
-            part.output.result.snapshot !== snapshotId ||
-            !Array.isArray(part.output.result.blocks)
-          )
-            return [];
-          const input: Record<string, unknown> = object(part.input)
-            ? part.input
-            : {};
-          // A scoped table-cell read discloses one cell, not the document.
-          if ("table_cell" in input) return [];
-          return [
-            {
-              cursor:
-                typeof input.cursor === "string" && input.cursor
-                  ? input.cursor
-                  : null,
-              result: part.output.result,
-            },
-          ];
-        },
-      ) ?? [],
+function readPages(reads: readonly StoredRead[]): ReadPage[] {
+  return reads.flatMap(({ input, result }) =>
+    // Section, target and table-cell reads disclose parts, never the document.
+    !Array.isArray(result.blocks) || PART_READS.some((key) => key in input)
+      ? []
+      : [
+          {
+            cursor:
+              typeof input.cursor === "string" && input.cursor
+                ? input.cursor
+                : null,
+            result,
+          },
+        ],
   );
 }
 
@@ -225,6 +283,30 @@ function reassemble(fragments: Fragment[]): SourceRecord | undefined {
   };
 }
 
+function bodyBlock({
+  base,
+  text,
+  runs,
+  structure,
+}: SourceRecord): WordSourceBlock {
+  const { content, objects, format } = structure;
+  return {
+    ...(base as Omit<WordSourceBlock, "text" | "xml">),
+    text,
+    ...(runs ? { runs } : {}),
+    ...(format !== undefined
+      ? { format: format as WordSourceBlock["format"] }
+      : {}),
+    ...(content !== undefined
+      ? { content: content as WordSourceBlock["content"] }
+      : {}),
+    ...(objects !== undefined
+      ? { objects: objects as WordSourceBlock["objects"] }
+      : {}),
+    xml: "",
+  };
+}
+
 /**
  * Rebuilds the source a plan was written against from the stored
  * `read_document_blocks` outputs for `snapshotId`, searching the given
@@ -235,7 +317,7 @@ export function wordSnapshotFromHistory(
   messages: readonly HistoryMessage[],
   snapshotId: string,
 ): WordHistorySnapshot | undefined {
-  const chain = completeRead(readPages(messages, snapshotId));
+  const chain = completeRead(readPages(storedReads(messages, snapshotId)));
   if (!chain) return undefined;
   const first = chain[0].result;
   const last = chain[chain.length - 1].result;
@@ -263,7 +345,7 @@ export function wordSnapshotFromHistory(
   for (const ref of order) {
     const record = reassemble(byRef.get(ref)!);
     if (!record) return undefined;
-    const { base, text, runs, structure } = record;
+    const { base, text, structure } = record;
     if (base.type === "story") {
       const { story } = structure;
       if (!object(story)) return undefined;
@@ -279,24 +361,7 @@ export function wordSnapshotFromHistory(
         ...(section as Omit<WordSectionSource, "xml">),
         xml: "",
       }));
-    } else {
-      const { content, objects, format } = structure;
-      blocks.push({
-        ...(base as Omit<WordSourceBlock, "text" | "xml">),
-        text,
-        ...(runs ? { runs } : {}),
-        ...(format !== undefined
-          ? { format: format as WordSourceBlock["format"] }
-          : {}),
-        ...(content !== undefined
-          ? { content: content as WordSourceBlock["content"] }
-          : {}),
-        ...(objects !== undefined
-          ? { objects: objects as WordSourceBlock["objects"] }
-          : {}),
-        xml: "",
-      });
-    }
+    } else blocks.push(bodyBlock(record));
   }
   const assets = Array.isArray(first.assets)
     ? (first.assets as Omit<WordImageAsset, "fileId" | "base64">[]).map(
@@ -333,11 +398,252 @@ export function wordSnapshotFromHistory(
   };
 }
 
+const isReadBlock = (
+  value: unknown,
+): value is Omit<WordSourceBlock, "xml"> & Record<string, unknown> =>
+  object(value) &&
+  typeof value.ref === "string" &&
+  typeof value.type === "string" &&
+  typeof value.text === "string";
+
+/** A table-cell read returns a cell's titles as snippets: { text, truncated }. */
+const snippetText = (value: unknown) =>
+  object(value) && typeof value.text === "string"
+    ? `${value.text}${value.truncated === true ? "…" : ""}`
+    : undefined;
+
+function requestOutline(
+  messages: readonly HistoryMessage[],
+  snapshotId: string,
+): WordParsedOutline | undefined {
+  const text = messages.findLast(
+    (m) => m.action_facet_args?.document_snapshot === snapshotId,
+  )?.action_facet_args?.heading_outline;
+  return text ? parseWordOutline(text) : undefined;
+}
+
+interface ReviewHeading {
+  text: string;
+  level: number;
+}
+
+const outlineTitle = (title: string) =>
+  Array.from(title).length >= WORD_OUTLINE_TITLE_CHARS ? `${title}…` : title;
+
+/**
+ * Where each section of a partly read review starts, by ref. An unread block may be a heading
+ * below the levels the outline lists in full, so blocks after it go under the nearest heading they
+ * surely belong to; a block with none starts a section without a title rather than a wrong one.
+ */
+function reviewSections(
+  order: readonly string[],
+  known: ReadonlyMap<string, WordSourceBlock | undefined>,
+  outline: WordParsedOutline | undefined,
+): Map<string, ReviewHeading | undefined> {
+  const sections = new Map<string, ReviewHeading | undefined>();
+  const positions = order.map(wordBodyRefIndex);
+  const endsBefore = outline?.endsBefore
+    ? (wordBodyRefIndex(outline.endsBefore) ?? -1)
+    : Infinity;
+  const listedCap = !outline
+    ? 1
+    : outline.shortened
+      ? Math.max(0, ...[...outline.headings.values()].map((h) => h.level)) + 1
+      : Infinity;
+  /** The shallowest level an unread block at this index could be a heading at. */
+  const capAt = (at: number) => (at < endsBefore ? listedCap : 1);
+  const headingOf = (ref: string): ReviewHeading | undefined => {
+    const block = known.get(ref);
+    const listed = outline?.headings.get(ref);
+    if (listed)
+      return {
+        text: block?.text.trim() ? block.text : outlineTitle(listed.title),
+        level: listed.level,
+      };
+    return block?.type === "heading"
+      ? { text: block.text, level: block.level ?? 1 }
+      : undefined;
+  };
+  const open: ReviewHeading[] = [];
+  let opening = true;
+  const unread = (cap: number) => {
+    while ((open.at(-1)?.level ?? 0) >= cap) open.pop();
+    if (cap <= 1) opening = false;
+  };
+  let previous = -1;
+  /** undefined: the opening content; null: no heading is sure. */
+  let current: ReviewHeading | null | undefined;
+  for (const [k, ref] of order.entries()) {
+    const at = positions[k];
+    if (at === undefined) return new Map([[order[0], undefined]]);
+    if (at > previous + 1) unread(capAt(at - 1));
+    previous = at;
+    const heading = headingOf(ref);
+    if (heading) {
+      while ((open.at(-1)?.level ?? 0) >= heading.level) open.pop();
+      open.push(heading);
+      opening = false;
+    } else if (!known.has(ref)) unread(capAt(at));
+    const title = open.at(-1) ?? (opening ? undefined : null);
+    if (title !== current) sections.set(ref, title ?? undefined);
+    current = title;
+  }
+  return sections;
+}
+
+/**
+ * The source of a plan whose turn read only parts of the document, as a
+ * document too large for a complete read is read: the blocks its section and
+ * target reads returned, and the headings that start each section of the
+ * review. Undefined when the turn made no such read.
+ */
+function wordPartialSnapshotFromHistory(
+  messages: readonly HistoryMessage[],
+  plan: WordDocumentPlan,
+): WordHistorySnapshot | undefined {
+  const reads = storedReads(messages, plan.snapshot).filter(({ input }) =>
+    PART_READS.some((key) => key in input),
+  );
+  if (!reads.length) return undefined;
+  const blocks = new Map<string, WordSourceBlock>();
+  const fragments = new Map<string, Map<number, Fragment>>();
+  const styles = new Map<string, WordAuthoringSnapshot["styles"][number]>();
+  /** Tables read only through a cell: not headings, though their blocks were not read. */
+  const cellTables = new Set<string>();
+  const cells = new Map<string, { rowLabel: string; header: string }>();
+  for (const { input, result } of reads) {
+    const cell = object(result.target) ? result.target : result.cell;
+    if (
+      "table_cell" in input &&
+      result.status === "ready" &&
+      object(cell) &&
+      typeof cell.sourceRef === "string"
+    ) {
+      cellTables.add(cell.sourceRef);
+      const found = (
+        Array.isArray(result.candidates) ? (result.candidates as unknown[]) : []
+      ).find(
+        (c) =>
+          object(c) &&
+          c.sourceRef === cell.sourceRef &&
+          c.rowIndex === cell.rowIndex &&
+          c.cellIndex === cell.cellIndex,
+      );
+      const rowLabel = object(found) ? snippetText(found.rowLabel) : undefined;
+      const header = object(found) ? snippetText(found.header) : undefined;
+      if (
+        rowLabel !== undefined &&
+        header !== undefined &&
+        typeof cell.rowIndex === "number" &&
+        typeof cell.cellIndex === "number"
+      )
+        cells.set(wordCellKey(cell.sourceRef, cell.rowIndex, cell.cellIndex), {
+          rowLabel,
+          header,
+        });
+    }
+    if ("section" in input && Array.isArray(result.blocks))
+      for (const value of result.blocks as unknown[]) {
+        if (isFragment(value)) {
+          const parts = fragments.get(value.ref) ?? new Map();
+          if (!parts.has(value.part)) parts.set(value.part, value);
+          fragments.set(value.ref, parts);
+        } else if (isReadBlock(value) && !blocks.has(value.ref))
+          blocks.set(value.ref, { ...value, xml: "" });
+      }
+    if (
+      !("target" in input) ||
+      result.status !== "ready" ||
+      !Array.isArray(result.targets)
+    )
+      continue;
+    for (const target of result.targets as unknown[])
+      if (
+        object(target) &&
+        target.objectTarget === undefined &&
+        target.bodyRef === target.ref &&
+        isReadBlock(target.content) &&
+        target.content.ref === target.ref &&
+        !blocks.has(target.content.ref)
+      )
+        blocks.set(target.content.ref, { ...target.content, xml: "" });
+    for (const style of Array.isArray(result.styles) ? result.styles : [])
+      if (
+        object(style) &&
+        typeof style.id === "string" &&
+        typeof style.name === "string" &&
+        !styles.has(style.id)
+      )
+        styles.set(
+          style.id,
+          style as unknown as WordAuthoringSnapshot["styles"][number],
+        );
+  }
+  for (const [ref, parts] of fragments) {
+    const record = blocks.has(ref)
+      ? undefined
+      : reassemble([...parts.values()]);
+    if (record) blocks.set(ref, bodyBlock(record));
+  }
+  const outline = requestOutline(messages, plan.snapshot);
+  const position = (ref: string) =>
+    wordBodyRefIndex(ref) ?? Number.MAX_SAFE_INTEGER;
+  const order = [
+    ...new Set([
+      ...plan.entries.flatMap((entry) =>
+        entry.kind === "insert" ? [] : entry.source,
+      ),
+      ...plan.deleted.flatMap((deletion) => deletion.source),
+      ...blocks.keys(),
+      ...(outline?.headings.keys() ?? []),
+    ]),
+  ].sort((a, b) => position(a) - position(b));
+  const known = new Map<string, WordSourceBlock | undefined>([
+    ...[...cellTables].map((ref) => [ref, undefined] as const),
+    ...blocks,
+  ]);
+  return {
+    source: "history",
+    token: plan.snapshot,
+    identity: "",
+    ooxml: "",
+    fingerprint: "",
+    blocks: order.flatMap((ref) => blocks.get(ref) ?? []),
+    styles: [...styles.values()],
+    assets: [],
+    imageAssetIssues: [],
+    read: new Set(blocks.keys()),
+    revoked: true,
+    used: true,
+    partial: {
+      order,
+      headings: reviewSections(order, known, outline),
+      cells,
+    },
+  };
+}
+
 export interface WordHistoryPlan {
   toolCallId: string;
   /** The materialized plan as JSON, as the plan fence carries it. */
   content: string;
   plan: WordDocumentPlan;
+  /** See {@link wordPlanNotInProposal}. */
+  notInProposal: string[];
+}
+
+/** How many left-out parts the card and the model's note name before "and other parts". */
+export const MAX_NOT_IN_PROPOSAL_NAMES = 5;
+
+/** The one accepted `submit_document_plan` call of a message and its receipt. */
+function acceptedSubmission(content: readonly ContentPart[] | undefined) {
+  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
+  const part = accepted.length === 1 ? accepted[0] : undefined;
+  if (part?.content_type !== "tool_use") return undefined;
+  const output = part.output;
+  return object(output) && object(output.result)
+    ? { part, result: output.result }
+    : undefined;
 }
 
 /**
@@ -348,29 +654,46 @@ export interface WordHistoryPlan {
 export function acceptedWordPlanFromHistory(
   content: readonly ContentPart[] | undefined,
 ): WordHistoryPlan | undefined {
-  const accepted = (content ?? []).filter(isAcceptedWordSubmission);
-  if (accepted.length !== 1) return undefined;
-  const part = accepted[0];
-  if (part.content_type !== "tool_use" || !part.tool_call_id) return undefined;
-  const output = part.output;
-  if (!object(output) || !object(output.result)) return undefined;
+  const accepted = acceptedSubmission(content);
+  const toolCallId = accepted?.part.tool_call_id;
+  if (!accepted || !toolCallId) return undefined;
+  const { part, result } = accepted;
   const plan =
     object(part.input) &&
     ("draft_id" in part.input ||
       "table_cell" in part.input ||
       "scoped_edit" in part.input)
-      ? output.result.plan
+      ? result.plan
       : part.input;
   if (
     !object(plan) ||
-    plan.snapshot !== output.result.snapshot ||
+    plan.snapshot !== result.snapshot ||
     (object(part.input) && plan.readToken !== part.input.readToken)
   )
     return undefined;
   const contentJson = JSON.stringify(plan);
   const parsed = parseWordDocumentPlan(contentJson);
   if (!parsed) return undefined;
-  return { toolCallId: part.tool_call_id, content: contentJson, plan: parsed };
+  return {
+    toolCallId,
+    content: contentJson,
+    plan: parsed,
+    notInProposal: wordPlanNotInProposal(content),
+  };
+}
+
+/** The parts a smaller accepted retry left out, as the add-in's receipt names them; an empty name
+ * stands for a part without text. */
+export function wordPlanNotInProposal(
+  content: readonly ContentPart[] | undefined,
+): string[] {
+  const names = acceptedSubmission(content)?.result.notInProposal;
+  return Array.isArray(names)
+    ? names.filter(
+        (name): name is string =>
+          typeof name === "string" && (name === "" || !!name.trim()),
+      )
+    : [];
 }
 
 export interface WordHistoryParagraph {
@@ -471,6 +794,8 @@ export interface WordHistoryProposal {
   plan: WordDocumentPlan;
   snapshot?: WordHistorySnapshot;
   documentName?: string;
+  /** See {@link wordPlanNotInProposal}; only for a proposal read from a message's content. */
+  notInProposal?: string[];
 }
 
 /**
@@ -482,12 +807,18 @@ export function wordHistoryProposal(
   lineage: readonly HistoryMessage[],
   submitted: readonly ContentPart[] | string,
 ): WordHistoryProposal | undefined {
+  const accepted =
+    typeof submitted === "string"
+      ? undefined
+      : acceptedWordPlanFromHistory(submitted);
   const plan =
     typeof submitted === "string"
       ? parseWordDocumentPlan(submitted)
-      : acceptedWordPlanFromHistory(submitted)?.plan;
+      : accepted?.plan;
   if (!plan) return undefined;
-  const snapshot = wordSnapshotFromHistory(lineage, plan.snapshot);
+  const snapshot =
+    wordSnapshotFromHistory(lineage, plan.snapshot) ??
+    wordPartialSnapshotFromHistory(lineage, plan);
   const documentName = lineage.findLast(
     (message) => message.action_facet_args?.document_name,
   )?.action_facet_args?.document_name;
@@ -495,6 +826,9 @@ export function wordHistoryProposal(
     plan: normalizeWordDocumentPlan(plan, snapshot),
     ...(snapshot ? { snapshot } : {}),
     ...(documentName ? { documentName } : {}),
+    ...(accepted?.notInProposal.length
+      ? { notInProposal: accepted.notInProposal }
+      : {}),
   };
 }
 

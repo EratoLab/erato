@@ -104,7 +104,7 @@ const UNRELATED: &str = "unreleased";
     def reference(self, version):
         (self.repo / REFERENCE).write_text(json.dumps({
             "old": {"stability": "stable", "introduced_in": "0.6.0"},
-            "new": {"stability": "unstable", "introduced_in": version},
+            "new": {"stability": "unreviewed", "introduced_in": version},
         }))
 
     def test_release_changes_only_unreleased_dates_and_returns_files_to_commit(self):

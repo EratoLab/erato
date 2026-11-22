@@ -1,0 +1,241 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  DEFAULT_START_BUFFER_MS as START_BUFFER_MS,
+  DEFAULT_START_WAIT_MS as START_WAIT_MS,
+  configureVoiceStart,
+  createPcmQueue,
+} from "./pcmPlayback";
+
+const RATE = 24000;
+
+class MockContext {
+  currentTime = 0;
+  destination = {};
+  started: { at: number; duration: number }[] = [];
+  sources: { onended: (() => void) | null }[] = [];
+  createBuffer(_channels: number, length: number, rate: number) {
+    return {
+      duration: length / rate,
+      getChannelData: () => new Float32Array(length),
+    };
+  }
+  createGain() {
+    return {
+      context: this,
+      gain: { value: 1, setTargetAtTime: vi.fn() },
+      connect: vi.fn(),
+    };
+  }
+  createBufferSource() {
+    const source = {
+      connect: vi.fn(),
+      disconnect: vi.fn(),
+      stop: vi.fn(),
+      buffer: null as { duration: number } | null,
+      onended: null as (() => void) | null,
+      start: (at: number) =>
+        this.started.push({ at, duration: source.buffer?.duration ?? 0 }),
+    };
+    this.sources.push(source);
+    return source;
+  }
+}
+
+/** Base64 PCM of `ms` milliseconds of silence. */
+const pcm = (ms: number) =>
+  globalThis.btoa(
+    String.fromCharCode(...new Uint8Array(((RATE * ms) / 1000) * 2)),
+  );
+
+const context = () => new MockContext() as unknown as AudioContext;
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => {
+  configureVoiceStart({});
+  vi.useRealTimers();
+});
+
+describe("starting a voice from silence", () => {
+  it("does not play the stream's first 200 ms alone before its pause", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    const started = (ctx as unknown as MockContext).started;
+    // As measured: 171 + 29 ms at once, then nothing for 0.3 to 0.7 s.
+    queue.enqueue(ctx, pcm(171), RATE);
+    queue.enqueue(ctx, pcm(29), RATE);
+    expect(started).toHaveLength(0);
+    expect(queue.active).toBe(true);
+
+    vi.advanceTimersByTime(300);
+    queue.enqueue(ctx, pcm(240), RATE);
+    // 440 ms buffered: all of it plays back to back, without a gap.
+    expect(started).toHaveLength(3);
+    for (let i = 1; i < started.length; i += 1)
+      expect(started[i].at).toBeCloseTo(
+        started[i - 1].at + started[i - 1].duration,
+        6,
+      );
+  });
+
+  it("waits at most a moment for the rest", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    queue.enqueue(ctx, pcm(200), RATE);
+    vi.advanceTimersByTime(START_WAIT_MS - 1);
+    expect((ctx as unknown as MockContext).started).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect((ctx as unknown as MockContext).started).toHaveLength(1);
+  });
+
+  it("starts at once with enough audio, or a whole short sentence", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    queue.enqueue(ctx, pcm(START_BUFFER_MS), RATE);
+    expect((ctx as unknown as MockContext).started).toHaveLength(1);
+
+    const short = createPcmQueue(vi.fn());
+    const other = context();
+    short.enqueue(other, pcm(150), RATE);
+    short.flush();
+    expect((other as unknown as MockContext).started).toHaveLength(1);
+  });
+
+  it("follows on at once while it plays, and a stop forgets what waits", () => {
+    const drained = vi.fn();
+    const queue = createPcmQueue(drained);
+    const ctx = context();
+    queue.enqueue(ctx, pcm(500), RATE);
+    queue.enqueue(ctx, pcm(50), RATE);
+    expect((ctx as unknown as MockContext).started).toHaveLength(2);
+
+    const waiting = createPcmQueue(drained);
+    const other = context();
+    waiting.enqueue(other, pcm(100), RATE);
+    waiting.stop();
+    vi.advanceTimersByTime(START_WAIT_MS);
+    expect((other as unknown as MockContext).started).toHaveLength(0);
+    expect(waiting.active).toBe(false);
+    expect(drained).not.toHaveBeenCalled();
+  });
+
+  it("takes the deployment's start buffer, and plays at once with none", () => {
+    configureVoiceStart({ bufferMs: 0 });
+    const ctx = context();
+    createPcmQueue(vi.fn()).enqueue(ctx, pcm(100), RATE);
+    expect((ctx as unknown as MockContext).started).toHaveLength(1);
+
+    configureVoiceStart({ bufferMs: 1000, maxWaitMs: 600 });
+    const other = context();
+    const queue = createPcmQueue(vi.fn());
+    queue.enqueue(other, pcm(500), RATE);
+    vi.advanceTimersByTime(START_WAIT_MS);
+    expect((other as unknown as MockContext).started).toHaveLength(0);
+    vi.advanceTimersByTime(600 - START_WAIT_MS);
+    expect((other as unknown as MockContext).started).toHaveLength(1);
+
+    // Out of range: the defaults.
+    configureVoiceStart({ bufferMs: -1, maxWaitMs: 99_999 });
+    const third = context();
+    createPcmQueue(vi.fn()).enqueue(third, pcm(START_BUFFER_MS), RATE);
+    expect((third as unknown as MockContext).started).toHaveLength(1);
+  });
+
+  it("F3: a voice that runs dry in the middle goes on at once, and a stop starts afresh", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    const started = (ctx as unknown as MockContext).started;
+    queue.enqueue(ctx, pcm(START_BUFFER_MS), RATE);
+    expect(started).toHaveLength(1);
+    // The queue runs dry; the stream goes on at its own pace.
+    (ctx as unknown as MockContext).sources[0].onended?.();
+    expect(queue.active).toBe(false);
+    queue.enqueue(ctx, pcm(60), RATE);
+    expect(started).toHaveLength(2);
+
+    queue.stop();
+    queue.enqueue(ctx, pcm(60), RATE);
+    expect(started).toHaveLength(2);
+    vi.advanceTimersByTime(START_WAIT_MS);
+    expect(started).toHaveLength(3);
+  });
+
+  it("keeps waiting audio when paused, to be said again", () => {
+    const queue = createPcmQueue(vi.fn());
+    const ctx = context();
+    const first = pcm(100);
+    queue.enqueue(ctx, first, RATE);
+    expect(queue.pause(ctx)).toEqual([{ audio: first, sampleRate: RATE }]);
+    expect(queue.active).toBe(false);
+  });
+});
+
+/**
+ * Replays a stream as it arrived, [ms after the first chunk, ms of audio],
+ * with the context's clock running, and returns the silences inside it and
+ * when its first sound starts, in ms.
+ */
+function replay(stream: [number, number][]) {
+  const mock = new MockContext();
+  const base = Date.now();
+  Object.defineProperty(mock, "currentTime", {
+    get: () => (Date.now() - base) / 1000,
+  });
+  const queue = createPcmQueue(vi.fn());
+  const ctx = mock as unknown as AudioContext;
+  for (const [at, ms] of stream) {
+    vi.advanceTimersByTime(at - (Date.now() - base));
+    queue.enqueue(ctx, pcm(ms), RATE);
+  }
+  queue.flush();
+  const gaps = mock.started
+    .slice(1)
+    .map((chunk, i) => {
+      const before = mock.started[i];
+      return Math.round((chunk.at - before.at - before.duration) * 1000);
+    })
+    .filter((gap) => gap > 0);
+  return { gaps, first: Math.round(mock.started[0].at * 1000) };
+}
+
+/** The rest of a sentence, faster than it plays as on staging: 2 s in 0.4 s. */
+const rest = (from: number): [number, number][] =>
+  Array.from({ length: 20 }, (_, i) => [from + i * 20, 100]);
+
+describe("streams as measured", () => {
+  it("staging's voice (small chunks, steady): no silence, first sound within 0.1 s", () => {
+    // A reply on MS staging, 2026-11-20: the first 12 chunks.
+    const { gaps, first } = replay([
+      [0, 40],
+      [0, 40],
+      [19, 120],
+      [19, 40],
+      [35, 40],
+      [35, 40],
+      [38, 40],
+      [54, 40],
+      [54, 80],
+      [83, 120],
+      [101, 40],
+      [101, 40],
+      ...rest(120),
+    ]);
+    expect(gaps).toEqual([]);
+    expect(first).toBeLessThanOrEqual(100);
+  });
+
+  it.each([290, 450, 550])(
+    "the local voice's first pause of %i ms after 200 ms of audio: no silence",
+    (pause) => {
+      const { gaps, first } = replay([[0, 171], [0, 29], ...rest(pause)]);
+      expect(gaps).toEqual([]);
+      expect(first).toBeLessThanOrEqual(START_WAIT_MS + 30);
+    },
+  );
+
+  it("a pause longer than the wait and the audio it holds leaves only the excess", () => {
+    // The longest pause measured on 2026-11-18.
+    const { gaps } = replay([[0, 171], [0, 29], ...rest(736)]);
+    expect(gaps).toEqual([736 - START_WAIT_MS - 200]);
+  });
+});

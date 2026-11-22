@@ -27,6 +27,7 @@ import {
   useMemo,
 } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
 import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 import {
@@ -38,12 +39,28 @@ import { useChatHistory } from "@/hooks";
 import { stopReadAloud } from "@/hooks/audio/readAloud";
 import {
   beginSpeechResponse,
+  endSpeechResponse,
   moveSpeechStream,
   playSpeechChunk,
+  readsBackContinuation,
+  replyCallsTool,
   speechFailed,
+  spokenPartBegins,
+  spokenPartEnds,
   stopSpeechPlayback,
   useSpeechPlayback,
+  writtenPartArrives,
 } from "@/hooks/audio/speechPlayback";
+import {
+  beginWaitTurn,
+  endWaitTurn,
+  moveWaitTurn,
+  waitTurnAnswered,
+  waitTurnAudio,
+  waitTurnSpeaks,
+  waitTurnSpokenEnd,
+  waitTurnTool,
+} from "@/hooks/audio/waitLines";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
@@ -80,6 +97,7 @@ import { handleChatCreated } from "./handlers/handleChatCreated";
 import { handleClientToolCall } from "./handlers/handleClientToolCall";
 import { handleMessageComplete as externalHandleMessageComplete } from "./handlers/handleMessageComplete";
 import { handleReasoningDelta } from "./handlers/handleReasoningDelta";
+import { handleSpokenDelta } from "./handlers/handleSpokenDelta";
 import { handleTextDelta } from "./handlers/handleTextDelta";
 import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
@@ -519,6 +537,7 @@ export function useChatMessaging(
       logger.log(
         "[DEBUG_STREAMING] Resetting streaming state on mount/chatId change.",
       );
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
     } else {
       logger.log(
@@ -789,6 +808,7 @@ export function useChatMessaging(
           logger.log(
             `[DEBUG_STREAMING] ${logContext}: Persisted assistant detected, resetting streaming state.`,
           );
+          endWaitTurn(effectiveStreamKey);
           store.resetStreaming(effectiveStreamKey);
         } else {
           logger.log(
@@ -865,6 +885,7 @@ export function useChatMessaging(
       const cleanupForStreamKey = getSSECleanupForKey(streamKey);
       cleanupForStreamKey?.();
       setSSECleanupForKey(streamKey, null);
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
       setSubmittingForKey(streamKey, false);
       return;
@@ -876,16 +897,20 @@ export function useChatMessaging(
     // does, because a dropped connection resumes and the result still lands.
     abortClientToolCalls(effectiveChatId);
 
-    void fetch("/api/v1beta/me/messages/abortstream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify({
-        chat_id: effectiveChatId,
-      }),
-    }).catch((error: unknown) => {
+    void fetchWithAuthRecovery(
+      () =>
+        fetch("/api/v1beta/me/messages/abortstream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            chat_id: effectiveChatId,
+          }),
+        }),
+      "abort-stream",
+    ).catch((error: unknown) => {
       logger.error("Failed to request message cancellation", error);
     });
   }, [
@@ -951,6 +976,7 @@ export function useChatMessaging(
 
       // Reset streaming state
       logger.log("SSE Cleanup: Calling resetStreaming.");
+      endWaitTurn(streamKey);
       resetStreaming(streamKey);
 
       // Clear error on unmount
@@ -1062,6 +1088,7 @@ export function useChatMessaging(
         // Handle different message types from SSE
         switch (responseData.message_type) {
           case "audio_delta":
+            waitTurnAudio(activeStreamKey);
             playSpeechChunk(
               responseData.message_id,
               responseData.sequence,
@@ -1081,6 +1108,7 @@ export function useChatMessaging(
             {
               const previousStreamKey = activeStreamKey;
               moveSpeechStream(previousStreamKey, responseData.chat_id);
+              moveWaitTurn(previousStreamKey, responseData.chat_id);
               // A resume stream replays the chat's full event history, so
               // this frame can announce a chat this client never submitted
               // (most visibly a delegated run entered mid-generation). Such
@@ -1208,7 +1236,23 @@ export function useChatMessaging(
             break;
 
           case "text_delta":
+            if (responseData.new_text.trim().length > 0) {
+              waitTurnAnswered(activeStreamKey);
+              writtenPartArrives(activeStreamKey);
+            }
             handleTextDelta(responseData, activeStreamKey);
+            break;
+
+          case "spoken_delta":
+            if (responseData.new_text.trim().length > 0)
+              waitTurnSpeaks(activeStreamKey);
+            spokenPartBegins(activeStreamKey);
+            handleSpokenDelta(responseData, activeStreamKey);
+            break;
+
+          case "spoken_end":
+            waitTurnSpokenEnd(activeStreamKey);
+            spokenPartEnds(activeStreamKey, responseData.message_id);
             break;
 
           case "reasoning_delta":
@@ -1216,6 +1260,8 @@ export function useChatMessaging(
             break;
 
           case "assistant_message_completed":
+            endWaitTurn(activeStreamKey);
+            endSpeechResponse(activeStreamKey, responseData.message_id);
             logger.log(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_completed event. Full payload:",
               responseData,
@@ -1291,6 +1337,7 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: tool_call_proposed event received. Full payload:",
               responseData,
             );
+            replyCallsTool(activeStreamKey);
             handleToolCallProposed(responseData, activeStreamKey);
             break;
 
@@ -1300,6 +1347,13 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            waitTurnTool(
+              activeStreamKey,
+              responseData.message_id,
+              responseData.tool_call_id,
+              responseData.status,
+              responseData.display?.label,
+            );
             // The sidebar keeps the Scheduled lists cached, so without this
             // the Scheduled page and earlier cards would not show the change.
             if (
@@ -1364,6 +1418,7 @@ export function useChatMessaging(
                 .getState()
                 .markTerminalLocal(activeStreamKey, "error");
             }
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
             setSubmittingForKey(activeStreamKey, false);
@@ -1426,6 +1481,7 @@ export function useChatMessaging(
       setHandoffSubmitKey((current) =>
         current === resumeStreamKey ? null : current,
       );
+      endWaitTurn(resumeStreamKey);
       resetStreaming(resumeStreamKey);
     },
     [isSubmittingForKey, resetStreaming, setSubmittingForKey],
@@ -1545,6 +1601,7 @@ export function useChatMessaging(
               .getStreaming(resumeStreamKey).isStreaming;
             if (stillStreaming) {
               setError(connectionError);
+              endWaitTurn(resumeStreamKey);
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
@@ -1575,6 +1632,7 @@ export function useChatMessaging(
               logger.warn(
                 "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
               );
+              endWaitTurn(resumeStreamKey);
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream closed without completion (${reason})`,
@@ -1716,6 +1774,7 @@ export function useChatMessaging(
           [handoff.optimisticMessageId],
           handoff.streamKeyForDraft,
         );
+        endWaitTurn(handoff.streamKeyForDraft);
         resetStreaming(handoff.streamKeyForDraft);
       }
       return true;
@@ -1947,6 +2006,7 @@ export function useChatMessaging(
         if (!prepared || controller.signal.aborted) {
           // Nothing reached the server, so no refetch can restore these rows.
           removeUserMessages([userMessage.id], streamKey);
+          endWaitTurn(streamKey);
           resetStreaming(streamKey);
           if (silentChatId) {
             setAwaitingFirstStreamChunkForNewChat(false);
@@ -2061,6 +2121,8 @@ export function useChatMessaging(
         requestBody.conversational_audio_back =
           speech.conversational && speech.enabled;
         beginSpeechResponse(streamKey);
+        if (useSpeechPlayback.getState().spokenTurn === streamKey)
+          beginWaitTurn(streamKey);
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
           requestBody,
           effectiveChatIdForRequest,
@@ -2179,6 +2241,7 @@ export function useChatMessaging(
             logger.log(
               "[DEBUG_STREAMING] SSE onError: Resetting streaming state.",
             );
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             clearPendingChat(activeStreamKey);
 
@@ -2254,6 +2317,7 @@ export function useChatMessaging(
               logger.log(
                 "[DEBUG_STREAMING] SSE onClose (unexpected): Resetting streaming state.",
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               clearPendingChat(activeStreamKey);
 
@@ -2300,6 +2364,7 @@ export function useChatMessaging(
         logger.log(
           "[DEBUG_STREAMING] sendMessage catch: Resetting streaming state.",
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         // Use the new utility for refetch and clear
@@ -2442,6 +2507,7 @@ export function useChatMessaging(
               }
             }
             setError(connectionError);
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             void handleRefetchAndClear({ logContext: "SSE error (edit)" });
             setSubmittingForKey(activeStreamKey, false);
@@ -2471,6 +2537,7 @@ export function useChatMessaging(
                 "[DEBUG_STREAMING] Edit SSE connection closed unexpectedly while streaming was still active.",
               );
               setError(new Error("SSE connection closed unexpectedly (edit)"));
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Edit SSE closed unexpectedly",
@@ -2495,6 +2562,7 @@ export function useChatMessaging(
         setError(
           err instanceof Error ? err : new Error("Failed to edit message"),
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         void handleRefetchAndClear({ logContext: "Edit message error" });
@@ -2595,6 +2663,7 @@ export function useChatMessaging(
               }
             }
             setError(connectionError);
+            endWaitTurn(activeStreamKey);
             resetStreaming(activeStreamKey);
             void handleRefetchAndClear({
               logContext: "SSE error (regenerate)",
@@ -2628,6 +2697,7 @@ export function useChatMessaging(
               setError(
                 new Error("SSE connection closed unexpectedly (regenerate)"),
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Regenerate SSE closed unexpectedly",
@@ -2654,6 +2724,7 @@ export function useChatMessaging(
             ? err
             : new Error("Failed to regenerate message"),
         );
+        endWaitTurn(streamKey);
         resetStreaming(streamKey);
 
         void handleRefetchAndClear({ logContext: "Regenerate message error" });
@@ -2751,13 +2822,18 @@ export function useChatMessaging(
       const settled: SettledApproval[] = nothingToDecide
         ? []
         : items && items.length > 0
-          ? items.map((item) => ({
-              item,
-              decision:
-                itemDecisions?.find(
-                  (answer) => answer.approvalId === item.approval_id,
-                )?.decision ?? decision,
-            }))
+          ? items.map((item) => {
+              const answer = itemDecisions?.find(
+                (entry) => entry.approvalId === item.approval_id,
+              );
+              return {
+                item,
+                decision: answer?.decision ?? decision,
+                ...(answer?.changeRequest
+                  ? { changeRequest: answer.changeRequest }
+                  : {}),
+              };
+            })
           : [
               {
                 item: {
@@ -2836,6 +2912,7 @@ export function useChatMessaging(
       const rollBackUnaccepted = (activeStreamKey: string) => {
         setSSECleanupForKey(activeStreamKey, null);
         setSSEAbortCallback(null, activeStreamKey);
+        endWaitTurn(activeStreamKey);
         resetStreaming(activeStreamKey);
         setSubmittingForKey(activeStreamKey, false);
         if (activeStreamKey !== NEW_CHAT_STREAM_KEY) {
@@ -2854,6 +2931,14 @@ export function useChatMessaging(
           .getState()
           .setStreaming({ content: seededContent }, activeStreamKey);
       };
+
+      // The answer after a decision is read back when the turn that stopped
+      // was, and the voice can still play it.
+      const readBack = !nothingToDecide && readsBackContinuation(streamKey);
+      if (readBack) {
+        beginSpeechResponse(streamKey);
+        beginWaitTurn(streamKey, { continuation: true });
+      }
 
       return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
@@ -2906,6 +2991,7 @@ export function useChatMessaging(
                 }
               }
               setError(connectionError);
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "SSE error (continue)",
@@ -2950,6 +3036,7 @@ export function useChatMessaging(
               setError(
                 new Error("SSE connection closed unexpectedly (continue)"),
               );
+              endWaitTurn(activeStreamKey);
               resetStreaming(activeStreamKey);
               void handleRefetchAndClear({
                 logContext: "Continue SSE closed unexpectedly",
@@ -2977,6 +3064,7 @@ export function useChatMessaging(
                     approvalIds,
                     itemDecisions,
                     enumerate,
+                    readBack,
                   }),
             ),
           },

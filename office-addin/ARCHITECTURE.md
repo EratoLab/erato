@@ -48,7 +48,10 @@ implement the seams listed below, and never modify the core itself.
   full tier, else the whole file through `getFileAsync`, fetching only the
   slices that hold the slide's parts (`utils/powerpointFileContent.ts`). Nothing
   is cached; a file that does not match the shapes on screen is not used, and
-  what the whole file supplies is labelled as possibly the last saved version.
+  what the whole file supplies is labelled as possibly the last saved version,
+  except on the one host measured to hand over unsaved edits (Microsoft 365 for
+  Windows at the full tier, `fileIsCurrent`). On that host only, an export
+  without a notes page also counts as "no notes" (`exportKeepsNotes`).
   Like Word's
   chip, the chip and the tools appear only while the server advertises the
   `powerpoint_presentation` action facet, and the tools are listed only for a
@@ -62,10 +65,35 @@ implement the seams listed below, and never modify the core itself.
   composer's own upload path and stages it as an ordinary image attachment; the
   composer stays disabled until it is staged or a notice says why not. A model
   that cannot see images shows a warning for as long as a picture stays staged.
-  Image parts reach the model without a file name, so the send's
+  A picture's file name gives only the slide's position, so the send's
   `selection_summary` names the slide each sent picture shows.
-  They are sideloaded from `manifests/manifest-local-excel.xml` and
-  `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
+  A fourth tool, `powerpoint_view_slide`, lets the model ask for a picture of
+  one slide by id during a turn (`utils/powerpointViewSlide.ts`). It is
+  registered at the full tier only and listed like the reads, but only while
+  the selected model also takes images and uploads are on. It is not offered for
+  a regenerate or an edit: they run on the earlier answer's model, which the
+  pane does not know. The pane renders
+  that slide, selected or not, through `runPowerPoint` (20 s, waiting behind
+  other PowerPoint calls included), uploads it into the turn's chat with
+  `fetchUploadFile` and returns the slide's id, position and slide count, the
+  file name and pixel size, and the file id in `fileUploadIds`; never picture
+  bytes. The server attaches the file to the answer and passes the image after
+  the result, but not when the turn pauses before its next request (another
+  tool's approval card, the tool-call limit prompt; ERMAIN-1246). A turn may ask for at most three pictures (fewer if the message
+  takes fewer files), counted by the turn's message id; every render attempt
+  counts, an unknown slide id does not. A replayed call gets its first answer
+  instead of a second upload. A refusal, a stopped turn, a failed or late
+  render, a picture over the upload limit and a refused upload each return a
+  plain error text ("No picture was made" or "No picture was added"). The
+  add-in API has no hidden flag, so a hidden slide is rendered like any other.
+  There is no approval card: client tools have none unless the user's own
+  setting asks.
+  Locally they are sideloaded from `manifests/manifest-local-excel.xml` and
+  `manifest-local-powerpoint.xml`. For deployments the backend renders
+  `manifests/manifest-presentation.xml` at `/office-addin/manifest-presentation.xml`
+  (own add-in id `integrations.ms_office.addin.presentation`, branding inherited
+  like Word's, SharePoint variant like Word's, no `Requirements`); Excel has no
+  deployable manifest.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,
   `OfficeDocumentAuthProvider` and `OfficeDocumentFeatureConfig` (sign-in and
@@ -161,6 +189,13 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    and gives both a built-in MCP surface hint. The chat list's source filter
    does not offer them yet. Like every add-in platform, they log an
    unknown-platform warning until an action facet declares them.
+
+7. **Pane start report** — `OfficeHostReport` (`src/providers/`), mounted
+   inside `AuthGate` in the Word, Excel, PowerPoint and Outlook apps, posts
+   the host and platform from `Office.onReady` once per pane start to
+   `/me/office-host-report`; PowerPoint adds its API set and read tier. The
+   backend only counts it (`erato_office_addin_pane_starts_total`). Teams
+   and the web app send nothing.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 

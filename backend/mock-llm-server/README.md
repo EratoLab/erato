@@ -112,6 +112,8 @@ The server comes with pre-configured mocks:
 | ReadMockFileToolCall | Triggers normal MCP file-read flow | "read mock file" | Tool call to `read_file` with `docs/readme.txt` | 100ms |
 | TriggerMcpContentFilterToolCall | Triggers MCP content-filter error flow | "mcp content filter" | Tool call to `trigger_content_filter` | 100ms |
 | McpAppsCounterToolCall | Calls the mock MCP server's MCP Apps view tool | "mcp apps counter" | Tool call to `show_counter` with `start` 41 | 100ms |
+| McpAppsImageToolCall | Calls the MCP Apps view tool that also returns a PNG file | "mcp apps image" | Tool call to `show_counter_with_image` with `start` 41 | 100ms |
+| McpAppsImageInAnswer | After that call, answers with the returned file as a Markdown image | "mcp apps image in answer" in any user message | `![File](erato-file://…)` for each file link in the request | 50ms |
 | (default) | Fallback when no match | - | Generic response | 50ms |
 
 ### OpenAI Responses mocks

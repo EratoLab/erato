@@ -77,6 +77,9 @@ pub struct CiteFilesResponseConfig {
     /// Delay between chunks in milliseconds
     #[serde(default = "default_cite_files_delay_ms")]
     pub delay_ms: u64,
+    /// Show each file as a Markdown image instead of listing its link
+    #[serde(default)]
+    pub as_images: bool,
 }
 
 fn default_cite_files_delay_ms() -> u64 {
@@ -202,6 +205,13 @@ pub struct MatchRuleAnyUserMessageInCurrentTurnWithPattern {
     pub pattern: String,
 }
 
+/// Match rule that checks every user message in the conversation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchRuleAnyUserMessageWithPattern {
+    /// Pattern to match (substring matching)
+    pub pattern: String,
+}
+
 /// Match rule that checks system message content using substring matching
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchRuleAnySystemMessageWithPattern {
@@ -226,6 +236,8 @@ pub enum MatchRule {
     AnySystemMessageWithPattern(MatchRuleAnySystemMessageWithPattern),
     /// Match based on any user message since the last assistant message
     AnyUserMessageInCurrentTurnWithPattern(MatchRuleAnyUserMessageInCurrentTurnWithPattern),
+    /// Match based on any user message anywhere in the conversation
+    AnyUserMessageWithPattern(MatchRuleAnyUserMessageWithPattern),
     /// Match based on any message containing an audio content part
     AnyMessageContainsAudioContent(MatchRuleAnyMessageContainsAudioContent),
     /// Match when the last message in the conversation is a tool result
@@ -273,6 +285,12 @@ impl Mock {
                             pattern_rule.pattern
                         );
                     }
+                    MatchRule::AnyUserMessageWithPattern(pattern_rule) => {
+                        println!(
+                            "any user message contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
+                    }
                     MatchRule::AnyMessageContainsAudioContent(pattern_rule) => {
                         let content_type = pattern_rule.content_type.as_deref().unwrap_or("audio");
                         println!("contains audio content matching \"{}\"", content_type);
@@ -304,6 +322,12 @@ impl Mock {
                     MatchRule::AnyUserMessageInCurrentTurnWithPattern(pattern_rule) => {
                         println!(
                             "      - any user message since last assistant contains text \"{}\"",
+                            pattern_rule.pattern
+                        );
+                    }
+                    MatchRule::AnyUserMessageWithPattern(pattern_rule) => {
+                        println!(
+                            "      - any user message contains text \"{}\"",
                             pattern_rule.pattern
                         );
                     }
@@ -486,6 +510,13 @@ impl Matcher {
                 let links = self.extract_erato_file_links_from_messages(request);
                 let text = if links.is_empty() {
                     "No `erato-file://<uuid>` links found in request messages.".to_string()
+                } else if config.as_images {
+                    let images = links
+                        .iter()
+                        .map(|link| format!("![File]({})", link))
+                        .collect::<Vec<_>>()
+                        .join("\n\n");
+                    format!("Here is the file:\n\n{}", images)
                 } else {
                     let list = links
                         .iter()
@@ -758,6 +789,22 @@ impl Matcher {
                         .extract_user_messages_since_last_assistant(request)
                         .iter()
                         .any(|message| message.to_lowercase().contains(&pattern))
+                    {
+                        return true;
+                    }
+                }
+                MatchRule::AnyUserMessageWithPattern(pattern_rule) => {
+                    let pattern = pattern_rule.pattern.to_lowercase();
+                    if request
+                        .messages
+                        .iter()
+                        .filter(|message| message.role == "user")
+                        .filter_map(|message| message.content.as_ref())
+                        .any(|content| {
+                            self.extract_content_text(content)
+                                .to_lowercase()
+                                .contains(&pattern)
+                        })
                     {
                         return true;
                     }
@@ -1747,7 +1794,10 @@ mod tests {
                     pattern: "cite files".to_string(),
                 },
             )],
-            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig { delay_ms: 10 }),
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig {
+                delay_ms: 10,
+                as_images: false,
+            }),
         }];
 
         let matcher = Matcher::new(mocks);
@@ -1776,6 +1826,42 @@ mod tests {
                 assert!(combined.contains("erato-file://11111111-2222-3333-4444-555555555555"));
                 assert!(combined.contains("erato-file://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"));
                 assert!(combined.contains("erato-file://ffffffff-ffff-ffff-ffff-ffffffffffff"));
+            }
+            _ => panic!("Expected Static response"),
+        }
+    }
+
+    #[test]
+    fn test_cite_files_as_images_answers_with_markdown_images() {
+        let mocks = vec![Mock {
+            name: "CiteFilesAsImages".to_string(),
+            description: "Shows files as images".to_string(),
+            match_rules: vec![MatchRule::LastMessageIsToolResult],
+            response: ResponseConfig::CiteFiles(CiteFilesResponseConfig {
+                delay_ms: 10,
+                as_images: true,
+            }),
+        }];
+
+        let matcher = Matcher::new(mocks);
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "messages": [
+                {"role": "user", "content": "show the picture"},
+                {
+                    "role": "tool",
+                    "tool_call_id": "call-1",
+                    "content": "{\"images\":[{\"data_base64\":\"erato-file://11111111-2222-3333-4444-555555555555\"}]}"
+                }
+            ]
+        }))
+        .unwrap();
+
+        match matcher.match_request(&request, "test0008") {
+            ResponseConfig::Static(config) => {
+                assert_eq!(
+                    config.chunks.join(""),
+                    "Here is the file:\n\n![File](erato-file://11111111-2222-3333-4444-555555555555)"
+                );
             }
             _ => panic!("Expected Static response"),
         }

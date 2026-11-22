@@ -1,4 +1,6 @@
-use super::{AudioStream, SpeechProvider, provider, sentences::Sentences, wav};
+use super::{
+    AudioStream, SpeechProvider, provider, sentences::Sentences, spoken::SpeechLanguage, wav,
+};
 use crate::policy::prelude::*;
 use crate::{
     config::SpeechProviderConfig,
@@ -32,17 +34,28 @@ pub struct AudioSynthesisMetadata {
 
 type SynthesizedResponse = (Vec<u8>, Vec<String>, u32);
 
+/// What the speech worker is given, in order.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SpeechInput {
+    Text(String),
+    /// The end of a spoken part: reported once all audio before it is sent.
+    PartEnd,
+}
+
 // Gather a useful initial passage without waiting indefinitely for more text.
 // Subsequent calls drain sentences accumulated during synthesis, up to the input cap.
 async fn next_passage(
-    receiver: &mut mpsc::UnboundedReceiver<String>,
-    pending: &mut Option<String>,
-) -> Option<String> {
+    receiver: &mut mpsc::UnboundedReceiver<SpeechInput>,
+    pending: &mut Option<SpeechInput>,
+) -> Option<SpeechInput> {
     const MIN_CHARS: usize = 160;
     const MAX_CHARS: usize = 2000;
-    let mut text = match pending.take() {
-        Some(text) => text,
+    let first = match pending.take() {
+        Some(input) => input,
         None => receiver.recv().await?,
+    };
+    let SpeechInput::Text(mut text) = first else {
+        return Some(SpeechInput::PartEnd);
     };
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(250);
     let mut length = text.chars().count();
@@ -59,15 +72,19 @@ async fn next_passage(
             Err(mpsc::error::TryRecvError::Empty) => None,
         };
         let Some(next) = next else { break };
+        let SpeechInput::Text(next) = next else {
+            *pending = Some(SpeechInput::PartEnd);
+            break;
+        };
         let next_length = next.chars().count();
         if length + next_length > MAX_CHARS {
-            *pending = Some(next);
+            *pending = Some(SpeechInput::Text(next));
             break;
         }
         text.push_str(&next);
         length += next_length;
     }
-    Some(text)
+    Some(SpeechInput::Text(text))
 }
 
 pub const MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -80,12 +97,19 @@ pub struct SpeechChunk {
     pub pcm: Vec<u8>,
 }
 
+/// What a [`PassageSpeaker`] yields: audio, or the end of a spoken part
+/// whose audio has all been yielded.
+pub enum SpeakerOutput {
+    Chunk(SpeechChunk),
+    PartEnd,
+}
+
 /// Speaks queued text passage by passage and yields the audio as it arrives.
 /// Shared by live audio-back and read aloud; dropping it stops the provider request.
 pub struct PassageSpeaker {
     provider: Box<dyn SpeechProvider>,
-    receiver: mpsc::UnboundedReceiver<String>,
-    pending: Option<String>,
+    receiver: mpsc::UnboundedReceiver<SpeechInput>,
+    pending: Option<SpeechInput>,
     audio: Option<AudioStream>,
     carry: Vec<u8>,
     passage_bytes: usize,
@@ -98,7 +122,7 @@ pub struct PassageSpeaker {
 impl PassageSpeaker {
     pub fn new(
         config: &SpeechProviderConfig,
-        receiver: mpsc::UnboundedReceiver<String>,
+        receiver: mpsc::UnboundedReceiver<SpeechInput>,
     ) -> Result<Self, Report> {
         Ok(Self {
             provider: provider(config)?,
@@ -116,17 +140,31 @@ impl PassageSpeaker {
     }
 
     /// A speaker for text that is already complete, split into the same passages as live speech.
-    pub fn for_text(config: &SpeechProviderConfig, text: &str) -> Result<Self, Report> {
+    pub fn for_text(
+        config: &SpeechProviderConfig,
+        text: &str,
+        language: SpeechLanguage,
+    ) -> Result<Self, Report> {
         let (sender, receiver) = mpsc::unbounded_channel();
-        let mut sentences = Sentences::default();
+        let mut sentences = Sentences::new(language);
         for sentence in sentences.push(text).into_iter().chain(sentences.finish()) {
-            let _ = sender.send(sentence);
+            let _ = sender.send(SpeechInput::Text(sentence));
         }
         Self::new(config, receiver)
     }
 
     /// The next audio chunk, or `None` once every passage is spoken.
     pub async fn next_chunk(&mut self) -> Result<Option<SpeechChunk>, Report> {
+        loop {
+            match self.next_output().await? {
+                Some(SpeakerOutput::Chunk(chunk)) => return Ok(Some(chunk)),
+                Some(SpeakerOutput::PartEnd) => continue,
+                None => return Ok(None),
+            }
+        }
+    }
+
+    pub async fn next_output(&mut self) -> Result<Option<SpeakerOutput>, Report> {
         loop {
             if let Some(audio) = &mut self.audio {
                 let Some(chunk) = audio.next().await else {
@@ -149,21 +187,24 @@ impl PassageSpeaker {
                 self.passage_bytes += pcm.len();
                 let sequence = self.sequence;
                 self.sequence += 1;
-                return Ok(Some(SpeechChunk {
+                return Ok(Some(SpeakerOutput::Chunk(SpeechChunk {
                     sequence,
                     sample_rate: self.sample_rate,
                     pcm,
-                }));
+                })));
             }
             if self.finished {
                 return Ok(None);
             }
-            let Some(text) = next_passage(&mut self.receiver, &mut self.pending).await else {
-                self.provider.finish().await?;
-                self.finished = true;
-                return Ok(None);
+            let text = match next_passage(&mut self.receiver, &mut self.pending).await {
+                Some(SpeechInput::Text(text)) => text,
+                Some(SpeechInput::PartEnd) => return Ok(Some(SpeakerOutput::PartEnd)),
+                None => {
+                    self.provider.finish().await?;
+                    self.finished = true;
+                    return Ok(None);
+                }
             };
-            let text = super::sentences::speakable(&text);
             if text.trim().is_empty() {
                 continue;
             }
@@ -181,7 +222,7 @@ impl PassageSpeaker {
 
 pub struct SpeechSession {
     sentences: Sentences,
-    sender: Option<mpsc::UnboundedSender<String>>,
+    sender: Option<mpsc::UnboundedSender<SpeechInput>>,
     worker: tokio::task::JoinHandle<Result<SynthesizedResponse, Report>>,
     config: SpeechProviderConfig,
     provider_id: String,
@@ -198,11 +239,12 @@ impl SpeechSession {
     pub fn start(
         config: SpeechProviderConfig,
         provider_id: String,
+        language: SpeechLanguage,
         task: Arc<StreamingTask>,
         tx: mpsc::Sender<Result<Event, Report>>,
         message_id: Uuid,
     ) -> Self {
-        let (sender, receiver) = mpsc::unbounded_channel::<String>();
+        let (sender, receiver) = mpsc::unbounded_channel::<SpeechInput>();
         let settings = config.clone();
         let worker_task = task.clone();
         let worker = tokio::spawn(async move {
@@ -210,7 +252,19 @@ impl SpeechSession {
             let mut speaker = PassageSpeaker::new(&settings, receiver)?;
             let mut pcm = Vec::new();
             let run = async {
-                while let Some(chunk) = speaker.next_chunk().await? {
+                while let Some(output) = speaker.next_output().await? {
+                    let chunk = match output {
+                        SpeakerOutput::Chunk(chunk) => chunk,
+                        SpeakerOutput::PartEnd => {
+                            let event = StreamingEvent::SpokenEnd { message_id };
+                            let json = serde_json::to_string(&event)?;
+                            task.send_event(event).await.map_err(Report::msg)?;
+                            let _ = tx
+                                .send(Ok(Event::default().event("spoken_end").data(json)))
+                                .await;
+                            continue;
+                        }
+                    };
                     let event = StreamingEvent::AudioDelta {
                         message_id,
                         sequence: chunk.sequence,
@@ -233,7 +287,7 @@ impl SpeechSession {
             Ok((pcm, speaker.segments, speaker.sample_rate))
         });
         Self {
-            sentences: Sentences::default(),
+            sentences: Sentences::new(language),
             sender: Some(sender),
             worker,
             config,
@@ -255,9 +309,20 @@ impl SpeechSession {
         }
         for sentence in self.sentences.push(text) {
             if let Some(sender) = &self.sender {
-                let _ = sender.send(sentence);
+                let _ = sender.send(SpeechInput::Text(sentence));
             }
         }
+    }
+    /// Says the last sentence of a spoken part now, without waiting for the
+    /// written part, and reports `spoken_end` once its audio is sent. The
+    /// input stays open: a later model call in the same generation can speak
+    /// again.
+    pub fn flush_spoken(&mut self) {
+        let Some(sender) = &self.sender else { return };
+        for sentence in self.sentences.finish() {
+            let _ = sender.send(SpeechInput::Text(sentence));
+        }
+        let _ = sender.send(SpeechInput::PartEnd);
     }
     pub async fn finish(
         mut self,
@@ -270,17 +335,17 @@ impl SpeechSession {
         if self.input_limit_exceeded {
             return Err(eyre!("Speech input exceeds 1 MiB"));
         }
-        if let Some(tail) = self.sentences.finish()
-            && let Some(sender) = &self.sender
-        {
-            let _ = sender.send(tail);
+        if let Some(sender) = &self.sender {
+            for sentence in self.sentences.finish() {
+                let _ = sender.send(SpeechInput::Text(sentence));
+            }
         }
         self.sender.take();
         let (pcm, segments, sample_rate) = (&mut self.worker).await??;
         if self.task.is_abort_requested() {
             return Err(eyre!("Speech cancelled"));
         }
-        if pcm.is_empty() {
+        if pcm.is_empty() || !app.config.audio_conversational.keep_reply_audio {
             return Ok(None);
         }
         let data = wav(&pcm, sample_rate)?;
@@ -294,7 +359,10 @@ impl SpeechSession {
             channels: 1,
             encoding: "pcm_s16le".into(),
         };
-        let path = format!("speech/{chat_id}/{message_id}.wav");
+        // A continuation after an approval speaks into the same message, so
+        // each recording needs a path of its own.
+        let file_id = Uuid::new_v4();
+        let path = format!("speech/{chat_id}/{message_id}-{file_id}.wav");
         let storage = app.default_file_storage_provider();
         authorize!(
             policy,
@@ -312,7 +380,7 @@ impl SpeechSession {
             let transaction = app.db.begin().await?;
             let file = crate::models::file_upload::create_file_upload_record(
                 &transaction,
-                Uuid::new_v4(),
+                file_id,
                 subject.user_id().to_string(),
                 &chat_id,
                 format!("speech-{message_id}.wav"),
@@ -386,7 +454,14 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (_, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "mock".into(), task, tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "mock".into(),
+            SpeechLanguage::default(),
+            task,
+            tx,
+            message_id,
+        );
         session.push("The first sentence. More text ");
         tokio::time::timeout(std::time::Duration::from_secs(3), entered.notified())
             .await
@@ -459,7 +534,8 @@ mod tests {
             "Intro sentence.\n\n```rs\nlet secret = 1;\n```\n\n{}",
             "A long answer keeps going. ".repeat(200)
         );
-        let mut speaker = PassageSpeaker::for_text(&config, &text).unwrap();
+        let mut speaker =
+            PassageSpeaker::for_text(&config, &text, SpeechLanguage::default()).unwrap();
         let chunk = tokio::time::timeout(std::time::Duration::from_secs(3), speaker.next_chunk())
             .await
             .unwrap()
@@ -488,22 +564,114 @@ mod tests {
         server.abort();
     }
 
+    // A spoken part, a tool call, another spoken part: one session per
+    // generation says both, each as soon as its part is complete.
+    #[tokio::test]
+    async fn each_flushed_spoken_part_is_said_while_the_input_stays_open() {
+        let inputs = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let recorded = inputs.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/audio/speech",
+                    post(move |axum::Json(request): axum::Json<serde_json::Value>| {
+                        let recorded = recorded.clone();
+                        async move {
+                            recorded
+                                .lock()
+                                .unwrap()
+                                .push(request["input"].as_str().unwrap().to_string());
+                            Response::builder()
+                                .header("content-type", "audio/pcm")
+                                .body(Body::from(vec![1, 2, 3, 4]))
+                                .unwrap()
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let config: SpeechProviderConfig = serde_json::from_value(serde_json::json!({
+            "provider_kind":"audio_cpp", "model_name":"local", "voice":"voice", "base_url":format!("http://{address}")
+        })).unwrap();
+        let manager = BackgroundTaskManager::new(None, Default::default(), None);
+        let message_id = Uuid::new_v4();
+        let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
+        let (tx, _rx) = mpsc::channel(8);
+        let mut session = SpeechSession::start(
+            config,
+            "test".into(),
+            SpeechLanguage::default(),
+            task.clone(),
+            tx,
+            message_id,
+        );
+        let part_spoken = |events: &mut tokio::sync::broadcast::Receiver<StreamingEvent>| {
+            let mut events = events.resubscribe();
+            async move {
+                let mut audio = false;
+                loop {
+                    let event =
+                        tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
+                            .await
+                            .unwrap()
+                            .unwrap();
+                    match event {
+                        StreamingEvent::AudioDelta { .. } => audio = true,
+                        StreamingEvent::SpokenEnd { .. } => return audio,
+                        _ => {}
+                    }
+                }
+            }
+        };
+        let first = part_spoken(&mut events);
+        session.push("Ich schaue nach");
+        session.flush_spoken();
+        assert!(first.await);
+        let second = part_spoken(&mut events);
+        session.push("Morgen um zwei");
+        session.flush_spoken();
+        assert!(second.await);
+        let inputs = inputs.lock().unwrap().clone();
+        assert_eq!(inputs.len(), 2, "{inputs:?}");
+        assert!(inputs[0].contains("Ich schaue nach"), "{inputs:?}");
+        assert!(inputs[1].contains("Morgen um zwei"), "{inputs:?}");
+        assert!(session.sender.is_some());
+        task.request_abort();
+        server.abort();
+    }
+
     #[tokio::test]
     async fn passages_merge_queued_text_and_preserve_overflow_and_tail() {
         let (tx, mut rx) = mpsc::unbounded_channel();
-        tx.send("Hello. ".into()).unwrap();
-        tx.send("More context. ".into()).unwrap();
-        tx.send("x".repeat(1990)).unwrap();
-        tx.send("Final tail".into()).unwrap();
+        for text in [
+            "Hello. ".to_string(),
+            "More context. ".into(),
+            "x".repeat(1990),
+            "Final tail".into(),
+        ] {
+            tx.send(SpeechInput::Text(text)).unwrap();
+        }
+        tx.send(SpeechInput::PartEnd).unwrap();
+        tx.send(SpeechInput::Text("Next part".into())).unwrap();
         drop(tx);
         let mut pending = None;
+        let mut passages = Vec::new();
+        while let Some(passage) = next_passage(&mut rx, &mut pending).await {
+            passages.push(passage);
+        }
         assert_eq!(
-            next_passage(&mut rx, &mut pending).await.unwrap(),
-            "Hello. More context. "
-        );
-        assert_eq!(
-            next_passage(&mut rx, &mut pending).await.unwrap(),
-            "x".repeat(1990) + "Final tail"
+            passages,
+            [
+                SpeechInput::Text("Hello. More context. ".into()),
+                SpeechInput::Text("x".repeat(1990) + "Final tail"),
+                SpeechInput::PartEnd,
+                SpeechInput::Text("Next part".into()),
+            ]
         );
         assert!(next_passage(&mut rx, &mut pending).await.is_none());
     }
@@ -511,14 +679,14 @@ mod tests {
     #[tokio::test]
     async fn short_passage_flushes_while_text_channel_remains_open() {
         let (_tx, mut rx) = mpsc::unbounded_channel();
-        let mut pending = Some("Short sentence.".into());
+        let mut pending = Some(SpeechInput::Text("Short sentence.".into()));
         let passage = tokio::time::timeout(
             std::time::Duration::from_secs(1),
             next_passage(&mut rx, &mut pending),
         )
         .await
         .unwrap();
-        assert_eq!(passage.as_deref(), Some("Short sentence."));
+        assert_eq!(passage, Some(SpeechInput::Text("Short sentence.".into())));
     }
 
     #[tokio::test]
@@ -529,10 +697,22 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "live".into(), task, tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "live".into(),
+            SpeechLanguage::default(),
+            task,
+            tx,
+            message_id,
+        );
         session.push("Hello.");
-        if let Some(tail) = session.sentences.finish() {
-            session.sender.as_ref().unwrap().send(tail).unwrap();
+        for sentence in session.sentences.finish() {
+            session
+                .sender
+                .as_ref()
+                .unwrap()
+                .send(SpeechInput::Text(sentence))
+                .unwrap();
         }
         session.sender.take();
         let (pcm, segments, rate) = (&mut session.worker).await.unwrap().unwrap();
@@ -573,7 +753,14 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "test".into(), task.clone(), tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "test".into(),
+            SpeechLanguage::default(),
+            task.clone(),
+            tx,
+            message_id,
+        );
         session.push("First sentence. More text still arriving");
         let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
             .await

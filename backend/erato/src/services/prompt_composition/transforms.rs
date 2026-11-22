@@ -12,15 +12,15 @@ use super::types::{
 use crate::config::ActionFacetConfig;
 use crate::config::ChatProviderConfig;
 use crate::config::FacetsConfig;
-use crate::config::TurnInstructionKind;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
     ContentPart, ContentPartActionFacetMarker, ContentPartDelegationPreambleMarker,
     ContentPartImageFilePointer, ContentPartText, ContentPartTextFilePointer,
     ContentPartTurnInstructionMarker, GenerationInputMessages, GenerationParameters, InputMessage,
-    MessageRole, MessageSchema, StoredTurnInstructionKind,
+    MessageRole, MessageSchema,
 };
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
 use std::collections::{BTreeSet, HashMap};
@@ -92,7 +92,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     action_facet_configs: &HashMap<String, ActionFacetConfig>,
     // Request platform (from `X-Erato-Platform`). Used to scope hidden facets.
     platform: Option<&str>,
-    turn_instructions: &BTreeSet<TurnInstructionKind>,
+    turn_instructions: &BTreeSet<super::types::TurnInstruction>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
     sequence.replay_policy = prompt_provider.tool_replay_policy();
@@ -181,11 +181,15 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         let system_prompt = prompt_provider
             .get_system_prompt(
                 chat_provider_config,
-                preferred_language,
-                user_preference_nickname,
-                user_preference_job_title,
-                user_preference_assistant_custom_instructions,
-                user_preference_assistant_additional_information,
+                SystemPromptContext {
+                    has_assistant: assistant_config.is_some(),
+                    preferred_language,
+                    user_preference_nickname,
+                    user_preference_job_title,
+                    user_preference_assistant_custom_instructions,
+                    user_preference_assistant_additional_information,
+                    ..Default::default()
+                },
             )
             .await?;
         if let Some(prompt) = system_prompt {
@@ -649,7 +653,7 @@ pub async fn resolve_sequence(
                 input_messages.push(InputMessage {
                     role: MessageRole::User,
                     content: ContentPart::TurnInstructionMarker(ContentPartTurnInstructionMarker {
-                        kind: StoredTurnInstructionKind::Known(kind),
+                        kind: kind.stored(),
                     }),
                 });
             }
@@ -709,9 +713,11 @@ pub async fn resolve_sequence(
                                 }
                                 // Snapshot messages carry no record of which
                                 // generation made them, so the replay policy is
-                                // not applied here: receipts written when their
+                                // not applied here: calls shortened when their
                                 // row was replayed pass through, and older full
                                 // payloads stay full — see `replay_policy`.
+                                // Receipts from before ERMAIN-1274 become real
+                                // calls again.
                                 let input_msg = normalize_historical_input_message(input_msg);
                                 if include_system || !matches!(input_msg.role, MessageRole::System)
                                 {
@@ -742,8 +748,16 @@ pub async fn resolve_sequence(
                 let offered = OfferedClientTools::from_generation_parameters(
                     message.generation_parameters.as_ref(),
                 );
+                // An earlier reply's written text stands on its own; its
+                // spoken part shown here would be copied on a later turn
+                // that did not ask for the format.
+                let content = parsed
+                    .content
+                    .into_iter()
+                    .filter(|part| !matches!(part, ContentPart::Spoken(_)))
+                    .collect();
                 input_messages.extend(
-                    replay_assistant_content(&parsed.role, parsed.content)
+                    replay_assistant_content(&parsed.role, content)
                         .into_iter()
                         .map(|message| {
                             replay_policy.apply_to_prior_turn_message(message, &offered)
@@ -808,8 +822,37 @@ pub(crate) fn replay_assistant_content(
     content: Vec<ContentPart>,
 ) -> Vec<InputMessage> {
     let mut input_messages = Vec::new();
+    // A spoken part of the turn in progress replays in the format the turn's
+    // prompt asks for, so a continuation goes on writing it.
+    let mut spoken: Option<String> = None;
+    let flush_spoken = |spoken: &mut Option<String>, input_messages: &mut Vec<InputMessage>| {
+        if let Some(said) = spoken.take() {
+            input_messages.push(InputMessage {
+                role: role.clone(),
+                content: ContentPart::Text(ContentPartText {
+                    text: crate::services::speech::reply_split::spoken_markup(&said),
+                }),
+            });
+        }
+    };
     for content_part in content {
         match content_part {
+            ContentPart::Spoken(part) => {
+                flush_spoken(&mut spoken, &mut input_messages);
+                spoken = Some(part.text);
+            }
+            ContentPart::Text(ContentPartText { text }) if spoken.is_some() => {
+                let said = spoken.take().unwrap_or_default();
+                input_messages.push(InputMessage {
+                    role: role.clone(),
+                    content: ContentPart::Text(ContentPartText {
+                        text: format!(
+                            "{}\n\n{text}",
+                            crate::services::speech::reply_split::spoken_markup(&said)
+                        ),
+                    }),
+                });
+            }
             // Approval lifecycle content is host-side state. The
             // ToolUse appended after its resolution is the only
             // portion that must be replayed to the provider.
@@ -824,6 +867,7 @@ pub(crate) fn replay_assistant_content(
                 if is_synthetic_client_action_tool_use(&tool_use) {
                     continue;
                 }
+                flush_spoken(&mut spoken, &mut input_messages);
                 // For the UI only; the snapshot stores both copies, so both drop it.
                 // The Tool copy keeps `allowed_by`: the label context reads it.
                 tool_use.result_details = None;
@@ -848,11 +892,12 @@ pub(crate) fn replay_assistant_content(
             }
         }
     }
+    flush_spoken(&mut spoken, &mut input_messages);
     input_messages
 }
 
 fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
-    input_msg
+    super::replay_policy::upgrade_legacy_receipt(input_msg)
 }
 
 /// True when an `InputMessage` carries a per-turn directive emitted by a
@@ -919,7 +964,9 @@ fn strip_ui_only_tool_output(
             description: None,
             description_truncated: false,
             server_name: display.server_name,
+            tool_name: None,
             read_only: false,
+            closed_world: false,
             label: display
                 .label
                 .map(|label| crate::models::message::ToolCallLabel {
@@ -930,6 +977,8 @@ fn strip_ui_only_tool_output(
                     warnings: Vec::new(),
                     source: Default::default(),
                     change: None,
+                    read: None,
+                    spoken_names: Default::default(),
                 }),
         });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
@@ -1123,6 +1172,44 @@ mod tests {
     use crate::models::message::{
         ToolAllowedBy, ToolCallStatus, ToolResultDetails, ToolResultLink, ToolUse,
     };
+
+    #[test]
+    fn a_spoken_part_replays_in_the_format_it_was_written_in() {
+        let spoken = |text: &str| {
+            ContentPart::Spoken(crate::models::message::ContentPartSpoken { text: text.into() })
+        };
+        let replayed = replay_assistant_content(
+            &MessageRole::Assistant,
+            vec![
+                spoken("Ich schaue nach."),
+                ContentPart::ToolUse(part("search", serde_json::json!("found"))),
+                spoken("Morgen um zwei. Soll ich ihn eintragen?"),
+                ContentPart::Text(ContentPartText {
+                    text: "Der Termin ist morgen um 14:00. Soll ich ihn eintragen?".into(),
+                }),
+            ],
+        );
+        let texts: Vec<&str> = replayed
+            .iter()
+            .filter_map(|message| match &message.content {
+                ContentPart::Text(text) => Some(text.text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "<spoken>Ich schaue nach.</spoken>",
+                "<spoken>Morgen um zwei. Soll ich ihn eintragen?</spoken>\n\nDer Termin ist morgen um 14:00. Soll ich ihn eintragen?",
+            ]
+        );
+        assert!(matches!(replayed[1].content, ContentPart::ToolUse(_)));
+        assert!(
+            replayed
+                .iter()
+                .all(|message| message.role != MessageRole::User)
+        );
+    }
     use crate::services::delegation::{
         DELEGATE_TO_ASSISTANT_TOOL_NAME, DelegationResultEnvelope, DelegationRunStatus,
     };
@@ -1226,11 +1313,13 @@ mod tests {
                 title: Some("SYNTHETIC-LINK-TITLE".to_string()),
             }],
             failure: None,
-            view: Some(crate::models::message::ToolResultView {
+            view: Some(Box::new(crate::models::message::ToolResultView {
                 server_id: "records".to_string(),
                 uri: "ui://records/SYNTHETIC-VIEW".to_string(),
                 structured_content: Some(serde_json::json!({"rows": "SYNTHETIC-STRUCTURED"})),
-            }),
+                meta: Some(serde_json::json!({"svg": "SYNTHETIC-RESULT-META"})),
+            })),
+            view_unavailable: false,
         });
 
         let replayed = replay_assistant_content(
@@ -1250,6 +1339,7 @@ mod tests {
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
         assert!(!snapshot.contains("SYNTHETIC-VIEW"), "{snapshot}");
         assert!(!snapshot.contains("SYNTHETIC-STRUCTURED"), "{snapshot}");
+        assert!(!snapshot.contains("SYNTHETIC-RESULT-META"), "{snapshot}");
     }
 
     #[test]

@@ -7,6 +7,7 @@ import {
   wordSourceDetails,
   isWordHistorySnapshot,
   WORD_READ_TOOL,
+  wordReplayRecordRead,
 } from "@erato/frontend/word-review";
 
 import { checkWordApprovalScope } from "./wordApprovalScope";
@@ -19,6 +20,12 @@ import {
 import { WordDocumentDraftStore } from "./wordDocumentDrafts";
 import { MAX_WORD_DOCX_BYTES } from "./wordDocumentPackageCodec";
 import { withReadOnlyFields, wordReadRefusedByIssue } from "./wordReadAccess";
+import {
+  WORD_PLAIN_READ_KEYS,
+  wordCompleteReadUnavailable,
+  wordReadArgumentsRefusal,
+  wordRefusalOffersPlainRead,
+} from "./wordReadArguments";
 import {
   wordReadFragments,
   wordReadJsonBytes,
@@ -47,6 +54,12 @@ import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 export { WORD_READ_TOOL };
 export type { WordReadAccess };
 const MAX_PAGES = 12;
+const FIXABLE_READ_ISSUES = new Set([
+  "read-arguments",
+  "snapshot-mismatch",
+  "target-arguments",
+  "cell-read-arguments",
+]);
 interface Session {
   snapshot: WordAuthoringSnapshot;
   pages: WordReadFragment[][];
@@ -82,6 +95,7 @@ export class WordDocumentReadSession {
   private session: Session | null = null;
   private access: WordReadAccess = "write";
   private readCapture?: WordReadCapture;
+  private requestText?: string;
   private completeBudgetCheck?: () => Promise<string | undefined>;
   private completeBudget?: Promise<string | undefined>;
   readonly drafts = new WordDocumentDraftStore();
@@ -108,6 +122,10 @@ export class WordDocumentReadSession {
   get capture(): WordReadCapture | undefined {
     return this.readCapture;
   }
+  /** What the user asked when the capture was taken; part checks look for the sections it names. */
+  get request(): string | undefined {
+    return this.requestText;
+  }
   snapshotForSubmission(
     context: ClientToolCallContext,
   ): WordAuthoringSnapshot | undefined {
@@ -117,9 +135,20 @@ export class WordDocumentReadSession {
       ? session.snapshot
       : undefined;
   }
+  /** Why this request cannot make a complete read, if it cannot; the budget is checked once. */
+  async completeReadIssue(): Promise<string | undefined> {
+    if (this.session?.snapshot.completeReadIssue)
+      return this.session.snapshot.completeReadIssue;
+    if (!this.completeBudgetCheck) return undefined;
+    this.completeBudget ??= this.completeBudgetCheck().catch(
+      () => "budget-unavailable",
+    );
+    return this.completeBudget;
+  }
   clear(): void {
     this.access = "write";
     this.readCapture = undefined;
+    this.requestText = undefined;
     this.completeBudgetCheck = undefined;
     this.completeBudget = undefined;
     this.drafts.clear();
@@ -130,12 +159,17 @@ export class WordDocumentReadSession {
     snapshot?: WordAuthoringSnapshot,
     request?: WordDocumentReadRequest,
     completeBudgetCheck?: () => Promise<string | undefined>,
-    options?: { access?: WordReadAccess; capture?: WordReadCapture },
+    options?: {
+      access?: WordReadAccess;
+      capture?: WordReadCapture;
+      request?: string;
+    },
   ): void {
     this.clear();
     if (!snapshot || isWordHistorySnapshot(snapshot)) return;
     this.access = options?.access ?? "write";
     this.readCapture = options?.capture;
+    this.requestText = options?.request;
     this.completeBudgetCheck = completeBudgetCheck;
     snapshot.revoked = false;
     snapshot.read.clear();
@@ -232,14 +266,18 @@ export class WordDocumentReadSession {
     if (!approval.read) return approval.result;
     const { snapshot } = session;
     const { hostGrant: _grant, ...call } = context;
-    return this.executeReadOnly(
-      input && typeof input === "object" && !Array.isArray(input)
+    // Filled into the read the call means, so a replay record still reads as one.
+    const { call: read } = wordReplayRecordRead(input);
+    const filled =
+      read && typeof read === "object" && !Array.isArray(read)
         ? {
-            ...input,
+            ...read,
             snapshot: snapshot.token,
             documentIdentity: snapshot.identity,
           }
-        : input,
+        : read;
+    return this.executeReadOnly(
+      read === input ? filled : { ...(input as object), kept: filled },
       { ...call, chatId: grant.ownerChatId, messageId: grant.ownerMessageId },
     );
   };
@@ -253,12 +291,18 @@ export class WordDocumentReadSession {
     context: ClientToolCallContext | undefined,
     sessionAccess: WordReadAccess,
   ): Promise<ClientToolExecutionResult> {
+    const { call, replayRecord } = wordReplayRecordRead(input);
     const access =
-      input && typeof input === "object" && "section" in input
+      call && typeof call === "object" && "section" in call
         ? "read-only"
         : sessionAccess;
     const capture = context && this.snapshotForSubmission(context);
-    const { result, scope } = await this.executeRead(input, context, access);
+    const { result, scope } = await this.executeRead(
+      call,
+      context,
+      access,
+      replayRecord,
+    );
     if (result.ok) {
       if (
         capture &&
@@ -317,6 +361,7 @@ export class WordDocumentReadSession {
     input: unknown,
     context: ClientToolCallContext | undefined,
     access: WordReadAccess,
+    replayRecord: boolean,
   ): Promise<WordReadOutcome> {
     const session = this.session;
     const fail = (error: string, code: string, path = "/snapshot") => ({
@@ -338,15 +383,42 @@ export class WordDocumentReadSession {
       session.chatId !== context.chatId
     )
       return fail(WORD_NO_REQUEST_SESSION_MESSAGE, "wrong-request");
+    const plainAvailable = async () =>
+      access !== "read-only" &&
+      !snapshot.revoked &&
+      !snapshot.used &&
+      !snapshot.issue &&
+      !(await this.completeReadIssue());
+    const refuse = async (issue: {
+      path: string;
+      code: string;
+      message: string;
+    }) =>
+      wordReadArgumentsRefusal(snapshot, input, {
+        plainAvailable:
+          wordRefusalOffersPlainRead(input) && (await plainAvailable()),
+        replayRecord,
+        issue,
+      });
+    // Refusals a corrected call gets past; they say how.
+    const withFix = async (read: WordReadOutcome) => {
+      const issue = read.result.ok
+        ? undefined
+        : read.result.validationErrors?.[0];
+      return issue && FIXABLE_READ_ISSUES.has(issue.code)
+        ? refuse(issue)
+        : read;
+    };
     if (!input || typeof input !== "object" || Array.isArray(input))
-      return fail(
-        "Expected a snapshot token and optional cursor.",
-        "read-arguments",
-        "",
-      );
+      return refuse({
+        path: "",
+        code: "read-arguments",
+        message: "Expected a snapshot token and optional cursor.",
+      });
     const args = input as Record<string, unknown>;
-    if ("section" in args) return readWordSection(snapshot, args);
-    if ("target" in args) return readWordTargets(snapshot, args, access);
+    if ("section" in args) return withFix(readWordSection(snapshot, args));
+    if ("target" in args)
+      return withFix(readWordTargets(snapshot, args, access));
     if ("table_cell" in args) {
       if (
         snapshot.revoked ||
@@ -358,7 +430,7 @@ export class WordDocumentReadSession {
           snapshot.issue ??
             (snapshot.used ? "snapshot-used" : "snapshot-revoked"),
         );
-      return readWordTableCell(snapshot, args, access);
+      return withFix(readWordTableCell(snapshot, args, access));
     }
     if (access === "read-only")
       return fail(
@@ -367,7 +439,7 @@ export class WordDocumentReadSession {
       );
 
     if (
-      Object.keys(args).some((k) => k !== "snapshot" && k !== "cursor") ||
+      Object.keys(args).some((k) => !WORD_PLAIN_READ_KEYS.includes(k)) ||
       typeof args.snapshot !== "string" ||
       !args.snapshot ||
       args.snapshot.length > 128 ||
@@ -375,11 +447,12 @@ export class WordDocumentReadSession {
         args.cursor !== null &&
         typeof args.cursor !== "string")
     )
-      return fail(
-        "Expected a snapshot token and optional string or null cursor; no other arguments are supported.",
-        "read-arguments",
-        "",
-      );
+      return refuse({
+        path: "",
+        code: "read-arguments",
+        message:
+          "Expected a snapshot token and optional string or null cursor; no other arguments are supported.",
+      });
     if (snapshot.revoked || snapshot.used)
       return fail(
         "This document capture has been used or revoked. A new request with the document included must capture the updated document before further editing.",
@@ -391,15 +464,9 @@ export class WordDocumentReadSession {
         snapshot.issue,
       );
     if (snapshot.completeReadIssue)
-      return fail(
-        "This document is too large for a complete read, so whole-document plans and repairs are unavailable. Read the sections the request needs with section:{ref} pages from the Outline, following nextCursor; use target, target.queries or table_cell only for what you edit, and submit scoped_edit or table_cell changes. No document changes were made.",
-        snapshot.completeReadIssue,
-      );
+      return wordCompleteReadUnavailable(snapshot, snapshot.completeReadIssue);
     if (this.completeBudgetCheck) {
-      this.completeBudget ??= this.completeBudgetCheck().catch(
-        () => "budget-unavailable",
-      );
-      const issue = await this.completeBudget;
+      const issue = await this.completeReadIssue();
       if (
         this.session !== session ||
         snapshot.revoked ||
@@ -407,11 +474,7 @@ export class WordDocumentReadSession {
         context.signal?.aborted
       )
         return fail("Document read stopped or expired.", "read-unavailable");
-      if (issue)
-        return fail(
-          "The complete read is unavailable within this request's model budget. Scoped reads remain available.",
-          issue,
-        );
+      if (issue) return wordCompleteReadUnavailable(snapshot, issue);
     }
     const firstPage = args.cursor == null || args.cursor === "";
     const snapshotChanged = args.snapshot !== snapshot.token;

@@ -60,7 +60,7 @@ pub enum GenerationUpdate {
     Text(String),
     /// User-facing phase or tool progress, without arguments or raw reasoning.
     Status(String),
-    Completed(Completion),
+    Completed(Box<Completion>),
     Failed(String),
 }
 
@@ -71,6 +71,7 @@ pub struct Completion {
     pub text: String,
     /// Text before the last tool step, kept separately from the answer.
     pub earlier_text: String,
+    pub output_ids: Vec<Uuid>,
     /// The open tool approvals the turn stopped on, answered together.
     pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
@@ -80,6 +81,24 @@ pub struct Completion {
     /// The turn's tasks that needed a client tool, which a turn sent from
     /// Teams never has.
     pub client_tasks: Vec<ClientTask>,
+    /// The turn's tool calls as they ended, for the decided cards' results.
+    pub tool_uses: Vec<crate::models::message::ToolUse>,
+}
+
+#[derive(Default)]
+pub struct CompletionFiles {
+    pub sources: Vec<FileSource>,
+    pub outputs: Vec<crate::db::entity::file_uploads::Model>,
+}
+
+impl Completion {
+    pub(super) fn requested_ids(&self) -> std::collections::HashSet<Uuid> {
+        citations::referenced_file_ids(&format!("{}\n\n{}", self.text, self.earlier_text))
+            .into_iter()
+            .filter_map(|id| id.parse().ok())
+            .chain(self.output_ids.iter().copied())
+            .collect()
+    }
 }
 
 /// A task that got no client tools because its turn was sent from Teams.
@@ -138,7 +157,11 @@ impl From<StreamRouteError> for StartError {
                 DELEGATED_RUN_RUNNING_MESSAGE => StartError::Refused(Msg::TaskStillRunning),
                 _ => StartError::Rejected(message),
             },
-            StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
+            // Teams sends no voice receipts; a refused one is a decision
+            // that no longer fits the card.
+            StreamRouteError::DecisionsMismatch(_)
+            | StreamRouteError::CardChanged(_)
+            | StreamRouteError::VoiceReceiptRefused(_) => StartError::DecisionsMismatch,
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
             StreamRouteError::CoveredByParent(_) => StartError::Refused(Msg::ApprovalInParentChat),
             StreamRouteError::ChildrenWaiting(_) => StartError::Refused(Msg::ContinuesOnItsOwn),
@@ -158,6 +181,9 @@ pub struct Session {
 }
 
 impl Session {
+    pub(super) fn access_token(&self) -> Option<&str> {
+        self.me.access_token.as_deref()
+    }
     pub fn user_id(&self) -> Uuid {
         self.user_id
     }
@@ -178,51 +204,78 @@ impl Host {
         Self { app_state }
     }
 
-    /// Resolve file references only within the already-authorized answer's
-    /// chat, using the same input-file inventory as the Web messages response.
-    /// Never look up an arbitrary model-supplied UUID across other chats.
-    pub async fn citation_sources(
+    pub async fn completion_files(
         &self,
+        session: &Session,
         completion: &Completion,
-    ) -> Result<Vec<FileSource>, Report> {
-        use crate::db::entity::{file_uploads, messages};
-        let requested: std::collections::HashSet<Uuid> = citations::referenced_file_ids(&format!(
-            "{}\n\n{}",
-            completion.text, completion.earlier_text
-        ))
-        .into_iter()
-        .filter_map(|id| Uuid::parse_str(&id).ok())
-        .collect();
-        if requested.is_empty() {
-            return Ok(Vec::new());
+    ) -> Result<CompletionFiles, Report> {
+        use crate::db::entity::{chat_file_uploads, messages};
+        use crate::models::file_upload::get_file_upload_by_id;
+        use crate::policy::prelude::{Action, Resource, authorize};
+        let requested = completion.requested_ids();
+        let mut resolved = CompletionFiles::default();
+        if requested.is_empty()
+            || !self
+                .usable_chat(session, completion.chat_id, &self.app_state.db)
+                .await?
+        {
+            return Ok(resolved);
         }
-        let inputs = Messages::find()
+        let db = &self.app_state.db;
+        let subject = session.me.to_subject();
+        authorize!(
+            session.policy,
+            &subject,
+            &Resource::Chat(completion.chat_id.to_string()),
+            Action::Read
+        )?;
+        let ids = chat_file_uploads::Entity::find()
+            .select_only()
+            .column(chat_file_uploads::Column::FileUploadId)
+            .filter(chat_file_uploads::Column::ChatId.eq(completion.chat_id))
+            .filter(chat_file_uploads::Column::FileUploadId.is_in(requested))
+            .into_tuple::<Uuid>()
+            .all(db)
+            .await?;
+        if ids.is_empty() {
+            return Ok(resolved);
+        }
+        let inputs: std::collections::HashSet<_> = Messages::find()
             .select_only()
             .column(messages::Column::InputFileUploads)
             .filter(messages::Column::ChatId.eq(completion.chat_id))
             .into_tuple::<Option<Vec<Uuid>>>()
-            .all(&self.app_state.db)
-            .await?;
-        let ids: std::collections::HashSet<Uuid> = inputs
+            .all(db)
+            .await?
             .into_iter()
             .flatten()
             .flatten()
-            .filter(|id| requested.contains(id))
             .collect();
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let files = file_uploads::Entity::find()
-            .filter(file_uploads::Column::Id.is_in(ids))
-            .all(&self.app_state.db)
-            .await?;
-        Ok(files
-            .into_iter()
-            .map(|file| FileSource {
+        for id in ids {
+            let Ok(file) = get_file_upload_by_id(db, &session.policy, &subject, &id).await else {
+                continue;
+            };
+            let input = inputs.contains(&id);
+            // MCP can return Markdown alone pointing at a previously generated object.
+            // Unsubmitted uploads can also belong to the chat, so association alone
+            // does not make them bot outputs.
+            let generated = !input
+                && (completion.output_ids.contains(&id)
+                    || file.file_storage_path.starts_with("generated_files/")
+                    || file.file_storage_path.starts_with("generated_images/"));
+            if !generated && !input {
+                continue;
+            }
+            resolved.sources.push(FileSource {
                 id: file.id.to_string(),
-                name: file.filename,
-            })
-            .collect())
+                name: file.filename.clone(),
+                generated,
+            });
+            if generated {
+                resolved.outputs.push(file);
+            }
+        }
+        Ok(resolved)
     }
 
     /// Stop only the generation which produced this Teams stream. A later
@@ -284,26 +337,22 @@ impl Host {
     /// The language to answer in: the user's stored language, else the one
     /// their client reports, else the deployment's default. A failed read
     /// answers anyway, without the stored language.
-    pub async fn reply_language(
-        &self,
-        user_id: Option<Uuid>,
-        client: Option<&str>,
-        default: &str,
-    ) -> Lang {
+    pub async fn reply_language(&self, user_id: Option<Uuid>, client: Option<&str>) -> Lang {
+        let default = self.app_state.default_language().await;
         let Some(user_id) = user_id else {
-            return Lang::resolve(None, client, default);
+            return Lang::resolve(None, client, &default);
         };
-        text_language::of_user(&self.app_state.db, user_id, client, default)
+        text_language::of_user(&self.app_state.db, user_id, client, &default)
             .await
             .unwrap_or_else(|error| {
                 tracing::warn!(%error, "Could not read the stored language of a Teams user");
-                Lang::resolve(None, client, default)
+                Lang::resolve(None, client, &default)
             })
     }
 
     /// The language for a message nobody asked for, such as a task result.
-    pub async fn stored_language(&self, user_id: Uuid, default: &str) -> Lang {
-        self.reply_language(Some(user_id), None, default).await
+    pub async fn stored_language(&self, user_id: Uuid) -> Lang {
+        self.reply_language(Some(user_id), None).await
     }
 
     /// Whether any Teams message got through to Erato on any replica: it left
@@ -874,19 +923,27 @@ fn translate(
                 Ok(StreamingEvent::ToolCallUpdate {
                     tool_call_id,
                     tool_name,
+                    display,
                     status,
                     progress_message,
                     progress: completed,
                     total,
                     ..
-                }) => GenerationUpdate::Status(progress.tool(
-                    tool_call_id,
-                    &tool_name,
-                    status,
-                    progress_message.as_deref(),
-                    completed,
-                    total,
-                )),
+                }) => GenerationUpdate::Status(
+                    progress.tool(
+                        tool_call_id,
+                        // The tool's own name where the model called it by a
+                        // name qualified with its server.
+                        display
+                            .as_ref()
+                            .and_then(|display| display.tool_name.as_deref())
+                            .unwrap_or(&tool_name),
+                        status,
+                        progress_message.as_deref(),
+                        completed,
+                        total,
+                    ),
+                ),
                 Ok(StreamingEvent::ClientToolCall { .. }) => GenerationUpdate::Status(
                     Msg::NeedsAppProgress.fill(lang, &[("app", &app_name)]),
                 ),
@@ -894,9 +951,9 @@ fn translate(
                     message_id,
                     content,
                     ..
-                }) => GenerationUpdate::Completed(completion_from_content(
+                }) => GenerationUpdate::Completed(Box::new(completion_from_content(
                     &facets, chat_id, message_id, &content,
-                )),
+                ))),
                 Ok(StreamingEvent::Error { error }) => {
                     GenerationUpdate::Failed(error_message(error.as_ref(), lang))
                 }
@@ -999,19 +1056,27 @@ fn completion_from_content(
                             approval_id: item.approval_id,
                             tool_name: child.tool_name,
                             source: approval_source(child.display.as_ref(), &child.mcp_server_id),
+                            metadata: child.display.clone(),
                             display: child.display.map(approval_display),
                             input: child.input,
-                            own_tool: false,
-                            budget: false,
+                            server_id: child.mcp_server_id,
+                            // The call runs in the task's own chat.
+                            tool_call_id: None,
+                            ..Default::default()
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: item.tool_name,
                             source: approval_source(item.display.as_ref(), &request.mcp_server_id),
+                            metadata: item.display.clone(),
                             display: item.display.map(approval_display),
                             input: item.input,
                             own_tool: request.kind == ToolApprovalKind::BuiltinTool,
                             budget: request.kind == ToolApprovalKind::ToolCallLimit,
+                            server_id: request.mcp_server_id.clone(),
+                            tool_call_id: (request.kind == ToolApprovalKind::McpTool)
+                                .then_some(item.tool_call_id),
+                            card: None,
                         },
                     })
                     .collect(),
@@ -1025,11 +1090,27 @@ fn completion_from_content(
         message_id,
         text,
         earlier_text,
+        output_ids: since_earlier_stop(content)
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::TextFilePointer(p) => Some(p.file_upload_id),
+                ContentPart::ImageFilePointer(p) => Some(p.file_upload_id),
+                ContentPart::AudioFilePointer(p) => Some(p.file_upload_id),
+                _ => None,
+            })
+            .collect(),
         approvals,
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
         reminders: super::reminders::turn_reminders(content),
         client_tasks: tasks_without_client(facets, content),
+        tool_uses: content
+            .iter()
+            .filter_map(|part| match part {
+                ContentPart::ToolUse(tool_use) => Some(tool_use.clone()),
+                _ => None,
+            })
+            .collect(),
     }
 }
 
@@ -1567,8 +1648,10 @@ mod tests {
             description: Some("Description".into()),
             description_truncated: true,
             server_name: None,
+            tool_name: None,
             label: None,
             read_only: false,
+            closed_world: false,
         });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -1617,8 +1700,10 @@ mod tests {
                 description: None,
                 description_truncated: false,
                 server_name: Some("Team Wiki".into()),
+                tool_name: None,
                 label: None,
                 read_only: false,
+                closed_world: false,
             });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -1691,6 +1776,7 @@ mod tests {
                 approval_id: "task-a".to_string(),
                 tool_call_id: "task-a".to_string(),
                 tool_name: "delegate_task".to_string(),
+                called_as: None,
                 display: None,
                 input: json!({"task": "Publish the page"}),
                 child: Some(crate::models::message::ChildApprovalRef {
@@ -1714,6 +1800,7 @@ mod tests {
                     waiting_for: None,
                     approval_scope: None,
                 }),
+                replaces_approval_id: None,
             });
         ContentPart::ToolApprovalRequest(request)
     }
@@ -1902,5 +1989,54 @@ mod tests {
             texts,
             ["I am checking.", "", "The result", "The result is ready."]
         );
+    }
+
+    /// A call the model made by a name qualified with its server shows the
+    /// tool's own name, which its display carries, in the progress line.
+    #[tokio::test]
+    async fn progress_names_a_qualified_call_by_the_tools_own_name() {
+        let (sender, receiver) = broadcast::channel(16);
+        let mut updates = translate(
+            Uuid::new_v4(),
+            receiver,
+            None,
+            Lang::En,
+            "Erato".into(),
+            FacetsConfig::default(),
+        );
+        sender
+            .send(StreamingEvent::ToolCallUpdate {
+                message_id: Uuid::new_v4(),
+                content_index: 0,
+                tool_call_id: "call".into(),
+                tool_name: "crm_eu__search".into(),
+                display: Some(crate::models::message::ToolDisplayMetadata {
+                    title: "Search".into(),
+                    description: None,
+                    description_truncated: false,
+                    server_name: Some("CRM EU".into()),
+                    tool_name: Some("search".into()),
+                    label: None,
+                    read_only: false,
+                    closed_world: false,
+                }),
+                status: ToolCallStatus::InProgress,
+                input: None,
+                output: None,
+                result_details: None,
+                allowed_by: None,
+                progress_message: None,
+                progress: None,
+                total: None,
+            })
+            .unwrap();
+        sender.send(StreamingEvent::StreamEnd).unwrap();
+        let mut statuses = Vec::new();
+        while let Some(update) = updates.recv().await {
+            if let GenerationUpdate::Status(status) = update {
+                statuses.push(status);
+            }
+        }
+        assert_eq!(statuses, ["Using search…"]);
     }
 }

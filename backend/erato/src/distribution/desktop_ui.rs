@@ -29,7 +29,7 @@ use crate::config::AppConfig;
 use crate::distribution::Distribution;
 use crate::distribution::frontend_bundles::serialize_import_map;
 use crate::distribution::runtime::DistributionBundle;
-use crate::distribution::translations::TranslationDistribution;
+use crate::distribution::translations::TranslationCatalogs;
 
 pub const FORMAT: u64 = 1;
 pub const HOST_API: u64 = 1;
@@ -585,6 +585,7 @@ struct FileEntry {
 pub fn assemble_for_state(
     config: &AppConfig,
     distribution: &Distribution,
+    translations: &TranslationCatalogs,
     overrides: &DistributionBundle,
 ) -> Option<Arc<DesktopUiPackage>> {
     let artifact = distribution
@@ -595,6 +596,7 @@ pub fn assemble_for_state(
         artifact,
         config,
         distribution,
+        translations,
         overrides,
         PACKAGE_BUDGET_BYTES,
         PACKAGE_MAX_ARCHIVE_BYTES,
@@ -619,6 +621,7 @@ pub fn assemble(
     artifact: &DesktopUiArtifact,
     config: &AppConfig,
     distribution: &Distribution,
+    translations: &TranslationCatalogs,
     overrides: &DistributionBundle,
     budget: u64,
     max_archive_bytes: u64,
@@ -626,7 +629,7 @@ pub fn assemble(
     let bundle = &artifact.bundle;
     let mut assembly = Assembly {
         files: bundle.files.clone(),
-        translations: &distribution.translations,
+        translations,
     };
     let main_root = distribution.frontend_bundles.main.root().to_path_buf();
 
@@ -854,7 +857,7 @@ fn composition_env(config: &AppConfig, theme: Option<&str>) -> Map<String, Value
 
 struct Assembly<'a> {
     files: BTreeMap<String, PackageFile>,
-    translations: &'a TranslationDistribution,
+    translations: &'a TranslationCatalogs,
 }
 
 impl Assembly<'_> {
@@ -1104,10 +1107,12 @@ impl PackageTokenKey {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::config::I18nRuntimeConfig;
     use crate::config::TranslationPoCompilationMode;
     use crate::distribution::component_kits::ComponentKitDistribution;
     use crate::distribution::frontend_bundles::FrontendBundles;
     use crate::distribution::runtime::DistributionFile;
+    use crate::distribution::translations::TranslationDistribution;
 
     /// A small valid bundle as the sidecar's packer would write it: one
     /// window, one asset, one catalog and the kit-host import map.
@@ -1348,6 +1353,7 @@ pub(crate) mod tests {
             &fixture_artifact(),
             &config,
             &distribution,
+            &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
             &overrides,
             PACKAGE_BUDGET_BYTES,
             PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1506,6 +1512,7 @@ pub(crate) mod tests {
                 &artifact,
                 &config,
                 &distribution,
+                &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
                 &DistributionBundle::default(),
                 PACKAGE_BUDGET_BYTES,
                 PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1529,6 +1536,7 @@ pub(crate) mod tests {
                 &fixture_artifact(),
                 config,
                 &distribution,
+                &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(config)),
                 &DistributionBundle::default(),
                 PACKAGE_BUDGET_BYTES,
                 PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1640,6 +1648,7 @@ pub(crate) mod tests {
             &fixture_artifact(),
             &config,
             &distribution,
+            &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
             &DistributionBundle::default(),
             PACKAGE_BUDGET_BYTES,
             PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1695,6 +1704,7 @@ pub(crate) mod tests {
             &fixture_artifact(),
             &config,
             &distribution,
+            &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
             &DistributionBundle::default(),
             PACKAGE_BUDGET_BYTES,
             PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1728,6 +1738,7 @@ pub(crate) mod tests {
             &fixture_artifact(),
             &config,
             &distribution,
+            &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
             &DistributionBundle::default(),
             64,
             PACKAGE_MAX_ARCHIVE_BYTES,
@@ -1746,6 +1757,7 @@ pub(crate) mod tests {
             &fixture_artifact(),
             &config,
             &distribution,
+            &TranslationCatalogs::new(&I18nRuntimeConfig::from_app_config(&config)),
             &DistributionBundle::default(),
             PACKAGE_BUDGET_BYTES,
             64,

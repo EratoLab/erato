@@ -37,7 +37,6 @@ import {
   getAssistantHubDisplayScore,
   getAssistantHubRatingScale,
   EmptyAssistantHubState,
-  isAssistantHubReviewAcceptedStatus,
 } from "./assistantHubUtils";
 
 import type {
@@ -74,6 +73,7 @@ const refreshAfterVersionChange = (
 type AssistantSubmissionGroup = {
   hubAssistantId: string;
   sourceAssistantId: string;
+  isSubmissionOwner: boolean;
   name: string;
   description?: string | null;
   versions: AssistantHubVersion[];
@@ -92,6 +92,7 @@ export const groupVersionsByAssistant = (
       groups.set(version.hub_assistant_id, {
         hubAssistantId: version.hub_assistant_id,
         sourceAssistantId: version.source_assistant_id,
+        isSubmissionOwner: version.is_submission_owner,
         name: version.assistant.name,
         description: version.assistant.description,
         versions: [version],
@@ -397,7 +398,7 @@ export default function AssistantHubMyPage() {
           })}
         </Button>
       )}
-      {version.status === "submitted" && (
+      {version.is_submission_owner && version.status === "submitted" && (
         <Button
           variant="secondary"
           size="sm"
@@ -422,44 +423,42 @@ export default function AssistantHubMyPage() {
           })}
         </Button>
       )}
-      {isAssistantHubReviewAcceptedStatus(version.status) && (
-        <>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={isPendingAction(version, "publish")}
-            disabled={pendingAction !== null}
-            onClick={() => {
-              void handleSetPublished(version, !version.is_published);
-            }}
-          >
-            {version.is_published
-              ? t({
-                  id: "assistantHub.my.unpublish",
-                  message: "Unpublish",
-                })
-              : t({
-                  id: "assistantHub.my.publish",
-                  message: "Publish",
-                })}
-          </Button>
-          {version.is_published && !version.is_current_published_version && (
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={isPendingAction(version, "current")}
-              disabled={pendingAction !== null}
-              onClick={() => {
-                void handleSetCurrent(version);
-              }}
-            >
-              {t({
-                id: "assistantHub.my.makeCurrent",
-                message: "Make current",
+      {(version.is_published ? version.can_unpublish : version.can_publish) && (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isPendingAction(version, "publish")}
+          disabled={pendingAction !== null}
+          onClick={() => {
+            void handleSetPublished(version, !version.is_published);
+          }}
+        >
+          {version.is_published
+            ? t({
+                id: "assistantHub.my.unpublish",
+                message: "Unpublish",
+              })
+            : t({
+                id: "assistantHub.my.publish",
+                message: "Publish",
               })}
-            </Button>
-          )}
-        </>
+        </Button>
+      )}
+      {version.can_make_current && (
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isPendingAction(version, "current")}
+          disabled={pendingAction !== null}
+          onClick={() => {
+            void handleSetCurrent(version);
+          }}
+        >
+          {t({
+            id: "assistantHub.my.makeCurrent",
+            message: "Make current",
+          })}
+        </Button>
       )}
     </>
   );
@@ -746,21 +745,23 @@ export default function AssistantHubMyPage() {
                           message: "Edit draft",
                         })}
                       </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<PlusIcon className="size-4" />}
-                        onClick={() =>
-                          navigate(
-                            `/assistant-hub/submit/${group.sourceAssistantId}`,
-                          )
-                        }
-                      >
-                        {t({
-                          id: "assistantHub.my.submitNewVersion",
-                          message: "Submit new version",
-                        })}
-                      </Button>
+                      {group.isSubmissionOwner && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={<PlusIcon className="size-4" />}
+                          onClick={() =>
+                            navigate(
+                              `/assistant-hub/submit/${group.sourceAssistantId}`,
+                            )
+                          }
+                        >
+                          {t({
+                            id: "assistantHub.my.submitNewVersion",
+                            message: "Submit new version",
+                          })}
+                        </Button>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-3">

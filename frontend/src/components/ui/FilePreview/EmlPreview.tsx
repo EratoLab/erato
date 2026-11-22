@@ -3,6 +3,7 @@ import { sanitize } from "lettersanitizer";
 import PostalMime from "postal-mime";
 import { useEffect, useMemo, useState } from "react";
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { Button } from "@/components/ui/Controls/Button";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
@@ -149,7 +150,10 @@ export const EmlPreview: React.FC<EmlPreviewProps> = ({ url }) => {
     const load = async () => {
       let bytes: ArrayBuffer;
       try {
-        const res = await fetch(url);
+        const res = await fetchWithAuthRecovery(
+          () => fetch(url),
+          "file-preview",
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         bytes = await res.arrayBuffer();
       } catch (err) {

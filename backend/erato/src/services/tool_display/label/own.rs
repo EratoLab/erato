@@ -184,6 +184,8 @@ mod tests {
                 warnings: Vec::new(),
                 source: ToolCallLabelSource::OwnMapping,
                 change: None,
+                read: None,
+                spoken_names: Default::default(),
             }
         );
     }

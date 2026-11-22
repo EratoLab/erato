@@ -1570,13 +1570,38 @@ struct Case {
     #[serde(default)]
     input_schema: JsonObject,
     arguments: Value,
-    expected: Expected,
+    /// The label the probe expected; absent on calls added for reads.
+    #[serde(default)]
+    expected: Option<Expected>,
     /// Calls that ran earlier in the chat, on the call's own server.
     #[serde(default)]
     context: Vec<ContextCall>,
     /// What the record the call acts on is called, by those calls.
     #[serde(default)]
     expected_name: Option<String>,
+    /// Set on calls whose name reads: the read they get, or why they stay
+    /// generic. Every other call gets none.
+    #[serde(default)]
+    expected_read: Option<ExpectedRead>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ExpectedRead {
+    Read {
+        object_kind: ToolCallObjectKind,
+        #[serde(default)]
+        title: Option<String>,
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        target: Option<String>,
+        #[serde(default)]
+        filtered: bool,
+    },
+    Generic {
+        generic: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -1615,21 +1640,22 @@ fn score(fixture: &str) -> Score {
     };
     for line in fixture.lines().filter(|line| !line.trim().is_empty()) {
         let case: Case = serde_json::from_str(line).unwrap();
+        let expected = case.expected.expect("an expected label");
         let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref(), None);
         let mapping = &rules.mapping;
         let got = mapping.items.first().cloned().unwrap_or_default();
-        let want = case.expected.items.first().cloned().unwrap_or_default();
+        let want = expected.items.first().cloned().unwrap_or_default();
         let mut misses = Vec::new();
         for (part, got, want) in [
             (
                 "action",
                 format!("{:?}", mapping.action),
-                format!("{:?}", case.expected.action),
+                format!("{:?}", expected.action),
             ),
             (
                 "kind",
                 format!("{:?}", mapping.object_kind),
-                format!("{:?}", case.expected.object_kind),
+                format!("{:?}", expected.object_kind),
             ),
             (
                 "title",
@@ -2108,8 +2134,10 @@ fn the_test_sets_records_are_named_by_the_reads_before_them() {
                     description: None,
                     description_truncated: false,
                     server_name: Some(SERVER.into()),
+                    tool_name: None,
                     label: None,
                     read_only: true,
+                    closed_world: false,
                 }),
                 input: Some(call.input),
                 output: Some(call.output),
@@ -2131,4 +2159,265 @@ fn the_test_sets_records_are_named_by_the_reads_before_them() {
         named += 1;
     }
     assert_eq!(named, 4);
+}
+
+fn read_of(tool: &Tool, arguments: &Value) -> Option<crate::models::message::ToolCallRead> {
+    crate::services::tool_display::mcp_tool_call_display(
+        &crate::config::McpRuntimeConfig::default(),
+        "server",
+        tool,
+        arguments,
+        None,
+        &Default::default(),
+    )
+    .label?
+    .read
+}
+
+type ReadShape = (
+    ToolCallObjectKind,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+);
+
+fn read_shape(read: &crate::models::message::ToolCallRead) -> ReadShape {
+    let pointer = |slot: &Option<crate::models::message::ToolCallLabelSlot>| {
+        slot.as_ref().map(|slot| slot.pointer.clone())
+    };
+    let item = read.item.clone().unwrap_or_default();
+    (
+        read.object_kind,
+        pointer(&item.title),
+        pointer(&item.id),
+        pointer(&item.target),
+        read.filtered,
+    )
+}
+
+fn reads(name: &str, arguments: Value) -> Option<ReadShape> {
+    read_of(&tool(name, None, &[]), &arguments).map(|read| read_shape(&read))
+}
+
+/// Every call in the test sets whose name reads gets the read its fixture
+/// expects, or stays generic for the reason the fixture gives; every other
+/// call gets none.
+#[test]
+fn the_test_sets_reads_get_a_read_and_every_other_call_none() {
+    let mut counts = Vec::new();
+    for (name, fixture) in [
+        ("testset", include_str!("fixtures/testset.jsonl")),
+        (
+            "testset_dynamics",
+            include_str!("fixtures/testset_dynamics.jsonl"),
+        ),
+        (
+            "testset_reads",
+            include_str!("fixtures/testset_reads.jsonl"),
+        ),
+    ] {
+        let (mut read, mut generic) = (0, 0);
+        for line in fixture.lines().filter(|line| !line.trim().is_empty()) {
+            let case: Case = serde_json::from_str(line).unwrap();
+            let mut tool = Tool::new(case.tool.clone(), "", case.input_schema.clone());
+            tool.annotations = case.annotations.clone();
+            let got = read_of(&tool, &case.arguments).map(|read| read_shape(&read));
+            match case.expected_read {
+                Some(ExpectedRead::Read {
+                    object_kind,
+                    title,
+                    id,
+                    target,
+                    filtered,
+                }) => {
+                    assert_eq!(
+                        got,
+                        Some((object_kind, title, id, target, filtered)),
+                        "{name}: {}",
+                        case.id
+                    );
+                    read += 1;
+                }
+                Some(ExpectedRead::Generic { generic: reason }) => {
+                    assert_eq!(got, None, "{name}: {}", case.id);
+                    println!("{name}: {} stays generic: {reason}", case.id);
+                    generic += 1;
+                }
+                None => assert_eq!(got, None, "{name}: {}", case.id),
+            }
+        }
+        println!("{name}: {read} reads, {generic} generic");
+        counts.push((name, read, generic));
+    }
+    assert_eq!(
+        counts,
+        [
+            ("testset", 4, 2),
+            ("testset_dynamics", 6, 0),
+            ("testset_reads", 12, 27),
+        ]
+    );
+}
+
+#[test]
+fn a_search_a_get_and_a_list_each_say_what_they_read() {
+    use ToolCallObjectKind::{Other, Row, Task};
+    let some = |kind, title: Option<&str>, id: Option<&str>, target: Option<&str>, filtered| {
+        Some((
+            kind,
+            title.map(str::to_string),
+            id.map(str::to_string),
+            target.map(str::to_string),
+            filtered,
+        ))
+    };
+    assert_eq!(
+        reads("search", json!({"query": "Müller GmbH", "limit": 10})),
+        some(Other, Some("/query"), None, None, false)
+    );
+    assert_eq!(
+        reads("get_issue", json!({"issue_id": "ENG-12"})),
+        some(Task, None, Some("/issue_id"), None, false)
+    );
+    assert_eq!(
+        reads(
+            "retrieve_record",
+            json!({"tablename": "opportunity", "recordId": RECORD})
+        ),
+        some(Row, None, Some("/recordId"), Some("/tablename"), false)
+    );
+    // A table that only repeats the kind says nothing more.
+    assert_eq!(
+        reads("list_records", json!({"tablename": "task", "top": 50})),
+        some(Task, None, None, None, false)
+    );
+    // An argument the rules do not understand might change something.
+    assert_eq!(
+        reads(
+            "list_tasks",
+            json!({"status": "open", "limit": 20, "cursor": null})
+        ),
+        None
+    );
+    assert_eq!(
+        reads(
+            "list_tasks",
+            json!({"filter": {"status": "open"}, "limit": 20})
+        ),
+        some(Task, None, None, None, true)
+    );
+    // Another record's ID narrows a list; it is not what the call reads.
+    assert_eq!(
+        reads(
+            "list_issues",
+            json!({"assignee_id": "u-1", "project_id": "p-1"})
+        ),
+        some(Task, None, None, Some("/project_id"), true)
+    );
+    assert_eq!(
+        reads("search", json!({"query": "  ", "limit": 10})),
+        some(Other, None, None, None, false)
+    );
+}
+
+#[test]
+fn calls_that_may_do_more_than_read_get_no_read() {
+    for (name, arguments) in [
+        (
+            "get_and_update_record",
+            json!({"id": RECORD, "status": "won"}),
+        ),
+        ("fetch_page", json!({"page_id": RECORD, "mode": "update"})),
+        ("search", json!({"query": "x", "publish": true})),
+        ("list_items", json!({"send_notification": true})),
+        ("search", json!({"query": "x", "delete": true})),
+        // A `kind` names no verb, but a loss in it is never hidden.
+        ("get_items", json!({"kind": "HardDelete"})),
+        (
+            "read_query",
+            json!({"querytext": "UPDATE account SET name = 'x'"}),
+        ),
+        (
+            "search",
+            json!({"query": "/* note */ DELETE FROM user_sessions"}),
+        ),
+        ("search", json!({"query": "DELETE FROM user_sessions;"})),
+        ("query_rows", json!({"sql": "select 1"})),
+        ("list_files", json!({"command": "ls -la /srv"})),
+        ("save_search", json!({"query": "open deals"})),
+        ("get_or_create_folder", json!({"name": "Q4"})),
+        ("sign_out", json!({})),
+    ] {
+        assert_eq!(reads(name, arguments.clone()), None, "{name} {arguments}");
+    }
+    let read_only = Some(hints(Some(true), None));
+    assert!(
+        read_of(
+            &tool("delete_record", read_only.clone(), &[]),
+            &json!({"recordId": RECORD})
+        )
+        .is_none()
+    );
+    assert!(
+        read_of(
+            &tool("get_record", Some(hints(None, Some(true))), &[]),
+            &json!({"recordId": RECORD})
+        )
+        .is_none()
+    );
+    assert!(
+        read_of(
+            &tool("get_record", read_only, &[]),
+            &json!({"recordId": RECORD})
+        )
+        .is_some()
+    );
+}
+
+#[test]
+fn a_read_shows_no_consent_flag_no_typed_name_and_no_unread_id_as_a_name() {
+    let search = read_of(
+        &tool("search", None, &[]),
+        &json!({"query": "Müller GmbH", "hasUserApproved": true}),
+    )
+    .unwrap();
+    assert!(!search.filtered);
+    assert!(
+        !serde_json::to_string(&search)
+            .unwrap()
+            .contains("hasUserApproved")
+    );
+
+    let get = read_of(&tool("get_record", None, &[]), &json!({"recordId": RECORD})).unwrap();
+    let value = &get.item.unwrap().id.unwrap().values[0];
+    assert!(value.machine_id);
+    assert_eq!(value.resolved, None);
+
+    for arguments in [
+        json!({"record": lookup(RECORD, "account")}),
+        json!({"recordId": RECORD, "regarding": lookup(ACCOUNT, "account")}),
+    ] {
+        let read = read_of(&tool("get_record", None, &[]), &arguments);
+        assert!(
+            !serde_json::to_string(&read)
+                .unwrap()
+                .contains("Typed by the model"),
+            "{arguments}"
+        );
+    }
+}
+
+#[test]
+fn any_arguments_give_a_small_read_or_none() {
+    for arguments in crate::services::tool_display::label::tests::hostile_arguments() {
+        for name in ["search", "get_record", "list_rows"] {
+            let read = read_of(&tool(name, None, &[]), &arguments);
+            let size = serde_json::to_string(&read).unwrap().len();
+            assert!(
+                size <= 2 * super::super::MAX_READ_VALUE_BYTES,
+                "{name}: {size}"
+            );
+        }
+    }
 }

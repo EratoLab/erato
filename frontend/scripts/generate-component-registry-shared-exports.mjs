@@ -268,6 +268,9 @@ const ownExports = (filePath) => {
 // beats keeping a dead import alive in a host component.
 const pinnedComponentModules = [
   path.join(componentsDir, "ui", "FileUpload", "FilePreviewLoading.tsx"),
+  // Approval cards no longer show a tool's description; the tool settings
+  // list still does.
+  path.join(componentsDir, "ui", "ToolCall", "McpToolDescription.tsx"),
 ];
 
 // Exports of a registry-reachable module the kit surface withholds on purpose;

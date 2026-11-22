@@ -1,3 +1,7 @@
+import {
+  validateWordDocumentPlan,
+  wordPlainTextBlocks,
+} from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -81,6 +85,45 @@ describe("Word structural compiler", () => {
         captureWordAuthoringSnapshot(xml, "doc-A", "Off"),
       ),
     ).toBe(true);
+  });
+  it("writes a nested plain-text list as one Word list, with bullets or numbers per level", () => {
+    const s = readySnapshot();
+    const p = examplePlan(s.token);
+    const { blocks, issues } = wordPlainTextBlocks(
+      "- Abruf\n  1. bis 14 Uhr\n  2. im Portal\n- Lieferung\n  1. DAP\n    - frei Haus",
+      { idPrefix: "r1" },
+    );
+    expect(issues).toEqual([]);
+    p.entries.push({ kind: "insert", blocks });
+    expect(validateWordDocumentPlan(p, s)).toBeNull();
+    const xml = compileWordDocumentPlan(p, s);
+    const after = captureWordAuthoringSnapshot(xml, "doc-A", "Off");
+    expect(verifyWordPlanOutput(p, s, after)).toBe(true);
+    const items = after.blocks.filter((b) => b.type === "list-item");
+    expect(new Set(items.map((b) => b.list)).size).toBe(1);
+    expect(items.map((b) => [b.level, b.ordered])).toEqual([
+      [0, false],
+      [1, true],
+      [1, true],
+      [0, false],
+      [1, true],
+      [2, false],
+    ]);
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    expect(doc.getElementsByTagNameNS(W, "num")).toHaveLength(1);
+    expect(
+      Array.from(doc.getElementsByTagNameNS(W, "lvl"))
+        .slice(0, 4)
+        .map((lvl) => [
+          lvl.getElementsByTagNameNS(W, "numFmt")[0].getAttributeNS(W, "val"),
+          lvl.getElementsByTagNameNS(W, "lvlText")[0].getAttributeNS(W, "val"),
+        ]),
+    ).toEqual([
+      ["bullet", "•"],
+      ["decimal", "%2."],
+      ["bullet", "•"],
+      ["bullet", "•"],
+    ]);
   });
   it("preserves unchanged emphasis and hyperlinks and escapes generated text", () => {
     const original = packageXml(

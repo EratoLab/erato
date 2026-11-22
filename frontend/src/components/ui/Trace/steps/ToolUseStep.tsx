@@ -39,6 +39,7 @@ import {
   isRecord,
   serverFailureMessage,
 } from "@/lib/toolCallGist/serverText";
+import { shownToolName } from "@/lib/toolCallGist/toolName";
 import { toolDecisionLabel } from "@/lib/trace/toolDecisionLabel";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
@@ -123,6 +124,24 @@ const ResultLink = ({
 
 const textOf = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
+
+/**
+ * The title a read-only, closed-world MCP call's row shows as its one plain
+ * line: the one its tool declares. `undefined` keeps the row's own line, for
+ * a tool without a title of its own and for every other call.
+ */
+const plainTitleOf = (part: ToolUse): string | undefined => {
+  const display: unknown = part.display;
+  if (
+    !isRecord(display) ||
+    display.read_only !== true ||
+    display.closed_world !== true
+  ) {
+    return undefined;
+  }
+  const title = textOf(display.title);
+  return title !== shownToolName(part) ? title : undefined;
+};
 
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
@@ -333,21 +352,27 @@ const PlainToolUseStep = ({
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
+  // The name the call was made by; the row shows the tool's own.
   const toolName = part.tool_name ?? "";
+  const shownName = shownToolName(part);
   const toolCallId = part.tool_call_id;
   const refused = refusedWithoutDecision(part, decision);
   // A denied or refused call never ran: its decision tag says so.
   const notRun = decision?.status === "denied" || refused;
   const decisionTag = toolDecisionLabel(part, decision, refused);
   const label = part.display?.label;
+  const plainTitle = plainTitleOf(part);
   // Erato's own proposals have cards of their own: the row only names them.
   const proposal = useMemo(
     () => ownProposalOf(label, part.input),
     [label, part.input],
   );
   const gist = useMemo(
-    () => (proposal ? undefined : gistOf(label, part.input)),
-    [proposal, label, part.input],
+    () =>
+      proposal || plainTitle !== undefined
+        ? undefined
+        : gistOf(label, part.input),
+    [proposal, plainTitle, label, part.input],
   );
   const serverName = textOf(part.display?.server_name);
   const lead = gist?.items[0];
@@ -437,16 +462,17 @@ const PlainToolUseStep = ({
       </div>
     ) : undefined;
   const proposalLine = proposal && ownProposalLine(proposal, phase);
-  // A gist row's title is the line, so the tool it ran is named in the body.
+  // A gist or plain row's title is the line, so the tool it ran is named in
+  // the body.
   const body =
-    proposal || gist ? (
+    proposal || gist || plainTitle !== undefined ? (
       <>
         {proposal?.kind === "comments" && isMixedCommentProposal(proposal) && (
           <CommentChangeRows changes={proposal.changes} />
         )}
         <ToolCallIdentity
           className="pt-2"
-          toolName={toolName}
+          toolName={shownName}
           server={serverName}
         />
         {payload}
@@ -483,8 +509,16 @@ const PlainToolUseStep = ({
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={linePhase} />
               </span>
+            ) : plainTitle !== undefined ? (
+              <span
+                dir="auto"
+                className="[unicode-bidi:isolate]"
+                data-testid="tool-call-plain-line"
+              >
+                {plainTitle}
+              </span>
             ) : (
-              toolName
+              shownName
             )}
             {counts === undefined && server}
             {progress && (
@@ -557,12 +591,17 @@ const withoutLabel = (
     ...part,
     display: isRecord(display)
       ? {
-          title: textOf(display.title) ?? part.tool_name ?? "",
+          title: textOf(display.title) ?? shownToolName(part),
           description_truncated: false,
           server_name: textOf(display.server_name),
+          tool_name: textOf(display.tool_name),
           read_only:
             typeof display.read_only === "boolean"
               ? display.read_only
+              : undefined,
+          closed_world:
+            typeof display.closed_world === "boolean"
+              ? display.closed_world
               : undefined,
         }
       : undefined,

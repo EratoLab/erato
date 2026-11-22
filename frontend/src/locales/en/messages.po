@@ -22,6 +22,7 @@ msgid "about.title"
 msgstr "About Page"
 
 #. js-lingui-explicit-id
+#: src/adaptiveCards/toolCallCards.tsx
 #: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.allowOnce"
 msgstr "Allow once"
@@ -1820,9 +1821,39 @@ msgid "chat.audio_failed"
 msgstr "Audio unavailable. Your text response is still available."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Read the card aloud"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "The recording could not be played. Reload the chat to try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Replay audio response, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.stop"
+msgstr "Stop the replay"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "The recording is not available."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Skip"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -1853,6 +1884,71 @@ msgstr "Cancel transcription"
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.cancelNamed"
 msgstr "Cancel transcription: {filename}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_heard"
+msgstr "Heard …"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood"
+msgstr "“{words}” · Understood: {meaning}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.approve"
+msgstr "allow (on screen only)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.change"
+msgstr "change the request"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.new_request"
+msgstr "a new request"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.read_text"
+msgstr "read the text"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.reject"
+msgstr "deny (on screen only)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.repeat"
+msgstr "again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.rest"
+msgstr "what else"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.skip"
+msgstr "next"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.stop"
+msgstr "stop"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.unclear"
+msgstr "not understood"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.hesitation_held"
+msgstr "“{heldHesitation}” · Still listening"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
@@ -2030,6 +2126,11 @@ msgstr "Failed to load tools for this workspace."
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Deselect {facetDisplayName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/MessageAttachments.tsx
+msgid "chat.file.download_output"
+msgstr "Download {filename}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
@@ -2503,6 +2604,11 @@ msgid "chat.history.unpinFailed"
 msgstr "Couldn't unpin the chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.audio.notSentCardWaiting"
+msgstr "Not sent: a confirmation is waiting"
+
+#. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "chat.input.audioRecording.diagnostics.autoGainControl"
 #~ msgstr "auto gain: {value}"
@@ -2896,6 +3002,11 @@ msgstr "Searched on this device: {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr "{source}: indexed items searched; inventory and date coverage are incomplete"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source}: {from} – {to}"
 
@@ -2908,6 +3019,11 @@ msgstr "{source}: since {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source}: not searchable yet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr "{source}: indexed items searched; document dates are unavailable"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -3132,6 +3248,16 @@ msgstr "Please take a moment to check the chat history for confidential informat
 #: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.warning.title"
 msgstr "The conversation may contain sensitive information"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.spoken_reply.label"
+msgstr "Spoken"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.partCallsExhausted"
+msgstr "Erato reached the limit of parts it can write in one request; ask for a smaller change."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -5035,6 +5161,82 @@ msgid "officeAddin.word.layout.width"
 msgstr "Page width"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: names.length
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.notChanged"
+msgstr "{0, plural, one {Not changed: {listed}. Ask for it in your next message.} other {Not changed: {listed}. Ask for them in your next message.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.notChanged.more"
+msgstr "{more, plural, one {Not changed: {listed} and # more. Ask for them in your next message.} other {Not changed: {listed} and # more. Ask for them in your next message.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.moved"
+msgstr "Moved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.order"
+msgstr "the order of the sections"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.planning"
+msgstr "Erato is planning the changes…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.progress"
+msgstr "{total, plural, one {{ready} of # section ready} other {{ready} of # sections ready}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.ready"
+msgstr "Ready"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reasonChangedInWord"
+msgstr "changed in Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renamed"
+msgstr "Renamed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reordering"
+msgstr "Reordering replaces the whole document; Undo takes it back only as a whole."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.rows"
+msgstr "Sections"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.title"
+msgstr "{count, plural, one {Changes in # section} other {Changes in # sections}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.untitled"
+msgstr "Text without a title"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.withReason"
+msgstr "{name} ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writing"
+msgstr "Writing…"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planAction.insert"
 msgstr "Insert paragraphs"
@@ -5122,6 +5324,11 @@ msgstr "Sections to show"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+msgid "officeAddin.word.planReview.sectionUnknown"
+msgstr "Section not known"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordDocumentPlanReview.tsx
 msgid "officeAddin.word.planReview.showPreview"
 msgstr "Preview the result"
 
@@ -5129,6 +5336,11 @@ msgstr "Preview the result"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.beforeUnavailable"
 msgstr "Previous values were not captured; only the new settings are shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.planRow.blockCount"
+msgstr "{n, plural, one {# block} other {# blocks}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
@@ -5197,6 +5409,11 @@ msgstr "{n, plural, one {# other item} other {# other items}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.originalUnread"
+msgstr "The original text was not read in this chat, so only the new text is shown. Check the passage in Word."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.pageLayout"
 msgstr "Page layout"
 
@@ -5214,6 +5431,11 @@ msgstr "{n, plural, one {# paragraph} other {# paragraphs}}"
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
 msgid "officeAddin.word.planRow.removed"
 msgstr "Removed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPlanChangeRow.tsx
+msgid "officeAddin.word.planRow.removedUnread"
+msgstr "The removed text was not read in this chat, so it cannot be shown here. Check the passage in Word."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPlanChangeRow.tsx
@@ -5464,6 +5686,11 @@ msgstr "From Word"
 #: src/components/ui/WordReview/WordProposalCard.tsx
 msgid "officeAddin.word.proposal.label"
 msgstr "Proposed document changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/wordPlanLabels.ts
+msgid "officeAddin.word.proposal.notInProposalNoText"
+msgstr "a part without text"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordProposalCard.tsx
@@ -5970,6 +6197,71 @@ msgstr "Test microphone"
 #: src/components/ui/Settings/MicTestPanel.tsx
 msgid "preferences.dialog.audio.test.stop"
 msgstr "Stop test"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.description"
+msgstr "Natural: the voice says what is being approved in plain sentences. Word for word: it reads the card's fields as shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cards.heading"
+msgstr "Approval cards"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.description"
+msgstr "How the voice speaks in conversation mode. The read-aloud button always reads the text in the chat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.followOrganization"
+msgstr "Use my organization's setting"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.heading"
+msgstr "Voice"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.locked"
+msgstr "Set by your organization"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.natural"
+msgstr "Natural"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.option.precise"
+msgstr "Word for word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.description"
+msgstr "Natural: the voice gives a short spoken answer and the chat keeps the complete written one. Word for word: the voice reads the written answer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.replies.heading"
+msgstr "Replies in conversation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.saveFailed"
+msgstr "The voice setting could not be saved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.description"
+msgstr "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.label"
+msgstr "Show what the voice said in the chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -8079,6 +8371,11 @@ msgstr "Maximum number of documents processed at the same time."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr "Inventory is incomplete. Indexed items remain searchable; date coverage is incomplete."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Indexing priority"
 
@@ -8246,6 +8543,11 @@ msgstr "Not scanned yet"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Partially indexed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr "Partial coverage"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -8523,6 +8825,501 @@ msgstr "Waiting for your review in the Erato desktop app"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr "Start the Erato desktop app to continue this review."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.clause.id"
+msgstr "{kind, select, other {whose ID is shown on screen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.clause.unread"
+msgstr "{kind, select, other {that I haven't read in this chat}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.instructionUnknown"
+msgstr "What exactly happens is not known."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.nothingChanges"
+msgstr "Nothing seems to change."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.permanent"
+msgstr "This cannot be undone."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.restorable"
+msgstr "{subject, select, many {They can be restored.} other {It can be restored.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.restoreUnknown"
+msgstr "{subject, select, many {Whether they can be restored is not known.} other {Whether it can be restored is not known.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.rowsUnknown"
+msgstr "How many records this affects is not known."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.count"
+msgstr "I need {countWord} approvals for this."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.cut"
+msgstr "… shortened"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.destination"
+msgstr "{shape, select, recipients {to {target}} sendPlace {{kind, select, other {to {target}}}} share {with {target}} move {to {target}} other {in {target}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.changed"
+msgstr "{field}: from {from} to {to}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.emptied"
+msgstr "The field {field} will be emptied."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listAddedClaim"
+msgstr "{count, plural, one {{values} will be added to {field}, the tool says.} other {{values} will be added to {field}, the tool says.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listMaybeReplaced"
+msgstr "{shape, select, values {The list {field} gets {values}. Whether that replaces the list or adds to it is not known.} other {Whether the list {field} is replaced or added to is not known.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listRemovedClaim"
+msgstr "{count, plural, one {{values} will be removed from {field}, the tool says.} other {{values} will be removed from {field}, the tool says.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listReplaced"
+msgstr "{shape, select, values {The list {field} will be replaced with {values}.} other {The list {field} will be replaced.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.losses"
+msgstr "{shape, select, emptied {{emptied, plural, one {{emptiedWord} field will be emptied.} other {{emptiedWord} fields will be emptied.}}} both {{emptied, plural, one {{emptiedWord} field} other {{emptiedWord} fields}} will be emptied and {lists, plural, one {{listsWord} list} other {{listsWord} lists}} replaced or cut down.} other {{lists, plural, one {{listsWord} list will be replaced or cut down.} other {{listsWord} lists will be replaced or cut down.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.named"
+msgstr "{field} as given in the call: {value}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.setTo"
+msgstr "{kind, select, other {{field} will be set to {value}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.unreadable"
+msgstr "{field}: the value is shown on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.value"
+msgstr "{field}: {value}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.dropped"
+msgstr "{field} is no longer part of it."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.elsewhere"
+msgstr "Something else is different too; it's on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.entry"
+msgstr "{asked, select, asked {Changed: {sentence}} unsure {Also changed: {sentence}} other {Also changed, without being asked: {sentence}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.field"
+msgstr "{field} is different now; it's on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.intro"
+msgstr "{kind, select, changed {The new version: {what}} same {The new card is the same as before: {what}} other_item {Careful, the new card is about something different: {what}} other {The card was changed: {what}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.more"
+msgstr "{shape, select, asked {{count, plural, one {And one more field changed as asked; it's on screen.} other {And {countWord} more fields changed as asked; they're on screen.}}} unsure {{count, plural, one {And one more field changed; it's on screen.} other {And {countWord} more fields changed; they're on screen.}}} other {{count, plural, one {And one more field changed without being asked; it's on screen.} other {And {countWord} more fields changed without being asked; they're on screen.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.recipients"
+msgstr "{kind, select, to {Now to: {names}.} cc {Now in copy: {names}.} bcc {Now in blind copy: {names}.} other {{group} now: {names}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.rest"
+msgstr "Everything else is as before."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.rows"
+msgstr "{count, plural, one {One row is different now; it's on screen.} other {{countWord} rows are different now; they're on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.sameHint"
+msgstr "Nothing was changed. Try saying the change a different way."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.statement"
+msgstr "{kind, select, sql {The query is different now; it's on screen.} other {The instruction is different now; it's on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.title"
+msgstr "{shape, select, subject {The subject is now {name}.} other {The title is now {name}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.unreadable"
+msgstr "I can't tell from the card whether the change is in: only something I can't read out is different. It's on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.item.subject"
+msgstr "Subject: {name}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.more"
+msgstr "{count, plural, one {And one more field, shown on screen.} other {And {countWord} more fields, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.nothingLeft"
+msgstr "That was everything."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeConflict"
+msgstr "The card has changed in the meantime. Please check the screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeFailed"
+msgstr "The change couldn't be sent. The card is waiting on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeNoCard"
+msgstr "{shape, select, several {After several changes no new card came, and nothing was run. Please say again what should happen.} other {No new card came, and nothing was run. Just say how to go on.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeOnScreen"
+msgstr "{reason, select, others {First decide on the other approvals on screen; then this card can be changed by voice.} other {This card can't be changed by voice. Please decide it on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changing"
+msgstr "All right, I'll change that."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decideOnScreen"
+msgstr "{decision, select, approve {For now, approving is done on screen.} other {For now, declining is done on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decisionFailed"
+msgstr "That didn't go through. Please decide on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.declined"
+msgstr "All right, I won't do it."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.declineOnScreen"
+msgstr "This card is declined on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.newRequest"
+msgstr "First this card: decide on it on screen, or say what should be different. Then please say the new request again."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.noText"
+msgstr "This card has no long text."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.phraseOnScreen"
+msgstr "Then please confirm on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayAgain"
+msgstr "I didn't catch that clearly. Please say it again."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhrase"
+msgstr "Please say “{phrase}” to go ahead."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.sayPhraseAgain"
+msgstr "Please say “{phrase}” once more."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unavailable"
+msgstr "Voice commands aren't working right now. The card is waiting on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unclear"
+msgstr "{commands, select, withText {I didn't catch that. You can say: go on, what else, again, read the text, or stop.} other {I didn't catch that. You can say: go on, what else, again, or stop.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichText"
+msgstr "{shape, select, named {Which text: {texts}?} other {Which text? The texts are on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.ordinal"
+msgstr "The {ordinal} one:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.ordinal.next"
+msgstr "The next one:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.outside"
+msgstr "{shape, select, single {The recipient is outside the organisation.} all {All recipients are outside the organisation.} other {{outside, plural, one {One recipient is outside the organisation.} other {{countWord} of the recipients are outside the organisation.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "A decision is waiting on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.columnOf"
+msgstr "{column} of {table}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.condition"
+msgstr "{operator, select, equals {{column} is {value}.} not_equals {{column} is not {value}.} less {{kind, select, date {{column} is before {value}.} other {{column} is less than {value}.}}} at_most {{kind, select, date {{column} is on or before {value}.} other {{column} is at most {value}.}}} greater {{kind, select, date {{column} is after {value}.} other {{column} is greater than {value}.}}} at_least {{kind, select, date {{column} is on or after {value}.} other {{column} is at least {value}.}}} contains {{column} contains {value}.} starts_with {{column} starts with {value}.} ends_with {{column} ends with {value}.} is_empty {{column} is empty.} is_not_empty {{column} is not empty.} in {{column} is {value}.} neither {{column} is neither {value} nor {second}.} not_in {{column} is not {value}.} between {{kind, select, date {{column} is between {value} and {second}.} other {{column} is between {value} and {second}.}}} other {{column} is compared with {value}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.conditionLong"
+msgstr "{column} is compared with a text of about {words} words, shown on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.conditionsLead"
+msgstr ", with these conditions:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.limit"
+msgstr "{shape, select, one {Only the first result.} other {At most {things}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreConditions"
+msgstr "{shape, select, unknown {With conditions shown on screen.} counted {{count, plural, one {With one condition, shown on screen.} other {With {countWord} conditions, shown on screen.}}} other {{count, plural, one {And one more condition, shown on screen.} other {And {countWord} more conditions, shown on screen.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreTables"
+msgstr "{count, plural, one {one more table} other {{countWord} more tables}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreValues"
+msgstr "{count, plural, one {one more value} other {{countWord} more values}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.tables"
+msgstr "{count, plural, one {from the table {tables}} other {from the tables {tables}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.things"
+msgstr "{kind, select, page {pages} row {records} database {databases} folder {folders} note {notes} comment {comments} paragraph {paragraphs} document {documents} email {emails} message {messages} event {events} file {files} task {tasks} other {items}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.what"
+msgstr "{shape, select, search {I'd like to search {source} for {text} {clause}} searchIn {I'd like to search {thing} {source} for {text} {clause}} searchLong {I'd like to search {source} for a text of about {text} words, shown on screen {clause}} searchInLong {I'd like to search {thing} {source} for a text of about {text} words, shown on screen {clause}} read {I'd like to read {thing} {tables} {source} {clause}} other {I'd like to list {thing} {source} {clause}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.where"
+msgstr "Where: {places}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.recipients"
+msgstr "{shape, select, unnamed {{total, plural, one {one recipient} other {{countWord} recipients}}} other {{rest, plural, one {{name} and one other} other {{name} and {countWord} others}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.request"
+msgstr "Please confirm on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.requestPhrase"
+msgstr "Say “{phrase}” to go ahead."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.rest"
+msgstr "{count, plural, one {One more thing:} other {{countWord} more things:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.named"
+msgstr "{kind, select, page {the page {name}} row {the record {name}} database {the database {name}} folder {the folder {name}} note {the note {name}} comment {the comment {name}} paragraph {the paragraph {name}} document {the document {name}} email {the email {name}} message {the message {name}} event {the event {name}} file {the file {name}} task {the task {name}} other {the item {name}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.one"
+msgstr "{kind, select, page {a page} row {a record} database {a database} folder {a folder} note {a note} comment {a comment} paragraph {a paragraph} document {a document} email {an email} message {a message} event {an event} file {a file} task {a task} other {an item}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.titled"
+msgstr "{thing}, {name}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.source"
+msgstr "{direction, select, from {from {server}} other {in {server}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text"
+msgstr "{shape, select, field {{field}: a text of about {words} words, shown on screen.} other {Plus a text of about {words} words, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictated"
+msgstr "{relation, select, unchanged {{field}: the text exactly as dictated.} part {{field}: part of the dictated text, word for word.} extended {{field}: the dictated text word for word, with additions.} other {{field}: the dictated text, changed in places.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedReadLead"
+msgstr "{relation, select, part {The card holds only part of what was dictated. It reads:} extended {The card holds more than what was dictated. It reads:} other {The text on the card differs from what was dictated. It reads:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedUnnamed"
+msgstr "{relation, select, unchanged {Plus the text exactly as dictated.} part {Plus part of the dictated text, word for word.} extended {Plus the dictated text word for word, with additions.} other {Plus the dictated text, changed in places.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.textCut"
+msgstr "The rest of the text is on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.counted"
+msgstr "{kind, select, page {{countWord} pages} row {{countWord} records} database {{countWord} databases} folder {{countWord} folders} note {{countWord} notes} comment {{countWord} comments} paragraph {{countWord} paragraphs} document {{countWord} documents} email {{countWord} emails} message {{countWord} messages} event {{countWord} events} file {{countWord} files} task {{countWord} tasks} other {{countWord} items}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.including"
+msgstr "{kind, select, page {{countWord} pages, including {names},} row {{countWord} records, including {names},} database {{countWord} databases, including {names},} folder {{countWord} folders, including {names},} note {{countWord} notes, including {names},} comment {{countWord} comments, including {names},} paragraph {{countWord} paragraphs, including {names},} document {{countWord} documents, including {names},} email {{countWord} emails, including {names},} message {{countWord} messages, including {names},} event {{countWord} events, including {names},} file {{countWord} files, including {names},} task {{countWord} tasks, including {names},} other {{countWord} items, including {names},}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.named"
+msgstr "{kind, select, page {the page {name}} row {the record {name}} database {the database {name}} folder {the folder {name}} note {the note {name}} comment {the comment {name}} paragraph {the paragraph {name}} document {the document {name}} email {the email {name}} message {the message {name}} event {the event {name}} file {the file {name}} task {the task {name}} other {the item {name}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.namedMany"
+msgstr "{kind, select, page {the pages {names}} row {the records {names}} database {the databases {names}} folder {the folders {names}} note {the notes {names}} comment {the comments {names}} paragraph {the paragraphs {names}} document {the documents {names}} email {the emails {names}} message {the messages {names}} event {the events {names}} file {the files {names}} task {the tasks {names}} other {the items {names}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.one"
+msgstr "{kind, select, page {a page} row {a record} database {a database} folder {a folder} note {a note} comment {a comment} paragraph {a paragraph} document {a document} email {an email} message {a message} event {an event} file {a file} task {a task} other {an item}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value"
+msgstr "{role, select, from {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}} to {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}} other {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.dateTime"
+msgstr "{date} at {time}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.moreEntries"
+msgstr "{count, plural, one {one more} other {{countWord} more}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.no"
+msgstr "no"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.percent"
+msgstr "{number} percent"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.yes"
+msgstr "yes"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what"
+msgstr "{action, select, create {I'd like to create {thing} {destination} {source} {clause}} update {I'd like to change {thing} {destination} {source} {clause}} reschedule {I'd like to reschedule {thing} {destination} {source} {clause}} delete {I'd like to delete {thing} {destination} {source} {clause}} send {I'd like to send {thing} {destination} {source} {clause}} move {I'd like to move {thing} {destination} {source} {clause}} comment {I'd like to comment on {thing} {destination} {source} {clause}} share {I'd like to share {thing} {destination} {source} {clause}} run {I'd like to run {thing} {destination} {source} {clause}} upsert {I'd like to create or update {thing} {destination} {source} {clause}} archive {I'd like to archive {thing} {destination} {source} {clause}} upload {I'd like to upload {thing} {destination} {source} {clause}} other {I'd like to work on {thing} {destination} {source} {clause}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what.generic"
+msgstr "I'd like to use the tool {tool} {source}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what.statement"
+msgstr "{statement, select, sql {I'd like to run an SQL query {source}. It's shown on screen.} shell {I'd like to run a shell command {source}. It's shown on screen.} code {I'd like to run a piece of code {source}. It's shown on screen.} other {I'd like to run an instruction {source}. It's shown on screen.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx
@@ -8811,6 +9608,11 @@ msgstr "Allowed — sent once every item is decided"
 #: src/components/ui/Message/ApprovalDecisionActions.tsx
 msgid "toolApproval.staged.denied"
 msgstr "Denied — sent once every item is decided"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/McpToolApprovalCard.tsx
+msgid "toolApproval.voicePhrase"
+msgstr "By voice: “{phrase}”"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalDecisionActions.tsx
@@ -9640,6 +10442,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Could not archive {kind} {title} in {where}} titled {Could not archive {kind} {title}} placed {Could not archive {kind} in {where}} other {Could not archive {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} in {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} in {server}: # row} other {{title} in {server}: # rows}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
@@ -10408,6 +11220,11 @@ msgid "trace.reasoning.title"
 msgstr "Thinking"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/Trace.tsx
+msgid "trace.submission.writing"
+msgstr "Writing the changes"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.taskResult.followInTaskChat"
 msgstr "Follow it in the task's own chat:"
@@ -10454,6 +11271,26 @@ msgstr "Approved"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.message"
+msgstr "The interactive view of {toolName} asks to save this file on your device."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.save"
+msgstr "Save"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.download.title"
+msgstr "Save {fileName}?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.notShown"
+msgstr "The interactive view could not be shown."
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
 msgid "trace.tool.appView.title"
 msgstr "Interactive view of {toolName}"
 
@@ -10486,6 +11323,11 @@ msgstr "You allowed this once"
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.alwaysAllowed"
 msgstr "You chose “Always allow”"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.changeRequested"
+msgstr "Not run: you asked for a change"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts

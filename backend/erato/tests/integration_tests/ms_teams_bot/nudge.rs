@@ -416,7 +416,7 @@ async fn the_producer_follows_reloaded_settings(pool: Pool<Postgres>) {
     let db = app_state.db.clone();
     app_state.reloadable.write().await.teams_nudge = config();
     let producer =
-        InactivityNudgeProducer::reloadable(app_state.reloadable.clone(), APP_NAME, None, "en");
+        InactivityNudgeProducer::reloadable(app_state.reloadable.clone(), APP_NAME, None);
 
     let inactive = user(&db, "reloaded", "reloaded@example.com").await;
     personal_conversation(&db, inactive.id, "a:reloaded").await;

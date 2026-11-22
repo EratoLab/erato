@@ -3336,6 +3336,119 @@ export const useSearchSharepoint = <TData = Schemas.SharepointSearchResponse,>(
   });
 };
 
+export type ApprovalSpeechStyleError = Fetcher.ErrorWrapper<undefined>;
+
+export type ApprovalSpeechStyleVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchApprovalSpeechStyle = (
+  variables: ApprovalSpeechStyleVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/approval-speech-style",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ApprovalSpeechStyleResponse>;
+};
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.ApprovalSpeechStyleResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/approval-speech-style",
+      operationId: "approvalSpeechStyle",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchApprovalSpeechStyle(variables, signal),
+  };
+}
+
+export const useSuspenseApprovalSpeechStyle = <
+  TData = Schemas.ApprovalSpeechStyleResponse,
+>(
+  variables: ApprovalSpeechStyleVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ApprovalSpeechStyleResponse,
+      ApprovalSpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    TData
+  >({
+    ...approvalSpeechStyleQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useApprovalSpeechStyle = <
+  TData = Schemas.ApprovalSpeechStyleResponse,
+>(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ApprovalSpeechStyleResponse,
+      ApprovalSpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    TData
+  >({
+    ...approvalSpeechStyleQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type BudgetStatusError = Fetcher.ErrorWrapper<undefined>;
 
 export type BudgetStatusVariables = V1betaApiContext["fetcherOptions"];
@@ -6393,6 +6506,165 @@ export const useMessageSubmitSse = (
   });
 };
 
+export type SpeakApprovalPathParams = {
+  /**
+   * The assistant message whose approval is spoken
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type SpeakApprovalError = Fetcher.ErrorWrapper<undefined>;
+
+export type SpeakApprovalVariables = {
+  body: Schemas.ApprovalSpeechRequest;
+  pathParams: SpeakApprovalPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
+ */
+export const fetchSpeakApproval = (
+  variables: SpeakApprovalVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    SpeakApprovalError,
+    Schemas.ApprovalSpeechRequest,
+    {},
+    {},
+    SpeakApprovalPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/approval-speech",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
+ */
+export const useSpeakApproval = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      SpeakApprovalError,
+      SpeakApprovalVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    SpeakApprovalError,
+    SpeakApprovalVariables
+  >({
+    mutationFn: (variables: SpeakApprovalVariables) =>
+      fetchSpeakApproval(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type InterpretApprovalVoiceCommandPathParams = {
+  /**
+   * The assistant message whose approval waits
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type InterpretApprovalVoiceCommandError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type InterpretApprovalVoiceCommandVariables = {
+  body: Schemas.ApprovalVoiceCommandRequest;
+  pathParams: InterpretApprovalVoiceCommandPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Built-in rules answer the plain words; a configured model may answer the
+ * rest, seeing the words and the pieces' roles and field names. The answer
+ * carries no text and is not stored. `approve` and `reject` count only once
+ * the card's request piece was heard (or the card has none): a yes or no
+ * before that, or beside a backchannel ("mhm, ja"), is `noise`.
+ *
+ * With `[approval_voice_decisions]` on, `decision` says whether the words decide the
+ * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
+ * confirm"), checked before any rule or model and never by a model; a
+ * refusal by the rules or the model refuses. Either needs the turn's own
+ * single call as `approval_id`, a card whose request was heard with nothing
+ * owed, and a recording that started after the voice and heard enough
+ * speech; one that did not gets `say_again`. An accepted decision gets a
+ * receipt, kept in the database for `receipt_ttl_seconds`, with a record of
+ * how it was given.
+ */
+export const fetchInterpretApprovalVoiceCommand = (
+  variables: InterpretApprovalVoiceCommandVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ApprovalVoiceCommand,
+    InterpretApprovalVoiceCommandError,
+    Schemas.ApprovalVoiceCommandRequest,
+    {},
+    {},
+    InterpretApprovalVoiceCommandPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/approval-voice-command",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Built-in rules answer the plain words; a configured model may answer the
+ * rest, seeing the words and the pieces' roles and field names. The answer
+ * carries no text and is not stored. `approve` and `reject` count only once
+ * the card's request piece was heard (or the card has none): a yes or no
+ * before that, or beside a backchannel ("mhm, ja"), is `noise`.
+ *
+ * With `[approval_voice_decisions]` on, `decision` says whether the words decide the
+ * card. Only the whole confirmation phrase approves ("Ich bestätige", "I
+ * confirm"), checked before any rule or model and never by a model; a
+ * refusal by the rules or the model refuses. Either needs the turn's own
+ * single call as `approval_id`, a card whose request was heard with nothing
+ * owed, and a recording that started after the voice and heard enough
+ * speech; one that did not gets `say_again`. An accepted decision gets a
+ * receipt, kept in the database for `receipt_ttl_seconds`, with a record of
+ * how it was given.
+ */
+export const useInterpretApprovalVoiceCommand = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ApprovalVoiceCommand,
+      InterpretApprovalVoiceCommandError,
+      InterpretApprovalVoiceCommandVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ApprovalVoiceCommand,
+    InterpretApprovalVoiceCommandError,
+    InterpretApprovalVoiceCommandVariables
+  >({
+    mutationFn: (variables: InterpretApprovalVoiceCommandVariables) =>
+      fetchInterpretApprovalVoiceCommand(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ExplainMessageTextPathParams = {
   /**
    * The message the marked text belongs to
@@ -6451,6 +6723,70 @@ export const useExplainMessageText = (
   >({
     mutationFn: (variables: ExplainMessageTextVariables) =>
       fetchExplainMessageText(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ProgressSpeechPathParams = {
+  /**
+   * The assistant message being generated
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type ProgressSpeechError = Fetcher.ErrorWrapper<undefined>;
+
+export type ProgressSpeechVariables = {
+  body: Schemas.ProgressSpeechRequest;
+  pathParams: ProgressSpeechPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Answers only while that answer is still being generated, and only for a
+ * short sentence: the voice never says free text at any other time.
+ */
+export const fetchProgressSpeech = (
+  variables: ProgressSpeechVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ProgressSpeechError,
+    Schemas.ProgressSpeechRequest,
+    {},
+    {},
+    ProgressSpeechPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/progress-speech",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Answers only while that answer is still being generated, and only for a
+ * short sentence: the voice never says free text at any other time.
+ */
+export const useProgressSpeech = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ProgressSpeechError,
+      ProgressSpeechVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ProgressSpeechError,
+    ProgressSpeechVariables
+  >({
+    mutationFn: (variables: ProgressSpeechVariables) =>
+      fetchProgressSpeech(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };
@@ -6631,6 +6967,52 @@ export const useAvailableModels = <TData = AvailableModelsResponse,>(
     ),
     ...options,
     ...queryOptions,
+  });
+};
+
+export type OfficeHostReportError = Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeHostReportVariables = {
+  body: Schemas.OfficeHostReportRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeHostReport = (
+  variables: OfficeHostReportVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeHostReportError,
+    Schemas.OfficeHostReportRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/office-host-report",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useOfficeHostReport = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      OfficeHostReportError,
+      OfficeHostReportVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    OfficeHostReportError,
+    OfficeHostReportVariables
+  >({
+    mutationFn: (variables: OfficeHostReportVariables) =>
+      fetchOfficeHostReport(deepMerge(fetcherOptions, variables)),
+    ...options,
   });
 };
 
@@ -7214,6 +7596,113 @@ export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
     TData
   >({
     ...recentChatsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type ReplySpeechStyleError = Fetcher.ErrorWrapper<undefined>;
+
+export type ReplySpeechStyleVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchReplySpeechStyle = (
+  variables: ReplySpeechStyleVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/reply-speech-style",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function replySpeechStyleQuery(variables: ReplySpeechStyleVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ReplySpeechStyleResponse>;
+};
+
+export function replySpeechStyleQuery(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ReplySpeechStyleResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function replySpeechStyleQuery(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/reply-speech-style",
+      operationId: "replySpeechStyle",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchReplySpeechStyle(variables, signal),
+  };
+}
+
+export const useSuspenseReplySpeechStyle = <
+  TData = Schemas.ReplySpeechStyleResponse,
+>(
+  variables: ReplySpeechStyleVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReplySpeechStyleResponse,
+      ReplySpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    TData
+  >({
+    ...replySpeechStyleQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useReplySpeechStyle = <TData = Schemas.ReplySpeechStyleResponse,>(
+  variables: ReplySpeechStyleVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ReplySpeechStyleResponse,
+      ReplySpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ReplySpeechStyleResponse,
+    ReplySpeechStyleError,
+    TData
+  >({
+    ...replySpeechStyleQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -8091,6 +8580,108 @@ export const useStartingAssistant = <
     TData
   >({
     ...startingAssistantQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type WaitLinesQueryParams = {
+  /**
+   * The `version` the caller already has.
+   */
+  known?: string;
+};
+
+export type WaitLinesError = Fetcher.ErrorWrapper<undefined>;
+
+export type WaitLinesVariables = {
+  queryParams?: WaitLinesQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchWaitLines = (
+  variables: WaitLinesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.WaitLinesResponse,
+    WaitLinesError,
+    undefined,
+    {},
+    WaitLinesQueryParams,
+    {}
+  >({ url: "/api/v1beta/me/wait-lines", method: "get", ...variables, signal });
+
+export function waitLinesQuery(variables: WaitLinesVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.WaitLinesResponse>;
+};
+
+export function waitLinesQuery(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.WaitLinesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function waitLinesQuery(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/wait-lines",
+      operationId: "waitLines",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) => fetchWaitLines(variables, signal),
+  };
+}
+
+export const useSuspenseWaitLines = <TData = Schemas.WaitLinesResponse,>(
+  variables: WaitLinesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.WaitLinesResponse,
+      WaitLinesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.WaitLinesResponse,
+    WaitLinesError,
+    TData
+  >({
+    ...waitLinesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useWaitLines = <TData = Schemas.WaitLinesResponse,>(
+  variables: WaitLinesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.WaitLinesResponse,
+      WaitLinesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<Schemas.WaitLinesResponse, WaitLinesError, TData>({
+    ...waitLinesQuery(
       variables === reactQuery.skipToken
         ? variables
         : deepMerge(fetcherOptions, variables),
@@ -9312,6 +9903,128 @@ export const useOfficeAddinExchangeServerManifest = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinPresentationManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+  /**
+   * integrated-apps (default) or sharepoint, which omits ribbon commands.
+   */
+  distribution?: null | ("integrated-apps" | "sharepoint");
+};
+
+export type OfficeAddinPresentationManifestError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinPresentationManifestVariables = {
+  queryParams?: OfficeAddinPresentationManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinPresentationManifest = (
+  variables: OfficeAddinPresentationManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    undefined,
+    {},
+    OfficeAddinPresentationManifestQueryParams,
+    {}
+  >({
+    url: "/office-addin/manifest-presentation.xml",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest-presentation.xml",
+      operationId: "officeAddinPresentationManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinPresentationManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinPresentationManifest = <TData = undefined,>(
+  variables: OfficeAddinPresentationManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinPresentationManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    TData
+  >({
+    ...officeAddinPresentationManifestQuery(
+      deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinPresentationManifest = <TData = undefined,>(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinPresentationManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    TData
+  >({
+    ...officeAddinPresentationManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type OfficeAddinManifestQueryParams = {
   /**
    * Optional externally reachable deployment base URL used to rewrite the manifest.
@@ -9527,6 +10240,11 @@ export type QueryOperation =
       variables: SearchSharepointVariables | reactQuery.SkipToken;
     }
   | {
+      path: "/api/v1beta/me/approval-speech-style";
+      operationId: "approvalSpeechStyle";
+      variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken;
+    }
+  | {
       path: "/api/v1beta/me/budget";
       operationId: "budgetStatus";
       variables: BudgetStatusVariables | reactQuery.SkipToken;
@@ -9627,6 +10345,11 @@ export type QueryOperation =
       variables: RecentChatsVariables | reactQuery.SkipToken;
     }
   | {
+      path: "/api/v1beta/me/reply-speech-style";
+      operationId: "replySpeechStyle";
+      variables: ReplySpeechStyleVariables | reactQuery.SkipToken;
+    }
+  | {
       path: "/api/v1beta/me/scheduled-items";
       operationId: "listScheduledItems";
       variables: ListScheduledItemsVariables | reactQuery.SkipToken;
@@ -9650,6 +10373,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/starting-assistant";
       operationId: "startingAssistant";
       variables: StartingAssistantVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/wait-lines";
+      operationId: "waitLines";
+      variables: WaitLinesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/messages";
@@ -9691,6 +10419,13 @@ export type QueryOperation =
       operationId: "officeAddinExchangeServerManifest";
       variables:
         | OfficeAddinExchangeServerManifestVariables
+        | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest-presentation.xml";
+      operationId: "officeAddinPresentationManifest";
+      variables:
+        | OfficeAddinPresentationManifestVariables
         | reactQuery.SkipToken;
     }
   | {

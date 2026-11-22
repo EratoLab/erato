@@ -17,7 +17,7 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use utoipa::ToSchema;
 
@@ -491,17 +491,22 @@ pub struct ToolResultDetails {
     pub failure: Option<ToolCallFailure>,
     /// The interactive view (MCP Apps) the tool declares, set when its server
     /// enables `mcp_apps` and the view was read and accepted for this call.
+    // Boxed: it holds the result's `structuredContent` and `_meta`, and most
+    // calls have no view.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
-    pub view: Option<ToolResultView>,
+    pub view: Option<Box<ToolResultView>>,
+    /// Set instead of `view` when the tool declares a view and its server
+    /// enables `mcp_apps`, but the view was refused or could not be read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub view_unavailable: bool,
 }
 
 impl ToolResultDetails {
     pub fn failed(failure: ToolCallFailure) -> Self {
         Self {
-            links: Vec::new(),
             failure: Some(failure),
-            view: None,
+            ..Self::default()
         }
     }
 }
@@ -509,7 +514,7 @@ impl ToolResultDetails {
 /// Where the web app gets a call's view: `GET
 /// /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
 /// HTML and its `_meta.ui`. The view is shown with the call's `input`, its
-/// `output` and `structured_content`.
+/// `output`, `structured_content` and `meta`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultView {
     pub server_id: String,
@@ -520,6 +525,12 @@ pub struct ToolResultView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, value_type = Object)]
     pub structured_content: Option<serde_json::Value>,
+    /// The result's `_meta` as the server returned it, which the view gets
+    /// unchanged with the result. Kept only here, for the view, like
+    /// `structured_content`: the model never reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, value_type = Object)]
+    pub meta: Option<serde_json::Value>,
 }
 
 /// How a call failed when Erato, not the tool, wrote its error.
@@ -586,6 +597,13 @@ pub struct ToolDisplayMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub server_name: Option<String>,
+    /// The tool's own name on its MCP server, set only when the model calls
+    /// it by a name qualified with the server because another server or one
+    /// of Erato's own tools has the same name. The call's `tool_name` is then
+    /// that qualified name; show this one instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub tool_name: Option<String>,
     /// What this call does to what, and where. Absent on client tools and
     /// older rows, which render as before.
     #[serde(
@@ -604,6 +622,15 @@ pub struct ToolDisplayMetadata {
         deserialize_with = "readable_flag"
     )]
     pub read_only: bool,
+    /// Whether the tool says it reaches nothing outside its server
+    /// (`openWorldHint: false`) by the annotations the approval policy read
+    /// for this call. Unknown counts as open. Set on MCP calls only.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "readable_flag"
+    )]
+    pub closed_world: bool,
 }
 
 /// A stored label, result detail or decision note this version cannot read is
@@ -648,6 +675,143 @@ pub struct ToolCallLabel {
     )]
     #[schema(nullable = false)]
     pub change: Option<ToolCallChange>,
+    /// What a call that only reads looks at, for words spoken aloud. No card
+    /// reads it: a read keeps the label it had before reads had a verb.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub read: Option<ToolCallRead>,
+    /// What people call this call's fields, coded values and tables, by
+    /// language tag, from the server's spoken vocabularies, for words spoken
+    /// aloud. Keyed by the names as this label carries them: an effect's
+    /// `raw_name` and its values' `text`, a read condition's `column` and its
+    /// values' `text` (as `table.column` when the condition names one of
+    /// several tables; a coded value of an unnamed table has none), a read's
+    /// table. No card reads it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub spoken_names: BTreeMap<String, ToolCallSpokenNames>,
+}
+
+/// One language's words for the names a call uses. A name without an entry
+/// is not here and is spoken as the card shows it.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallSpokenNames {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, String>,
+    /// By field, then by value.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub choices: BTreeMap<String, BTreeMap<String, String>>,
+    /// What the records of a table are called, in the plural.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tables: BTreeMap<String, String>,
+    /// A field's own natural sentence variants, by sentence type (`changed`,
+    /// `set`, `updated`) and then by field, keyed like `fields`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sentences: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+/// A call that only reads, by the rules alone and only where every check a
+/// label passes agrees: a search when `item.title` holds the text it looks
+/// for, one or a few items when `item.id` names them, otherwise a list.
+/// Values are read and resolved as on a label, so a machine ID is named only
+/// by `resolved`, and a consent flag or a name the model typed next to an ID
+/// is never in it. Its verb, `read`, is in the closed list of actions but is
+/// never sent on a label: a read's label keeps `other`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallRead {
+    pub object_kind: ToolCallObjectKind,
+    /// `title`: the text it searches for; `id`: what it reads; `target`:
+    /// where it looks, such as a folder, a parent or a table. Never fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub item: Option<ToolCallLabelItem>,
+    /// Conditions narrow what it reads beyond the item, other than paging or
+    /// sorting.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub filtered: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ToolCallLabelWarning>,
+    /// What a call's one SQL statement reads, when parsing it shows it is
+    /// certainly a single plain read; then `item.id` holds the record a
+    /// condition on the table's own key names.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub query: Option<ToolCallReadQuery>,
+}
+
+/// The parts of a plain SQL read the voice says: the tables, the conditions
+/// simple enough to say, and a limit. Names are as the statement wrote them,
+/// display-cleaned.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallReadQuery {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tables_omitted: u32,
+    /// Conditions joined by AND that compare one column with values, in the
+    /// statement's order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<ToolCallReadCondition>,
+    /// Conditions it applies beyond `conditions`: past the cap, or not a
+    /// simple comparison.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub conditions_omitted: u32,
+    /// The most rows it returns, from TOP, LIMIT or FETCH.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallReadCondition {
+    pub column: String,
+    /// The table the column belongs to, when the statement reads several
+    /// and names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub table: Option<String>,
+    pub operator: ToolCallReadOperator,
+    /// The values it compares with, read as label values: a machine ID is
+    /// named only by `resolved`. `between` has two.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<ToolCallLabelValue>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub values_omitted: u32,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallReadOperator {
+    Equals,
+    NotEquals,
+    Less,
+    AtMost,
+    Greater,
+    AtLeast,
+    Contains,
+    StartsWith,
+    EndsWith,
+    IsEmpty,
+    IsNotEmpty,
+    In,
+    NotIn,
+    Between,
+    /// What an operator from a newer version reads as; never sent.
+    #[serde(other)]
+    Other,
 }
 
 /// What a call changes, described the same way for every server and computed
@@ -757,6 +921,11 @@ pub struct ToolCallEffect {
     /// the record being changed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub new_name: bool,
+    /// The value sits in an object inside the record, such as a record
+    /// created with it: its name and codes belong to that object, so spoken
+    /// names never apply to it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
 }
 
 /// One value as a card shows it.
@@ -876,6 +1045,9 @@ pub struct ToolCallTextChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub before: Option<ToolCallEffectValue>,
+    /// See [`ToolCallEffect::nested`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
 }
 
 /// Who a call reaches. Group addresses count as one and are never expanded.
@@ -1170,6 +1342,11 @@ pub enum ToolCallAction {
     /// Moves to an archive rather than deleting; a move to the trash is a delete.
     Archive,
     Upload,
+    /// Only looks: a search, a get or a list. In the closed list for the
+    /// rules' own checks, but never sent on a label: a read keeps the verb
+    /// `other`, so a card draws it as before, and its description is
+    /// [`ToolCallLabel::read`].
+    Read,
     /// Also what a value from a newer version reads as.
     #[default]
     #[serde(other)]
@@ -1497,12 +1674,25 @@ pub struct ChildWaitingFor {
 pub struct ApprovalItem {
     pub approval_id: String,
     pub tool_call_id: String,
+    /// The tool as its MCP server or Erato names it: what the card shows and
+    /// a standing decision is stored for.
     pub tool_name: String,
+    /// The name the model called the tool by, set only where it is not
+    /// `tool_name`: a name qualified with the MCP server. The continued call
+    /// is stored and replayed under it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub called_as: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<ToolDisplayMetadata>,
     pub input: JsonValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child: Option<ChildApprovalRef>,
+    /// The item of an earlier stop on the same message this one replaces: the
+    /// user asked for that call to be changed and this is the model's
+    /// corrected call of the same tool on the same server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaces_approval_id: Option<String>,
 }
 
 /// A call of the parked batch that was never popped. The parked part is the
@@ -1559,10 +1749,19 @@ impl ContentPartToolApprovalRequest {
             approval_id: self.tool_call_id.clone(),
             tool_call_id: self.tool_call_id.clone(),
             tool_name: self.tool_name.clone(),
+            called_as: None,
             display: self.display.clone(),
             input: self.input.clone(),
             child: None,
+            replaces_approval_id: None,
         }]
+    }
+}
+
+impl ApprovalItem {
+    /// The name the model called the tool by.
+    pub fn called_name(&self) -> &str {
+        self.called_as.as_deref().unwrap_or(&self.tool_name)
     }
 }
 
@@ -1585,6 +1784,10 @@ pub struct ContentPartToolApproval {
     /// The approval row that decision made.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_approval_id: Option<Uuid>,
+    /// Set when the user approved by voice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub voice: Option<VoiceDecisionRecord>,
 }
 
 /// Records a user rejection in the assistant message lifecycle.
@@ -1602,10 +1805,75 @@ pub struct ContentPartToolRejection {
     pub approval_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_chat_id: Option<Uuid>,
-    /// Why the call was rejected when the user did not decide it directly.
-    /// The only value is `withdrawn`.
+    /// Why the call was rejected when the user did not simply deny it:
+    /// `withdrawn` when the user took the question back, `change_requested`
+    /// when they asked for the call to be different.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The user's words when `reason` is `change_requested`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_request: Option<String>,
+    /// Set when the user refused by voice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub voice: Option<VoiceDecisionRecord>,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceDecisionOutcome {
+    Approved,
+    Refused,
+}
+
+/// A piece of the spoken card and what the user had heard of it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct VoiceDecisionPiece {
+    pub id: String,
+    pub role: crate::services::approval_voice_commands::CardPieceRole,
+    pub state: crate::services::approval_voice_commands::CardPieceState,
+}
+
+/// How a decision was given by voice, kept with the decision for audits and
+/// for tuning. Never the audio. Times are RFC 3339: `matched_at` by the
+/// server's clock, the others by the device's.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct VoiceDecisionRecord {
+    pub user_id: String,
+    pub approval_id: String,
+    /// What the card asked about: the call's tool and arguments, hashed.
+    pub card_digest: String,
+    pub language: String,
+    pub pieces: Vec<VoiceDecisionPiece>,
+    /// The phrase an approval needed, by its id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub required_phrase: Option<String>,
+    /// The words as matched: the phrase folded, a refusal in lower case,
+    /// at most 100 characters.
+    pub matched_words: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub match_kind: Option<crate::services::approval_voice_commands::PhraseMatchKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub request_heard_at: Option<String>,
+    pub voice_stopped_at: String,
+    pub recording_started_at: String,
+    pub recording_ended_at: String,
+    pub matched_at: String,
+    /// How long the speech detector heard speech in the recording.
+    pub speech_ms: u32,
+    /// The share of the recording's detector frames heard as speech, in
+    /// thousandths.
+    pub speech_frames_permille: u16,
+    /// From the request heard to the first speech of the answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub answer_latency_ms: Option<u32>,
+    pub outcome: VoiceDecisionOutcome,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
@@ -1614,6 +1882,11 @@ pub struct ContentPartToolRejection {
 pub enum ContentPart {
     CompactionMarker(ContentPartCompactionMarker),
     Text(ContentPartText),
+    /// What the voice said for a reply in conversational audio mode, kept
+    /// apart from the written answer in the `Text` parts after it. Not part
+    /// of the message's text: titles, search, read aloud and exports use the
+    /// written answer only.
+    Spoken(ContentPartSpoken),
     Reasoning(ContentPartReasoning),
     ToolUse(ToolUse),
     ToolApprovalRequest(ContentPartToolApprovalRequest),
@@ -1749,6 +2022,11 @@ pub struct ContentPartText {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ContentPartSpoken {
+    pub text: String,
+}
+
 #[derive(
     Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, Default, erato_memory::HeapSize,
 )]
@@ -1823,7 +2101,29 @@ pub struct ContentPartTurnInstructionMarker {
 #[serde(untagged)]
 pub enum StoredTurnInstructionKind {
     Known(erato_config::config::TurnInstructionKind),
+    Builtin(BuiltinTurnInstruction),
     Unknown(String),
+}
+
+/// A turn instruction whose text is built in, not configured: its wording
+/// and the server's handling of the reply change together.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum BuiltinTurnInstruction {
+    /// Write a spoken part in `<spoken>…</spoken>`, then the written answer.
+    SpokenAndWritten,
 }
 
 /// The structured-brief fields of a delegated run, copied from the chat's
@@ -1982,6 +2282,7 @@ impl MessageSchema {
             .iter()
             .filter_map(|part| match part {
                 ContentPart::Text(text) => Some(text.text.as_str()),
+                ContentPart::Spoken(_) => None,
                 ContentPart::Reasoning(_) => None,
                 ContentPart::ToolUse(_) => None,
                 ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => None,
@@ -2849,6 +3150,7 @@ impl InputMessage {
     pub fn full_text(&self) -> String {
         match &self.content {
             ContentPart::Text(content) => content.text.to_string(),
+            ContentPart::Spoken(_) => String::new(),
             ContentPart::Reasoning(_) => String::new(),
             ContentPart::ToolUse(_) => String::new(),
             ContentPart::ClientToolPending(_) | ContentPart::ToolApprovalRequest(_) => {

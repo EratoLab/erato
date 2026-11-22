@@ -18,6 +18,10 @@ vi.mock("@/hooks/audio/readAloud", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/audio/readAloud")>()),
   toggleReadAloud,
 }));
+const traces = vi.hoisted(() => ({ shown: true }));
+vi.mock("@/hooks/audio/voiceTraces", () => ({
+  useVoiceTracesShown: (needed: boolean) => needed && traces.shown,
+}));
 vi.mock("@/components/ui/Message/MessageTimestamp", () => ({
   MessageTimestamp: () => <time>now</time>,
 }));
@@ -58,6 +62,7 @@ const controls = (props: Partial<MessageControlsProps> = {}) => (
 const button = () => screen.queryByRole("button", { name: "Read aloud" });
 
 beforeEach(() => {
+  traces.shown = true;
   toggleReadAloud.mockClear();
   useReadAloud.setState({
     messageId: null,
@@ -107,7 +112,7 @@ describe("read aloud button in the default message controls", () => {
     ],
     ["the message has no text", { readAloud: { ...READABLE, hasText: false } }],
     [
-      "the message already carries a spoken reply",
+      "the message shows its own replay button",
       { readAloud: { ...READABLE, hasSpokenAudio: true } },
     ],
   ])("is hidden when %s", (_name, props) => {
@@ -115,6 +120,12 @@ describe("read aloud button in the default message controls", () => {
 
     expect(button()).not.toBeInTheDocument();
     expect(screen.getByLabelText("Copy message")).toBeInTheDocument();
+  });
+
+  it("stands in for a stored recording whose replay button is hidden", () => {
+    traces.shown = false;
+    withFeature(controls({ readAloud: { ...READABLE, hasSpokenAudio: true } }));
+    expect(button()).toBeInTheDocument();
   });
 
   it("is hidden while the feature is off, also without a feature provider", () => {

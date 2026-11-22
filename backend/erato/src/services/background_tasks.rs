@@ -1427,6 +1427,8 @@ pub struct StreamingTask {
     /// generations of the same chat in the map and the chats-row lease.
     pub generation_id: Uuid,
     pub speech_enabled: AtomicBool,
+    /// The language spoken replies are prepared for, set together with `speech_enabled`.
+    pub speech_language: std::sync::OnceLock<crate::services::speech::spoken::SpeechLanguage>,
     chat_id: Uuid,
     db: Option<DatabaseConnection>,
     /// The id of the assistant message being generated. Set to a placeholder at
@@ -1504,6 +1506,7 @@ impl StreamingTask {
         Self {
             generation_id,
             speech_enabled: AtomicBool::new(false),
+            speech_language: std::sync::OnceLock::new(),
             chat_id: Uuid::nil(),
             db: None,
             message_id: std::sync::RwLock::new(message_id),
@@ -1991,6 +1994,18 @@ pub enum StreamingEvent {
         sample_rate: u32,
     },
     AudioError {
+        message_id: Uuid,
+    },
+    /// New text of a reply's spoken part, for the voice.
+    #[serde(rename = "spoken_delta")]
+    SpokenDelta {
+        message_id: Uuid,
+        content_index: usize,
+        new_text: String,
+    },
+    /// A spoken part is complete; the written answer may still be streaming.
+    #[serde(rename = "spoken_end")]
+    SpokenEnd {
         message_id: Uuid,
     },
     /// A new chat was created

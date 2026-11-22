@@ -178,6 +178,7 @@ describe("WordAddinChatHost", () => {
       "erato-word-edits",
       "erato-word-insert",
       "erato-word-document-plan",
+      "erato-word-document-parts",
       "erato-word-replace",
       "erato-word-comments-add",
       "erato-word-comments-respond",

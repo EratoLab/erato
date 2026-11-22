@@ -250,6 +250,15 @@
               "type": "null"
             }
           ]
+        },
+        "inventoryComplete": {
+          "type": "boolean",
+          "description": "Whether the latest inventory is complete. False means no contiguous date coverage is guaranteed; searchable documents remain usable."
+        },
+        "searchableDocuments": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Visible documents with indexed or empty receipts, including undated documents. Independent of inventory completeness and the known extraction backlog."
         }
       },
       "required": [

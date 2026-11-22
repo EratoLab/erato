@@ -2,12 +2,15 @@
 //! approval requests. Clients render it as plain text, never as trusted markup.
 
 pub mod label;
+#[cfg(test)]
+mod spoken_card_set;
 
 use crate::config::McpRuntimeConfig;
-use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};
+use crate::models::message::{ToolCallLabel, ToolCallLabelWarning, ToolDisplayMetadata};
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
 };
+use crate::services::mcp_session_manager::ManagedTool;
 use crate::services::mcp_tool_annotations::McpToolAnnotationSource;
 
 pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
@@ -32,8 +35,10 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         description_truncated: description.as_ref().is_some_and(|value| value.truncated),
         description: description.map(|value| value.text),
         server_name: None,
+        tool_name: None,
         label: None,
         read_only: false,
+        closed_world: false,
     }
 }
 
@@ -231,6 +236,55 @@ fn labelled_display(
                 label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
             }
         }
+        let vocabulary = label::spoken::SpokenVocabulary::for_server(config, server_id);
+        let mut spoken = vocabulary.as_ref().map(|vocabulary| {
+            let table = spoken_table(&label).or_else(|| label::rules::table_of(arguments));
+            vocabulary.collector(table.as_deref())
+        });
+        if let (Some(spoken), Some(change)) = (spoken.as_mut(), label.change.as_ref()) {
+            spoken.change(change);
+        }
+        let shown = &label;
+        let mut read_names = vocabulary
+            .as_ref()
+            .map(|vocabulary| vocabulary.collector(None));
+        let read = label::guarded_read(|| {
+            let (mut read, filtered) = label::read_label(tool, arguments, consent, shown)?;
+            if let Some(server) = &scope {
+                context.resolve(&mut read, arguments, server);
+            }
+            Some((read, filtered))
+        })
+        .map(|(read, filtered)| label::read_description(read, filtered))
+        .or_else(|| {
+            label::guarded_read(|| {
+                let glossary = config
+                    .mcp_servers
+                    .get(server_id)
+                    .map(|server| &server.glossary);
+                let mut read = label::sql_read(
+                    tool,
+                    arguments,
+                    consent,
+                    shown,
+                    glossary,
+                    read_names.as_mut(),
+                )?;
+                if let Some(server) = &scope {
+                    context.resolve_query(&mut read, server);
+                }
+                Some(read)
+            })
+        });
+        if let (Some(spoken), Some(read_names)) = (spoken.as_mut(), read_names)
+            && read.is_some()
+        {
+            spoken.merge(read_names.finish());
+        }
+        label.read = read;
+        if let Some(spoken) = spoken {
+            label.spoken_names = spoken.finish();
+        }
         label
     })
     .or_else(|| {
@@ -244,7 +298,24 @@ fn labelled_display(
         // lost wins over it.
         read_only: shown_as_read_only(tool)
             && !label::rules::sounds_like_a_loss(&tool.name, arguments),
+        closed_world: !crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
+            .open_world_hint,
         ..tool_display_metadata(tool)
+    }
+}
+
+/// Where the call's one item lives, when its label names a single place:
+/// the table a spoken vocabulary's scoped entries are for.
+fn spoken_table(label: &ToolCallLabel) -> Option<String> {
+    let [item] = label.items.as_slice() else {
+        return None;
+    };
+    let target = item.target.as_ref()?;
+    match (target.values.as_slice(), target.omitted) {
+        ([value], 0) if !value.machine_id && !value.text.trim().is_empty() => {
+            Some(value.text.trim().to_string())
+        }
+        _ => None,
     }
 }
 
@@ -292,8 +363,10 @@ fn own_tool_display(
         description: None,
         description_truncated: false,
         server_name: None,
+        tool_name: None,
         label: Some(label),
         read_only: false,
+        closed_world: false,
     })
 }
 
@@ -354,6 +427,33 @@ fn without_approval_argument<'a>(
     }
 }
 
+/// The tool's own name as a call's display carries it, for a tool the model
+/// calls by a name qualified with its server (see `mcp_tool_names`); `None`
+/// for a tool it calls by that name already.
+pub fn own_tool_name(tool: &ManagedTool) -> Option<String> {
+    tool.offered_as.as_ref()?;
+    Some(sanitize_display_text(&tool.tool.name, MAX_DISPLAY_NAME_CHARS).text)
+        .filter(|name| !name.is_empty())
+}
+
+/// What a call of a tool the model calls by a qualified name shows while the
+/// model still writes its arguments: the server and the tool's own name, so
+/// its row never shows the qualified one. `None` for every other tool, whose
+/// row shows the name it is called by until the call's display comes.
+pub fn preparing_call_display(
+    config: &McpRuntimeConfig,
+    tool: &ManagedTool,
+) -> Option<ToolDisplayMetadata> {
+    let tool_name = own_tool_name(tool)?;
+    Some(ToolDisplayMetadata {
+        description: None,
+        description_truncated: false,
+        server_name: Some(config.mcp_server_display_name(&tool.server_id)),
+        tool_name: Some(tool_name),
+        ..tool_display_metadata(&tool.tool)
+    })
+}
+
 /// What a tool row and its live updates keep of a call's display. Only
 /// approval cards show the description, and a row would repeat it per call.
 pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
@@ -369,6 +469,35 @@ mod tests {
     use super::*;
     use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
     use rmcp::model::{JsonObject, Tool, ToolAnnotations};
+
+    /// A call of a tool the model calls by a qualified name carries the
+    /// tool's own name, cleaned for display, from its first update on; any
+    /// other call carries none.
+    #[test]
+    fn only_a_qualified_call_carries_the_tools_own_name() {
+        let mut tool = ManagedTool {
+            server_id: "crm_eu".into(),
+            tool: Tool::new("search\u{202E}", "Searches.", JsonObject::new()),
+            approval_argument: None,
+            destructive_hint_source: Default::default(),
+            offered_as: None,
+        };
+        let config = McpRuntimeConfig::default();
+        assert_eq!(own_tool_name(&tool), None);
+        assert_eq!(preparing_call_display(&config, &tool), None);
+
+        tool.offered_as = Some("crm_eu__search_0a1b2c3d".into());
+        assert_eq!(own_tool_name(&tool).as_deref(), Some("search"));
+        let preparing = preparing_call_display(&config, &tool).unwrap();
+        assert_eq!(preparing.tool_name.as_deref(), Some("search"));
+        assert_eq!(
+            preparing.server_name,
+            Some(config.mcp_server_display_name("crm_eu"))
+        );
+        assert_eq!(preparing.title, "search");
+        assert_eq!(preparing.description, None);
+        assert_eq!(preparing.label, None);
+    }
 
     #[test]
     fn titles_follow_mcp_precedence_and_clean_before_falling_back() {
@@ -566,6 +695,57 @@ mod tests {
             let (flag, json) = shown(hint, destructive);
             assert!(!flag, "{hint:?} {destructive:?}");
             assert!(json.get("read_only").is_none());
+        }
+    }
+
+    #[test]
+    fn a_call_is_closed_world_only_when_its_annotations_say_so() {
+        let shown = |annotations: Option<ToolAnnotations>| {
+            let mut tool = Tool::new("tool", "", JsonObject::new());
+            tool.annotations = annotations;
+            let display = mcp_tool_call_display(
+                &McpRuntimeConfig::default(),
+                "server",
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            );
+            (
+                display.closed_world,
+                serde_json::to_value(&display).unwrap(),
+            )
+        };
+        let (flag, json) = shown(Some(ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            Some(false),
+            Some(true),
+            Some(false),
+        )));
+        assert!(flag);
+        assert_eq!(json["closed_world"], true);
+        // Open, unknown and absent all count as open.
+        for annotations in [
+            Some(ToolAnnotations::from_raw(
+                None,
+                None,
+                None,
+                None,
+                Some(true),
+            )),
+            Some(ToolAnnotations::from_raw(
+                None,
+                Some(true),
+                None,
+                None,
+                None,
+            )),
+            None,
+        ] {
+            let (flag, json) = shown(annotations.clone());
+            assert!(!flag, "{annotations:?}");
+            assert!(json.get("closed_world").is_none());
         }
     }
 
@@ -1194,8 +1374,10 @@ mod tests {
             description: Some("Updates a record.".into()),
             description_truncated: false,
             server_name: Some("Dynamics 365".into()),
+            tool_name: None,
             label: Some(resolved),
             read_only: false,
+            closed_world: false,
         };
         assert_eq!(
             child_approval_display(&child),

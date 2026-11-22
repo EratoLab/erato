@@ -1,5 +1,7 @@
 //! Message submission and streaming API tests.
 
+mod approval_change_requests;
+mod approval_voice_commands;
 mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;
@@ -11,6 +13,7 @@ mod mcp_surface_hints;
 mod model_labels;
 mod preparation_failures;
 mod reminder_tools;
+mod spoken_approvals;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;
@@ -5290,7 +5293,8 @@ async fn park_a_turn_and_keep_its_events(
 /// well as the gated one, and a call's live updates, the first running one as
 /// well as the final one, carry the display its row is stored with. The rules
 /// label the gated call from its name and arguments; the read gives them
-/// nothing to say and stays generic. The readable view names the arguments by
+/// nothing to say and stays generic, with only a read description beside it
+/// for the voice. The readable view names the arguments by
 /// path without copying their values, and the approval fields stay what the
 /// gate decided.
 ///
@@ -5329,6 +5333,11 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     let read = &content[0];
     assert_eq!(read["content_type"], "tool_use");
     assert_eq!(read["status"], "success");
+    // Read-only and closed-world: it ran without a card under the restrictive
+    // preset, and its row says so for the plain step.
+    assert_eq!(read["allowed_by"], "policy");
+    assert_eq!(read["display"]["read_only"], true);
+    assert_eq!(read["display"]["closed_world"], true);
     assert_eq!(
         read["display"]["label"],
         json!({
@@ -5336,6 +5345,7 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
             "object_kind": "other",
             "arguments": {"path": "", "kind": "group"},
             "source": "generic",
+            "read": {"object_kind": "other"},
         })
     );
     let read_updates: Vec<_> = terminal_tool_call_update_events(&events)
@@ -5360,6 +5370,9 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     assert_eq!(request["approvals"][0]["display"], request["display"]);
     assert_eq!(request["input"], arguments);
     assert_eq!(request["preset"], "restrictive");
+    // The open-world probe asks, and its card may say it can send data out.
+    assert!(request["display"].get("closed_world").is_none());
+    assert_eq!(request["annotations"]["openWorldHint"], true);
     let label = &request["display"]["label"];
     assert_eq!(
         (&label["source"], &label["action"]),
@@ -8975,6 +8988,389 @@ async fn test_writes_off_offers_only_server_declared_read_only_mcp_tools(pool: P
         "writes off keeps only tools the server marks read-only"
     );
     assert_eq!(offers[2], full_set, "writes back on restores the full set");
+}
+
+/// Two servers that offer the same tools: the model sees each tool under a
+/// name qualified with its server, and a call reaches the server its name
+/// names, under the tool's own name. Only the second server's `read_file`
+/// fails, so a call routed there would not succeed. Switching one server off
+/// for the chat does not rename the other's tools.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn same_named_tools_of_two_servers_are_qualified_and_reach_their_own_server(
+    pool: Pool<Postgres>,
+) {
+    const README: &str = "This is a mock README file.";
+    let recorder = RequestBodyRecorder::new();
+    let answered = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let answered = answered.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[README], &[]))
+                .matcher(answered);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["ROUTED"]));
+        });
+    }
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[README]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[(
+                    "call_read",
+                    "files__read_file",
+                    json!({ "path": "docs/readme.txt" }),
+                )]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    for (server_id, path) in [("files", "/mcp/file"), ("broken_files", "/mcp/error")] {
+        app_config.mcp_servers.insert(
+            server_id.to_string(),
+            mcp_server_config(
+                &mock_mcp_base_url(),
+                path,
+                McpServerAuthenticationConfig::None,
+            ),
+        );
+    }
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-both".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["files".to_string(), "broken_files".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "read the readme" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert_eq!(extract_full_text(&events), "ROUTED");
+
+    // In the servers' sorted order, as after every restart.
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 1, "{offers:?}");
+    assert_eq!(
+        offers[0],
+        vec![
+            "broken_files__list_files",
+            "broken_files__read_file",
+            "files__list_files",
+            "files__read_file",
+        ]
+    );
+
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let parts = message_content(&app_state, assistant_message_id).await;
+    let tool_use = parts
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .expect("the call is stored");
+    assert_eq!(tool_use["tool_name"], "files__read_file");
+    assert_eq!(tool_use["status"], "success", "{tool_use}");
+    assert!(
+        tool_use["output"].to_string().contains(README),
+        "{tool_use}"
+    );
+
+    // Names are given before the chat's switches apply, so with the other
+    // server off, `files` keeps the names the model called it by.
+    let chat_id = extract_chat_id(&events).expect("Expected chat_id from the first turn");
+    put_chat_disabled_servers(&server, &chat_id, &["broken_files"]).await;
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "existing_chat_id": chat_id, "user_message": "and again" }))
+        .await;
+    response.assert_status_ok();
+    let offers = recorded_tool_offers(&answered.bodies());
+    assert_eq!(offers.len(), 2, "{offers:?}");
+    assert_eq!(offers[1], vec!["files__list_files", "files__read_file"]);
+    assert_eq!(extract_full_text(&parse_sse_events(&response)), "ROUTED");
+}
+
+/// A call the model makes by a qualified name parks under the server's own
+/// tool name, so the card and any standing decision name the tool as the
+/// server does. The other server that offered the probe is gone by the time
+/// the user approves, so the rebuilt tool set offers the probe under its own
+/// name: the approved call runs on its server and is still stored, and
+/// replayed to the model, under the name the model called, with the tool's
+/// own name for the row to show.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_continued_call_keeps_the_name_the_model_called_once_the_names_no_longer_collide(
+    pool: Pool<Postgres>,
+) {
+    const PUBLISHED: &str = "approval probe published";
+    const QUALIFIED: &str = "mock_mcp_approval_copy__publish_approval_probe";
+    let mut mocks = MockSet::new();
+    // By the final request the tool list offers the probe under its own
+    // name, so the qualified name reaches the model only in the replayed call.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[PUBLISHED, QUALIFIED], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["QUALIFIED-APPROVED"]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[QUALIFIED], &[PUBLISHED]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[("call_probe", QUALIFIED, json!({}))]),
+        );
+    });
+
+    let (app_state, server, _chat_id, assistant_message_id, parked_content) =
+        park_a_turn_on_the_approval_gate_with_config(pool, mocks, |app_config| {
+            app_config.mcp_servers.insert(
+                "mock_mcp_approval_copy".to_string(),
+                mcp_server_config(
+                    &mock_mcp_base_url(),
+                    "/mcp/legacy/approval-policy",
+                    McpServerAuthenticationConfig::None,
+                ),
+            );
+            app_config.mcp_server_permissions.rules.insert(
+                "allow-mock-mcp-copy".to_string(),
+                erato::config::McpServerPermissionRule::AllowAll {
+                    mcp_server_ids: vec!["mock_mcp_approval_copy".to_string()],
+                },
+            );
+        })
+        .await;
+
+    let approval_request = parked_content
+        .as_array()
+        .unwrap()
+        .last()
+        .expect("Expected the approval request last")
+        .clone();
+    assert_eq!(approval_request["content_type"], "tool_approval_request");
+    assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval_copy");
+    assert_eq!(approval_request["tool_name"], "publish_approval_probe");
+    let approvals = approval_request["approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1);
+    assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    assert_eq!(approvals[0]["called_as"], QUALIFIED);
+    assert_eq!(
+        approvals[0]["display"]["tool_name"],
+        "publish_approval_probe"
+    );
+    let approval_id = approvals[0]["approval_id"].as_str().unwrap().to_string();
+
+    {
+        let mut reloadable = app_state.reloadable.write().await;
+        assert!(
+            reloadable
+                .mcp
+                .config
+                .mcp_servers
+                .remove("mock_mcp_approval")
+                .is_some()
+        );
+        let config = reloadable.mcp.config.clone();
+        reloadable.mcp.servers.reconfigure(&config).await;
+    }
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": assistant_message_id,
+            "decisions": [{ "approval_id": approval_id, "decision": "approve" }],
+        }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "QUALIFIED-APPROVED"
+    );
+
+    let parts = message_content(&app_state, assistant_message_id).await;
+    let tool_use = parts
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_call_id"] == approval_id)
+        .expect("the approved call is stored");
+    assert_eq!(tool_use["status"], "success", "{tool_use}");
+    assert!(
+        tool_use["output"].to_string().contains(PUBLISHED),
+        "{tool_use}"
+    );
+    assert_eq!(tool_use["tool_name"], QUALIFIED);
+    assert_eq!(tool_use["display"]["tool_name"], "publish_approval_probe");
+}
+
+/// An MCP tool named like Erato's own `wait`: with waiting on, both are
+/// offered, Erato's as `wait` and the server's as `<server>__wait`, and each
+/// call reaches its own handler. The server's call is shown, live and stored,
+/// under the tool's own name.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_mcp_tool_named_like_the_wait_tool_is_offered_beside_it(pool: Pool<Postgres>) {
+    let answer = mock_mcp_server::MCP_WAIT_ANSWER;
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[answer], &[]));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&["BOTH-WAITED"]));
+    });
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&[], &[answer]))
+                .matcher(recorder);
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[
+                    ("call_erato_wait", "wait", json!({ "seconds": 1 })),
+                    ("call_queue_wait", "queue__wait", json!({})),
+                ]),
+            );
+        });
+    }
+
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "queue".to_string(),
+        mcp_server_config(
+            &mock_mcp_base_url(),
+            "/mcp/builtin-names",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-queue".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["queue".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.enable_wait = true;
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: false,
+        allow_always: false,
+        ..Default::default()
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let server = app_server(app_state.clone());
+
+    let response = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "wait for the queue" }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    assert_eq!(extract_full_text(&events), "BOTH-WAITED");
+
+    let offers = recorded_tool_offers(&recorder.bodies());
+    assert_eq!(offers.len(), 1, "{offers:?}");
+    for name in ["queue__wait", "wait"] {
+        assert_eq!(
+            offers[0].iter().filter(|offered| *offered == name).count(),
+            1,
+            "{name} is offered once: {offers:?}"
+        );
+    }
+
+    let assistant_message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let parts = message_content(&app_state, assistant_message_id).await;
+    // Erato keeps the model's call id after a prefix of its own.
+    let is_call = |part: &Value, call_id: &str| {
+        part["tool_call_id"]
+            .as_str()
+            .is_some_and(|id| id.ends_with(&format!(":{call_id}")))
+    };
+    let stored = |call_id: &str| {
+        parts
+            .iter()
+            .find(|part| part["content_type"] == "tool_use" && is_call(part, call_id))
+            .unwrap_or_else(|| panic!("{call_id} is stored: {parts:?}"))
+            .clone()
+    };
+    let erato_wait = stored("call_erato_wait");
+    assert_eq!(erato_wait["tool_name"], "wait");
+    assert_eq!(erato_wait["status"], "success", "{erato_wait}");
+    assert!(
+        !erato_wait["output"].to_string().contains(answer),
+        "{erato_wait}"
+    );
+    let queue_wait = stored("call_queue_wait");
+    assert_eq!(queue_wait["tool_name"], "queue__wait");
+    assert_eq!(queue_wait["status"], "success", "{queue_wait}");
+    assert!(
+        queue_wait["output"].to_string().contains(answer),
+        "{queue_wait}"
+    );
+    assert_eq!(queue_wait["display"]["tool_name"], "wait");
+
+    // Every live update of the server's call, from its first, carries the
+    // tool's own name to show.
+    let updates: Vec<Value> = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|json| {
+            json["message_type"] == "tool_call_update" && is_call(json, "call_queue_wait")
+        })
+        .collect();
+    assert!(!updates.is_empty());
+    assert!(
+        updates
+            .iter()
+            .all(|update| update["display"]["tool_name"] == "wait"),
+        "{updates:?}"
+    );
 }
 
 /// With writes off the client-action tool is withheld even though the action

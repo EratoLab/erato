@@ -82,20 +82,26 @@ export function WordReviewReceipt({
               : wordUndoneText(title)
             : outcome === "adjusted"
               ? wordPlanAdjustedHeadline()
-              : kind === "plan"
-                ? t({
-                    id: "officeAddin.word.planReceipt.applied",
-                    message: `Applied: ${title}`,
+              : review.status !== "done"
+                ? // Only a card the pane applied says so; any other says what it proposed.
+                  t({
+                    id: "officeAddin.word.receipt.proposed",
+                    message: `Proposed: ${title}`,
                   })
-                : kind === "insert"
-                  ? wordInsertedText()
-                  : kind === "selection"
-                    ? review.selection?.status === "unchanged"
-                      ? wordReplaceUnchangedText()
-                      : wordReplacedText()
-                    : wordEditsAppliedText(
-                        wordEditCounts(review.outcomes).applied,
-                      )}
+                : kind === "plan"
+                  ? t({
+                      id: "officeAddin.word.planReceipt.applied",
+                      message: `Applied: ${title}`,
+                    })
+                  : kind === "insert"
+                    ? wordInsertedText()
+                    : kind === "selection"
+                      ? review.selection?.status === "unchanged"
+                        ? wordReplaceUnchangedText()
+                        : wordReplacedText()
+                      : wordEditsAppliedText(
+                          wordEditCounts(review.outcomes).applied,
+                        )}
       </strong>
       {outcome === "verified" && (
         <span className="word-review__hint">{wordPlanVerifiedText()}</span>

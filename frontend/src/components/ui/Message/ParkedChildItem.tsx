@@ -155,6 +155,7 @@ export const ParkedChildItem = ({
       data-testid="delegated-task-approval-item"
       data-approval-id={item.approval_id}
       data-child-chat-id={child?.child_chat_id ?? ""}
+      data-tool-name={child?.tool_name ?? ""}
       className="rounded-md border border-theme-border p-2"
     >
       <p className="text-sm font-medium text-theme-fg-primary">

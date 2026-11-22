@@ -186,10 +186,12 @@ export function strictDifferingParts(
   }
 }
 
-/** Parts that fail full-document write verification, with where each first diverges. */
+/** Parts that fail full-document write verification, with where each first diverges. `replaced`,
+ * the package the write wrote over, applies the housekeeping the verify applied. */
 export function verifyDifferingParts(
   expectedXml: string,
   actualXml: string,
+  replaced?: string,
 ): Pick<
   WordDiagnosticDetails,
   "parts" | "partsOmitted" | "locations" | "error"
@@ -199,6 +201,9 @@ export function verifyDifferingParts(
       expectedXml,
       actualXml,
       true,
+      "strict",
+      false,
+      replaced,
     );
     return { ...partList(parts), ...(locations.length ? { locations } : {}) };
   } catch (error) {

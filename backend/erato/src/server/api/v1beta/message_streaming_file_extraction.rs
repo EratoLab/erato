@@ -534,8 +534,7 @@ fn mcp_result_details(
         .collect();
     (!links.is_empty()).then_some(ToolResultDetails {
         links,
-        failure: None,
-        view: None,
+        ..ToolResultDetails::default()
     })
 }
 
@@ -777,6 +776,8 @@ mod tests {
             file_bytes_cache: moka::future::Cache::new(0),
             file_contents_cache: moka::future::Cache::new(0),
             token_count_cache: moka::future::Cache::new(0),
+            voice_command_words: Default::default(),
+            speech_readings: Default::default(),
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
             tool_label_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(
@@ -921,8 +922,7 @@ mod tests {
                 name: Some("row-1".into()),
                 title: Some("Synthetic row".into()),
             }],
-            failure: None,
-            view: None,
+            ..ToolResultDetails::default()
         }
     }
 

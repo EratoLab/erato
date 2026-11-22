@@ -18,6 +18,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useToastStore } from "@/components/ui/Toast/toastStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import {
+  ORGANIZATION_SUBJECT_ID,
+  ORGANIZATION_SUBJECT_ID_TYPE,
+} from "@/types/sharing";
 
 import AssistantHubSubmitPage from "../AssistantHubSubmitPage";
 
@@ -73,8 +78,13 @@ vi.mock("@/hooks/ui", () => ({
   }),
 }));
 
-vi.mock("@/components/ui/Sharing/SubjectSelector", () => ({
-  SubjectSelector: () => <div data-testid="subject-selector" />,
+vi.mock("@/hooks/sharing", () => ({
+  useOrganizationMembersSearch: () => ({
+    members: [],
+    isLoading: false,
+    error: null,
+    isSearching: false,
+  }),
 }));
 
 vi.mock("@/components/ui/Feedback/Alert", () => ({
@@ -185,6 +195,31 @@ describe("AssistantHubSubmitPage", () => {
     await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
     expect(submitVersion.mock.calls[0][0].body.category_ids).toEqual([
       "research",
+    ]);
+  });
+
+  it("submits the full organization as the Hub audience when the direct picker hides it", async () => {
+    render(
+      <StaticFeatureConfigProvider
+        config={{ assistants: { enableDirectOrganizationSharing: false } }}
+      >
+        {page(new QueryClient())}
+      </StaticFeatureConfigProvider>,
+    );
+
+    expect(screen.getByText("Full organization")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Research" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit version" }));
+
+    await waitFor(() => expect(submitVersion).toHaveBeenCalledTimes(1));
+    expect(submitVersion.mock.calls[0][0].body.audience_grants).toEqual([
+      {
+        subject_type: "organization",
+        subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
+        subject_id: ORGANIZATION_SUBJECT_ID,
+        role: "viewer",
+      },
     ]);
   });
 

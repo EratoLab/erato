@@ -129,17 +129,27 @@ describe("a document too large for a complete read", () => {
     expect(snapshot.completeReadIssue).toBe("too-large");
   });
 
-  it("refuses the complete read and points to scoped reads", async () => {
+  it("answers the complete read with the outline and a section call", async () => {
     const { snapshot, session } = setup();
     const response = await session.execute(
       { snapshot: snapshot.token },
       context,
     );
     expect(response).toMatchObject({
-      ok: false,
-      validationErrors: [{ code: "too-large" }],
+      ok: true,
+      result: {
+        completeRead: "unavailable",
+        reason: "too-large",
+        complete: false,
+        outline: expect.stringContaining("Intro"),
+        exampleCall: {
+          snapshot: snapshot.token,
+          documentIdentity: snapshot.identity,
+          section: { ref: expect.any(String) },
+        },
+      },
     });
-    expect(!response.ok && response.error).toContain("target");
+    expect(response.ok && JSON.stringify(response.result)).toContain("target");
     expect(snapshot.readToken).toBeUndefined();
   });
 

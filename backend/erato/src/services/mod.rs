@@ -1,4 +1,7 @@
+pub mod adaptive_cards;
+pub(crate) mod approval_change_requests;
 pub mod approval_scope;
+pub mod approval_voice_commands;
 pub(crate) mod audio_transcription;
 pub mod background_tasks;
 pub mod chat_history_compaction;
@@ -40,6 +43,7 @@ pub mod mcp_surface;
 mod mcp_token_exchange;
 pub mod mcp_tool_annotations;
 pub mod mcp_tool_approval;
+pub mod mcp_tool_names;
 pub mod mcp_transports;
 pub mod mcp_wait;
 pub mod ms_graph;

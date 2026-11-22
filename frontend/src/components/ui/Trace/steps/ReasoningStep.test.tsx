@@ -129,3 +129,31 @@ describe("ReasoningStep — masked mode (running/active state)", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("ReasoningStep — live section", () => {
+  it("renders only the newest paragraphs of a long live section", () => {
+    const body = Array.from(
+      { length: 400 },
+      (_, i) => `Paragraph ${i} weighs the options once more.`,
+    ).join("\n\n");
+    renderReasoningStep({
+      segment: { title: "Thinking", body },
+      status: "running",
+      isStreaming: true,
+      isCollapsed: false,
+      isLastStep: true,
+    });
+
+    const window = screen.getByTestId("trace-step-live-window");
+    expect(window).toHaveTextContent("Paragraph 399 weighs the options");
+    expect(window).not.toHaveTextContent("Paragraph 0 weighs the options");
+  });
+
+  it("renders the whole section once it is done", () => {
+    renderReasoningStep({ status: "done" });
+    expect(screen.getByText("Model reasoning body text")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("trace-step-live-window"),
+    ).not.toBeInTheDocument();
+  });
+});

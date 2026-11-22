@@ -556,6 +556,15 @@ describe("ToolUseStep decision row", () => {
       { status: "denied", neverAllow: false, withdrawn: true },
       "Not run: you no longer allow this tool",
     ],
+    [
+      {
+        status: "denied",
+        neverAllow: false,
+        withdrawn: false,
+        changeRequested: true,
+      },
+      "Not run: you asked for a change",
+    ],
   ] as [ToolDecision, string][])("words the decision %o", (decision, text) => {
     settled({}, decision.status === "denied" ? "error" : "done", decision);
 
@@ -1344,5 +1353,206 @@ describe("ToolUseStep proposal row", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("tool-call-proposal-line")).toBeNull();
     expect(screen.queryByTestId("tool-call-identity")).toBeNull();
+  });
+});
+
+describe("ToolUseStep plain line", () => {
+  const READ_DISPLAY = {
+    title: "Create chart",
+    description_truncated: false,
+    server_name: "Charts",
+    read_only: true,
+    closed_world: true,
+    label: {
+      action: "other" as const,
+      object_kind: "other" as const,
+      source: "generic" as const,
+    },
+  };
+  const step = (
+    display: unknown,
+    overrides: Partial<ToolUse> = {},
+    decision?: ToolDecision,
+  ) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-chart",
+          tool_name: "render_chart",
+          status: "success",
+          input: {
+            spec: { data: { values: [{ month: "2026-01-01", revenue: 120 }] } },
+          } as unknown as ToolUse["input"],
+          output: { files: ["chart.png"] } as unknown as ToolUse["output"],
+          allowed_by: "policy",
+          display: display as ToolUse["display"],
+          ...overrides,
+        }}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+        decision={decision}
+      />,
+    );
+
+  it("shows a read-only, closed-world call as its tool's title and server, with the arguments behind the toggle", () => {
+    step(READ_DISPLAY);
+
+    const toggle = screen.getByRole("button", { name: /Create chart/ });
+    const line = screen.getByTestId("tool-call-plain-line");
+    expect(line).toHaveTextContent(/^Create chart$/);
+    expect(line).toHaveAttribute("dir", "auto");
+    expect(toggle).toHaveTextContent(/^Create chart\s*Charts/);
+    expect(toggle).not.toHaveTextContent("render_chart");
+    // Ran on the policy, as a read: nothing more to say on the row.
+    expect(screen.queryByTestId("tool-decision-row")).toBeNull();
+    const input = screen.getByText(/Input Parameters/i);
+    expect(isFolded(input)).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(isFolded(input)).toBe(false);
+    const identity = screen.getByTestId("tool-call-identity");
+    expect(identity).toHaveTextContent("render_chart");
+    expect(identity).toHaveTextContent("Charts");
+    expect(screen.getByText(/2026-01-01/)).toBeInTheDocument();
+  });
+
+  it("puts the title in place of a line the label would give", () => {
+    step({
+      ...READ_DISPLAY,
+      label: {
+        action: "create",
+        object_kind: "page",
+        source: "rules",
+        items: [
+          {
+            title: {
+              pointer: "/spec",
+              values: [{ path: "/spec", text: "Revenue" }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      "Create chart",
+    );
+    expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
+    expect(screen.queryByTestId("tool-call-gist-values")).toBeNull();
+  });
+
+  it.each([
+    ["a tool without a title of its own", { title: "render_chart" }],
+    ["an open-world read", { closed_world: undefined }],
+    ["a closed-world write", { read_only: undefined }],
+    ["flags that are not true", { read_only: "yes", closed_world: 1 }],
+  ])("keeps the row's own line for %s", (_case, overrides) => {
+    step({ ...READ_DISPLAY, ...overrides });
+
+    expect(screen.queryByTestId("tool-call-plain-line")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /render_chart/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a decision the user took beside the plain line", () => {
+    step(
+      READ_DISPLAY,
+      { allowed_by: undefined },
+      { status: "approved", alwaysAllow: false },
+    );
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      "Create chart",
+    );
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      /^Charts · You allowed this once$/,
+    );
+  });
+
+  it("names a call made by a qualified name by the tool's own name in its details", () => {
+    step(
+      { ...READ_DISPLAY, tool_name: "render_chart" },
+      { tool_name: "charts__render_chart" },
+    );
+
+    expect(screen.getByTestId("tool-call-plain-line")).toHaveTextContent(
+      /^Create chart$/,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Create chart/ }));
+    const identity = screen.getByTestId("tool-call-identity");
+    expect(identity).toHaveTextContent("render_chart");
+    expect(identity).not.toHaveTextContent("charts__render_chart");
+  });
+});
+
+/**
+ * The model calls a tool by a name qualified with its server when another
+ * server has a tool of the same name; the row still shows the tool's own.
+ */
+describe("ToolUseStep with a qualified tool name", () => {
+  const qualified = (display: Record<string, unknown>) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-search",
+          tool_name: "crm_eu__search",
+          status: "success",
+          input: { query: "invoices" } as unknown as ToolUse["input"],
+          output: { results: [] } as unknown as ToolUse["output"],
+          display: {
+            description_truncated: false,
+            server_name: "CRM EU",
+            tool_name: "search",
+            ...display,
+          } as ToolUse["display"],
+        }}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+
+  it("shows an unlabelled call by the tool's own name and its server", () => {
+    qualified({ title: "Search records" });
+
+    const toggle = screen.getByRole("button", { name: /search/ });
+    expect(toggle).toHaveTextContent(/^search\s*CRM EU/);
+    expect(toggle).not.toHaveTextContent("crm_eu__search");
+    // The test handle keeps the name the call was made by.
+    expect(screen.getByTestId("tool-call-item")).toHaveAttribute(
+      "data-tool-name",
+      "crm_eu__search",
+    );
+  });
+
+  it("keeps the row's own line for a read-only, closed-world tool without a title", () => {
+    qualified({ title: "search", read_only: true, closed_world: true });
+
+    expect(screen.queryByTestId("tool-call-plain-line")).toBeNull();
+    expect(screen.getByRole("button", { name: /search/ })).toHaveTextContent(
+      /^search\s*CRM EU/,
+    );
+  });
+
+  it("keeps the tool's own name when the label cannot be read at all", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const label = { action: "read", object_kind: "record", source: "rules" };
+    Object.defineProperty(label, "items", {
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+    qualified({ title: "Search records", label });
+
+    const toggle = screen.getByRole("button", { name: /search/ });
+    expect(toggle).toHaveTextContent(/^search\s*CRM EU/);
+    expect(toggle).not.toHaveTextContent("crm_eu__search");
+    vi.restoreAllMocks();
   });
 });
