@@ -5329,6 +5329,36 @@ msgstr "This change needs a full-document rewrite, which Erato can't verify on W
 #~ msgstr "Page width"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.applyLater"
+msgstr "You can apply the change once Erato has finished."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPlanCard.tsx
+msgid "officeAddin.word.parts.consent"
+msgstr "Apply the changes reviewed below?"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.label"
+msgstr "Document changes in parts"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.stopped"
+msgstr "Erato stopped before finishing, so there is nothing to apply. Send your request again to continue."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleStopped"
+msgstr "Changes not finished"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDocumentPartsCard.tsx
+msgid "officeAddin.word.parts.titleWriting"
+msgstr "Writing the changes"
+
+#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Insert paragraphs"

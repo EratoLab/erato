@@ -5142,6 +5142,186 @@ msgid "officeAddin.word.layout.width"
 msgstr "Szerokość strony"
 
 #. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.changedInWord"
+msgstr "Zmieniono w Wordzie, gdy Erato pisał"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.checking"
+msgstr "Sprawdzanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.didntGetTo"
+msgstr "Erato nie zdążył zająć się: {gaps}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.finishing"
+msgstr "Sprawdzanie całej zmiany…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.include"
+msgstr "Uwzględnij ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.includeReordering"
+msgstr "Uwzględnij ponownie nowy układ"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leaveOut"
+msgstr "Pomiń"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leaveOutReordering"
+msgstr "Pomiń nowy układ"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leftOut"
+msgstr "Pominięte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.leftOutWithReordering"
+msgstr "Pominięte razem z nowym układem"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.merged"
+msgstr "Połączono w jedną sekcję: {name}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.merges"
+msgstr "{merges, plural, one {# połączenie} few {# połączenia} many {# połączeń} other {# połączenia}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.moves"
+msgstr "{moves, plural, one {# przeniesienie} few {# przeniesienia} many {# przeniesień} other {# przeniesienia}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesAfter"
+msgstr "{name} jest teraz po: {after}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesElsewhere"
+msgstr "{name} trafia w inne miejsce."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.movesFirst"
+msgstr "{name} jest teraz na początku."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.namedMore"
+msgstr "{more, plural, one {{listed} i # inną sekcją} few {{listed} i # innymi sekcjami} many {{listed} i # innymi sekcjami} other {{listed} i # innymi sekcjami}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.notWritten"
+msgstr "Nienapisane"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.progress"
+msgstr "{total, plural, one {Gotowe: {ready} z # sekcji} few {Gotowe: {ready} z # sekcji} many {Gotowe: {ready} z # sekcji} other {Gotowe: {ready} z # sekcji}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.ready"
+msgstr "Gotowe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redo"
+msgstr "Napisz ponownie: {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redoAfterApply"
+msgstr "Zastosuj resztę, a potem poproś Erato o ponowne napisanie: {redone}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.redoNext"
+msgstr "W następnej wiadomości poproś Erato o ponowne napisanie: {redone}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renamed"
+msgstr "{name} ma teraz tytuł {newTitle}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renames"
+msgstr "{renames, plural, one {# zmieniony nagłówek} few {# zmienione nagłówki} many {# zmienionych nagłówków} other {# zmienionego nagłówka}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reorderAfterApply"
+msgstr "Zastosuj resztę, a potem poproś Erato o ponowne uporządkowanie sekcji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.reorderingChangedInWord"
+msgstr "Nowy układ zastępuje cały dokument, który w międzyczasie zmieniono w Wordzie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.rows"
+msgstr "Sekcje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.structure"
+msgstr "Struktura"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.untitled"
+msgstr "Tekst bez tytułu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.waiting"
+msgstr "Oczekuje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissing"
+msgstr "Napisz brakujące sekcje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingAfterApply"
+msgstr "Zastosuj resztę, a potem poproś Erato o napisanie brakujących sekcji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writeMissingNext"
+msgstr "W następnej wiadomości poproś Erato o napisanie brakujących sekcji."
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.writing"
+msgstr "Pisanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.written"
+msgstr "Napisane"
+
+#. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.planAction.insert"
 msgstr "Wstaw akapity"
@@ -5179,6 +5359,7 @@ msgstr "Zmiany"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.planReview.checkInWord"
 msgstr "Obiekty, podział na strony i wygląd stron nie są tu pokazywane. Sprawdź je w Wordzie po zastosowaniu."
 

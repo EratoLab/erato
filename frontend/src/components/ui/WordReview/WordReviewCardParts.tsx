@@ -1,4 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
+import { useEffect, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
@@ -16,7 +17,45 @@ import "./wordReview.css";
 import { storyLabel } from "./wordPlanLabels";
 
 import type { WordPlanRisk } from "@/lib/wordReview/wordPlanReview";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, ReactNode, RefObject } from "react";
+
+/** The set with `key` added or removed, as the reviews keep their open rows. */
+export function toggledKeys(
+  prev: ReadonlySet<string>,
+  key: string,
+  open: boolean,
+): ReadonlySet<string> {
+  const next = new Set(prev);
+  if (open) next.add(key);
+  else next.delete(key);
+  return next;
+}
+
+/**
+ * Focuses the review row a jump opened once it has rendered, or the review's jump target when the
+ * row is drawn inside a preview instead. Returns the setter for the row to focus.
+ */
+export function useWordReviewJumpFocus(
+  containerRef: RefObject<HTMLElement | null>,
+): (rowKey: string) => void {
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusKey) return;
+    const target = Array.from(
+      containerRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ??
+        [],
+    ).find((item) => item.dataset.rowKey === focusKey);
+    const focusable =
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS selector
+      target?.querySelector<HTMLElement>("button, [tabindex]") ??
+      containerRef.current?.querySelector<HTMLElement>("[data-jump-target]");
+    focusable?.focus();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in jsdom
+    focusable?.scrollIntoView?.({ block: "nearest" });
+    setFocusKey(null);
+  }, [focusKey, containerRef]);
+  return setFocusKey;
+}
 
 export function WordReviewGenerating({ label }: { label: string }) {
   return (
@@ -157,9 +196,12 @@ export function wordPlanRiskLabel(risk: WordPlanRisk): string {
 export function WordCheckFirst({
   risks,
   onJump,
+  jumpable = () => true,
 }: {
   risks: readonly WordPlanRisk[];
   onJump: (rowKey: string) => void;
+  /** A risk whose row the review does not show reads as plain text. */
+  jumpable?: (rowKey: string) => boolean;
 }) {
   if (risks.length === 0) return null;
   return (
@@ -176,13 +218,17 @@ export function WordCheckFirst({
       <ul className="word-review__risks">
         {risks.map((risk) => (
           <li key={risk.kind}>
-            <Button
-              type="button"
-              variant="link"
-              onClick={() => onJump(risk.rowKey)}
-            >
-              {wordPlanRiskLabel(risk)}
-            </Button>
+            {jumpable(risk.rowKey) ? (
+              <Button
+                type="button"
+                variant="link"
+                onClick={() => onJump(risk.rowKey)}
+              >
+                {wordPlanRiskLabel(risk)}
+              </Button>
+            ) : (
+              wordPlanRiskLabel(risk)
+            )}
           </li>
         ))}
       </ul>

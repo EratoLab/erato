@@ -781,6 +781,42 @@ function storyRows(
   });
 }
 
+/**
+ * The owner of each review row of `plan`, given one per entry and per deletion, such as the part
+ * of a larger change the entry came from. It reads the row keys `buildWordPlanReview` writes.
+ */
+export function wordPlanRowOwners<K>(
+  plan: Pick<WordDocumentPlan, "entries" | "deleted">,
+  owners: { entries: readonly K[]; deleted: readonly K[] },
+): (rowKey: string) => K | undefined {
+  const byKey = new Map<string, K>();
+  plan.entries.forEach((entry, k) => {
+    const owner = owners.entries[k];
+    if (entry.kind === "keep") {
+      for (const ref of entry.source) byKey.set(`keep:${ref}`, owner);
+      return;
+    }
+    if (entry.kind === "replace")
+      for (const ref of entry.source) byKey.set(`replaced:${ref}`, owner);
+    for (const block of entry.blocks) byKey.set(`output:${block.id}`, owner);
+  });
+  plan.deleted.forEach((removal, k) => {
+    for (const ref of removal.source)
+      byKey.set(`deleted:${ref}`, owners.deleted[k]);
+  });
+  return (rowKey) => {
+    if (byKey.has(rowKey)) return byKey.get(rowKey);
+    // A native edit's row extends its block's key with the edit it makes.
+    for (
+      let at = rowKey.indexOf(":", rowKey.indexOf(":") + 1);
+      at > 0;
+      at = rowKey.indexOf(":", at + 1)
+    )
+      if (byKey.has(rowKey.slice(0, at))) return byKey.get(rowKey.slice(0, at));
+    return undefined;
+  };
+}
+
 interface GroupDraft {
   key: string;
   order: [number, number];

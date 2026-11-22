@@ -19,6 +19,7 @@ export * from "./wordNoteAnchors";
 export * from "./wordOutlineFormat";
 export * from "./wordPlanDiagnostics";
 export * from "./wordPlanComments";
+export * from "./wordPartsProgress";
 export * from "./wordPlainText";
 export * from "./wordPlanReview";
 export * from "./wordReadScope";

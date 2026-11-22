@@ -1,6 +1,8 @@
 import {
   acceptedWordCommentSubmission,
   acceptedWordPlanFromHistory,
+  WORD_PARTS_FENCE,
+  wordPartsSectionPlanCall,
 } from "@erato/frontend/word-review";
 
 import {
@@ -21,6 +23,7 @@ export const WORD_CARD_FENCE_LANGUAGES: readonly string[] = [
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
   WORD_PLAN_FENCE,
+  WORD_PARTS_FENCE,
   WORD_REPLACE_FENCE,
   ...Object.values(WORD_COMMENT_CARD_FENCES),
 ];
@@ -55,15 +58,27 @@ export function buildWordArtifact(args: {
     : acceptedWordCommentSubmission(args.content);
   const commentCard =
     comments && offerable.includes(comments.action) ? comments : undefined;
+  // A change in parts shows its rows from the accepted section plan until the finish's plan card;
+  // an accepted submission of another kind has the Apply and wins over an unfinished one.
+  const sectionPlan =
+    !plan && !commentCard && offerable.includes(WORD_SUBMIT_PLAN_ACTION)
+      ? wordPartsSectionPlanCall(args.content)
+      : undefined;
   const submitted = plan
     ? { ...plan, language: WORD_PLAN_FENCE }
-    : commentCard
+    : sectionPlan
       ? {
-          toolCallId: commentCard.toolCallId,
-          content: commentCard.toolCallId,
-          language: WORD_COMMENT_CARD_FENCES[commentCard.action],
+          toolCallId: sectionPlan,
+          content: sectionPlan,
+          language: WORD_PARTS_FENCE,
         }
-      : undefined;
+      : commentCard
+        ? {
+            toolCallId: commentCard.toolCallId,
+            content: commentCard.toolCallId,
+            language: WORD_COMMENT_CARD_FENCES[commentCard.action],
+          }
+        : undefined;
   const proposedClientAction = plan
     ? WORD_SUBMIT_PLAN_ACTION
     : commentCard
