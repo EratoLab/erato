@@ -2,14 +2,15 @@
 //! protocol eras.
 use super::*;
 use mock_mcp_server::{
-    COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_URI, OVERSIZED_VIEW_URI, SLOW_VIEW_URI,
-    WRONG_TYPE_VIEW_URI, counter_view_ui_meta,
+    COUNTER_TOOL_NAME, COUNTER_VIEW_HTML, COUNTER_VIEW_URI, OVERSIZED_VIEW_URI, PUBLIC_VIEW_URI,
+    SLOW_VIEW_URI, UNCACHED_VIEW_URI, WRONG_TYPE_VIEW_URI, counter_view_ui_meta,
 };
 use serde_json::{Value, json};
 
 const ERAS: [&str; 2] = ["legacy", "stateless"];
 
-/// The mock server, and the path of every `resources/read` it received.
+/// The mock server, and the path and view URI of every `resources/read` it
+/// received.
 async fn serve_counting_reads() -> (String, Arc<std::sync::Mutex<Vec<String>>>) {
     let reads = Arc::new(std::sync::Mutex::new(Vec::new()));
     let seen = reads.clone();
@@ -19,10 +20,13 @@ async fn serve_counting_reads() -> (String, Arc<std::sync::Mutex<Vec<String>>>) 
             async move {
                 let (parts, body) = request.into_parts();
                 let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
-                if serde_json::from_slice::<Value>(&bytes)
-                    .is_ok_and(|message| message["method"] == "resources/read")
+                if let Ok(message) = serde_json::from_slice::<Value>(&bytes)
+                    && message["method"] == "resources/read"
                 {
-                    seen.lock().unwrap().push(parts.uri.path().to_string());
+                    let uri = message["params"]["uri"].as_str().unwrap_or_default();
+                    seen.lock()
+                        .unwrap()
+                        .push(format!("{} {uri}", parts.uri.path()));
                 }
                 next.run(axum::extract::Request::from_parts(parts, bytes.into()))
                     .await
@@ -61,6 +65,16 @@ fn reads_of(reads: &std::sync::Mutex<Vec<String>>, era: &str) -> usize {
         .count()
 }
 
+fn reads_of_view(reads: &std::sync::Mutex<Vec<String>>, era: &str, uri: &str) -> usize {
+    let read = format!("/mcp/{era}/apps {uri}");
+    reads
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|seen| **seen == read)
+        .count()
+}
+
 /// Everything logged while `run` runs, with what it returns.
 async fn logged<T>(run: impl std::future::Future<Output = T>) -> (T, String) {
     #[derive(Clone, Default)]
@@ -90,7 +104,8 @@ async fn logged<T>(run: impl std::future::Future<Output = T>) -> (T, String) {
 
 /// The tool list keeps each tool's view URI, and a view is read once per
 /// server and URI: later calls, in any chat, are served from the cache until
-/// the server's configuration changes.
+/// the server's configuration changes or the tool list, which the server
+/// sends with a TTL, goes stale.
 #[tokio::test]
 async fn a_view_is_read_once_per_server_and_uri_in_both_protocol_eras() {
     let (url, reads) = serve_counting_reads().await;
@@ -110,6 +125,7 @@ async fn a_view_is_read_once_per_server_and_uri_in_both_protocol_eras() {
             server_id: era.to_string(),
             uri: COUNTER_VIEW_URI.to_string(),
             structured_content: None,
+            meta: None,
         });
         // Calls that ask at once share one read, and later ones find it kept.
         let at_once = join_all(
@@ -242,6 +258,45 @@ async fn a_view_that_never_answers_is_given_up_with_a_log_line() {
         assert_eq!(reads_of(&reads, era), 1, "{era}");
     }
     assert!(manager.app_views.iter().next().is_none());
+}
+
+/// A view is kept as the cache hints of its read allow: a read without
+/// `cacheScope: "public"` for the credentials it was read with only, a public
+/// one for every user, and one with `ttlMs: 0` for no later call.
+#[tokio::test]
+async fn a_view_is_kept_as_the_cache_hints_of_its_read_allow() {
+    let (url, reads) = serve_counting_reads().await;
+    let mut config = apps_config(&url, true);
+    for server in config.mcp_servers.values_mut() {
+        server.authentication = serde_json::from_value(
+            json!({"mode": "forwarded", "forwarded": {"credential": "access_token"}}),
+        )
+        .unwrap();
+    }
+    let manager = McpSessionManager::new(&config);
+    let users = ["first-user-token", "second-user-token"].map(|token| McpRequestAuthContext {
+        access_token: Some(token),
+        ..Default::default()
+    });
+    let chat = Uuid::new_v4();
+    for era in ERAS {
+        for _call in 0..2 {
+            for auth in &users {
+                for uri in [COUNTER_VIEW_URI, PUBLIC_VIEW_URI, UNCACHED_VIEW_URI] {
+                    assert!(
+                        manager
+                            .app_view_for_call(chat, era, uri, auth)
+                            .await
+                            .is_some(),
+                        "{era} {uri}"
+                    );
+                }
+            }
+        }
+        assert_eq!(reads_of_view(&reads, era, COUNTER_VIEW_URI), 2, "{era}");
+        assert_eq!(reads_of_view(&reads, era, PUBLIC_VIEW_URI), 1, "{era}");
+        assert_eq!(reads_of_view(&reads, era, UNCACHED_VIEW_URI), 4, "{era}");
+    }
 }
 
 /// With MCP Apps off, no view is read and none is offered.

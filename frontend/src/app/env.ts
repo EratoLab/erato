@@ -7,6 +7,12 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+import type {
+  ConfirmationPhrases,
+  SpokenCardLanguage,
+} from "@/lib/toolCallGist/spokenLanguageData";
+import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
+
 // The `[delegation.tasks.approval] mode` the backend is running, as its config
 // spelling.
 export type DelegationTasksApprovalMode =
@@ -50,6 +56,7 @@ export type Env = {
   delegationTasksAllowAsync: boolean;
   delegationTasksApprovalMode: DelegationTasksApprovalMode;
   assistantsEnableEditSharing?: boolean;
+  assistantsEnableDirectOrganizationSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
   assistantsToolsMenuDescriptionDisplay?: AssistantToolsMenuDescriptionDisplay;
   assistantsShowRecentItems: boolean;
@@ -90,8 +97,43 @@ export type Env = {
   audioConversationalEnabled: boolean;
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
+  approvalVoiceCommandsEnabled?: boolean;
+  /** A waiting card may be decided by voice; only the phrase approves. */
+  approvalVoiceDecisionsEnabled?: boolean;
+  /** The deployment's natural sentence variants for spoken approval cards, by language. */
+  approvalSpeechSentences?: Partial<
+    Record<string, Partial<Record<string, string>>>
+  >;
+  /** The deployment's number words, by language, to read numbers said in words. */
+  spokenNumberWords?: Partial<Record<string, NumberWords>>;
+  /**
+   * The words spoken approval cards say as code and read the user's words
+   * with, by language: the built-in German and English ones merged with the
+   * deployment's.
+   */
+  approvalSpeechWords?: Partial<Record<string, SpokenCardLanguage>>;
+  /**
+   * The confirmation phrase each language approves a card with, as shown,
+   * when the deployment configures one; the built-in ones otherwise.
+   */
+  approvalVoicePhrases?: ConfirmationPhrases;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
+  audioConversationalCardEndOfTurnSilenceMs?: number;
+  audioConversationalMinSpeechMs?: number;
+  audioConversationalCardMinSpeechMs?: number;
+  audioConversationalVoiceStartBufferMs?: number;
+  audioConversationalVoiceStartMaxWaitMs?: number;
+  audioConversationalHesitationWords?: string[];
+  /**
+   * The whole hesitation list of each language that has its own, for a
+   * user whose interface is in it; any other uses the list above.
+   */
+  audioConversationalHesitations?: Partial<Record<string, string[]>>;
+  /** The user can speak over the voice, and the voice yields. */
+  audioConversationalTalkOverVoice?: boolean;
+  /** Speech over the voice that stops it, in milliseconds. */
+  audioConversationalTalkOverVoiceMinSpeechMs?: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -143,6 +185,7 @@ declare global {
     DELEGATION_TASKS_ALLOW_ASYNC?: boolean;
     DELEGATION_TASKS_APPROVAL_MODE?: string;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
+    ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
     ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY?: string;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
@@ -185,8 +228,25 @@ declare global {
     AUDIO_CONVERSATIONAL_ENABLED?: boolean;
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
+    APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
+    APPROVAL_VOICE_DECISIONS_ENABLED?: boolean;
+    APPROVAL_SPEECH_SENTENCES?: Partial<
+      Record<string, Partial<Record<string, string>>>
+    >;
+    SPOKEN_NUMBER_WORDS?: Partial<Record<string, NumberWords>>;
+    APPROVAL_SPEECH_WORDS?: Partial<Record<string, SpokenCardLanguage>>;
+    APPROVAL_VOICE_PHRASES?: ConfirmationPhrases;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
+    AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS?: number;
+    AUDIO_CONVERSATIONAL_MIN_SPEECH_MS?: number;
+    AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS?: number;
+    AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS?: number;
+    AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS?: number;
+    AUDIO_CONVERSATIONAL_HESITATION_WORDS?: string[];
+    AUDIO_CONVERSATIONAL_HESITATIONS?: Partial<Record<string, string[]>>;
+    AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
+    AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -364,6 +424,8 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_ENABLE_EDIT_SHARING === "false"
       ? false
       : (window.ASSISTANTS_ENABLE_EDIT_SHARING ?? true);
+  const assistantsEnableDirectOrganizationSharing =
+    window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING ?? true;
   const descriptionDisplay =
     import.meta.env.VITE_ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY ??
     window.ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY;
@@ -517,6 +579,45 @@ export const env = (): Env => {
     .VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS
     ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS)
     : window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
+  const audioConversationalCardEndOfTurnSilenceMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS
+    ? Number(
+        import.meta.env.VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS,
+      )
+    : window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS;
+  const audioConversationalMinSpeechMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS
+    ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS)
+    : window.AUDIO_CONVERSATIONAL_MIN_SPEECH_MS;
+  const audioConversationalCardMinSpeechMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS
+    ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS)
+    : window.AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS;
+  const audioConversationalVoiceStartBufferMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS
+    ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS)
+    : window.AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS;
+  const audioConversationalVoiceStartMaxWaitMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS
+    ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS)
+    : window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS;
+  const audioConversationalHesitationWords = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_HESITATION_WORDS
+    ? String(import.meta.env.VITE_AUDIO_CONVERSATIONAL_HESITATION_WORDS)
+        .split(",")
+        .map((word) => word.trim())
+        .filter(Boolean)
+    : window.AUDIO_CONVERSATIONAL_HESITATION_WORDS;
+  const audioConversationalTalkOverVoice =
+    import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE !== undefined
+      ? import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE === "true"
+      : (window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE ?? false);
+  const audioConversationalTalkOverVoiceMinSpeechMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS
+    ? Number(
+        import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS,
+      )
+    : window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -605,6 +706,7 @@ export const env = (): Env => {
     delegationTasksAllowAsync,
     delegationTasksApprovalMode,
     assistantsEnableEditSharing,
+    assistantsEnableDirectOrganizationSharing,
     assistantsUsageViewEnabled,
     assistantsToolsMenuDescriptionDisplay,
     assistantsShowRecentItems,
@@ -653,13 +755,37 @@ export const env = (): Env => {
     audioDictationEnabled,
     audioDictationMaxRecordingDurationSeconds,
     audioConversationalEnabled,
-    speechEnabled: window.SPEECH_ENABLED ?? false,
+    speechEnabled:
+      import.meta.env.VITE_SPEECH_ENABLED !== undefined
+        ? import.meta.env.VITE_SPEECH_ENABLED === "true"
+        : (window.SPEECH_ENABLED ?? false),
     readAloudEnabled:
       import.meta.env.VITE_READ_ALOUD_ENABLED !== undefined
         ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
         : (window.READ_ALOUD_ENABLED ?? false),
+    approvalVoiceCommandsEnabled:
+      import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
+        ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
+        : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
+    approvalVoiceDecisionsEnabled:
+      import.meta.env.VITE_APPROVAL_VOICE_DECISIONS_ENABLED !== undefined
+        ? import.meta.env.VITE_APPROVAL_VOICE_DECISIONS_ENABLED === "true"
+        : (window.APPROVAL_VOICE_DECISIONS_ENABLED ?? false),
+    approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
+    spokenNumberWords: window.SPOKEN_NUMBER_WORDS,
+    approvalSpeechWords: window.APPROVAL_SPEECH_WORDS,
+    approvalVoicePhrases: window.APPROVAL_VOICE_PHRASES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
+    audioConversationalCardEndOfTurnSilenceMs,
+    audioConversationalMinSpeechMs,
+    audioConversationalCardMinSpeechMs,
+    audioConversationalVoiceStartBufferMs,
+    audioConversationalVoiceStartMaxWaitMs,
+    audioConversationalHesitationWords,
+    audioConversationalHesitations: window.AUDIO_CONVERSATIONAL_HESITATIONS,
+    audioConversationalTalkOverVoice,
+    audioConversationalTalkOverVoiceMinSpeechMs,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

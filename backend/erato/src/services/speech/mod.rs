@@ -4,6 +4,7 @@ pub mod gemini_live;
 pub mod openai;
 pub mod openai_realtime;
 pub mod readings;
+pub mod reply_split;
 pub mod sentences;
 pub mod session;
 pub mod spoken;

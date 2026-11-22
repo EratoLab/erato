@@ -2,7 +2,7 @@ import {
   useConversationDropzone,
   useUploadFeature,
 } from "@erato/frontend/library";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { PowerPointChatInput } from "./components/PowerPointChatInput";
 import { AddinChatCoreView } from "../core/AddinChatCore";
@@ -14,6 +14,17 @@ import type { AddinChatHostProps } from "../core/AddinChatCore";
 export function PowerPointAddinChatHost({ controller }: AddinChatHostProps) {
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const [slidePictureBusy, setSlidePictureBusy] = useState(false);
+  // Regenerate and edit send no model: the server reruns on the model of the earlier answer,
+  // which the pane does not know, so the slide picture is not offered for such a turn.
+  const rerunRef = useRef(false);
+  controller.hostCallbacksRef.current = {
+    beforeEdit: () => {
+      rerunRef.current = true;
+    },
+    beforeRegenerate: () => {
+      rerunRef.current = true;
+    },
+  };
   const dropzone = useConversationDropzone({
     uploadFiles: controller.uploadFiles,
     onUploaded: (files) => controller.chatInputControls.addUploadedFiles(files),
@@ -34,6 +45,7 @@ export function PowerPointAddinChatHost({ controller }: AddinChatHostProps) {
         <PowerPointChatInput
           chatInputProps={props}
           onSlidePictureBusyChange={setSlidePictureBusy}
+          rerunRef={rerunRef}
         />
       )}
       renderSettings={(props) => <AddinSettingsDialogCore {...props} />}

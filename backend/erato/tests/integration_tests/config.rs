@@ -254,6 +254,20 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .display_name,
         "Erato for Documents"
     );
+    assert_eq!(
+        config.integrations.ms_office.addin.presentation.addin_id,
+        "f13aa6d0-f017-46e3-8b17-a72159d689ea"
+    );
+    assert_eq!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .presentation
+            .manifest
+            .display_name,
+        "Erato for PowerPoint"
+    );
     assert!(
         config
             .integrations
@@ -3699,6 +3713,88 @@ parameters = '{"type":"object","properties":{"title":{"type":"typo"}}}'
     );
 }
 
+const PART_TOOLS: &str = r#"
+[client_tools.tools.write]
+name = "write_part"
+description = "Stage a part"
+parameters = '{"type":"object","properties":{"row":{"type":"integer"}}}'
+
+[client_tools.tools.submit]
+name = "submit_draft"
+description = "Stage draft"
+parameters = '{"type":"object"}'
+[client_tools.tools.submit.submission]
+part_tools = ["client/write_part"]
+"#;
+
+#[test]
+fn part_tools_are_opt_in_with_their_own_budgets() {
+    let config = migrate_config_with_action_facets(PART_TOOLS);
+    let submission = config.client_tools.tools["submit"]
+        .submission
+        .as_ref()
+        .unwrap();
+    assert_eq!(submission.part_tools, ["client/write_part"]);
+    assert_eq!(submission.max_part_calls, 40);
+    assert_eq!(submission.max_row_tries, 3);
+    assert_eq!(submission.part_key, "/row");
+}
+
+#[test]
+#[should_panic(
+    expected = "part tool 'client/missing' must name a configured non-submission client tool"
+)]
+fn part_tools_must_be_configured() {
+    migrate_config_with_action_facets(&PART_TOOLS.replace("client/write_part", "client/missing"));
+}
+
+#[test]
+#[should_panic(expected = "submission.max_row_tries must be 1–10")]
+fn part_tries_are_bounded() {
+    migrate_config_with_action_facets(&format!("{PART_TOOLS}max_row_tries = 0\n"));
+}
+
+#[test]
+#[should_panic(expected = "is a part tool of both")]
+fn a_part_tool_belongs_to_one_submission() {
+    migrate_config_with_action_facets(&format!(
+        r#"{PART_TOOLS}
+[client_tools.tools.other]
+name = "submit_other"
+description = "Stage another draft"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.other.submission]
+part_tools = ["client/write_part"]
+"#
+    ));
+}
+
+#[test]
+#[should_panic(expected = "part tool 'client/write_part' cannot set child_access = \"read\"")]
+fn a_part_tool_is_never_offered_to_a_task() {
+    migrate_config_with_action_facets(&PART_TOOLS.replace(
+        "description = \"Stage a part\"",
+        "description = \"Stage a part\"\nchild_access = \"read\"\nhost_context = \"word_document\"",
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "is a part tool of 'client/submit_draft' and a recovery read of 'client/submit_other'"
+)]
+fn a_part_tool_is_no_recovery_read_of_another_submission() {
+    migrate_config_with_action_facets(&format!(
+        r#"{PART_TOOLS}
+[client_tools.tools.other]
+name = "submit_other"
+description = "Stage another draft"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.other.submission]
+recovery_read_tools = ["client/write_part"]
+"#
+    ));
+}
+
 fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"
@@ -5541,6 +5637,74 @@ model_name = "gpt-4o"
         config.integrations.ms_office.addin.document,
         erato_config::config::MsOfficeAddinDocumentConfig::default(),
         "erato.template.toml's document add-in block drifted from the Rust defaults"
+    );
+}
+
+#[test]
+fn test_ms_office_addin_presentation_template_block_matches_rust_defaults() {
+    // The surrounding mail example intentionally differs from Default; compare only the presentation block.
+    let template = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../erato.template.toml"
+    ))
+    .expect("read erato.template.toml");
+    let start = template
+        .find("# [integrations.ms_office.addin.presentation]")
+        .expect("template contains the presentation add-in block");
+    let end = template[start..]
+        .find("\n#\n")
+        .map(|offset| start + offset)
+        .expect("presentation add-in block is terminated by a bare comment line");
+    let uncommented: String = template[start..end]
+        .lines()
+        .map(|line| {
+            line.strip_prefix("# ")
+                .or_else(|| line.strip_prefix("#"))
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            format!(
+                r#"
+{uncommented}
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#
+            )
+            .as_bytes(),
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.integrations.ms_office.addin.presentation,
+        erato_config::config::MsOfficeAddinPresentationConfig::default(),
+        "erato.template.toml's presentation add-in block drifted from the Rust defaults"
     );
 }
 

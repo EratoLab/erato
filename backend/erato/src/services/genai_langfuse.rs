@@ -128,6 +128,12 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "text": text_part.text
                 }));
             }
+            ContentPart::Spoken(spoken_part) => {
+                output_parts.push(json!({
+                    "type": "spoken",
+                    "text": spoken_part.text
+                }));
+            }
             ContentPart::Reasoning(reasoning_part) => {
                 output_parts.push(json!({
                     "type": "reasoning",

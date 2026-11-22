@@ -196,8 +196,11 @@ describe("FeatureConfigProvider", () => {
         },
         audioConversational: {
           speechEnabled: false,
+          voiceCommandsEnabled: false,
+          voiceDecisionsEnabled: false,
           enabled: false,
           maxRecordingDurationSeconds: 1200,
+          talkOverVoice: false,
         },
         chatSharing: {
           enabled: false,
@@ -214,6 +217,7 @@ describe("FeatureConfigProvider", () => {
           delegationTasksAllowAsync: false,
           delegationTasksApprovalMode: "async_only",
           enableEditSharing: true,
+          enableDirectOrganizationSharing: true,
           usageViewEnabled: false,
           showRecentItems: false,
           showRecentItemsCollapsible: false,
@@ -863,8 +867,11 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         speechEnabled: false,
+        voiceCommandsEnabled: false,
+        voiceDecisionsEnabled: false,
         enabled: false,
         maxRecordingDurationSeconds: 1200,
+        talkOverVoice: false,
       });
     });
 
@@ -872,6 +879,9 @@ describe("FeatureConfigProvider", () => {
       mockEnv.mockReturnValue({
         audioConversationalEnabled: true,
         audioConversationalMaxRecordingDurationSeconds: 600,
+        approvalVoiceCommandsEnabled: true,
+        audioConversationalTalkOverVoice: true,
+        audioConversationalTalkOverVoiceMinSpeechMs: 700,
       });
 
       const { result } = renderHook(() => useAudioConversationalFeature(), {
@@ -880,8 +890,12 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         speechEnabled: false,
+        voiceCommandsEnabled: true,
+        voiceDecisionsEnabled: false,
         enabled: true,
         maxRecordingDurationSeconds: 600,
+        talkOverVoice: true,
+        talkOverVoiceMinSpeechMs: 700,
       });
     });
   });
@@ -989,6 +1003,7 @@ describe("FeatureConfigProvider", () => {
         delegationTasksAllowAsync: false,
         delegationTasksApprovalMode: "async_only",
         enableEditSharing: true,
+        enableDirectOrganizationSharing: true,
         usageViewEnabled: false,
         showRecentItems: false,
         showRecentItemsCollapsible: false,
@@ -1014,6 +1029,7 @@ describe("FeatureConfigProvider", () => {
         disableLogout: false,
         assistantsEnabled: true,
         delegationTasksApprovalMode: "async_only",
+        assistantsEnableDirectOrganizationSharing: false,
         assistantsShowRecentItems: true,
         assistantsShowRecentItemsCollapsible: true,
         assistantsToolsMenuDescriptionDisplay: "full",
@@ -1046,6 +1062,7 @@ describe("FeatureConfigProvider", () => {
         delegationTasksAllowAsync: false,
         delegationTasksApprovalMode: "async_only",
         enableEditSharing: true,
+        enableDirectOrganizationSharing: false,
         usageViewEnabled: false,
         showRecentItems: true,
         showRecentItemsCollapsible: true,

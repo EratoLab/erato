@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
 import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 import { McpAppView } from "@/components/ui/ToolCall/McpAppView";
+import { McpAppViewFiles } from "@/components/ui/ToolCall/McpAppViewFiles";
 import {
   Trace,
   durationFromTraceParts,
@@ -57,7 +58,7 @@ import {
   WORD_REPLACE_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
 import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
-import { ChatContext } from "@/providers/ChatProvider";
+import { useOptionalChatSession } from "@/providers/ChatProvider";
 import {
   useMessageTextActionsFeature,
   useTraceFeature,
@@ -78,6 +79,7 @@ import { MermaidBlock } from "./MermaidBlock";
 import { MessageExplainCard } from "./MessageExplainCard";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import { SidecarReviewItem } from "./SidecarReviewItem";
+import { SpokenReply } from "./SpokenReply";
 import { StopWaitingAction } from "./StopWaitingAction";
 import {
   SyntaxHighlightedCode,
@@ -781,7 +783,7 @@ function ClientToolPendingNotice({
   const link = useSidecarReviewLinks((state) =>
     key ? state.links[key] : undefined,
   );
-  const chatId = React.useContext(ChatContext)?.currentChatId ?? undefined;
+  const chatId = useOptionalChatSession()?.currentChatId ?? undefined;
   const chatInReview = useSidecarReviewStore(
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );
@@ -822,6 +824,7 @@ function ClientToolPendingNotice({
 
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
+  part.content_type === "spoken" ||
   part.content_type === "reasoning" ||
   part.content_type === "tool_use" ||
   part.content_type === "tool_approval_request" ||
@@ -906,6 +909,24 @@ const extractReferencedEratoFileIds = (text: string): Set<string> => {
 };
 
 /**
+ * The files a tool call returned: its stored output names each one with an
+ * `erato-file://` link where the server's result carried the bytes.
+ */
+const eratoFileIdsIn = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const fileId = getEratoFileIdFromUrl(value);
+    return fileId ? [fileId] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(eratoFileIdsIn);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(eratoFileIdsIn);
+  }
+  return [];
+};
+
+/**
  * Every id a decision part can be found by. The generated schema loses the type
  * of the optional ones, so they are read through a narrowing accessor.
  */
@@ -941,6 +962,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       status: "denied",
       neverAllow: part.never_allow === true,
       withdrawn: reason === "withdrawn",
+      changeRequested: reason === "change_requested",
     };
   }
   return undefined;
@@ -960,6 +982,9 @@ interface MarkdownMessageContextValue {
   onImageClick?: (image: UiImagePart) => void;
   imageAdvisory: string | null;
   generatedImageFileIds: ReadonlySet<string>;
+  filesById: Record<string, FileUploadItem>;
+  /** The images of calls whose view shows, which show as file chips. */
+  chippedFileIds: ReadonlySet<string>;
 }
 
 // The markdown overrides live at module level so React keeps their elements
@@ -971,8 +996,33 @@ const MarkdownMessageContext = React.createContext<MarkdownMessageContextValue>(
     resolveEratoFileLink: () => null,
     imageAdvisory: null,
     generatedImageFileIds: new Set(),
+    filesById: {},
+    chippedFileIds: new Set(),
   },
 );
+
+/**
+ * Whether a Markdown element holds an image that shows as a file chip, as an
+ * answer's image of a file the call's view already shows does.
+ */
+const holdsChippedImage = (
+  node: unknown,
+  chippedFileIds: ReadonlySet<string>,
+): boolean =>
+  chippedFileIds.size > 0 &&
+  ((node as { children?: unknown[] } | undefined)?.children ?? []).some(
+    (child) => {
+      const { tagName, properties } = child as {
+        tagName?: string;
+        properties?: { src?: unknown };
+      };
+      const fileId =
+        typeof properties?.src === "string"
+          ? getEratoFileIdFromUrl(properties.src)
+          : null;
+      return tagName === "img" && !!fileId && chippedFileIds.has(fileId);
+    },
+  );
 
 type MarkdownElementProps<Tag extends React.ElementType> =
   React.ComponentPropsWithoutRef<Tag> & { node?: unknown };
@@ -1060,7 +1110,21 @@ function MarkdownImage({
     onImageClick,
     imageAdvisory,
     generatedImageFileIds,
+    filesById,
+    chippedFileIds,
   } = React.useContext(MarkdownMessageContext);
+  const fileId = src ? getEratoFileIdFromUrl(src) : null;
+  if (fileId && chippedFileIds.has(fileId)) {
+    // The call's view already shows what the image holds: the same chip as
+    // under the view instead of a second full image.
+    return (
+      <McpAppViewFiles
+        fileIds={[fileId]}
+        filesById={filesById}
+        onFilePreview={onFileLinkPreview}
+      />
+    );
+  }
   const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
   const isEratoFileImageUrl =
     // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -1208,10 +1272,20 @@ function MarkdownListItem({
 
 function MarkdownParagraph({
   children,
-  node: _node,
+  node,
   ...props
 }: MarkdownElementProps<"p">) {
-  const { isStreaming } = React.useContext(MarkdownMessageContext);
+  const { isStreaming, chippedFileIds } = React.useContext(
+    MarkdownMessageContext,
+  );
+  // A file chip is a block, which a paragraph cannot hold.
+  if (holdsChippedImage(node, chippedFileIds)) {
+    return (
+      <div className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
+        {children}
+      </div>
+    );
+  }
   // A streamed paragraph holding only an unfinished emphasis or code marker.
   if (
     isStreaming &&
@@ -1432,13 +1506,16 @@ const MARKDOWN_COMPONENTS: Partial<Components> = {
   },
 };
 
+/** One shared default, so a message without files keeps a stable markdown context. */
+const NO_FILES: Record<string, FileUploadItem> = {};
+
 export const MessageContent = memo(function MessageContent({
   content: messageContent,
   messageId,
   isStreaming = false,
   showRaw = false,
   onImageClick,
-  filesById = {},
+  filesById = NO_FILES,
   onFileLinkPreview,
   preserveSoftLineBreaks = false,
   createdAt,
@@ -1649,17 +1726,77 @@ export const MessageContent = memo(function MessageContent({
     return briefs;
   }, [content]);
 
-  const generatedImageFileIds = React.useMemo(() => {
-    const fileIds = new Set<string>();
+  // Keyed by value: a new set on every streamed chunk would re-render every
+  // finished markdown block through the markdown context.
+  const generatedImageFileIdsKey = React.useMemo(
+    () =>
+      content
+        .flatMap((part) =>
+          part.content_type === "image_file_pointer"
+            ? [part.file_upload_id]
+            : [],
+        )
+        .join("\n"),
+    [content],
+  );
+  const generatedImageFileIds = React.useMemo(
+    () =>
+      new Set<string>(
+        generatedImageFileIdsKey === ""
+          ? []
+          : generatedImageFileIdsKey.split("\n"),
+      ),
+    [generatedImageFileIdsKey],
+  );
 
+  // Calls whose view shows: their images, which the stored output names as
+  // links, show as chips under the view instead of as full images. Their
+  // other files stay in the message's attachments.
+  const [shownViews, setShownViews] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const markViewShown = React.useCallback((toolCallId: string) => {
+    setShownViews((shown) =>
+      shown.has(toolCallId) ? shown : new Set(shown).add(toolCallId),
+    );
+  }, []);
+  // Keyed by value: the chipped set below feeds the markdown context, so a new
+  // map on every streamed chunk would re-render every finished markdown block.
+  const viewFileIdsKey = React.useMemo(() => {
+    const byCall: [string, string[]][] = [];
     content.forEach((part) => {
-      if (part.content_type === "image_file_pointer") {
-        fileIds.add(part.file_upload_id);
+      if (
+        part.content_type === "tool_use" &&
+        part.tool_call_id &&
+        part.result_details?.view
+      ) {
+        byCall.push([
+          part.tool_call_id,
+          [
+            ...new Set(
+              eratoFileIdsIn(part.output).filter((fileId) =>
+                generatedImageFileIds.has(fileId),
+              ),
+            ),
+          ],
+        ]);
       }
     });
-
-    return fileIds;
-  }, [content]);
+    return JSON.stringify(byCall);
+  }, [content, generatedImageFileIds]);
+  const viewFileIds = React.useMemo(
+    () => new Map(JSON.parse(viewFileIdsKey) as [string, string[]][]),
+    [viewFileIdsKey],
+  );
+  const chippedFileIds = React.useMemo(
+    () =>
+      new Set(
+        [...shownViews].flatMap(
+          (toolCallId) => viewFileIds.get(toolCallId) ?? [],
+        ),
+      ),
+    [shownViews, viewFileIds],
+  );
 
   const textReferencedEratoFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
@@ -1743,6 +1880,8 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     }),
     [
       messageId,
@@ -1753,71 +1892,83 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     ],
   );
 
-  const renderMarkdown = (text: string, textBlockPrefix?: string) => {
-    const mentionLinkedText =
-      mentionedAssistants && mentionedAssistants.length > 0
-        ? linkAssistantMentions(text, mentionedAssistants)
-        : text;
-    const linkedTextContent = autolinkEratoFiles(mentionLinkedText);
+  const renderMarkdown = React.useCallback(
+    (text: string, textBlockPrefix?: string) => {
+      const mentionLinkedText =
+        mentionedAssistants && mentionedAssistants.length > 0
+          ? linkAssistantMentions(text, mentionedAssistants)
+          : text;
+      const linkedTextContent = autolinkEratoFiles(mentionLinkedText);
 
-    return (
-      <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
-        <HostArtifactContext.Provider value={hostArtifact ?? null}>
-          <WordHistoryContext.Provider value={wordHistoryRendering}>
-            <MarkdownMessageContext.Provider value={markdownMessage}>
-              <Markdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[
-                  rehypeRaw,
-                  [rehypeSanitize, markdownSanitizeSchema],
-                  rehypeKatex,
-                  ...(textBlockPrefix === undefined
-                    ? []
-                    : [
-                        [
-                          rehypeMessageTextBlocks,
-                          {
-                            prefix: textBlockPrefix,
-                            slotAfter: explainAnchor?.endBlock,
-                          },
-                        ] as NonNullable<
-                          MarkdownOptions["rehypePlugins"]
-                        >[number],
-                      ]),
-                ]}
-                components={MARKDOWN_COMPONENTS}
-                urlTransform={(url, key, node) => {
-                  // Sanitization prefixes IDs to prevent DOM clobbering; keep
-                  // generated footnote links pointed at those prefixed IDs.
-                  if (
-                    key === "href" &&
-                    url.startsWith("#") &&
-                    (node.properties.dataFootnoteRef !== undefined ||
-                      node.properties.dataFootnoteBackref !== undefined)
-                  ) {
-                    return `#user-content-${url.slice(1)}`;
-                  }
-                  // eslint-disable-next-line lingui/no-unlocalized-strings
-                  return url.startsWith("erato-file://") ||
-                    url.startsWith(ERATO_MENTION_SCHEME)
-                    ? url
-                    : defaultUrlTransform(url);
-                }}
-                // Handle incomplete markdown patterns gracefully
-                skipHtml={false}
-                unwrapDisallowed={false}
-              >
-                {linkedTextContent}
-              </Markdown>
-            </MarkdownMessageContext.Provider>
-          </WordHistoryContext.Provider>
-        </HostArtifactContext.Provider>
-      </BlockCodeContext.Provider>
-    );
-  };
+      return (
+        <BlockCodeContext.Provider value={{ isBlockCode: false, isStreaming }}>
+          <HostArtifactContext.Provider value={hostArtifact ?? null}>
+            <WordHistoryContext.Provider value={wordHistoryRendering}>
+              <MarkdownMessageContext.Provider value={markdownMessage}>
+                <Markdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[
+                    rehypeRaw,
+                    [rehypeSanitize, markdownSanitizeSchema],
+                    rehypeKatex,
+                    ...(textBlockPrefix === undefined
+                      ? []
+                      : [
+                          [
+                            rehypeMessageTextBlocks,
+                            {
+                              prefix: textBlockPrefix,
+                              slotAfter: explainAnchor?.endBlock,
+                            },
+                          ] as NonNullable<
+                            MarkdownOptions["rehypePlugins"]
+                          >[number],
+                        ]),
+                  ]}
+                  components={MARKDOWN_COMPONENTS}
+                  urlTransform={(url, key, node) => {
+                    // Sanitization prefixes IDs to prevent DOM clobbering; keep
+                    // generated footnote links pointed at those prefixed IDs.
+                    if (
+                      key === "href" &&
+                      url.startsWith("#") &&
+                      (node.properties.dataFootnoteRef !== undefined ||
+                        node.properties.dataFootnoteBackref !== undefined)
+                    ) {
+                      return `#user-content-${url.slice(1)}`;
+                    }
+                    // eslint-disable-next-line lingui/no-unlocalized-strings
+                    return url.startsWith("erato-file://") ||
+                      url.startsWith(ERATO_MENTION_SCHEME)
+                      ? url
+                      : defaultUrlTransform(url);
+                  }}
+                  // Handle incomplete markdown patterns gracefully
+                  skipHtml={false}
+                  unwrapDisallowed={false}
+                >
+                  {linkedTextContent}
+                </Markdown>
+              </MarkdownMessageContext.Provider>
+            </WordHistoryContext.Provider>
+          </HostArtifactContext.Provider>
+        </BlockCodeContext.Provider>
+      );
+    },
+    [
+      mentionedAssistants,
+      isStreaming,
+      hostArtifact,
+      wordHistoryRendering,
+      markdownMessage,
+      explainAnchor?.endBlock,
+    ],
+  );
 
   // Whole-body fallback: a `"body"`-mode facet response whose email the model
   // emitted with NO fence at all (common with newer models) — there's no code
@@ -1860,6 +2011,29 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
+  // The spoken parts and the reply's recording show as one row, at the first
+  // spoken part: one recording covers every spoken part of a reply.
+  const spoken = React.useMemo(() => {
+    const firstIndex = content.findIndex(
+      (part) => part.content_type === "spoken",
+    );
+    if (firstIndex < 0) return null;
+    const audio = content.find(
+      (part) => part.content_type === "audio_file_pointer",
+    );
+    return {
+      firstIndex,
+      texts: content.flatMap((part) =>
+        part.content_type === "spoken" ? [part.text] : [],
+      ),
+      audioUrl:
+        audio?.content_type === "audio_file_pointer"
+          ? (audio.download_url ?? undefined)
+          : undefined,
+      hasAudio: audio !== undefined,
+    };
+  }, [content]);
+
   const lastRenderableIndex = React.useMemo(() => {
     for (let index = content.length - 1; index >= 0; index--) {
       if (isRenderableContentPart(content[index])) {
@@ -1883,7 +2057,7 @@ export const MessageContent = memo(function MessageContent({
       (part) =>
         part.content_type === "tool_use" &&
         part.tool_call_id === submittedCard.toolCallId &&
-        part.status === "success",
+        (submittedCard.pending === true || part.status === "success"),
     );
 
   const traceDurationMs = React.useMemo(
@@ -1947,10 +2121,10 @@ export const MessageContent = memo(function MessageContent({
         if (cluster.kind === "trace") {
           // The trace block is the "current writer" while no later renderable
           // (text/image) content exists below it.
-          const lastTracePartIndex =
-            cluster.startIndex + cluster.parts.length - 1;
+          const lastTracePartIndex = cluster.endIndex;
+          // A card shown while the message streams follows the work the trace still does.
           const hasLaterContent =
-            !!hasSubmittedCard ||
+            (!!hasSubmittedCard && !isStreaming) ||
             foldsWordPlan ||
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
@@ -1982,15 +2156,38 @@ export const MessageContent = memo(function MessageContent({
                   />
                 ) : null;
               })}
-              {cluster.parts.map((tracePart, partIndex) =>
-                tracePart.content_type === "tool_use" &&
-                tracePart.result_details?.view ? (
-                  <McpAppView
-                    key={`mcp-app-${tracePart.tool_call_id ?? partIndex}`}
-                    part={tracePart}
-                  />
-                ) : null,
-              )}
+              {cluster.parts.map((tracePart, partIndex) => {
+                if (
+                  tracePart.content_type !== "tool_use" ||
+                  (!tracePart.result_details?.view &&
+                    !tracePart.result_details?.view_unavailable)
+                ) {
+                  return null;
+                }
+                const toolCallId = tracePart.tool_call_id;
+                return (
+                  <React.Fragment key={`mcp-app-${toolCallId ?? partIndex}`}>
+                    <McpAppView
+                      part={tracePart}
+                      withFiles={eratoFileIdsIn(tracePart.output).length > 0}
+                      onShown={
+                        toolCallId
+                          ? () => {
+                              markViewShown(toolCallId);
+                            }
+                          : undefined
+                      }
+                    />
+                    {toolCallId && shownViews.has(toolCallId) && (
+                      <McpAppViewFiles
+                        fileIds={viewFileIds.get(toolCallId) ?? []}
+                        filesById={filesById}
+                        onFilePreview={onFileLinkPreview}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </React.Fragment>
           );
         }
@@ -2087,19 +2284,29 @@ export const MessageContent = memo(function MessageContent({
           );
         }
 
-        if (part.content_type === "audio_file_pointer") {
+        if (part.content_type === "spoken") {
+          if (spoken?.firstIndex !== index) return null;
           return (
-            // The adjacent assistant message provides the full spoken text.
-            // eslint-disable-next-line jsx-a11y/media-has-caption
-            <audio
+            <SpokenReply
+              key={`spoken-${index}`}
+              texts={spoken.texts}
+              audioUrl={spoken.audioUrl}
+              hasAudio={spoken.hasAudio}
+              isStreaming={isStreaming}
+            />
+          );
+        }
+
+        if (part.content_type === "audio_file_pointer") {
+          if (spoken) return null;
+          // A reply read word for word: the written answer is what was said.
+          return (
+            <SpokenReply
               key={`audio-${part.file_upload_id}`}
-              controls
-              preload="none"
-              src={part.download_url ?? undefined}
-              aria-label={t({
-                id: "chat.audio_replay",
-                message: "Replay audio response",
-              })}
+              texts={[]}
+              audioUrl={part.download_url ?? undefined}
+              hasAudio
+              isStreaming={false}
             />
           );
         }
@@ -2107,7 +2314,8 @@ export const MessageContent = memo(function MessageContent({
         if (image) {
           if (
             part.content_type === "image_file_pointer" &&
-            textReferencedEratoFileIds.has(part.file_upload_id)
+            (textReferencedEratoFileIds.has(part.file_upload_id) ||
+              chippedFileIds.has(part.file_upload_id))
           ) {
             return null;
           }

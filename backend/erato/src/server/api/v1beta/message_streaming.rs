@@ -67,6 +67,7 @@ use crate::services::prompt_guardrails::{
 };
 use crate::services::sentry::capture_report;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use crate::services::tool_arguments::{
     ToolArgumentStreams, tool_call_content_index, upsert_tool_use, without_preparing_tools,
 };
@@ -538,7 +539,10 @@ enum ToolCallGate {
 ///
 /// The parked request's `tool_name` is both what the card shows and the key
 /// the continuation runs the tool by, so it must survive display cleaning
-/// unchanged; a name that would not is refused instead of parked.
+/// unchanged; a name that would not is refused instead of parked. It is the
+/// server's own name for the tool, also when the model called it by a
+/// qualified one (see `mcp_tool_names`): with the server id, it names the
+/// tool for the user's standing decisions too.
 fn gate_mcp_tool_call(
     config: &McpToolApprovalConfig,
     server_id: &str,
@@ -554,6 +558,7 @@ fn gate_mcp_tool_call(
         (McpToolEffectiveState::Denied, _) => refuse_denied_tool_call(tool_call),
         (McpToolEffectiveState::Ask, _) => ask_for_tool_call(
             tool_call,
+            &tool.name,
             ToolApprovalKind::McpTool,
             server_id,
             Some(display.clone()),
@@ -589,6 +594,7 @@ fn gate_builtin_tool_call(
     }
     ask_for_tool_call(
         tool_call,
+        &tool_call.fn_name,
         ToolApprovalKind::BuiltinTool,
         "",
         Some(display),
@@ -614,10 +620,13 @@ fn refuse_denied_tool_call(tool_call: &genai::chat::ToolCall) -> ToolCallGate {
     ))
 }
 
-/// Park one tool call on an approval card. `source_id` is the MCP server id,
-/// or a client tool's namespace.
+/// Park one tool call on an approval card. `tool_name` is what the card names
+/// the tool by, and `source_id` the MCP server id, or a client tool's
+/// namespace.
+#[allow(clippy::too_many_arguments)]
 fn ask_for_tool_call(
     tool_call: &genai::chat::ToolCall,
+    tool_name: &str,
     kind: ToolApprovalKind,
     source_id: &str,
     display: Option<crate::models::message::ToolDisplayMetadata>,
@@ -625,8 +634,8 @@ fn ask_for_tool_call(
     preset: &str,
     allow_always: bool,
 ) -> ToolCallGate {
-    let display_name = sanitize_display_text(&tool_call.fn_name, MAX_DISPLAY_NAME_CHARS);
-    if display_name.truncated || display_name.text != tool_call.fn_name {
+    let display_name = sanitize_display_text(tool_name, MAX_DISPLAY_NAME_CHARS);
+    if display_name.truncated || display_name.text != tool_name {
         return ToolCallGate::Refuse(format!(
             "The tool '{}' has a name that cannot be shown for approval; the call was not executed.",
             display_name.text
@@ -648,10 +657,12 @@ fn ask_for_tool_call(
         approvals: vec![ApprovalItem {
             approval_id: tool_call.call_id.clone(),
             tool_call_id: tool_call.call_id.clone(),
+            called_as: (display_name.text != tool_call.fn_name).then(|| tool_call.fn_name.clone()),
             tool_name: display_name.text,
             display,
             input: tool_call.fn_arguments.clone(),
             child: None,
+            replaces_approval_id: None,
         }],
         // The rest of the parked batch is recorded by the caller that owns the
         // queue, not by this per-call gate.
@@ -736,6 +747,7 @@ fn gate_client_tool_call(
         Some(ClientToolDecision::Ask) if reviewed_on_device => ToolCallGate::Run(None),
         Some(ClientToolDecision::Ask) => ask_for_tool_call(
             tool_call,
+            &tool_call.fn_name,
             ToolApprovalKind::ClientTool,
             namespace,
             None,
@@ -1554,6 +1566,14 @@ pub enum MessageSubmitStreamingResponseMessage {
     },
     #[serde(rename = "audio_error")]
     AudioError { message_id: Uuid },
+    #[serde(rename = "spoken_delta")]
+    /// Sent whenever the voice gets new text of a reply's spoken part. The
+    /// written answer comes as `text_delta`.
+    SpokenDelta(MessageSubmitStreamingResponseMessageTextDelta),
+    #[serde(rename = "spoken_end")]
+    /// Sent when a spoken part is complete: the voice has all of it, and the
+    /// written answer may still be streaming.
+    SpokenEnd { message_id: Uuid },
     #[serde(rename = "chat_created")]
     /// May optionally be sent at the start of the stream to indicate that a new chat has been created.
     ChatCreated(MessageSubmitStreamingResponseChatCreated),
@@ -1592,6 +1612,8 @@ impl SendAsSseEvent for MessageSubmitStreamingResponseMessage {
         match self {
             Self::AudioDelta { .. } => "audio_delta",
             Self::AudioError { .. } => "audio_error",
+            Self::SpokenDelta(_) => "spoken_delta",
+            Self::SpokenEnd { .. } => "spoken_end",
             Self::ChatCreated(_) => "chat_created",
             Self::UserMessageSaved(_) => "user_message_saved",
             Self::AssistantMessageStarted(_) => "assistant_message_started",
@@ -2046,6 +2068,26 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
         StreamingEvent::AudioError { message_id } => (
             "audio_error",
             serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioError {
+                message_id: *message_id,
+            })?,
+        ),
+        StreamingEvent::SpokenDelta {
+            message_id,
+            content_index,
+            new_text,
+        } => (
+            "spoken_delta",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::SpokenDelta(
+                MessageSubmitStreamingResponseMessageTextDelta {
+                    message_id: *message_id,
+                    content_index: *content_index,
+                    new_text: new_text.clone(),
+                },
+            ))?,
+        ),
+        StreamingEvent::SpokenEnd { message_id } => (
+            "spoken_end",
+            serde_json::to_string(&MessageSubmitStreamingResponseMessage::SpokenEnd {
                 message_id: *message_id,
             })?,
         ),
@@ -2575,6 +2617,12 @@ pub enum ToolApprovalDecision {
     /// document or turn, until it changes from outside the chat. Valid only on
     /// a task's client tool item that carries `approval_scope`.
     ApproveContext,
+    /// Neither allow nor deny: the user wants the call different and says how
+    /// in `change_request`. The call is not run, the model reads the user's
+    /// words and makes a corrected call that needs its own decision. Valid on
+    /// the turn's own `mcp_tool`, `client_tool` or `builtin_tool` item, at
+    /// most one per continuation.
+    RequestChange,
 }
 
 impl ToolApprovalDecision {
@@ -2602,6 +2650,17 @@ pub struct ApprovalDecisionItem {
     #[serde(default)]
     #[schema(nullable = false, value_type = Object)]
     pub scope_position: Option<Value>,
+    /// The user's words for `request_change`, as they typed or said them.
+    /// Refused on any other decision.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub change_request: Option<String>,
+    /// For `approve` or `reject` said by voice: the receipt the voice command
+    /// endpoint gave for it. It must be for this card as it is now, and is
+    /// taken once. A tap carries none.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub voice_receipt: Option<String>,
 }
 
 /// Rehydrates a generation that was deliberately stopped for tool approval.
@@ -2619,6 +2678,10 @@ pub struct ContinueStreamRequest {
     decisions: Vec<ApprovalDecisionItem>,
     #[serde(default)]
     decision: Option<ToolApprovalDecision>,
+    /// Read the continued answer back, as `conversational_audio_back` does on
+    /// a submitted message.
+    #[serde(default)]
+    conversational_audio_back: bool,
     /// Whether the client shows each task child an `mcp_tool` or `client_tool`
     /// part carries as an item of its own. Decisions on such a part are refused
     /// without it while a child is open: an older client shows only the turn's
@@ -2654,6 +2717,10 @@ pub struct ContinueStreamRequest {
     /// task's `approve_context` decision.
     #[serde(skip)]
     scope_approval: Option<Uuid>,
+    /// How each decision by voice was given, by approval id, from its
+    /// receipt.
+    #[serde(skip)]
+    voice_records: HashMap<String, crate::models::message::VoiceDecisionRecord>,
 }
 
 impl ContinueStreamRequest {
@@ -2672,9 +2739,12 @@ impl ContinueStreamRequest {
                     approval_id,
                     decision,
                     scope_position: None,
+                    change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
@@ -2683,6 +2753,7 @@ impl ContinueStreamRequest {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 }
@@ -2790,6 +2861,35 @@ pub struct ChildrenWaitingError {
 
 pub(crate) const CHILDREN_WAITING_CODE: &str = "children_waiting";
 
+/// Body of the `409` `continuestream` answers to a decision that names no
+/// approval while the open card is the corrected call of a change request.
+///
+/// A client that sends no `approval_id` may still show the card it replaced,
+/// on another tab or device, so its answer cannot be meant for this one. The
+/// client reloads the message and shows the card named here.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct CardChangedError {
+    /// Always `card_changed`.
+    pub code: String,
+    /// The approval that is open now.
+    pub approval_id: String,
+}
+
+pub(crate) const CARD_CHANGED_CODE: &str = "card_changed";
+
+/// Body of the `409` `continuestream` answers to a decision by voice whose
+/// `voice_receipt` is unknown, used, expired, or for another card or
+/// decision. Nothing was decided; the card waits on screen.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct VoiceReceiptRefusedError {
+    /// Always `voice_receipt_refused`.
+    pub code: String,
+}
+
+pub(crate) const VOICE_RECEIPT_REFUSED_CODE: &str = "voice_receipt_refused";
+
 /// Body of the `409` `continuestream` answers on a delegated child whose
 /// request is currently being asked about in the chat that started it.
 ///
@@ -2807,8 +2907,20 @@ pub struct CoveredByParentError {
 pub(crate) const COVERED_BY_PARENT_CODE: &str = "covered_by_parent";
 
 /// `ContentPartToolRejection.reason` for a call the user took back rather than
-/// answered. The only value the field has.
+/// answered.
 pub(crate) const REJECTION_REASON_WITHDRAWN: &str = "withdrawn";
+
+/// The `ContentPartToolRejection.reason` a decision that does not run the
+/// call records, when it is not a plain denial.
+fn rejection_reason(decision: ToolApprovalDecision) -> Option<String> {
+    match decision {
+        ToolApprovalDecision::Withdraw => Some(REJECTION_REASON_WITHDRAWN.to_string()),
+        ToolApprovalDecision::RequestChange => {
+            Some(crate::services::approval_change_requests::REJECTION_REASON.to_string())
+        }
+        _ => None,
+    }
+}
 
 /// The row a client named is not a delivered task result at all.
 pub(crate) const REACT_REASON_NOT_A_TASK_RESULT: &str = "not_a_task_result";
@@ -2842,6 +2954,12 @@ pub enum StreamRouteError {
     /// `continuestream` only: nothing to decide while task children wait for a
     /// client.
     ChildrenWaiting(Box<ChildrenWaitingError>),
+    /// `continuestream` only: a decision that names no approval, while the
+    /// open card replaces one the user asked to change.
+    CardChanged(Box<CardChangedError>),
+    /// `continuestream` only: a decision by voice whose receipt does not let
+    /// it through.
+    VoiceReceiptRefused(Box<VoiceReceiptRefusedError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -2879,6 +2997,12 @@ impl axum::response::IntoResponse for StreamRouteError {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
             StreamRouteError::ChildrenWaiting(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            StreamRouteError::CardChanged(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            StreamRouteError::VoiceReceiptRefused(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -5075,9 +5199,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // action facet declares client actions and the chat allows writes: client
     // actions are the mutation channel, so the write toggle withholds them
     // together with non-read-only MCP tools. The tool is handled in the tool
-    // call loop instead of being dispatched to an MCP server. If an MCP tool
-    // already claims the same name, it wins — adding a duplicate tool name
-    // would be rejected by providers and ambiguous to dispatch.
+    // call loop instead of being dispatched to an MCP server. An MCP tool of
+    // the same name is offered under a qualified name (see `mcp_tool_names`);
+    // the check below only keeps a duplicate name, which providers reject and
+    // nothing could dispatch, from ever being offered.
     if !is_delegated_run
         && chat.mcp_write_tools_enabled
         && let Some(action_facet) = user_input.action_facet.as_ref()
@@ -5248,8 +5373,9 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
     // — depth stays at one even if a user mentions assistants inside a
-    // delegated chat. If an MCP tool claims either name, it wins (same
-    // precedence as the other synthetic tools).
+    // delegated chat. An MCP tool of either name is offered under a qualified
+    // name (see `mcp_tool_names`); the checks below only keep a duplicate
+    // name from being offered.
     //
     // `delegate_to_assistant` is aimed at an assistant the user mentioned;
     // `delegate_task` lets the model plan its own sub-task, scoped by facets.
@@ -5330,8 +5456,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     }
     // Offer the synthetic wait tool when waiting is enabled globally or when
     // an MCP server explicitly allows one of the discovered tools to defer a
-    // continuation. The tool is only useful alongside MCP tools, and MCP wins
-    // if a server already exposes the reserved name.
+    // continuation. The tool is only useful alongside MCP tools. An MCP tool
+    // of the same name is offered under a qualified name (see
+    // `mcp_tool_names`); the check below only keeps a duplicate name from
+    // being offered.
     let wait_tool_enabled = !generation_mcp_tools.is_empty()
         && (mcp.config.mcp_servers_global.enable_wait
             || generation_mcp_tools.iter().any(|managed_tool| {
@@ -5343,7 +5471,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     if wait_tool_enabled {
         let name_taken_by_mcp_tool = generation_mcp_tools
             .iter()
-            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME);
+            .any(|tool| tool.model_name() == crate::services::mcp_wait::WAIT_TOOL_NAME);
         if name_taken_by_mcp_tool {
             tracing::warn!(
                 "Not offering the wait tool: an MCP tool already uses the name '{}'",
@@ -5487,6 +5615,329 @@ fn append_text_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> u
     }
 }
 
+fn append_spoken_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> usize {
+    let content_index = content.len().saturating_sub(1);
+    if let Some(ContentPart::Spoken(spoken_part)) = content.last_mut() {
+        spoken_part.text.push_str(&new_text);
+        content_index
+    } else {
+        let content_index = content.len();
+        content.push(ContentPart::Spoken(
+            crate::models::message::ContentPartSpoken { text: new_text },
+        ));
+        content_index
+    }
+}
+
+/// Whether a generation's reply is split into a spoken and a written part:
+/// only when its prompt asked for the format. Earlier replies are replayed
+/// without their spoken parts, so a turn that did not ask has no format to
+/// copy.
+fn splits_reply(messages: &GenerationInputMessages) -> bool {
+    use crate::models::message::{BuiltinTurnInstruction, StoredTurnInstructionKind};
+    messages.messages.iter().any(|message| {
+        matches!(
+            &message.content,
+            ContentPart::TurnInstructionMarker(marker)
+                if marker.kind
+                    == StoredTurnInstructionKind::Builtin(BuiltinTurnInstruction::SpokenAndWritten)
+        )
+    })
+}
+
+/// What a spoken part that never closed, or ran too long, becomes: the start
+/// of the written text.
+fn spoken_becomes_written(content: &mut [ContentPart]) {
+    if let Some(at) = content
+        .iter()
+        .rposition(|part| matches!(part, ContentPart::Spoken(_)))
+        && let ContentPart::Spoken(spoken) = &content[at]
+    {
+        content[at] = ContentPart::Text(ContentPartText {
+            text: spoken.text.clone(),
+        });
+    }
+}
+
+/// Stores split text no client sees streamed: what a stopped call still
+/// held, or a reply that arrived whole.
+fn store_reply_pieces(
+    pieces: Vec<crate::services::speech::reply_split::Piece>,
+    content: &mut Vec<ContentPart>,
+) {
+    use crate::services::speech::reply_split::Piece;
+    for piece in pieces {
+        match piece {
+            Piece::Spoken(text) => {
+                append_spoken_delta_part(content, text);
+            }
+            Piece::Written(text) | Piece::Plain(text) => {
+                if !text.is_empty() {
+                    append_text_delta_part(content, text);
+                }
+            }
+            Piece::SpokenEnd => {}
+            Piece::SpokenIsWritten => spoken_becomes_written(content),
+        }
+    }
+}
+
+/// Routes the split text of a reply: the spoken part to the voice and a
+/// `Spoken` part, the written part to the chat, as the deltas arrive.
+async fn emit_reply_pieces(
+    pieces: Vec<crate::services::speech::reply_split::Piece>,
+    content: &mut Vec<ContentPart>,
+    speech: &mut Option<crate::services::speech::session::SpeechSession>,
+    assistant_message_id: Uuid,
+    streaming_task: Option<&Arc<StreamingTask>>,
+    tx: &Sender<Result<Event, Report>>,
+) -> Result<(), Report> {
+    use crate::services::speech::reply_split::Piece;
+    for piece in pieces {
+        let written = match piece {
+            Piece::Plain(text) => {
+                if let Some(speech) = speech.as_mut() {
+                    speech.push(&text);
+                }
+                text
+            }
+            Piece::Written(text) => text,
+            Piece::Spoken(text) => {
+                if let Some(speech) = speech.as_mut() {
+                    speech.push(&text);
+                }
+                let content_index = append_spoken_delta_part(content, text.clone());
+                let event = StreamingEvent::SpokenDelta {
+                    message_id: assistant_message_id,
+                    content_index,
+                    new_text: text,
+                };
+                if let Some(task) = streaming_task {
+                    send_background_event(task, event.clone(), "broadcast spoken delta").await;
+                }
+                let _ = tx.send(Ok(streaming_event_to_sse(&event)?)).await;
+                continue;
+            }
+            Piece::SpokenEnd => {
+                // The speech worker sends `spoken_end` after the part's last
+                // audio, so the client knows when the voice is done.
+                if let Some(speech) = speech.as_mut() {
+                    speech.flush_spoken();
+                }
+                continue;
+            }
+            Piece::SpokenIsWritten => {
+                spoken_becomes_written(content);
+                // The voice says what it has and reports the part's end, so
+                // the client counts it as said.
+                if let Some(speech) = speech.as_mut() {
+                    speech.flush_spoken();
+                }
+                continue;
+            }
+        };
+        if written.is_empty() {
+            continue;
+        }
+        let content_index = append_text_delta_part(content, written.clone());
+        if let Some(task) = streaming_task {
+            send_background_event(
+                task,
+                StreamingEvent::TextDelta {
+                    message_id: assistant_message_id,
+                    content_index,
+                    new_text: written.clone(),
+                },
+                "broadcast text delta",
+            )
+            .await;
+        }
+        let message: GenerationStreamingMessage = MessageSubmitStreamingResponseMessageTextDelta {
+            message_id: assistant_message_id,
+            content_index,
+            new_text: written,
+        }
+        .into();
+        send_generation_event(&message, tx.clone()).await?;
+    }
+    Ok(())
+}
+
+/// The stored shape of a split reply, on every way out of the generation.
+/// A reply with no written text keeps what was spoken as its text, so the
+/// message is never empty for titles, search or read aloud; a spoken part
+/// the written text repeats is not kept twice.
+fn settle_spoken_parts(content: &mut Vec<ContentPart>) {
+    // A turn parked on a decision is settled when it ends, with what the
+    // continuation writes.
+    if crate::models::message::is_durable_stop(content)
+        || !content
+            .iter()
+            .any(|part| matches!(part, ContentPart::Spoken(_)))
+    {
+        return;
+    }
+    let has_written = content
+        .iter()
+        .any(|part| matches!(part, ContentPart::Text(text) if !text.text.trim().is_empty()));
+    if !has_written {
+        let mut settled: Vec<ContentPart> = Vec::with_capacity(content.len());
+        for part in content.drain(..) {
+            match (settled.last_mut(), part) {
+                (Some(ContentPart::Text(last)), ContentPart::Spoken(spoken)) => {
+                    last.text.push(' ');
+                    last.text.push_str(spoken.text.trim());
+                }
+                (_, ContentPart::Spoken(spoken)) => {
+                    settled.push(ContentPart::Text(ContentPartText {
+                        text: spoken.text.trim().to_string(),
+                    }));
+                }
+                (_, part) => settled.push(part),
+            }
+        }
+        *content = settled;
+        return;
+    }
+    let mut index = 0;
+    while index < content.len() {
+        if let ContentPart::Spoken(spoken) = &content[index] {
+            let said = spoken.text.trim();
+            let repeated = content[index + 1..]
+                .iter()
+                .find(|part| !matches!(part, ContentPart::Reasoning(_)))
+                .is_some_and(
+                    |next| matches!(next, ContentPart::Text(text) if text.text.trim() == said),
+                );
+            if said.is_empty() || repeated {
+                content.remove(index);
+                continue;
+            }
+        }
+        index += 1;
+    }
+}
+
+#[cfg(test)]
+mod spoken_part_tests {
+    use super::*;
+    use crate::models::message::ContentPartSpoken;
+
+    fn spoken(text: &str) -> ContentPart {
+        ContentPart::Spoken(ContentPartSpoken { text: text.into() })
+    }
+
+    fn text(text: &str) -> ContentPart {
+        ContentPart::Text(ContentPartText { text: text.into() })
+    }
+
+    #[test]
+    fn a_reply_stopped_while_speaking_keeps_what_was_said_as_its_text() {
+        let mut content = vec![spoken("Ich schaue nach. "), spoken("Morgen um zwei.")];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [text("Ich schaue nach. Morgen um zwei.")]);
+    }
+
+    #[test]
+    fn a_spoken_part_the_written_text_repeats_is_kept_once() {
+        let mut content = vec![spoken("Gern."), text("Gern.")];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [text("Gern.")]);
+
+        let mut content = vec![
+            spoken("Ich schaue nach."),
+            spoken(" "),
+            text("Der Termin ist morgen um 14:00."),
+        ];
+        settle_spoken_parts(&mut content);
+        assert_eq!(
+            content,
+            [
+                spoken("Ich schaue nach."),
+                text("Der Termin ist morgen um 14:00.")
+            ]
+        );
+    }
+
+    #[test]
+    fn a_late_reasoning_summary_goes_before_the_spoken_part() {
+        let mut content = vec![spoken("Ja."), text("Ja, morgen.")];
+        assert_eq!(
+            insert_reasoning_part_before_text(&mut content, "r".into()),
+            0
+        );
+        assert!(matches!(content[0], ContentPart::Reasoning(_)));
+    }
+
+    #[test]
+    fn a_reply_is_split_only_when_the_turn_asks() {
+        use crate::models::message::{
+            BuiltinTurnInstruction, ContentPartTurnInstructionMarker, InputMessage,
+            StoredTurnInstructionKind,
+        };
+        let message = |role, content| InputMessage { role, content };
+        let asked = GenerationInputMessages {
+            messages: vec![message(
+                MessageRole::User,
+                ContentPart::TurnInstructionMarker(ContentPartTurnInstructionMarker {
+                    kind: StoredTurnInstructionKind::Builtin(
+                        BuiltinTurnInstruction::SpokenAndWritten,
+                    ),
+                }),
+            )],
+        };
+        assert!(splits_reply(&asked));
+        let not_asked = GenerationInputMessages {
+            messages: vec![
+                message(MessageRole::Assistant, text("<spoken>Ja.</spoken>\n\nJa.")),
+                message(MessageRole::User, text("<spoken>")),
+            ],
+        };
+        assert!(!splits_reply(&not_asked));
+    }
+
+    #[test]
+    fn a_parked_turn_keeps_its_spoken_part_for_the_continuation() {
+        let approval = ContentPart::ToolApprovalRequest(
+            crate::models::message::ContentPartToolApprovalRequest {
+                tool_call_id: "call".into(),
+                tool_name: "create_event".into(),
+                display: None,
+                mcp_server_id: "calendar".into(),
+                input: serde_json::json!({}),
+                annotations: crate::models::message::ToolApprovalAnnotations {
+                    read_only_hint: false,
+                    destructive_hint: false,
+                    idempotent_hint: false,
+                    open_world_hint: true,
+                },
+                preset: "restrictive".into(),
+                allow_always: false,
+                requested_at: String::new(),
+                kind: Default::default(),
+                approvals: Vec::new(),
+                pending_tool_calls: Vec::new(),
+                approval_scope: None,
+            },
+        );
+        let mut content = vec![spoken("Ich trage den Termin ein."), approval.clone()];
+        settle_spoken_parts(&mut content);
+        assert_eq!(content, [spoken("Ich trage den Termin ein."), approval]);
+    }
+
+    #[test]
+    fn a_stopped_call_keeps_what_the_split_still_held() {
+        let mut split = crate::services::speech::reply_split::ReplySplit::new();
+        let mut content = Vec::new();
+        store_reply_pieces(
+            split.push("<spoken>Ja.</spoken>Morgen um 14:00 </"),
+            &mut content,
+        );
+        store_reply_pieces(split.finish(), &mut content);
+        assert_eq!(content, [spoken("Ja."), text("Morgen um 14:00 </")]);
+    }
+}
+
 fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String) -> usize {
     let content_index = content.len().saturating_sub(1);
     if let Some(ContentPart::Reasoning(reasoning_part)) = content.last_mut() {
@@ -5505,7 +5956,7 @@ fn append_reasoning_delta_part(content: &mut Vec<ContentPart>, new_text: String)
 fn insert_reasoning_part_before_text(content: &mut Vec<ContentPart>, text: String) -> usize {
     let insertion_index = content
         .iter()
-        .position(|part| matches!(part, ContentPart::Text(_)))
+        .position(|part| matches!(part, ContentPart::Text(_) | ContentPart::Spoken(_)))
         .unwrap_or(content.len());
 
     content.insert(
@@ -6105,9 +6556,11 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
         approval_id: child.tool_call.call_id.clone(),
         tool_call_id: child.tool_call.call_id.clone(),
         tool_name: child.tool_call.fn_name.clone(),
+        called_as: None,
         display: None,
         input: child.tool_call.fn_arguments.clone(),
         child: Some(child_ref),
+        replaces_approval_id: None,
     }
 }
 
@@ -6184,9 +6637,11 @@ fn task_plan_approval_part(
             approval_id: format!("plan:{batch_id}:{position}"),
             tool_call_id: call.call_id.clone(),
             tool_name: call.fn_name.clone(),
+            called_as: None,
             display: None,
             input: call.fn_arguments.clone(),
             child: None,
+            replaces_approval_id: None,
         })
         .collect();
     let head = &gated[0];
@@ -6806,8 +7261,7 @@ mod generation_event_wire_format_tests {
                                     name: Some("row-1".into()),
                                     title: None,
                                 }],
-                                failure: None,
-                                view: None,
+                                ..Default::default()
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -6876,6 +7330,9 @@ async fn stream_generate_chat_completion<'a>(
     // reached, so the first turn dispatches them instead of going straight to
     // the model. `None` for a generation that starts from a user message.
     resume: Option<ParkedTurnResume>,
+    // The reply is written as a spoken part and a written part (see
+    // `splits_reply`); the spoken part is dropped when nothing is spoken.
+    split_reply: bool,
 ) -> Result<(Vec<ContentPart>, Option<GenerationMetadata>), Report> {
     let mut speech = streaming_task
         .filter(|task| {
@@ -6883,30 +7340,25 @@ async fn stream_generate_chat_completion<'a>(
                 .load(std::sync::atomic::Ordering::Relaxed)
         })
         .and_then(|task| {
-            app_state
-                .config
-                .audio_conversational
-                .speech_provider
-                .as_ref()
-                .and_then(|id| {
-                    let id = app_state.config.resolve_speech_provider_id(id).ok()?;
-                    app_state
-                        .config
-                        .speech_providers
-                        .provider
-                        .get(id)
-                        .map(|config| {
-                            crate::services::speech::session::SpeechSession::start(
-                                config.clone(),
-                                id.to_string(),
-                                task.speech_language.get().cloned().unwrap_or_default(),
-                                (*task).clone(),
-                                tx.clone(),
-                                assistant_message_id,
-                            )
-                        })
-                })
+            // `speech_enabled` was decided with the live switch when the turn
+            // started; a reply already being read back finishes.
+            let (id, config) = app_state.config.speech_provider(
+                app_state
+                    .config
+                    .audio_conversational
+                    .speech_provider
+                    .as_deref(),
+            )?;
+            Some(crate::services::speech::session::SpeechSession::start(
+                config.clone(),
+                id.to_string(),
+                task.speech_language.get().cloned().unwrap_or_default(),
+                (*task).clone(),
+                tx.clone(),
+                assistant_message_id,
+            ))
         });
+    let mut reply_split = split_reply.then(crate::services::speech::reply_split::ReplySplit::new);
     let mcp = app_state.mcp_state().await;
     let mut tool_result_context = Arc::new(tool_result_context);
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
@@ -6990,6 +7442,9 @@ async fn stream_generate_chat_completion<'a>(
         app_state.config.generation.max_tool_calls_per_message,
         &initial_message_content,
     );
+    let mut offered_client_tools = offered_client_tools;
+    crate::services::client_tools::link_part_tools(&mut offered_client_tools)
+        .map_err(|error| eyre!(error))?;
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
@@ -7070,16 +7525,23 @@ async fn stream_generate_chat_completion<'a>(
             }
         }
     }
-    let (mut unfinished_tool_calls, approved_task_call_ids, context_approved_calls): (
+    let (
+        mut unfinished_tool_calls,
+        approved_task_call_ids,
+        context_approved_calls,
+        mut ask_first_new_call,
+    ): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
         HashMap<String, Uuid>,
+        bool,
     ) = resume.map_or_else(
         || {
             (
                 std::collections::VecDeque::new(),
                 HashSet::new(),
                 HashMap::new(),
+                false,
             )
         },
         |resume| {
@@ -7087,9 +7549,14 @@ async fn stream_generate_chat_completion<'a>(
                 resume.initial_unfinished_tool_calls.into(),
                 resume.approved_task_call_ids,
                 resume.context_approved_calls,
+                resume.ask_first_new_call,
             )
         },
     );
+    let seeded_call_ids: HashSet<String> = unfinished_tool_calls
+        .iter()
+        .map(|call| call.call_id.clone())
+        .collect();
     let mut current_turn = consumption.model_turns;
     let mut current_tool_call_count = consumption.tool_calls;
     // Charged per class and never summed: a run that has spent its server
@@ -7154,13 +7621,12 @@ async fn stream_generate_chat_completion<'a>(
         .unwrap_or_default();
     let mut hallucination_suppression =
         HallucinationSuppressionState::new(hallucination_suppression_config);
+    // Keyed by the name the model calls, qualified where two servers or a
+    // built-in share a bare name; the call reaches its server by `tool.name`.
     let available_mcp_tools_by_name: HashMap<
         String,
         crate::services::mcp_session_manager::ManagedTool,
-    > = available_mcp_tools
-        .into_iter()
-        .map(|tool| (tool.tool.name.to_string(), tool))
-        .collect();
+    > = crate::services::mcp_tool_names::by_model_name(available_mcp_tools);
 
     // Track cumulative usage statistics across all turns
     let mut total_prompt_tokens = 0u32;
@@ -7301,12 +7767,10 @@ async fn stream_generate_chat_completion<'a>(
     macro_rules! persist_correction {
         () => {
             if let Some(correction) = submission_correction.as_ref() {
-                let name = correction
-                    .tool
-                    .rsplit('/')
-                    .next()
-                    .expect("qualified submission name");
-                submission_attempts.insert(name.to_owned(), correction.outcome.attempts_used);
+                submission_attempts.insert(
+                    correction.model_name().to_owned(),
+                    correction.outcome.attempts_used,
+                );
             }
             if submission_correction.is_some()
                 && let Some(task) = streaming_task
@@ -7383,11 +7847,13 @@ async fn stream_generate_chat_completion<'a>(
         let batch_call_count = unfinished_tool_calls.len();
         // Reserve semantic attempts before either ordinary budgets or task approval can park a batch.
         for call in &unfinished_tool_calls {
-            if allowed_tool_names.contains(&call.fn_name)
-                && let Some(tool) = offered_client_tools
-                    .get(&call.fn_name)
-                    .filter(|tool| tool.submission.is_some())
-            {
+            let Some(tool) = offered_client_tools
+                .get(&call.fn_name)
+                .filter(|_| allowed_tool_names.contains(&call.fn_name))
+            else {
+                continue;
+            };
+            if tool.submission.is_some() {
                 let correction = submission_correction.get_or_insert_with(|| {
                     crate::services::submission_correction::SubmissionCorrection::new(tool)
                 });
@@ -7396,6 +7862,29 @@ async fn stream_generate_chat_completion<'a>(
                 if charge.submission_attempt.is_none() {
                     let attempt = correction.charge_submission();
                     charge.submission_attempt = Some(attempt);
+                }
+            } else if let Some(part) = &tool.part
+                && let Some(owner) = offered_client_tools.values().find(|owner| {
+                    owner.submission.is_some() && owner.config.qualified_name() == part.submission
+                })
+                && !tool_charges
+                    .get(&call.call_id)
+                    .is_some_and(|charge| charge.part_call.is_some())
+            {
+                let correction = submission_correction.get_or_insert_with(|| {
+                    crate::services::submission_correction::SubmissionCorrection::new(owner)
+                });
+                // A part of another submission than the open one is an
+                // ordinary call.
+                if correction.is_part(tool) {
+                    let (number, try_number) = correction.charge_part(
+                        &tool.config.qualified_name(),
+                        part.key_of(&call.fn_arguments),
+                        current_turn,
+                    );
+                    let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                    charge.part_call = Some(number);
+                    charge.part_try = Some(try_number);
                 }
             }
         }
@@ -7516,6 +8005,11 @@ async fn stream_generate_chat_completion<'a>(
             .await;
             persist_operation_turn!();
             let unfinished_tool_call = unfinished_tool_calls.pop_front().expect("nonempty calls");
+            let ignore_standing_allow =
+                ask_first_new_call && !seeded_call_ids.contains(&unfinished_tool_call.call_id);
+            if ignore_standing_allow {
+                ask_first_new_call = false;
+            }
             let batch_position = {
                 let position = batch_position;
                 batch_position += 1;
@@ -7774,40 +8268,29 @@ async fn stream_generate_chat_completion<'a>(
                             managed.approval_argument.as_deref(),
                         )
                         .await;
-                        let display = crate::services::tool_display::mcp_tool_call_display_from(
-                            &mcp.config,
-                            &managed.server_id,
-                            &managed.tool,
-                            managed.destructive_hint_source,
-                            &unfinished_tool_call.fn_arguments,
-                            managed.approval_argument.as_deref(),
-                            &label_mapping.mapping,
-                            &tool_result_context,
-                        );
+                        let display = crate::models::message::ToolDisplayMetadata {
+                            tool_name: crate::services::tool_display::own_tool_name(managed),
+                            ..crate::services::tool_display::mcp_tool_call_display_from(
+                                &mcp.config,
+                                &managed.server_id,
+                                &managed.tool,
+                                managed.destructive_hint_source,
+                                &unfinished_tool_call.fn_arguments,
+                                managed.approval_argument.as_deref(),
+                                &label_mapping.mapping,
+                                &tool_result_context,
+                            )
+                        };
                         (Some(display), label_mapping.unlabelled)
                     }
                     None => (None, None),
                 };
             // Emit event for tool call proposed
             {
-                let unfinished_tool_call = unfinished_tool_call.clone();
                 let tool_call_start_time = now_timestamp();
                 tool_call_started_at
                     .insert(unfinished_tool_call.call_id.clone(), tool_call_start_time);
-                if was_preparing {
-                    send_tool_generation_update::<GenerationStreamingMessage>(
-                        assistant_message_id,
-                        tool_index,
-                        &unfinished_tool_call,
-                        mcp_display.as_ref().map(tool_row_display),
-                        ToolCallStatus::InProgress,
-                        None,
-                        None,
-                        streaming_task,
-                        &tx,
-                    )
-                    .await?;
-                } else {
+                if !was_preparing {
                     let proposed_call = MessageSubmitStreamingResponseToolCallProposed {
                         message_id: assistant_message_id,
                         content_index: tool_index,
@@ -7822,9 +8305,9 @@ async fn stream_generate_chat_completion<'a>(
                             StreamingEvent::ToolCallProposed {
                                 message_id: assistant_message_id,
                                 content_index: tool_index,
-                                tool_call_id: unfinished_tool_call.call_id,
-                                tool_name: unfinished_tool_call.fn_name,
-                                input: Some(unfinished_tool_call.fn_arguments),
+                                tool_call_id: unfinished_tool_call.call_id.clone(),
+                                tool_name: unfinished_tool_call.fn_name.clone(),
+                                input: Some(unfinished_tool_call.fn_arguments.clone()),
                             },
                             "broadcast proposed tool call",
                         )
@@ -7832,6 +8315,26 @@ async fn stream_generate_chat_completion<'a>(
                     }
                     let message: GenerationStreamingMessage = proposed_call.into();
                     send_generation_event(&message, tx.clone()).await?;
+                }
+                // A proposed call shows the name it was called by until its
+                // display comes, so a call by a qualified name gets it at once.
+                if was_preparing
+                    || mcp_display
+                        .as_ref()
+                        .is_some_and(|display| display.tool_name.is_some())
+                {
+                    send_tool_generation_update::<GenerationStreamingMessage>(
+                        assistant_message_id,
+                        tool_index,
+                        &unfinished_tool_call,
+                        mcp_display.as_ref().map(tool_row_display),
+                        ToolCallStatus::InProgress,
+                        None,
+                        None,
+                        streaming_task,
+                        &tx,
+                    )
+                    .await?;
                 }
             }
 
@@ -8718,6 +9221,14 @@ async fn stream_generate_chat_completion<'a>(
                         let scope_key = policy.grant.as_ref().and_then(|grant| {
                             grant.approval_scope.as_ref().map(|key| (grant, key))
                         });
+                        let decision = match decision {
+                            Some(
+                                crate::models::user_preference::ClientToolDecision::AlwaysAllow,
+                            ) if ignore_standing_allow => {
+                                Some(crate::models::user_preference::ClientToolDecision::Ask)
+                            }
+                            decision => decision,
+                        };
                         let gate = gate_client_tool_call(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
@@ -8857,7 +9368,9 @@ async fn stream_generate_chat_completion<'a>(
                     )
                     .await;
                     if tool_charges.get(&call_id).is_some_and(|charge| {
-                        charge.submission_attempt.is_some() || charge.recovery_read
+                        charge.submission_attempt.is_some()
+                            || charge.recovery_read
+                            || charge.part_call.is_some()
                     }) && let Some(correction) = submission_correction.as_mut()
                     {
                         correction.stop(crate::services::submission_correction::SubmissionReason::CapabilityUnavailable);
@@ -8882,6 +9395,13 @@ async fn stream_generate_chat_completion<'a>(
                     .get(&call_id)
                     .and_then(|charge| charge.submission_attempt)
                     .unwrap_or(0);
+                // Charged only as a part of the open submission.
+                let part = tool_policy.and_then(|policy| policy.part.as_ref()).zip(
+                    tool_charges
+                        .get(&call_id)
+                        .and_then(|charge| charge.part_call.zip(charge.part_try)),
+                );
+                let part_key = part.and_then(|(part, _)| part.key_of(&tool_input));
                 // A live granted call never parks durably and never waits for
                 // the inbox: it is live on the grant's executor or it fails. A
                 // durable one parks at once for the grant's binding.
@@ -8935,6 +9455,18 @@ async fn stream_generate_chat_completion<'a>(
                         ], None))
                     } else { submission.validate(&tool_input) }
                 });
+                if let Some((part, (number, try_number))) = part
+                    && let Some(correction) = submission_correction.as_ref()
+                {
+                    let key_path = if part_key.is_some() {
+                        part.key_pointer()
+                    } else {
+                        ""
+                    };
+                    validation_failure = correction
+                        .part_refusal(number, try_number, key_path)
+                        .or_else(|| part.arguments.validate(&tool_input));
+                }
                 let durable_request = if app_state.config.client_tools.durable_operations_enabled {
                     tool_policy.and_then(|policy| {
                         let kind = operation_kind?;
@@ -9012,7 +9544,8 @@ async fn stream_generate_chat_completion<'a>(
                 if let Some(request) = &durable_request {
                     task.register_client_operation(request.clone()).await?;
                 }
-                let live_submission = submission.is_some()
+                // Parts go where the submission that finishes their draft goes.
+                let live_submission = (submission.is_some() || part.is_some())
                     && durable_request.is_none()
                     && task.uses_shared_client_transport();
                 if validation_failure.is_none()
@@ -9064,6 +9597,7 @@ async fn stream_generate_chat_completion<'a>(
                             && validation_failure.is_none()
                             && durable_request.is_none()
                             && submission.is_none()
+                            && part.is_none()
                             && !policy.inbox_only
                     })
                     .and_then(|policy| policy.executor.as_ref())
@@ -9508,20 +10042,36 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 if let Some(submission) = submission {
                     submission.annotate(&mut output_value, &outcome, attempt);
-                    response_text = output_value.to_string();
                     if let Some(correction) = submission_correction.as_mut() {
                         correction.record(&outcome);
                         output_value["submission_outcome"] =
                             serde_json::to_value(&correction.outcome)?;
-                        if !correction.pending() && correction.outcome.status != crate::services::submission_correction::SubmissionStatus::Accepted {
-                            output_value["submission"] = json!({"status":"failed", "attempts_remaining":0});
-                        }
-                        response_text = output_value.to_string();
                     }
-                    if submission_correction
+                }
+                if part.is_some()
+                    && let Some(correction) = submission_correction.as_mut()
+                {
+                    correction.record_part(&outcome);
+                    output_value["part"] = correction.part_budget(
+                        &tool_policy.expect("offered part").config.qualified_name(),
+                        part_key.as_deref(),
+                    );
+                }
+                if submission.is_some() || part.is_some() {
+                    if let Some(correction) = submission_correction
                         .as_ref()
-                        .is_some_and(|correction| !correction.pending())
+                        .filter(|correction| !correction.pending())
                     {
+                        output_value["submission_outcome"] =
+                            serde_json::to_value(&correction.outcome)?;
+                        // A part call is no attempt, so only a submission is marked failed.
+                        if submission.is_some()
+                            && correction.outcome.status
+                                != crate::services::submission_correction::SubmissionStatus::Accepted
+                        {
+                            output_value["submission"] =
+                                json!({"status":"failed", "attempts_remaining":0});
+                        }
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
                             total_prompt_tokens,
@@ -9536,6 +10086,7 @@ async fn stream_generate_chat_completion<'a>(
                             non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
                     }
+                    response_text = output_value.to_string();
                 }
                 persist_correction!();
                 let tool_error =
@@ -9653,19 +10204,12 @@ async fn stream_generate_chat_completion<'a>(
                     return Err(error);
                 }
             };
-            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall {
-                server_id: managed_tool.server_id.clone(),
-                tool_call: unfinished_tool_call.clone(),
-                tool: managed_tool.tool.clone(),
-                // A call reaches this dispatch only when the gate let it
-                // through without asking, so no user decision exists for it.
-                approval_argument: managed_tool.approval_argument.clone().map(|name| {
-                    crate::services::mcp_manager::ApprovalArgument {
-                        name,
-                        user_approved: false,
-                    }
-                }),
-            };
+            // A call reaches this dispatch only when the gate let it through
+            // without asking, so no user decision exists for it.
+            let managed_tool_call = crate::services::mcp_manager::ManagedToolCall::ungated(
+                &managed_tool,
+                unfinished_tool_call.clone(),
+            );
             let row_display = tool_row_display(&display);
 
             // MCP approval is a durable stop, not an in-memory park. Persist
@@ -9687,6 +10231,9 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(_) => None,
             };
+            let user_decision = user_decision.filter(|decision| {
+                !(ignore_standing_allow && *decision == UserToolDecision::AlwaysAllow)
+            });
             let gate = gate_mcp_tool_call(
                 approval_config,
                 &managed_tool_call.server_id,
@@ -10125,6 +10672,7 @@ async fn stream_generate_chat_completion<'a>(
                                 &file_content_parts,
                                 output_value.as_ref(),
                             ),
+                            tool_call_result.meta.as_ref(),
                         )
                         .await;
 
@@ -10600,6 +11148,11 @@ async fn stream_generate_chat_completion<'a>(
                 )
                 .await?;
             }
+            let mut approval_request = approval_request;
+            crate::services::approval_change_requests::mark_replacement(
+                &current_message_content,
+                &mut approval_request,
+            );
             current_message_content.push(ContentPart::ToolApprovalRequest(approval_request));
         }
 
@@ -11118,6 +11671,9 @@ async fn stream_generate_chat_completion<'a>(
             let next_result = if let Some(task) = streaming_task {
                 tokio::select! {
                     _ = task.wait_for_abort() => {
+                        if let Some(split) = reply_split.as_mut() {
+                            store_reply_pieces(split.finish(), &mut current_message_content);
+                        }
                         let aborted_content = current_message_content.clone();
 
                         if let (Some(client), Some(turn_start)) = (&tracing_client, turn_start_time) {
@@ -11309,6 +11865,9 @@ async fn stream_generate_chat_completion<'a>(
 
                             let message: GenerationStreamingMessage = error_event.into();
                             send_generation_event(&message, tx.clone()).await?;
+                            if let Some(split) = reply_split.as_mut() {
+                                store_reply_pieces(split.finish(), &mut current_message_content);
+                            }
                             let generation_metadata = build_generation_metadata(
                                 total_prompt_tokens,
                                 total_completion_tokens,
@@ -11326,32 +11885,22 @@ async fn stream_generate_chat_completion<'a>(
                                 generation_metadata,
                             ));
                         }
-                        if let Some(speech) = &mut speech {
-                            speech.push(&content);
-                        }
                         current_turn_streamed_text.push_str(&content);
-                        let content_index =
-                            append_text_delta_part(&mut current_message_content, content.clone());
-                        let delta = MessageSubmitStreamingResponseMessageTextDelta {
-                            message_id: assistant_message_id,
-                            content_index,
-                            new_text: content.clone(),
+                        let pieces = match reply_split.as_mut() {
+                            Some(split) => split.push(&content),
+                            None => {
+                                vec![crate::services::speech::reply_split::Piece::Plain(content)]
+                            }
                         };
-                        // Forward to streaming_task if present
-                        if let Some(task) = streaming_task {
-                            send_background_event(
-                                task,
-                                StreamingEvent::TextDelta {
-                                    message_id: assistant_message_id,
-                                    content_index,
-                                    new_text: content,
-                                },
-                                "broadcast text delta",
-                            )
-                            .await;
-                        }
-                        let message: GenerationStreamingMessage = delta.into();
-                        send_generation_event(&message, tx.clone()).await?;
+                        emit_reply_pieces(
+                            pieces,
+                            &mut current_message_content,
+                            &mut speech,
+                            assistant_message_id,
+                            streaming_task,
+                            &tx,
+                        )
+                        .await?;
                     }
                     ChatStreamEvent::ReasoningChunk(StreamChunk { content }) => {
                         captured_reasoning_summary.push_str(&content);
@@ -11421,6 +11970,14 @@ async fn stream_generate_chat_completion<'a>(
                                     .into();
                                 send_generation_event(&message, tx.clone()).await?;
                             }
+                            let preparing_display = available_mcp_tools_by_name
+                                .get(chunk.tool_call.fn_name.as_str())
+                                .and_then(|tool| {
+                                    crate::services::tool_display::preparing_call_display(
+                                        &mcp.config,
+                                        tool,
+                                    )
+                                });
                             let preview_call = genai::chat::ToolCall {
                                 fn_arguments: progress.preview,
                                 ..chunk.tool_call
@@ -11429,7 +11986,7 @@ async fn stream_generate_chat_completion<'a>(
                                 assistant_message_id,
                                 progress.index,
                                 &preview_call,
-                                None,
+                                preparing_display,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
                                 None,
@@ -11525,6 +12082,9 @@ async fn stream_generate_chat_completion<'a>(
 
                     let message: GenerationStreamingMessage = error_event.into();
                     send_generation_event(&message, tx.clone()).await?;
+                    if let Some(split) = reply_split.as_mut() {
+                        store_reply_pieces(split.finish(), &mut current_message_content);
+                    }
                     let generation_metadata = build_generation_metadata(
                         total_prompt_tokens,
                         total_completion_tokens,
@@ -11621,14 +12181,37 @@ async fn stream_generate_chat_completion<'a>(
                 send_generation_event(&message, tx.clone()).await?;
             }
 
+            if let Some(split) = reply_split.as_mut() {
+                let pieces = split.finish();
+                emit_reply_pieces(
+                    pieces,
+                    &mut current_message_content,
+                    &mut speech,
+                    assistant_message_id,
+                    streaming_task,
+                    &tx,
+                )
+                .await?;
+                if let Some(fallback) = split.take_fallback() {
+                    crate::metrics::report_reply_split_fallback(fallback.label());
+                }
+            }
+
             #[allow(clippy::collapsible_match)]
             #[allow(clippy::single_match)]
             if let Some(captured_texts) = stream_end.captured_texts() {
                 if current_turn_streamed_text.is_empty() {
                     for captured_text in captured_texts {
-                        current_message_content.push(ContentPart::Text(ContentPartText {
-                            text: captured_text.into(),
-                        }));
+                        if split_reply {
+                            let mut split = crate::services::speech::reply_split::ReplySplit::new();
+                            let mut pieces = split.push(captured_text);
+                            pieces.extend(split.finish());
+                            store_reply_pieces(pieces, &mut current_message_content);
+                        } else {
+                            current_message_content.push(ContentPart::Text(ContentPartText {
+                                text: captured_text.into(),
+                            }));
+                        }
                     }
                 }
             } else if !current_turn_streamed_text.is_empty() {
@@ -11767,11 +12350,13 @@ async fn stream_generate_chat_completion<'a>(
                 let progresses = calls.iter().any(|call| {
                     allowed_tool_names.contains(&call.fn_name)
                         && offered_client_tools.get(&call.fn_name).is_some_and(|tool| {
-                            tool.submission.is_some() || correction.is_declared_read(tool)
+                            tool.submission.is_some()
+                                || correction.is_part(tool)
+                                || correction.is_declared_read(tool)
                         })
                 });
                 if !progresses {
-                    let retry = correction.no_progress(current_turn);
+                    let retry = correction.no_progress(current_turn, calls.is_empty());
                     if !retry {
                         break 'loop_call_turns Ok((
                             current_message_content,
@@ -12087,6 +12672,7 @@ async fn stream_generate_chat_completion<'a>(
     persist_correction!();
     let mut completion = completion;
     if let Ok((content, _)) = &mut completion {
+        settle_spoken_parts(content);
         let upgraded = label_upgrades.finish(content);
         announce_tool_rows(
             content,
@@ -12106,7 +12692,13 @@ async fn stream_generate_chat_completion<'a>(
                 .finish(app_state, policy, subject, chat_id, assistant_message_id)
                 .await
             {
-                Ok(Some(pointer)) => content.push(pointer),
+                Ok(Some(pointer)) => {
+                    // A stop on an approval stays the last part: that is what
+                    // marks the turn as waiting.
+                    let at = content.len()
+                        - usize::from(crate::models::message::is_durable_stop(content));
+                    content.insert(at, pointer);
+                }
                 Ok(None) => {}
                 Err(error) => {
                     tracing::warn!(%error, "Speech synthesis failed; keeping text response");
@@ -12122,10 +12714,13 @@ async fn stream_generate_chat_completion<'a>(
         }
     }
     completion.map(|(content, mut metadata)| {
-        if let Some(correction) = submission_correction {
+        if let Some(outcome) = submission_correction
+            .as_ref()
+            .and_then(|correction| correction.shown_outcome())
+        {
             metadata
                 .get_or_insert_with(GenerationMetadata::default)
-                .submission_outcome = Some(correction.outcome);
+                .submission_outcome = Some(outcome.clone());
         }
         (without_preparing_tools(&content), metadata)
     })
@@ -12311,13 +12906,19 @@ pub async fn generate_chat_summary(
                 .chat_providers
                 .as_ref()
                 .map(|chat_providers| &chat_providers.summary),
-            Some(&me_user.preferred_language),
-            me_user.preference_nickname.as_deref(),
-            me_user.preference_job_title.as_deref(),
-            me_user.preference_assistant_custom_instructions.as_deref(),
-            me_user
-                .preference_assistant_additional_information
-                .as_deref(),
+            &SystemPromptContext {
+                has_assistant: chat.assistant_id.is_some(),
+                preferred_language: Some(&me_user.preferred_language),
+                user_preference_nickname: me_user.preference_nickname.as_deref(),
+                user_preference_job_title: me_user.preference_job_title.as_deref(),
+                user_preference_assistant_custom_instructions: me_user
+                    .preference_assistant_custom_instructions
+                    .as_deref(),
+                user_preference_assistant_additional_information: me_user
+                    .preference_assistant_additional_information
+                    .as_deref(),
+                ..Default::default()
+            },
         )
         .await?;
 
@@ -12563,7 +13164,8 @@ fn summary_user_message_text_from_generation_input(
                     let text = text.trim();
                     (!text.is_empty()).then_some(text)
                 }
-                ContentPart::Reasoning(_)
+                ContentPart::Spoken(_)
+                | ContentPart::Reasoning(_)
                 | ContentPart::ToolUse(_)
                 | ContentPart::ClientToolPending(_)
                 | ContentPart::ToolApprovalRequest(_)
@@ -12817,10 +13419,11 @@ pub(crate) struct GenerationMcpToolSet {
     /// The tools offered to the model, with the assistant, facet, policy and
     /// per-user denial filters applied.
     pub tools: Vec<crate::services::mcp_session_manager::ManagedTool>,
-    /// Tool names MCP claimed before the per-user denial. Synthetic and
-    /// client tools yield to MCP on a name clash, so a user denying an MCP
-    /// tool must not promote the same-named client tool it was shadowing —
-    /// the collision checks read this snapshot, not `tools`.
+    /// The names MCP tools are offered under (see `mcp_tool_names`), taken
+    /// before the per-user denial. Client tools yield to MCP on a name clash,
+    /// so a user denying an MCP tool must not promote the same-named client
+    /// tool it was shadowing — the collision checks read this snapshot, not
+    /// `tools`.
     pub mcp_claimed_names: HashSet<String>,
     /// `(server_id, tool_name)` pairs the user has denied for themselves.
     pub denied: HashSet<(String, String)>,
@@ -12939,11 +13542,24 @@ async fn resolve_generation_mcp_tools(
         filter_mcp_tools_by_server_ids(filtered_mcp_tools, inputs.parent_mcp_server_ids);
     let generation_mcp_tools =
         filter_mcp_tools_by_allowlist(filtered_mcp_tools, facet_allowlist.as_deref());
-    let generation_mcp_tools =
+    let mut generation_mcp_tools =
         filter_mcp_tools_by_allowlist(generation_mcp_tools, inputs.parent_mcp_allowlist);
+    // Named on the same snapshot as `mcp_claimed_names`, before the user's own
+    // switches: turning one of two same-named tools off must not hand the
+    // other its bare name while a client tool already took it.
+    crate::services::mcp_tool_names::warn_about(
+        &crate::services::mcp_tool_names::assign_model_names(
+            &mut generation_mcp_tools,
+            &crate::services::mcp_tool_names::offered_builtin_tool_names(
+                &app_state.config,
+                &mcp.config,
+                crate::services::scheduled_items::teams_channel_available(app_state),
+            ),
+        ),
+    );
     let mcp_claimed_names: HashSet<String> = generation_mcp_tools
         .iter()
-        .map(|tool| tool.tool.name.to_string())
+        .map(|tool| tool.model_name().to_string())
         .collect();
 
     // Read even when discovery came back empty: a continuation must still
@@ -13182,57 +13798,28 @@ fn apply_assistant_server_filter(
     }
 }
 
-/// How a reserved `erato/<name>` tool came to be selected. The distinction
-/// only matters for diagnostics: an operator who spelled the tool out exactly
-/// is told loudly when an MCP tool takes the name from it, while one who
-/// selected it through a wildcard gets a plain warning.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReservedSelection {
-    /// Not selected; the tool is not offered.
-    No,
-    /// Selected through a wildcard (`*`, `erato`, or `erato/*`).
-    Pattern,
-    /// Selected by its exact `erato/<name>` pattern.
-    Exact,
-}
-
-/// Whether the effective client-tool allowlist selects a reserved built-in.
+/// Whether the effective client-tool allowlist selects a reserved built-in,
+/// by its exact `erato/<name>` pattern or through `*`, `erato` or `erato/*`.
 ///
 /// Reserved tools ride the client-tool collector rather than the MCP one on
 /// purpose: `build_mcp_tool_allowlist` treats `None` as "everything allowed",
 /// so a deployment with no MCP allowlisting would offer every built-in by
 /// default. The client-tool allowlist is opt-in — empty selects nothing.
-pub(crate) fn reserved_tool_selected(
-    bare_name: &str,
-    client_tool_allowlist: &[String],
-) -> ReservedSelection {
-    if client_tool_allowlist.is_empty() {
-        return ReservedSelection::No;
-    }
-    let exact = format!(
-        "{}/{}",
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name
-    );
-    if client_tool_allowlist.contains(&exact) {
-        return ReservedSelection::Exact;
-    }
-    if is_qualified_tool_allowed(
-        erato_config::config::RESERVED_TOOL_NAMESPACE,
-        bare_name,
-        client_tool_allowlist,
-    ) {
-        return ReservedSelection::Pattern;
-    }
-    ReservedSelection::No
+pub(crate) fn reserved_tool_selected(bare_name: &str, client_tool_allowlist: &[String]) -> bool {
+    !client_tool_allowlist.is_empty()
+        && is_qualified_tool_allowed(
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name,
+            client_tool_allowlist,
+        )
 }
 
 /// Decide whether a reserved built-in tool may be offered on this turn.
 ///
 /// One place holds all four rules so the tool that fills this slot does not
-/// have to re-derive them: the feature gate, allowlist selection, the
-/// MCP-wins precedence shared with the other synthetic tools, and suppression
-/// inside a delegated run (a child must not spawn its own children here).
+/// have to re-derive them: the feature gate, allowlist selection, never
+/// offering a name an MCP tool is offered under, and suppression inside a
+/// delegated run (a child must not spawn its own children here).
 pub(crate) fn synthetic_tool_offer_slot(
     bare_name: &str,
     feature_enabled: bool,
@@ -13243,27 +13830,18 @@ pub(crate) fn synthetic_tool_offer_slot(
     if !feature_enabled || is_delegated_run {
         return false;
     }
-    let selection = reserved_tool_selected(bare_name, client_tool_allowlist);
-    if selection == ReservedSelection::No {
+    if !reserved_tool_selected(bare_name, client_tool_allowlist) {
         return false;
     }
-    if mcp_tools.iter().any(|tool| tool.tool.name == bare_name) {
-        // Same precedence as the other synthetic tools: a real MCP tool that
-        // claims the name wins, and the built-in stands down.
-        if selection == ReservedSelection::Exact {
-            tracing::error!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name, but an \
-                 allowlist selects it explicitly — rename the MCP tool or drop the pattern.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        } else {
-            tracing::warn!(
-                "Not offering reserved tool '{}/{}': an MCP tool already uses the name.",
-                erato_config::config::RESERVED_TOOL_NAMESPACE,
-                bare_name
-            );
-        }
+    // While the built-in can be offered, an MCP tool of its name is offered
+    // under a qualified name (see `mcp_tool_names`); this only keeps a
+    // duplicate name from being offered.
+    if mcp_tools.iter().any(|tool| tool.model_name() == bare_name) {
+        tracing::warn!(
+            "Not offering reserved tool '{}/{}': an MCP tool is offered under that name.",
+            erato_config::config::RESERVED_TOOL_NAMESPACE,
+            bare_name
+        );
         return false;
     }
     true
@@ -13597,13 +14175,12 @@ fn merge_action_facet_into_mcp_allowlist(
 #[cfg(test)]
 mod tests {
     use super::{
-        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, ReservedSelection,
-        StreamRouteError, ToolAllowedBy, ToolApprovalDecision, ToolCallGate,
-        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
-        detached_generation_event_sink, effective_client_tool_allowlist,
-        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_allowlist,
-        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
-        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, StreamRouteError,
+        ToolAllowedBy, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
+        derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
+        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
+        filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
+        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -13626,6 +14203,7 @@ mod tests {
             server_id: server_id.to_string(),
             tool,
             destructive_hint_source: Default::default(),
+            offered_as: None,
         }
     }
 
@@ -13788,41 +14366,31 @@ mod tests {
     #[test]
     fn reserved_tool_selected_by_star_namespace_and_exact() {
         let exact = vec!["erato/delegate_task".to_string()];
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &exact),
-            ReservedSelection::Exact
-        );
+        assert!(reserved_tool_selected("delegate_task", &exact));
 
         for pattern in ["*", "erato", "erato/*"] {
-            assert_eq!(
+            assert!(
                 reserved_tool_selected("delegate_task", &[pattern.to_string()]),
-                ReservedSelection::Pattern,
                 "pattern {pattern} should select the reserved tool"
             );
         }
 
         // A different reserved name is not selected by an exact pattern for
         // another one.
-        assert_eq!(
-            reserved_tool_selected("collect_tasks", &exact),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("collect_tasks", &exact));
 
         // Nor is an unrelated namespace a selector.
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &["outlook/*".to_string()]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected(
+            "delegate_task",
+            &["outlook/*".to_string()]
+        ));
     }
 
     #[test]
     fn reserved_tool_not_selected_by_empty_allowlist() {
         // The client-tool collector is opt-in: an empty allowlist selects
         // nothing, unlike the MCP allowlist whose `None` means "everything".
-        assert_eq!(
-            reserved_tool_selected("delegate_task", &[]),
-            ReservedSelection::No
-        );
+        assert!(!reserved_tool_selected("delegate_task", &[]));
     }
 
     #[test]
@@ -14088,7 +14656,10 @@ mod tests {
 
         let plain = Tool::new("publish", "publish", Map::new());
         match gate_call(&restrictive, "server", &plain, &call("publish"), None) {
-            ToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.tool_name, "publish");
+                assert_eq!(request.approvals[0].called_as, None);
+            }
             other => panic!("expected an approval request, got {other:?}"),
         }
 
@@ -14107,6 +14678,84 @@ mod tests {
         assert!(matches!(
             gate_call(&restrictive, "server", &tool, &call(&long_name), None),
             ToolCallGate::Refuse(_)
+        ));
+    }
+
+    /// A tool the model called by its qualified name parks under the server's
+    /// own name: the continuation finds it, and stores a standing decision
+    /// for it, by server id and that name.
+    #[test]
+    fn a_qualified_call_parks_under_the_servers_own_tool_name() {
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let tool = Tool::new("publish", "publish", Map::new());
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "wiki_eu__publish".to_string(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        match gate_call(&restrictive, "wiki_eu", &tool, &call, None) {
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.tool_name, "publish");
+                assert_eq!(request.mcp_server_id, "wiki_eu");
+                assert_eq!(request.approvals[0].tool_name, "publish");
+                assert_eq!(request.approvals[0].tool_call_id, "call-1");
+                // The continuation stores and replays the call under this.
+                assert_eq!(
+                    request.approvals[0].called_as.as_deref(),
+                    Some("wiki_eu__publish")
+                );
+                assert_eq!(request.approvals[0].called_name(), "wiki_eu__publish");
+            }
+            other => panic!("expected an approval request, got {other:?}"),
+        }
+        match gate_call(
+            &restrictive,
+            "wiki_eu",
+            &tool,
+            &call,
+            Some(UserToolDecision::Denied),
+        ) {
+            ToolCallGate::Refuse(message) => assert!(message.contains("wiki_eu__publish")),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    /// A built-in stands down only for an MCP tool that is offered under its
+    /// name; one offered under a qualified name leaves the built-in its slot.
+    #[test]
+    fn a_qualified_mcp_tool_does_not_take_a_builtins_slot() {
+        let mut tools = vec![managed_tool(
+            "planner",
+            Tool::new(
+                erato_config::config::DELEGATE_TASK_TOOL_NAME,
+                "plan",
+                Map::new(),
+            ),
+        )];
+        let allowlist = vec!["*".to_string()];
+        assert!(!super::synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            true,
+            &allowlist,
+            &tools,
+            false,
+        ));
+        crate::services::mcp_tool_names::assign_model_names(
+            &mut tools,
+            &[erato_config::config::DELEGATE_TASK_TOOL_NAME],
+        );
+        assert_eq!(tools[0].model_name(), "planner__delegate_task");
+        assert!(super::synthetic_tool_offer_slot(
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            true,
+            &allowlist,
+            &tools,
+            false,
         ));
     }
 
@@ -14202,9 +14851,11 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "publish".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child: None,
+            replaces_approval_id: None,
         }
     }
 
@@ -14213,6 +14864,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: Some(decision),
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -14221,6 +14873,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 
@@ -14233,9 +14886,12 @@ mod tests {
                     approval_id: approval_id.to_string(),
                     decision,
                     scope_position: None,
+                    change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -14244,6 +14900,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         }
     }
 
@@ -14565,8 +15222,10 @@ mod tests {
                 description: Some("Friday, 13 Nov, 10:00".into()),
                 description_truncated: false,
                 server_name: None,
+                tool_name: None,
                 label: None,
                 read_only: false,
+                closed_world: false,
             })
         };
         let asks = |config: &McpToolApprovalConfig, name: &str| {
@@ -14824,11 +15483,14 @@ mod tests {
             approval_id: approval_id.to_string(),
             decision: ToolApprovalDecision::Approve,
             scope_position: None,
+            change_request: None,
+            voice_receipt: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
             message_id: Uuid::new_v4(),
             decisions,
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
@@ -14837,6 +15499,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         };
         assert!(
             super::resolve_submitted_decisions(
@@ -14940,6 +15603,7 @@ mod tests {
                 child_chat_id: None,
                 covers: None,
                 scope_approval_id: None,
+                voice: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -14991,6 +15655,7 @@ mod tests {
                 child_chat_id: None,
                 covers: None,
                 scope_approval_id: None,
+                voice: None,
             })
         };
         let own_ran = ContentPart::ToolUse(ToolUse {
@@ -15056,6 +15721,7 @@ mod tests {
                 child_chat_id: None,
                 covers: scope_approval_id.map(|_| ApprovalScopeCovers::Document),
                 scope_approval_id,
+                voice: None,
             })
         };
         let mut ask = gated_request("read", "2026-10-30T10:00:00Z");
@@ -15201,9 +15867,11 @@ mod tests {
             approval_id: approval_id.to_string(),
             tool_call_id: approval_id.to_string(),
             tool_name: "delegate_task".to_string(),
+            called_as: None,
             display: None,
             input: json!({}),
             child,
+            replaces_approval_id: None,
         };
         let open = vec![
             item("own", None),
@@ -15506,6 +16174,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -15514,6 +16183,7 @@ mod tests {
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
+            voice_records: Default::default(),
         };
         assert!(matches!(
             resolve_submitted_decisions(&empty, &open),
@@ -15543,6 +16213,62 @@ mod tests {
         assert!(ToolApprovalDecision::ApproveAlways.is_approval());
         assert!(!ToolApprovalDecision::Reject.is_approval());
         assert!(!ToolApprovalDecision::RejectAlways.is_approval());
+        assert!(!ToolApprovalDecision::RequestChange.is_approval());
+    }
+
+    #[test]
+    fn a_change_request_names_the_turns_own_call_and_comes_alone() {
+        let mut stop = gated_request("own", "2026-10-20T10:00:01Z");
+        let open = [open_approval("own"), child_item("task-a")];
+        let item = |approval_id: &str, decision| ApprovalDecisionItem {
+            approval_id: approval_id.to_string(),
+            decision,
+            scope_position: None,
+            change_request: Some("nimm den 22.".to_string()),
+            voice_receipt: None,
+        };
+        let refused = |stop: &super::ContentPartToolApprovalRequest, decisions| {
+            let mut request = super::ContinueStreamRequest::with_decisions(Uuid::nil(), Vec::new());
+            request.decisions = decisions;
+            super::change_request_refused(stop, &open, &request, 1000)
+        };
+        let mut approve_child = item("task-a", ToolApprovalDecision::Approve);
+        approve_child.change_request = None;
+        assert_eq!(
+            refused(
+                &stop,
+                vec![
+                    item("own", ToolApprovalDecision::RequestChange),
+                    approve_child
+                ]
+            ),
+            None
+        );
+        assert!(
+            refused(
+                &stop,
+                vec![item("task-a", ToolApprovalDecision::RequestChange)]
+            )
+            .is_some()
+        );
+        assert!(
+            refused(
+                &stop,
+                vec![
+                    item("own", ToolApprovalDecision::RequestChange),
+                    item("task-a", ToolApprovalDecision::RequestChange)
+                ]
+            )
+            .is_some()
+        );
+        stop.kind = ToolApprovalKind::ToolCallLimit;
+        assert!(
+            refused(
+                &stop,
+                vec![item("own", ToolApprovalDecision::RequestChange)]
+            )
+            .is_some()
+        );
     }
 
     #[test]
@@ -18149,6 +18875,54 @@ pub(crate) async fn run_generation_after_user_message(
     .await
 }
 
+/// Turns on speech for the reply `task` generates when the client asked for it
+/// and conversational audio can speak, in the user's language. Returns whether
+/// the reply is read back.
+fn enable_reply_speech(
+    task: &StreamingTask,
+    app_state: &AppState,
+    switches: crate::config::VoiceSwitches,
+    me_user: &MeProfile,
+    requested: bool,
+) -> bool {
+    let read_back = requested
+        && switches
+            .conversational_speech_provider(&app_state.config)
+            .is_some();
+    task.speech_enabled
+        .store(read_back, std::sync::atomic::Ordering::Relaxed);
+    let _ = task.speech_language.set(
+        crate::services::speech::spoken::SpeechLanguage::with_readings(
+            super::me_profile_middleware::normalize_supported_language(
+                me_user.preference_language.as_deref(),
+            )
+            .unwrap_or(&me_user.preferred_language),
+            &app_state.speech_readings,
+        ),
+    );
+    read_back
+}
+
+/// Turns on speech like [`enable_reply_speech`] and returns how the reply is
+/// spoken, resolved for the caller at turn time, or `None` when it is not
+/// read back.
+async fn read_back_reply(
+    task: &StreamingTask,
+    app_state: &AppState,
+    switches: crate::config::VoiceSwitches,
+    me_user: &MeProfile,
+    requested: bool,
+) -> Option<erato_config::reply_speech::ReplySpeechWording> {
+    if !enable_reply_speech(task, app_state, switches, me_user, requested) {
+        return None;
+    }
+    Some(
+        super::reply_speech_style::resolve_for(app_state, me_user)
+            .await
+            .wording,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_generation_after_user_message_memory_inner(
     task: &Arc<StreamingTask>,
@@ -18163,23 +18937,14 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
-    let reply_is_read_back = request.conversational_audio_back
-        && app_state.config.audio_conversational.transcription.enabled
-        && app_state
-            .config
-            .audio_conversational
-            .speech_provider
-            .is_some();
-    task.speech_enabled
-        .store(reply_is_read_back, std::sync::atomic::Ordering::Relaxed);
-    let _ = task
-        .speech_language
-        .set(crate::services::speech::spoken::SpeechLanguage::new(
-            super::me_profile_middleware::normalize_supported_language(
-                me_user.preference_language.as_deref(),
-            )
-            .unwrap_or(&me_user.preferred_language),
-        ));
+    let reply_speech = read_back_reply(
+        task,
+        app_state,
+        app_state.voice_switches().await,
+        me_user,
+        request.conversational_audio_back,
+    )
+    .await;
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -18202,7 +18967,7 @@ async fn run_generation_after_user_message_memory_inner(
         }),
         turn_instructions: crate::services::prompt_composition::turn_instructions_for_turn(
             &app_state.config.turn_instructions,
-            reply_is_read_back,
+            reply_speech,
         ),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
@@ -18433,6 +19198,7 @@ async fn run_generation_after_user_message_memory_inner(
         }),
         task_tool_budgets_for_chat(chat),
         None,
+        splits_reply(&generation_input_messages),
     );
 
     let (end_content, generation_metadata) = match generation_task.await {
@@ -19190,6 +19956,7 @@ pub(crate) async fn start_regeneration(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                splits_reply(&generation_input_messages),
             )
             .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -19824,6 +20591,7 @@ pub(crate) async fn start_edit(
                 }),
                 task_tool_budgets_for_chat(&chat),
                 None,
+                splits_reply(&generation_input_messages),
             )
             .await;
             let (end_content, generation_metadata) = match generation_result {
@@ -21203,6 +21971,14 @@ fn resolve_submitted_decisions(
     }
 
     if let Some(decision) = request.decision {
+        if let [only_open] = open
+            && only_open.replaces_approval_id.is_some()
+        {
+            return Err(StreamRouteError::CardChanged(Box::new(CardChangedError {
+                code: CARD_CHANGED_CODE.to_string(),
+                approval_id: only_open.approval_id.clone(),
+            })));
+        }
         let [only_open] = open else {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
@@ -21371,6 +22147,139 @@ fn approve_always_refused(
             && asked_about != ToolApprovalKind::ClientTool
             && !mcp_allows_always
     })
+}
+
+/// The records of the decisions said by voice, once each receipt is
+/// checked against the card as it is now. A receipt is taken once, so a
+/// refused body needs a new one.
+async fn voice_receipts_taken(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    message_id: Uuid,
+    open: &[ApprovalItem],
+    request: &ContinueStreamRequest,
+) -> Result<HashMap<String, crate::models::message::VoiceDecisionRecord>, StreamRouteError> {
+    use crate::models::message::VoiceDecisionOutcome;
+    use crate::services::approval_voice_commands::decision::{check_receipt, take_receipt};
+    let user_id = Uuid::parse_str(&me_user.id).ok();
+    // A receipt issued before deciding by voice was switched off is still
+    // taken, so it cannot count once deciding is back on.
+    let deciding = app_state.voice_switches().await.voice_decisions;
+    let mut records = HashMap::new();
+    for item in &request.decisions {
+        let Some(id) = item.voice_receipt.as_deref() else {
+            continue;
+        };
+        let outcome = match item.decision {
+            ToolApprovalDecision::Approve => VoiceDecisionOutcome::Approved,
+            ToolApprovalDecision::Reject => VoiceDecisionOutcome::Refused,
+            _ => {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "`voice_receipt` belongs to `approve` or `reject` only".to_string(),
+                )
+                    .into());
+            }
+        };
+        // A receipt that cannot be read refuses like one that does not
+        // match: nothing is decided, and the card waits on screen.
+        let taken = take_receipt(&app_state.db, id)
+            .await
+            .inspect_err(|error| tracing::error!(%error, "Reading a voice receipt failed"))
+            .ok()
+            .flatten();
+        let checked = open
+            .iter()
+            .find(|open| open.approval_id == item.approval_id)
+            .zip(user_id)
+            .map(|(open, user_id)| {
+                check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
+            });
+        match (checked, taken) {
+            (Some(Ok(())), Some(taken)) if deciding => {
+                records.insert(item.approval_id.clone(), taken.receipt.record);
+            }
+            (checked, _) => {
+                tracing::info!(
+                    problem = ?checked,
+                    switched_off = !deciding,
+                    "Refused a decision by voice: its receipt does not match the card, or deciding by voice is off"
+                );
+                return Err(StreamRouteError::VoiceReceiptRefused(Box::new(
+                    VoiceReceiptRefusedError {
+                        code: VOICE_RECEIPT_REFUSED_CODE.to_string(),
+                    },
+                )));
+            }
+        }
+    }
+    Ok(records)
+}
+
+/// The user's words of each `request_change` decision, by approval id.
+fn change_request_words(request: &ContinueStreamRequest) -> HashMap<String, String> {
+    request
+        .decisions
+        .iter()
+        .filter(|item| item.decision == ToolApprovalDecision::RequestChange)
+        .filter_map(|item| {
+            Some((
+                item.approval_id.clone(),
+                item.change_request.as_deref()?.trim().to_string(),
+            ))
+        })
+        .collect()
+}
+
+/// Why the change requests of a body cannot apply, if they cannot.
+///
+/// Only the turn's own call can be asked to change: a task's item, a plan and
+/// the tool-call limit carry no call the model could make again here.
+fn change_request_refused(
+    stop: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    request: &ContinueStreamRequest,
+    max_chars: usize,
+) -> Option<String> {
+    if request.decision == Some(ToolApprovalDecision::RequestChange) {
+        return Some(
+            "A change request needs `decisions` with the user's words in `change_request`"
+                .to_string(),
+        );
+    }
+    let mut changes = 0;
+    for item in &request.decisions {
+        if item.decision != ToolApprovalDecision::RequestChange {
+            if item.change_request.is_some() {
+                return Some(
+                    "`change_request` belongs to the decision `request_change` only".to_string(),
+                );
+            }
+            continue;
+        }
+        changes += 1;
+        let words = item.change_request.as_deref().map(str::trim).unwrap_or("");
+        if words.is_empty() {
+            return Some("A change request needs the user's words in `change_request`".to_string());
+        }
+        if words.chars().count() > max_chars {
+            return Some(format!(
+                "A change request is limited to {max_chars} characters"
+            ));
+        }
+        let own = matches!(
+            stop.kind,
+            ToolApprovalKind::McpTool
+                | ToolApprovalKind::ClientTool
+                | ToolApprovalKind::BuiltinTool
+        ) && open
+            .iter()
+            .any(|open| open.approval_id == item.approval_id && open.child.is_none());
+        if !own {
+            return Some("Only the turn's own tool call can be asked to change".to_string());
+        }
+    }
+    (changes > 1).then(|| "One continuation carries at most one change request".to_string())
 }
 
 /// Whether a set of decisions saves a standing answer on one of Erato's own
@@ -21680,6 +22589,7 @@ pub(crate) async fn start_continuation(
     });
     let mut resume_parked = false;
     let mut context = HashMap::new();
+    let mut voice_records = HashMap::new();
     let entry = if state.open.is_empty() {
         if has_waiting_items && empty_body && awaiting_approval && state.unanswered {
             resume_parked = true;
@@ -21739,6 +22649,16 @@ pub(crate) async fn start_continuation(
             {
                 return Err((axum::http::StatusCode::BAD_REQUEST, refusal.to_string()).into());
             }
+            if let Some(refusal) = change_request_refused(
+                &state.request,
+                &decidable,
+                &request,
+                app_state.config.approval_change_requests.max_chars,
+            ) {
+                return Err((axum::http::StatusCode::BAD_REQUEST, refusal).into());
+            }
+            voice_records =
+                voice_receipts_taken(app_state, me_user, message.id, &decidable, &request).await?;
             if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
@@ -21774,6 +22694,7 @@ pub(crate) async fn start_continuation(
         }
     };
     request.context = context;
+    request.voice_records = voice_records;
 
     let app_state_for_worker = app_state.clone();
     let policy_for_worker = policy.clone();
@@ -21808,6 +22729,15 @@ pub(crate) async fn start_continuation(
     };
 
     let client_stream_guard = task.client_stream_guard();
+    // The turn instruction for a spoken reply is in the stored prompt the
+    // continuation reuses, so only the speech itself is decided here.
+    enable_reply_speech(
+        &task,
+        app_state,
+        app_state.voice_switches().await,
+        me_user,
+        request.conversational_audio_back,
+    );
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
@@ -21875,7 +22805,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), a decision by voice carries a `voice_receipt` that is unknown, used, expired or for another card or decision (JSON, code = voice_receipt_refused, body = VoiceReceiptRefusedError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -21944,6 +22874,11 @@ pub(crate) struct ParkedTurnResume {
     /// pass the gate again, which runs them under that approval while it is
     /// live and asks again once it ended.
     pub context_approved_calls: HashMap<String, Uuid>,
+    /// The user just asked for a change: the first call the model makes asks
+    /// even where a standing "always allow" would run it, so the user
+    /// confirms the version that results. Calls the policy never asks about
+    /// still run.
+    pub ask_first_new_call: bool,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -22166,9 +23101,12 @@ async fn resume_parked_child(
                     approval_id: item.approval_id.clone(),
                     decision,
                     scope_position: None,
+                    change_request: None,
+                    voice_receipt: None,
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             // None on purpose: the child goes on with the binding it was
@@ -22179,6 +23117,7 @@ async fn resume_parked_child(
             strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval,
+            voice_records: Default::default(),
         };
         let client_reads = configuration
             .as_ref()
@@ -22479,6 +23418,7 @@ async fn settle_parked_children(
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
                 covers: scope_approval.map(|(covers, _)| covers),
                 scope_approval_id: scope_approval.map(|(_, approval)| approval),
+                voice: None,
             }));
         } else {
             content.push(ContentPart::ToolRejection(ContentPartToolRejection {
@@ -22490,8 +23430,9 @@ async fn settle_parked_children(
                 rejected_at: now_timestamp(),
                 approval_id: Some(item.approval_id.clone()),
                 child_chat_id: child.as_ref().map(|child| child.child_chat_id),
-                reason: matches!(decision, ToolApprovalDecision::Withdraw)
-                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                reason: rejection_reason(decision),
+                change_request: None,
+                voice: None,
             }));
         }
 
@@ -23007,6 +23948,11 @@ pub(crate) async fn run_continuation(
         }
     };
 
+    let change_requests = match entry {
+        ContinuationEntry::Decide => change_request_words(&request),
+        _ => HashMap::new(),
+    };
+
     mark_continuation_in_flight(app_state, policy, me_user, &message).await?;
 
     let generation_parameters: GenerationParameters = serde_json::from_value(
@@ -23039,6 +23985,7 @@ pub(crate) async fn run_continuation(
                             child_chat_id: None,
                             covers: None,
                             scope_approval_id: None,
+                            voice: None,
                         }))
                 }
                 ToolApprovalDecision::Reject | ToolApprovalDecision::Withdraw => parsed
@@ -23050,8 +23997,9 @@ pub(crate) async fn run_continuation(
                         rejected_at: now_timestamp(),
                         approval_id: Some(item.approval_id.clone()),
                         child_chat_id: None,
-                        reason: matches!(decision, ToolApprovalDecision::Withdraw)
-                            .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                        reason: rejection_reason(*decision),
+                        change_request: None,
+                        voice: None,
                     })),
                 _ => {
                     return Err(eyre!(
@@ -23241,6 +24189,10 @@ pub(crate) async fn run_continuation(
             .iter()
             .find(|tool| tool.server_id == server_id && tool.tool.name == item.tool_name)
             .cloned();
+        // The card names the server's own tool; the row and the model's replay
+        // keep the name the model called it by, qualified or not, even when
+        // the tools that share the name changed since the turn parked.
+        let call_name = item.called_name().to_string();
         // A grant is only written for a call that actually runs: "always allow"
         // on a stale card must not overwrite a denial stored in the meantime.
         let always_allow_setting =
@@ -23286,6 +24238,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     covers: None,
                     scope_approval_id: None,
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
         } else {
             parsed
@@ -23299,8 +24252,9 @@ pub(crate) async fn run_continuation(
                     rejected_at: now_timestamp(),
                     approval_id: Some(item.approval_id.clone()),
                     child_chat_id: None,
-                    reason: matches!(decision, ToolApprovalDecision::Withdraw)
-                        .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                    reason: rejection_reason(decision),
+                    change_request: change_requests.get(&item.approval_id).cloned(),
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
         }
 
@@ -23309,15 +24263,21 @@ pub(crate) async fn run_continuation(
             ToolUse {
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
-                tool_name: item.tool_name.clone(),
+                tool_name: call_name.clone(),
                 display: item.display.as_ref().map(tool_row_display),
                 input: Some(item.input.clone()),
                 progress_message: None,
                 progress: None,
                 total: None,
-                output: Some(
-                    json!({"status": "rejected", "error": "The user denied this tool call."}),
-                ),
+                output: Some(match change_requests.get(&item.approval_id) {
+                    Some(words) => crate::services::approval_change_requests::tool_output(
+                        &app_state.config.approval_change_requests.note,
+                        words,
+                    ),
+                    None => {
+                        json!({"status": "rejected", "error": "The user denied this tool call."})
+                    }
+                }),
                 result_details: None,
                 allowed_by: None,
                 started_at: Some(now_timestamp()),
@@ -23326,7 +24286,7 @@ pub(crate) async fn run_continuation(
         } else if let Some(managed_tool) = approved_tool {
             let call = genai::chat::ToolCall {
                 call_id: item.tool_call_id.clone(),
-                fn_name: item.tool_name.clone(),
+                fn_name: call_name.clone(),
                 fn_arguments: item.input.clone(),
                 thought_signatures: None,
             };
@@ -23363,7 +24323,7 @@ pub(crate) async fn run_continuation(
                     message_id: message.id,
                     content_index: parsed.content.len(),
                     tool_call_id: item.tool_call_id.clone(),
-                    tool_name: item.tool_name.clone(),
+                    tool_name: call_name.clone(),
                     display: item.display.as_ref().map(tool_row_display),
                     input: None,
                     status: ToolCallStatus::InProgress,
@@ -23430,6 +24390,7 @@ pub(crate) async fn run_continuation(
                                             &file_content_parts,
                                             processed.output_value.as_ref(),
                                         ),
+                                        result.meta.as_ref(),
                                     )
                                     .await;
                                 (status, processed.output_value, result_details)
@@ -23447,7 +24408,7 @@ pub(crate) async fn run_continuation(
                     ToolUse {
                         tool_call_id: item.tool_call_id.clone(),
                         status,
-                        tool_name: item.tool_name.clone(),
+                        tool_name: call_name.clone(),
                         display: item.display.as_ref().map(tool_row_display),
                         input: Some(item.input.clone()),
                         progress_message: None,
@@ -23465,7 +24426,7 @@ pub(crate) async fn run_continuation(
                     ToolUse {
                         tool_call_id: item.tool_call_id.clone(),
                         status: MessageToolCallStatus::Error,
-                        tool_name: item.tool_name.clone(),
+                        tool_name: call_name.clone(),
                         display: item.display.as_ref().map(tool_row_display),
                         input: Some(item.input.clone()),
                         progress_message: None,
@@ -23494,7 +24455,7 @@ pub(crate) async fn run_continuation(
             ToolUse {
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
-                tool_name: item.tool_name.clone(),
+                tool_name: call_name.clone(),
                 display: item.display.as_ref().map(tool_row_display),
                 input: Some(item.input.clone()),
                 progress_message: None,
@@ -23644,6 +24605,7 @@ pub(crate) async fn run_continuation(
                     child_chat_id: None,
                     covers: scope_approval.map(|(_, covers)| covers),
                     scope_approval_id: scope_approval.map(|(approval, _)| approval),
+                    voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
@@ -23661,8 +24623,9 @@ pub(crate) async fn run_continuation(
                 rejected_at: now_timestamp(),
                 approval_id: Some(item.approval_id.clone()),
                 child_chat_id: None,
-                reason: matches!(decision, ToolApprovalDecision::Withdraw)
-                    .then(|| REJECTION_REASON_WITHDRAWN.to_string()),
+                reason: rejection_reason(decision),
+                change_request: change_requests.get(&item.approval_id).cloned(),
+                voice: request.voice_records.get(&item.approval_id).cloned(),
             }));
         let tool_use = ToolUse {
             tool_call_id: item.tool_call_id.clone(),
@@ -23682,18 +24645,25 @@ pub(crate) async fn run_continuation(
             // A plan denial carries no `reason`: the closed envelope vocabulary
             // has none for it, and "the user said no" is not a run outcome. A
             // task's client call does: its result counts what was declined.
-            output: Some(if declines_client_calls {
-                crate::services::delegated_client_tools::declined_output(&item.tool_name)
-            } else {
-                json!({
-                    "status": "rejected",
-                    "error": if approval_request.kind == ToolApprovalKind::TaskPlan {
-                        "The user declined this task."
-                    } else {
-                        "The user denied this tool call."
-                    },
-                })
-            }),
+            output: Some(
+                if let Some(words) = change_requests.get(&item.approval_id) {
+                    crate::services::approval_change_requests::tool_output(
+                        &app_state.config.approval_change_requests.note,
+                        words,
+                    )
+                } else if declines_client_calls {
+                    crate::services::delegated_client_tools::declined_output(&item.tool_name)
+                } else {
+                    json!({
+                        "status": "rejected",
+                        "error": if approval_request.kind == ToolApprovalKind::TaskPlan {
+                            "The user declined this task."
+                        } else {
+                            "The user denied this tool call."
+                        },
+                    })
+                },
+            ),
             result_details: None,
             allowed_by: None,
             started_at: Some(now_timestamp()),
@@ -24029,6 +24999,7 @@ pub(crate) async fn run_continuation(
             .collect(),
         &request.strict_mode_executors,
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
+        !change_requests.is_empty(),
     )
     .await
 }
@@ -24210,7 +25181,14 @@ async fn resume_parked_generation(
     // may have changed since the turn began.
     continuing_strict_mode_executors: &[crate::services::client_operations::ExecutorBinding],
     assistant_mcp_server_ids: Option<Vec<String>>,
+    // The continuation carried a change request.
+    change_requested: bool,
 ) -> Result<(), Report> {
+    // A change request past the turn's limit ends the turn the way the
+    // budget's "answer now" does, so a misunderstanding cannot loop.
+    let change_limit_reached = change_requested
+        && crate::services::approval_change_requests::rounds(&parsed.content)
+            > app_state.config.approval_change_requests.max_rounds as usize;
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     let user_id = Uuid::parse_str(&me_user.id)?;
@@ -24341,6 +25319,9 @@ async fn resume_parked_generation(
         compat_omit_strict,
     )
     .await;
+    // Split or not follows the stored prompt, never the setting now, so the
+    // prompt and the speech cannot disagree after a settings change.
+    let split_reply = splits_reply(&source_generation_input_messages);
     let generation_input_messages =
         resolve_directive_markers_in_generation_input(app_state, generation_input_messages);
     let mut chat_request = generation_input_messages.into_chat_request();
@@ -24499,7 +25480,7 @@ async fn resume_parked_generation(
     if wait_tool_enabled
         && !available_mcp_tools
             .iter()
-            .any(|tool| tool.tool.name == crate::services::mcp_wait::WAIT_TOOL_NAME)
+            .any(|tool| tool.model_name() == crate::services::mcp_wait::WAIT_TOOL_NAME)
     {
         continuation_tools.push(crate::services::mcp_wait::build_wait_tool(
             mcp.config.mcp_servers_global.max_wait_seconds,
@@ -24542,11 +25523,12 @@ async fn resume_parked_generation(
         &mut continuation_tools,
     )
     .await?;
-    let answer_without_tools = crate::services::tool_call_budget::choices(&parsed.content)
-        .last()
-        .is_some_and(|(_, choice)| {
-            choice == crate::services::tool_call_budget::BudgetChoice::Answer
-        });
+    let answer_without_tools = change_limit_reached
+        || crate::services::tool_call_budget::choices(&parsed.content)
+            .last()
+            .is_some_and(|(_, choice)| {
+                choice == crate::services::tool_call_budget::BudgetChoice::Answer
+            });
     chat_request.tools = if answer_without_tools {
         None
     } else {
@@ -24573,7 +25555,12 @@ async fn resume_parked_generation(
     // it cannot run is looked up by tool name across the exclusions rather than
     // scoped to one server the way the gated item's is.
     let refusal_for_abandoned_call = |tool_name: &str| -> String {
-        if denied_mcp_tools
+        if change_limit_reached {
+            format!(
+                "The turn ended after repeated change requests, so the tool '{}' was not run.",
+                tool_name
+            )
+        } else if denied_mcp_tools
             .iter()
             .any(|(_, denied)| denied == tool_name)
         {
@@ -24665,7 +25652,11 @@ async fn resume_parked_generation(
         .map(crate::models::message::InputMessage::into_chat_message),
     );
 
-    if answer_without_tools {
+    if change_limit_reached {
+        chat_request.messages.push(GenAiChatMessage::user(
+            app_state.config.approval_change_requests.limit_note.clone(),
+        ));
+    } else if answer_without_tools {
         chat_request.messages.push(GenAiChatMessage::user(
             "The tool-call budget has been reached. Please provide your final answer now using the information already available. No more tools are available.",
         ));
@@ -24692,6 +25683,7 @@ async fn resume_parked_generation(
         continuing_client_tools,
         continuing_executors,
         context_approved_calls,
+        ask_first_new_call: change_requested,
     });
 
     let chat_options =
@@ -24731,7 +25723,9 @@ async fn resume_parked_generation(
             ),
             action_facet_args: generation_parameters.action_facet_args.clone(),
         });
-    let (end_content, generation_metadata) = stream_generate_chat_completion(
+    // Boxed: inline, the generation state is copied into every continuation
+    // wrapper's debug frame, about 1.6 MiB more stack for a resumed turn.
+    let (end_content, generation_metadata) = Box::pin(stream_generate_chat_completion(
         tx.clone(),
         app_state,
         policy,
@@ -24778,7 +25772,8 @@ async fn resume_parked_generation(
         // The same logical turn retains its consumption across stops.
         task_tool_budgets_for_chat(&chat),
         resume,
-    )
+        split_reply,
+    ))
     .await?;
     // Written even when the generation reported no metadata of its own, and
     // before the content: this is what releases the claim taken above, and a
@@ -25091,6 +26086,7 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map_or(&[], |context| context.strict_mode_executors.as_slice()),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
+        false,
     )
     .await
 }

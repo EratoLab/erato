@@ -210,6 +210,7 @@ function coverageCounter(
 
 export type MailboxIndexingState =
   | "disabled"
+  | "partial"
   | "scanFailed"
   | "sourceUnavailable"
   | "indexingUnavailable"
@@ -239,6 +240,7 @@ export interface IndexingSummary {
   range: IndexingRange | null;
   observedAt: number | null;
   notices: {
+    partialInventory?: boolean;
     unreadable: boolean;
     notStoredLocally: boolean;
     /** Only what the application cached reached the index, e.g. Teams. */
@@ -377,6 +379,7 @@ function indexingSummary(
           "scanning",
           "indexing",
           "current",
+          "partial",
           "disabled",
           "stopped",
           "unavailable",
@@ -446,6 +449,7 @@ function indexingSummary(
         : "scanFailed";
     else if (lifecycles.includes("scanning")) state = "scanning";
     else if (lifecycles.includes("indexing")) state = "indexing";
+    else if (lifecycles.includes("partial")) state = "partial";
     else state = "current";
   } else if (discovery.some((source) => !source.accessible))
     state = "sourceUnavailable";
@@ -522,6 +526,10 @@ function indexingSummary(
     range,
     observedAt,
     notices: {
+      ...(reported &&
+        ranges.some((range) => range.inventoryComplete === false) && {
+          partialInventory: true,
+        }),
       unreadable: (unindexable ?? 0) > 0,
       notStoredLocally: (missingFromLocalCache ?? 0) > 0,
       cachedOnly:

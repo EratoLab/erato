@@ -95,8 +95,18 @@ export interface HostArtifact {
    * against the fence tag as written.
    */
   cardFenceLanguages?: readonly string[];
-  /** Review hint only; the host still owns consent and live-state validation. */
-  submittedCard?: { toolCallId: string; language: string; content: string };
+  /**
+   * Review hint only; the host still owns consent and live-state validation.
+   * `pending` shows the card while its call is still being written or
+   * checked, as for a draft the host fills in; otherwise only for an accepted
+   * call.
+   */
+  submittedCard?: {
+    toolCallId: string;
+    language: string;
+    content: string;
+    pending?: boolean;
+  };
   /**
    * Replaces the default set of drifted fence tags rescued as the email
    * artifact when `bodyFormat` is present (the default covers the tags

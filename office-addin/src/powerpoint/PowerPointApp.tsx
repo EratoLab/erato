@@ -3,10 +3,12 @@ import { createBrowserClientInfo } from "@erato/frontend/library";
 import { PowerPointAddinChatHost } from "./PowerPointAddinChatHost";
 import { installPowerPointComponentRegistrations } from "./installPowerPointComponentRegistrations";
 import { PowerPointAddinSessionController } from "./powerpointSession";
+import { powerpointHostReportDetails } from "./utils/powerpointReadSupport";
 import { NeutralAddinChatPage } from "../core/NeutralAddinChatPage";
 import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
 import { OfficeDocumentAuthProvider } from "../providers/OfficeDocumentAuthProvider";
 import { OfficeDocumentFeatureConfig } from "../providers/OfficeDocumentFeatureConfig";
+import { OfficeHostReport } from "../providers/OfficeHostReport";
 import { OfficeProvider } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 
@@ -26,6 +28,7 @@ export default function PowerPointApp() {
           <OfficeThemeProvider>
             <OfficeDocumentAuthProvider>
               <AuthGate>
+                <OfficeHostReport details={powerpointHostReportDetails} />
                 <div className="office-shell">
                   <NeutralAddinChatPage
                     platform="powerpoint"

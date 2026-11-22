@@ -1,16 +1,33 @@
-import { MAX_WORD_SCOPE_BYTES } from "@erato/frontend/word-review";
+import {
+  MAX_PLAN_BYTES,
+  MAX_WORD_SCOPE_BYTES,
+} from "@erato/frontend/word-review";
 
 /** The backend schema for word_submit_document_plan (erato-action-facets.toml) and its tool
  * description state the same numbers. Blocks per change have no count limit (ERMAIN-1193). */
 export const MAX_WORD_SCOPED_CHANGES = 16;
 export const MAX_WORD_SCOPED_SOURCES = 16;
+/** The code checks a part may waive when its change is intended (wordPartChecks.ts). */
+export const WORD_PART_ALLOWS = [
+  "numbers",
+  "clause-numbering",
+  "term",
+  "kept-unchanged",
+  "cross-reference",
+] as const;
 const WORD_SCOPED_JSON = `about ${Math.floor(MAX_WORD_SCOPE_BYTES / 1000)},000 characters of JSON`;
 export const WORD_SCOPED_SIZE = `${MAX_WORD_SCOPE_BYTES / 1024} KiB (${WORD_SCOPED_JSON})`;
-export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection (body, objects, stories, sections), ${MAX_WORD_SCOPED_SOURCES} source refs per change and ${WORD_SCOPED_SIZE} per submission`;
+/** The 24 KiB cap holds only after a target read; after a complete read a sparse change is
+ * expanded into a full plan anyway, so it has a full plan's limit (ERMAIN-1287). */
+export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection (body, objects, stories, sections) and ${MAX_WORD_SCOPED_SOURCES} source refs per change; after a target read at most ${WORD_SCOPED_SIZE} per submission, after a complete read as much as a full plan (${MAX_PLAN_BYTES / 1024} KiB)`;
 /** One rule for when a full plan is needed; the plan contract, tool description and facet prompt
- * carry the same sentence (ERMAIN-1186). */
-export const WORD_FULL_PLAN_RULE = `Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than ${MAX_WORD_SCOPED_CHANGES} changes per collection, or ${WORD_SCOPED_JSON}). Otherwise submit only the changes with scoped_edit, also after a complete read.`;
-export const WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN = `This document is too large for a full plan; submit at most ${WORD_SCOPED_JSON} now and tell the user the rest follows in the next turn.`;
+ * carry the same sentence (ERMAIN-1186). Size alone never calls for a full plan (ERMAIN-1287). */
+export const WORD_FULL_PLAN_RULE = `Use a full plan only to rewrite or reorder most of the document, or for more than ${MAX_WORD_SCOPED_CHANGES} changes per collection. Otherwise submit only the changes with scoped_edit, also after a complete read. A scoped_edit over ${WORD_SCOPED_JSON} after a target read needs the complete read first, then the same scoped_edit with its final readToken; when the document is too large for a complete read, submit what fits and continue in the next turn.`;
+export const WORD_SCOPED_NEEDS_COMPLETE_READ = `Scoped submission exceeds ${WORD_SCOPED_SIZE}, the limit after a target read. Complete the full read and resubmit the same scoped_edit with its final readToken; after a complete read it may be as large as a full plan.`;
+const WORD_SCOPED_WHAT_FITS = `submit at most ${WORD_SCOPED_JSON} now and tell the user the rest follows in the next turn.`;
+export const WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN = `This document is too large for a full plan; ${WORD_SCOPED_WHAT_FITS}`;
+export const WORD_SCOPED_OVER_COMPLETE_READ_BUDGET = `A complete read does not fit this request's model budget; ${WORD_SCOPED_WHAT_FITS}`;
+export const WORD_SCOPED_EXPANDED_TOO_LARGE = `With the blocks it keeps, this change exceeds a full plan's ${MAX_PLAN_BYTES / 1024} KiB. Submit part of it now and tell the user the rest follows in the next turn.`;
 
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
@@ -58,7 +75,15 @@ export const WORD_AUTHORING_CONTRACT = {
     revision:
       "Each changed rejected proposal advances the revision. Validation covers the complete materialized plan. Unchanged proposals with unchanged diagnostics end the submission turn. Full and repair submissions share the configured attempt budget. Acceptance persists the complete plan for review without writing to Word.",
   },
-  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.",
+  plan: `{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. ${WORD_FULL_PLAN_RULE}`,
+  parts: {
+    plan: "plan_document_sections {snapshot,readToken,intent,terms?,rows:[{source:'b1-b57,b60',action:'keep'|'rewrite'|'delete',change?,title?,reason?}]}. Rows are in output order and hold every body block exactly once: their order moves blocks, and several ranges in one rewrite row merge them. A rewrite row says its change, a delete row its reason; title renames the heading a keep row starts with, which then takes the built-in heading style of its level. Sending it again replaces it and keeps the parts of rewrite rows with the same blocks.",
+    part: "write_document_section {snapshot,draft_id,row,ops:[{keep:refs}|{replace:refs,text}|{insert:text}|{delete:refs,reason}],allow?} per rewrite row. The ops use every block of the row exactly once, in output order. A rejected part changes nothing: send it again whole.",
+    checks: `Each part is compared with the original: numbers and amounts, clause numbers such as (1), the section plan's terms, blocks repeated word for word, and a row that leaves more than half of its body paragraphs (paragraphs and list items) unchanged. Finish checks every part again, and references to sections the change deletes, moves or renumbers; a finish sent again unchanged after such a refusal leaves those rows as they are. allow lists a check (${WORD_PART_ALLOWS.join(", ")}) whose change is intended: kept-unchanged already with the first part of a row that keeps most of its paragraphs on purpose, the others only when their error offers them; the receipt lists it as allowed.`,
+    text: "New text is plain text. One non-empty line is one block. # to ###### is a heading of that level. '- ' is a bullet and '1. ' a numbered item, two spaces of indent per level, and indented items nest in the list above them, numbered from 1 under each item; a new list always starts at 1, a blank line between items keeps the list, and a later '1.' starts a new one. '| a | b |' is a table row; a |---| line after the first row makes it the header row. **bold** and *italic* work inside a line. A \\ at the start of a line keeps the line as text. A line that replaces a paragraph takes that paragraph's style; new tables take the document's table style. Anything else (other formatting, styles, continuing a list, merged cells, fields) is kept by reference or goes through scoped_edit.",
+    finish:
+      "submit_document_plan {snapshot,readToken,draft_id,revision,finish:true} with the latest receipt's revision checks the whole change and stages it like a full plan.",
+  },
   ownership:
     "Every body source ref is consumed once by keep, replace or deleted. New nested block IDs are globally unique. Story sources and document_sections are separate read records, not body ownership refs. Keep preserves exact content. Replacement and deletion accept native objects. Source references are scoped to this immutable snapshot.",
   entries: {
@@ -75,7 +100,7 @@ export const WORD_AUTHORING_CONTRACT = {
     },
   },
   paragraphs:
-    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}. A heading's captured styleRef is read-only metadata: never copy it into a heading block. The host chooses its built-in style from level; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its items share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
+    "{id,type:'paragraph',text,runs?,styleRef?,format?}; heading: {id,type:'heading',text,level:1..9,runs?,format?}. A heading's captured styleRef is read-only metadata: never copy it into a heading block. The host chooses its built-in style from level; list-item: {id,type:'list-item',text,list:'group-id',level:0..8,ordered:boolean,runs?,styleRef?,format?}. Reuse a captured existing-* list name, level and ordered value to continue that exact list. A new group name creates a separate list; its levels nest in it, and the items of one level share ordered. Each paragraph is a distinct block; text has no newline. Runs concatenate exactly to text.",
   runFormatting:
     "Each run has text plus optional bold,italic,underline,strike,caps,smallCaps:boolean; underlineStyle:single|double|dotted|dash|wave; fontFamily; fontSize in points; color/shading:6-digit hex; highlight:Word named color; verticalAlign:baseline|superscript|subscript; characterSpacing in points; language:BCP47.",
   paragraphFormatting:

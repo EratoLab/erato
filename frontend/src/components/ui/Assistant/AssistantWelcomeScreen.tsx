@@ -9,6 +9,7 @@ import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { SegmentedControl } from "@/components/ui/Controls/SegmentedControl";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { ReadOnlyMarkdown } from "@/components/ui/Markdown/ReadOnlyMarkdown";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
@@ -125,7 +126,7 @@ export interface AssistantWelcomeUpperProps
   configurationClassName?: string;
 }
 
-/** Avatar, name and description, each opening the configuration modal; sits above the composer. */
+/** Assistant identity and description above the composer, with configuration on the avatar and name. */
 export function AssistantWelcomeUpper({
   assistant,
   className = "",
@@ -217,14 +218,18 @@ export function AssistantWelcomeUpper({
             </h1>
 
             {assistant.description && (
-              <p
+              <div
                 className={clsx(
-                  "text-lg text-theme-fg-secondary",
+                  "break-words text-lg text-theme-fg-secondary [&>:is(ol,ul)]:w-fit [&>:is(ol,ul)]:max-w-full [&>:is(ol,ul)]:text-start",
                   headerTextAlignment,
+                  headerTextAlignment === "text-center" &&
+                    "[&>:is(ol,ul)]:mx-auto",
+                  headerTextAlignment === "text-right" &&
+                    "[&>:is(ol,ul)]:ml-auto",
                 )}
               >
-                {assistant.description}
-              </p>
+                <ReadOnlyMarkdown>{assistant.description}</ReadOnlyMarkdown>
+              </div>
             )}
           </div>
         </div>

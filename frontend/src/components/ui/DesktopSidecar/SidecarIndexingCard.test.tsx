@@ -397,6 +397,32 @@ describe("mailbox status rendering", () => {
     return status;
   }
 
+  it.each(["indexing", "partial"] as const)(
+    "shows partial inventory while lifecycle is %s",
+    (lifecycle) => {
+      const status = withRange({
+        from: null,
+        through: null,
+        unavailableReason: "inventory_incomplete",
+        inventoryComplete: false,
+        searchableDocuments: 2,
+      });
+      Object.assign(status.discovery[0], {
+        state: "partial",
+        lifecycle,
+        discoveryComplete: false,
+      });
+      const row = renderStatus(status);
+      expect(
+        row.getByText(
+          lifecycle === "indexing" ? "Indexing" : "Partial coverage",
+        ),
+      ).toBeInTheDocument();
+      expect(row.getByText(/Inventory is incomplete/)).toBeInTheDocument();
+      expect(row.queryByText("Scan failed")).not.toBeInTheDocument();
+    },
+  );
+
   it("shows the period up to today, when it was checked, and missing-cache content without counts", () => {
     const row = renderStatus();
     expect(row.getByText("Up-to-date")).toBeInTheDocument();

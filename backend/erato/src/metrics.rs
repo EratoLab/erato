@@ -28,6 +28,7 @@ pub mod components;
 ))]
 mod exporter;
 pub(crate) mod memory;
+pub(crate) mod office_host;
 #[doc(hidden)]
 pub mod owned;
 mod process;
@@ -42,6 +43,7 @@ const CHAT_PROVIDER_TIME_TO_LAST_TOKEN_METRIC: &str =
 const CHAT_PROVIDER_GENERATION_ERRORS_METRIC: &str = "erato_chat_provider_generation_errors_total";
 const FILE_TYPE_DETECTION_DURATION_METRIC: &str = "erato_file_type_detection_duration_seconds";
 const FILE_TYPE_DETECTION_TOTAL_METRIC: &str = "erato_file_type_detection_total";
+const REPLY_SPLIT_FALLBACK_METRIC: &str = "erato_reply_split_fallback_total";
 
 pub fn init_prometheus_metrics(config: &AppConfig) -> Result<()> {
     if !config.integrations.prometheus.enabled {
@@ -283,6 +285,12 @@ pub fn report_chat_provider_generation_error(chat_provider_id: &str, error: &Gen
     .increment(1);
 }
 
+/// A reply asked to be split into a spoken and a written part that did not
+/// keep the format: `no_open`, `unclosed` or `too_long`.
+pub fn report_reply_split_fallback(reason: &'static str) {
+    counter!(REPLY_SPLIT_FALLBACK_METRIC, "reason" => reason).increment(1);
+}
+
 pub fn report_file_type_detection(mode: &str, outcome: &str, duration: Duration) {
     histogram!(
         FILE_TYPE_DETECTION_DURATION_METRIC,
@@ -346,9 +354,19 @@ fn describe_application_metrics() {
         "Cold file type detection duration segmented by configured mode and outcome."
     );
     describe_counter!(
+        REPLY_SPLIT_FALLBACK_METRIC,
+        Unit::Count,
+        "Spoken replies that did not keep the spoken-and-written format, by reason; each fell back to reading the written text."
+    );
+    describe_counter!(
         FILE_TYPE_DETECTION_TOTAL_METRIC,
         Unit::Count,
         "Total cold file type detection attempts segmented by configured mode and outcome."
+    );
+    describe_counter!(
+        office_host::OFFICE_ADDIN_PANE_STARTS_METRIC,
+        Unit::Count,
+        "Office add-in pane starts (a pane that loaded and signed in), by Office host, platform and, for PowerPoint, API set and read tier."
     );
     describe_gauge!(
         MCP_ACTIVE_SESSIONS_METRIC,

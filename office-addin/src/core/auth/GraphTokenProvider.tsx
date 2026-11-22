@@ -116,7 +116,8 @@ export function GraphTokenProvider({
   prompt: GraphSignInPrompt;
   children: React.ReactNode;
 }) {
-  const { redeemSessionForToken, lastRedeemedAtRef } = useSessionRedeem();
+  const { redeemSessionForToken, lastRedeemedAtRef, endsAtRef } =
+    useSessionRedeem();
   const [signInCount, setSignInCount] = useState(0);
   const [signInNeeded, setSignInNeeded] = useState<
     "sign-in" | "consent" | null
@@ -164,7 +165,11 @@ export function GraphTokenProvider({
         // only redeem tokens minted for its own resource.
         if (
           !options?.skipSessionWarm &&
-          shouldRefreshOauth2ProxySession(lastRedeemedAtRef.current)
+          shouldRefreshOauth2ProxySession(
+            lastRedeemedAtRef.current,
+            Date.now(),
+            endsAtRef.current,
+          )
         ) {
           await redeemSessionForToken(bootstrap, "refreshing");
         }
@@ -207,6 +212,7 @@ export function GraphTokenProvider({
       }
     },
     [
+      endsAtRef,
       lastRedeemedAtRef,
       prompt.action,
       prompt.consent,

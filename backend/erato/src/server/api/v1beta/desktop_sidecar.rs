@@ -607,6 +607,9 @@ mod tests {
             &artifact,
             &config,
             &distribution,
+            &crate::distribution::translations::TranslationCatalogs::new(
+                &crate::config::I18nRuntimeConfig::from_app_config(&config),
+            ),
             &Default::default(),
             crate::distribution::desktop_ui::PACKAGE_BUDGET_BYTES,
             crate::distribution::desktop_ui::PACKAGE_MAX_ARCHIVE_BYTES,

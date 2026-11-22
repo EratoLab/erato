@@ -843,6 +843,7 @@ fn read_keeps_its_part(row: &HostRow, config: &mut erato::config::AppConfig) {
             .chain([row.part.0.to_string()])
             .collect(),
         keep_output_fields: vec!["$.status".into()],
+        ..Default::default()
     };
     config.client_tools.tools.insert(READ_KEY.into(), tool);
 }

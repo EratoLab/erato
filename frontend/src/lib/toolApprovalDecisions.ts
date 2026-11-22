@@ -12,6 +12,10 @@ export interface DecidedApproval {
    * position at the click, sent as `scope_position`.
    */
   scopePosition?: unknown;
+  /** For `request_change`: what the user wants different, in their words. */
+  changeRequest?: string;
+  /** For `approve` or `reject` said by voice: the endpoint's receipt. */
+  voiceReceipt?: string;
 }
 
 /**
@@ -46,6 +50,13 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * gain a question while the card is open, and only an enumerated body comes
  * back as `decisions_mismatch` naming it. An `approve_context` answer is
  * always enumerated, since only an item carries its position.
+ *
+ * `readBack` asks for the continued answer to be spoken; the caller sets it
+ * when the turn that stopped was spoken.
+ *
+ * A change request is always enumerated: it names its approval and carries
+ * the user's words. So is a decision said by voice, which carries its
+ * receipt.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -53,13 +64,16 @@ export const buildContinueStreamBody = ({
   approvalIds,
   itemDecisions,
   enumerate = false,
+  readBack = false,
 }: {
   messageId: string;
   decision: ToolApprovalDecision;
   approvalIds?: string[];
   itemDecisions?: DecidedApproval[];
   enumerate?: boolean;
+  readBack?: boolean;
 }): ContinueStreamRequest => {
+  const spoken = readBack ? { conversational_audio_back: true } : {};
   const decided: DecidedApproval[] =
     itemDecisions && itemDecisions.length > 0
       ? itemDecisions
@@ -67,7 +81,12 @@ export const buildContinueStreamBody = ({
   if (
     decided.length > 1 ||
     (enumerate && decided.length > 0) ||
-    decided.some((item) => item.decision === "approve_context")
+    decided.some(
+      (item) =>
+        item.decision === "approve_context" ||
+        item.decision === "request_change" ||
+        item.voiceReceipt !== undefined,
+    )
   ) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
       approval_id: item.approvalId,
@@ -79,12 +98,17 @@ export const buildContinueStreamBody = ({
               ApprovalDecisionItem["scope_position"]
             >,
           }),
+      ...(item.decision === "request_change" && item.changeRequest
+        ? { change_request: item.changeRequest }
+        : {}),
+      ...(item.voiceReceipt ? { voice_receipt: item.voiceReceipt } : {}),
     }));
     return {
       message_id: messageId,
       decisions,
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
+      ...spoken,
     };
   }
   // A single open item needs no enumeration, but it still has to be answered
@@ -95,5 +119,6 @@ export const buildContinueStreamBody = ({
     decision: decided[0]?.decision ?? decision,
     shows_child_items: true,
     shows_limit_and_builtin_child_items: true,
+    ...spoken,
   };
 };

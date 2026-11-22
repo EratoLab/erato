@@ -7,8 +7,8 @@ import type {
  * look a block keeps when its plan sets no format. */
 export function wordReadableStyles(
   styles: WordAuthoringSnapshot["styles"],
-): Omit<WordAuthoringSnapshot["styles"][number], "inUse">[] {
-  return styles.map(({ look, inUse, ...style }) =>
+): Omit<WordAuthoringSnapshot["styles"][number], "inUse" | "firstRowLook">[] {
+  return styles.map(({ look, inUse, firstRowLook: _firstRowLook, ...style }) =>
     inUse && look ? { ...style, look } : style,
   );
 }
@@ -18,7 +18,12 @@ export function wordStyleNamesBytes(
   styles: WordAuthoringSnapshot["styles"],
 ): number {
   return new TextEncoder().encode(
-    JSON.stringify(styles.map(({ look: _look, inUse: _inUse, ...s }) => s)),
+    JSON.stringify(
+      styles.map(
+        ({ look: _look, inUse: _inUse, firstRowLook: _firstRowLook, ...s }) =>
+          s,
+      ),
+    ),
   ).length;
 }
 

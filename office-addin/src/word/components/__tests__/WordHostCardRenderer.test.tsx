@@ -270,17 +270,18 @@ describe("WordHostCardRenderer", () => {
   });
 
   describe("the identity gate", () => {
-    it("disables the action with a stated reason after a pane reload", () => {
+    it("folds to what it proposed after a pane reload, with no Apply even when opened", () => {
       renderCard({ artifact: makeArtifact(), captures: new Map() });
 
-      expect(
-        screen.getByRole("button", {
-          name: /^Apply (edit|all \d+ edits)$/,
-        }),
-      ).toBeDisabled();
+      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+        /^Proposed: /,
+      );
+      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
       expect(
         screen.getByText(/no longer has the document snapshot/),
       ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
     });
 
     it("disables the action with a stated reason for another document", () => {
@@ -951,12 +952,31 @@ describe("WordHostCardRenderer", () => {
         }),
         language: "erato-word-insert",
         content: "A drafted paragraph.",
-        captures: new Map(),
+        currentIdentity: "pane-session:other",
       });
 
       expect(
         screen.getByRole("button", { name: "Insert the text at the cursor" }),
       ).toBeDisabled();
+    });
+
+    it("folds to what it proposed after a pane reload", () => {
+      renderCard({
+        artifact: makeArtifact({
+          facetId: COMPOSE_FACET,
+          allowedClientActions: [INSERT],
+        }),
+        language: "erato-word-insert",
+        content: "A drafted paragraph.",
+        captures: new Map(),
+      });
+
+      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+        "Proposed: Insert text",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Insert the text at the cursor" }),
+      ).toBeNull();
     });
   });
 

@@ -7,6 +7,8 @@
  * never downloads the transcript again, and both render the same parse.
  */
 
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
+
 import { parseTeamsTranscriptIndex } from "./teamsTranscriptIndex";
 
 import type { TeamsTranscriptIndex } from "./teamsTranscriptIndex";
@@ -65,7 +67,10 @@ export function forgetStoredTeamsTranscripts() {
 }
 
 async function fetchTranscript(url: string): Promise<StoredTeamsTranscript> {
-  const response = await fetch(url);
+  const response = await fetchWithAuthRecovery(
+    () => fetch(url),
+    "teams-transcript",
+  );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const text = await response.text();
   const index = parseTeamsTranscriptIndex(text);

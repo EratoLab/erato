@@ -8,7 +8,7 @@
  */
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
-import { tryRecoverAuth } from "@/auth/authRecovery";
+import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import {
   connectivity,
   markNetworkFailure,
@@ -328,18 +328,19 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         credentials: "same-origin",
       });
 
-      armStallTimer(connectTimeoutMs);
-      response = await fetch(url, buildInit());
-      clearIdleTimer();
-      // Connect-time 401 (the proxy rejected the request before it reached the
-      // backend/stream): recover the session and reopen ONCE. Safe to replay —
-      // a pre-stream 401 means nothing was processed. No-op for the web app,
-      // which registers no recovery handler (see @/auth/authRecovery).
-      if (response.status === 401 && (await tryRecoverAuth("sse-401"))) {
+      // Turned away as signed out at connect time (the proxy rejected the request before it reached
+      // the backend/stream): recover the session and reopen ONCE. Safe to replay — nothing was
+      // processed. No-op for the web app, which registers no recovery handler.
+      // The connect timeout covers each send, not the session renewal between them.
+      const send = async () => {
         armStallTimer(connectTimeoutMs);
-        response = await fetch(url, buildInit());
-        clearIdleTimer();
-      }
+        try {
+          return await fetch(url, buildInit());
+        } finally {
+          clearIdleTimer();
+        }
+      };
+      response = await fetchWithAuthRecovery(send, "sse-signed-out");
       connectivity.reportNetworkSuccess();
 
       if (!response.ok) {

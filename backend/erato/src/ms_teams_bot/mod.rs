@@ -18,6 +18,7 @@ pub mod cards;
 pub mod citations;
 pub mod connector;
 mod controls;
+mod files;
 pub mod graph;
 mod handler;
 pub mod host;
@@ -81,9 +82,6 @@ pub struct TeamsBotSettings {
     pub context_message_count: u32,
     pub streaming: bool,
     pub security_groups_only: bool,
-    /// `i18n.language.default_language`: the bot's language for users who
-    /// have none stored and whose client reports none.
-    pub default_language: String,
 }
 
 pub struct TeamsBot {
@@ -91,6 +89,7 @@ pub struct TeamsBot {
     inbound: InboundAuth,
     connector: Connector,
     user_tokens: UserTokenClient,
+    graph_base: String,
     /// Graph identity and groups per Entra object ID, to spare two Graph
     /// calls on every message.
     identities: moka::future::Cache<String, (GraphIdentity, Vec<String>)>,
@@ -128,11 +127,12 @@ pub struct SetupStatus {
 }
 
 impl TeamsBot {
+    fn graph<'a>(&'a self, token: &'a str) -> graph::Graph<'a> {
+        graph::Graph::with_base(self.connector.http(), token, &self.graph_base)
+    }
+
     /// The bot runtime, or `None` when the bot is disabled.
-    pub fn from_config(
-        app: &MsOfficeTeamsAppConfig,
-        default_language: &str,
-    ) -> Result<Option<Arc<Self>>, Report> {
+    pub fn from_config(app: &MsOfficeTeamsAppConfig) -> Result<Option<Arc<Self>>, Report> {
         let config = &app.bot;
         if !config.enabled {
             return Ok(None);
@@ -160,6 +160,7 @@ impl TeamsBot {
             .transpose()?;
         let http = reqwest::Client::builder().timeout(HTTP_TIMEOUT).build()?;
         Ok(Some(Arc::new(Self {
+            graph_base: graph::GRAPH.into(),
             settings: TeamsBotSettings {
                 tenant_id: tenant_id.clone(),
                 app_name: app.manifest.short_name.clone(),
@@ -172,7 +173,6 @@ impl TeamsBot {
                 context_message_count: config.context_message_count,
                 streaming: config.streaming,
                 security_groups_only: config.security_groups_only,
-                default_language: default_language.to_string(),
             },
             inbound: InboundAuth::new(http.clone(), app_id.clone()),
             user_tokens: UserTokenClient::new(
@@ -261,6 +261,7 @@ impl TeamsBot {
     /// A bot whose token service and Connector are local test servers.
     pub(crate) fn for_test(base: &str, streaming: bool) -> Self {
         Self {
+            graph_base: base.into(),
             settings: TeamsBotSettings {
                 tenant_id: "tenant".into(),
                 app_name: "Erato".into(),
@@ -270,7 +271,6 @@ impl TeamsBot {
                 context_message_count: 0,
                 streaming,
                 security_groups_only: false,
-                default_language: "en".into(),
             },
             inbound: InboundAuth::with_static_keys("bot".into(), Vec::new()),
             connector: Connector::with_test_token(reqwest::Client::new()),

@@ -1,33 +1,43 @@
 //! The text a voice reads: markdown turned into plain sentences a listener can follow.
 //! Only the copy sent to the voice is changed; the chat keeps the text as written.
 
-use super::readings::Readings;
+use super::readings::{Readings, ReadingsByLanguage};
 use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{BrokenLink, CowStr, Event, Options, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::borrow::Cow;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
-/// The user's language as a bare two-letter code, the form the sentence splitter recognises.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SpeechLanguage(String);
+/// The user's language as a bare two-letter code, the form the sentence splitter recognises,
+/// with the readings the voice uses in it.
+#[derive(Clone)]
+pub struct SpeechLanguage {
+    code: String,
+    readings: Option<Arc<Readings>>,
+}
 
 impl SpeechLanguage {
     /// Reduces "de-DE" or "de_DE" to "de". Callers pass the language the screen shows when it is
-    /// supported, else the profile's resolved language, as Explain does.
+    /// supported, else the profile's resolved language, as Explain does. Uses the built-in
+    /// readings.
     pub fn new(language: &str) -> Self {
-        Self(
-            language
-                .split(['-', '_'])
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .to_ascii_lowercase(),
-        )
+        Self::with_readings(language, ReadingsByLanguage::built_in())
+    }
+
+    /// Like [`SpeechLanguage::new`], with the readings the configuration built.
+    pub fn with_readings(language: &str, readings: &ReadingsByLanguage) -> Self {
+        let code = erato_config::language_words::primary_subtag(language);
+        let readings = readings.get(language);
+        Self { code, readings }
     }
 
     pub fn code(&self) -> &str {
-        &self.0
+        &self.code
+    }
+
+    #[cfg(test)]
+    pub(super) fn readings(&self) -> Option<Arc<Readings>> {
+        self.readings.clone()
     }
 
     /// The rules sentences are split with. English text is split with German rules too: on
@@ -79,6 +89,35 @@ pub fn speakable(markdown: &str, language: &SpeechLanguage) -> String {
     read(markdown, language, false, Replaced::default())
         .text
         .replace(BREAK, "")
+}
+
+/// Plain text as markdown that reads back as exactly that text: every ASCII
+/// punctuation mark escaped, the other whitespace collapsed to single spaces,
+/// so no mark, table, list, heading or code block is parsed out of it. Each
+/// line is a paragraph of its own, so a line break still ends a sentence.
+pub fn plain_as_markdown(plain: &str) -> String {
+    let mut escaped = String::with_capacity(plain.len() + 8);
+    for line in plain.lines() {
+        let mut words = line.split_whitespace().peekable();
+        if words.peek().is_none() {
+            continue;
+        }
+        if !escaped.is_empty() {
+            escaped.push_str("\n\n");
+        }
+        for (index, word) in words.enumerate() {
+            if index > 0 {
+                escaped.push(' ');
+            }
+            for c in word.chars() {
+                if c.is_ascii_punctuation() {
+                    escaped.push('\\');
+                }
+                escaped.push(c);
+            }
+        }
+    }
+    escaped
 }
 
 /// Which replacement sentences were said since the last spoken text.
@@ -164,7 +203,7 @@ pub(super) fn read(
         _ => true,
     });
 
-    let readings = Readings::for_language(language);
+    let readings = language.readings.as_deref();
     let last = pieces.len().saturating_sub(1);
     let mut spoken = String::new();
     for (index, piece) in pieces.into_iter().enumerate() {
@@ -328,6 +367,43 @@ fn strip_www(host: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn plain_text_is_spoken_as_shown() {
+        let language = super::SpeechLanguage::new("de");
+        let spoken = |plain: &str| super::speakable(&super::plain_as_markdown(plain), &language);
+        for (plain, words) in [
+            ("Betreff: ~~alt~~ neu", &["Betreff", "alt", "neu"][..]),
+            ("Preis **50 € _netto", &["Preis", "50", "netto"]),
+            ("[Entwurf", &["Entwurf"]),
+            ("# 1. Punkt", &["1", "Punkt"]),
+            ("    eingerückt\n\n  Zeile", &["eingerückt.", "Zeile"]),
+        ] {
+            let said = spoken(plain);
+            for word in words {
+                assert!(said.contains(word), "{plain:?} -> {said:?}");
+            }
+        }
+        let table = spoken("| a | b |\n|---|---|\n| 1 | 2 |");
+        assert!(
+            !table.contains("Tabelle") && table.contains('a'),
+            "{table:?}"
+        );
+        assert!(super::speakable("~~alt~~ neu", &language).trim() == "neu.");
+    }
+
+    #[test]
+    fn plain_text_keeps_its_line_breaks_and_readings() {
+        let language = super::SpeechLanguage::new("de");
+        let spoken = |plain: &str| super::speakable(&super::plain_as_markdown(plain), &language);
+        let email = spoken("Hallo Max,\n\nder Bericht ist fertig\nviele Grüße\nDaniel");
+        assert!(
+            email.contains("fertig.") && email.contains("Grüße."),
+            "{email:?}"
+        );
+        let due = "Am 21.11.2026 um 14:30 Uhr sind 1.250,00 € fällig.";
+        assert_eq!(spoken(due), super::speakable(due, &language));
+    }
+
     use super::*;
 
     fn de(markdown: &str) -> String {

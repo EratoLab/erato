@@ -2,6 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "@/app/env";
 
+describe("env assistantsEnableDirectOrganizationSharing", () => {
+  afterEach(() => {
+    delete window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING;
+  });
+
+  it("defaults to true when the backend omits the setting", () => {
+    expect(env().assistantsEnableDirectOrganizationSharing).toBe(true);
+  });
+
+  it.each([true, false])("reads the backend value (%s)", (value) => {
+    window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING = value;
+    expect(env().assistantsEnableDirectOrganizationSharing).toBe(value);
+  });
+});
+
 describe("env keepToolsDropdownOpen", () => {
   afterEach(() => {
     delete window.KEEP_TOOLS_DROPDOWN_OPEN;
@@ -44,6 +59,48 @@ describe("env readAloudEnabled", () => {
   );
 });
 
+describe("env speechEnabled", () => {
+  afterEach(() => {
+    delete window.SPEECH_ENABLED;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to off", () => {
+    expect(env().speechEnabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.SPEECH_ENABLED = value;
+      expect(env().speechEnabled).toBe(value);
+      vi.stubEnv("VITE_SPEECH_ENABLED", String(!value));
+      expect(env().speechEnabled).toBe(!value);
+    },
+  );
+});
+
+describe("env approvalVoiceCommandsEnabled", () => {
+  afterEach(() => {
+    delete window.APPROVAL_VOICE_COMMANDS_ENABLED;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to off", () => {
+    expect(env().approvalVoiceCommandsEnabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.APPROVAL_VOICE_COMMANDS_ENABLED = value;
+      expect(env().approvalVoiceCommandsEnabled).toBe(value);
+      vi.stubEnv("VITE_APPROVAL_VOICE_COMMANDS_ENABLED", String(!value));
+      expect(env().approvalVoiceCommandsEnabled).toBe(!value);
+    },
+  );
+});
+
 describe("env audioConversationalEndOfTurnSilenceMs", () => {
   afterEach(() => {
     delete window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
@@ -59,6 +116,77 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1500);
     vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS", "1200");
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1200);
+  });
+
+  it("reads the minimum speech and the voice's start buffer", () => {
+    expect(env().audioConversationalMinSpeechMs).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_MIN_SPEECH_MS = 300;
+    window.AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS = 96;
+    window.AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS = 0;
+    window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS = 500;
+    expect(env()).toMatchObject({
+      audioConversationalMinSpeechMs: 300,
+      audioConversationalCardMinSpeechMs: 96,
+      audioConversationalVoiceStartBufferMs: 0,
+      audioConversationalVoiceStartMaxWaitMs: 500,
+    });
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS", "128");
+    expect(env().audioConversationalCardMinSpeechMs).toBe(128);
+    delete window.AUDIO_CONVERSATIONAL_MIN_SPEECH_MS;
+    delete window.AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS;
+    delete window.AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS;
+    delete window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS;
+  });
+
+  it("reads the hesitation words, from the backend or a comma-separated Vite override", () => {
+    expect(env().audioConversationalHesitationWords).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_HESITATION_WORDS = ["äh", "euh"];
+    expect(env().audioConversationalHesitationWords).toEqual(["äh", "euh"]);
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_HESITATION_WORDS", "um, uh");
+    expect(env().audioConversationalHesitationWords).toEqual(["um", "uh"]);
+    delete window.AUDIO_CONVERSATIONAL_HESITATION_WORDS;
+  });
+
+  it("reads the card's own silence beside it", () => {
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS = 900;
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBe(900);
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS", "700");
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBe(700);
+    delete window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS;
+  });
+});
+
+describe("env audioConversationalTalkOverVoice", () => {
+  afterEach(() => {
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE;
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
+    vi.unstubAllEnvs();
+  });
+
+  it("is off by default, with no minimum of its own", () => {
+    expect(env().audioConversationalTalkOverVoice).toBe(false);
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBeUndefined();
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE = value;
+      expect(env().audioConversationalTalkOverVoice).toBe(value);
+      vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE", String(!value));
+      expect(env().audioConversationalTalkOverVoice).toBe(!value);
+    },
+  );
+
+  it("reads the minimum speech and prefers the Vite override", () => {
+    window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS = 700;
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(700);
+    vi.stubEnv(
+      "VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS",
+      "300",
+    );
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(300);
   });
 });
 

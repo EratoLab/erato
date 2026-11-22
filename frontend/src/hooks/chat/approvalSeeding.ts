@@ -5,12 +5,16 @@ import type {
   ContentPart,
   ToolApprovalDecision,
   ToolApprovalKind,
+  ToolDisplayMetadata,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface SeedableApprovalItem {
   approval_id: string;
   tool_call_id: string;
   tool_name: string;
+  /** The name the model called the tool by, where it is not `tool_name`. */
+  called_as?: string | null;
+  display?: ToolDisplayMetadata | null;
   input: unknown;
   child?: {
     child_chat_id: string;
@@ -23,10 +27,12 @@ export interface SeedableApprovalItem {
 export interface SettledApproval {
   item: SeedableApprovalItem;
   decision: ToolApprovalDecision;
+  /** The user's words for a `request_change`. */
+  changeRequest?: string;
 }
 
 const decisionPart = (
-  { item, decision }: SettledApproval,
+  { item, decision, changeRequest }: SettledApproval,
   now: string,
 ): ContentPart =>
   // The generated schema collapses both `serde_json::Value` and
@@ -51,7 +57,16 @@ const decisionPart = (
         rejected_at: now,
         approval_id: item.approval_id,
         child_chat_id: item.child?.child_chat_id ?? null,
-        reason: decision === "withdraw" ? "withdrawn" : null,
+        reason:
+          decision === "withdraw"
+            ? "withdrawn"
+            : decision === "request_change"
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- API wire value
+                "change_requested"
+              : null,
+        ...(decision === "request_change"
+          ? { change_request: changeRequest ?? null }
+          : {}),
       }) as unknown as ContentPart;
 
 const toolUsePart = (item: SeedableApprovalItem, approved: boolean) =>
@@ -59,7 +74,18 @@ const toolUsePart = (item: SeedableApprovalItem, approved: boolean) =>
     // eslint-disable-next-line lingui/no-unlocalized-strings -- API wire value
     content_type: "tool_use",
     tool_call_id: item.tool_call_id,
-    tool_name: item.tool_name,
+    // As the server writes the row: under the name the model called, with
+    // the card's display, which names the tool as its server does.
+    tool_name: item.called_as ?? item.tool_name,
+    ...(item.display
+      ? {
+          display: {
+            ...item.display,
+            description: undefined,
+            description_truncated: false,
+          },
+        }
+      : {}),
     input: item.input ?? null,
     output: null,
     progress_message: null,

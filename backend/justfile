@@ -42,11 +42,19 @@ generate_open_api_check:
 generate_config_reference_check:
     cargo run --bin gen-config-reference -- --check
 
+# Writes the built-in language data the web app ships
+generate_language_base:
+    cargo run -p erato_config --bin gen-language-base
+
+# Checks that the web app's built-in language data matches the backend's
+generate_language_base_check:
+    cargo run -p erato_config --bin gen-language-base -- --check
+
 check_config_reference_docs:
     uv run ../site/scripts/check_config_reference_coverage.py
 
 test *args:
-    RUST_MIN_STACK=8388608 cargo nextest run --retries 2 --no-fail-fast {{args}}
+    RUST_MIN_STACK=16777216 cargo nextest run --retries 2 --no-fail-fast {{args}}
 
 test_policy:
     opa test --v1-compatible -v policy

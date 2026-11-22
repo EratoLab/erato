@@ -8,6 +8,19 @@ import {
   useReducer,
 } from "react";
 
+/**
+ * What content that changes its own height after it has rendered, such as an
+ * interactive view, dispatches from its element, bubbling, when its height
+ * has changed: a list the user follows at its bottom stays there.
+ */
+export const CONTENT_RESIZED_EVENT = "erato:content-resized";
+
+/**
+ * How close to its bottom the user must have left the list for content that
+ * grows to keep it there.
+ */
+const FOLLOW_BOTTOM_THRESHOLD_PX = 8;
+
 interface UseScrollToBottomOptions {
   /**
    * Whether to enable auto-scrolling to bottom
@@ -168,6 +181,13 @@ export function useScrollToBottom({
   // Also provide separate state values for UI updates
   const [isScrolledUp, setIsScrolledUp] = useState(false);
 
+  // Whether the list follows its bottom: until the user scrolls up away from
+  // it, and again once the list scrolls to its bottom. Read when content
+  // grows, before the list has scrolled.
+  const followsBottom = useRef(true);
+  const holdsStill = useRef(false);
+  holdsStill.current = autoScrollPaused || isTransitioning;
+
   // Memoize the scroll position check function for performance
   const checkIfUserIsScrolledUp = useCallback(() => {
     const container = containerRef.current;
@@ -207,6 +227,7 @@ export function useScrollToBottom({
     // Use CSS smooth scrolling for better performance
     container.style.scrollBehavior = "smooth";
     container.scrollTop = container.scrollHeight;
+    followsBottom.current = true;
 
     // Reset after transition completes to not interfere with other scrolling
     setTimeout(() => {
@@ -225,6 +246,7 @@ export function useScrollToBottom({
     // Use requestAnimationFrame for smoother scrolling
     requestAnimationFrame(() => {
       container.scrollTop = container.scrollHeight;
+      followsBottom.current = true;
       dispatch({ type: "SCROLL_TO_BOTTOM" });
 
       // When we scroll to bottom, update scrolled up state
@@ -282,6 +304,37 @@ export function useScrollToBottom({
     checkIfUserIsScrolledUp,
   ]);
 
+  // Content that grows keeps a list the user follows at its bottom: where the
+  // user left the list is read from its scrolling, which growing content
+  // does not change. Scrolling up away from the bottom stops following it,
+  // scrolling down to it follows it again; scrolling down elsewhere, as the
+  // browser does when it keeps the content in view in place, changes
+  // nothing.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !enabled) return;
+    let lastScrollTop = container.scrollTop;
+    const followScrolling = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom =
+        scrollHeight - scrollTop - clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
+      if (atBottom || scrollTop < lastScrollTop) {
+        followsBottom.current = atBottom;
+      }
+      lastScrollTop = scrollTop;
+    };
+    const keepBottom = () => {
+      if (!followsBottom.current || holdsStill.current) return;
+      container.scrollTop = container.scrollHeight;
+    };
+    container.addEventListener("scroll", followScrolling, { passive: true });
+    container.addEventListener(CONTENT_RESIZED_EVENT, keepBottom);
+    return () => {
+      container.removeEventListener("scroll", followScrolling);
+      container.removeEventListener(CONTENT_RESIZED_EVENT, keepBottom);
+    };
+  }, [enabled]);
+
   // Handle automatic scrolling on initial load and when new messages arrive
   useEffect(() => {
     if (!enabled) return;
@@ -310,6 +363,7 @@ export function useScrollToBottom({
         } else {
           container.scrollTop = container.scrollHeight;
         }
+        followsBottom.current = true;
 
         // Update state after scrolling
         dispatch({ type: "SCROLL_TO_BOTTOM" });

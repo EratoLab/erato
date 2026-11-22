@@ -5,7 +5,7 @@
 //! one, and the tool definitions it is offered are unchanged.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use eyre::{Report, WrapErr, eyre};
-use rmcp::model::{ReadResourceResult, ResourceContents, Tool};
+use rmcp::model::{MetaObject, ReadResourceResult, ResourceContents, Tool};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -26,7 +26,8 @@ pub const VIEW_FAILURE_RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
 pub const VIEW_CACHE_BYTES: u64 = 128 * 1024 * 1024;
 /// How many refused or unreadable views are remembered at once.
 pub const MAX_REMEMBERED_VIEW_FAILURES: u64 = 10_000;
-/// The most of a call's `structuredContent` kept with the call for its view.
+/// The most of a call's `structuredContent`, and of its result's `_meta`,
+/// each kept with the call for its view.
 pub const MAX_VIEW_STRUCTURED_CONTENT_BYTES: usize = 1024 * 1024;
 /// Longest `ui://` URI a tool may name as its view.
 const MAX_VIEW_URI_BYTES: usize = 512;
@@ -117,12 +118,25 @@ impl McpAppView {
 /// A call's `structuredContent` as its view gets it: an object of at most
 /// `MAX_VIEW_STRUCTURED_CONTENT_BYTES`, or nothing.
 pub fn structured_content_for_view(structured_content: Option<&Value>) -> Option<Value> {
-    let value = structured_content.filter(|value| value.is_object())?;
+    kept_for_view("structuredContent", structured_content)
+}
+
+/// A call result's `_meta` as its view gets it, unchanged: at most
+/// `MAX_VIEW_STRUCTURED_CONTENT_BYTES`, or nothing.
+pub fn result_meta_for_view(meta: Option<&MetaObject>) -> Option<Value> {
+    let meta = meta.map(|meta| Value::Object(meta.0.clone()));
+    kept_for_view("_meta", meta.as_ref())
+}
+
+/// `value` of the result's field `field` when it is an object of at most
+/// `MAX_VIEW_STRUCTURED_CONTENT_BYTES`.
+fn kept_for_view(field: &str, value: Option<&Value>) -> Option<Value> {
+    let value = value.filter(|value| value.is_object())?;
     let size = value.to_string().len();
     if size > MAX_VIEW_STRUCTURED_CONTENT_BYTES {
         tracing::warn!(
             size,
-            "structuredContent is larger than the {MAX_VIEW_STRUCTURED_CONTENT_BYTES} bytes kept for a view; the view gets the result's text only"
+            "the result's {field} is larger than the {MAX_VIEW_STRUCTURED_CONTENT_BYTES} bytes kept for a view; the view gets the result without it"
         );
         return None;
     }
@@ -266,5 +280,20 @@ mod tests {
         assert_eq!(structured_content_for_view(Some(&json!([1, 2, 3]))), None);
         let large = json!({"text": "x".repeat(MAX_VIEW_STRUCTURED_CONTENT_BYTES)});
         assert_eq!(structured_content_for_view(Some(&large)), None);
+    }
+
+    #[test]
+    fn a_view_gets_the_results_meta_unchanged_within_the_limit() {
+        let meta = json!({"svg": "<svg/>", "io.example/chart": {"kind": "bar"}});
+        assert_eq!(
+            result_meta_for_view(Some(&MetaObject(meta.as_object().unwrap().clone()))),
+            Some(meta)
+        );
+        assert_eq!(result_meta_for_view(None), None);
+        let large = json!({"svg": "x".repeat(MAX_VIEW_STRUCTURED_CONTENT_BYTES)});
+        assert_eq!(
+            result_meta_for_view(Some(&MetaObject(large.as_object().unwrap().clone()))),
+            None
+        );
     }
 }

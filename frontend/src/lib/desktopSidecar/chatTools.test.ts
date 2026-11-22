@@ -1464,6 +1464,72 @@ async function knownCoverage(response: unknown, input: unknown = {}) {
 }
 
 describe("search coverage for the model", () => {
+  it("warns about incomplete inventory in catalog listings too", async () => {
+    const response = withCoverage([
+      coverageSource({
+        from: null,
+        through: null,
+        unavailableReason: "inventory_incomplete",
+        inventoryComplete: false,
+        searchableDocuments: 2,
+      }),
+    ]);
+    response.coverage!.basis = "catalog";
+    const coverage = await knownCoverage(response);
+    expect(coverage.notice).toContain(
+      "is incomplete; unreadable or undiscovered items may be missing",
+    );
+    expect(coverage.notice).not.toContain("not been scanned yet");
+  });
+
+  it("keeps undated hits searchable after inventory recovers", async () => {
+    const coverage = await knownCoverage(
+      withCoverage([
+        coverageSource({
+          from: null,
+          through: null,
+          unavailableReason: "no_dated_searchable_documents",
+          inventoryComplete: true,
+          searchableDocuments: 2,
+        }),
+      ]),
+    );
+    expect(coverage.notice).toContain(
+      "were searched, but their document dates are unavailable",
+    );
+    expect(coverage.notice).not.toContain("nothing in");
+  });
+
+  it("keeps partial first-scan hits and explains unknown date coverage", async () => {
+    const response = withCoverage([
+      coverageSource({
+        from: null,
+        through: null,
+        unavailableReason: "inventory_incomplete",
+        inventoryComplete: false,
+        searchableDocuments: 2,
+        olderPending: 10,
+      }),
+    ]);
+    const result = await searchResult(response);
+    expect(result.hits).toEqual(response.hits);
+    const coverage = result.coverage as KnownSearchCoverage;
+    expect(coverage.sources[0]).toMatchObject({
+      status: "partial",
+      searchableDocuments: 2,
+    });
+    expect(coverage.notice).toContain(
+      "successfully indexed items were searched",
+    );
+    expect(coverage.notice).toContain(
+      "no contiguous date coverage is guaranteed",
+    );
+    expect(coverage.notice).not.toContain("nothing in");
+    expect(coverage.notice).toContain(
+      "10 known dated items are still awaiting indexing",
+    );
+  });
+
   it("maps the conformance report to the compact shape and drops the raw keys", async () => {
     const result = await searchResult(searchCoverageFixture);
     expect(result).not.toHaveProperty("limitReached");

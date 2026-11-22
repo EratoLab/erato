@@ -294,6 +294,57 @@ async fn test_profile_preferences_store_the_client_time_zone_and_language(pool: 
     assert_eq!(profile["preference_language"], "de-DE");
 }
 
+/// How approval cards are read aloud is a profile preference: set, returned,
+/// refused when unknown, and cleared with an explicit `null`.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_preferences_store_the_approval_speech_style(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+    let put = |body: Value| {
+        server
+            .put("/api/v1beta/me/profile/preferences")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&body)
+    };
+
+    let updated = put(serde_json::json!({
+        "preference_approval_speech_amount": "short",
+        "preference_approval_speech_wording": "natural"
+    }))
+    .await;
+    updated.assert_status_ok();
+    let updated: Value = updated.json();
+    assert_eq!(updated["preference_approval_speech_amount"], "short");
+    assert_eq!(updated["preference_approval_speech_wording"], "natural");
+    put(serde_json::json!({"preference_approval_speech_wording": "chatty"}))
+        .await
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+
+    // The resolved style follows the user, since the deployment lets them choose.
+    let style: Value = server
+        .get("/api/v1beta/me/approval-speech-style")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(style["amount"], "short");
+    assert_eq!(style["wording"], "natural");
+    assert_eq!(style["source"], "user");
+
+    let cleared = put(serde_json::json!({"preference_approval_speech_amount": null})).await;
+    cleared.assert_status_ok();
+    let cleared: Value = cleared.json();
+    assert_eq!(cleared.get("preference_approval_speech_amount"), None);
+    assert_eq!(cleared["preference_approval_speech_wording"], "natural");
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_client_tool_decisions_replace_the_map_and_reject_invalid_names(pool: Pool<Postgres>) {
     let app_state = test_app_state(hermetic_app_config(None, None), pool).await;

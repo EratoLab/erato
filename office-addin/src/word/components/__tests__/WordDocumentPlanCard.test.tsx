@@ -45,6 +45,7 @@ import {
 } from "../../../test/mocks/word/commentFixtures";
 import { ooxmlHostCommentStates } from "../../../test/mocks/word/commentStates";
 import { storedWordReads } from "../../../test/mocks/word/historyReads";
+import { largeDocumentTurn } from "../../../test/mocks/word/largeDocumentTurn";
 import {
   editWordPackage,
   installWordOoxmlHost,
@@ -118,6 +119,7 @@ const mock = vi.hoisted(() => {
     messageStatus: "completed",
     content: [] as unknown[],
     request: "",
+    requestArgs: undefined as Record<string, unknown> | undefined,
     restoreRequest: vi.fn(),
     pendingConfirmations,
     registerConfirmation: (chatId: string, id: string) =>
@@ -136,6 +138,7 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
         id: "request",
         role: "user",
         content: [{ content_type: "text", text: mock.request }],
+        action_facet_args: mock.requestArgs,
       },
       [String(mock.artifact.messageId)]: {
         id: String(mock.artifact.messageId),
@@ -198,12 +201,22 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
 function Conversation({ children }: { children: ReactNode }) {
   const id = String(mock.artifact.messageId);
   const [messages] = useState(() => ({
+    ...(mock.requestArgs && {
+      request: {
+        id: "request",
+        role: "user",
+        content: [],
+        action_facet_args: mock.requestArgs,
+        createdAt: "2026-10-01T00:00:00Z",
+      } as unknown as EratoLibrary.Message,
+    }),
     [id]: {
       id,
       status: mock.messageStatus,
       role: "assistant",
       content: mock.content,
       createdAt: "2026-10-01T00:00:00Z",
+      ...(mock.requestArgs && { previous_message_id: "request" }),
     } as EratoLibrary.Message,
   }));
   return (
@@ -401,6 +414,7 @@ beforeEach(() => {
   mock.messageStatus = "completed";
   mock.content = [];
   mock.request = "";
+  mock.requestArgs = undefined;
   mock.restoreRequest.mockClear();
   mock.pendingConfirmations.clear();
   mock.artifact = {
@@ -478,7 +492,85 @@ describe("structural document review", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
   });
 
-  it("restores a saved submission for inspection after a pane reload without enabling Apply", async () => {
+  it("names the chapters an accepted smaller retry left out", async () => {
+    const state = setup(CHAPTERS);
+    const messageId = String(mock.artifact.messageId);
+    const context = { toolCallId: "read", messageId, chatId: "chat-A" };
+    const session = new WordDocumentReadSession();
+    session.activate(state.snapshot, context);
+    await session.execute({ snapshot: state.snapshot.token }, context);
+    const submit = createWordDocumentSubmissionExecutor(session);
+    const rewrite = (chapters: string[], id: (i: number) => string) => ({
+      snapshot: state.snapshot.token,
+      readToken: state.snapshot.readToken,
+      scoped_edit: {
+        body: chapters.map((name, i) => ({
+          operation: "replace",
+          source: [
+            state.snapshot.blocks.find((b) => b.text === `${name} body.`)!.ref,
+          ],
+          blocks: [{ id: id(i), type: "paragraph", text: `${name}, shorter.` }],
+        })),
+      },
+    });
+    const refused = await submit(
+      rewrite(["Scope", "Plan", "Notes"], () => "same"),
+      { ...context, toolCallId: "first" },
+    );
+    expect(refused.ok).toBe(false);
+    const input = rewrite(["Scope"], (i) => `r${i}`);
+    const result = await submit(input, {
+      ...context,
+      toolCallId: "submission",
+    });
+    if (!result.ok) throw new Error("Expected accepted plan");
+    const output = result.result as { plan: WordDocumentPlan };
+    mock.content = [
+      {
+        content_type: "tool_use",
+        tool_name: WORD_SUBMIT_PLAN_TOOL,
+        tool_call_id: "submission",
+        status: "success",
+        input,
+        output: {
+          status: "success",
+          result: output,
+          submission: { status: "accepted" },
+        },
+      },
+    ];
+    mock.artifact = {
+      ...buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: {
+          clientActions: ["word.apply_document_plan"],
+          alwaysAskActions: [],
+        },
+        content: mock.content as EratoLibrary.ContentPart[],
+        messageId,
+        capture: state.capture,
+      }),
+    };
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map([[messageId, state.capture]])}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={JSON.stringify(output.plan)}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    expect(
+      await screen.findByTestId("word-plan-not-changed"),
+    ).toHaveTextContent(
+      "Not changed: Plan, Notes. Ask for them in your next message.",
+    );
+  });
+
+  it("folds a saved submission after a pane reload to what it proposed, without Apply, and opens it for inspection", async () => {
     const state = setup();
     mock.artifact.submittedCard = {
       toolCallId: "saved",
@@ -499,22 +591,31 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: Conversation },
     );
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      "Proposed: Change 5 items",
+    );
+    expect(screen.queryByText(/^Applied/)).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Change 5 items" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByRole("heading", { name: "Change 5 items" }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
     expect(screen.getByText("Recommendation")).toBeVisible();
     expect(
       screen.getByText(/original document is not available in this session/),
     ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(screen.queryByText(/Headers, footers/)).toBeNull();
     expect(screen.queryByText(/reused ·|source blocks/)).toBeNull();
+    expect(screen.queryByTestId("word-plan-not-changed")).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
 
-  it("reviews a reloaded plan in full against the read stored in the chat, without enabling Apply", async () => {
+  it("reviews a reloaded plan in full against the read stored in the chat once opened, without Apply", async () => {
     const state = setup(CHAPTERS, (snapshot) =>
       bodyPlan(
         snapshot,
@@ -545,6 +646,7 @@ describe("structural document review", () => {
       </WordWriteProvider>,
       { wrapper: Conversation },
     );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("Check first")).toBeVisible();
     expect(
       screen.getByRole("button", {
@@ -554,11 +656,73 @@ describe("structural document review", () => {
     expect(
       screen.queryByText(/original document is not available in this session/),
     ).toBeNull();
-    const apply = screen.getByRole("button", { name: "Apply changes" });
-    expect(apply).toBeDisabled();
-    fireEvent.click(apply);
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
   });
+
+  it(
+    "reviews a reloaded plan on a document too large for a complete read from the parts the chat read",
+    {
+      timeout: 30_000,
+    },
+    async () => {
+      const titles = ["2.1 Section 2.1", "4.2 Section 4.2", "6.3 Section 6.3"];
+      const turn = await largeDocumentTurn({ sections: [titles[0]] });
+      const unreadTarget = turn.reads.slice(0, -1);
+      mock.content = [...unreadTarget, turn.submission];
+      mock.requestArgs = turn.user.action_facet_args;
+      const content = JSON.stringify(turn.plan);
+      mock.artifact.submittedCard = {
+        toolCallId: "saved",
+        language: "erato-word-document-plan",
+        content,
+      };
+      mock.artifact.isFreshCompletion = false;
+      delete mock.artifact.itemIdentity;
+      render(
+        <WordWriteProvider
+          documentIdentity="doc-A"
+          capturesByAssistantMessageId={new Map()}
+        >
+          <WordHostCardRenderer
+            language="erato-word-document-plan"
+            content={content}
+          />
+        </WordWriteProvider>,
+        { wrapper: Conversation },
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+      expect(
+        screen.getByText(/original document is not available in this session/),
+      ).toBeVisible();
+      for (const title of titles) {
+        const group = screen.getByRole("button", {
+          name: new RegExp(`^${title}`),
+        });
+        if (group.getAttribute("aria-expanded") !== "true")
+          fireEvent.click(group);
+      }
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>("[data-row-key^='output:']"),
+      ];
+      expect(rows).toHaveLength(3);
+      for (const row of rows)
+        fireEvent.click(within(row).getAllByRole("button")[0]);
+      const [read, unread] = rows;
+      fireEvent.click(within(read).getByRole("tab", { name: "Original" }));
+      expect(within(read).getByRole("tabpanel")).toHaveTextContent(
+        turn.changed[0].text,
+      );
+      expect(
+        within(unread).getByText(
+          "The original text was not read in this chat, so only the new text is shown. Check the passage in Word.",
+        ),
+      ).toBeVisible();
+      expect(within(unread).getAllByText("Revised 1.")[0]).toBeVisible();
+      expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    },
+  );
 
   it("applies through the live capture even when the chat also holds the read", async () => {
     const state = setup();
@@ -2103,13 +2267,17 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(word.insert).not.toHaveBeenCalled();
   });
 
-  it("stay refused after a later turn revokes their snapshot", async () => {
+  it("fold once a later turn revokes their snapshot, and stay refused when opened", async () => {
     const { snapshot, refresh } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
     });
     await act(async () => {});
     snapshot.revoked = true;
     refresh();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
     expect(
@@ -2119,20 +2287,26 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(screen.queryByText(/no longer active/)).toBeNull();
   });
 
-  it("leave an in-place plan a later turn revoked with a disabled Apply and the expired notice", async () => {
+  it("fold an in-place plan a later turn revoked to what it proposed, with the expired notice and no Apply", async () => {
     const { snapshot, refresh } = await mountRealistic(
       (s) => statusRewritePlan(s, "Status: revised."),
       { profile: "word-web" },
     );
     await act(async () => {});
+    expect(applyButton()).toBeEnabled();
     snapshot.revoked = true;
     refresh();
-    expect(applyButton()).toBeDisabled();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByText(
         "This document snapshot is no longer active. Include the document in a new request.",
       ),
     ).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
 
   it("keeps the organization wording where a desktop deployment turns the import off", async () => {

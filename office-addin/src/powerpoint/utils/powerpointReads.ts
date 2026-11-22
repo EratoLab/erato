@@ -111,7 +111,10 @@ export function fitItems<T>(
 
 type Input = Record<string, unknown>;
 
-function invalid(path: string, message: string): ClientToolExecutionResult {
+export function invalid(
+  path: string,
+  message: string,
+): ClientToolExecutionResult {
   return {
     ok: false,
     error: message,
@@ -147,7 +150,7 @@ async function guarded(
   }
 }
 
-function positions(slides: PowerPoint.SlideCollection) {
+export function positions(slides: PowerPoint.SlideCollection) {
   return new Map(slides.items.map((slide, i) => [slide.id, i + 1]));
 }
 
@@ -392,7 +395,7 @@ export function readPowerPointSlide(
   });
 }
 
-function slideNotFound(slideId: string): ClientToolExecutionResult {
+export function slideNotFound(slideId: string): ClientToolExecutionResult {
   return invalid(
     "/slideId",
     `No slide has the id ${slideId}. Read the presentation overview for the current ids.`,
@@ -463,7 +466,7 @@ export function readPowerPointSelection(
     const { text } = live;
     const result: Record<string, unknown> = {
       ...envelope(support),
-      ...(outcome?.ok && outcome.route === "file"
+      ...(outcome?.ok && !outcome.current
         ? { fileContent: SAVED_FILE_NOTE }
         : {}),
       selectedSlides: selection.listed,

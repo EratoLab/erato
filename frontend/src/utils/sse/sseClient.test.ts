@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
 import {
   connectivity,
@@ -160,6 +161,47 @@ describe("sseClient fetch parser", () => {
       "Content-Type": "application/json",
       Authorization: "Bearer test-id-token",
     });
+  });
+
+  it("reopens once after the proxy's sign-in page, with the session renewed", async () => {
+    const recover = vi.fn().mockResolvedValue(true);
+    setAuthRecoveryHandler(recover);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("<html>sign in</html>", {
+          status: 403,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        body: makeStream(["data: done\n\n"]),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const onMessage = vi.fn();
+    const onError = vi.fn();
+
+    try {
+      createSSEConnection("/api/v1beta/me/client-operations/stream", {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        onMessage,
+        onError,
+        onClose: vi.fn(),
+      });
+      await waitForAsyncWork();
+      await waitForAsyncWork();
+
+      expect(recover).toHaveBeenCalledWith("sse-signed-out");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onMessage).toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      setAuthRecoveryHandler(null);
+    }
   });
 
   it("preserves request and response context for failed SSE requests", async () => {
@@ -360,5 +402,52 @@ describe("sseClient network failures", () => {
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(isStalledStream(onError.mock.calls[0][0])).toBe(true);
+  });
+
+  it("does not count a session renewal against connectTimeoutMs", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.spyOn(connectivity, "reportNetworkSuccess").mockImplementation(() => {});
+    const recover = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          setTimeout(() => resolve(true), 25_000);
+        }),
+    );
+    setAuthRecoveryHandler(recover);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("<html>sign in</html>", {
+          status: 403,
+          headers: { "content-type": "text/html" },
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        body: makeStream(["data: done\n\n"]),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const onMessage = vi.fn();
+    const onError = vi.fn();
+
+    try {
+      createSSEConnection("/api/test", {
+        method: "POST",
+        connectTimeoutMs: 20_000,
+        onMessage,
+        onError,
+      });
+      await vi.advanceTimersByTimeAsync(26_000);
+
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(onMessage).toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      setAuthRecoveryHandler(null);
+    }
   });
 });

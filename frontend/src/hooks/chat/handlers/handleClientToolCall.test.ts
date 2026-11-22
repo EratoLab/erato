@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 import { fakeWebLocks } from "@/test/webLocks";
@@ -94,6 +95,54 @@ describe("handleClientToolCall", () => {
       message_id: "msg-1",
       tool_call_id: "call-1",
       result: { slots: 3 },
+    });
+  });
+
+  describe("a result the proxy turns away as signed out", () => {
+    // 2026-11-19 10:14:06 UTC: the pane answered a Word read within a second, the proxy answered
+    // its result with the 403 sign-in page, and the server timed the read out 30 s later.
+    const signInPage = () => ({
+      ok: false,
+      status: 403,
+      headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+    });
+
+    afterEach(() => {
+      setAuthRecoveryHandler(null);
+    });
+
+    it("is sent again once the session is renewed", async () => {
+      const recover = vi.fn().mockResolvedValue(true);
+      setAuthRecoveryHandler(recover);
+      fetchMock
+        .mockResolvedValueOnce(signInPage())
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: { slots: 3 },
+      }));
+
+      await handleClientToolCall(makeEvent(), deps);
+
+      expect(recover).toHaveBeenCalledWith("client-tool-result");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][1]).toEqual(fetchMock.mock.calls[0][1]);
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(true);
+    });
+
+    it("is not sent again when the session cannot be renewed", async () => {
+      setAuthRecoveryHandler(vi.fn().mockResolvedValue(false));
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      fetchMock.mockResolvedValue(signInPage());
+      registerClientToolExecutor("fetch_availability", async () => ({
+        ok: true,
+        result: { slots: 3 },
+      }));
+
+      await handleClientToolCall(makeEvent(), deps);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(hasClientToolCallBeenAnswered("call-1")).toBe(false);
     });
   });
 

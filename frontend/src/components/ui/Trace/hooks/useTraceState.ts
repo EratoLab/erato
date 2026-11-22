@@ -1,4 +1,5 @@
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { submissionEnd } from "@/lib/trace/submissionSteps";
 
 import type { LogicalStep, TraceStepStatus } from "../types";
 
@@ -18,6 +19,20 @@ export const useIsCurrentChatBusy = (): boolean =>
     const kind = state.statusByChatId[chatId]?.kind;
     return kind === "running" || kind === "action_required";
   });
+
+/** A call that has not returned: the turn is parked on it, still writes it, or abandoned it. */
+const unsettledStatus = (
+  waits: boolean,
+  isTraceActive: boolean,
+  isChatBusy: boolean,
+): TraceStepStatus => {
+  if (waits) return "waiting";
+  if (isTraceActive) return "running";
+  // Only a chat that still owes an outcome can be trusted to settle the call
+  // later; with no such writer left it was abandoned mid-flight, and calling
+  // that `done` would put a green check on a call that never returned.
+  return isChatBusy ? "done" : "interrupted";
+};
 
 /**
  * Compute the visual status of a logical step given its position in the
@@ -43,17 +58,30 @@ export const stepStatus = (
   if (step.kind === "tool_use") {
     if (step.part.status === "error") return "error";
     if (step.part.status === "success") return "done";
-    if (
+    return unsettledStatus(
       waitingToolCallId !== undefined &&
-      step.part.tool_call_id === waitingToolCallId
-    )
-      return "waiting";
-    if (isTraceActive) return "running";
-    // Unfinished on a trace that is no longer being written. Only a chat that
-    // still owes an outcome can be trusted to settle the part later; with no
-    // such writer left the call was abandoned mid-flight, and calling that
-    // `done` would put a green check on a call that never returned.
-    return isChatBusy ? "done" : "interrupted";
+        step.part.tool_call_id === waitingToolCallId,
+      isTraceActive,
+      isChatBusy,
+    );
+  }
+  if (step.kind === "submission") {
+    // Only how the submission ended is the step's outcome; a part sent again is no failure.
+    const end = submissionEnd(step.calls);
+    if (end) return end === "accepted" ? "done" : "error";
+    // Without a recorded end it is open like a call that has not returned, also once every call
+    // has: the model stopped, the provider failed or the budget ran out before it finished.
+    return unsettledStatus(
+      waitingToolCallId !== undefined &&
+        step.calls.some(
+          (call) =>
+            call.tool_call_id === waitingToolCallId &&
+            call.status !== "success" &&
+            call.status !== "error",
+        ),
+      isTraceActive,
+      isChatBusy,
+    );
   }
   // reasoning
   return isLastStep && isTraceActive ? "running" : "done";

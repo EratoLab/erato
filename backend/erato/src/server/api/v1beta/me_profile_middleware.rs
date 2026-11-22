@@ -114,6 +114,31 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_language: Option<String>,
+    /// How much approval cards say aloud, as the user chose; absent follows
+    /// the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_approval_speech_amount: Option<crate::config::ApprovalSpeechAmount>,
+    /// How approval cards are worded aloud, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_approval_speech_wording: Option<crate::config::ApprovalSpeechWording>,
+    /// What the voice says while the user waits, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_wait_lines_amount: Option<erato_config::wait_lines::WaitLinesAmount>,
+    /// How replies are spoken in conversation, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_reply_speech_wording: Option<erato_config::reply_speech::ReplySpeechWording>,
+    /// Whether the chat shows what the voice said, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_reply_speech_show_in_chat: Option<bool>,
 }
 
 impl UserProfile {
@@ -140,6 +165,11 @@ impl UserProfile {
             preference_starting_assistant_cleared: false,
             preference_time_zone: None,
             preference_language: None,
+            preference_approval_speech_amount: None,
+            preference_approval_speech_wording: None,
+            preference_wait_lines_amount: None,
+            preference_reply_speech_wording: None,
+            preference_reply_speech_show_in_chat: None,
         }
     }
 
@@ -206,6 +236,23 @@ impl UserProfile {
             self.preference_starting_assistant_cleared = prefs.starting_assistant_cleared;
             self.preference_time_zone = prefs.time_zone;
             self.preference_language = prefs.language;
+            self.preference_approval_speech_amount = prefs
+                .approval_speech_amount
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_approval_speech_wording = prefs
+                .approval_speech_wording
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_wait_lines_amount = prefs
+                .wait_lines_amount
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_reply_speech_wording = prefs
+                .reply_speech_wording
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_reply_speech_show_in_chat = prefs.reply_speech_show_in_chat;
             self.client_tool_decisions =
                 crate::models::user_preference::client_tool_decisions_from_json(
                     &prefs.client_tool_decisions,
@@ -332,7 +379,7 @@ pub(crate) async fn complete_user_profile(
 ) -> Result<UserProfile, StatusCode> {
     user_profile.determine_final_language_with_config(
         accept_language_header,
-        &app_state.config.i18n.language,
+        &app_state.reloadable.read().await.i18n.language,
         id_token_xms_pl,
         id_token_xms_tpl,
     );
@@ -399,6 +446,17 @@ pub(crate) async fn user_profile_middleware(
 }
 
 const SUPPORTED_LANGUAGES: [&str; 5] = ["en", "de", "fr", "pl", "es"];
+
+/// Warns at startup for language data no card or voice can reach today:
+/// their language always passes [`normalize_supported_language`].
+pub(crate) fn warn_unreachable_voice_language(what: &str, language: &str) {
+    if !SUPPORTED_LANGUAGES.contains(&language) {
+        tracing::warn!(
+            "{what} for `{language}` are kept but unused until that language is supported; the voice uses only {}.",
+            SUPPORTED_LANGUAGES.join(", ")
+        );
+    }
+}
 
 pub(super) fn normalize_supported_language(raw_language: Option<&str>) -> Option<&str> {
     let raw_language = raw_language?;

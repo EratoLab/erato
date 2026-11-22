@@ -1,5 +1,6 @@
 // Pure Word review model: no React, lingui or Office.js behind it.
 export * from "./wordBlockFormatting";
+export * from "./wordBodyRef";
 export * from "./wordBuiltInStyles";
 export * from "./wordCommentChanges";
 export * from "./wordCommentContext";
@@ -15,10 +16,14 @@ export * from "./wordMediaComparison";
 export * from "./wordMediaContent";
 export * from "./wordNativeContent";
 export * from "./wordNoteAnchors";
+export * from "./wordOutlineFormat";
 export * from "./wordPlanDiagnostics";
 export * from "./wordPlanComments";
+export * from "./wordPartsProgress";
+export * from "./wordPlainText";
 export * from "./wordPlanReview";
 export * from "./wordReadScope";
+export * from "./wordReplayRecord";
 export * from "./wordRichContent";
 export * from "./wordRichPlan";
 export * from "./wordStories";

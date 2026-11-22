@@ -716,6 +716,9 @@ struct ScenarioOptions {
     withdraw_submission_on_approval: bool,
     label: Option<erato::config::ClientToolLabelConfig>,
     parameters: Option<Value>,
+    /// Offers `plan_sections` and `write_part` as part tools of `submit_draft`,
+    /// with this many part calls per request.
+    max_part_calls: Option<u32>,
 }
 
 impl Default for ScenarioOptions {
@@ -734,6 +737,7 @@ impl Default for ScenarioOptions {
             withdraw_submission_on_approval: false,
             label: None,
             parameters: None,
+            max_part_calls: None,
         }
     }
 }
@@ -758,6 +762,7 @@ async fn run_scenario(
         withdraw_submission_on_approval,
         label,
         parameters,
+        max_part_calls,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -866,6 +871,39 @@ async fn run_scenario(
         }
         config.client_tools.tools.insert(name.into(), tool);
     }
+    if let Some(max_part_calls) = max_part_calls {
+        let submission = config
+            .client_tools
+            .tools
+            .get_mut("draft")
+            .unwrap()
+            .submission
+            .as_mut()
+            .unwrap();
+        submission.part_tools = vec!["client/plan_sections".into(), "client/write_part".into()];
+        submission.max_part_calls = max_part_calls;
+        for (name, parameters) in [
+            (
+                "plan_sections",
+                json!({"type":"object","properties":{"rows":{"type":"array","items":{"type":"string"}}},"required":["rows"],"additionalProperties":false}),
+            ),
+            (
+                "write_part",
+                json!({"type":"object","properties":{"row":{"type":"integer"},"text":{"type":"string"}},"required":["row","text"],"additionalProperties":false}),
+            ),
+        ] {
+            config.client_tools.tools.insert(
+                name.into(),
+                ClientToolConfig {
+                    name: name.into(),
+                    description: "Stage one part of the draft.".into(),
+                    parameters: parameters.to_string(),
+                    timeout_ms: Some(timeout_ms),
+                    ..Default::default()
+                },
+            );
+        }
+    }
     config.generation.max_tool_calls_per_message = ordinary_budget;
     config.facets.tool_call_allowlist = vec!["client/*".into()];
     if task_approval {
@@ -921,6 +959,12 @@ async fn run_scenario(
                     })
                 })
                 .expect("budget approval");
+            let parked =
+                &row.generation_metadata.as_ref().unwrap_or(&Value::Null)["submission_outcome"];
+            assert!(
+                parked["status"] != "correcting" || parked["attempts_used"] != 0,
+                "a park before any submission call shows no correction: {parked}"
+            );
             let mut continuation_state = state.clone();
             if withdraw_submission_on_approval {
                 continuation_state.config.client_tools.tools.remove("draft");
@@ -1072,7 +1116,7 @@ async fn run_scenario(
         .all(&state.db)
         .await
         .unwrap();
-    if max_attempts > 0 {
+    if max_attempts > 0 && max_part_calls.is_none() {
         assert!(
             rows.iter()
                 .any(|row| row.raw_message.to_string().contains("submission")),
@@ -1559,6 +1603,381 @@ async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>
     assert!(events.iter().all(|event| event.get("display").is_none()));
 }
 
+fn plan_sections(id: &'static str) -> ModelStep {
+    ModelStep::Tools(vec![(
+        id,
+        "plan_sections",
+        json!({"rows":["a","b","c","d"]}),
+    )])
+}
+
+fn write_part(id: &'static str, row: u32) -> ModelStep {
+    ModelStep::Tools(vec![(
+        id,
+        "write_part",
+        json!({"row":row,"text":"New text"}),
+    )])
+}
+
+fn staged(row: u32) -> Value {
+    json!({"result":{"row":row,"status":"ready"}})
+}
+
+fn rejected_part() -> Value {
+    json!({"validation_errors":[{"path":"/text","code":"text-form","message":"Line 2 is not a table row."}]})
+}
+
+fn parts_options(max_part_calls: u32) -> ScenarioOptions {
+    ScenarioOptions {
+        max_part_calls: Some(max_part_calls),
+        // Parts and the finish fit in no ordinary budget.
+        ordinary_budget: 1,
+        ..Default::default()
+    }
+}
+
+/// The model's call ID of an event, without the generation's prefix.
+fn call_id(event: &Value) -> &str {
+    let id = event["tool_call_id"].as_str().unwrap_or_default();
+    id.rsplit(':').next().unwrap_or(id)
+}
+
+/// The settled update of each call, in call order.
+fn call_outputs<'a>(events: &'a [Value], id: &str) -> Vec<&'a Value> {
+    events
+        .iter()
+        .filter(|event| {
+            event["message_type"] == "tool_call_update"
+                && call_id(event) == id
+                && (event["status"] == "success" || event["status"] == "error")
+        })
+        .map(|event| &event["output"])
+        .collect()
+}
+
+fn dispatched(events: &[Value]) -> Vec<&str> {
+    events
+        .iter()
+        .filter(|event| event["message_type"] == "client_tool_call")
+        .map(call_id)
+        .collect()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_section_plan_four_parts_and_the_finish_run_in_one_turn(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_one", 1),
+            write_part("call_1291_two", 2),
+            write_part("call_1291_three", 3),
+            write_part("call_1291_four", 4),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(1),
+            staged(2),
+            staged(3),
+            staged(4),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 6);
+    assert_eq!(
+        dispatched(&events),
+        [
+            "call_1291_plan",
+            "call_1291_one",
+            "call_1291_two",
+            "call_1291_three",
+            "call_1291_four",
+            "call_1291_finish"
+        ]
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":1,"max_attempts":5})
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_four")[0]["part"],
+        json!({"tries_remaining":2,"calls_remaining":35})
+    );
+    assert!(
+        call_outputs(&events, "call_1291_plan")[0]
+            .get("submission_outcome")
+            .is_none()
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.to_string().contains("tool_call_limit"))
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_rejected_part_uses_only_the_tries_of_its_row(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_row_first", 2),
+            ModelStep::Tools(vec![(
+                "call_1291_row_schema",
+                "write_part",
+                json!({"row":2,"text":5}),
+            )]),
+            write_part("call_1291_row_third", 2),
+            write_part("call_1291_row_fourth", 2),
+            write_part("call_1291_other_row", 3),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            rejected_part(),
+            rejected_part(),
+            staged(3),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 7);
+    assert_eq!(
+        dispatched(&events),
+        [
+            "call_1291_plan",
+            "call_1291_row_first",
+            "call_1291_row_third",
+            "call_1291_other_row",
+            "call_1291_finish"
+        ]
+    );
+    let first = call_outputs(&events, "call_1291_row_first")[0];
+    assert_eq!(first["validation_errors"][0]["path"], "/text");
+    assert_eq!(first["part"]["tries_remaining"], 2);
+    let schema = call_outputs(&events, "call_1291_row_schema")[0];
+    assert_eq!(schema["validation_errors"][0]["path"], "/text");
+    assert_eq!(schema["validation_errors"][0]["code"], "type");
+    assert_eq!(schema["part"]["tries_remaining"], 1);
+    let refused = call_outputs(&events, "call_1291_row_fourth")[0];
+    assert_eq!(refused["validation_errors"][0]["path"], "/row");
+    assert_eq!(
+        refused["validation_errors"][0]["code"],
+        "part_tries_exhausted"
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_other_row")[0]["part"],
+        json!({"tries_remaining":2,"calls_remaining":34})
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":1,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_text_reply_before_the_finish_gets_one_reminder(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_one", 1),
+            ModelStep::Text("PROSE_BEFORE_FINISH"),
+            write_part("call_1291_two", 2),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(1),
+            staged(2),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 5);
+    assert!(
+        requests[3]
+            .to_string()
+            .contains("This is the only reminder")
+    );
+    assert!(
+        !requests[2]
+            .to_string()
+            .contains("This is the only reminder")
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":1,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_second_text_reply_before_the_finish_ends_without_a_proposal(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            ModelStep::Text("FIRST_PROSE"),
+            ModelStep::Text("SECOND_PROSE"),
+        ],
+        vec![json!({"result":{"draft_id":"d1","revision":1}})],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"unresolved","reason":"model_stopped","attempts_used":0,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_part_call_past_the_request_limit_asks_for_the_finish_then_ends(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_one", 1),
+            write_part("call_1291_over", 2),
+            write_part("call_1291_past", 3),
+        ],
+        vec![json!({"result":{"draft_id":"d1","revision":1}}), staged(1)],
+        parts_options(2),
+    )
+    .await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(dispatched(&events), ["call_1291_plan", "call_1291_one"]);
+    assert_eq!(
+        call_outputs(&events, "call_1291_over")[0]["validation_errors"][0]["code"],
+        "part_calls_exhausted"
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"unresolved","reason":"part_calls_exhausted","attempts_used":0,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_part_parked_on_task_approval_is_charged_once(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            ModelStep::Tools(vec![
+                (
+                    "call_1291_task",
+                    "delegate_task",
+                    json!({"task":"Research context","facet_ids":["plan"]}),
+                ),
+                (
+                    "call_1291_parked",
+                    "write_part",
+                    json!({"row":2,"text":"New text"}),
+                ),
+            ]),
+            write_part("call_1291_again", 2),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(2),
+            staged(2),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        ScenarioOptions {
+            max_part_calls: Some(40),
+            task_approval: true,
+            budget_decision: Some("reject"),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 4);
+    assert_eq!(
+        dispatched(&events),
+        ["call_1291_parked", "call_1291_again", "call_1291_finish"]
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_parked")[0]["part"],
+        json!({"tries_remaining":2,"calls_remaining":38})
+    );
+    assert_eq!(
+        call_outputs(&events, "call_1291_again")[0]["part"],
+        json!({"tries_remaining":1,"calls_remaining":37})
+    );
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":1,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_finish_sent_with_a_part_uses_an_attempt_and_is_refused(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            ModelStep::Tools(vec![
+                (
+                    "call_1291_part",
+                    "write_part",
+                    json!({"row":1,"text":"New text"}),
+                ),
+                ("call_1291_early", "submit_draft", json!({"title":"early"})),
+            ]),
+            submission("call_1291_finish", json!("valid")),
+        ],
+        vec![
+            json!({"result":{"draft_id":"d1","revision":1}}),
+            staged(1),
+            json!({"result":{"draft_id":"d1"}}),
+        ],
+        parts_options(40),
+    )
+    .await;
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        dispatched(&events),
+        ["call_1291_plan", "call_1291_part", "call_1291_finish"]
+    );
+    assert!(requests[2].to_string().contains("submission_must_be_alone"));
+    assert_eq!(
+        final_outcome(&events),
+        &json!({"status":"accepted","attempts_used":2,"max_attempts":5})
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_part_the_client_never_answers_ends_without_using_an_attempt(pool: Pool<Postgres>) {
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            plan_sections("call_1291_plan"),
+            write_part("call_1291_slow", 1),
+        ],
+        vec![json!({"result":{"draft_id":"d1","revision":1}})],
+        ScenarioOptions {
+            timeout_ms: 200,
+            check_metadata: true,
+            ..parts_options(40)
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    let expected =
+        json!({"status":"unresolved","reason":"timeout","attempts_used":0,"max_attempts":5});
+    assert_eq!(final_outcome(&events), &expected);
+    let slow = call_outputs(&events, "call_1291_slow")[0];
+    assert_eq!(slow["reason"], "timeout");
+    assert_eq!(slow["submission_outcome"], expected);
+    assert!(slow.get("submission").is_none(), "{slow}");
+}
+
 /// Client files must survive the full tool loop, completion SSE and persisted
 /// history; a JSON-only reference cannot drive the attachment renderer.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -1737,4 +2156,204 @@ async fn client_tool_attachments_are_linked_streamed_and_persisted(pool: Pool<Po
                 .is_some()
         );
     }
+}
+
+fn message_index(request: &Value, found: impl Fn(&Value) -> bool) -> Option<usize> {
+    request["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(found)
+}
+
+fn has_image(message: &Value, data_url: &str) -> bool {
+    message["content"].as_array().is_some_and(|parts| {
+        parts
+            .iter()
+            .any(|part| part["type"] == "image_url" && part["image_url"]["url"] == data_url)
+    })
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn client_tool_picture_reaches_the_model_after_its_result(pool: Pool<Postgres>) {
+    use axum_test::multipart::{MultipartForm, Part};
+    use base64::Engine;
+
+    const LATER_TURN: &str = "LATER_TURN_QUESTION";
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[], &["call_picture"]));
+        mock_llm_sse_response(
+            then,
+            build_openai_tool_calls_streaming_response(&[(
+                "call_picture",
+                "fetch_picture",
+                json!({}),
+            )]),
+        );
+    });
+    for (required, forbidden, answer) in [
+        (vec!["call_picture"], vec![LATER_TURN], "Seen."),
+        (vec![LATER_TURN], vec![], "Answered."),
+    ] {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&required, &forbidden))
+                .matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&[answer]));
+        });
+    }
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    for provider in config
+        .chat_providers
+        .as_mut()
+        .unwrap()
+        .providers
+        .values_mut()
+    {
+        provider.model_capabilities.supports_image_understanding = true;
+    }
+    config.client_tools.tools.insert(
+        "picture".into(),
+        ClientToolConfig {
+            name: "fetch_picture".into(),
+            parameters: json!({"type":"object","properties":{}}).to_string(),
+            ..Default::default()
+        },
+    );
+    config.facets.tool_call_allowlist = vec!["client/fetch_picture".into()];
+    let state = test_app_state(config, pool).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let server = app_server(state.clone());
+
+    let data_url = format!(
+        "data:image/png;base64,{}",
+        crate::test_utils::TINY_PNG_BASE64
+    );
+    let picture = base64::engine::general_purpose::STANDARD
+        .decode(crate::test_utils::TINY_PNG_BASE64)
+        .unwrap();
+    let uploaded = server
+        .post(&format!("/api/v1beta/me/files?chat_id={chat_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .multipart(
+            MultipartForm::new().add_part(
+                "file",
+                Part::bytes(picture)
+                    .file_name("picture.png")
+                    .mime_type("image/png"),
+            ),
+        )
+        .await;
+    uploaded.assert_status_ok();
+    let file_id = uploaded.json::<Value>()["files"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let request = json!({"existing_chat_id":chat_id,"user_message":"Fetch the picture"});
+    let submit = async {
+        server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&request)
+            .await
+    };
+    let client = async {
+        loop {
+            if let Some(task) = state.background_tasks.get_task(&chat_id).await {
+                for event in task.get_event_history().await {
+                    if let StreamingEvent::ClientToolCall {
+                        message_id,
+                        tool_call_id,
+                        ..
+                    } = event
+                    {
+                        let response = server
+                            .post("/api/v1beta/me/messages/clienttoolresult")
+                            .with_bearer_token(TEST_JWT_TOKEN)
+                            .json(&json!({
+                                "chat_id": chat_id, "message_id": message_id, "tool_call_id": tool_call_id,
+                                "result": {"subject": "PICTURE_SUBJECT"},
+                                "file_upload_ids": [file_id],
+                            }))
+                            .await;
+                        response.assert_status_ok();
+                        assert_eq!(response.json::<Value>()["delivered"], true);
+                        return;
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    };
+    let (response, ()) = tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::join!(submit, client)
+    })
+    .await
+    .expect("picture tool loop did not finish");
+    response.assert_status_ok();
+    let message_id = parse_sse_events(&response)
+        .into_iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .expect("completed event")["message_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"existing_chat_id":chat_id,"previous_message_id":message_id,"user_message":LATER_TURN}))
+        .await
+        .assert_status_ok();
+
+    let requests: Vec<Value> = recorder
+        .bodies()
+        .iter()
+        .map(|body| serde_json::from_str(body).unwrap())
+        .collect();
+    assert_eq!(requests.len(), 2);
+    let is_result = |message: &Value| message["tool_call_id"] == "call_picture";
+    let names_file = |message: &Value| message.to_string().contains("file name: picture.png");
+
+    let same_turn = &requests[0];
+    let result = message_index(same_turn, is_result).expect("tool result");
+    let image = message_index(same_turn, |message| has_image(message, &data_url))
+        .expect("the picture is in the request that follows the tool result");
+    assert!(
+        image > result,
+        "the picture comes after the result: {same_turn}"
+    );
+    assert_eq!(same_turn["messages"][image]["role"], "user");
+    assert!(
+        message_index(same_turn, names_file).is_some_and(|name| name > result && name < image),
+        "the file name comes between the result and the picture: {same_turn}"
+    );
+    let result_text = same_turn["messages"][result]["content"].as_str().unwrap();
+    assert!(result_text.contains("PICTURE_SUBJECT"), "{result_text}");
+    assert!(result_text.contains("picture.png"), "{result_text}");
+    assert!(
+        result_text.contains(crate::test_utils::CLIENT_TOOL_IMAGE_NOTICE),
+        "{result_text}"
+    );
+    assert!(!result_text.contains("text only"), "{result_text}");
+    assert!(!result_text.contains("unavailableReason"), "{result_text}");
+
+    // Replayed inside the assistant's message, where this adapter sends no
+    // image. `only_ollama_sends_an_image_replayed_in_an_assistant_message`
+    // covers the other adapters.
+    let later_turn = &requests[1];
+    assert!(message_index(later_turn, is_result).is_some());
+    assert!(message_index(later_turn, names_file).is_some());
+    assert!(
+        !later_turn.to_string().contains("data:image/"),
+        "the later turn carried the picture again: {later_turn}"
+    );
 }

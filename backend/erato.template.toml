@@ -119,6 +119,14 @@ chat_provider_ids = ["test-token-limit"]
 # chat_provider_id = "test-token-limit"
 # allow_other_provider = false
 
+# Voice commands on a waiting approval card (conversational audio mode).
+# Without chat_provider_id only the built-in rules answer.
+# [approval_voice_commands]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+# model_timeout_ms = 2500
+# prompt = "..."
+
 # From ./run_mcp_server.sh
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
 # [mcp_servers_global]
@@ -250,6 +258,13 @@ chat_provider_ids = ["test-token-limit"]
 # [integrations.ms_office.addin.document.manifest]
 # display_name = "Erato for Documents"
 # description = "Erato AI assistant for Word documents"
+#
+# # The PowerPoint add-in has its own catalog ID, distinct from the two above.
+# [integrations.ms_office.addin.presentation]
+# addin_id = "f13aa6d0-f017-46e3-8b17-a72159d689ea"
+# [integrations.ms_office.addin.presentation.manifest]
+# display_name = "Erato for PowerPoint"
+# description = "Erato AI assistant for PowerPoint presentations"
 #
 # # Runtime hosting the Outlook launch event handlers. Required as soon as at
 # # least one launch event is configured, rejected when none are. Both paths are
@@ -450,7 +465,18 @@ chat_provider_ids = ["test-token-limit"]
 # [audio_conversational]
 # enabled = false
 # speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
-# end_of_turn_silence_ms = 1800 # Silence that ends a spoken turn (500 to 5000); shorter replies sooner but cuts off more pauses
+# end_of_turn_silence_ms = 1800 # Silence that ends a spoken turn (500 to 5000; other values fall back with a warning); shorter replies sooner but cuts off more pauses
+# card_end_of_turn_silence_ms = 1000 # The same while a spoken approval card listens for a short command (500 to 5000)
+# min_speech_ms = 250 # Speech the voice detector must count before a turn can end (32 to 2000); it counts mostly vowels
+# card_min_speech_ms = 64 # The same while an approval card listens; its commands are single short words (32 to 2000)
+# voice_start_buffer_ms = 400 # Audio a voice starting from silence waits for, so its first syllable is not alone (0 to 2000)
+# voice_start_max_wait_ms = 350 # The longest it waits; what has come by then plays (0 to 2000)
+# hesitation_words = [] # Hesitation sounds added to the German and English base (one word of letters each); a turn of only these does not end
+# hesitation_words_replace_base = false # true: hesitation_words replaces the base; an empty list then holds nothing back
+# talk_over_voice = false # Let the user start speaking while the voice talks; the voice yields
+# talk_over_voice_min_speech_ms = 500 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner but stops on more coughs and "mhm"
+# reply_speech = { wording = "natural", user_choice = true, show_in_chat = false } # natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
+# keep_reply_audio = false # Store each reply's voice so it can be played again; off streams it only
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30
@@ -484,6 +510,8 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = false
 # # Whether assistants can be shared with edit access (default: true)
 # enable_edit_sharing = true
+# # Set to false to hide the organization target in the direct Share dialog (default: true)
+# enable_direct_organization_sharing = false
 # # Whether to show recent assistant items in the chat sidebar (default: false)
 # show_recent_items = false
 # # Whether the recent assistants sidebar section is rendered as a collapsible
@@ -503,6 +531,15 @@ chat_provider_ids = ["test-token-limit"]
 # # Maximum number of characters allowed in an assistant's system prompt.
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
+
+# Assistant Hub publication permissions
+# [assistant_hub.action_permissions]
+# Each action defaults to both roles. A caller needs any listed role.
+# editors have edit access to the source assistant, including through sharing.
+# reviewers match assistant_hub.reviewers.rules. Use [] to disable an action.
+# publish = ["editors", "reviewers"]
+# unpublish = ["editors", "reviewers"]
+# make_current = ["editors", "reviewers"]
 
 # Executor for scheduled deliveries: messages Erato owes a user at a due time
 # (reminders, the Teams inactivity nudge, notifications). Every replica runs

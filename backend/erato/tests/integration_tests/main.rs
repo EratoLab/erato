@@ -198,6 +198,17 @@ async fn test_app_state_internal(
     let mcp_servers = McpServers::new(&app_config);
     let reloadable = ReloadableAppState::new(&app_config, &distribution, mcp_servers);
 
+    let voice_command_words = std::sync::Arc::new(
+        erato::services::approval_voice_commands::CommandWordsByLanguage::from_config(
+            &app_config.approval_voice_commands.words,
+            &app_config.approval_voice_decisions.phrases,
+        ),
+    );
+    let speech_readings = std::sync::Arc::new(
+        erato::services::speech::readings::ReadingsByLanguage::from_config(
+            &app_config.spoken_readings,
+        ),
+    );
     let app_state = AppState {
         memory_reservation: None,
         client_operations: erato::services::client_operations::registry(&app_config).unwrap(),
@@ -232,6 +243,8 @@ async fn test_app_state_internal(
         file_bytes_cache,
         file_contents_cache,
         token_count_cache,
+        voice_command_words,
+        speech_readings,
         tool_label_cache: Default::default(),
         tool_label_timeout: erato::services::tool_labeller::LABEL_TIMEOUT,
         tool_label_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(

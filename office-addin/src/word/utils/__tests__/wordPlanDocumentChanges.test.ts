@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  heading,
   packageXml,
   paragraph,
 } from "../../../test/mocks/word/authoringFixtures";
@@ -9,7 +10,6 @@ import {
   uninstallMockWordDocument,
 } from "../../../test/mocks/word/document";
 import { okResult } from "../../../test/mocks/word/sectionFixtures";
-import { escapeXml } from "../../../utils/escapeXml";
 import {
   beginWordOwnWrite,
   nameWordOwnWriteIds,
@@ -19,24 +19,38 @@ import {
   resetWordChangeJournalForTests,
   wordChangePosition,
 } from "../wordChangeJournal";
+import { createWordDocumentPartExecutors } from "../wordDocumentPartTools";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
 import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
+import {
+  setWordInPlaceCapabilitiesForTests,
+  wordInPlaceCapabilities,
+} from "../wordInPlaceCapabilities";
 import { wordPlanWrittenBlocks } from "../wordPlanDocumentChanges";
 
 import type { WordDocumentBuild } from "../buildWordDocumentArgs";
+import type * as WordInPlaceSwitch from "../wordInPlaceSwitch";
 import type { ClientToolExecutionResult } from "@erato/frontend/library";
 import type { WordAuthoringSnapshot } from "@erato/frontend/word-review";
 
+const inPlace = vi.hoisted(() => ({ on: false }));
+vi.mock("../wordInPlaceSwitch", async (importOriginal) => {
+  const actual = await importOriginal<typeof WordInPlaceSwitch>();
+  return {
+    ...actual,
+    wordInPlaceAvailability: () =>
+      inPlace.on ? { enabled: true } : actual.wordInPlaceAvailability(),
+  };
+});
+
 const context = { chatId: "chat-A", messageId: "message-A", toolCallId: "c" };
 
-const heading = (text: string) =>
-  `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 const cell = (text: string) => `<w:tc><w:tcPr/>${paragraph(text)}</w:tc>`;
 const TABLE = `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${cell("Service")}${cell("Level")}</w:tr><w:tr>${cell("Hosting")}${cell("99.5 %")}</w:tr></w:tbl>`;
 
 /** Three numbered chapters; § 2 holds a table. */
-function captured() {
+function captured(fullDocument = false) {
   const snapshot = captureWordAuthoringSnapshot(
     packageXml(
       [
@@ -53,6 +67,7 @@ function captured() {
     ),
     "doc-A",
     "Off",
+    fullDocument,
   );
   const ordinalMap: WordDocumentBuild["ordinalMap"] = new Map();
   const ids = new Map<string, string[]>();
@@ -204,6 +219,8 @@ describe("a plan that writes what changed since the capture", () => {
   afterEach(() => {
     vi.useRealTimers();
     uninstallMockWordDocument();
+    inPlace.on = false;
+    setWordInPlaceCapabilitiesForTests(undefined);
   });
 
   it("is refused when the user edited a paragraph it writes, naming the part by its title", async () => {
@@ -307,16 +324,171 @@ describe("a plan that writes what changed since the capture", () => {
     expect([
       ...wordPlanWrittenBlocks(
         {
-          version: 1,
-          snapshot: doc.snapshot.token,
-          readToken: "scoped",
-          scope: "body",
           entries: order.map((ref) => ({ kind: "keep", source: [ref] })),
           deleted: [],
         },
         doc.snapshot,
       ),
     ]).toEqual([refs.indexOf(moved)]);
+  });
+
+  async function partsFinish(
+    rows: { source: string; action: string; change?: string }[],
+    parts: [number, string, string][],
+    edit: () => void,
+  ) {
+    const { readToken } = okResult<{ readToken: string }>(
+      await doc.session.execute(
+        { snapshot: doc.snapshot.token, cursor: null },
+        { ...context, toolCallId: `read-${++call}` },
+      ),
+    );
+    const executors = createWordDocumentPartExecutors(doc.session);
+    const planned = okResult<{ draft_id: string }>(
+      await executors.plan(
+        {
+          snapshot: doc.snapshot.token,
+          readToken,
+          intent: "Plainer wording.",
+          rows,
+        },
+        { ...context, toolCallId: `plan-${++call}` },
+      ),
+    );
+    let revision = 0;
+    for (const [row, text, replacement] of parts) {
+      const ref = refOf(doc.snapshot, text);
+      const own = rows[row - 1].source.split("-");
+      const ops = [
+        ...(own[0] === ref ? [] : [{ keep: own[0] }]),
+        { replace: ref, text: replacement },
+        ...((own[1] ?? own[0]) === ref ? [] : [{ keep: own[1] }]),
+      ];
+      ({ revision } = okResult<{ revision: number }>(
+        await executors.write(
+          {
+            snapshot: doc.snapshot.token,
+            draft_id: planned.draft_id,
+            row,
+            ops,
+          },
+          { ...context, toolCallId: `part-${++call}` },
+        ),
+      ));
+    }
+    edit();
+    return submit(
+      {
+        snapshot: doc.snapshot.token,
+        readToken,
+        draft_id: planned.draft_id,
+        revision,
+        finish: true,
+      },
+      { ...context, toolCallId: `submit-${++call}` },
+    );
+  }
+
+  const writtenText = (plan: {
+    entries: { kind: string; blocks?: { text: string }[] }[];
+  }) =>
+    plan.entries.flatMap((entry) =>
+      (entry.blocks ?? []).map((block) => block.text),
+    );
+
+  /** A whole-document capture on a host that writes in place, as Word PC does. */
+  function onPc() {
+    inPlace.on = true;
+    setWordInPlaceCapabilitiesForTests(wordInPlaceCapabilities("PC"));
+    doc = captured(true);
+    submit = createWordDocumentSubmissionExecutor(doc.session);
+  }
+
+  const REWRITE_1_AND_3 = [
+    { source: "b1-b2", action: "rewrite", change: "Plainer." },
+    { source: "b3-b6", action: "keep" },
+    { source: "b7-b9", action: "rewrite", change: "Plainer." },
+  ];
+  const PARTS_1_AND_3: [number, string, string][] = [
+    [1, "The Supplier provides the services.", "The Supplier does the work."],
+    [
+      3,
+      "Liability is limited to the annual fee.",
+      "Liability stops at the fee.",
+    ],
+  ];
+
+  it("leaves a section of a change in parts out on its own when it changed in Word", async () => {
+    onPc();
+    const finished = await partsFinish(REWRITE_1_AND_3, PARTS_1_AND_3, () =>
+      changed(idsOf("Liability is limited to the annual fee.")),
+    );
+
+    const result = okResult<{
+      plan: { entries: { kind: string; blocks?: { text: string }[] }[] };
+      rows: { title: string; status: string }[];
+      reordering?: string;
+      notInProposal: string[];
+      notInProposalNote: string;
+    }>(finished);
+    expect(result.rows.map((row) => [row.title, row.status])).toEqual([
+      ["§ 1 Gegenstand", "ready"],
+      ["§ 2 Leistungen", "kept"],
+      ["§ 3 Haftung", "changed_in_word"],
+    ]);
+    expect(writtenText(result.plan)).toEqual(["The Supplier does the work."]);
+    expect(result.reordering).toBeUndefined();
+    expect(result.notInProposal).toEqual(["§ 3 Haftung"]);
+    expect(result.notInProposalNote).toContain(
+      '"§ 3 Haftung", which changed in Word while you were working',
+    );
+  });
+
+  it("leaves the reordering out too once the document changed, since it would replace the whole document", async () => {
+    onPc();
+    const finished = await partsFinish(
+      [
+        { source: "b1-b2", action: "rewrite", change: "Plainer." },
+        { source: "b7-b9", action: "keep" },
+        { source: "b3-b6", action: "keep" },
+      ],
+      [
+        [
+          1,
+          "The Supplier provides the services.",
+          "The Supplier does the work.",
+        ],
+      ],
+      () => changed(idsOf("Neither party is liable for indirect loss.")),
+    );
+
+    const result = okResult<{
+      plan: { entries: { kind: string; source?: string[] }[] };
+      rows: { status: string }[];
+      reordering?: string;
+      notInProposal: string[];
+      notInProposalNote: string;
+    }>(finished);
+    expect(result.reordering).toBe("changed_in_word");
+    expect(result.notInProposal).toEqual([]);
+    expect(result.notInProposalNote).toMatch(
+      /^The reordering is left out: the document changed in Word/,
+    );
+    expect(result.rows.map((row) => row.status)).toEqual([
+      "ready",
+      "kept",
+      "kept",
+    ]);
+    const order = result.plan.entries.flatMap((entry) => entry.source ?? []);
+    expect(order).toEqual([...order].sort((a, b) => +a.slice(1) - +b.slice(1)));
+  });
+
+  it("refuses the finish as before when the rest would still replace the whole document", async () => {
+    refusal(
+      await partsFinish(REWRITE_1_AND_3, PARTS_1_AND_3, () =>
+        changed(idsOf("Liability is limited to the annual fee.")),
+      ),
+    );
   });
 
   it("refuses a whole-document plan for a change anywhere, and stages it otherwise", async () => {

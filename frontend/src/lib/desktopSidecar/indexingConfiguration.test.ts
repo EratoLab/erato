@@ -776,6 +776,24 @@ describe("indexed range", () => {
     expect(summary(waiting).range).toBeNull();
   });
 
+  it("shows useful partial coverage with pending and drained extraction", () => {
+    const status = unclaimed("inventory_incomplete");
+    status.discovery[0].state = "partial";
+    status.discovery[0].discoveryComplete = false;
+    Object.assign(status.discovery[0].indexedRange!, {
+      inventoryComplete: false,
+      searchableDocuments: 2,
+    });
+    for (const lifecycle of ["indexing", "partial"] as const) {
+      status.discovery[0].lifecycle = lifecycle;
+      expect(summary(status)).toMatchObject({
+        state: lifecycle,
+        range: null,
+        notices: { partialInventory: true },
+      });
+    }
+  });
+
   it("says a source was not scanned yet unless the status pill already says so", () => {
     const failed = unclaimed("not_enumerated");
     failed.discovery[0].state = "failed";

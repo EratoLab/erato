@@ -283,5 +283,62 @@
       },
       "expect": { "id": [null], "fields": [[null]] }
     }
+  ],
+  "reads": [
+    {
+      "case": "a search names the text it looks for",
+      "tool_name": "search",
+      "arguments": { "query": "Line 4", "limit": 5 },
+      "expect": { "title": ["Line 4"] }
+    },
+    {
+      "case": "a record read earlier is named as the read called it, never by its ID",
+      "tool_name": "retrieve_record",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5F0C2A10-0000-4000-8000-00000000A001"
+      },
+      "expect": { "id": ["Line 4 retrofit"], "target": ["opportunity"] }
+    },
+    {
+      "case": "a record created earlier in the chat is named as it was created",
+      "tool_name": "retrieve_record",
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001"
+      },
+      "expect": { "id": ["Agree technical layout"] }
+    },
+    {
+      "case": "a record nobody read has no name",
+      "tool_name": "retrieve_record",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009"
+      },
+      "expect": { "id": [null], "target": ["opportunity"] }
+    },
+    {
+      "case": "a describe reads the path it names",
+      "tool_name": "describe",
+      "arguments": { "path": "tables/task" },
+      "expect": { "id": [null] }
+    },
+    {
+      "case": "a plain SQL read is described by its statement and names no item",
+      "tool_name": "read_query",
+      "arguments": {
+        "querytext": "SELECT name, opportunityid FROM opportunity WHERE name LIKE '%Line 4%'"
+      },
+      "expect": {}
+    },
+    {
+      "case": "an SQL read of one record by its key is named as the chat's results called it",
+      "tool_name": "read_query",
+      "arguments": {
+        "querytext": "SELECT name, estimatedclosedate FROM opportunity WHERE opportunityid = '5F0C2A10-0000-4000-8000-00000000A001'"
+      },
+      "expect": { "id": ["Line 4 retrofit"] }
+    }
   ]
 }

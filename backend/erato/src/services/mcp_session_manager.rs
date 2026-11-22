@@ -332,8 +332,10 @@ pub struct McpSessionManager {
     creation_gates:
         tokio::sync::Mutex<HashMap<SessionKey, std::sync::Weak<tokio::sync::Mutex<()>>>>,
     generation: std::sync::Mutex<HashMap<String, u64>>,
-    /// Accepted MCP Apps views by server and URI, each kept until the tool
-    /// list it was read under goes stale, within `VIEW_CACHE_BYTES` in all.
+    /// Accepted MCP Apps views by server and URI, for every user when the
+    /// server marked the read public and otherwise per credentials, each kept
+    /// until the tool list it was read under goes stale or the read's own
+    /// `ttlMs` ends, whichever comes first, within `VIEW_CACHE_BYTES` in all.
     app_views: Cache<AppViewKey, CachedAppView>,
     /// Why a view was refused or could not be read, kept for
     /// `VIEW_FAILURE_RETRY_AFTER`. Kept per credentials, unlike accepted
@@ -343,16 +345,22 @@ pub struct McpSessionManager {
     _cleanup_task: JoinHandle<()>,
 }
 
-/// Server and view URI.
-type AppViewKey = (String, String);
+/// Server, view URI and, for a view kept for one user's credentials only, a
+/// digest of the session auth key. A view kept for every user, and every
+/// view of a server read without credentials, has none.
+type AppViewKey = (String, String, Option<u64>);
 /// Server, view URI and a digest of the session auth key.
 type AppViewFailureKey = (String, String, Option<u64>);
 
 #[derive(Debug, Clone)]
 struct CachedAppView {
     view: Arc<McpAppView>,
-    /// How long the tool list the view was read under stays fresh.
-    fresh_for: Duration,
+    /// When the view goes stale: when the tool list it was read under does,
+    /// or sooner when the read's `ttlMs` says so.
+    expires: tokio::time::Instant,
+    /// Whether the server marked the read `cacheScope: "public"`, so that
+    /// every user may get it.
+    public: bool,
 }
 
 struct AppViewExpiry;
@@ -364,14 +372,18 @@ impl Expiry<AppViewKey, CachedAppView> for AppViewExpiry {
         cached: &CachedAppView,
         _created_at: std::time::Instant,
     ) -> Option<Duration> {
-        Some(cached.fresh_for)
+        Some(
+            cached
+                .expires
+                .saturating_duration_since(tokio::time::Instant::now()),
+        )
     }
 }
 
 fn app_view_cache() -> Cache<AppViewKey, CachedAppView> {
     Cache::builder()
         .max_capacity(VIEW_CACHE_BYTES)
-        .weigher(|(server_id, uri): &AppViewKey, cached: &CachedAppView| {
+        .weigher(|(server_id, uri, _): &AppViewKey, cached: &CachedAppView| {
             let ui = cached.view.ui.as_ref().map_or(0, |ui| ui.to_string().len());
             (server_id.len() + uri.len() + cached.view.html.len() + ui)
                 .try_into()
@@ -881,8 +893,12 @@ impl McpSessionManager {
     /// The view at `uri` that a tool of `server_id` declares, for a server
     /// that enables MCP Apps. Read with `resources/read` in either protocol
     /// era, within `VIEW_READ_TIMEOUT`, and kept per server and URI until the
-    /// tool list it was read under goes stale. A view that is refused or
-    /// cannot be read is not read again for `VIEW_FAILURE_RETRY_AFTER`.
+    /// tool list it was read under goes stale, or sooner when the read's
+    /// `ttlMs` ends first. The cache hints of the read decide who gets it: a
+    /// read the server marks `cacheScope: "public"` is kept for every user,
+    /// any other for the credentials it was read with only. A view that is
+    /// refused or cannot be read is not read again for
+    /// `VIEW_FAILURE_RETRY_AFTER`.
     pub async fn read_app_view(
         &self,
         chat_id: Uuid,
@@ -898,11 +914,12 @@ impl McpSessionManager {
         if !tools.iter().any(|tool| view_uri(&tool.tool) == Some(uri)) {
             return Err(eyre!("No tool of this server declares this view"));
         }
-        let key = (server_id.to_owned(), uri.to_owned());
-        if let Some(cached) = self.app_views.get(&key).await {
+        let public_key: AppViewKey = (server_id.to_owned(), uri.to_owned(), None);
+        if let Some(cached) = self.app_views.get(&public_key).await {
             return Ok(cached.view);
         }
-        let failure_key = {
+        // The view kept for these credentials, and why it was refused.
+        let key = {
             let auth_key = Self::session_auth_key(server_id, &config, auth).await?;
             let digest = auth_key.map(|auth_key| {
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -911,7 +928,10 @@ impl McpSessionManager {
             });
             (server_id.to_owned(), uri.to_owned(), digest)
         };
-        if let Some(reason) = self.app_view_failures.get(&failure_key).await {
+        if let Some(cached) = self.app_views.get(&key).await {
+            return Ok(cached.view);
+        }
+        if let Some(reason) = self.app_view_failures.get(&key).await {
             return Err(eyre!(
                 "{reason} (from an earlier read, not repeated for {VIEW_FAILURE_RETRY_AFTER:?})"
             ));
@@ -936,16 +956,23 @@ impl McpSessionManager {
                 }
             }
         };
-        // Calls that ask for the same view at once share one read.
+        // Calls with the same credentials that ask for the view at once share
+        // one read.
         let outcome = self
             .app_views
             .try_get_with(key.clone(), async {
                 let result = tokio::time::timeout(VIEW_READ_TIMEOUT, read)
                     .await
                     .map_err(|_| eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}"))??;
+                let now = tokio::time::Instant::now();
+                let fresh_for = tools_expire.saturating_duration_since(now);
+                let fresh_for = result
+                    .ttl_ms
+                    .map_or(fresh_for, |ttl| fresh_for.min(Duration::from_millis(ttl)));
                 Ok::<_, Report>(CachedAppView {
+                    public: result.cache_scope == Some(rmcp::model::CacheScope::Public),
                     view: Arc::new(McpAppView::from_read_result(uri, result)?),
-                    fresh_for: tools_expire.saturating_duration_since(tokio::time::Instant::now()),
+                    expires: now + fresh_for,
                 })
             })
             .await;
@@ -956,15 +983,17 @@ impl McpSessionManager {
             Ok(cached) => {
                 if !still_current {
                     self.app_views.invalidate(&key).await;
+                } else if cached.public && key != public_key {
+                    // Kept for every user from now on, until it goes stale.
+                    self.app_views.invalidate(&key).await;
+                    self.app_views.insert(public_key, cached.clone()).await;
                 }
                 Ok(cached.view)
             }
             Err(error) => {
                 let reason = format!("{error:#}");
                 if still_current {
-                    self.app_view_failures
-                        .insert(failure_key, reason.clone())
-                        .await;
+                    self.app_view_failures.insert(key, reason.clone()).await;
                 }
                 Err(eyre!(reason))
             }
@@ -984,6 +1013,13 @@ impl McpSessionManager {
         }
     }
 
+    /// Whether `server_id` enables MCP Apps views.
+    pub async fn mcp_apps_enabled(&self, server_id: &str) -> bool {
+        self.server_config(server_id)
+            .await
+            .is_ok_and(|server| server.mcp_apps.enabled)
+    }
+
     /// The view a call of a tool declaring `uri` on `server_id` is shown
     /// with: none unless the server enables MCP Apps. A view that cannot be
     /// read or is refused is logged, and the call goes on without one.
@@ -994,11 +1030,7 @@ impl McpSessionManager {
         uri: &str,
         auth: &McpRequestAuthContext<'_>,
     ) -> Option<ToolResultView> {
-        let enabled = self
-            .server_config(server_id)
-            .await
-            .is_ok_and(|server| server.mcp_apps.enabled);
-        if !enabled {
+        if !self.mcp_apps_enabled(server_id).await {
             return None;
         }
         match self.read_app_view(chat_id, server_id, uri, auth).await {
@@ -1006,6 +1038,7 @@ impl McpSessionManager {
                 server_id: server_id.to_owned(),
                 uri: uri.to_owned(),
                 structured_content: None,
+                meta: None,
             }),
             Err(error) => {
                 warn!(
@@ -1060,7 +1093,7 @@ impl McpSessionManager {
         let mut unavailable_server_ids = Vec::new();
         let mut needing_auth_server_ids = Vec::new();
         let mut missing_credential_server_ids = Vec::new();
-        let server_ids: Vec<String> = self
+        let mut server_ids: Vec<String> = self
             .configuration
             .read()
             .await
@@ -1073,6 +1106,9 @@ impl McpSessionManager {
             })
             .cloned()
             .collect();
+        // The configuration is a map: sorted, the tools reach the model in
+        // the same order in every process.
+        server_ids.sort();
 
         let creation_results = join_all(server_ids.iter().map(|server_id| async move {
             (
@@ -1138,6 +1174,7 @@ impl McpSessionManager {
                     tool: tool.tool,
                     approval_argument: tool.approval_argument,
                     destructive_hint_source: tool.sources.destructive_hint,
+                    offered_as: None,
                 });
             }
         }
@@ -1210,15 +1247,22 @@ impl McpSessionManager {
     }
 
     /// The surface hint a call of `server_id` from `platform` carries: none
-    /// unless the server opted in and the surface is one Erato knows.
+    /// unless the server opted in and the surface is one Erato knows. For a
+    /// server with MCP Apps on, a surface that shows views takes the view
+    /// first.
     async fn surface_hint(&self, server_id: &str, platform: Option<&str>) -> Option<SurfaceHint> {
         let platform = platform?;
         let configuration = self.configuration.read().await;
-        configuration
+        let server = configuration
             .server_configs
             .get(server_id)
             .filter(|server| server.surface_hints)?;
-        SurfaceHint::resolve(platform, &configuration.surfaces)
+        let hint = SurfaceHint::resolve(platform, &configuration.surfaces)?;
+        Some(if server.mcp_apps.enabled {
+            hint.with_views()
+        } else {
+            hint
+        })
     }
 
     /// Call a tool for a request from `platform`, its `X-Erato-Platform`
@@ -1487,6 +1531,18 @@ pub struct ManagedTool {
     pub approval_argument: Option<String>,
     /// Who set the tool's destructive hint, which a card names.
     pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
+    /// The name the model is offered the tool under, set only where it is not
+    /// `tool.name`: when another server or one of Erato's own tools uses the
+    /// same bare name, it is a name qualified with the server (see
+    /// `mcp_tool_names`). The server is always called with `tool.name`.
+    pub offered_as: Option<String>,
+}
+
+impl ManagedTool {
+    /// The name the tool is offered to the model under and dispatched by.
+    pub fn model_name(&self) -> &str {
+        self.offered_as.as_deref().unwrap_or(&self.tool.name)
+    }
 }
 
 #[cfg(test)]
@@ -1667,6 +1723,31 @@ mod tests {
         );
         assert_eq!(manager.surface_hint("files", None).await, None);
         assert_eq!(manager.surface_hint("other", Some("web")).await, None);
+
+        // With MCP Apps on, the web app takes the view first; the Teams bot
+        // shows no views and keeps its list.
+        next.mcp_servers.get_mut("files").unwrap().mcp_apps = crate::config::McpAppsConfig {
+            enabled: true,
+            sandbox_origin: Some("https://mcp-apps.example.net".to_string()),
+        };
+        manager.reconfigure(&next).await;
+        assert_eq!(
+            manager
+                .surface_hint("files", Some("web"))
+                .await
+                .unwrap()
+                .to_value(),
+            serde_json::json!({"surface": "web",
+                "accept": ["text/html;profile=mcp-app", "image/svg+xml", "image/png"]})
+        );
+        assert_eq!(
+            manager
+                .surface_hint("files", Some("teams-bot"))
+                .await
+                .unwrap()
+                .to_value(),
+            serde_json::json!({"surface": "teams-bot", "accept": ["image/jpeg"]})
+        );
     }
 }
 

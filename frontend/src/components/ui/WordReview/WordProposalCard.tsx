@@ -8,7 +8,11 @@ import {
 } from "@/lib/wordReview/wordPlanReview";
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
-import { WordReviewCard, WordReviewDetailsToggle } from "./WordReviewCardParts";
+import {
+  WordNotChangedLine,
+  WordReviewCard,
+  WordReviewDetailsToggle,
+} from "./WordReviewCardParts";
 
 import type {
   WordAuthoringSnapshot,
@@ -62,7 +66,12 @@ export interface WordProposalCardProps {
   cardRef?: ComponentProps<typeof WordReviewCard>["cardRef"];
   /** Whether a plan without a snapshot is drawn from its own data. */
   showSavedPlan?: boolean;
+  /** Parts the request meant to change that this plan leaves as they were, by title. */
+  notInProposal?: readonly string[];
   adapter?: WordProposalAdapter;
+  /** Drawn in place of the plan review, such as a change in parts by its rows; it then carries
+   * the adapter's apply control itself, on top. */
+  body?: ReactNode;
 }
 
 export function WordProposalCard({
@@ -74,7 +83,9 @@ export function WordProposalCard({
   testId = "word-proposal-card",
   cardRef,
   showSavedPlan = true,
+  notInProposal,
   adapter,
+  body,
 }: WordProposalCardProps) {
   const detailsId = useId();
   const derived = useMemo(
@@ -102,7 +113,8 @@ export function WordProposalCard({
       footer={
         adapter ? (
           <>
-            {adapter.apply}
+            {/* A folded card shows only its line, not why it cannot be applied. */}
+            {!body && !collapsed && adapter.apply}
             <div className="word-review__actions">
               {status?.onToggleDetails && (
                 <WordReviewDetailsToggle
@@ -128,14 +140,16 @@ export function WordProposalCard({
         )
       }
     >
-      {(snapshot !== undefined || showSavedPlan) && (
-        <WordDocumentPlanReview
-          plan={plan}
-          snapshot={snapshot}
-          review={derived}
-          onLocate={snapshot ? adapter?.locate : undefined}
-        />
-      )}
+      {body ??
+        ((snapshot !== undefined || showSavedPlan) && (
+          <WordDocumentPlanReview
+            plan={plan}
+            snapshot={snapshot}
+            review={derived}
+            onLocate={snapshot ? adapter?.locate : undefined}
+          />
+        ))}
+      {notInProposal && <WordNotChangedLine names={notInProposal} />}
       {status?.notice}
     </WordReviewCard>
   );

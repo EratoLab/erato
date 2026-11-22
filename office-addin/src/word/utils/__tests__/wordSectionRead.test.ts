@@ -330,11 +330,14 @@ describe("section pages", () => {
         "/section/throughRef",
       ],
     ];
-    for (const [args, code, path] of cases)
-      expect(await read(args)).toMatchObject({
-        ok: false,
-        validationErrors: [{ code, path }],
+    for (const [args, code, path] of cases) {
+      const refused = await read(args);
+      expect(refused.ok).toBe(false);
+      expect(refused.ok ? null : refused.validationErrors?.[0]).toMatchObject({
+        code,
+        path,
       });
+    }
     expect(
       await session.execute(
         {
@@ -346,7 +349,13 @@ describe("section pages", () => {
       ),
     ).toMatchObject({
       ok: false,
-      validationErrors: [{ code: "snapshot-mismatch" }],
+      validationErrors: [
+        { code: "snapshot-mismatch" },
+        {
+          code: "snapshot-mismatch",
+          message: `Refs from an earlier snapshot can name other parts now; take them from this request's outline. A correct call: ${JSON.stringify({ snapshot: snapshot.token, documentIdentity: snapshot.identity, section: { ref: "b1" } })}`,
+        },
+      ],
     });
     expect(
       await session.execute(

@@ -1,13 +1,19 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { Disclosure } from "@/components/ui/Controls/Disclosure";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   GistValueText,
-  McpToolDescription,
   ToolArgumentView,
   ToolCallChangeBody,
   ToolCallChangeCard,
@@ -16,13 +22,21 @@ import {
   ToolCallIdentity,
   ToolCallInput,
 } from "@/components/ui/ToolCall";
+import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import {
   approvalDisplayOf,
   useToolCallCard,
 } from "@/lib/toolCallGist/approvalCard";
 import { cardSourceOf } from "@/lib/toolCallGist/cardLayout";
-import { sourceValuesLabel } from "@/lib/toolCallGist/gistLabels";
+import {
+  GIST_SLOTS,
+  GIST_TITLE_SLOT,
+  GIST_WHERE_SLOT,
+  sourceValuesLabel,
+  toolCallSentence,
+} from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+import { headlineClass } from "@/lib/toolCallGist/valueStyle";
 
 import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
@@ -67,10 +81,13 @@ const referentSource = (
     ? t({ id: "clientToolApproval.thisDevice", message: "This device" })
     : (display?.server_name ?? serverId);
 
-/** A card that shows the raw arguments itself gets none behind its details. */
-const showsRawInput = (card: ToolCallCard) =>
+/**
+ * A card that shows the raw arguments itself gets none behind its details.
+ * An MCP call's generic card leaves all of them to its details.
+ */
+const showsRawInput = (card: ToolCallCard, isClientTool: boolean) =>
   card.kind === "legacy" ||
-  (card.kind === "generic" && card.view === undefined) ||
+  (card.kind === "generic" && card.view === undefined && isClientTool) ||
   (card.kind === "gist" && card.rest.kind === "raw");
 
 const truncatedArgumentsLine = () =>
@@ -225,6 +242,54 @@ const ServerLine = ({
   </div>
 );
 
+/**
+ * What an MCP call the card has no line for does, as one sentence: the
+ * tool's title, else its name, the server it runs in and, for a call over
+ * rows, how many.
+ */
+const CallSentence = ({
+  toolName,
+  display,
+  serverId,
+  rows,
+  belowHeading = false,
+}: {
+  toolName: string;
+  display: ToolDisplayMetadata | null;
+  serverId: string;
+  rows?: number;
+  belowHeading?: boolean;
+}) => {
+  const title = display?.title ?? toolName;
+  const server = referentSource(display, serverId, false);
+  return (
+    <div
+      className="flex min-w-0 items-start gap-2"
+      data-testid="approval-call-sentence"
+    >
+      <span className="flex h-6 items-center">{referentIcon(false)}</span>
+      <p
+        className={clsx(
+          "min-w-0 break-words text-theme-fg-primary [overflow-wrap:anywhere]",
+          headlineClass(true, belowHeading),
+        )}
+      >
+        {toolCallSentence(server.length > 0, rows)
+          .split(GIST_SLOTS)
+          .map((part, index) =>
+            part === GIST_TITLE_SLOT || part === GIST_WHERE_SLOT ? (
+              <span key={index} dir="auto" className="[unicode-bidi:isolate]">
+                {part === GIST_TITLE_SLOT ? title : server}
+              </span>
+            ) : (
+              part
+            ),
+          )}
+      </p>
+    </div>
+  );
+};
+
 type ResolvedReferentProps = Omit<ApprovalReferentProps, "display"> & {
   display: ToolDisplayMetadata | null;
 };
@@ -363,6 +428,40 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
     );
   }
 
+  // An MCP call with no line of its own: one sentence, then what the rules
+  // read from its arguments, such as what a batch's fields hold. The
+  // arguments themselves, a batch's rows among them, are in its details.
+  if (card.kind === "generic" && !isClientTool) {
+    return (
+      <div className={clsx("space-y-2", className)}>
+        <CallSentence
+          toolName={props.toolName}
+          display={display}
+          serverId={serverId}
+          rows={card.change?.batch?.total}
+          belowHeading={props.belowHeading}
+        />
+        <CardRisk notes={card.notes} />
+        {card.change && (
+          <ToolCallChangeBody
+            change={card.change}
+            values={false}
+            rows={false}
+            outside={false}
+          />
+        )}
+        {card.change ? (
+          <ToolCallChangeFootnote
+            change={card.change}
+            extra={cardFootnoteLines(card.notes, false)}
+          />
+        ) : (
+          <CardFootnotes notes={card.notes} />
+        )}
+      </div>
+    );
+  }
+
   if (card.kind === "generic" && card.view) {
     return (
       <>
@@ -430,10 +529,13 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
 /**
  * What an approval asks about, above its consent card. A call with a label
  * reads as its gist: one line on what it does to what, and where, with its
- * key values, and every argument the gist does not show listed below it. A
- * label without a gist shows the arguments as names and values. Requests
- * saved before labels, and any label this card fails to render, keep the
- * tool heading and the raw input, so the buttons below always stay usable.
+ * key values, and every argument the gist does not show listed below it. An
+ * MCP call's label without a gist reads as one sentence, the tool, its server
+ * and any count of rows, with its arguments behind the details; a client
+ * tool's shows them as names and values. Requests saved before labels, and
+ * any label this card fails to render, keep the tool heading and the raw
+ * input, so the buttons below always stay usable. No card shows the tool's
+ * description, which is written for the model.
  */
 export const ApprovalReferent = (props: ApprovalReferentProps) => {
   const display = useMemo(
@@ -453,6 +555,12 @@ export const ApprovalReferent = (props: ApprovalReferentProps) => {
       <LabelledReferent {...props} display={display} />
     </ErrorBoundary>
   );
+};
+
+/** Opening the technical details ends a spoken card: the reader looks now. */
+const StopsApprovalSpeech = () => {
+  useEffect(() => stopApprovalSpeech(), []);
+  return null;
 };
 
 const LabelledTechnicalDetails = ({
@@ -490,13 +598,19 @@ const LabelledTechnicalDetails = ({
           {display.title}
         </p>
       )}
-      {isGist && display.description && (
-        <McpToolDescription
-          description={display.description}
-          truncated={display.description_truncated}
-        />
+      {/*
+        An MCP call's generic card keeps its arguments here, as names and
+        values; should the view fail, the raw input below still has them.
+      */}
+      {card.kind === "generic" && !isClientTool && card.view && (
+        <ErrorBoundary resetKeys={[card.view, input]} fallback={null}>
+          <ArgumentsScrollBox>
+            <ToolArgumentView view={card.view} values={card.values} />
+          </ArgumentsScrollBox>
+        </ErrorBoundary>
       )}
-      {!showsRawInput(card) && <ToolCallInput input={input} />}
+      {!showsRawInput(card, isClientTool) && <ToolCallInput input={input} />}
+      <StopsApprovalSpeech />
     </Disclosure>
   );
 };

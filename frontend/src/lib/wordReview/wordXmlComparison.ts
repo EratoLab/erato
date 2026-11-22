@@ -1,13 +1,17 @@
 import {
+  createWordBorderIndents,
   createWordConditionalTableStyles,
   isWordDetectedLanguage,
   isWordEmbeddedFont,
   isWordGlossaryRsids,
   isWordInertTableLook,
   isWordListInstanceId,
+  isWordViewZoom,
   wordDeobfuscatedFont,
   wordThemeFontLanguage,
 } from "./wordHousekeeping";
+
+import type { WordPackageRoots } from "./wordHousekeeping";
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
@@ -508,6 +512,7 @@ export function createWordXmlComparison(
         ns === W &&
         ["rsids", "proofState"].includes(local)) ||
       isWordGlossaryRsids(element, owner) ||
+      isWordViewZoom(element, owner) ||
       (owner === "/docProps/app.xml" &&
         ns ===
           "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" &&
@@ -521,6 +526,9 @@ export function createWordXmlComparison(
           "Paragraphs",
           "Application",
           "AppVersion",
+          // Word for Mac's AutoRecovery save adds both to a document it never saved (ERMAIN-1248).
+          "HeadingPairs",
+          "TitlesOfParts",
         ].includes(local)) ||
       (owner === "/docProps/core.xml" &&
         ((ns ===
@@ -725,6 +733,43 @@ export function removeWordDetectedLanguages(doc: Document): number {
   return languages.length;
 }
 
+/** Each element's signature as an import writes it again, without Word's detected languages and
+ * the comment marks whose ids an import renews (ERMAIN-950 gate C5); `strip` edits each copy first. */
+function importKeyed(
+  comparison: WordXmlComparison,
+  items: Element[],
+  owner?: string,
+  strip?: (copy: Element) => void,
+): { element: Element; key: string }[] {
+  return items.map((element) => {
+    const clone = element.cloneNode(true) as Element;
+    wordXmlElements(clone, W, "lang")
+      .filter(isWordDetectedLanguage)
+      .forEach(dropLanguage);
+    for (const mark of wordXmlElements(clone, W, "*").filter((e) =>
+      COMMENT_MARKS.has(e.localName),
+    ))
+      (mark.localName === "commentReference"
+        ? mark.parentElement
+        : mark
+      )?.remove();
+    strip?.(clone);
+    return { element, key: comparison.signature(clone, owner) };
+  });
+}
+
+/** The items no item of `others` has the key of, one copy each, in document order. */
+function unmatched<T extends { key: string }>(items: T[], others: T[]): T[] {
+  const available = new Map<string, number>();
+  for (const { key } of others)
+    available.set(key, (available.get(key) ?? 0) + 1);
+  return items.filter(({ key }) => {
+    const left = available.get(key) ?? 0;
+    if (left) available.set(key, left - 1);
+    return !left;
+  });
+}
+
 /**
  * proofing-language (wordHousekeeping): in the paragraphs `written` has and `original` lacks, drops
  * each w:lang that Word re-detects after a write, valued as one of the paragraphs the write
@@ -744,48 +789,101 @@ export function removeWordRedetectedLanguage(
   const original = typeof replaced === "function" ? replaced() : replaced;
   const originalBody = documentBody(original);
   if (!originalBody) return 0;
-  const keyed = (doc: Document, body: Element) => {
-    const comparison = createWordXmlComparison(doc);
-    return wordXmlElements(body, W, "p").map((paragraph) => {
-      const clone = paragraph.cloneNode(true) as Element;
-      wordXmlElements(clone, W, "lang")
-        .filter(isWordDetectedLanguage)
-        .forEach(dropLanguage);
-      // An import renews comment ids and paraIds (ERMAIN-950 gate C5), which a kept paragraph's marks name.
-      for (const mark of wordXmlElements(clone, W, "*").filter((e) =>
-        COMMENT_MARKS.has(e.localName),
-      ))
-        (mark.localName === "commentReference"
-          ? mark.parentElement
-          : mark
-        )?.remove();
-      return { paragraph, key: comparison.signature(clone) };
-    });
-  };
+  const keyed = (doc: Document, body: Element) =>
+    importKeyed(createWordXmlComparison(doc), wordXmlElements(body, W, "p"));
   const before = keyed(original, originalBody);
   const after = keyed(written, writtenBody);
-  const unmatched = <T extends { key: string }>(items: T[], others: T[]) => {
-    const available = new Map<string, number>();
-    for (const { key } of others)
-      available.set(key, (available.get(key) ?? 0) + 1);
-    return items.filter(({ key }) => {
-      const left = available.get(key) ?? 0;
-      if (left) available.set(key, left - 1);
-      return !left;
-    });
-  };
   const languages = new Set(
-    unmatched(before, after).flatMap(({ paragraph }) =>
-      ownLanguages(paragraph).map((lang) => lang.getAttributeNS(W, "val")),
+    unmatched(before, after).flatMap(({ element }) =>
+      ownLanguages(element).map((lang) => lang.getAttributeNS(W, "val")),
     ),
   );
   if (!languages.size) return 0;
   let dropped = 0;
-  for (const { paragraph } of unmatched(after, before))
-    for (const lang of ownLanguages(paragraph))
+  for (const { element } of unmatched(after, before))
+    for (const lang of ownLanguages(element))
       if (languages.has(lang.getAttributeNS(W, "val"))) {
         dropLanguage(lang);
         dropped++;
       }
+  return dropped;
+}
+
+const ownIndent = (table: Element) => {
+  const properties = Array.from(table.children).find(
+    (e) => e.namespaceURI === W && e.localName === "tblPr",
+  );
+  return {
+    properties,
+    indent:
+      properties &&
+      Array.from(properties.children).find(
+        (e) => e.namespaceURI === W && e.localName === "tblInd",
+      ),
+  };
+};
+
+/**
+ * table-indent (wordHousekeeping): drops each w:tblInd Word PC gives a styled table a write added,
+ * where createWordBorderIndents says it only offsets the left border. A written table is added
+ * when `replaced`, the package the write wrote over, holds no table like it, its own indent aside,
+ * one copy each. With `expected`, the package the write meant, the table in the same place there
+ * must have a style and no indent. Mutates `written` and returns how many it dropped.
+ */
+export function removeWordAddedTableIndents(
+  written: WordPackageRoots,
+  replaced: WordPackageRoots | (() => WordPackageRoots),
+  expected?: WordPackageRoots,
+): number {
+  const borderIndent = createWordBorderIndents(written);
+  const comparisons = new Map<Document, WordXmlComparison>();
+  const keyed = (root: Element, path: string) => {
+    const doc = root.ownerDocument;
+    let comparison = comparisons.get(doc);
+    if (!comparison)
+      comparisons.set(doc, (comparison = createWordXmlComparison(doc)));
+    return importKeyed(
+      comparison,
+      wordXmlElements(root, W, "tbl"),
+      path,
+      (copy) => ownIndent(copy).indent?.remove(),
+    );
+  };
+  const meantUnindented = (table: Element | undefined) => {
+    const { properties, indent } = table ? ownIndent(table) : {};
+    return (
+      !!properties &&
+      !indent &&
+      Array.from(properties.children).some(
+        (e) => e.namespaceURI === W && e.localName === "tblStyle",
+      )
+    );
+  };
+  let original: WordPackageRoots | undefined;
+  let dropped = 0;
+  for (const [path, root] of written) {
+    const tables = wordXmlElements(root, W, "tbl");
+    const meantRoot = expected?.get(path);
+    const meant =
+      expected && (meantRoot ? wordXmlElements(meantRoot, W, "tbl") : []);
+    if (meant && meant.length !== tables.length) continue;
+    const candidates = tables.filter(
+      (table, i) =>
+        borderIndent(table, path) && (!meant || meantUnindented(meant[i])),
+    );
+    if (!candidates.length) continue;
+    original ??= typeof replaced === "function" ? replaced() : replaced;
+    const before = original.get(path);
+    const added = new Set(
+      unmatched(keyed(root, path), before ? keyed(before, path) : []).map(
+        ({ element }) => element,
+      ),
+    );
+    for (const table of candidates)
+      if (added.has(table)) {
+        ownIndent(table).indent!.remove();
+        dropped++;
+      }
+  }
   return dropped;
 }

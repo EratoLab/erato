@@ -579,6 +579,30 @@ describe("AssistantsPage", () => {
     expect(useListAssistantHubAssistants).not.toHaveBeenCalled();
   });
 
+  it("renders a clamped Markdown excerpt inside the assistant's chat button", () => {
+    assistants = [
+      {
+        ...createAssistant("writer", "Writer"),
+        description:
+          "**Draft reports.**\n\n- Check facts\n- Read the [style guide][guide].\n\n[guide]: https://example.com/style",
+      },
+    ];
+
+    renderRoutes("/assistants");
+
+    const card = within(screen.getByTestId("assistant-list-item"));
+    const button = card.getByRole("button", { name: /Writer/ });
+    expect(button).toBeEnabled();
+    button.focus();
+    expect(button).toHaveFocus();
+    expect(
+      within(button).getByText(
+        "Draft reports. Check facts Read the style guide.",
+      ),
+    ).toHaveClass("line-clamp-2");
+    expect(card.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   describe("archiving an assistant", () => {
     const settle = () =>
       act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));

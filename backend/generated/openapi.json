@@ -1754,6 +1754,35 @@
         ]
       }
     },
+    "/api/v1beta/me/approval-speech-style": {
+      "get": {
+        "tags": [
+          "approval_speech_style"
+        ],
+        "summary": "How waiting approval cards are read aloud for the caller.",
+        "operationId": "approval_speech_style",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalSpeechStyleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/budget": {
       "get": {
         "tags": [
@@ -3345,7 +3374,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), a decision by voice carries a `voice_receipt` that is unknown, used, expired or for another card or decision (JSON, code = voice_receipt_refused, body = VoiceReceiptRefusedError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3572,6 +3601,128 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/approval-speech": {
+      "post": {
+        "tags": [
+          "read_aloud"
+        ],
+        "summary": "Speak the approval a message of the user is waiting on.",
+        "description": "The client composes the sentences from the card it shows; this only speaks\nthem, with the voice and cleaning of conversational mode's replies, piece\nby piece. It answers only for a message of the user's own chat whose stop\nstill has a decision open, and stores nothing.",
+        "operationId": "speak_approval",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message whose approval is spoken",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalSpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No pieces, or a piece with nothing to say"
+          },
+          "404": {
+            "description": "Conversational speech is off, or the message does not exist or is not in a chat of the user"
+          },
+          "409": {
+            "description": "The message has no approval waiting for a decision"
+          },
+          "413": {
+            "description": "More than 16 pieces, a piece over 400 characters, or more than 2000 characters in all"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/messages/{message_id}/approval-voice-command": {
+      "post": {
+        "tags": [
+          "approval_voice_commands"
+        ],
+        "summary": "Match what the user said while an approval card waits to one meaning.",
+        "description": "Built-in rules answer the plain words; a configured model may answer the\nrest, seeing the words and the pieces' roles and field names. The answer\ncarries no text and is not stored. `approve` and `reject` count only once\nthe card's request piece was heard (or the card has none): a yes or no\nbefore that, or beside a backchannel (\"mhm, ja\"), is `noise`.\n\nWith `[approval_voice_decisions]` on, `decision` says whether the words decide the\ncard. Only the whole confirmation phrase approves (\"Ich bestätige\", \"I\nconfirm\"), checked before any rule or model and never by a model; a\nrefusal by the rules or the model refuses. Either needs the turn's own\nsingle call as `approval_id`, a card whose request was heard with nothing\nowed, and a recording that started after the voice and heard enough\nspeech; one that did not gets `say_again`. An accepted decision gets a\nreceipt, kept in the database for `receipt_ttl_seconds`, with a record of\nhow it was given.",
+        "operationId": "interpret_approval_voice_command",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message whose approval waits",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalVoiceCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalVoiceCommand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty words, a piece id twice or empty, or a current piece that is not on the card"
+          },
+          "404": {
+            "description": "Voice commands are off, or the message does not exist or is not in a chat of the user"
+          },
+          "409": {
+            "description": "The message has no approval waiting for a decision"
+          },
+          "413": {
+            "description": "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/{message_id}/explain": {
       "post": {
         "tags": [
@@ -3623,6 +3774,64 @@
           },
           "500": {
             "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/messages/{message_id}/progress-speech": {
+      "post": {
+        "tags": [
+          "wait_lines"
+        ],
+        "summary": "Says one line about a running tool call of the caller's own answer.",
+        "description": "Answers only while that answer is still being generated, and only for a\nshort sentence: the voice never says free text at any other time.",
+        "operationId": "progress_speech",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message being generated",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProgressSpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The line is empty, too long or holds control characters"
+          },
+          "404": {
+            "description": "No voice, or the message is not in the caller's own chat"
+          },
+          "409": {
+            "description": "The answer is no longer being generated"
           }
         },
         "security": [
@@ -3708,6 +3917,40 @@
           },
           "500": {
             "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/office-host-report": {
+      "post": {
+        "tags": [
+          "office_host_report"
+        ],
+        "operationId": "office_host_report",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfficeHostReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Counted in erato_office_addin_pane_starts_total"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "422": {
+            "description": "When the body is not a report"
           }
         },
         "security": [
@@ -4002,6 +4245,35 @@
           },
           "500": {
             "description": "Server error while retrieving chats"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/reply-speech-style": {
+      "get": {
+        "tags": [
+          "reply_speech_style"
+        ],
+        "summary": "How replies are spoken for the caller in conversational audio mode.",
+        "operationId": "reply_speech_style",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplySpeechStyleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
           }
         },
         "security": [
@@ -4492,6 +4764,49 @@
           },
           "401": {
             "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/wait-lines": {
+      "get": {
+        "tags": [
+          "wait_lines"
+        ],
+        "summary": "What the voice says while the caller waits, and the audio of its fixed\nlines in the caller's language.",
+        "operationId": "wait_lines",
+        "parameters": [
+          {
+            "name": "known",
+            "in": "query",
+            "description": "The `version` the caller already has.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitLinesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "404": {
+            "description": "Conversational audio mode has no voice"
           }
         },
         "security": [
@@ -5237,6 +5552,89 @@
         }
       }
     },
+    "/office-addin/manifest-presentation.xml": {
+      "get": {
+        "tags": [],
+        "summary": "Get the PowerPoint task-pane Office add-in manifest with runtime URL substitutions.",
+        "operationId": "office_addin_presentation_manifest",
+        "parameters": [
+          {
+            "name": "base_url",
+            "in": "query",
+            "description": "Optional externally reachable deployment base URL used to rewrite the manifest.\nExample: https://app.example.com",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "distribution",
+            "in": "query",
+            "description": "integrated-apps (default) or sharepoint, which omits ribbon commands.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "integrated-apps",
+                    "sharepoint"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rendered PowerPoint task-pane Office add-in manifest",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid base_url or distribution query parameter",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Office add-in is disabled or manifest is unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to render manifest",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/office-addin/manifest.xml": {
       "get": {
         "tags": [],
@@ -5452,6 +5850,61 @@
           }
         }
       },
+      "ApprovalCardPiece": {
+        "type": "object",
+        "description": "One piece of the spoken card, without what it says.",
+        "required": [
+          "id",
+          "role",
+          "state"
+        ],
+        "properties": {
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a detail or a long text: the field's name as the card shows it."
+          },
+          "id": {
+            "type": "string"
+          },
+          "must_say": {
+            "type": "boolean",
+            "description": "The card must say this piece before a decision counts: a loss, a\nconsequence, recipients outside."
+          },
+          "role": {
+            "$ref": "#/components/schemas/ApprovalCardPieceRole"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApprovalCardPieceState"
+          }
+        }
+      },
+      "ApprovalCardPieceRole": {
+        "type": "string",
+        "description": "What a piece of the spoken card is, as the card that speaks it names it.",
+        "enum": [
+          "count",
+          "what",
+          "item",
+          "detail",
+          "outside",
+          "more",
+          "text",
+          "consequence",
+          "request",
+          "pointer"
+        ]
+      },
+      "ApprovalCardPieceState": {
+        "type": "string",
+        "enum": [
+          "heard",
+          "cut_short",
+          "not_said"
+        ]
+      },
       "ApprovalDecisionItem": {
         "type": "object",
         "description": "One decision of a continuation, naming the approval it answers.",
@@ -5464,12 +5917,20 @@
             "type": "string",
             "example": "call_abc123"
           },
+          "change_request": {
+            "type": "string",
+            "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },
           "scope_position": {
             "type": "object",
             "description": "The host's position at the click, for `approve_context` on a scope the\nhost checks on the device. Only the client that holds the document can\ntake it; it sends the decision with that host's `X-Erato-Executor`."
+          },
+          "voice_receipt": {
+            "type": "string",
+            "description": "For `approve` or `reject` said by voice: the receipt the voice command\nendpoint gave for it. It must be for this card as it is now, and is\ntaken once. A tap carries none."
           }
         }
       },
@@ -5515,6 +5976,10 @@
           "approval_id": {
             "type": "string"
           },
+          "called_as": {
+            "type": "string",
+            "description": "The name the model called the tool by, set only where it is not\n`tool_name`: a name qualified with the MCP server. The continued call\nis stored and replayed under it."
+          },
           "child": {
             "oneOf": [
               {
@@ -5538,11 +6003,19 @@
           "input": {
             "$ref": "#/components/schemas/Value"
           },
+          "replaces_approval_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The item of an earlier stop on the same message this one replaces: the\nuser asked for that call to be changed and this is the model's\ncorrected call of the same tool on the same server."
+          },
           "tool_call_id": {
             "type": "string"
           },
           "tool_name": {
-            "type": "string"
+            "type": "string",
+            "description": "The tool as its MCP server or Erato names it: what the card shows and\na standing decision is stored for."
           }
         }
       },
@@ -5599,6 +6072,263 @@
           },
           "scope_id": {
             "type": "string"
+          }
+        }
+      },
+      "ApprovalSpeechAmount": {
+        "type": "string",
+        "description": "How much a spoken card says.",
+        "enum": [
+          "full",
+          "short"
+        ]
+      },
+      "ApprovalSpeechRequest": {
+        "type": "object",
+        "description": "What a client says about the approval it shows.",
+        "required": [
+          "pieces"
+        ],
+        "properties": {
+          "pieces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
+          }
+        }
+      },
+      "ApprovalSpeechStyleResponse": {
+        "type": "object",
+        "required": [
+          "amount",
+          "short_details",
+          "wording",
+          "source",
+          "user_choice"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "short_details": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Details a short reading says before it holds back the rest.",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/ApprovalSpeechStyleSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own amount and wording."
+          },
+          "wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording"
+          }
+        }
+      },
+      "ApprovalSpeechStyleSource": {
+        "type": "string",
+        "description": "Where the caller's reading style comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "ApprovalSpeechWording": {
+        "type": "string",
+        "description": "How a spoken card is worded.",
+        "enum": [
+          "precise",
+          "natural"
+        ]
+      },
+      "ApprovalVoiceCommand": {
+        "type": "object",
+        "required": [
+          "meaning",
+          "source"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ApprovalVoiceDecision",
+            "description": "For `approve` and `reject` while deciding by voice is on: whether the\nwords decide the card."
+          },
+          "meaning": {
+            "$ref": "#/components/schemas/ApprovalVoiceMeaning"
+          },
+          "piece_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `repeat` and `read_text`: the piece meant. Null when the words do\nnot say which and the card has no single candidate."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ApprovalVoiceCommandSource"
+          }
+        }
+      },
+      "ApprovalVoiceCommandRequest": {
+        "type": "object",
+        "required": [
+          "transcript",
+          "pieces"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "The approval the card asks about; deciding by voice needs it."
+          },
+          "current_piece_id": {
+            "type": "string",
+            "description": "The piece being spoken, or the last one spoken."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language of the words as a tag such as `de`; the user's language\nwhen omitted."
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalCardPiece"
+            },
+            "description": "The spoken card's pieces in the order they are said, at most 16."
+          },
+          "question": {
+            "$ref": "#/components/schemas/ApprovalVoiceQuestion",
+            "description": "What the voice just asked, when the words may answer it."
+          },
+          "signals": {
+            "$ref": "#/components/schemas/ApprovalVoiceSignals",
+            "description": "What the device measured about the recording; an approval by voice\nneeds it."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "What the user said, as transcribed. At most 300 characters."
+          }
+        }
+      },
+      "ApprovalVoiceCommandSource": {
+        "type": "string",
+        "description": "Where the meaning came from.",
+        "enum": [
+          "rules",
+          "model",
+          "none"
+        ]
+      },
+      "ApprovalVoiceDecision": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "receipt": {
+            "type": "string",
+            "description": "With `accepted`: the receipt the decision carries as `voice_receipt`."
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApprovalVoiceDecisionStatus"
+          }
+        }
+      },
+      "ApprovalVoiceDecisionStatus": {
+        "type": "string",
+        "enum": [
+          "accepted",
+          "phrase_needed",
+          "screen_only",
+          "not_yet",
+          "say_again"
+        ]
+      },
+      "ApprovalVoiceMeaning": {
+        "type": "string",
+        "enum": [
+          "skip",
+          "rest",
+          "repeat",
+          "read_text",
+          "stop",
+          "change",
+          "new_request",
+          "approve",
+          "reject",
+          "noise",
+          "unclear"
+        ]
+      },
+      "ApprovalVoiceQuestion": {
+        "type": "string",
+        "description": "What the voice just asked about the card, when the user's words may\nanswer it.",
+        "enum": [
+          "which_text"
+        ]
+      },
+      "ApprovalVoiceSignals": {
+        "type": "object",
+        "description": "What the device measured about the recording the words came from. Times\nare milliseconds since the Unix epoch on the device's clock.",
+        "required": [
+          "voice_stopped_at_ms",
+          "recording_started_at_ms",
+          "recording_ended_at_ms",
+          "speech_ms",
+          "recorded_ms"
+        ],
+        "properties": {
+          "first_speech_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The first detector frame heard as speech.",
+            "minimum": 0
+          },
+          "over_voice": {
+            "type": "boolean",
+            "description": "The recording was opened while the voice spoke."
+          },
+          "recorded_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "All detector frames of the recording, in milliseconds.",
+            "minimum": 0
+          },
+          "recording_ended_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "recording_started_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "request_heard_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When the card's request to decide was heard in full.",
+            "minimum": 0
+          },
+          "speech_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Detector frames heard as speech, in milliseconds.",
+            "minimum": 0
+          },
+          "voice_stopped_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When the voice last stopped speaking before the recording.",
+            "minimum": 0
           }
         }
       },
@@ -6201,6 +6931,10 @@
           "status",
           "is_published",
           "is_current_published_version",
+          "can_publish",
+          "can_unpublish",
+          "can_make_current",
+          "is_submission_owner",
           "featured",
           "version_number",
           "long_description",
@@ -6227,6 +6961,15 @@
             "items": {
               "$ref": "#/components/schemas/ShareGrant"
             }
+          },
+          "can_make_current": {
+            "type": "boolean"
+          },
+          "can_publish": {
+            "type": "boolean"
+          },
+          "can_unpublish": {
+            "type": "boolean"
           },
           "category_ids": {
             "type": "array",
@@ -6260,6 +7003,9 @@
             "type": "boolean"
           },
           "is_published": {
+            "type": "boolean"
+          },
+          "is_submission_owner": {
             "type": "boolean"
           },
           "keywords": {
@@ -6716,6 +7462,24 @@
           "requesting_message_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "CardChangedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers to a decision that names no\napproval while the open card is the corrected call of a change request.\n\nA client that sends no `approval_id` may still show the card it replaced,\non another tab or device, so its answer cannot be meant for this one. The\nclient reloads the message and shows the card named here.",
+        "required": [
+          "code",
+          "approval_id"
+        ],
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "description": "The approval that is open now."
+          },
+          "code": {
+            "type": "string",
+            "description": "Always `card_changed`."
           }
         }
       },
@@ -7629,6 +8393,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/ContentPartSpoken",
+                "description": "What the voice said for a reply in conversational audio mode, kept\napart from the written answer in the `Text` parts after it. Not part\nof the message's text: titles, search, read aloud and exports use the\nwritten answer only."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "spoken"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "What the voice said for a reply in conversational audio mode, kept\napart from the written answer in the `Text` parts after it. Not part\nof the message's text: titles, search, read aloud and exports use the\nwritten answer only."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/ContentPartReasoning"
               },
               {
@@ -8129,6 +8916,17 @@
           }
         }
       },
+      "ContentPartSpoken": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
       "ContentPartTaskResult": {
         "type": "object",
         "description": "A delivered task result, as it sits in the conversation.\n\n`summary` is the child's own answer, already bounded to\n`delegation.result_max_chars`, and is the only untrusted field here: the\nrest is written by the server. It is stored RAW — the untrusted-data frame\nand the safety guidance are applied when the conversation is composed for\nthe model, so the UI can render the answer plainly.",
@@ -8261,6 +9059,10 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/VoiceDecisionRecord",
+            "description": "Set when the user approved by voice."
           }
         }
       },
@@ -8356,6 +9158,13 @@
               "null"
             ]
           },
+          "change_request": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's words when `reason` is `change_requested`."
+          },
           "child_chat_id": {
             "type": [
               "string",
@@ -8372,7 +9181,7 @@
               "string",
               "null"
             ],
-            "description": "Why the call was rejected when the user did not decide it directly.\nThe only value is `withdrawn`."
+            "description": "Why the call was rejected when the user did not simply deny it:\n`withdrawn` when the user took the question back, `change_requested`\nwhen they asked for the call to be different."
           },
           "rejected_at": {
             "type": "string"
@@ -8386,6 +9195,10 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/VoiceDecisionRecord",
+            "description": "Set when the user refused by voice."
           }
         }
       },
@@ -8408,6 +9221,10 @@
           "message_id"
         ],
         "properties": {
+          "conversational_audio_back": {
+            "type": "boolean",
+            "description": "Read the continued answer back, as `conversational_audio_back` does on\na submitted message."
+          },
           "decision": {
             "oneOf": [
               {
@@ -10859,6 +11676,49 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/MessageSubmitStreamingResponseMessageTextDelta",
+                "description": "Sent whenever the voice gets new text of a reply's spoken part. The\nwritten answer comes as `text_delta`."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "spoken_delta"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Sent whenever the voice gets new text of a reply's spoken part. The\nwritten answer comes as `text_delta`."
+          },
+          {
+            "type": "object",
+            "description": "Sent when a spoken part is complete: the voice has all of it, and the\nwritten answer may still be streaming.",
+            "required": [
+              "message_id",
+              "message_type"
+            ],
+            "properties": {
+              "message_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "spoken_end"
+                ]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/MessageSubmitStreamingResponseChatCreated",
                 "description": "May optionally be sent at the start of the stream to indicate that a new chat has been created."
               },
@@ -11385,6 +12245,32 @@
           }
         }
       },
+      "OfficeHostReportRequest": {
+        "type": "object",
+        "description": "What an Office add-in pane runs on, sent once when the pane has started and signed in.",
+        "required": [
+          "host"
+        ],
+        "properties": {
+          "api_set": {
+            "type": "string",
+            "description": "PowerPoint only: the highest PowerPoint API set the pane detected, or `none`."
+          },
+          "host": {
+            "type": "string",
+            "description": "`Office.HostType` as `Office.onReady` reports it, e.g. `PowerPoint`."
+          },
+          "platform": {
+            "type": "string",
+            "description": "`Office.PlatformType`, e.g. `PC`, `Mac` or `OfficeOnline`."
+          },
+          "tier": {
+            "type": "string",
+            "description": "PowerPoint only: the pane's read tier, `full`, `basic` or `none`."
+          }
+        },
+        "additionalProperties": false
+      },
       "OperationError": {
         "type": "object",
         "required": [
@@ -11854,6 +12740,13 @@
           }
         }
       },
+      "PhraseMatchKind": {
+        "type": "string",
+        "enum": [
+          "exact",
+          "variant"
+        ]
+      },
       "PolicyGuideConfig": {
         "type": "object",
         "required": [
@@ -11911,6 +12804,18 @@
             "propertyNames": {
               "type": "string"
             }
+          }
+        }
+      },
+      "ProgressSpeechRequest": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The line, composed by the client from the tool call's label."
           }
         }
       },
@@ -11985,6 +12890,12 @@
                   "audio_delta"
                 ]
               },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
+                "description": "The piece of a spoken approval card the audio belongs to; absent\nwhen a message is read aloud.",
+                "minimum": 0
+              },
               "sample_rate": {
                 "type": "integer",
                 "format": "int32",
@@ -11993,6 +12904,27 @@
               "sequence": {
                 "type": "integer",
                 "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every audio chunk of this piece of a spoken approval card was sent.",
+            "required": [
+              "piece",
+              "message_type"
+            ],
+            "properties": {
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "piece_done"
+                ]
+              },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
                 "minimum": 0
               }
             }
@@ -12576,6 +13508,58 @@
             "description": "The days of a weekly rule; empty for the other frequencies."
           }
         }
+      },
+      "ReplySpeechStyleResponse": {
+        "type": "object",
+        "required": [
+          "wording",
+          "source",
+          "user_choice",
+          "show_in_chat",
+          "show_in_chat_source"
+        ],
+        "properties": {
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "show_in_chat": {
+            "type": "boolean",
+            "description": "Whether the chat shows what the voice said: the spoken text, folded,\nand a play button where the recording was kept. The caller may always\nchoose it for themselves: it changes only what they see."
+          },
+          "show_in_chat_source": {
+            "$ref": "#/components/schemas/ReplySpeechStyleSource",
+            "description": "Where `show_in_chat` comes from."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ReplySpeechStyleSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own wording."
+          },
+          "wording": {
+            "$ref": "#/components/schemas/ReplySpeechWording"
+          }
+        }
+      },
+      "ReplySpeechStyleSource": {
+        "type": "string",
+        "description": "Where the caller's reply wording comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "ReplySpeechWording": {
+        "type": "string",
+        "description": "How a reply in conversational audio mode is spoken.",
+        "enum": [
+          "natural",
+          "precise"
+        ]
       },
       "ResolveShareLinkResponse": {
         "type": "object",
@@ -13374,6 +14358,7 @@
           "attempts_exhausted",
           "model_stopped",
           "recovery_reads_exhausted",
+          "part_calls_exhausted",
           "terminal_validation",
           "context_unavailable",
           "capability_unavailable",
@@ -13799,7 +14784,8 @@
           "approve_always",
           "reject_always",
           "withdraw",
-          "approve_context"
+          "approve_context",
+          "request_change"
         ]
       },
       "ToolApprovalKind": {
@@ -13875,6 +14861,7 @@
           "upsert",
           "archive",
           "upload",
+          "read",
           "other"
         ]
       },
@@ -14223,6 +15210,10 @@
             "type": "string",
             "description": "A readable name, display-cleaned."
           },
+          "nested": {
+            "type": "boolean",
+            "description": "The value sits in an object inside the record, such as a record\ncreated with it: its name and codes belong to that object, so spoken\nnames never apply to it."
+          },
           "new_name": {
             "type": "boolean",
             "description": "A name the call gives a record nobody read in this chat (see\n`record_unread`): a card reads it as a new value, never as the name of\nthe record being changed."
@@ -14456,8 +15447,22 @@
           "object_kind": {
             "$ref": "#/components/schemas/ToolCallObjectKind"
           },
+          "read": {
+            "$ref": "#/components/schemas/ToolCallRead",
+            "description": "What a call that only reads looks at, for words spoken aloud. No card\nreads it: a read keeps the label it had before reads had a verb."
+          },
           "source": {
             "$ref": "#/components/schemas/ToolCallLabelSource"
+          },
+          "spoken_names": {
+            "type": "object",
+            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text` (as `table.column` when the condition names one of\nseveral tables; a coded value of an unnamed table has none), a read's\ntable. No card reads it.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolCallSpokenNames"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "warnings": {
             "type": "array",
@@ -14651,6 +15656,123 @@
           "code"
         ]
       },
+      "ToolCallRead": {
+        "type": "object",
+        "description": "A call that only reads, by the rules alone and only where every check a\nlabel passes agrees: a search when `item.title` holds the text it looks\nfor, one or a few items when `item.id` names them, otherwise a list.\nValues are read and resolved as on a label, so a machine ID is named only\nby `resolved`, and a consent flag or a name the model typed next to an ID\nis never in it. Its verb, `read`, is in the closed list of actions but is\nnever sent on a label: a read's label keeps `other`.",
+        "required": [
+          "object_kind"
+        ],
+        "properties": {
+          "filtered": {
+            "type": "boolean",
+            "description": "Conditions narrow what it reads beyond the item, other than paging or\nsorting."
+          },
+          "item": {
+            "$ref": "#/components/schemas/ToolCallLabelItem",
+            "description": "`title`: the text it searches for; `id`: what it reads; `target`:\nwhere it looks, such as a folder, a parent or a table. Never fields."
+          },
+          "object_kind": {
+            "$ref": "#/components/schemas/ToolCallObjectKind"
+          },
+          "query": {
+            "$ref": "#/components/schemas/ToolCallReadQuery",
+            "description": "What a call's one SQL statement reads, when parsing it shows it is\ncertainly a single plain read; then `item.id` holds the record a\ncondition on the table's own key names."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelWarning"
+            }
+          }
+        }
+      },
+      "ToolCallReadCondition": {
+        "type": "object",
+        "required": [
+          "column",
+          "operator"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/ToolCallReadOperator"
+          },
+          "table": {
+            "type": "string",
+            "description": "The table the column belongs to, when the statement reads several\nand names it."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelValue"
+            },
+            "description": "The values it compares with, read as label values: a machine ID is\nnamed only by `resolved`. `between` has two."
+          },
+          "values_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallReadOperator": {
+        "type": "string",
+        "enum": [
+          "equals",
+          "not_equals",
+          "less",
+          "at_most",
+          "greater",
+          "at_least",
+          "contains",
+          "starts_with",
+          "ends_with",
+          "is_empty",
+          "is_not_empty",
+          "in",
+          "not_in",
+          "between",
+          "other"
+        ]
+      },
+      "ToolCallReadQuery": {
+        "type": "object",
+        "description": "The parts of a plain SQL read the voice says: the tables, the conditions\nsimple enough to say, and a limit. Names are as the statement wrote them,\ndisplay-cleaned.",
+        "properties": {
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallReadCondition"
+            },
+            "description": "Conditions joined by AND that compare one column with values, in the\nstatement's order."
+          },
+          "conditions_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Conditions it applies beyond `conditions`: past the cap, or not a\nsimple comparison.",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The most rows it returns, from TOP, LIMIT or FETCH.",
+            "minimum": 0
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tables_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "ToolCallRecipientGroup": {
         "type": "object",
         "required": [
@@ -14741,6 +15863,63 @@
           }
         }
       },
+      "ToolCallSpokenNames": {
+        "type": "object",
+        "description": "One language's words for the names a call uses. A name without an entry\nis not here and is spoken as the card shows it.",
+        "properties": {
+          "choices": {
+            "type": "object",
+            "description": "By field, then by value.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "sentences": {
+            "type": "object",
+            "description": "A field's own natural sentence variants, by sentence type (`changed`,\n`set`, `updated`) and then by field, keyed like `fields`.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tables": {
+            "type": "object",
+            "description": "What the records of a table are called, in the plural.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ToolCallStatus": {
         "type": "string",
         "enum": [
@@ -14778,6 +15957,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "nested": {
+            "type": "boolean",
+            "description": "See [`ToolCallEffect::nested`]."
           },
           "path": {
             "type": "string"
@@ -14829,6 +16012,10 @@
           "description_truncated"
         ],
         "properties": {
+          "closed_world": {
+            "type": "boolean",
+            "description": "Whether the tool says it reaches nothing outside its server\n(`openWorldHint: false`) by the annotations the approval policy read\nfor this call. Unknown counts as open. Set on MCP calls only."
+          },
           "description": {
             "type": [
               "string",
@@ -14852,6 +16039,10 @@
           },
           "title": {
             "type": "string"
+          },
+          "tool_name": {
+            "type": "string",
+            "description": "The tool's own name on its MCP server, set only when the model calls\nit by a name qualified with the server because another server or one\nof Erato's own tools has the same name. The call's `tool_name` is then\nthat qualified name; show this one instead."
           }
         }
       },
@@ -14872,6 +16063,10 @@
           "view": {
             "$ref": "#/components/schemas/ToolResultView",
             "description": "The interactive view (MCP Apps) the tool declares, set when its server\nenables `mcp_apps` and the view was read and accepted for this call."
+          },
+          "view_unavailable": {
+            "type": "boolean",
+            "description": "Set instead of `view` when the tool declares a view and its server\nenables `mcp_apps`, but the view was refused or could not be read."
           }
         }
       },
@@ -14905,12 +16100,16 @@
       },
       "ToolResultView": {
         "type": "object",
-        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output` and `structured_content`.",
+        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output`, `structured_content` and `meta`.",
         "required": [
           "server_id",
           "uri"
         ],
         "properties": {
+          "meta": {
+            "type": "object",
+            "description": "The result's `_meta` as the server returned it, which the view gets\nunchanged with the result. Kept only here, for the view, like\n`structured_content`: the model never reads it."
+          },
           "server_id": {
             "type": "string"
           },
@@ -15309,6 +16508,20 @@
               }
             ]
           },
+          "preference_approval_speech_amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How much approval cards say aloud: `full` or `short`. Explicit\n`null` follows the organisation again. Kept even where the user may\nnot choose, and then not used."
+          },
+          "preference_approval_speech_wording": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How approval cards are worded aloud: `precise` or `natural`, like the\namount."
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -15349,6 +16562,20 @@
             ],
             "description": "Preferred name to address the user with."
           },
+          "preference_reply_speech_show_in_chat": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the chat shows what the voice said in conversation; `null`\nfollows the organisation again."
+          },
+          "preference_reply_speech_wording": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How replies are spoken in conversation: `natural` or `precise`, like\nthe amount."
+          },
           "preference_starting_assistant_cleared": {
             "type": "boolean",
             "description": "Set `true` to explicitly clear the start screen (welcome screen even\nthough an audience pin exists), `false` to inherit again. Clearing\nalso removes any own pick; picking also un-clears."
@@ -15371,6 +16598,13 @@
             "type": "string",
             "description": "The client's IANA time zone (the browser's\n`Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it\nwhen it differs from the profile's `preference_time_zone`; anything\nthat is not an IANA zone name is rejected with 422.",
             "example": "Europe/Berlin"
+          },
+          "preference_wait_lines_amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the voice says while the user waits: `normal`, `long_only` or\n`off`, like the amount."
           }
         }
       },
@@ -15452,6 +16686,14 @@
             "type": "string",
             "description": "The user's profile picture URL."
           },
+          "preference_approval_speech_amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount",
+            "description": "How much approval cards say aloud, as the user chose; absent follows\nthe organisation."
+          },
+          "preference_approval_speech_wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording",
+            "description": "How approval cards are worded aloud, as the user chose; absent\nfollows the organisation."
+          },
           "preference_assistant_additional_information": {
             "type": "string",
             "description": "Additional contextual information about the user for the assistant."
@@ -15476,6 +16718,14 @@
             "type": "string",
             "description": "Preferred name to address the user with."
           },
+          "preference_reply_speech_show_in_chat": {
+            "type": "boolean",
+            "description": "Whether the chat shows what the voice said, as the user chose; absent\nfollows the organisation."
+          },
+          "preference_reply_speech_wording": {
+            "$ref": "#/components/schemas/ReplySpeechWording",
+            "description": "How replies are spoken in conversation, as the user chose; absent\nfollows the organisation."
+          },
           "preference_starting_assistant_cleared": {
             "type": "boolean",
             "description": "True when the user explicitly cleared their start screen. This is\ndeliberately distinct from \"never set\": a clear must keep suppressing\nan admin's audience pin, while \"never set\" inherits it."
@@ -15491,6 +16741,10 @@
           "preference_time_zone": {
             "type": "string",
             "description": "The IANA time zone the user's client last reported (web app or\nTeams). Local times the user enters, such as a reminder's date and\ntime, are resolved in it."
+          },
+          "preference_wait_lines_amount": {
+            "$ref": "#/components/schemas/WaitLinesAmount",
+            "description": "What the voice says while the user waits, as the user chose; absent\nfollows the organisation."
           },
           "preferred_language": {
             "type": "string",
@@ -15567,7 +16821,344 @@
           "denied"
         ]
       },
-      "Value": {}
+      "Value": {},
+      "VoiceDecisionOutcome": {
+        "type": "string",
+        "enum": [
+          "approved",
+          "refused"
+        ]
+      },
+      "VoiceDecisionPiece": {
+        "type": "object",
+        "description": "A piece of the spoken card and what the user had heard of it.",
+        "required": [
+          "id",
+          "role",
+          "state"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ApprovalCardPieceRole"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApprovalCardPieceState"
+          }
+        }
+      },
+      "VoiceDecisionRecord": {
+        "type": "object",
+        "description": "How a decision was given by voice, kept with the decision for audits and\nfor tuning. Never the audio. Times are RFC 3339: `matched_at` by the\nserver's clock, the others by the device's.",
+        "required": [
+          "user_id",
+          "approval_id",
+          "card_digest",
+          "language",
+          "pieces",
+          "matched_words",
+          "voice_stopped_at",
+          "recording_started_at",
+          "recording_ended_at",
+          "matched_at",
+          "speech_ms",
+          "speech_frames_permille",
+          "outcome"
+        ],
+        "properties": {
+          "answer_latency_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "From the request heard to the first speech of the answer.",
+            "minimum": 0
+          },
+          "approval_id": {
+            "type": "string"
+          },
+          "card_digest": {
+            "type": "string",
+            "description": "What the card asked about: the call's tool and arguments, hashed."
+          },
+          "language": {
+            "type": "string"
+          },
+          "match_kind": {
+            "$ref": "#/components/schemas/PhraseMatchKind"
+          },
+          "matched_at": {
+            "type": "string"
+          },
+          "matched_words": {
+            "type": "string",
+            "description": "The words as matched: the phrase folded, a refusal in lower case,\nat most 100 characters."
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/VoiceDecisionOutcome"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VoiceDecisionPiece"
+            }
+          },
+          "recording_ended_at": {
+            "type": "string"
+          },
+          "recording_started_at": {
+            "type": "string"
+          },
+          "request_heard_at": {
+            "type": "string"
+          },
+          "required_phrase": {
+            "type": "string",
+            "description": "The phrase an approval needed, by its id."
+          },
+          "speech_frames_permille": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The share of the recording's detector frames heard as speech, in\nthousandths.",
+            "minimum": 0
+          },
+          "speech_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How long the speech detector heard speech in the recording.",
+            "minimum": 0
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "voice_stopped_at": {
+            "type": "string"
+          }
+        }
+      },
+      "VoiceReceiptRefusedError": {
+        "type": "object",
+        "description": "Body of the `409` `continuestream` answers to a decision by voice whose\n`voice_receipt` is unknown, used, expired, or for another card or\ndecision. Nothing was decided; the card waits on screen.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Always `voice_receipt_refused`."
+          }
+        }
+      },
+      "WaitLineAudio": {
+        "type": "object",
+        "description": "One fixed line, ready to play.",
+        "required": [
+          "slot",
+          "text",
+          "audio",
+          "sample_rate"
+        ],
+        "properties": {
+          "audio": {
+            "type": "string",
+            "description": "Base64 of signed 16-bit little-endian mono PCM."
+          },
+          "sample_rate": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "slot": {
+            "$ref": "#/components/schemas/WaitLineSlot"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitLineSlot": {
+        "type": "string",
+        "description": "The slots of a language's lines.",
+        "enum": [
+          "opener",
+          "opener_short",
+          "still",
+          "long"
+        ]
+      },
+      "WaitLineToolTemplates": {
+        "type": "object",
+        "description": "Templates for a running tool call's line. `search` holds `{search}`;\n`items` and `list` hold `{table}`. Absent ones say nothing.",
+        "properties": {
+          "items": {
+            "type": "string"
+          },
+          "list": {
+            "type": "string"
+          },
+          "search": {
+            "type": "string"
+          }
+        }
+      },
+      "WaitLinesAmount": {
+        "type": "string",
+        "description": "How much the voice says while the user waits.",
+        "enum": [
+          "normal",
+          "long_only",
+          "off"
+        ]
+      },
+      "WaitLinesResponse": {
+        "type": "object",
+        "required": [
+          "amount",
+          "source",
+          "user_choice",
+          "language",
+          "voice",
+          "version",
+          "unchanged",
+          "incomplete",
+          "timing",
+          "lines",
+          "tools"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/WaitLinesAmount"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "incomplete": {
+            "type": "boolean",
+            "description": "A configured line could not be said and is missing from `lines`. A\nclient then asks again without `known`, so the line is tried again."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language the lines are in: the language the voice speaks to the\ncaller."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WaitLineAudio"
+            },
+            "description": "Empty when the amount is `off`, in a language without lines, or when\nthe voice could not say them."
+          },
+          "source": {
+            "$ref": "#/components/schemas/WaitLinesSource",
+            "description": "Where the last value that applied came from."
+          },
+          "timing": {
+            "$ref": "#/components/schemas/WaitLinesTiming"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/WaitLineToolTemplates"
+          },
+          "unchanged": {
+            "type": "boolean",
+            "description": "The caller already has this `version`: `lines` is left empty and\nnothing is synthesised."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own amount."
+          },
+          "version": {
+            "type": "string",
+            "description": "Changes whenever anything here changes: the voice, the language, the\nwords, the timings or the amount. A client keeps its lines only as\nlong as this stays the same."
+          },
+          "voice": {
+            "type": "string",
+            "description": "Changes whenever the voice that says the lines changes."
+          }
+        }
+      },
+      "WaitLinesSource": {
+        "type": "string",
+        "description": "Where the caller's amount comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "WaitLinesTiming": {
+        "type": "object",
+        "description": "When lines are due, in milliseconds from the end of the user's speech\nunless said otherwise.",
+        "required": [
+          "first_after_ms",
+          "tool_after_ms",
+          "still_after_ms",
+          "still_quiet_ms",
+          "long_after_ms",
+          "still_repeat_ms",
+          "still_repeat_max",
+          "min_gap_ms",
+          "max_per_turn",
+          "taper_after_turns"
+        ],
+        "properties": {
+          "first_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "long_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_per_turn": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "min_gap_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "From the end of one line to the start of the next.",
+            "minimum": 0
+          },
+          "still_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "still_quiet_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Silence before the \"still on it\" line, from the end of the last line.",
+            "minimum": 0
+          },
+          "still_repeat_max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many \"still on it\" lines at most after the long line.",
+            "minimum": 0
+          },
+          "still_repeat_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "After the long line, between \"still on it\" lines; `0` says it no more.",
+            "minimum": 0
+          },
+          "taper_after_turns": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Turns with an opener before the opener comes from the short set; `0`\nnever shortens.",
+            "minimum": 0
+          },
+          "tool_after_ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "From the start of a tool call.",
+            "minimum": 0
+          }
+        }
+      }
     }
   }
 }

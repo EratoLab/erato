@@ -1996,6 +1996,18 @@ pub enum StreamingEvent {
     AudioError {
         message_id: Uuid,
     },
+    /// New text of a reply's spoken part, for the voice.
+    #[serde(rename = "spoken_delta")]
+    SpokenDelta {
+        message_id: Uuid,
+        content_index: usize,
+        new_text: String,
+    },
+    /// A spoken part is complete; the written answer may still be streaming.
+    #[serde(rename = "spoken_end")]
+    SpokenEnd {
+        message_id: Uuid,
+    },
     /// A new chat was created
     #[serde(rename = "chat_created")]
     ChatCreated {

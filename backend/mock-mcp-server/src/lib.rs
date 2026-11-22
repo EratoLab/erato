@@ -725,6 +725,63 @@ impl ServerHandler for DeepResearchServer {
     }
 }
 
+/// What the `wait` tool of `/builtin-names` answers.
+pub const MCP_WAIT_ANSWER: &str = "The queue drained.";
+
+/// A tool named like one of Erato's own tools, `wait`.
+#[derive(Clone)]
+struct BuiltinNamesServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl BuiltinNamesServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl BuiltinNamesServer {
+    #[tool(
+        name = "wait",
+        description = "Wait until the server's queue has drained",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn queue_wait(&self) -> String {
+        MCP_WAIT_ANSWER.to_string()
+    }
+}
+
+impl ServerHandler for BuiltinNamesServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP server with a tool named like a built-in")
+    }
+}
+
 #[derive(Clone)]
 struct NoneAuthProbeServer {
     #[allow(dead_code)]
@@ -1189,7 +1246,9 @@ impl ServerHandler for UntrustedTextServer {
 /// MIME type of an MCP Apps view.
 pub const VIEW_MIME_TYPE: &str = "text/html;profile=mcp-app";
 /// The counter view, a minimal MCP Apps view: it shows the `start` the tool
-/// was called with and counts up on a click.
+/// was called with and counts up on a click. Like a view built with the MCP
+/// Apps SDK, it takes the host context's theme as its color scheme, and it
+/// answers `ui/resource-teardown`, logging "mock-counter-view torn down".
 pub const COUNTER_VIEW_URI: &str = "ui://mock/counter";
 /// A view served as plain `text/html`, which a host refuses.
 pub const WRONG_TYPE_VIEW_URI: &str = "ui://mock/wrong-type";
@@ -1199,8 +1258,16 @@ pub const OVERSIZED_VIEW_URI: &str = "ui://mock/oversized";
 pub const OVERSIZED_VIEW_BYTES: usize = 9 * 1024 * 1024;
 /// A view whose `resources/read` never answers.
 pub const SLOW_VIEW_URI: &str = "ui://mock/slow";
+/// The counter view, read with `cacheScope: "public"` and `ttlMs` of an hour:
+/// a host may keep it for every user.
+pub const PUBLIC_VIEW_URI: &str = "ui://mock/public";
+/// The counter view, read with `ttlMs: 0`: a host keeps it for no later call.
+pub const UNCACHED_VIEW_URI: &str = "ui://mock/uncached";
 /// The tool that shows the counter view.
 pub const COUNTER_TOOL_NAME: &str = "show_counter";
+/// The counter view's tool that also returns a picture as a file, as a chart
+/// tool returns its static image beside its view.
+pub const COUNTER_IMAGE_TOOL_NAME: &str = "show_counter_with_image";
 /// Text that only the counter view's document holds.
 pub const COUNTER_VIEW_MARKER: &str = "mock-counter-view";
 pub const COUNTER_VIEW_HTML: &str = r#"<!doctype html>
@@ -1212,8 +1279,15 @@ pub const COUNTER_VIEW_HTML: &str = r#"<!doctype html>
 const count = document.getElementById("count");
 document.getElementById("add").onclick = () => { count.value = Number(count.value) + 1; };
 window.addEventListener("message", ({ data }) => {
-  if (data?.id === 1 && data.result) parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+  if (data?.id === 1 && data.result) {
+    document.documentElement.style.colorScheme = data.result.hostContext?.theme ?? "";
+    parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+  }
   if (data?.method === "ui/notifications/tool-input") count.value = Number(data.params?.arguments?.start ?? 0);
+  if (data?.method === "ui/resource-teardown") {
+    console.log("mock-counter-view torn down");
+    parent.postMessage({ jsonrpc: "2.0", id: data.id, result: {} }, "*");
+  }
 });
 parent.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {
   protocolVersion: "2026-01-26", appCapabilities: {}, appInfo: { name: "mock-counter", version: "1.0.0" } } }, "*");
@@ -1227,13 +1301,34 @@ pub fn counter_view_ui_meta() -> serde_json::Value {
     json!({"csp": {"connectDomains": [], "resourceDomains": []}, "prefersBorder": true})
 }
 
+/// Text that only the `_meta` of a counter call's result holds.
+pub const COUNTER_RESULT_META_MARKER: &str = "mock-counter-result-meta";
+
+/// The `_meta` of the counter's result for `start`: data for its view only,
+/// as a chart tool hands its view the picture to save.
+pub fn counter_result_meta(start: i64) -> serde_json::Value {
+    json!({"mock/counter": {"start": start, "note": COUNTER_RESULT_META_MARKER}})
+}
+
 /// Each tool of the apps server and the view it declares.
-const APP_TOOLS: [(&str, &str); 4] = [
+const APP_TOOLS: [(&str, &str); 6] = [
     (COUNTER_TOOL_NAME, COUNTER_VIEW_URI),
     ("show_wrong_type_view", WRONG_TYPE_VIEW_URI),
     ("show_oversized_view", OVERSIZED_VIEW_URI),
     ("show_slow_view", SLOW_VIEW_URI),
+    ("show_public_view", PUBLIC_VIEW_URI),
+    ("show_uncached_view", UNCACHED_VIEW_URI),
 ];
+
+/// `show_counter_with_image`: the counter view, and a PNG file in its
+/// structured content, declared the way `generate_image` declares its images.
+fn counter_image_tool() -> rmcp::model::Tool {
+    let mut tool = app_tool(COUNTER_IMAGE_TOOL_NAME, COUNTER_VIEW_URI);
+    tool.output_schema = Some(rmcp::handler::server::tool::schema_for_type::<
+        ImageGenerationResponse,
+    >());
+    tool
+}
 
 fn app_tool(name: &str, view_uri: &str) -> rmcp::model::Tool {
     let schema = json!({"type": "object", "properties": {"start": {"type": "integer"}}});
@@ -1265,10 +1360,34 @@ impl ServerHandler for AppsServer {
             .and_then(|arguments| arguments.get("start"))
             .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
+        if request.name == COUNTER_IMAGE_TOOL_NAME {
+            let response = ImageGenerationResponse {
+                images: vec![GeneratedImage {
+                    data_base64: CAT_IMAGE_BASE64.trim().to_string(),
+                    file_name: "counter.png".to_string(),
+                    width: 500,
+                    height: 500,
+                    mime_type: "image/png".to_string(),
+                }],
+            };
+            let result: Result<CallToolResponse, McpError> = serde_json::to_value(&response)
+                .map(|structured| CallToolResult::structured(structured).into())
+                .map_err(|err| {
+                    McpError::internal_error(
+                        format!("Failed to serialize the counter image: {err}"),
+                        None,
+                    )
+                });
+            return std::future::ready(result);
+        }
         let mut result = CallToolResult::success(vec![ContentBlock::text(format!(
             "Counter started at {start}."
         ))]);
         result.structured_content = Some(json!({"start": start}));
+        if request.name == COUNTER_TOOL_NAME {
+            let meta = counter_result_meta(start);
+            result.meta = Some(MetaObject(meta.as_object().unwrap().clone()));
+        }
         std::future::ready(Ok(result.into()))
     }
 
@@ -1277,11 +1396,14 @@ impl ServerHandler for AppsServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        // With a TTL, as a host keeps its views no longer than the tool list.
         std::future::ready(Ok(ListToolsResult {
             tools: APP_TOOLS
                 .iter()
                 .map(|(name, view_uri)| app_tool(name, view_uri))
+                .chain([counter_image_tool()])
                 .collect(),
+            ttl_ms: Some(10 * 60 * 1000),
             ..Default::default()
         }))
     }
@@ -1292,7 +1414,9 @@ impl ServerHandler for AppsServer {
         _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResponse, McpError> {
         let (mime_type, text) = match request.uri.as_str() {
-            COUNTER_VIEW_URI => (VIEW_MIME_TYPE, COUNTER_VIEW_HTML.to_string()),
+            COUNTER_VIEW_URI | PUBLIC_VIEW_URI | UNCACHED_VIEW_URI => {
+                (VIEW_MIME_TYPE, COUNTER_VIEW_HTML.to_string())
+            }
             WRONG_TYPE_VIEW_URI => ("text/html", COUNTER_VIEW_HTML.to_string()),
             OVERSIZED_VIEW_URI => (VIEW_MIME_TYPE, "x".repeat(OVERSIZED_VIEW_BYTES)),
             SLOW_VIEW_URI => std::future::pending().await,
@@ -1309,7 +1433,15 @@ impl ServerHandler for AppsServer {
             let meta = json!({"ui": counter_view_ui_meta()});
             contents = contents.with_meta(MetaObject(meta.as_object().unwrap().clone()));
         }
-        Ok(ReadResourceResult::new(vec![contents]).into())
+        let result = ReadResourceResult::new(vec![contents]);
+        Ok(match request.uri.as_str() {
+            PUBLIC_VIEW_URI => result
+                .with_cache_scope(rmcp::model::CacheScope::Public)
+                .with_ttl_ms(60 * 60 * 1000),
+            UNCACHED_VIEW_URI => result.with_ttl_ms(0),
+            _ => result,
+        }
+        .into())
     }
 
     fn get_info(&self) -> ServerInfo {
@@ -1705,13 +1837,16 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
         },
         MechanismSummary {
             name: "Apps server",
-            description: "Tools that declare MCP Apps views: ui://mock/counter, one served as plain HTML, one too large and one that never answers",
+            description: "Tools that declare MCP Apps views: ui://mock/counter, also with a PNG file, one served as plain HTML, one too large, one that never answers, and the counter read as public and as never kept",
             endpoint: "Streamable HTTP /mcp/apps",
             tools: &[
                 COUNTER_TOOL_NAME,
+                COUNTER_IMAGE_TOOL_NAME,
                 "show_wrong_type_view",
                 "show_oversized_view",
                 "show_slow_view",
+                "show_public_view",
+                "show_uncached_view",
             ],
         },
         MechanismSummary {
@@ -1723,6 +1858,12 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
                 PLAIN_TEXT_TOOL_NAME,
                 HOSTILE_NAME_TOOL_NAME,
             ],
+        },
+        MechanismSummary {
+            name: "Built-in names server",
+            description: "A tool named like Erato's own wait tool",
+            endpoint: "Streamable HTTP /mcp/builtin-names",
+            tools: &["wait"],
         },
         MechanismSummary {
             name: "500 simulation endpoint",
@@ -1819,6 +1960,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
         "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/apps".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/builtin-names".bright_yellow()
     );
     println!(
         "  {} {}",
@@ -1940,6 +2086,8 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
     let untrusted_text_service = create_streamable_http_service(mode, || Ok(UntrustedTextServer));
     let records_service = create_streamable_http_service(mode, || Ok(RecordsServer::new()));
     let apps_service = create_streamable_http_service(mode, || Ok(AppsServer));
+    let builtin_names_service =
+        create_streamable_http_service(mode, || Ok(BuiltinNamesServer::new()));
 
     let none_auth_service = create_streamable_http_service(mode, || Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service =
@@ -1969,6 +2117,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
         .nest_service("/untrusted-text", untrusted_text_service)
         .nest_service("/records", records_service)
         .nest_service("/apps", apps_service)
+        .nest_service("/builtin-names", builtin_names_service)
         .route(
             "/auth-none",
             any(move |request| {

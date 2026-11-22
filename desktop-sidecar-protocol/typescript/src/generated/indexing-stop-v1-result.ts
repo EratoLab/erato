@@ -350,7 +350,7 @@ export interface ErrorCount {
 export interface DiscoverySource {
   sourceId: string;
   mailboxId: string | null;
-  state: "notStarted" | "scanning" | "complete" | "failed" | "disabled";
+  state: "notStarted" | "scanning" | "complete" | "failed" | "disabled" | "partial";
   discoveryComplete: boolean;
   scanStartedAt: string | null;
   lastSuccessfulScanAt: string | null;
@@ -361,7 +361,7 @@ export interface DiscoverySource {
   /**
    * Stable source lifecycle, independent of current scan attempts and worker occupancy. Optional for older v1 implementations; clients fall back to legacy derivation.
    */
-  lifecycle?: "scanning" | "indexing" | "current" | "disabled" | "stopped" | "unavailable" | "blocked";
+  lifecycle?: "scanning" | "indexing" | "current" | "disabled" | "stopped" | "unavailable" | "blocked" | "partial";
   /**
    * Durable inventory milestone. Enumeration reached the end; deletion reconciliation may still be deferred. Retained across scans and process restarts, cleared with a fresh catalog.
    */
@@ -417,6 +417,14 @@ export interface IndexedRange {
    * Why from is null, such as not_enumerated or no_searchable_documents. Null when a range is claimed.
    */
   unavailableReason: string | null;
+  /**
+   * Whether the latest inventory is complete. False means no contiguous date coverage is guaranteed; searchable documents remain usable.
+   */
+  inventoryComplete?: boolean;
+  /**
+   * Visible documents with indexed or empty receipts, including undated documents. Independent of inventory completeness and the known extraction backlog.
+   */
+  searchableDocuments?: number;
   [k: string]: unknown;
 }
 /**

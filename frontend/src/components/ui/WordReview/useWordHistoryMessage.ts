@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import {
   useConversationMessage,
@@ -6,8 +6,10 @@ import {
 } from "@/components/ui/Message/ConversationMessages";
 import {
   WORD_ACTION_FACET_IDS,
+  WORD_PLAN_SECTIONS_TOOL,
   WORD_READ_TOOL,
   WORD_SUBMIT_PLAN_TOOL,
+  WORD_WRITE_SECTION_TOOL,
 } from "@/lib/wordReview/wordHistoryNames";
 import { wordMessageLineage } from "@/lib/wordReview/wordHistoryParts";
 
@@ -64,16 +66,41 @@ export function useWordHistoryMessage(
   }, [request]);
 }
 
+const WORD_PLAN_TOOLS = new Set([
+  WORD_READ_TOOL,
+  WORD_SUBMIT_PLAN_TOOL,
+  WORD_PLAN_SECTIONS_TOOL,
+  WORD_WRITE_SECTION_TOOL,
+]);
+
 export const isWordPlanToolPart = (part: ContentPart): boolean =>
-  part.content_type === "tool_use" &&
-  (part.tool_name === WORD_READ_TOOL ||
-    part.tool_name === WORD_SUBMIT_PLAN_TOOL);
+  part.content_type === "tool_use" && WORD_PLAN_TOOLS.has(part.tool_name ?? "");
 
 export const isWordSubmitPlanPart = (part: ContentPart): boolean =>
   part.content_type === "tool_use" && part.tool_name === WORD_SUBMIT_PLAN_TOOL;
 
 const sameMessages = (a: readonly Message[], b: readonly Message[]) =>
   a.length === b.length && a.every((message, i) => message === b[i]);
+
+const NO_LINEAGE: readonly Message[] = [];
+
+// Every card checks its lineage on every streamed token, and the token lands
+// in a later message, so walking the branch without rebuilding it is enough.
+const isLineageOf = (
+  lineage: readonly Message[],
+  messages: Readonly<Record<string, Message | undefined>>,
+  messageId: string | undefined,
+): boolean => {
+  let index = lineage.length - 1;
+  for (let id = messageId; id; ) {
+    const message = messages[id];
+    if (!message) break;
+    if (index < 0 || lineage[index] !== message) return false;
+    index -= 1;
+    id = message.previous_message_id;
+  }
+  return index === -1;
+};
 
 /**
  * A message and the ones before it on its branch, oldest first. Re-renders
@@ -82,8 +109,11 @@ const sameMessages = (a: readonly Message[], b: readonly Message[]) =>
 export function useWordMessageLineage(
   messageId: string | undefined,
 ): readonly Message[] {
-  return useConversationSelector(
-    (messages) => wordMessageLineage(messages, messageId),
-    sameMessages,
-  );
+  const last = useRef(NO_LINEAGE);
+  return useConversationSelector((messages) => {
+    if (!isLineageOf(last.current, messages, messageId)) {
+      last.current = wordMessageLineage(messages, messageId);
+    }
+    return last.current;
+  }, sameMessages);
 }

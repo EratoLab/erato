@@ -39,8 +39,10 @@ fn earlier(results: Vec<(&str, Value, Value)>) -> ToolResultContext {
                         description: None,
                         description_truncated: false,
                         server_name: Some(SERVER.into()),
+                        tool_name: None,
                         label: None,
                         read_only: false,
+                        closed_world: false,
                     }),
                     input: Some(input),
                     output: Some(output),
@@ -112,6 +114,8 @@ fn a_call_with_no_verb_has_no_change_description() {
         warnings: Vec::new(),
         source: ToolCallLabelSource::Rules,
         change: None,
+        read: None,
+        spoken_names: Default::default(),
     };
     let arguments = json!({});
     let context = ToolResultContext::default();

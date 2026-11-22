@@ -44,6 +44,7 @@ describe("buildWordArtifact", () => {
       "erato-word-edits",
       "erato-word-insert",
       "erato-word-document-plan",
+      "erato-word-document-parts",
       "erato-word-replace",
       "erato-word-comments-add",
       "erato-word-comments-respond",
@@ -129,7 +130,75 @@ describe("buildWordArtifact", () => {
 
     expect(artifact?.itemIdentity).toBeUndefined();
     expect(artifact?.isFreshCompletion).toBeUndefined();
-    expect(artifact?.cardFenceLanguages).toHaveLength(7);
+    expect(artifact?.cardFenceLanguages).toHaveLength(8);
+  });
+
+  it("shows a change in parts from its accepted section plan until the finish", () => {
+    const sectionPlan = {
+      content_type: "tool_use",
+      tool_call_id: "call-plan",
+      tool_name: "plan_document_sections",
+      status: "success",
+      input: { snapshot: "s", readToken: "t", intent: "x", rows: [] },
+      output: {
+        status: "success",
+        result: { draft_id: "draft", revision: 1, rows: [] },
+      },
+    } as unknown as ContentPart;
+    const artifact = buildWordArtifact({
+      facetId: "word_document_authoring",
+      clientActionInfo: {
+        clientActions: ["word.apply_document_plan"],
+        alwaysAskActions: [],
+      },
+      content: [sectionPlan],
+      messageId: "m1",
+      capture,
+    });
+    expect(artifact?.submittedCard).toEqual({
+      toolCallId: "call-plan",
+      content: "call-plan",
+      language: "erato-word-document-parts",
+    });
+    expect(artifact?.proposedClientAction).toBeUndefined();
+    expect(
+      buildWordArtifact({
+        facetId: "word_document_review",
+        clientActionInfo: reviewInfo,
+        content: [sectionPlan],
+        messageId: "m1",
+        capture,
+      })?.submittedCard,
+    ).toBeUndefined();
+  });
+
+  it("shows the parts card from the section plan's first arguments while Erato writes it", () => {
+    const writing = {
+      content_type: "tool_use",
+      tool_call_id: "call-plan",
+      tool_name: "plan_document_sections",
+      status: "preparing",
+      input: '{"snapshot":"s","readToken":"t","intent":"Pla',
+    } as unknown as ContentPart;
+    const build = (generating: boolean) =>
+      buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: {
+          clientActions: ["word.apply_document_plan"],
+          alwaysAskActions: [],
+        },
+        content: [writing],
+        messageId: "m1",
+        capture,
+        generating,
+      })?.submittedCard;
+    expect(build(true)).toEqual({
+      toolCallId: "call-plan",
+      content: "call-plan",
+      language: "erato-word-document-parts",
+      pending: true,
+    });
+    expect(build(false)).toBeUndefined();
   });
 
   it("returns nothing when the facet advertises no action this build implements", () => {
@@ -232,6 +301,37 @@ describe("buildWordArtifact", () => {
       });
       expect(artifact?.clientActionGrantScopes).toEqual({
         "word.add_comments": "session_document",
+      });
+    });
+
+    it("shows accepted comment changes over a section plan that never finished", () => {
+      const sectionPlan = {
+        content_type: "tool_use",
+        tool_call_id: "call-plan",
+        tool_name: "plan_document_sections",
+        status: "success",
+        input: { snapshot: "s", readToken: "t", intent: "x", rows: [] },
+        output: {
+          status: "success",
+          result: { draft_id: "draft", revision: 1, rows: [] },
+        },
+      } as unknown as ContentPart;
+      const artifact = buildWordArtifact({
+        facetId: "word_document_authoring",
+        clientActionInfo: selectionInfo([
+          "word.apply_document_plan",
+          "word.add_comments",
+        ]),
+        content: [sectionPlan, ...accepted("word.add_comments")],
+        messageId: "m1",
+        capture,
+      });
+      expect(artifact).toMatchObject({
+        submittedCard: {
+          toolCallId: "call-7",
+          language: "erato-word-comments-add",
+        },
+        proposedClientAction: "word.add_comments",
       });
     });
 

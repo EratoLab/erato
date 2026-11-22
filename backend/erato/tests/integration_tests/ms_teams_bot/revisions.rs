@@ -151,7 +151,12 @@ async fn test_file_citations_use_chat_input_inventory(pool: Pool<Postgres>) {
         "[Attached](erato-file://{attached}), [Never sent](erato-file://{unattached}), [Invented](erato-file://{}).",
         Uuid::new_v4()
     );
-    let sources = f.host.citation_sources(&answer).await.unwrap();
+    let sources = f
+        .host
+        .completion_files(&f.session, &answer)
+        .await
+        .unwrap()
+        .sources;
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].id, attached.to_string());
     assert_eq!(sources[0].name, "attached.txt");
@@ -162,10 +167,32 @@ async fn test_file_citations_use_chat_input_inventory(pool: Pool<Postgres>) {
         erato::ms_teams_bot::texts::Lang::En,
     );
     assert_eq!(text, "Attached [1], Never sent, Invented.");
+    answer.output_ids = vec![unattached, unattached];
+    answer.text = format!(
+        "Source [page](erato-file://{attached}). ![Plot](erato-file://{unattached}) and [again](erato-file://{unattached})."
+    );
+    let files = f.host.completion_files(&f.session, &answer).await.unwrap();
+    assert_eq!(files.outputs.len(), 1);
+    assert_eq!(files.outputs[0].id, unattached);
+    let (text, citations) = erato::ms_teams_bot::citations::render(
+        &answer.text,
+        &files.sources,
+        None,
+        erato::ms_teams_bot::texts::Lang::En,
+    );
+    assert_eq!(text, "Source page [1]. Plot and again.");
+    assert_eq!(citations.len(), 1);
     // Even a real file attached in the original chat cannot be resolved for a
     // completion in a different chat merely because the assistant names it.
     answer.chat_id = Uuid::new_v4();
-    assert!(f.host.citation_sources(&answer).await.unwrap().is_empty());
+    assert!(
+        f.host
+            .completion_files(&f.session, &answer)
+            .await
+            .unwrap()
+            .sources
+            .is_empty()
+    );
 }
 
 /// Capture the actual translated events and record them through the handler's
@@ -188,7 +215,7 @@ async fn record_generation(
                 GenerationUpdate::Started { chat_id, .. } => {
                     assert_eq!(*chat_id, fixture.chat_id);
                 }
-                GenerationUpdate::Completed(done) => finished = Some(done.clone()),
+                GenerationUpdate::Completed(done) => finished = Some(done.as_ref().clone()),
                 GenerationUpdate::Failed(error) => panic!("revision generation failed: {error}"),
                 _ => {}
             }
