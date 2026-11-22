@@ -1652,6 +1652,7 @@ mod tests {
             label: None,
             read_only: false,
             closed_world: false,
+            plain_read: false,
         });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -1704,6 +1705,7 @@ mod tests {
                 label: None,
                 read_only: false,
                 closed_world: false,
+                plain_read: false,
             });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -2019,6 +2021,7 @@ mod tests {
                     label: None,
                     read_only: false,
                     closed_world: false,
+                    plain_read: false,
                 }),
                 status: ToolCallStatus::InProgress,
                 input: None,

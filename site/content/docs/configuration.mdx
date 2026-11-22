@@ -3333,8 +3333,9 @@ Lines per language tag, by slot: `opener`, `opener_short`, `still`, `long`. A sl
 {/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.search */}
 {/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.items */}
 {/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.list */}
+{/* erato_toml_config_key: audio_conversational.wait_lines.tools.<key>.server */}
 
-Templates per language tag for the line of a running tool call that only reads: `search` holds `{search}` (the text it searches for), `items` and `list` hold `{table}` (what the records are called, from the server's spoken vocabulary). A template not set, or empty, says nothing. A call that writes, or whose label says nothing about what it reads, gets no line of its own.
+Templates per language tag for the line of a running tool call that only reads: `search` holds `{search}` (the text it searches for, when it is at most six words), `items` and `list` hold `{table}` (what the records are called, from the server's spoken vocabulary), and `server` holds `{server}` (the server's display name, as "Checking {server}."), said when none of the others can name the call. The `server` line is said only for a call the server marks as read-only and in which nothing does more than read: no statement, script or batch, no recipients, no flag that acts, no write verb in the tool's name. A tool whose name only runs something (as `bc_actions_invoke`) rests on the server's read-only word, as its approval does. A template not set, or empty, says nothing. A call that writes gets no line of its own.
 
 ```toml
 [audio_conversational.wait_lines]
@@ -3357,6 +3358,7 @@ opener_short = ["Moment."]
 
 [audio_conversational.wait_lines.tools.de]
 list = "Ich sehe mir die {table} an."
+server = "Ich sehe in {server} nach."
 ```
 
 #### `audio_conversational.reply_speech`

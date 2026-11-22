@@ -992,6 +992,7 @@ mod tests {
                 search: Some("Ich suche nach {search}.".into()),
                 items: Some("Ja.".into()),
                 list: None,
+                server: None,
             },
         );
         let dropped = CommandWordsByLanguage::default().check_wait_lines(&mut wait_lines);

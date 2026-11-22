@@ -105,6 +105,7 @@ fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::To
                     label: None,
                     read_only: false,
                     closed_world: false,
+                    plain_read: false,
                 }),
                 input: Some(step.input.clone()),
                 output: Some(step.output.clone()),

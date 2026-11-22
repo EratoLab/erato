@@ -631,6 +631,15 @@ pub struct ToolDisplayMetadata {
         deserialize_with = "readable_flag"
     )]
     pub closed_world: bool,
+    /// Whether the call is `read_only` and nothing in it or its label does
+    /// more than read, so the voice may say that it looks something up on
+    /// `server_name`. Set on MCP calls only.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "readable_flag"
+    )]
+    pub plain_read: bool,
 }
 
 /// A stored label, result detail or decision note this version cannot read is

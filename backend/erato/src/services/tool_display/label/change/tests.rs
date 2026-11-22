@@ -43,6 +43,7 @@ fn earlier(results: Vec<(&str, Value, Value)>) -> ToolResultContext {
                         label: None,
                         read_only: false,
                         closed_world: false,
+                        plain_read: false,
                     }),
                     input: Some(input),
                     output: Some(output),

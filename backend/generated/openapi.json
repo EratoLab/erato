@@ -16029,6 +16029,10 @@
             "$ref": "#/components/schemas/ToolCallLabel",
             "description": "What this call does to what, and where. Absent on client tools and\nolder rows, which render as before."
           },
+          "plain_read": {
+            "type": "boolean",
+            "description": "Whether the call is `read_only` and nothing in it or its label does\nmore than read, so the voice may say that it looks something up on\n`server_name`. Set on MCP calls only."
+          },
           "read_only": {
             "type": "boolean",
             "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call and does not also call itself destructive. Set on\nMCP calls only."
@@ -16988,7 +16992,7 @@
       },
       "WaitLineToolTemplates": {
         "type": "object",
-        "description": "Templates for a running tool call's line. `search` holds `{search}`;\n`items` and `list` hold `{table}`. Absent ones say nothing.",
+        "description": "Templates for a running tool call's line. `search` holds `{search}`;\n`items` and `list` hold `{table}`; `server` holds `{server}`, for a\nread-only call the others cannot name. Absent ones say nothing.",
         "properties": {
           "items": {
             "type": "string"
@@ -16997,6 +17001,9 @@
             "type": "string"
           },
           "search": {
+            "type": "string"
+          },
+          "server": {
             "type": "string"
           }
         }

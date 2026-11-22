@@ -1353,6 +1353,9 @@ export function useChatMessaging(
               responseData.tool_call_id,
               responseData.status,
               responseData.display?.label,
+              responseData.display?.plain_read === true
+                ? responseData.display.server_name
+                : undefined,
             );
             // The sidebar keeps the Scheduled lists cached, so without this
             // the Scheduled page and earlier cards would not show the change.

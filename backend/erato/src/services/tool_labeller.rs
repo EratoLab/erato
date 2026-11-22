@@ -660,6 +660,7 @@ mod tests {
             }),
             read_only: false,
             closed_world: false,
+            plain_read: false,
         }
     }
 

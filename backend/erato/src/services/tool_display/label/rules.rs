@@ -260,6 +260,9 @@ pub(super) const PLACE_MEMBERS: [&str; 8] = [
     "branch",
     "organization",
 ];
+/// Members that pick which index or set of tables a search looks in, as
+/// Dataverse's `scope`: they narrow a read but name no place to say.
+const SCOPE_MEMBERS: [&str; 1] = ["scope"];
 pub(super) const ID_MEMBERS: [&str; 26] = [
     "id",
     "page_id",
@@ -841,6 +844,7 @@ pub fn read_arguments(
         let narrows = is_one_of(member, &FILTER_MEMBERS)
             || is_one_of(member, &TARGET_MEMBERS)
             || is_one_of(member, &PLACE_MEMBERS)
+            || is_one_of(member, &SCOPE_MEMBERS)
             || names_an_id(member)
             || value.as_object().is_some_and(is_lookup);
         if !narrows {
@@ -1399,6 +1403,24 @@ pub fn sounds_like_a_loss(tool_name: &str, arguments: &Value) -> bool {
                     && name_sounds_like_a_loss(&name_words(text_prefix(member, MAX_NAME_BYTES)))
             })
     })
+}
+
+/// Whether a call's arguments may do more than read, whatever its name and
+/// hints say: a loss word, a member that acts or changes state, a
+/// statement, script or batch anywhere.
+pub fn may_do_more_than_read(tool_name: &str, arguments: &Value) -> bool {
+    let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    // A name that only runs something, as `bc_actions_invoke`, says nothing
+    // about what it changes: the server's read-only word decides, as it
+    // decides whether the call needs a card.
+    !matches!(
+        verb(&name, Some(arguments)).action,
+        ToolCallAction::Other | ToolCallAction::Read | ToolCallAction::Run
+    ) || has(&name, &STATE_WORDS)
+        || sounds_like_a_loss(tool_name, arguments)
+        || sets_more_than_a_read(arguments)
+        || holds_a_statement(arguments)
+        || holds_write_text(arguments)
 }
 
 /// A top-level member that by its name holds something to run.
