@@ -1,3 +1,5 @@
+import { createValueStore, type ValueStore } from "@/utils/chat/valueStore";
+
 /**
  * Shared view of whether the server can be reached.
  *
@@ -10,18 +12,15 @@
 
 export type ConnectivityStatus = "online" | "offline";
 
-type Listener = (status: ConnectivityStatus) => void;
-
 export interface ConnectivityMonitorOptions {
   probeUrl?: string;
   probeTimeoutMs?: number;
-  probeBackoffMs?: readonly number[];
   fetchImpl?: typeof fetch;
 }
 
 export interface ConnectivityMonitor {
   getStatus: () => ConnectivityStatus;
-  subscribe: (listener: Listener) => () => void;
+  subscribe: (listener: () => void) => () => void;
   reportNetworkFailure: () => void;
   reportNetworkSuccess: () => void;
   /** Resolves once the server is reachable; rejects when `signal` aborts. */
@@ -32,7 +31,10 @@ export interface ConnectivityMonitor {
 // redirected probe is as good as a 200.
 // eslint-disable-next-line lingui/no-unlocalized-strings -- URL path
 const DEFAULT_PROBE_URL = "/health";
-const DEFAULT_PROBE_BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
+
+/** Wait before the next try after `failures` failed ones: 1 s, doubling, at most 15 s. */
+export const reconnectBackoffMs = (failures: number): number =>
+  Math.min(1_000 * 2 ** failures, 15_000);
 
 export function createConnectivityMonitor(
   options: ConnectivityMonitorOptions = {},
@@ -40,27 +42,15 @@ export function createConnectivityMonitor(
   const {
     probeUrl = DEFAULT_PROBE_URL,
     probeTimeoutMs = 5_000,
-    probeBackoffMs = DEFAULT_PROBE_BACKOFF_MS,
     fetchImpl,
   } = options;
 
-  let status: ConnectivityStatus = "online";
-  const listeners = new Set<Listener>();
+  const status = createValueStore<ConnectivityStatus>("online");
   let probeInFlight: Promise<void> | null = null;
   let probeTimer: ReturnType<typeof setTimeout> | null = null;
   let failedProbes = 0;
   let browserEventsAttached = false;
   let lastSuccessAt = 0;
-
-  const setStatus = (next: ConnectivityStatus) => {
-    if (next === status) {
-      return;
-    }
-    status = next;
-    for (const listener of [...listeners]) {
-      listener(next);
-    }
-  };
 
   const clearProbeTimer = () => {
     if (probeTimer !== null) {
@@ -82,7 +72,7 @@ export function createConnectivityMonitor(
   const markReachable = () => {
     failedProbes = 0;
     clearProbeTimer();
-    setStatus("online");
+    status.set("online");
   };
 
   const probe = () => {
@@ -117,11 +107,9 @@ export function createConnectivityMonitor(
       markReachable();
       return;
     }
-    setStatus("offline");
-    const delay =
-      probeBackoffMs[Math.min(failedProbes, probeBackoffMs.length - 1)];
+    status.set("offline");
+    scheduleProbe(reconnectBackoffMs(failedProbes));
     failedProbes += 1;
-    scheduleProbe(delay);
   };
 
   const probeNow = () => {
@@ -135,35 +123,32 @@ export function createConnectivityMonitor(
     }
     browserEventsAttached = true;
     window.addEventListener("offline", () => {
-      setStatus("offline");
-      scheduleProbe(probeBackoffMs[0]);
+      status.set("offline");
+      scheduleProbe(reconnectBackoffMs(0));
     });
     window.addEventListener("online", probeNow);
   };
 
-  const subscribe = (listener: Listener) => {
+  const subscribe = (listener: () => void) => {
     attachBrowserEvents();
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
+    return status.subscribe(listener);
   };
 
   return {
-    getStatus: () => status,
+    getStatus: status.get,
 
     subscribe,
 
     reportNetworkFailure() {
       attachBrowserEvents();
-      if (status === "online") {
+      if (status.get() === "online") {
         probeNow();
       }
     },
 
     reportNetworkSuccess() {
       lastSuccessAt = Date.now();
-      if (status === "offline" || probeTimer !== null) {
+      if (status.get() === "offline" || probeTimer !== null) {
         markReachable();
       }
     },
@@ -174,7 +159,7 @@ export function createConnectivityMonitor(
       }
       // A probe still running may be about to find the connection gone, so
       // "online" only counts once it has settled.
-      if (status === "online" && probeInFlight === null) {
+      if (status.get() === "online" && probeInFlight === null) {
         return Promise.resolve();
       }
       return new Promise<void>((resolve, reject) => {
@@ -189,14 +174,14 @@ export function createConnectivityMonitor(
           settle();
         };
         const onAbort = () => finish(() => reject(signal?.reason));
-        const unsubscribe = subscribe((next) => {
-          if (next === "online") {
+        const unsubscribe = subscribe(() => {
+          if (status.get() === "online") {
             finish(resolve);
           }
         });
         signal?.addEventListener("abort", onAbort, { once: true });
         void probeInFlight?.then(() => {
-          if (status === "online") {
+          if (status.get() === "online") {
             finish(resolve);
           }
         });
@@ -206,6 +191,11 @@ export function createConnectivityMonitor(
 }
 
 export const connectivity = createConnectivityMonitor();
+
+export const connectivityStatus: ValueStore<ConnectivityStatus> = {
+  get: () => connectivity.getStatus(),
+  subscribe: (listener) => connectivity.subscribe(listener),
+};
 
 const networkFailures = new WeakSet<object>();
 

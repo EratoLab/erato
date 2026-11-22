@@ -12,12 +12,17 @@ describe("connectQueryClientToConnectivity", () => {
   });
 
   it("pauses React Query while the connection is lost and resumes it once back", () => {
-    let notify: (status: ConnectivityStatus) => void = () => {};
-    vi.spyOn(connectivity, "getStatus").mockReturnValue("online");
-    vi.spyOn(connectivity, "subscribe").mockImplementation((listener) => {
-      notify = listener;
+    let status: ConnectivityStatus = "online";
+    let listener: () => void = () => {};
+    vi.spyOn(connectivity, "getStatus").mockImplementation(() => status);
+    vi.spyOn(connectivity, "subscribe").mockImplementation((next) => {
+      listener = next;
       return () => {};
     });
+    const notify = (next: ConnectivityStatus) => {
+      status = next;
+      listener();
+    };
 
     connectQueryClientToConnectivity();
     expect(onlineManager.isOnline()).toBe(true);

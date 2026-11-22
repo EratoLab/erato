@@ -468,5 +468,7 @@ The reconnection process:
 5. **Subscribe to Live**: After replay, subscribes to live events
 6. **Seamless Transition**: Client receives complete event stream without gaps
 
+The web app and the Office add-ins treat an answer stream that delivers nothing for 30 s as dropped and reattach, so a proxy that holds back SSE for more than 30 s causes reattaches; REST reads (GET) time out after 45 s without a response.
+
 This architecture allows us to do generation over long-running tasks that are resilient to network connection issues or
 user behaviour that may terminate a generation task (e.g. closing a browser tab with ongoing generation)

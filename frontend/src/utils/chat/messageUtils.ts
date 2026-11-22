@@ -2,10 +2,21 @@ import { extractTextFromContent } from "../adapters/contentPartAdapter";
 
 import type {
   ActionFacetRequest,
+  ContentPart,
   DelegationRunMode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
+
+/** Grows with every streamed character and every new part. */
+export const contentSize = (content: readonly ContentPart[]): number =>
+  content.reduce(
+    (size, part) =>
+      size +
+      1 +
+      ("text" in part && typeof part.text === "string" ? part.text.length : 0),
+    0,
+  );
 
 /**
  * Creates an optimistic user message object to be added to the UI immediately.

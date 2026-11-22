@@ -17,6 +17,7 @@ import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 import { getAssistantTurns } from "@/utils/chat/assistantTurns";
+import { contentSize } from "@/utils/chat/messageUtils";
 import {
   isSameMessage,
   shallowEqual,
@@ -32,7 +33,6 @@ import { MessageTextActionsToolbar } from "./MessageTextActionsToolbar";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
-import { useKeepScrollPositionOnRebuild } from "./useKeepScrollPositionOnRebuild";
 import { ConversationMessagesProvider } from "../Message/ConversationMessages";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
@@ -467,15 +467,6 @@ interface LastSeenSnapshot {
   contentSize: number;
 }
 
-const getContentSize = (message: ChatMessage) =>
-  message.content.reduce(
-    (size, part) =>
-      size +
-      1 +
-      ("text" in part && typeof part.text === "string" ? part.text.length : 0),
-    0,
-  );
-
 const takeLastSeenSnapshot = (
   messageOrder: string[],
   messages: Record<string, ChatMessage>,
@@ -489,7 +480,7 @@ const takeLastSeenSnapshot = (
     sessionId,
     messageId,
     createdAt: Date.parse(message.createdAt),
-    contentSize: getContentSize(message),
+    contentSize: contentSize(message.content),
   };
 };
 
@@ -557,7 +548,7 @@ function useUnseenMessageCount({
       // Growth only: the post-stream refetch may normalize persisted content.
       if (
         lastSeenMessage.role !== "user" &&
-        getContentSize(lastSeenMessage) > lastSeen.contentSize
+        contentSize(lastSeenMessage.content) > lastSeen.contentSize
       ) {
         count += 1;
       }
@@ -958,17 +949,6 @@ export const MessageList = memo<MessageListProps>(
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;
-    const contentRef = useRef<HTMLDivElement>(null);
-    const rebuildSpacerRef = useRef<HTMLDivElement>(null);
-    useKeepScrollPositionOnRebuild({
-      containerRef,
-      contentRef,
-      spacerRef: rebuildSpacerRef,
-      messages,
-      messageOrder,
-      sessionId: currentSessionId,
-      contentShown: !(showEmptyState && emptyStateComponent),
-    });
 
     // Return the header component with load more button if needed
     const renderMessageListHeader = useMemo(() => {
@@ -1094,11 +1074,7 @@ export const MessageList = memo<MessageListProps>(
               {emptyStateComponent}
             </div>
           ) : (
-            <div
-              ref={contentRef}
-              className="mx-auto w-full"
-              style={contentWidthStyle}
-            >
+            <div className="mx-auto w-full" style={contentWidthStyle}>
               <ConversationMessagesProvider messages={messages}>
                 {shouldUseVirtualization ? (
                   <VirtualizedMessageList
@@ -1147,7 +1123,6 @@ export const MessageList = memo<MessageListProps>(
                   />
                 )}
               </ConversationMessagesProvider>
-              <div ref={rebuildSpacerRef} aria-hidden="true" />
             </div>
           )}
         </div>

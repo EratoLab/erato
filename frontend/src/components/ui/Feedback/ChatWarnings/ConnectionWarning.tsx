@@ -6,10 +6,6 @@ import { Alert } from "../Alert";
 
 import type React from "react";
 
-/**
- * Shown while the server cannot be reached. Requests wait and a running
- * answer reattaches on their own once the connection is back.
- */
 export const ConnectionWarning: React.FC = () => {
   const status = useConnectivityStatus();
   if (status !== "offline") {

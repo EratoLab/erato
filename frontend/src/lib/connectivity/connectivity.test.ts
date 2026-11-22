@@ -5,6 +5,7 @@ import {
   isNetworkFailure,
   isStalledStream,
   markStalledStream,
+  reconnectBackoffMs,
 } from "./connectivity";
 
 const reachable = (): Promise<Response> =>
@@ -34,12 +35,9 @@ describe("createConnectivityMonitor", () => {
 
   it("goes offline only once the probe fails, then recovers on a later probe", async () => {
     const fetchImpl = vi.fn(unreachable);
-    const monitor = createConnectivityMonitor({
-      fetchImpl,
-      probeBackoffMs: [1_000, 2_000],
-    });
+    const monitor = createConnectivityMonitor({ fetchImpl });
     const seen: string[] = [];
-    monitor.subscribe((status) => seen.push(status));
+    monitor.subscribe(() => seen.push(monitor.getStatus()));
 
     monitor.reportNetworkFailure();
     await vi.advanceTimersByTimeAsync(0);
@@ -187,6 +185,12 @@ describe("createConnectivityMonitor", () => {
 
     settleProbe();
     await expect(waiting).resolves.toBeUndefined();
+  });
+
+  it("backs off from 1 s, doubling up to 15 s", () => {
+    expect([0, 1, 2, 3, 4, 5].map(reconnectBackoffMs)).toEqual([
+      1_000, 2_000, 4_000, 8_000, 15_000, 15_000,
+    ]);
   });
 
   it("tags a stalled stream as a network failure too", () => {

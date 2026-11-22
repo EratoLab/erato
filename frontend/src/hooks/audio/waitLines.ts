@@ -147,6 +147,9 @@ const statusOf = (error: unknown): number | undefined =>
     ? error.status
     : undefined;
 
+// On a cold cache the server makes every line's audio before it answers.
+const WAIT_LINES_READ_TIMEOUT_MS = 120_000;
+
 /**
  * Asks whether the lines still hold, and for new ones where they do not:
  * the server answers `unchanged` for the version the browser has, without
@@ -157,6 +160,7 @@ const statusOf = (error: unknown): number | undefined =>
 export function prepareWaitLines(): Promise<Loaded | null> {
   if (unsupported) return Promise.resolve(null);
   loading ??= fetchWaitLines({
+    readTimeoutMs: WAIT_LINES_READ_TIMEOUT_MS,
     // Lines that came back incomplete are asked for in full again, so a
     // line the voice failed on once is not missing for the whole session.
     queryParams: loaded && !loaded.incomplete ? { known: loaded.version } : {},

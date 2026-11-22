@@ -15,7 +15,7 @@ describe("ConnectionWarning", () => {
 
   it("appears while the connection is lost and goes away once it is back", () => {
     let status: ConnectivityStatus = "online";
-    const listeners = new Set<(next: ConnectivityStatus) => void>();
+    const listeners = new Set<() => void>();
     vi.spyOn(connectivity, "getStatus").mockImplementation(() => status);
     vi.spyOn(connectivity, "subscribe").mockImplementation((listener) => {
       listeners.add(listener);
@@ -23,7 +23,7 @@ describe("ConnectionWarning", () => {
     });
     const setStatus = (next: ConnectivityStatus) => {
       status = next;
-      listeners.forEach((listener) => listener(next));
+      listeners.forEach((listener) => listener());
     };
 
     render(

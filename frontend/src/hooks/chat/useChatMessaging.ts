@@ -27,7 +27,6 @@ import {
   useMemo,
 } from "react";
 
-import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
 import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 import {
@@ -69,9 +68,11 @@ import {
   connectivity,
   isNetworkFailure,
   isStalledStream,
+  reconnectBackoffMs,
 } from "@/lib/connectivity/connectivity";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
+  fetchAbortMessageStream,
   fetchChatMessages,
   listMcpServerToolsQuery,
   listUserToolApprovalSettingsQuery,
@@ -110,6 +111,7 @@ import { handleToolCallProposed } from "./handlers/handleToolCallProposed";
 import { handleToolCallUpdate } from "./handlers/handleToolCallUpdate";
 import { handleUserMessageSaved } from "./handlers/handleUserMessageSaved";
 import { serverAttachKey } from "./serverAttachKey";
+import { createStopDelivery } from "./stopDelivery";
 import { useCompactionStore } from "./store/compactionStore";
 import { useComposeSessionStore } from "./store/composeSessionStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
@@ -161,10 +163,9 @@ const RESUME_CONNECT_TIMEOUT_MS = 20_000;
 // After this many reattaches for silence within one answer, the stream is
 // probably fine and only held back on the way, so stop watching for silence.
 const MAX_STALL_REATTACHES = 3;
-// Failed reconnects while the network looks fine; waiting offline is free.
-const MAX_NETWORK_RESUME_RETRIES = 6;
-const networkResumeDelayMs = (retry: number) =>
-  Math.min(1_000 * 2 ** (retry - 1), 15_000);
+// Reattaches after network failures, counted until one opens; waiting
+// offline is free.
+const MAX_NETWORK_RESUME_ATTEMPTS = 6;
 
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
 
@@ -403,9 +404,10 @@ export function useChatMessaging(
   const isSubmittingByKeyRef = useRef<Record<string, boolean>>({});
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
-  const networkResumeRetriesByKeyRef = useRef<Record<string, number>>({});
   const stallReattachesByKeyRef = useRef<Record<string, number>>({});
   const reconnectWaitByKeyRef = useRef(new Map<string, () => void>());
+  const [stops] = useState(createStopDelivery);
+  useEffect(() => () => stops.dropAll(), [stops]);
   const preparationAbortByKeyRef = useRef<Record<string, AbortController>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   /**
@@ -927,39 +929,19 @@ export function useChatMessaging(
         return;
       }
       endedLocally = true;
-      reconnectWaitByKeyRef.current.get(stoppedKey)?.();
+      const cancelReconnectWait = reconnectWaitByKeyRef.current.get(stoppedKey);
+      if (typeof cancelReconnectWait === "function") cancelReconnectWait();
       endWaitTurn(stoppedKey);
       const closeConnection = getSSECleanupForKey(stoppedKey);
       setSSECleanupForKey(stoppedKey, null);
       setSSEAbortCallback(null, stoppedKey);
       const messaging = useMessagingStore.getState();
-      const streamed = messaging.getStreaming(stoppedKey);
-      const streamedId = streamed.currentMessageId;
-      if (streamedId) {
-        // Keep the text read so far on screen until the chat can be fetched
-        // again. The answer's row exists from the start of the turn, so the
-        // copy fetched earlier would otherwise replace it with stale content.
-        const saved = messaging.getApiMessages(stoppedKey);
-        const savedCopy = saved[streamedId] as Message | undefined;
-        if (savedCopy) {
-          messaging.setApiMessages(
-            Object.values({
-              ...saved,
-              [streamedId]: {
-                ...savedCopy,
-                content: streamed.content,
-                status: "complete",
-              },
-            }),
-            stoppedKey,
-          );
-        }
+      if (messaging.getStreaming(stoppedKey).currentMessageId) {
+        // The server's copy can lag behind what was read: it hears the stop
+        // only later, and a refetch can read the row before it saves it.
+        messaging.keepStreamedAnswer(stoppedKey);
         messaging.setStreaming(
-          {
-            isStreaming: false,
-            isFinalizing: false,
-            stoppedLocallyMessageId: streamedId,
-          },
+          { isStreaming: false, isFinalizing: false },
           stoppedKey,
         );
       } else {
@@ -999,48 +981,41 @@ export function useChatMessaging(
     abortClientToolCalls(effectiveChatId);
 
     const requestAbort = async (): Promise<boolean> => {
-      const send = async () => {
-        const controller = new AbortController();
-        const timeout = setTimeout(
-          () => controller.abort(),
-          ABORT_REQUEST_TIMEOUT_MS,
-        );
-        try {
-          return await fetch("/api/v1beta/me/messages/abortstream", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...getAuthHeaders(),
-            },
-            body: JSON.stringify({
-              chat_id: effectiveChatId,
-            }),
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timeout);
-        }
-      };
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        ABORT_REQUEST_TIMEOUT_MS,
+      );
       try {
-        await fetchWithAuthRecovery(send, "abort-stream");
+        await fetchAbortMessageStream(
+          { body: { chat_id: effectiveChatId } },
+          controller.signal,
+        );
         return true;
       } catch (error: unknown) {
+        // An HTTP error is still an answer: the server heard the stop.
+        if (!controller.signal.aborted && !isNetworkFailure(error)) {
+          return true;
+        }
         logger.error("Failed to request message cancellation", error);
-        connectivity.reportNetworkFailure();
+        if (controller.signal.aborted) connectivity.reportNetworkFailure();
         return false;
+      } finally {
+        clearTimeout(timeout);
       }
     };
-    void (async () => {
-      const fallback = setTimeout(endTurnLocally, STOP_LOCAL_FALLBACK_MS);
-      const delivered = await requestAbort();
-      clearTimeout(fallback);
-      if (delivered) {
-        return;
-      }
-      endTurnLocally();
-      await connectivity.waitUntilOnline();
-      await requestAbort();
-    })();
+    stops.deliver(stoppedKey, {
+      send: requestAbort,
+      onUndelivered: endTurnLocally,
+      undeliveredAfterMs: STOP_LOCAL_FALLBACK_MS,
+      onDeliveredLate: () => {
+        handleRefetchAndClear({ logContext: "Stop delivered late" }).catch(
+          (error: unknown) => {
+            logger.warn("Refetch after a late stop failed", error);
+          },
+        );
+      },
+    });
   }, [
     chatId,
     newlyCreatedChatId,
@@ -1195,7 +1170,10 @@ export function useChatMessaging(
 
   // Handle incoming SSE events
   const processStreamEvent = useCallback(
-    (event: SSEEvent, streamKeyRef?: { current: string }) => {
+    (
+      event: SSEEvent,
+      streamKeyRef?: { current: string; replays?: boolean },
+    ) => {
       try {
         const activeStreamKey = streamKeyRef?.current ?? streamKey;
         // Handle empty or invalid data
@@ -1362,6 +1340,14 @@ export function useChatMessaging(
               "[DEBUG_STREAMING] processStreamEvent: assistant_message_started event. Full payload:",
               responseData,
             );
+            // A reattached stream replays the answer from its start.
+            if (
+              streamKeyRef?.replays &&
+              useMessagingStore.getState().getStreaming(activeStreamKey)
+                .currentMessageId === responseData.message_id
+            ) {
+              useMessagingStore.getState().keepStreamedAnswer(activeStreamKey);
+            }
             handleAssistantMessageStarted(responseData, activeStreamKey);
             break;
 
@@ -1448,18 +1434,48 @@ export function useChatMessaging(
             void handleRefetchAndClear({
               invalidate: true,
               logContext: "Assistant message completed",
-            }).then(() => {
-              // Deliberately no clearPendingChat here: a chat the refetched
-              // list still does not return (filtered out, on a later page)
-              // has the placeholder as its only sidebar row, which must
-              // survive the finished turn. The listed-row swap clears it when
-              // the chat shows up; leaving for a new chat clears it otherwise.
-              // Reset submission flag after refetch completes
-              setSubmittingForKey(activeStreamKey, false);
-              logger.log(
-                "[DEBUG_STREAMING] assistant_message_completed: isSubmittingRef.current set to false after refetch.",
-              );
-            });
+            })
+              .catch((error: unknown) => {
+                // A finished answer must not leave the chat locked: end the
+                // turn with the streamed answer kept, and read the chat once
+                // more when the connection is back.
+                logger.warn("Completion refetch failed", error);
+                // Before the store write below, which is what re-renders.
+                setSubmittingForKey(activeStreamKey, false);
+                const messaging = useMessagingStore.getState();
+                messaging.keepStreamedAnswer(activeStreamKey);
+                messaging.setStreaming(
+                  { isStreaming: false, isFinalizing: false },
+                  activeStreamKey,
+                );
+                void connectivity
+                  .waitUntilOnline()
+                  .then(() => {
+                    const newerTurn =
+                      isSubmittingForKey(activeStreamKey) ||
+                      useMessagingStore.getState().getStreaming(activeStreamKey)
+                        .isStreaming;
+                    if (newerTurn) return;
+                    return handleRefetchAndClear({
+                      logContext: "Refetch after a failed completion refetch",
+                    });
+                  })
+                  .catch((retryError: unknown) => {
+                    logger.warn("Refetch after reconnect failed", retryError);
+                  });
+              })
+              .then(() => {
+                // Deliberately no clearPendingChat here: a chat the refetched
+                // list still does not return (filtered out, on a later page)
+                // has the placeholder as its only sidebar row, which must
+                // survive the finished turn. The listed-row swap clears it when
+                // the chat shows up; leaving for a new chat clears it otherwise.
+                // Reset submission flag after refetch completes
+                setSubmittingForKey(activeStreamKey, false);
+                logger.log(
+                  "[DEBUG_STREAMING] assistant_message_completed: isSubmittingRef.current set to false after refetch.",
+                );
+              });
             break;
 
           case "tool_call_proposed":
@@ -1614,9 +1630,9 @@ export function useChatMessaging(
       // A finished answer stays until the completion refetch has the saved
       // copy, as after an uninterrupted turn; resetting here drops it from
       // the list until then.
-      if (
-        !useMessagingStore.getState().getStreaming(resumeStreamKey).isFinalizing
-      ) {
+      const messaging = useMessagingStore.getState();
+      if (!messaging.getStreaming(resumeStreamKey).isFinalizing) {
+        messaging.keepStreamedAnswer(resumeStreamKey);
         endWaitTurn(resumeStreamKey);
         resetStreaming(resumeStreamKey);
       }
@@ -1630,6 +1646,7 @@ export function useChatMessaging(
         chatIdHint?: string | null;
         streamKeyHint?: string;
         force?: boolean;
+        newOutage?: boolean;
       }) => boolean)
     | null
   >(null);
@@ -1642,18 +1659,16 @@ export function useChatMessaging(
    */
   const resumeAfterReconnect = useCallback(
     (resumeStreamKey: string, resumeChatId: string, reason: string) => {
-      const retry =
-        (networkResumeRetriesByKeyRef.current[resumeStreamKey] ?? 0) + 1;
-      if (retry > MAX_NETWORK_RESUME_RETRIES) {
-        delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+      const attempts = resumeAttemptsByKeyRef.current[resumeStreamKey] ?? 0;
+      if (attempts >= MAX_NETWORK_RESUME_ATTEMPTS) {
+        delete resumeAttemptsByKeyRef.current[resumeStreamKey];
         return false;
       }
-      networkResumeRetriesByKeyRef.current[resumeStreamKey] = retry;
 
       const controller = new AbortController();
       const cancel = () => {
         controller.abort();
-        delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+        delete resumeAttemptsByKeyRef.current[resumeStreamKey];
         delete stallReattachesByKeyRef.current[resumeStreamKey];
         reconnectWaitByKeyRef.current.delete(resumeStreamKey);
       };
@@ -1661,13 +1676,16 @@ export function useChatMessaging(
       setSSECleanupForKey(resumeStreamKey, cancel);
       setSSEAbortCallback(cancel, resumeStreamKey);
       logger.warn(
-        `[DEBUG_STREAMING] stream connection lost (${reason}); reattaching after reconnect, retry=${retry}`,
+        `[DEBUG_STREAMING] stream connection lost (${reason}); reattaching after reconnect, attempts=${attempts}`,
       );
 
       void (async () => {
         try {
           await connectivity.waitUntilOnline(controller.signal);
-          await abortableDelay(networkResumeDelayMs(retry), controller.signal);
+          await abortableDelay(
+            reconnectBackoffMs(Math.max(0, attempts - 1)),
+            controller.signal,
+          );
         } catch {
           return;
         }
@@ -1681,7 +1699,7 @@ export function useChatMessaging(
           !useMessagingStore.getState().getStreaming(resumeStreamKey)
             .isStreaming
         ) {
-          delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+          delete resumeAttemptsByKeyRef.current[resumeStreamKey];
           delete stallReattachesByKeyRef.current[resumeStreamKey];
           return;
         }
@@ -1705,12 +1723,15 @@ export function useChatMessaging(
       chatIdHint?: string | null;
       streamKeyHint?: string;
       force?: boolean;
+      /** Forced, and the attempts so far no longer count. */
+      newOutage?: boolean;
     }) => {
       const {
         reason,
         chatIdHint = null,
         streamKeyHint,
-        force = false,
+        newOutage = false,
+        force = newOutage,
       } = options;
       const store = useMessagingStore.getState();
       const candidateKey = streamKeyHint ?? streamKey;
@@ -1744,6 +1765,7 @@ export function useChatMessaging(
       }
 
       const resumeStreamKey = getStreamKey(effectiveChatId);
+      if (newOutage) delete resumeAttemptsByKeyRef.current[resumeStreamKey];
       const attemptCount = resumeAttemptsByKeyRef.current[resumeStreamKey] ?? 0;
       const hasExistingConnection =
         useMessagingStore.getState().sseAbortCallbacksByKey[resumeStreamKey] !==
@@ -1765,7 +1787,7 @@ export function useChatMessaging(
         `[DEBUG_STREAMING] Attempting resumestream for chat ${effectiveChatId} (${reason}), attempt=${resumeAttemptsByKeyRef.current[resumeStreamKey]}`,
       );
 
-      const resumeStreamKeyRef = { current: resumeStreamKey };
+      const resumeStreamKeyRef = { current: resumeStreamKey, replays: true };
       const cleanup = createSSEConnection(
         "/api/v1beta/me/messages/resumestream",
         {
@@ -1785,7 +1807,6 @@ export function useChatMessaging(
             processStreamEvent(sseEvent, resumeStreamKeyRef),
           onOpen: () => {
             resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
-            delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
             logger.log(
               `[DEBUG_STREAMING] resumestream opened for chat ${effectiveChatId}`,
             );
@@ -2172,6 +2193,7 @@ export function useChatMessaging(
         prepare?.onAbandoned?.();
         return undefined;
       }
+      const stopSettled = stops.settle(streamKey);
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
@@ -2403,6 +2425,7 @@ export function useChatMessaging(
 
         const connectionStreamKeyRef = { current: streamKey };
 
+        if (stopSettled) await stopSettled;
         // Store the abort function in both the ref AND the global store
         // This allows external code (like createNewChat) to abort the connection
         const cleanup = createSSEConnection(sseUrl, {
@@ -2430,7 +2453,7 @@ export function useChatMessaging(
                 reason: "submitstream-onError",
                 streamKeyHint: activeStreamKey,
                 // A dropped connection is a new outage, not another failed resume.
-                force: isNetworkFailure(connectionError),
+                newOutage: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 logger.warn(
@@ -2685,6 +2708,7 @@ export function useChatMessaging(
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
       }
+      const stopSettled = stops.settle(streamKey);
 
       // Read from the store, not the render closure, so this callback does not
       // depend on `messages`/`messageOrder`, which change on every stream chunk.
@@ -2730,6 +2754,7 @@ export function useChatMessaging(
 
         const sseUrl = `/api/v1beta/me/messages/editstream`;
         const connectionStreamKeyRef = { current: streamKey };
+        if (stopSettled) await stopSettled;
         const cleanup = createSSEConnection(sseUrl, {
           idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
@@ -2756,8 +2781,7 @@ export function useChatMessaging(
               const resumed = attemptResumeStream({
                 reason: "editstream-onError",
                 streamKeyHint: activeStreamKey,
-                // A dropped connection is a new outage, not another failed resume.
-                force: isNetworkFailure(connectionError),
+                newOutage: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 return;
@@ -2856,6 +2880,7 @@ export function useChatMessaging(
         );
         return;
       }
+      const stopSettled = stops.settle(streamKey);
 
       // Clear any previous streaming state and close existing SSE connection
       resetStreaming(streamKey);
@@ -2889,6 +2914,7 @@ export function useChatMessaging(
 
         const sseUrl = `/api/v1beta/me/messages/regeneratestream`;
         const connectionStreamKeyRef = { current: streamKey };
+        if (stopSettled) await stopSettled;
         const cleanup = createSSEConnection(sseUrl, {
           idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
@@ -2915,8 +2941,7 @@ export function useChatMessaging(
               const resumed = attemptResumeStream({
                 reason: "regeneratestream-onError",
                 streamKeyHint: activeStreamKey,
-                // A dropped connection is a new outage, not another failed resume.
-                force: isNetworkFailure(connectionError),
+                newOutage: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 return;
@@ -3200,7 +3225,11 @@ export function useChatMessaging(
         beginWaitTurn(streamKey, { continuation: true });
       }
 
-      return new Promise<void>((resolve, reject) => {
+      const stopSettled = stops.settle(streamKey);
+      const connect = (
+        resolve: () => void,
+        reject: (reason: unknown) => void,
+      ) => {
         const connectionStreamKeyRef = { current: streamKey };
         let settled = false;
 
@@ -3246,8 +3275,7 @@ export function useChatMessaging(
                 const resumed = attemptResumeStream({
                   reason: "continuestream-onError",
                   streamKeyHint: activeStreamKey,
-                  // A dropped connection is a new outage, not another failed resume.
-                  force: isNetworkFailure(connectionError),
+                  newOutage: isNetworkFailure(connectionError),
                 });
                 if (resumed) {
                   return;
@@ -3335,7 +3363,10 @@ export function useChatMessaging(
 
         setSSECleanupForKey(streamKey, cleanup);
         setSSEAbortCallback(cleanup, streamKey);
-      });
+      };
+      return stopSettled
+        ? stopSettled.then(() => new Promise<void>(connect))
+        : new Promise<void>(connect);
     },
     [
       attemptResumeStream,

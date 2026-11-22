@@ -398,6 +398,30 @@ describe("v1betaApiFetch network failures", () => {
     expect(failure).toHaveBeenCalledTimes(1);
   });
 
+  it("lets a read with a longer limit of its own wait past the default", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.stubGlobal("fetch", pendingUntilAborted());
+
+    let settled = false;
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/wait-lines",
+      method: "get",
+      readTimeoutMs: READ_RESPONSE_TIMEOUT_MS * 2,
+    }).catch((error: unknown) => error);
+    void request.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS + 1_000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS);
+    expect(((await request) as Error).message).toBe(
+      "Network error (request timed out)",
+    );
+  });
+
   it("forwards the caller's abort and does not report it", async () => {
     const failure = vi
       .spyOn(connectivity, "reportNetworkFailure")
