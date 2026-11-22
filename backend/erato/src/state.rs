@@ -1111,30 +1111,15 @@ impl AppState {
     /// Get the system prompt for a given chat provider configuration.
     /// This resolves either a static system prompt or retrieves one from Langfuse,
     /// and renders any placeholders (e.g., {{erato_inject_preferred_language_code}}).
-    #[allow(clippy::too_many_arguments)]
     pub async fn get_system_prompt(
         &self,
         config: &ChatProviderConfig,
-        preferred_language: Option<&str>,
-        user_preference_nickname: Option<&str>,
-        user_preference_job_title: Option<&str>,
-        user_preference_assistant_custom_instructions: Option<&str>,
-        user_preference_assistant_additional_information: Option<&str>,
-        time_zone: Option<chrono_tz::Tz>,
+        ctx: &SystemPromptContext<'_>,
     ) -> Result<Option<String>, Report> {
-        let ctx = SystemPromptContext {
-            preferred_language,
-            user_preference_nickname,
-            user_preference_job_title,
-            user_preference_assistant_custom_instructions,
-            user_preference_assistant_additional_information,
-            time_zone,
-        };
-
         // If a system prompt is configured, resolve, render, and return it
         if let Some(system_prompt) = &config.system_prompt {
             let resolved_prompt = self.resolve_prompt_source(system_prompt).await?;
-            let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, &ctx);
+            let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, ctx);
             tracing::debug!(
                 original_length = resolved_prompt.len(),
                 rendered_length = rendered_prompt.len(),
@@ -1160,7 +1145,7 @@ impl AppState {
                     fallback: None,
                 })
                 .await?;
-            let rendered_prompt = self.system_prompt_renderer.render(&system_prompt, &ctx);
+            let rendered_prompt = self.system_prompt_renderer.render(&system_prompt, ctx);
 
             return Ok(Some(rendered_prompt));
         }
@@ -1176,21 +1161,8 @@ impl AppState {
     pub async fn get_summary_system_prompt(
         &self,
         config: Option<&SummaryConfig>,
-        preferred_language: Option<&str>,
-        user_preference_nickname: Option<&str>,
-        user_preference_job_title: Option<&str>,
-        user_preference_assistant_custom_instructions: Option<&str>,
-        user_preference_assistant_additional_information: Option<&str>,
+        ctx: &SystemPromptContext<'_>,
     ) -> Result<String, Report> {
-        let ctx = SystemPromptContext {
-            preferred_language,
-            user_preference_nickname,
-            user_preference_job_title,
-            user_preference_assistant_custom_instructions,
-            user_preference_assistant_additional_information,
-            time_zone: None,
-        };
-
         let Some(config) = config else {
             return Ok(DEFAULT_SUMMARY_SYSTEM_PROMPT.to_string());
         };
@@ -1200,7 +1172,7 @@ impl AppState {
         };
 
         let resolved_prompt = self.resolve_prompt_source(summary_prompt).await?;
-        let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, &ctx);
+        let rendered_prompt = self.system_prompt_renderer.render(&resolved_prompt, ctx);
         tracing::debug!(
             original_length = resolved_prompt.len(),
             rendered_length = rendered_prompt.len(),

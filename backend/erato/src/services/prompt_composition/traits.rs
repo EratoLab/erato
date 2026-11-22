@@ -5,6 +5,7 @@ use crate::db::entity::messages;
 use crate::models::assistant::AssistantWithFiles;
 use crate::models::message::ContentPartImage;
 use crate::server::api::v1beta::message_streaming::FileContentsForGeneration;
+use crate::services::template_rendering::contexts::system_prompt::SystemPromptContext;
 use async_trait::async_trait;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
@@ -57,11 +58,7 @@ pub trait PromptProvider: Send + Sync {
     async fn get_system_prompt(
         &self,
         chat_provider_config: &ChatProviderConfig,
-        preferred_language: Option<&str>,
-        user_preference_nickname: Option<&str>,
-        user_preference_job_title: Option<&str>,
-        user_preference_assistant_custom_instructions: Option<&str>,
-        user_preference_assistant_additional_information: Option<&str>,
+        ctx: SystemPromptContext<'_>,
     ) -> Result<Option<String>, Report>;
 
     /// Resolve a prompt source specification into a concrete prompt string.

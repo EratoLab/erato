@@ -1585,6 +1585,36 @@ model_name = "gpt-4"
 system_prompt = { source = "static", prompt = "You are a helpful assistant that provides concise and accurate answers." }
 ```
 
+###### Profile placeholders for chats without an assistant
+
+Use the `_no_assistant` variants to include profile text only in chats without an assistant. In those chats, each variant renders the same saved value as its unsuffixed placeholder, or an empty string if the preference is unset. In chats bound to an assistant, including shared assistants, each variant renders an empty string. The unsuffixed placeholders render the saved values in either context.
+
+| Profile preference | Placeholder for chats without an assistant |
+| --- | --- |
+| Nickname | `erato_inject_user_preference_nickname_no_assistant` |
+| Job Title | `erato_inject_user_preference_job_title_no_assistant` |
+| Custom Instructions | `erato_inject_user_preference_assistant_custom_instructions_no_assistant` |
+| Additional Information | `erato_inject_user_preference_assistant_additional_information_no_assistant` |
+
+Use a Handlebars `#if` block to omit the Custom Instructions heading and its text whenever the value is empty. This example keeps the other three profile fields available in every chat.
+
+```handlebars
+You are a helpful assistant.
+
+Nickname: {{erato_inject_user_preference_nickname}}
+Job Title: {{erato_inject_user_preference_job_title}}
+Additional Information: {{erato_inject_user_preference_assistant_additional_information}}
+{{#if erato_inject_user_preference_assistant_custom_instructions_no_assistant}}
+
+## Custom Instructions
+{{erato_inject_user_preference_assistant_custom_instructions_no_assistant}}
+{{/if}}
+```
+
+Upgrade the backend before adopting these placeholders. Older backends render unknown placeholders as empty strings even in chats without an assistant. Update the templates where you want this behavior, including active Langfuse prompt versions and any configured fallback text. The same placeholders are available in the configured [chat-title summary prompt](#chat_providerssummarysystem_prompt).
+
+Existing chats continue to use their saved system prompts until the prompt is rebuilt, for example when chat history is rebased into a new assistant context. Newly built prompts use the current template and the destination chat's assistant binding.
+
 ##### `chat_providers.providers.<provider-id>.system_prompt_langfuse`
 
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.system_prompt_langfuse */}
