@@ -266,6 +266,37 @@ describe("the rows of a change in parts", () => {
     ).toBeInTheDocument();
   });
 
+  it("says a row the checks left out stays as it is, and to redo it after Apply", () => {
+    render(
+      <WordPartsReview
+        progress={{
+          ...finished,
+          rows: [
+            finished.rows[0],
+            { ...finished.rows[2], state: "left-out" },
+            finished.rows[4],
+          ],
+        }}
+        title="Changes"
+        leftOut={{ rows: new Set(), structure: false }}
+        onLeaveOut={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
+      "Erato's new text didn't pass the checks, so the section stays as it isLeft out",
+    );
+    expect(
+      within(row("§ 7 Haftung, § 9 Schluss")).queryByRole("button"),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        "Apply the rest, then ask Erato to redo § 7 Haftung, § 9 Schluss.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/didn't get to/)).toBeNull();
+  });
+
   it("offers the follow-up actions only through their hooks", () => {
     const onRedo = vi.fn();
     const onWriteMissing = vi.fn();

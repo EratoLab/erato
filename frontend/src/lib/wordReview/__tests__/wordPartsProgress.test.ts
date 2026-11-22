@@ -193,7 +193,7 @@ describe("the parts card's rows", () => {
     });
   });
 
-  it("takes the finish receipt's word for rows not written or changed in Word", () => {
+  it("takes the finish receipt's word for rows not written, changed in Word or left out by the checks", () => {
     const finish = tool(
       "finish",
       "submit_document_plan",
@@ -218,7 +218,13 @@ describe("the parts card's rows", () => {
             title: SIX_TITLES[k],
             paragraphs: 10,
             status:
-              k === 1 ? "changed_in_word" : k === 5 ? "not_written" : "ready",
+              k === 1
+                ? "changed_in_word"
+                : k === 3
+                  ? "left_out"
+                  : k === 5
+                    ? "not_written"
+                    : "ready",
           })),
         },
       },
@@ -235,7 +241,7 @@ describe("the parts card's rows", () => {
       "ready",
       "changed-in-word",
       "ready",
-      "ready",
+      "left-out",
       "ready",
       "not-written",
     ]);

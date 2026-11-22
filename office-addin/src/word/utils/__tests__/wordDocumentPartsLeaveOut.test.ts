@@ -192,7 +192,7 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
       rows: { row: number; status: string }[];
     };
     expect(result.rows).toContainEqual(
-      expect.objectContaining({ row: 4, status: "not_written" }),
+      expect.objectContaining({ row: 4, status: "left_out" }),
     );
     const rebuilt = wordPartsFromContent(turn.content, snapshot)!;
     expect([...rebuilt.draft.parts.keys()]).toEqual([2, 4, 5, 6]);

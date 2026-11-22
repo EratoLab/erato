@@ -59,7 +59,7 @@ export interface WordPartsReviewProps {
   checkInWord?: boolean;
 }
 
-type Shown = WordPartsSectionRow["state"] | "left-out" | "removed" | "written";
+type Shown = WordPartsSectionRow["state"] | "removed" | "written";
 
 function pill(state: Shown): { label: string; tone: string } {
   switch (state) {
@@ -302,10 +302,10 @@ export function WordPartsReview({
     );
   const withReordering = (row: WordPartsSectionRow) =>
     reorderingOut && merged.has(row.row);
+  const toRedo = (row: WordPartsSectionRow) =>
+    row.state === "changed-in-word" || row.state === "left-out";
   const isOut = (row: WordPartsSectionRow) =>
-    row.state === "changed-in-word" ||
-    withReordering(row) ||
-    !!leftOut?.rows.has(row.row);
+    toRedo(row) || withReordering(row) || !!leftOut?.rows.has(row.row);
   const finished = progress.finished !== undefined;
   // "Apply the rest" only while something is left for Apply to write.
   const restApplies =
@@ -313,11 +313,9 @@ export function WordPartsReview({
     (progress.rows.some((row) => row.state === "ready" && !isOut(row)) ||
       (!!structure && !reorderingOut));
   const notWritten = progress.rows.filter((row) => row.state === "not-written");
-  const changedInWord = progress.rows.filter(
-    (row) => row.state === "changed-in-word",
-  );
+  const redoRows = progress.rows.filter(toRedo);
   const gaps = namedRows(notWritten);
-  const redone = namedRows(changedInWord);
+  const redone = namedRows(redoRows);
   const status = progressText(progress);
   return (
     <div ref={containerRef} className="word-plan-review">
@@ -387,7 +385,7 @@ export function WordPartsReview({
           const rowChanges = changes?.get(row.row) ?? [];
           const canLeaveOut =
             row.state === "ready" && !withReordering(row) && editable;
-          const redo = !!onRedo && row.state === "changed-in-word";
+          const redo = !!onRedo && toRedo(row);
           const detail =
             rowChanges.length || canLeaveOut || redo ? (
               <>
@@ -440,12 +438,18 @@ export function WordPartsReview({
                       id: "officeAddin.word.parts.changedInWord",
                       message: "Changed in Word while Erato wrote it",
                     })
-                  : withReordering(row)
+                  : row.state === "left-out"
                     ? t({
-                        id: "officeAddin.word.parts.leftOutWithReordering",
-                        message: "Left out with the reordering",
+                        id: "officeAddin.word.parts.failedChecks",
+                        message:
+                          "Erato's new text didn't pass the checks, so the section stays as it is",
                       })
-                    : undefined
+                    : withReordering(row)
+                      ? t({
+                          id: "officeAddin.word.parts.leftOutWithReordering",
+                          message: "Left out with the reordering",
+                        })
+                      : undefined
               }
               pill={
                 <Pill
@@ -468,7 +472,7 @@ export function WordPartsReview({
         })}
       </ul>
       {(!!notWritten.length && (finished || progress.stopped)) ||
-      (finished && !onRedo && !!changedInWord.length) ||
+      (finished && !onRedo && !!redoRows.length) ||
       (finished && !!progress.reorderingLeftOut) ? (
         <div className="word-plan-review__section word-parts__gap">
           {!!notWritten.length && (finished || progress.stopped) && (
@@ -500,7 +504,7 @@ export function WordPartsReview({
               })}
             </Button>
           )}
-          {finished && !onRedo && !!changedInWord.length && (
+          {finished && !onRedo && !!redoRows.length && (
             <p className="word-review__hint">
               {restApplies
                 ? t({

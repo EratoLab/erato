@@ -5158,6 +5158,11 @@ msgstr "Erato no llegó a {gaps}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.failedChecks"
+msgstr "El nuevo texto de Erato no superó la comprobación, así que la sección se queda como está"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.finishing"
 msgstr "Comprobando todo el cambio…"
 

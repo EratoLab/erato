@@ -236,7 +236,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
         path: "/ops",
         code: "kept-unchanged",
         message:
-          "This part leaves 27 of the row's 39 body paragraphs unchanged (kept: b315-b321,b323-b336,b338-b342,b349). Rewrite them as the row's change says, or, if they stay as they are on purpose, send the part again with allow: [\"kept-unchanged\"].",
+          "This part leaves 27 of the row's 39 body paragraphs unchanged (kept: b315-b321,b323-b336,b338-b342,b349). Rewrite them as the row's change says. If keeping them unchanged is intended, send the part again with allow: [\"kept-unchanged\"].",
       },
     ]);
     expect(found["P-verbatim-T1-V4-sol-t1__S6"]).toEqual([
@@ -284,7 +284,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
       {
         path: "",
         code: "cross-reference",
-        message: `Row 4 (§ 6 Lieferung und Logistik), at /ops/7/text line 10: Adds a reference to § 12 Notfall- und Eskalationsmanagement, which this change moves and the original row does not refer to; leave it out, or, if the request asks for it, send the row again with allow: ["cross-reference"]. ${leave}`,
+        message: `Row 4 (§ 6 Lieferung und Logistik), at /ops/7/text line 10: Adds a reference to § 12 Notfall- und Eskalationsmanagement, which this change moves and the original row does not refer to; leave the reference out. If this reference is intended, send the part again with allow: ["cross-reference"]. ${leave}`,
       },
     ]);
     const finished = await doc.finish(draft_id, revision);
@@ -292,7 +292,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
     const result = (finished as { result: Record<string, unknown> }).result;
     expect(result.notInProposal).toEqual(["§ 6 Lieferung und Logistik"]);
     expect(result.rows).toContainEqual(
-      expect.objectContaining({ row: 4, status: "not_written" }),
+      expect.objectContaining({ row: 4, status: "left_out" }),
     );
     const plan = result.plan as WordDocumentPlan;
     expect(
@@ -454,7 +454,7 @@ describe("code checks per part and at finish", { timeout: 120_000 }, () => {
         path: "/allow",
         code: "part-shape",
         message:
-          'allow lists checks whose change is intended: "numbers", "clause-numbering", "term", "kept-unchanged" and "cross-reference". Use it only when a check\'s error says so.',
+          'allow lists checks whose change is intended: "numbers", "clause-numbering", "term", "kept-unchanged" and "cross-reference". Name "kept-unchanged" with a part that keeps most of its row\'s paragraphs on purpose, and the others only when a check\'s error says so.',
       },
     ]);
   });
@@ -522,8 +522,9 @@ describe("code checks in an English document", () => {
     ops: unknown[],
     allow: WordPartAllow[] = [],
     rows = plan.plan.rows,
+    terms = plan.plan.terms,
   ) => {
-    const sections = { ...plan.plan, rows };
+    const sections = { ...plan.plan, rows, terms };
     const r = rows.findIndex((row) => row.action === "rewrite");
     const parsed = parseWordPartOps(ops, r, rows[r], snapshot);
     if (!("ops" in parsed)) throw new Error(JSON.stringify(parsed.issues));
@@ -592,6 +593,22 @@ describe("code checks in an English document", () => {
       ]).part.issues.map(({ message }) => message),
     ).toEqual([
       'Line 1 has 1,500 and 40 where b4 has 1,200 and 30. Keep every number and amount as the original writes it. If changing these numbers is intended, send the part again with allow: ["numbers"].',
+    ]);
+    expect(
+      write(
+        [
+          { keep: "b3" },
+          {
+            replace: "b4-b5",
+            text: "(1) You pay EUR 1,200 each month within 30 days.\n(2) Late payment costs 5 percent.",
+          },
+        ],
+        [],
+        plan.plan.rows,
+        ["Customer", "interest"],
+      ).part.issues.map(({ message }) => message),
+    ).toEqual([
+      'Line 1 drops Customer, which b4 has; line 2 drops interest, which b5 has. Keep the section plan\'s terms as the document writes them. If changing these terms is intended, send the part again with allow: ["term"].',
     ]);
   });
 

@@ -138,9 +138,12 @@ meaning is left to the review:
   unchanged.
 
 A part's `allow` waives `numbers`, `clause-numbering`, `term`,
-`kept-unchanged` or `cross-reference` when its change is intended; the receipt
+`kept-unchanged` or `cross-reference` when its change is intended. The contract
+offers `kept-unchanged` already with a row's first part, since the model wrote
+the keeps itself and a section-sized row with a targeted change keeps most of
+its paragraphs; the others only once their error names the change. The receipt
 and the finish's `rows` list what a check found and the part allowed as
-`allowed`, for the rows card (ERMAIN-1297) to show. A refused part names the
+`allowed`; the card does not show them yet (ERMAIN-1307). A refused part names the
 line and says the fix; the shipping pipeline's own errors come in the same
 refusal.
 
@@ -155,7 +158,9 @@ number or uses the other section's old number less. A section moved when some
 shortest way to the new order moves it and its place among the sections
 changed, top-level sections counting alike whatever their size: in a swap both
 sides count, a section between them does not. A refusal names the row to send
-again, or to finish again to leave it unchanged.
+again, or to finish again to leave it unchanged; that finish lists the row as
+`left_out` in `result.rows`, and the card shows it as left out, with the step
+to ask Erato to redo it.
 
 Section numbers come from heading text with a word or sign ("§ 10",
 "Section 3", "Article 5") or dots ("10.1"); a bare "3." is too common in text

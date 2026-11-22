@@ -828,12 +828,14 @@ export function wordPartRows(
           ? "kept"
           : row.action === "delete"
             ? "deleted"
-            : written
-              ? "ready"
-              : finished
-                ? "not_written"
-                : "waiting") satisfies WordPartReceiptStatus,
-      // Changes a check found and the part said were intended, for the rows card (ERMAIN-1297).
+            : leftOut?.includes(r)
+              ? "left_out"
+              : written
+                ? "ready"
+                : finished
+                  ? "not_written"
+                  : "waiting") satisfies WordPartReceiptStatus,
+      // Changes a check found and the part said were intended; the card does not show them yet (ERMAIN-1307).
       ...(allowed?.length ? { allowed } : {}),
     };
   });
@@ -1158,7 +1160,7 @@ export function wordPartsFromContent(
       // A written part the finish checks left out is not in the accepted plan.
       else if (
         object(row) &&
-        row.status === ("not_written" satisfies WordPartReceiptStatus)
+        row.status === ("left_out" satisfies WordPartReceiptStatus)
       )
         draft.parts.delete(r);
     });

@@ -450,7 +450,7 @@ export function checkWordPart({
     issue(
       "/ops",
       "kept-unchanged",
-      `This part leaves ${unchanged} of the row's ${body.length} body paragraphs unchanged${kept.length ? ` (kept: ${refsOf(kept)})` : ""}. Rewrite them as the row's change says, or, if they stay as they are on purpose, send the part again with allow: ["kept-unchanged"].`,
+      `This part leaves ${unchanged} of the row's ${body.length} body paragraphs unchanged${kept.length ? ` (kept: ${refsOf(kept)})` : ""}. Rewrite them as the row's change says. If keeping them unchanged is intended, send the part again with allow: ["kept-unchanged"].`,
     );
 
   // Numbers of blocks the part deletes may move into its new text, as in a merge.
@@ -625,7 +625,7 @@ export function parseWordPartAllow(
     !value.every((code) => WORD_PART_ALLOWS.includes(code as WordPartAllow))
   )
     return {
-      message: `allow lists checks whose change is intended: ${list(WORD_PART_ALLOWS.map((code) => `"${code}"`))}. Use it only when a check's error says so.`,
+      message: `allow lists checks whose change is intended: ${list(WORD_PART_ALLOWS.map((code) => `"${code}"`))}. Name "kept-unchanged" with a part that keeps most of its row's paragraphs on purpose, and the others only when a check's error says so.`,
     };
   return { allow: new Set(value as WordPartAllow[]) };
 }
@@ -833,7 +833,7 @@ export function wordPartsReferenceIssues(
         return;
       }
       finding(
-        `Adds a reference to ${section.title}, which this change moves and the original row does not refer to; leave it out, or, if the request asks for it, send the row again with allow: ["cross-reference"].`,
+        `Adds a reference to ${section.title}, which this change moves and the original row does not refer to; leave the reference out. If this reference is intended, send the part again with allow: ["cross-reference"].`,
       );
     };
     for (const { op, line, text } of targets)

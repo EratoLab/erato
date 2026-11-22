@@ -5158,6 +5158,11 @@ msgstr "Erato n’a pas eu le temps de traiter {gaps}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.failedChecks"
+msgstr "Le nouveau texte d’Erato n’a pas passé la vérification, la section reste donc telle quelle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.finishing"
 msgstr "Vérification de l’ensemble de la modification…"
 
