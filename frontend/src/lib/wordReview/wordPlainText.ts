@@ -69,27 +69,41 @@ function tableCells(line: string): string[] {
 const isSeparator = (cells: string[]) =>
   cells.every((cell) => /^:?-+:?$/u.test(cell));
 
+/** A bold close after a space, as in `**Note: **`, leaves the space outside the bold. */
 const INLINE =
-  /\*\*\*(?!\s)(.+?)(?<!\s)\*\*\*|\*\*(?!\s)(.+?)(?<!\s)\*\*|\*(?!\s)([^*]+?)(?<!\s)\*/gu;
+  /\*\*\*(?!\s)(.+?)(\s*)\*\*\*|\*\*(?!\s)(.+?)(\s*)\*\*|\*(?!\s)([^*]+?)(?<!\s)\*/gu;
 
-/** Runs only when a line has formatting; an unclosed `**` is a slip, a lone `*` is text. */
+/** Runs only when a line has formatting; a `**` left over is a slip, a lone `*` is text. */
 function inlineRuns(
   value: string,
-): { text: string; runs?: WordPlanRun[] } | { unclosed: true } {
+): { text: string; runs?: WordPlanRun[] } | { slip: "unclosed" | "space" } {
   const runs: WordPlanRun[] = [];
+  const plain = (text: string) => {
+    const before = runs.at(-1);
+    if (before && !before.bold && !before.italic) before.text += text;
+    else if (text) runs.push({ text });
+  };
   let last = 0;
   for (const match of value.matchAll(INLINE)) {
     const at = match.index;
-    if (at > last) runs.push({ text: value.slice(last, at) });
-    if (match[1] !== undefined)
+    plain(value.slice(last, at));
+    if (match[1] !== undefined) {
       runs.push({ text: match[1], bold: true, italic: true });
-    else if (match[2] !== undefined) runs.push({ text: match[2], bold: true });
-    else runs.push({ text: match[3], italic: true });
+      plain(match[2]);
+    } else if (match[3] !== undefined) {
+      runs.push({ text: match[3], bold: true });
+      plain(match[4]);
+    } else runs.push({ text: match[5], italic: true });
     last = at + match[0].length;
   }
-  if (last < value.length) runs.push({ text: value.slice(last) });
-  if (runs.some((run) => !run.bold && !run.italic && run.text.includes("**")))
-    return { unclosed: true };
+  plain(value.slice(last));
+  const leftover = runs.find(
+    (run) => !run.bold && !run.italic && run.text.includes("**"),
+  );
+  if (leftover)
+    return {
+      slip: /\*\*\s.*\*\*/u.test(leftover.text) ? "space" : "unclosed",
+    };
   const text = runs.map((run) => run.text).join("");
   return runs.some((run) => run.bold || run.italic)
     ? { text, runs: runs.filter((run) => run.text) }
@@ -124,23 +138,24 @@ export function wordPlainTextBlocks(
   let sequence = 0;
   const nextId = () => `${idPrefix}_${++sequence}`;
   let lists = 0;
-  /** The open list per level, the next number it shows, and whether every item so far was "1.". */
-  type Group = { name: string; ordered: boolean; next: number; lazy: boolean };
+  /** One Word list: its levels nest in it, each with one marker type. */
+  type List = { name: string; ordered: Map<number, boolean> };
+  /** The open items per level: their list, the next number they show, and whether every item so far was "1.". */
+  type Group = { list: List; ordered: boolean; next: number; lazy: boolean };
   let groups: (Group | undefined)[] = [];
-  const newGroup = (ordered: boolean): Group => ({
-    name: `${idPrefix}_list${++lists}`,
-    ordered,
-    next: 1,
-    lazy: true,
-  });
   const issue = (line: number, message: string) => {
     if (issues.length < MAX_ISSUES)
       issues.push({ line, message: `Line ${line}: ${message}` });
   };
   const inline = (value: string, line: number) => {
     const result = inlineRuns(value);
-    if ("unclosed" in result) {
-      issue(line, `close **bold** with ** on the same line, ${KEEP_AS_TEXT}.`);
+    if ("slip" in result) {
+      issue(
+        line,
+        result.slip === "space"
+          ? `write **bold** with no space after its opening **, ${KEEP_AS_TEXT}.`
+          : `close **bold** with ** on the same line, ${KEEP_AS_TEXT}.`,
+      );
       return { text: value };
     }
     return result;
@@ -306,16 +321,27 @@ export function wordPlainTextBlocks(
       let group = groups[level];
       const number = ordered ? Number(item[3]) : undefined;
       // "1." after other numbers starts a new list, which then shows 1. as written.
-      if (
-        group?.ordered !== ordered ||
-        (number === 1 && group.next > 1 && !group.lazy)
-      )
-        groups[level] = group = newGroup(ordered);
+      const restart = number === 1 && !!group && group.next > 1 && !group.lazy;
+      if (group?.ordered !== ordered || restart) {
+        // A sublist joins its parent's list, where Word numbers it from 1 under each parent item;
+        // only a level of the other marker type, or a restart, needs a list of its own.
+        const parent = groups[level - 1]?.list;
+        const list =
+          parent &&
+          !restart &&
+          (parent.ordered.get(level) ?? ordered) === ordered
+            ? parent
+            : { name: `${idPrefix}_list${++lists}`, ordered: new Map() };
+        list.ordered.set(level, ordered);
+        groups[level] = group = { list, ordered, next: 1, lazy: true };
+      }
       if (number !== undefined) {
         if (group.next === 1 && number !== 1)
           issue(
             line,
-            `this item shows as 1., not ${number}.: a new numbered list always starts at 1. Number it 1.; ${EXISTING_LIST}, ${KEEP_AS_TEXT}.`,
+            level > 0
+              ? `this item shows as 1., not ${number}.: the numbers under each item start again at 1. Number it 1., ${KEEP_AS_TEXT}.`
+              : `this item shows as 1., not ${number}.: a new numbered list always starts at 1. Number it 1.; ${EXISTING_LIST}, ${KEEP_AS_TEXT}.`,
           );
         else if (number !== group.next && !(number === 1 && group.lazy))
           issue(
@@ -330,7 +356,7 @@ export function wordPlainTextBlocks(
         {
           id: nextId(),
           type: "list-item",
-          list: group.name,
+          list: group.list.name,
           level,
           ordered,
           ...inline(value, line),

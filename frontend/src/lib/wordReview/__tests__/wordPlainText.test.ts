@@ -56,22 +56,48 @@ describe("the plain-text form", () => {
     });
   });
 
-  it("builds lists by level, with numbered and bulleted levels as their own lists", () => {
-    const { blocks, issues } = convert(
-      "1. Abruf\n  - bis 14 Uhr\n  - im Portal\n2. Lieferung\n    1. DAP\n\n- neu",
-    );
+  const items = (text: string) => {
+    const { blocks, issues } = convert(text);
     expect(issues).toEqual([]);
+    return blocks.map((b) =>
+      b.type === "list-item" ? [b.list, b.level, b.ordered, b.text] : b.type,
+    );
+  };
+
+  it("builds a nested list as one list, with bullets or numbers per level, numbered from 1 under each item", () => {
     expect(
-      blocks.map((b) =>
-        b.type === "list-item" ? [b.list, b.level, b.ordered, b.text] : b.type,
+      items(
+        "1. Abruf\n  - bis 14 Uhr\n  - im Portal\n2. Lieferung\n  - DAP\n    1. Werk Ost\n    2. Werk Halden\n  - frei Haus\n      1. Zentrallager",
       ),
     ).toEqual([
       ["r1_1_list1", 0, true, "Abruf"],
-      ["r1_1_list2", 1, false, "bis 14 Uhr"],
-      ["r1_1_list2", 1, false, "im Portal"],
+      ["r1_1_list1", 1, false, "bis 14 Uhr"],
+      ["r1_1_list1", 1, false, "im Portal"],
       ["r1_1_list1", 0, true, "Lieferung"],
-      ["r1_1_list3", 1, true, "DAP"],
-      ["r1_1_list4", 0, false, "neu"],
+      ["r1_1_list1", 1, false, "DAP"],
+      ["r1_1_list1", 2, true, "Werk Ost"],
+      ["r1_1_list1", 2, true, "Werk Halden"],
+      ["r1_1_list1", 1, false, "frei Haus"],
+      ["r1_1_list1", 2, true, "Zentrallager"],
+    ]);
+  });
+
+  it("gives a sublist of the other marker type, a restarted level and a top level of the other type a list of their own", () => {
+    expect(
+      items(
+        "- Abruf\n  1. bis 14 Uhr\n- Lieferung\n  - DAP\n  - frei Haus\n- Rechnung\n  1. Frist\n  2. Skonto\n  1. Mahnung\n\n1. neu",
+      ),
+    ).toEqual([
+      ["r1_1_list1", 0, false, "Abruf"],
+      ["r1_1_list1", 1, true, "bis 14 Uhr"],
+      ["r1_1_list1", 0, false, "Lieferung"],
+      ["r1_1_list2", 1, false, "DAP"],
+      ["r1_1_list2", 1, false, "frei Haus"],
+      ["r1_1_list1", 0, false, "Rechnung"],
+      ["r1_1_list1", 1, true, "Frist"],
+      ["r1_1_list1", 1, true, "Skonto"],
+      ["r1_1_list3", 1, true, "Mahnung"],
+      ["r1_1_list4", 0, true, "neu"],
     ]);
   });
 
@@ -94,6 +120,13 @@ describe("the plain-text form", () => {
       expect.objectContaining({ line: 3 }),
     ]);
     expect(convert("1. a\n2. b\n3. c").issues).toEqual([]);
+    expect(convert("1. a\n  1. x\n2. b\n  2. y").issues).toEqual([
+      {
+        line: 4,
+        message:
+          "Line 4: this item shows as 1., not 2.: the numbers under each item start again at 1. Number it 1., or start the line with \\ to keep it as text.",
+      },
+    ]);
   });
 
   it("keeps a list across blank lines, numbers all-1. items in order and starts a new list at a later 1.", () => {
@@ -105,7 +138,7 @@ describe("the plain-text form", () => {
     expect(lists("1. a\n\n2. b\n\n  - c\n\n3. d")).toEqual([
       "r1_1_list1",
       "r1_1_list1",
-      "r1_1_list2",
+      "r1_1_list1",
       "r1_1_list1",
     ]);
     expect(lists("1. a\n1. b\n1. c")).toEqual([
@@ -213,6 +246,50 @@ describe("the plain-text form", () => {
     expect(lines("####### zu tief")).toEqual([1]);
   });
 
+  it("leaves the space before a closing ** outside the bold", () => {
+    const { blocks, issues } = convert(
+      "**Wichtig: **(3) Die Frist gilt.\n- ***Achtung ***bei Frost\n| **Zone: **A | B |",
+    );
+    expect(issues).toEqual([]);
+    expect(blocks[0]).toEqual({
+      id: "r1_1_1",
+      type: "paragraph",
+      text: "Wichtig: (3) Die Frist gilt.",
+      runs: [
+        { text: "Wichtig:", bold: true },
+        { text: " (3) Die Frist gilt." },
+      ],
+    });
+    expect(blocks[1]).toMatchObject({
+      text: "Achtung bei Frost",
+      runs: [
+        { text: "Achtung", bold: true, italic: true },
+        { text: " bei Frost" },
+      ],
+    });
+    expect(
+      blocks[2].type === "table" && blocks[2].rows[0].cells[0].blocks,
+    ).toEqual([
+      {
+        id: "r1_1_3",
+        type: "paragraph",
+        text: "Zone: A",
+        runs: [{ text: "Zone:", bold: true }, { text: " A" }],
+      },
+    ]);
+  });
+
+  it("tells an unclosed bold from a bold that opens with a space", () => {
+    const messages = (text: string) =>
+      convert(text).issues.map((i) => i.message);
+    expect(messages("Die **Frist gilt.")).toEqual([
+      "Line 1: close **bold** with ** on the same line, or start the line with \\ to keep it as text.",
+    ]);
+    expect(messages("Die ** Frist** gilt.")).toEqual([
+      "Line 1: write **bold** with no space after its opening **, or start the line with \\ to keep it as text.",
+    ]);
+  });
+
   it("gives a replacing line the style of the paragraph it takes the place of", () => {
     const { blocks } = convert(
       "Erster Satz.\nZweiter Satz.\n- Punkt\n# Titel",
@@ -258,10 +335,10 @@ describe("a part's new text with every construct of the form", () => {
       "heading",
       "paragraph",
       ["r1_1_list1", 0],
-      ["r1_1_list2", 1],
+      ["r1_1_list1", 1],
       ["r1_1_list1", 0],
-      ["r1_1_list3", 0],
-      ["r1_1_list3", 0],
+      ["r1_1_list2", 0],
+      ["r1_1_list2", 0],
       "table",
       "paragraph",
     ]);
