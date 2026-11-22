@@ -2489,7 +2489,7 @@ impl AppConfig {
                                 qualified, error
                             );
                         }
-                        refuse_fanned_choices(
+                        refuse_doubled_recursion(
                             &format!("Client tool '{qualified}' submission schema"),
                             &value,
                         );
@@ -8705,15 +8705,13 @@ fn configured_non_submission_tool<'a>(
         .find(|tool| tool.qualified_name() == name && tool.submission.is_none())
 }
 
-/// Panics when two alternatives of a choice in a schema checked before
-/// dispatch lead back to that choice through the same property: a failed
-/// check collects every alternative's errors at every nesting level.
-fn refuse_fanned_choices(subject: &str, schema: &serde_json::Value) {
-    let fanned = crate::client_tool_schema::fanned_choices(schema);
-    if !fanned.is_empty() {
+/// Panics when a failed check of a schema checked before dispatch would
+/// reach one subschema more than once for the same value at every nesting
+/// level.
+fn refuse_doubled_recursion(subject: &str, schema: &serde_json::Value) {
+    if let Some(at) = crate::client_tool_schema::doubled_recursion(schema) {
         panic!(
-            "{subject}: two alternatives of {} lead back to it through the same property; a failed check would repeat once per alternative at every nesting level. Give that property to one alternative only, or pick the alternative with if/then.",
-            fanned.join(", ")
+            "{subject}: two parts of the schema lead back to {at} through the same property, so a failed check would repeat it at every nesting level and grow exponentially with the depth. Keep the recursive property in one place, for example next to the anyOf, and set it to true in the alternatives."
         );
     }
 }
@@ -8771,7 +8769,7 @@ fn validate_submission_parts(
             .map_err(|error| error.to_string())
             .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| schema));
         match compiled {
-            Ok(schema) => refuse_fanned_choices(
+            Ok(schema) => refuse_doubled_recursion(
                 &format!("Client tool '{qualified}' part tool '{name}' schema"),
                 &schema,
             ),

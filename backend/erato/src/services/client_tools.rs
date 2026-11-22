@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 use utoipa::ToSchema;
 
 use crate::config::{ClientToolConfig, ClientToolNativeSchema};
+use erato_config::client_tool_schema::{pointer_token, resolve_local};
 
 /// Request-scoped policy for the exact tool selected after namespace deduplication.
 #[derive(Clone)]
@@ -263,7 +264,13 @@ fn schema_issue(error: &jsonschema::ValidationError<'_>) -> ClientToolValidation
             .unwrap_or("schema")
             .into(),
         // Do not echo the proposed artifact into a correction response.
-        message: bounded(&error.masked().to_string(), 512),
+        message: match &error.kind {
+            // jsonschema's own message leaves out values past the first few.
+            jsonschema::error::ValidationErrorKind::Enum { options } => {
+                bounded(&format!("value is not one of {options}"), 512)
+            }
+            _ => bounded(&error.masked().to_string(), 512),
+        },
     }
 }
 
@@ -324,7 +331,7 @@ impl<'s> Alternative<'s> {
             let Some(reference) = object.get("$ref") else {
                 return Some(alternative);
             };
-            schema = resolve(root, reference.as_str()?)?;
+            schema = resolve_local(root, reference.as_str()?)?;
         }
         None
     }
@@ -384,7 +391,7 @@ fn schema_at<'s>(root: &'s Value, location: &str) -> Option<&'s Value> {
         let token = token.replace("~1", "/").replace("~0", "~");
         schema = match schema {
             Value::Object(object) => match object.get(&token)? {
-                Value::String(reference) if token == "$ref" => resolve(root, reference)?,
+                Value::String(reference) if token == "$ref" => resolve_local(root, reference)?,
                 value => value,
             },
             Value::Array(items) => items.get(token.parse::<usize>().ok()?)?,
@@ -392,16 +399,6 @@ fn schema_at<'s>(root: &'s Value, location: &str) -> Option<&'s Value> {
         };
     }
     Some(schema)
-}
-
-/// Follows `#` and `#/…` pointers into this schema only; anything else, such
-/// as an anchor or a `$id` URI, is not followed.
-fn resolve<'s>(root: &'s Value, reference: &str) -> Option<&'s Value> {
-    root.pointer(reference.strip_prefix('#')?)
-}
-
-fn pointer_token(key: &str) -> String {
-    key.replace('~', "~0").replace('/', "~1")
 }
 
 /// Whether the schema sets `$id` below its root or names an anchor: `#/…`
@@ -610,14 +607,9 @@ impl ArgumentCheck {
         issues
     }
 
-    /// The alternative a value that fails every alternative aims at. One that
-    /// rejects the value's JSON type comes last. Then: the one whose tag (see
-    /// `tags`) accepts the value's, else the one whose own required key (one
-    /// no other alternative names) is present; then the fewest missing
-    /// required keys, the fewest errors, the first. A tag value no alternative
-    /// accepts, a missing tag every alternative requires, or no own key
-    /// present where every alternative has one is reported as such. Tags and
-    /// own keys are used only if every alternative can be read.
+    /// The alternative a value that fails every alternative aims at, ranked
+    /// as `client-submissions.md` describes, or the issues that replace that
+    /// choice (an unknown or missing tag, no alternative aimed at).
     fn choose(
         &self,
         error: &jsonschema::ValidationError<'_>,
@@ -1667,6 +1659,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn an_enum_issue_lists_every_allowed_value() {
+        let policy = policy_for(json!({"type":"object","properties":{
+            "type":{"type":"string","enum":["paragraph","heading","list-item","table","image"]}
+        }}));
+        assert_eq!(
+            issues(&policy, json!({"type":"secret"})),
+            vec![issue(
+                "/type",
+                "enum",
+                r#"value is not one of ["paragraph","heading","list-item","table","image"]"#
+            )]
+        );
+    }
+
     /// The Word section writer's `ops`: forms told apart only by their own
     /// keys, checked as a part call.
     #[test]
@@ -1687,7 +1694,7 @@ mod tests {
             ]}}
         }}))
         .unwrap();
-        assert!(erato_config::client_tool_schema::fanned_choices(&check.schema).is_empty());
+        assert!(erato_config::client_tool_schema::doubled_recursion(&check.schema).is_none());
         let write = |op: Value| json!({"row":2,"ops":[{"keep":"b1"}, op]});
         let missing_text = issue("/ops/1", "required", r#""text" is a required property"#);
         assert_eq!(
@@ -1942,7 +1949,7 @@ mod tests {
     fn the_plan_shape_costs_the_same_at_any_nesting_depth() {
         let policy = plan_policy();
         assert!(
-            erato_config::client_tool_schema::fanned_choices(&policy.arguments.schema).is_empty()
+            erato_config::client_tool_schema::doubled_recursion(&policy.arguments.schema).is_none()
         );
         let nested = |depth: usize| {
             let mut block = json!({"type":"paragraph","text":5});
