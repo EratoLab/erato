@@ -29,6 +29,9 @@ const makeVersion = (
   },
   assistant_id: `${versionId}-assistant`,
   audience_grants: [],
+  can_make_current: false,
+  can_publish: overrides.status !== "submitted" && !overrides.is_published,
+  can_unpublish: false,
   category_ids: [],
   created_at: "2026-01-01T00:00:00Z",
   creator: { display_name: "Assistant creator", id: "creator" },
@@ -37,6 +40,7 @@ const makeVersion = (
   hub_assistant_id: `${versionId}-hub`,
   is_current_published_version: false,
   is_published: false,
+  is_submission_owner: false,
   keywords: [],
   long_description: "Long assistant description",
   review_average_score: null,
@@ -52,6 +56,7 @@ const makeVersion = (
 
 let versions: AssistantHubVersion[];
 let listError: Error | null;
+let canReview: boolean;
 const reviewVersion = vi.fn();
 const setPublished = vi.fn();
 const setCurrent = vi.fn();
@@ -84,7 +89,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useAssistantHubConfig: () => ({
     data: {
       enabled: true,
-      can_review: true,
+      can_review: canReview,
       enable_categories: false,
       categories: [],
     },
@@ -153,6 +158,7 @@ const deferred = () => {
 describe("AssistantHubReviewPage", () => {
   beforeEach(() => {
     listError = null;
+    canReview = true;
     versions = [makeVersion("first"), makeVersion("second")];
     for (const mutation of [
       reviewVersion,
@@ -168,6 +174,42 @@ describe("AssistantHubReviewPage", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("uses independent publication permissions for reviewers in the queue and on a version", () => {
+    versions = [
+      makeVersion("unpublished", { can_publish: false }),
+      makeVersion("published", { is_published: true, can_unpublish: true }),
+    ];
+
+    const queue = renderPage("/assistant-hub/review");
+    expect(
+      screen.getByRole("button", { name: "Unpublish" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^(Publish|Make current)$/ }),
+    ).not.toBeInTheDocument();
+    queue.unmount();
+
+    renderPage("/assistant-hub/review/published");
+    expect(
+      screen.getByRole("button", { name: "Unpublish" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Make current" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the queue and its actions hidden from a user with neither role", () => {
+    canReview = false;
+    versions.push(makeVersion("pending", { status: "submitted" }));
+
+    renderPage("/assistant-hub/review");
+
+    expect(screen.queryByText("Assistant pending")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^(Publish|Accept|Decline)$/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps only the clicked row busy until the queue has refetched", async () => {

@@ -419,6 +419,24 @@
     "security_relevance": "high",
     "stability": "alpha"
   },
+  "assistant_hub.action_permissions.make_current.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "assistant_hub.action_permissions.publish.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "assistant_hub.action_permissions.unpublish.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "assistant_hub.categories.<key>.display_name": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.2",

@@ -82,7 +82,9 @@ export default function AssistantHubReviewPage() {
   const { data: config, isLoading: isLoadingConfig } = useAssistantHubConfig(
     {},
   );
-  const { data, isLoading, error } = useListReviewAssistantHubVersions({});
+  const { data, isLoading, error } = useListReviewAssistantHubVersions(
+    config?.can_review ? {} : skipToken,
+  );
   const reviewVersion = useReviewAssistantHubVersion();
   const setPublished = useSetAssistantHubVersionPublished();
   const setCurrent = useSetAssistantHubVersionCurrent();
@@ -217,26 +219,30 @@ export default function AssistantHubReviewPage() {
   const renderAcceptedVersionActions = (version: AssistantHubVersion) =>
     isAssistantHubReviewAcceptedStatus(version.status) ? (
       <>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={isPendingAction(version, "publish")}
-          disabled={pendingAction !== null}
-          onClick={() => {
-            void handleSetPublished(version, !version.is_published);
-          }}
-        >
-          {version.is_published
-            ? t({
-                id: "assistantHub.review.unpublish",
-                message: "Unpublish",
-              })
-            : t({
-                id: "assistantHub.review.publish",
-                message: "Publish",
-              })}
-        </Button>
-        {version.is_published && !version.is_current_published_version && (
+        {(version.is_published
+          ? version.can_unpublish
+          : version.can_publish) && (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={isPendingAction(version, "publish")}
+            disabled={pendingAction !== null}
+            onClick={() => {
+              void handleSetPublished(version, !version.is_published);
+            }}
+          >
+            {version.is_published
+              ? t({
+                  id: "assistantHub.review.unpublish",
+                  message: "Unpublish",
+                })
+              : t({
+                  id: "assistantHub.review.publish",
+                  message: "Publish",
+                })}
+          </Button>
+        )}
+        {version.can_make_current && (
           <Button
             variant="secondary"
             size="sm"

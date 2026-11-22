@@ -30,6 +30,9 @@ const acceptedVersion: AssistantHubVersion = {
   },
   assistant_id: "assistant-snapshot",
   audience_grants: [],
+  can_make_current: false,
+  can_publish: false,
+  can_unpublish: false,
   category_ids: ["marketing"],
   created_at: "2026-01-01T00:00:00Z",
   creator: {
@@ -41,6 +44,7 @@ const acceptedVersion: AssistantHubVersion = {
   hub_assistant_id: "hub-assistant",
   is_current_published_version: true,
   is_published: true,
+  is_submission_owner: false,
   keywords: [],
   long_description: "Long assistant description",
   review_average_score: 8.4,

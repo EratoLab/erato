@@ -7171,6 +7171,34 @@ groups = ["assistant-hub-reviewers", "ai-governance"]
 
 Reviewer group membership comes from the authenticated user's group information, for example through the OIDC `groups` claim. If no reviewer rule matches, the user can still browse published hub assistants they can access, but cannot accept, decline, feature, or review submissions.
 
+#### `assistant_hub.action_permissions`
+
+Configure Publish, Unpublish, and Make current independently. A caller needs any one of the roles listed for the action.
+
+- `editors` includes the source assistant's owner and users with effective edit access through sharing.
+- `reviewers` includes users who match `assistant_hub.reviewers.rules`.
+
+Use `["reviewers"]` for reviewer-only access, `["editors"]` for editor-only access, or `[]` to disable an action. Unknown role values are rejected. Review queue access and accept or decline decisions use the reviewer rules.
+
+{/* erato_toml_config_key: assistant_hub.action_permissions.publish.[] */}
+
+- **`publish`** controls who can publish an unpublished, review-accepted version. Publishing automatically makes that version current. Defaults to `["editors", "reviewers"]`.
+
+{/* erato_toml_config_key: assistant_hub.action_permissions.unpublish.[] */}
+
+- **`unpublish`** controls who can remove a version from publication. Defaults to `["editors", "reviewers"]`.
+
+{/* erato_toml_config_key: assistant_hub.action_permissions.make_current.[] */}
+
+- **`make_current`** controls who can switch the current version to another published version. Defaults to `["editors", "reviewers"]`.
+
+```toml
+[assistant_hub.action_permissions]
+publish = ["editors", "reviewers"]
+unpublish = ["editors", "reviewers"]
+make_current = ["editors", "reviewers"]
+```
+
 ### `starter_prompts`
 
 {/* erato_toml_config_key: starter_prompts */}

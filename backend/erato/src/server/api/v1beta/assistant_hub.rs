@@ -1,8 +1,10 @@
+use crate::config::{AssistantHubActionRole, AssistantHubConfig};
 use crate::db::entity::prelude::ShareGrants;
 use crate::db::entity::share_grants;
 use crate::models::assistant_hub;
 use crate::models::assistant_hub::{
-    HubAudienceGrantInput, HubReviewInput, HubReviewRecord, HubSubmissionProfile, HubVersionRecord,
+    HubAudienceGrantInput, HubPublicationAction, HubReviewInput, HubReviewRecord,
+    HubSubmissionProfile, HubVersionRecord,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -18,7 +20,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::types::Uuid;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -99,6 +101,10 @@ pub struct AssistantHubVersion {
     pub status: String,
     pub is_published: bool,
     pub is_current_published_version: bool,
+    pub can_publish: bool,
+    pub can_unpublish: bool,
+    pub can_make_current: bool,
+    pub is_submission_owner: bool,
     pub featured: bool,
     pub version_number: String,
     pub version_comment: Option<String>,
@@ -336,17 +342,45 @@ async fn records_to_response(
     records: Vec<HubVersionRecord>,
     include_audience_grants: bool,
 ) -> Vec<AssistantHubVersion> {
-    let available_models = match app_state
+    let config = &app_state.config.assistant_hub;
+    let (available_models, editable_sources) = match app_state
         .global_policy_engine
         .request_engine(&app_state.db, &app_state.config)
         .await
     {
-        Ok(policy) => super::available_models_for_me(app_state, &policy, me_user)
-            .await
-            .ok(),
+        Ok(policy) => {
+            let mut editable_sources = HashSet::new();
+            if config
+                .action_permissions
+                .includes_role(AssistantHubActionRole::Editors)
+            {
+                let source_ids: HashSet<_> = records
+                    .iter()
+                    .filter(|record| record.version.status == assistant_hub::STATUS_REVIEW_ACCEPTED)
+                    .map(|record| record.hub_assistant.source_assistant_id)
+                    .collect();
+                let source_ids: Vec<_> = source_ids.into_iter().collect();
+                match assistant_hub::editable_source_ids(
+                    &policy,
+                    &me_user.to_subject(),
+                    &source_ids,
+                )
+                .await
+                {
+                    Ok(ids) => editable_sources.extend(ids),
+                    Err(error) => {
+                        tracing::warn!(%error, "Could not resolve Assistant Hub source edit permissions")
+                    }
+                }
+            }
+            let available_models = super::available_models_for_me(app_state, &policy, me_user)
+                .await
+                .ok();
+            (available_models, editable_sources)
+        }
         Err(error) => {
-            tracing::warn!(%error, "Could not resolve assistant hub model selections");
-            None
+            tracing::warn!(%error, "Could not resolve Assistant Hub response permissions and model selections");
+            (None, HashSet::new())
         }
     };
     let creator_display_names = resolve_creator_display_names(app_state, me_user, &records).await;
@@ -386,11 +420,15 @@ async fn records_to_response(
             let audience_grants = audience_grants_by_assistant_id
                 .remove(&record.version.assistant_id.to_string())
                 .unwrap_or_default();
+            let is_editor = editable_sources.contains(&record.hub_assistant.source_assistant_id);
             let mut response = record_to_response(
                 record,
                 creator_display_name,
                 review_summary,
                 audience_grants,
+                config,
+                me_user,
+                is_editor,
             );
             if let Some(models) = &available_models {
                 response.assistant.default_chat_provider = app_state.effective_saved_model_id(
@@ -477,10 +515,20 @@ fn record_to_response(
     creator_display_name: Option<String>,
     review_summary: Option<&assistant_hub::HubReviewSummary>,
     audience_grants: Vec<ShareGrant>,
+    config: &AssistantHubConfig,
+    me_user: &MeProfile,
+    is_editor: bool,
 ) -> AssistantHubVersion {
     let creator_id = record.creator.id.to_string();
     let creator_email = record.creator.email.clone();
     let creator_fallback = creator_email.clone().unwrap_or_else(|| creator_id.clone());
+    let is_reviewer = config.can_review(&me_user.groups);
+    let can_act = |action: HubPublicationAction| {
+        action.changes_version(&record.version) && action.is_allowed(config, is_editor, is_reviewer)
+    };
+    let can_publish = can_act(HubPublicationAction::Publish);
+    let can_unpublish = can_act(HubPublicationAction::Unpublish);
+    let can_make_current = can_act(HubPublicationAction::MakeCurrent);
 
     AssistantHubVersion {
         hub_assistant_id: record.hub_assistant.id.to_string(),
@@ -490,6 +538,10 @@ fn record_to_response(
         status: record.version.status,
         is_published: record.version.is_published,
         is_current_published_version: record.version.is_current_published_version,
+        can_publish,
+        can_unpublish,
+        can_make_current,
+        is_submission_owner: me_user.id == creator_id,
         featured: record.hub_assistant.featured,
         version_number: record.version.version_number,
         version_comment: record.version.version_comment,
@@ -886,9 +938,11 @@ pub async fn submit_assistant_hub_review(
 pub async fn list_my_assistant_hub_versions(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
 ) -> Result<Json<AssistantHubVersionsResponse>, StatusCode> {
     let records = assistant_hub::list_my_hub_versions(
         &app_state.db,
+        &policy,
         &app_state.config.assistant_hub,
         &me_user.to_subject(),
     )
@@ -1024,17 +1078,24 @@ pub async fn withdraw_assistant_hub_version(
 pub async fn set_assistant_hub_version_published(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Path(version_id): Path<String>,
     Json(request): Json<AssistantHubSetPublishedRequest>,
 ) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_hub::set_published(
+    let action = if request.is_published {
+        HubPublicationAction::Publish
+    } else {
+        HubPublicationAction::Unpublish
+    };
+    let record = assistant_hub::update_version_publication(
         &app_state.db,
+        &policy,
         &app_state.config.assistant_hub,
         &me_user.to_subject(),
         &me_user.groups,
         version_id,
-        request.is_published,
+        action,
     )
     .await
     .map_err(model_error_to_status)?;
@@ -1064,15 +1125,18 @@ pub async fn set_assistant_hub_version_published(
 pub async fn set_assistant_hub_version_current(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
     Path(version_id): Path<String>,
 ) -> Result<Json<AssistantHubVersionResponse>, StatusCode> {
     let version_id = Uuid::parse_str(&version_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let record = assistant_hub::set_current_published_version(
+    let record = assistant_hub::update_version_publication(
         &app_state.db,
+        &policy,
         &app_state.config.assistant_hub,
         &me_user.to_subject(),
         &me_user.groups,
         version_id,
+        HubPublicationAction::MakeCurrent,
     )
     .await
     .map_err(model_error_to_status)?;

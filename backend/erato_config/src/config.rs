@@ -7204,6 +7204,11 @@ pub struct AssistantHubConfig {
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub reviewers: AssistantHubReviewerPermissionsConfig,
 
+    // Roles allowed to publish, unpublish, and choose the current version.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    pub action_permissions: AssistantHubActionPermissionsConfig,
+
     // Categories available for assistant hub submissions.
     //
     // The map key is the category ID used by the backend.
@@ -7229,14 +7234,54 @@ impl Default for AssistantHubConfig {
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
+            action_permissions: AssistantHubActionPermissionsConfig::default(),
             categories: HashMap::new(),
         }
     }
 }
 
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct AssistantHubActionPermissionsConfig {
+    pub publish: Vec<AssistantHubActionRole>,
+    pub unpublish: Vec<AssistantHubActionRole>,
+    pub make_current: Vec<AssistantHubActionRole>,
+}
+
+impl Default for AssistantHubActionPermissionsConfig {
+    fn default() -> Self {
+        let roles = vec![
+            AssistantHubActionRole::Editors,
+            AssistantHubActionRole::Reviewers,
+        ];
+        Self {
+            publish: roles.clone(),
+            unpublish: roles.clone(),
+            make_current: roles,
+        }
+    }
+}
+
+impl AssistantHubActionPermissionsConfig {
+    pub fn includes_role(&self, role: AssistantHubActionRole) -> bool {
+        [&self.publish, &self.unpublish, &self.make_current]
+            .into_iter()
+            .any(|roles| roles.contains(&role))
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum AssistantHubActionRole {
+    Editors,
+    Reviewers,
+}
+
 #[cfg(test)]
 mod assistant_hub_config_tests {
-    use super::AssistantHubConfig;
+    use super::{AssistantHubActionPermissionsConfig, AssistantHubActionRole, AssistantHubConfig};
 
     #[test]
     fn categories_are_enabled_by_default() {
@@ -7254,6 +7299,35 @@ mod assistant_hub_config_tests {
         .expect("config should deserialize");
 
         assert!(!config.enable_categories);
+    }
+
+    #[test]
+    fn assistant_hub_action_permission_defaults_are_independent() {
+        use AssistantHubActionRole::{Editors, Reviewers};
+
+        let defaults = AssistantHubActionPermissionsConfig::default();
+        assert_eq!(defaults.publish, [Editors, Reviewers]);
+        assert_eq!(defaults.unpublish, [Editors, Reviewers]);
+        assert_eq!(defaults.make_current, [Editors, Reviewers]);
+
+        let config: AssistantHubConfig = serde_json::from_value(serde_json::json!({
+            "action_permissions": { "publish": ["reviewers"], "make_current": [] }
+        }))
+        .expect("config should deserialize");
+
+        assert_eq!(config.action_permissions.publish, [Reviewers]);
+        assert_eq!(config.action_permissions.unpublish, defaults.unpublish);
+        assert!(config.action_permissions.make_current.is_empty());
+    }
+
+    #[test]
+    fn assistant_hub_action_permissions_reject_unknown_roles() {
+        assert!(
+            serde_json::from_value::<AssistantHubConfig>(serde_json::json!({
+                "action_permissions": { "publish": ["owners"] }
+            }))
+            .is_err()
+        );
     }
 }
 

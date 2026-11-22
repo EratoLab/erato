@@ -531,6 +531,15 @@ chat_provider_ids = ["test-token-limit"]
 # # When not set, no server-side limit is enforced and the frontend defaults to 5000 for UI validation.
 # max_system_prompt_length = 5000
 
+# Assistant Hub publication permissions
+# [assistant_hub.action_permissions]
+# Each action defaults to both roles. A caller needs any listed role.
+# editors have edit access to the source assistant, including through sharing.
+# reviewers match assistant_hub.reviewers.rules. Use [] to disable an action.
+# publish = ["editors", "reviewers"]
+# unpublish = ["editors", "reviewers"]
+# make_current = ["editors", "reviewers"]
+
 # Executor for scheduled deliveries: messages Erato owes a user at a due time
 # (reminders, the Teams inactivity nudge, notifications). Every replica runs
 # its own tick; a row is delivered at most once per claim, and a claim left
