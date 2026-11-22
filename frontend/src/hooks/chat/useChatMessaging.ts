@@ -90,6 +90,7 @@ import {
   constructSubmitStreamRequestBody,
 } from "@/utils/chat/messageUtils";
 import { useStableValue } from "@/utils/chat/stableValues";
+import { useValueStore } from "@/utils/chat/valueStore";
 import { createLogger } from "@/utils/debugLogger";
 import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
@@ -2154,17 +2155,15 @@ export function useChatMessaging(
         prepare?.onAbandoned?.();
         return undefined;
       }
-      // Prevent duplicate submissions
-      if (isSubmittingForKey(streamKey)) {
+      // Prevent duplicate submissions; and a Stop the server has not heard
+      // yet would end this turn too.
+      if (isSubmittingForKey(streamKey) || stops.pending.get().has(streamKey)) {
         logger.warn(
           `[DEBUG_STREAMING] Preventing duplicate message submission for streamKey: ${streamKey}`,
         );
         prepare?.onAbandoned?.();
         return undefined;
       }
-      // Stop cancels this wait as it cancels a host preparation.
-      const stopWait = new AbortController();
-      const stopSettled = stops.settle(streamKey, stopWait.signal);
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
@@ -2218,20 +2217,6 @@ export function useChatMessaging(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
 
-      // Nothing reached the server, so no refetch can restore these rows.
-      const dropSend = () => {
-        removeUserMessages([userMessage.id], streamKey);
-        endWaitTurn(streamKey);
-        resetStreaming(streamKey);
-        if (silentChatId) {
-          setAwaitingFirstStreamChunkForNewChat(false);
-          setNewlyCreatedChatId(null);
-          setNewlyCreatedChatIdInStore(null);
-        }
-        setSubmittingForKey(streamKey, false);
-        prepare?.onAbandoned?.();
-      };
-
       let effectiveActionFacet = actionFacet;
       if (prepare) {
         const controller = new AbortController();
@@ -2262,25 +2247,20 @@ export function useChatMessaging(
           }
         }
         if (!prepared || controller.signal.aborted) {
-          dropSend();
+          // Nothing reached the server, so no refetch can restore these rows.
+          removeUserMessages([userMessage.id], streamKey);
+          endWaitTurn(streamKey);
+          resetStreaming(streamKey);
+          if (silentChatId) {
+            setAwaitingFirstStreamChunkForNewChat(false);
+            setNewlyCreatedChatId(null);
+            setNewlyCreatedChatIdInStore(null);
+          }
+          setSubmittingForKey(streamKey, false);
+          prepare.onAbandoned?.();
           return undefined;
         }
         effectiveActionFacet = prepared.actionFacet;
-      }
-
-      if (stopSettled) {
-        preparationAbortByKeyRef.current[streamKey] = stopWait;
-        const stopDelivered = await stopSettled.then(
-          () => true,
-          () => false,
-        );
-        if (preparationAbortByKeyRef.current[streamKey] === stopWait) {
-          delete preparationAbortByKeyRef.current[streamKey];
-        }
-        if (!stopDelivered) {
-          dropSend();
-          return undefined;
-        }
       }
 
       // A brand-new chat gets its seed on chat_created, once it has an id.
@@ -2693,11 +2673,10 @@ export function useChatMessaging(
       actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
       stopReadAloud();
-      if (isSubmittingForKey(streamKey)) {
+      if (isSubmittingForKey(streamKey) || stops.pending.get().has(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
       }
-      const stopSettled = stops.settle(streamKey, new AbortController().signal);
 
       // Read from the store, not the render closure, so this callback does not
       // depend on `messages`/`messageOrder`, which change on every stream chunk.
@@ -2743,7 +2722,6 @@ export function useChatMessaging(
 
         const sseUrl = `/api/v1beta/me/messages/editstream`;
         const connectionStreamKeyRef = { current: streamKey };
-        if (stopSettled) await stopSettled;
         const cleanup = createSSEConnection(sseUrl, {
           idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
@@ -2863,13 +2841,12 @@ export function useChatMessaging(
       actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
       stopReadAloud();
-      if (isSubmittingForKey(streamKey)) {
+      if (isSubmittingForKey(streamKey) || stops.pending.get().has(streamKey)) {
         logger.warn(
           "[DEBUG_STREAMING] Preventing duplicate regenerate submission",
         );
         return;
       }
-      const stopSettled = stops.settle(streamKey, new AbortController().signal);
 
       // Clear any previous streaming state and close existing SSE connection
       resetStreaming(streamKey);
@@ -2903,7 +2880,6 @@ export function useChatMessaging(
 
         const sseUrl = `/api/v1beta/me/messages/regeneratestream`;
         const connectionStreamKeyRef = { current: streamKey };
-        if (stopSettled) await stopSettled;
         const cleanup = createSSEConnection(sseUrl, {
           idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
@@ -3064,7 +3040,7 @@ export function useChatMessaging(
       // that refetch resets the streaming buffer when it lands. A decision
       // taken inside that window would seed a buffer the refetch then wipes,
       // leaving the continuation to stream invisibly with the composer open.
-      if (isSubmittingForKey(streamKey)) {
+      if (isSubmittingForKey(streamKey) || stops.pending.get().has(streamKey)) {
         return Promise.reject(
           new Error(
             "The previous turn is still settling. Try again in a moment.",
@@ -3214,11 +3190,7 @@ export function useChatMessaging(
         beginWaitTurn(streamKey, { continuation: true });
       }
 
-      const stopSettled = stops.settle(streamKey, new AbortController().signal);
-      const connect = (
-        resolve: () => void,
-        reject: (reason: unknown) => void,
-      ) => {
+      return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
         let settled = false;
 
@@ -3352,16 +3324,7 @@ export function useChatMessaging(
 
         setSSECleanupForKey(streamKey, cleanup);
         setSSEAbortCallback(cleanup, streamKey);
-      };
-      return stopSettled
-        ? stopSettled.then(
-            () => new Promise<void>(connect),
-            (error: unknown) => {
-              rollBackUnaccepted(streamKey);
-              throw error;
-            },
-          )
-        : new Promise<void>(connect);
+      });
     },
     [
       attemptResumeStream,
@@ -3398,11 +3361,13 @@ export function useChatMessaging(
 
   // isPendingResponse is true from the moment send is clicked until streaming completes
   // This is different from isStreaming which only becomes true after the first chunk arrives
+  const stopsPending = useValueStore(stops.pending);
   const isPendingResponse =
     isSubmittingForKey(streamKey) ||
     handoffSubmitKey === streamKey ||
     streaming.isStreaming ||
-    streaming.isFinalizing;
+    streaming.isFinalizing ||
+    stopsPending.has(streamKey);
 
   const resumeSettledStop = useCallback(
     (messageId: string, toolCallId: string) =>
