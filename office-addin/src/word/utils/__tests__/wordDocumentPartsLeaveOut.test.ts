@@ -158,6 +158,56 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
     expect(progress.rows.every((row) => row.state === "ready")).toBe(true);
   });
 
+  it("rebuilds the accepted plan after a finish that left a refused row out", async () => {
+    const snapshot = capture();
+    const turn = await recordPartsTurn(snapshot, {
+      plan: T1.plan,
+      parts: T1.parts.map((part) =>
+        part.row === 4
+          ? {
+              ...part,
+              ops: part.ops.map((op, k) =>
+                k === 1
+                  ? { ...op, text: op.text.replace("\n", " Es gilt § 10.\n") }
+                  : op,
+              ),
+              allow: [...part.allow, "numbers"],
+            }
+          : part,
+      ),
+      finishes: 2,
+    });
+    if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    const codes = (output: unknown) =>
+      (
+        output as { validation_errors?: { code: string }[] }
+      ).validation_errors?.map(({ code }) => code) ?? [];
+    expect(
+      turn.content.map((part) =>
+        part.content_type === "tool_use" ? codes(part.output) : [],
+      ),
+    ).toEqual([[], [], [], [], [], [], ["cross-reference"], []]);
+    const result = turn.last.result as {
+      plan: WordDocumentPlan;
+      rows: { row: number; status: string }[];
+    };
+    expect(result.rows).toContainEqual(
+      expect.objectContaining({ row: 4, status: "not_written" }),
+    );
+    const rebuilt = wordPartsFromContent(turn.content, snapshot)!;
+    expect([...rebuilt.draft.parts.keys()]).toEqual([2, 4, 5, 6]);
+    expect(
+      canonicalWordPlan(
+        assembleWordParts(
+          snapshot,
+          rebuilt.draft.readToken,
+          rebuilt.draft.plan,
+          rebuilt.draft.parts,
+        ).plan,
+      ),
+    ).toBe(canonicalWordPlan(result.plan));
+  });
+
   it("sends the rest in place once the reordering is left out", async () => {
     const snapshot = capture();
     const ref = inPlaceParagraph(snapshot);
