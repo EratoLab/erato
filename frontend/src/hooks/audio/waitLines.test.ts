@@ -104,6 +104,44 @@ const endSources = () => {
   for (const source of sources.splice(0)) source.onended?.();
 };
 
+const READ_LABEL = {
+  action: "other",
+  object_kind: "row",
+  source: "rules",
+  read: { object_kind: "row", query: { tables: ["opportunity"] } },
+  spoken_names: { de: { tables: { opportunity: "Verkaufschancen" } } },
+} as never;
+
+type Setup = Awaited<ReturnType<typeof setup>>;
+
+/** The reply's spoken part, as the stream sends it, played to its end. */
+const spokenPart = async ({ playback, lines }: Setup, sequence = 0) => {
+  lines.waitTurnSpeaks("s");
+  playback.spokenPartBegins("s");
+  playback.playSpeechChunk("m", sequence, "AQIDBA==", 24000, "s");
+  lines.waitTurnAudio("s");
+  lines.waitTurnSpokenEnd("s");
+  playback.spokenPartEnds("s", "m");
+  await vi.advanceTimersByTimeAsync(400);
+  expect(sources).toHaveLength(1);
+  endSources();
+  await vi.advanceTimersByTimeAsync(0);
+};
+
+/** A call whose line the server sends at once. */
+const toolWithLine = ({ playback, lines }: Setup, id: string) => {
+  playback.replyCallsTool("s");
+  lines.waitTurnTool("s", "m", id, "in_progress", READ_LABEL);
+  const options = sse.mock.calls.at(-1)?.[1] as {
+    onMessage: (event: { type: string; data: string }) => void;
+  };
+  options.onMessage({
+    type: "audio_delta",
+    data: JSON.stringify({ audio: "AQIDBA==", sample_rate: 24000 }),
+  });
+  options.onMessage({ type: "done", data: "" });
+};
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
@@ -342,6 +380,121 @@ describe("wait lines", () => {
     sources.length = 0;
     await vi.advanceTimersByTimeAsync(60000);
     expect(sources).toHaveLength(0);
+  });
+
+  it("goes on with a tool line after a spoken part before a tool call", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(1000);
+    // "I'll check the deal…", before the opener was due.
+    await spokenPart(ctx);
+    await vi.advanceTimersByTimeAsync(3000);
+    // Paused: no opener after the reply spoke, nothing before a call.
+    expect(sources).toHaveLength(0);
+    toolWithLine(ctx, "read");
+    // Spoken part over at 1.4 s: the tool line 4 s after, at 5.4 s, long
+    // before still on it would be due.
+    await vi.advanceTimersByTimeAsync(1400);
+    expect(sources).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sources).toHaveLength(1);
+    expect(ctx.lines.waitLinePlaying()).toBe(true);
+  });
+
+  it("goes on with still on it after a spoken part and a call without a line", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
+    endSources();
+    await vi.advanceTimersByTimeAsync(2000);
+    await spokenPart(ctx);
+    ctx.playback.replyCallsTool("s");
+    ctx.lines.waitTurnTool("s", "m", "write", "in_progress", null);
+    expect(sse).not.toHaveBeenCalled();
+    // Spoken part over at ~5.4 s: still on it 8 s after, at ~13.4 s.
+    await vi.advanceTimersByTimeAsync(7500);
+    expect(sources).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sources).toHaveLength(1);
+  });
+
+  it("says nothing more after a spoken part that the answer follows", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
+    endSources();
+    await vi.advanceTimersByTimeAsync(2000);
+    await spokenPart(ctx);
+    ctx.playback.writtenPartArrives("s");
+    ctx.lines.waitTurnAnswered("s");
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("does not start a line while the spoken part's audio still plays", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    ctx.lines.waitTurnSpeaks("s");
+    ctx.playback.spokenPartBegins("s");
+    ctx.playback.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s");
+    ctx.lines.waitTurnSpokenEnd("s");
+    ctx.playback.spokenPartEnds("s", "m");
+    toolWithLine(ctx, "read");
+    await vi.advanceTimersByTimeAsync(30000);
+    // Only the spoken part's own audio.
+    expect(sources).toHaveLength(1);
+    endSources();
+    await vi.advanceTimersByTimeAsync(4100);
+    expect(sources).toHaveLength(1);
+  });
+
+  it("keeps a second spoken part that begins before the first one's end", async () => {
+    const ctx = await setup();
+    const { playback, lines } = ctx;
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    lines.waitTurnSpeaks("s");
+    playback.spokenPartBegins("s");
+    playback.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s");
+    lines.waitTurnAudio("s");
+    playback.replyCallsTool("s");
+    lines.waitTurnTool("s", "m", "write", "in_progress", null);
+    lines.waitTurnTool("s", "m", "write", "success", null);
+    lines.waitTurnSpeaks("s");
+    playback.spokenPartBegins("s");
+    playback.playSpeechChunk("m", 1, "AQIDBA==", 24000, "s");
+    lines.waitTurnSpokenEnd("s");
+    playback.spokenPartEnds("s", "m");
+    lines.waitTurnAudio("s");
+    lines.waitTurnSpokenEnd("s");
+    playback.spokenPartEnds("s", "m");
+    await vi.advanceTimersByTimeAsync(400);
+    endSources();
+    await vi.advanceTimersByTimeAsync(0);
+    toolWithLine(ctx, "read");
+    await vi.advanceTimersByTimeAsync(4100);
+    expect(sources).toHaveLength(1);
+  });
+
+  it("goes on after a spoken part in a continuation after an approval", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s", { continuation: true });
+    ctx.lines.waitTurnTool("s", "m", "write", "in_progress", null);
+    ctx.lines.waitTurnTool("s", "m", "write", "success", null);
+    await vi.advanceTimersByTimeAsync(500);
+    await spokenPart(ctx);
+    toolWithLine(ctx, "read");
+    await vi.advanceTimersByTimeAsync(3900);
+    expect(sources).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sources).toHaveLength(1);
   });
 
   it("counts a continuation from its start, without an opener", async () => {

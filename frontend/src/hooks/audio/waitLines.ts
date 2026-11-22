@@ -6,6 +6,7 @@ import { createSSEConnection } from "@/utils/sse/sseClient";
 import { createPcmQueue, playbackContext } from "./pcmPlayback";
 import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
+  afterReplyAudio,
   holdReplyAudio,
   onSpeechInterrupted,
   releaseReplyAudio,
@@ -17,6 +18,7 @@ import type {
   WaitLinesResponse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
+  SaidLine,
   WaitAmount,
   WaitLineKind,
   WaitTiming,
@@ -68,6 +70,11 @@ interface Turn {
   checked: boolean;
   /** A continuation after a decision has no opener of its own. */
   opener: boolean;
+  /**
+   * The reply's spoken parts whose end is still to come, oldest first: a
+   * part's end follows its audio, so it can come after the next part began.
+   */
+  parts: SaidLine[];
 }
 
 /** Speech that ended this long ago no longer belongs to the turn sent now. */
@@ -220,6 +227,7 @@ export function beginWaitTurn(
     toolsSeen: new Set(),
     checked: false,
     opener: !options.continuation,
+    parts: [],
   };
   const current = turn;
   prepareWaitLines().then(
@@ -244,6 +252,48 @@ export function waitTurnAnswered(streamKey: string) {
   current.state.answerStarted = true;
   closeToolLines(current);
   plan();
+}
+
+/**
+ * The reply's audio arrived. Inside a spoken part it is that part's voice,
+ * which `waitTurnSpeaks` has counted; otherwise it reads the answer.
+ */
+export function waitTurnAudio(streamKey: string) {
+  if (forTurn(streamKey)?.parts.length) return;
+  waitTurnAnswered(streamKey);
+}
+
+/**
+ * The reply's spoken part has begun. It may be the answer or a line before
+ * a tool call, so it pauses the wait rather than end it: a tool call after
+ * it lets the lines go on, the written answer ends them.
+ */
+export function waitTurnSpeaks(streamKey: string) {
+  const current = forTurn(streamKey);
+  if (!current) return;
+  const { state } = current;
+  if (state.answerStarted || state.ended) return;
+  // More text of the open part, unless a tool call came after it: a new
+  // model call speaks a part of its own.
+  const open = current.parts.at(-1);
+  if (open && !state.tools.some((tool) => tool.startedAt >= open.startedAt))
+    return;
+  const part: SaidLine = { kind: "reply", startedAt: now() };
+  current.parts.push(part);
+  state.said.push(part);
+  plan();
+}
+
+/** The spoken part has all its audio: it counts as said once that played. */
+export function waitTurnSpokenEnd(streamKey: string) {
+  const current = forTurn(streamKey);
+  const part = current?.parts.shift();
+  if (!current || !part) return;
+  void afterReplyAudio().then(() => {
+    if (turn !== current) return;
+    part.endedAt ??= now();
+    plan();
+  });
 }
 
 /** The turn's stream ended: a line that plays finishes, nothing follows. */
@@ -272,7 +322,7 @@ export function waitTurnTool(
   label: ToolCallLabel | null | undefined,
 ) {
   const current = forTurn(streamKey);
-  if (!current || !loaded) return;
+  if (!current) return;
   const { state } = current;
   let tool = state.tools.find((entry) => entry.id === toolCallId);
   if (status === "success" || status === "error") {
@@ -285,11 +335,15 @@ export function waitTurnTool(
   current.toolsSeen.add(toolCallId);
   tool = { id: toolCallId, startedAt: now(), ready: false };
   state.tools.push(tool);
-  if (state.answerStarted || state.ended || loaded.amount === "off") return;
-  const text = toolWaitLine(label, loaded.language, loaded.tools);
+  const text =
+    !loaded || state.answerStarted || state.ended || loaded.amount === "off"
+      ? null
+      : toolWaitLine(label, loaded.language, loaded.tools);
   if (!text) {
-    // Nothing to say about it; the fixed lines cover the wait.
-    state.tools = state.tools.filter((entry) => entry !== tool);
+    // A call without a line still counts: after a spoken part, it lets the
+    // fixed lines cover the wait.
+    tool.silent = true;
+    plan();
     return;
   }
   const line: ToolLine = { messageId, text, chunks: [], close: () => {} };
@@ -302,7 +356,7 @@ export function waitTurnTool(
     settled = true;
     line.chunks = [];
     current.toolLines.delete(toolCallId);
-    state.tools = state.tools.filter((entry) => entry !== added);
+    added.silent = true;
     if (turn === current) plan();
   };
   line.close = createSSEConnection(
@@ -343,6 +397,7 @@ export function waitTurnTool(
       onClose: fail,
     },
   );
+  plan();
 }
 
 const closeToolLines = (current: Turn) => {
@@ -451,18 +506,19 @@ function plan() {
     state.answerStarted = true;
     return;
   }
-  state.said.push({
+  const said: SaidLine = {
     kind: step.line,
     ...(step.line === "tool" ? { toolCallId: step.toolCallId } : {}),
     ...(step.line === "still" && step.repeat ? { repeat: true } : {}),
     startedAt: now(),
-  });
+  };
+  state.said.push(said);
   if (step.line === "opener") openersSaid += 1;
   if (slot) lastSaid.set(slot, clips[0].text);
   busy = true;
   holdReplyAudio();
   lineDone = () => {
-    const said = state.said[state.said.length - 1];
+    // Not the last entry: a spoken part may have begun while the line played.
     said.endedAt ??= now();
     // The answer goes on the reply queue before anything waiting for the
     // line (a card) is let go, so it is never overtaken.

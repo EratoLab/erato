@@ -56,6 +56,9 @@ import {
   endWaitTurn,
   moveWaitTurn,
   waitTurnAnswered,
+  waitTurnAudio,
+  waitTurnSpeaks,
+  waitTurnSpokenEnd,
   waitTurnTool,
 } from "@/hooks/audio/waitLines";
 import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
@@ -1085,7 +1088,7 @@ export function useChatMessaging(
         // Handle different message types from SSE
         switch (responseData.message_type) {
           case "audio_delta":
-            waitTurnAnswered(activeStreamKey);
+            waitTurnAudio(activeStreamKey);
             playSpeechChunk(
               responseData.message_id,
               responseData.sequence,
@@ -1242,12 +1245,13 @@ export function useChatMessaging(
 
           case "spoken_delta":
             if (responseData.new_text.trim().length > 0)
-              waitTurnAnswered(activeStreamKey);
+              waitTurnSpeaks(activeStreamKey);
             spokenPartBegins(activeStreamKey);
             handleSpokenDelta(responseData, activeStreamKey);
             break;
 
           case "spoken_end":
+            waitTurnSpokenEnd(activeStreamKey);
             spokenPartEnds(activeStreamKey, responseData.message_id);
             break;
 

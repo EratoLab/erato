@@ -112,16 +112,24 @@ const clearUnderrun = () => {
   clearTimeout(underrunTimer);
   underrunTimer = undefined;
 };
+let quietWaiters: (() => void)[] = [];
+const replyQuiet = () => !queue.active && held === null && gate === null;
+const settleQuiet = () => {
+  if (!replyQuiet()) return;
+  const waiters = quietWaiters;
+  quietWaiters = [];
+  for (const resolve of waiters) resolve();
+};
 const queue = createPcmQueue(() => {
   clearUnderrun();
+  settleQuiet();
   if (audioEnded || !accepting) {
     useSpeechPlayback.setState({ playing: false });
     return;
   }
   underrunTimer = setTimeout(() => {
     underrunTimer = undefined;
-    if (!queue.active && held === null && gate === null)
-      useSpeechPlayback.setState({ playing: false });
+    if (replyQuiet()) useSpeechPlayback.setState({ playing: false });
   }, UNDERRUN_HOLD_MS);
 });
 const interruptListeners = new Set<() => void>();
@@ -138,6 +146,17 @@ export function onSpeechInterrupted(listener: () => void): () => void {
 const interrupted = () => {
   for (const listener of interruptListeners) listener();
 };
+
+/**
+ * Resolves once the reply's voice has played out the audio it has, at once
+ * when it has none: a wait line after a spoken part waits for its end.
+ */
+export function afterReplyAudio(): Promise<void> {
+  return new Promise((resolve) => {
+    quietWaiters.push(resolve);
+    settleQuiet();
+  });
+}
 
 /**
  * A wait line plays: the answer's audio waits for it. Until it is released
@@ -157,6 +176,7 @@ export function releaseReplyAudio() {
   const context = playbackContext();
   if (chunks.length === 0 || !accepting || context?.state !== "running") {
     if (!queue.active) useSpeechPlayback.setState({ playing: false });
+    settleQuiet();
     return;
   }
   for (const chunk of chunks) {
@@ -195,6 +215,7 @@ export function stopSpeechPlayback(streamKey?: string) {
   clearUnderrun();
   queue.stop();
   useSpeechPlayback.setState({ playing: false, paused: false });
+  settleQuiet();
   interrupted();
 }
 

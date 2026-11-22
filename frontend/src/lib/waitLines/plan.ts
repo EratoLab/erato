@@ -19,6 +19,10 @@
  * - The opener is said only close to when it was due: a check of the lines
  *   that answers late leaves it out rather than say "one moment" at 20 s.
  * - Lines `minGapMs` apart, one at a time. `maxPerTurn` 0 says nothing.
+ * - The reply's own spoken part counts as a line said, so the opener is not
+ *   said after it and it counts toward `maxPerTurn`. It may be the answer or
+ *   a line before a tool call, so it pauses the wait: nothing more is said
+ *   until a tool call starts after it.
  */
 
 export type WaitAmount = "normal" | "long_only" | "off";
@@ -43,7 +47,8 @@ export interface WaitTiming {
 export type WaitLineKind = "opener" | "tool" | "still" | "long";
 
 export interface SaidLine {
-  kind: WaitLineKind;
+  /** `reply`: the reply's own spoken part. */
+  kind: WaitLineKind | "reply";
   toolCallId?: string;
   /** A "still on it" said again after the long line. */
   repeat?: boolean;
@@ -58,6 +63,8 @@ export interface WaitTool {
   endedAt?: number;
   /** Its line's audio has fully arrived. */
   ready: boolean;
+  /** It has no line, or its line failed: it only counts as a call made. */
+  silent?: boolean;
 }
 
 export interface WaitTurnState {
@@ -99,6 +106,10 @@ export function nextWaitStep(
   if (turn.said.some((line) => line.endedAt === undefined)) {
     return { kind: "wait" };
   }
+  const reply = turn.said.findLast((line) => line.kind === "reply");
+  if (reply && !turn.tools.some((tool) => tool.startedAt >= reply.startedAt)) {
+    return { kind: "wait" };
+  }
   const lastEnd = Math.max(
     -Infinity,
     ...turn.said.map((line) => line.endedAt ?? -Infinity),
@@ -115,7 +126,7 @@ export function nextWaitStep(
   let toolLoading = false;
   if (underCap && usable("tool")) {
     for (const tool of turn.tools) {
-      if (tool.endedAt !== undefined) continue;
+      if (tool.endedAt !== undefined || tool.silent) continue;
       if (turn.said.some((line) => line.toolCallId === tool.id)) continue;
       if (!tool.ready) {
         toolLoading = true;
