@@ -19,7 +19,8 @@ export type WordPartsRowState =
   | "checking"
   | "ready"
   | "not-written"
-  | "changed-in-word";
+  | "changed-in-word"
+  | "left-out";
 
 export interface WordPartsSectionRow {
   /** The section plan's row number, from 1. */
@@ -38,14 +39,16 @@ export interface WordPartsStructure {
   renames: { row: number; title: string; newTitle: string }[];
 }
 
-/** A row's status in the pane's section plan and finish receipts. */
+/** A row's status in the pane's section plan and finish receipts; `left_out`: the finish checks
+ * refused the row's part, and a finish sent again kept the row as it was. */
 export type WordPartReceiptStatus =
   | "waiting"
   | "ready"
   | "kept"
   | "deleted"
   | "not_written"
-  | "changed_in_word";
+  | "changed_in_word"
+  | "left_out";
 
 /** Why the finish left the reordering out: the document changed in Word, and reordering replaces
  * the whole document, which Apply then refuses. */
@@ -280,6 +283,7 @@ const FINISHED_STATES: Partial<
   deleted: "ready",
   not_written: "not-written",
   changed_in_word: "changed-in-word",
+  left_out: "left-out",
 };
 
 /** `leftOut`: rows the finish kept as they were, so they neither rename nor join blocks. */

@@ -858,7 +858,9 @@ export function WordDocumentPlanCard({
   // Rows the parts card names on their own are not repeated in the left-out line.
   const shownGaps = new Set(
     parts?.progress.rows.flatMap((row) =>
-      row.state === "not-written" || row.state === "changed-in-word"
+      row.state === "not-written" ||
+      row.state === "changed-in-word" ||
+      row.state === "left-out"
         ? [row.title]
         : [],
     ),

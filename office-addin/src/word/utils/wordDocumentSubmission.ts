@@ -22,6 +22,7 @@ import {
   WORD_PARTS_REORDERING_LEFT_OUT,
   wordPartRowLabel,
   wordPartRows,
+  wordPartRowTitle,
   wordPartsChangedInWord,
   wordPartsFinishRejected,
   wordPartsWithout,
@@ -40,6 +41,7 @@ import {
   wordInPlaceAvailability,
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
+import { wordPartsFinishChecks } from "./wordPartChecks";
 import {
   WORD_LEFT_OUT_EARLIER,
   wordNotInProposalGroups,
@@ -312,8 +314,26 @@ function createSubmissionExecutor(
           serialized,
           finish.result,
         );
-      let staging = finish
-        ? wordPartsFinishStaging(finish.draft, snapshot, session.capture)
+      const checked =
+        finish &&
+        wordPartsFinishChecks(snapshot, finish, (r) =>
+          wordPartRowTitle(finish.draft.plan.rows[r], snapshot),
+        );
+      if (finish && checked) finish.assembly = checked.assembly;
+      // Parts the finish checks leave out stay out when Word's changes are staged.
+      const staged =
+        finish && checked?.leftOut.length
+          ? {
+              ...finish.draft,
+              parts: new Map(
+                [...finish.draft.parts].filter(
+                  ([r]) => !checked.leftOut.includes(r),
+                ),
+              ),
+            }
+          : finish?.draft;
+      let staging = staged
+        ? wordPartsFinishStaging(staged, snapshot, session.capture)
         : undefined;
       if (staging && "refusal" in staging)
         return session.drafts.remember(
@@ -377,7 +397,7 @@ function createSubmissionExecutor(
       // Word may change a section while the finish is checked; the smaller change is checked once more.
       for (let round = 0; finish && staging && !changed; round++) {
         const later = wordPartsFinishStaging(
-          finish.draft,
+          staged!,
           snapshot,
           session.capture,
         );
@@ -402,6 +422,36 @@ function createSubmissionExecutor(
       }
       if (changed)
         return session.drafts.remember(context.toolCallId, serialized, changed);
+      // One refusal names what the checks found and what the pipeline refuses.
+      const finishRejected =
+        finish && checked && !prepared.ok
+          ? wordPartsFinishRejected(
+              prepared,
+              { draft: finish.draft, assembly: finish.assembly },
+              snapshot,
+            )
+          : undefined;
+      if (checked?.issues.length) {
+        checked.refused();
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          sparseRejection(input, {
+            ok: false,
+            error: "Document plan finish rejected.",
+            validationErrors: [
+              ...checked.issues,
+              ...((finishRejected?.ok === false &&
+                finishRejected.validationErrors) ||
+                []),
+            ].slice(0, 16),
+            ...(finishRejected?.ok === false &&
+            finishRejected.submissionFeedback
+              ? { submissionFeedback: finishRejected.submissionFeedback }
+              : {}),
+          }),
+        );
+      }
       let result = prepared;
       if (prepared.ok) {
         session.drafts.accepted = true;
@@ -436,6 +486,12 @@ function createSubmissionExecutor(
               reason: "which the section plan announced but no part wrote",
             },
             {
+              parts: (checked?.leftOut ?? []).map((r) =>
+                wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+              ),
+              reason: "whose part the finish checks refused",
+            },
+            {
               parts: sectionPlan
                 ? wordPartsNotInProposal(
                     snapshot,
@@ -467,6 +523,7 @@ function createSubmissionExecutor(
                     rows: wordPartRows(finish.draft, snapshot, {
                       finished: true,
                       changed: changedInWord,
+                      leftOut: checked?.leftOut,
                     }),
                   }
                 : {}),
@@ -476,11 +533,8 @@ function createSubmissionExecutor(
               ...notInProposal,
             },
           };
-      } else if (finish) {
-        result = sparseRejection(
-          input,
-          wordPartsFinishRejected(prepared, finish, snapshot),
-        );
+      } else if (finishRejected) {
+        result = sparseRejection(input, finishRejected);
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the
         // expanded plan the model never saw.

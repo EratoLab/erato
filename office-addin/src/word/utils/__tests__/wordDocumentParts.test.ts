@@ -8,83 +8,42 @@ import {
 } from "@erato/frontend/word-review";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { completeWordRead } from "../../../test/mocks/word/partsTurn";
-import { wordDocumentFileToOoxml } from "../wordDocumentPackage";
-import { createWordDocumentPartExecutors } from "../wordDocumentPartTools";
+import {
+  openWordParts,
+  partsReceipt,
+  partsRejection,
+  WORD_PARTS_FIXTURES,
+} from "../../../test/mocks/word/wordPartsTurn";
 import { finishWordParts, wordPartsFinishRejected } from "../wordDocumentParts";
-import { WordDocumentReadSession } from "../wordDocumentReadTool";
-import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
-import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 
-import type {
-  ClientToolCallContext,
-  ClientToolExecutionResult,
-  ContentPart,
-} from "@erato/frontend/library";
+import type { ContentPart } from "@erato/frontend/library";
 import type { WordDocumentPlan } from "@erato/frontend/word-review";
 
-const FIXTURES = `${process.cwd()}/src/test/fixtures/word-parts`;
-const CONTRACT = new Uint8Array(
-  readFileSync(`${FIXTURES}/framework-contract.docx`),
-);
 /** The probe's T1 parts (qwen3.8-max), one section plan row per part. */
-const T1 = JSON.parse(readFileSync(`${FIXTURES}/t1-parts.json`, "utf8")) as {
+const T1_RAW = JSON.parse(
+  readFileSync(`${WORD_PARTS_FIXTURES}/t1-parts.json`, "utf8"),
+) as {
   plan: { intent: string; terms: string[]; rows: Record<string, string>[] };
   parts: { row: number; ops: Record<string, string>[] }[];
 };
-
-let calls = 0;
-const context = (): ClientToolCallContext => ({
-  chatId: "chat-A",
-  messageId: "message-A",
-  toolCallId: `call-${++calls}`,
-});
-
-async function open() {
-  const snapshot = captureWordAuthoringSnapshot(
-    wordDocumentFileToOoxml(CONTRACT),
-    "Rahmenvertrag.docx",
-    "Off",
-    true,
-  );
-  const session = new WordDocumentReadSession();
-  session.activate(snapshot, context());
-  const readToken = await completeWordRead(session, snapshot, context);
-  const parts = createWordDocumentPartExecutors(session);
-  const submit = createWordDocumentSubmissionExecutor(session);
-  const base = { snapshot: snapshot.token };
-  return {
-    snapshot,
-    session,
-    readToken,
-    plan: (input: Record<string, unknown>) =>
-      parts.plan({ ...base, readToken, ...input }, context()),
-    write: (draft: string, row: number, ops: unknown, call = context()) =>
-      parts.write({ ...base, draft_id: draft, row, ops }, call),
-    finish: (draft: string, revision: number, call = context()) =>
-      submit(
-        { ...base, readToken, draft_id: draft, revision, finish: true },
-        call,
-      ),
-    submit: (input: Record<string, unknown>) =>
-      submit({ ...base, readToken, ...input }, context()),
-  };
-}
-
-type Receipt = {
-  draft_id: string;
-  revision: number;
-  rows: { row: number; title: string; status: string }[];
-  rows_left: number[];
+/** What the code checks find in the T1 writer's parts, sent as intended so these tests exercise
+ * the pipeline; wordPartChecks.test.ts sends them as they are. */
+const T1_ALLOW: Record<number, string[]> = {
+  3: ["term"],
+  4: ["clause-numbering", "term"],
+  5: ["kept-unchanged"],
+  6: ["kept-unchanged"],
+  7: ["clause-numbering", "term"],
 };
-const receipt = (result: ClientToolExecutionResult) => {
-  if (!result.ok) throw new Error(JSON.stringify(result.validationErrors));
-  return result.result as Receipt;
+const T1 = {
+  plan: T1_RAW.plan,
+  parts: T1_RAW.parts.map((part) => ({ ...part, allow: T1_ALLOW[part.row] })),
 };
-const rejection = (result: ClientToolExecutionResult) => {
-  expect(result.ok).toBe(false);
-  return result.ok ? undefined : result;
-};
+const ALL_CHECKS = ["numbers", "clause-numbering", "term", "kept-unchanged"];
+
+const open = openWordParts;
+const receipt = partsReceipt;
+const rejection = partsRejection;
 
 // Every call runs the shipping compile and verification on a 422-block document.
 describe("a large change in parts", { timeout: 30_000 }, () => {
@@ -105,7 +64,9 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     ]);
     let { draft_id, revision } = planned;
     for (const part of T1.parts) {
-      const written = receipt(await doc.write(draft_id, part.row, part.ops));
+      const written = receipt(
+        await doc.write(draft_id, part.row, part.ops, undefined, part.allow),
+      );
       expect(written).toMatchObject({ row: part.row, status: "ready" });
       ({ draft_id, revision } = written);
     }
@@ -197,11 +158,17 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     const { draft_id } = receipt(await doc.plan(T1.plan));
     expect(
       rejection(
-        await doc.write(draft_id, 5, [
-          { keep: "b350-b353" },
-          { replace: "b354-b358", text: "Gut.\nStufe \u0007 eins" },
-          { keep: "b359-b380" },
-        ]),
+        await doc.write(
+          draft_id,
+          5,
+          [
+            { keep: "b350-b353" },
+            { replace: "b354-b358", text: "Gut.\nStufe \u0007 eins" },
+            { keep: "b359-b380" },
+          ],
+          undefined,
+          ALL_CHECKS,
+        ),
       )?.validationErrors,
     ).toEqual([
       {
@@ -257,9 +224,13 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     const { draft_id } = receipt(await doc.plan(T1.plan));
     expect(
       rejection(
-        await doc.write(draft_id, 5, [
-          { replace: "b350-b380", text: "Lang. ".repeat(50_000) },
-        ]),
+        await doc.write(
+          draft_id,
+          5,
+          [{ replace: "b350-b380", text: "Lang. ".repeat(50_000) }],
+          undefined,
+          ALL_CHECKS,
+        ),
       )?.validationErrors,
     ).toEqual([
       {
@@ -310,7 +281,7 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     let { draft_id, revision } = receipt(await doc.plan(T1.plan));
     for (const part of T1.parts.slice(0, -1))
       ({ draft_id, revision } = receipt(
-        await doc.write(draft_id, part.row, part.ops),
+        await doc.write(draft_id, part.row, part.ops, undefined, part.allow),
       ));
     expect(
       rejection(await doc.finish(draft_id, revision - 1))
@@ -345,7 +316,7 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     let { draft_id, revision } = receipt(await doc.plan(T1.plan));
     for (const part of T1.parts)
       ({ draft_id, revision } = receipt(
-        await doc.write(draft_id, part.row, part.ops),
+        await doc.write(draft_id, part.row, part.ops, undefined, part.allow),
       ));
     const input = {
       snapshot: doc.snapshot.token,
@@ -407,7 +378,15 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     });
 
     doc.snapshot.trackingMode = "Off";
-    ({ revision } = receipt(await doc.write(draft_id, 5, T1.parts[2].ops)));
+    ({ revision } = receipt(
+      await doc.write(
+        draft_id,
+        5,
+        T1.parts[2].ops,
+        undefined,
+        T1.parts[2].allow,
+      ),
+    ));
     doc.snapshot.trackingMode = "TrackAll";
     expect(
       rejection(await doc.finish(draft_id, revision))?.submissionFeedback
@@ -449,7 +428,9 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     const [first, second] = await Promise.all(
       T1.parts
         .slice(0, 2)
-        .map((part) => doc.write(draft_id, part.row, part.ops)),
+        .map((part) =>
+          doc.write(draft_id, part.row, part.ops, undefined, part.allow),
+        ),
     );
     expect([receipt(first).revision, receipt(second).revision]).toEqual([2, 3]);
     expect(receipt(second).rows_left).toEqual([5, 6, 7]);
@@ -479,9 +460,13 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
     );
     expect(
       rejection(
-        await doc.write(draft_id, 2, [
-          { replace: "b101", text: "- eins\n- zwei" },
-        ]),
+        await doc.write(
+          draft_id,
+          2,
+          [{ replace: "b101", text: "- eins\n- zwei" }],
+          undefined,
+          ALL_CHECKS,
+        ),
       )?.validationErrors?.[0],
     ).toMatchObject({ code: "web-needs-whole-document" });
   });
@@ -524,7 +509,15 @@ describe("a large change in parts", { timeout: 30_000 }, () => {
   it("keeps the parts of unchanged rows when the section plan is sent again", async () => {
     const doc = await open();
     let { draft_id } = receipt(await doc.plan(T1.plan));
-    ({ draft_id } = receipt(await doc.write(draft_id, 3, T1.parts[0].ops)));
+    ({ draft_id } = receipt(
+      await doc.write(
+        draft_id,
+        3,
+        T1.parts[0].ops,
+        undefined,
+        T1.parts[0].allow,
+      ),
+    ));
     const rows = T1.plan.rows.map((row, k) =>
       k === 3 ? { source: row.source, action: "keep" } : row,
     );

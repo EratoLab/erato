@@ -15,6 +15,7 @@ import { wordBlockTitle, wordPassageStart } from "./wordPlanDocumentChanges";
 import { wordWrittenChanges } from "./wordReadFreshness";
 import { WORD_PLAN_PATH, WORD_PLAN_PATH_IN_TEXT } from "./wordScopedSubmission";
 
+import type { WordPartAllow } from "./wordPartChecks";
 import type { WordLeftOutPart } from "./wordPlanCoverage";
 import type { WordReadCapture } from "./wordReadFreshness";
 import type {
@@ -68,8 +69,12 @@ export interface WordPartsDraft {
   readToken: string;
   plan: WordPartsPlan;
   parts: Map<number, WordPartOp[]>;
-  /** A finish at this revision was refused for rows without a part, so the next one leaves them. */
-  unwrittenRefusedAt?: number;
+  /** Per written row: the checks its part allows, and those that found a change it allows. */
+  allow: Map<number, ReadonlySet<WordPartAllow>>;
+  waived: Map<number, WordPartAllow[]>;
+  /** What a refused finish named: rows without a part, by their blocks, and parts the finish checks
+   * refused. A finish that would name only these again leaves them unchanged. */
+  named: { unwritten: Set<string>; parts: WeakSet<readonly WordPartOp[]> };
 }
 
 /** The part of the section plan an assembled entry or deletion came from. */
@@ -127,6 +132,19 @@ export function wordPartRefs(
   return refs;
 }
 
+/** Runs of consecutive integers, in the order given, as [first, last]. */
+export function wordConsecutiveRuns(
+  values: readonly number[],
+): [number, number][] {
+  const runs: [number, number][] = [];
+  for (const value of values) {
+    const last = runs.at(-1);
+    if (last && value === last[1] + 1) last[1] = value;
+    else runs.push([value, value]);
+  }
+  return runs;
+}
+
 export function wordPartRanges(
   refs: readonly string[],
   snapshot: WordAuthoringSnapshot,
@@ -135,16 +153,12 @@ export function wordPartRanges(
   const positions = refs
     .map((ref) => index.get(ref))
     .filter((at): at is number => at !== undefined);
-  const out: string[] = [];
-  for (let i = 0; i < positions.length; i++) {
-    let j = i;
-    while (j + 1 < positions.length && positions[j + 1] === positions[j] + 1)
-      j++;
-    const first = snapshot.blocks[positions[i]].ref;
-    out.push(i === j ? first : `${first}-${snapshot.blocks[positions[j]].ref}`);
-    i = j;
-  }
-  return out.join(",");
+  return wordConsecutiveRuns(positions)
+    .map(([from, to]) => {
+      const first = snapshot.blocks[from].ref;
+      return from === to ? first : `${first}-${snapshot.blocks[to].ref}`;
+    })
+    .join(",");
 }
 
 /** The heading a keep row's `title` renames: the block the row starts with. */
@@ -214,6 +228,20 @@ export const wordPartRowTitle = (
 /** "Row 6 (§ 9 Haftung)": how messages to the model name a row. */
 export const wordPartRowName = (rowIndex: number, title: string) =>
   `Row ${rowIndex + 1}${title ? ` (${title})` : ""}`;
+
+export const wordPartResend = (rowIndex: number) =>
+  `Send row ${rowIndex + 1} again with write_document_section.`;
+
+/** A finding about one row, as a finish or the section plan names it: the row, where in its part,
+ * the finding and what to send again. */
+export const wordPartRowFinding = (
+  rowIndex: number,
+  title: string,
+  where: { path: string; line?: number } | undefined,
+  message: string,
+  resend = wordPartResend(rowIndex),
+) =>
+  `${wordPartRowName(rowIndex, title)}${where ? `, at ${where.path}${where.line === undefined ? "" : ` line ${where.line}`}` : ""}: ${message} ${resend}`;
 
 export function parseWordPartsPlan(
   input: Record<string, unknown>,
@@ -664,16 +692,18 @@ export function wordPartIssues(
         message: `The section plan and its parts: ${message}`,
       };
     const part = "op" in origin;
-    const where = part
-      ? `, at ${path}${line === undefined ? "" : ` line ${line}`}`
-      : "";
-    const resend = part
-      ? `Send row ${origin.row + 1} again with write_document_section.`
-      : "Send the section plan again with this row fixed.";
     return {
       ...issue,
       path: "",
-      message: `${wordPartRowName(origin.row, titleOf(origin.row))}${where}: ${message} ${resend}`,
+      message: wordPartRowFinding(
+        origin.row,
+        titleOf(origin.row),
+        part ? { path, line } : undefined,
+        message,
+        part
+          ? wordPartResend(origin.row)
+          : "Send the section plan again with this row fixed.",
+      ),
     };
   });
 }
@@ -681,46 +711,78 @@ export function wordPartIssues(
 /** One section draft per request, cleared with the read session's drafts. */
 export class WordPartsDraftStore {
   private draft?: WordPartsDraft;
+  /** Sections of the request a fix request already named, so it is said once per request. */
+  readonly namedSections = new Set<number>();
 
   clear(): void {
     this.draft = undefined;
+    this.namedSections.clear();
   }
 
   get current(): WordPartsDraft | undefined {
     return this.draft;
   }
 
-  /** Rewrite rows with the same blocks keep their parts. */
-  carried(plan: WordPartsPlan): Map<number, WordPartOp[]> {
+  /** New row → the earlier rewrite row with the same blocks, whose part it keeps. */
+  private same(plan: WordPartsPlan): Map<number, number> {
     const previous = this.draft;
-    const parts = new Map<number, WordPartOp[]>();
+    const same = new Map<number, number>();
     if (previous)
       plan.rows.forEach((row, r) => {
         if (row.action !== "rewrite") return;
-        const same = previous.plan.rows.findIndex(
-          (old) =>
-            old.action === "rewrite" && old.refs.join() === row.refs.join(),
+        const old = previous.plan.rows.findIndex(
+          (was, k) =>
+            was.action === "rewrite" &&
+            was.refs.join() === row.refs.join() &&
+            previous.parts.has(k),
         );
-        const ops = same >= 0 ? previous.parts.get(same) : undefined;
-        if (ops) parts.set(r, ops);
+        if (old >= 0) same.set(r, old);
       });
+    return same;
+  }
+
+  /** Rewrite rows with the same blocks keep their parts. */
+  carried(plan: WordPartsPlan): Map<number, WordPartOp[]> {
+    const parts = new Map<number, WordPartOp[]>();
+    for (const [r, old] of this.same(plan))
+      parts.set(r, this.draft!.parts.get(old)!);
     return parts;
   }
 
   open(plan: WordPartsPlan, readToken: string): WordPartsDraft {
     const previous = this.draft;
+    const same = this.same(plan);
+    const moved = <T>(from: Map<number, T> | undefined) =>
+      new Map(
+        [...same].flatMap(([r, old]) =>
+          from?.has(old) ? [[r, from.get(old)!] as const] : [],
+        ),
+      );
     this.draft = {
       id: previous?.id ?? globalThis.crypto.randomUUID(),
       revision: (previous?.revision ?? 0) + 1,
       readToken,
       plan,
-      parts: this.carried(plan),
+      parts: moved(previous?.parts),
+      allow: moved(previous?.allow),
+      waived: moved(previous?.waived),
+      named: previous?.named ?? { unwritten: new Set(), parts: new WeakSet() },
     };
     return this.draft;
   }
 
-  write(draft: WordPartsDraft, row: number, ops: WordPartOp[]): void {
+  write(
+    draft: WordPartsDraft,
+    row: number,
+    ops: WordPartOp[],
+    {
+      allow,
+      waived,
+    }: { allow: ReadonlySet<WordPartAllow>; waived: WordPartAllow[] },
+  ): void {
     draft.parts.set(row, ops);
+    draft.allow.set(row, allow);
+    draft.waived.set(row, waived);
     draft.revision++;
   }
 }
@@ -730,38 +792,53 @@ export const wordUnwrittenRows = (draft: WordPartsDraft): number[] =>
     row.action === "rewrite" && !draft.parts.has(r) ? [r] : [],
   );
 
-/** `changed`: rows the finish left out because they changed in Word while Erato wrote them. */
+/** `changed`: rows the finish left out because they changed in Word while Erato wrote them.
+ * `leftOut`: written rows a finish leaves unchanged, since the finish checks refused their part. */
 export function wordPartRows(
   draft: WordPartsDraft,
   snapshot: WordAuthoringSnapshot,
   {
     finished = false,
     changed,
-  }: { finished?: boolean; changed?: ReadonlySet<number> } = {},
+    leftOut,
+  }: {
+    finished?: boolean;
+    changed?: ReadonlySet<number>;
+    leftOut?: readonly number[];
+  } = {},
 ) {
   const sections = wordCaptureSections(snapshot);
   const index = wordBlockIndex(snapshot);
-  return draft.plan.rows.map((row, r) => ({
-    row: r + 1,
-    action: row.action,
-    // A renamed row is named by the heading it renames, so old and new read as a pair.
-    title: row.title
-      ? (wordBlockTitle(sections, index.get(row.refs[0])!) ?? "")
-      : wordPartRowTitle(row, snapshot),
-    ...(row.title ? { new_title: row.title } : {}),
-    paragraphs: row.refs.length,
-    status: (changed?.has(r)
-      ? "changed_in_word"
-      : row.action === "keep"
-        ? "kept"
-        : row.action === "delete"
-          ? "deleted"
-          : draft.parts.has(r)
-            ? "ready"
-            : finished
-              ? "not_written"
-              : "waiting") satisfies WordPartReceiptStatus,
-  }));
+  return draft.plan.rows.map((row, r) => {
+    const written =
+      draft.parts.has(r) && !leftOut?.includes(r) && !changed?.has(r);
+    const allowed = written ? draft.waived.get(r) : undefined;
+    return {
+      row: r + 1,
+      action: row.action,
+      // A renamed row is named by the heading it renames, so old and new read as a pair.
+      title: row.title
+        ? (wordBlockTitle(sections, index.get(row.refs[0])!) ?? "")
+        : wordPartRowTitle(row, snapshot),
+      ...(row.title ? { new_title: row.title } : {}),
+      paragraphs: row.refs.length,
+      status: (changed?.has(r)
+        ? "changed_in_word"
+        : row.action === "keep"
+          ? "kept"
+          : row.action === "delete"
+            ? "deleted"
+            : leftOut?.includes(r)
+              ? "left_out"
+              : written
+                ? "ready"
+                : finished
+                  ? "not_written"
+                  : "waiting") satisfies WordPartReceiptStatus,
+      // Changes a check found and the part said were intended; the card does not show them yet (ERMAIN-1307).
+      ...(allowed?.length ? { allowed } : {}),
+    };
+  });
 }
 
 const refusal = (
@@ -784,8 +861,8 @@ export type WordPartsFinish =
     }
   | { ok: false; result: ClientToolExecutionResult };
 
-/** Rows without a part are refused once; finishing again at the same revision leaves them as they
- * are and the card names them, so nothing announced disappears unnoticed. */
+/** A finish of the current draft, assembled with every part; rows without one keep their blocks.
+ * Whether it is refused for them is the finish checks' call (wordPartsFinishChecks). */
 export function finishWordParts(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
@@ -817,25 +894,6 @@ export function finishWordParts(
       "draft-revision",
       `Use the draft_id and revision of the latest section plan or part receipt; the revision is now ${draft.revision}.`,
     );
-  const unwritten = wordUnwrittenRows(draft);
-  const leaveUnwritten = draft.unwrittenRefusedAt === draft.revision;
-  if (unwritten.length && !leaveUnwritten) {
-    draft.unwrittenRefusedAt = draft.revision;
-    const rows = unwritten.map((r) =>
-      wordPartRowName(r, wordPartRowTitle(draft.plan.rows[r], snapshot)),
-    );
-    const more = rows.length - 3;
-    const listed =
-      more > 0
-        ? `${rows.slice(0, 3).join(", ")} and ${more} more ${more === 1 ? "row" : "rows"}`
-        : rows.join(" and ");
-    const them = rows.length > 1 ? "them" : "it";
-    return fail(
-      "/finish",
-      "rows-not-written",
-      `${listed} ${rows.length > 1 ? "have" : "has"} no part yet. Write ${them} with write_document_section and finish again, or finish again at revision ${draft.revision} to leave ${them} unchanged; the card then says so.`,
-    );
-  }
   return {
     ok: true,
     draft,
@@ -845,13 +903,38 @@ export function finishWordParts(
       draft.plan,
       draft.parts,
     ),
-    unwritten: leaveUnwritten ? unwritten : [],
+    unwritten: wordUnwrittenRows(draft),
+  };
+}
+
+/** The refusal for rows without a part, with the way to leave them as they are. */
+export function wordUnwrittenRowsIssue(
+  draft: WordPartsDraft,
+  unwritten: readonly number[],
+  snapshot: WordAuthoringSnapshot,
+) {
+  const rows = unwritten.map((r) =>
+    wordPartRowName(r, wordPartRowTitle(draft.plan.rows[r], snapshot)),
+  );
+  const more = rows.length - 3;
+  const listed =
+    more > 0
+      ? `${rows.slice(0, 3).join(", ")} and ${more} more ${more === 1 ? "row" : "rows"}`
+      : rows.join(" and ");
+  const them = rows.length > 1 ? "them" : "it";
+  return {
+    path: "/finish",
+    code: "rows-not-written",
+    message: `${listed} ${rows.length > 1 ? "have" : "has"} no part yet. Write ${them} with write_document_section and finish again, or finish again at revision ${draft.revision} to leave ${them} unchanged; the card then says so.`,
   };
 }
 
 export function wordPartsFinishRejected(
   prepared: Extract<ClientToolExecutionResult, { ok: false }>,
-  { draft, assembly }: Extract<WordPartsFinish, { ok: true }>,
+  {
+    draft,
+    assembly,
+  }: Pick<Extract<WordPartsFinish, { ok: true }>, "draft" | "assembly">,
   snapshot: WordAuthoringSnapshot,
 ): ClientToolExecutionResult {
   return {
@@ -1051,7 +1134,16 @@ export function wordPartsFromContent(
         return undefined;
       const parsed = parseWordPartOps(part.input.ops, r, row, snapshot);
       if ("issues" in parsed) return undefined;
-      store.write(store.current, r, parsed.ops);
+      store.write(store.current, r, parsed.ops, {
+        allow: new Set(
+          (Array.isArray(part.input.allow) ? part.input.allow : []).filter(
+            (code): code is WordPartAllow => typeof code === "string",
+          ),
+        ),
+        waived: Array.isArray(result.allowed)
+          ? (result.allowed as WordPartAllow[])
+          : [],
+      });
     } else if (store.current && isAcceptedWordPartsFinish(part))
       finished = result;
   }
@@ -1065,6 +1157,12 @@ export function wordPartsFromContent(
         row.status === ("changed_in_word" satisfies WordPartReceiptStatus)
       )
         changed.add(r);
+      // A written part the finish checks left out is not in the accepted plan.
+      else if (
+        object(row) &&
+        row.status === ("left_out" satisfies WordPartReceiptStatus)
+      )
+        draft.parts.delete(r);
     });
   return {
     draft,

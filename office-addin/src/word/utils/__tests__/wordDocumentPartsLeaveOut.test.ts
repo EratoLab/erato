@@ -39,9 +39,23 @@ const FIXTURES = `${process.cwd()}/src/test/fixtures/word-parts`;
 const CONTRACT = new Uint8Array(
   readFileSync(`${FIXTURES}/framework-contract.docx`),
 );
-const T1 = JSON.parse(readFileSync(`${FIXTURES}/t1-parts.json`, "utf8")) as {
+const T1_RAW = JSON.parse(
+  readFileSync(`${FIXTURES}/t1-parts.json`, "utf8"),
+) as {
   plan: Record<string, unknown> & { rows: Record<string, string>[] };
   parts: { row: number; ops: Record<string, string>[] }[];
+};
+/** What the code checks (ERMAIN-1298) find in the T1 writer's parts, sent as intended. */
+const T1_ALLOW: Record<number, string[]> = {
+  3: ["term"],
+  4: ["clause-numbering", "term"],
+  5: ["kept-unchanged"],
+  6: ["kept-unchanged"],
+  7: ["clause-numbering", "term"],
+};
+const T1 = {
+  plan: T1_RAW.plan,
+  parts: T1_RAW.parts.map((part) => ({ ...part, allow: T1_ALLOW[part.row] })),
 };
 
 const capture = () =>
@@ -144,6 +158,56 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
     expect(progress.rows.every((row) => row.state === "ready")).toBe(true);
   });
 
+  it("rebuilds the accepted plan after a finish that left a refused row out", async () => {
+    const snapshot = capture();
+    const turn = await recordPartsTurn(snapshot, {
+      plan: T1.plan,
+      parts: T1.parts.map((part) =>
+        part.row === 4
+          ? {
+              ...part,
+              ops: part.ops.map((op, k) =>
+                k === 1
+                  ? { ...op, text: op.text.replace("\n", " Es gilt § 10.\n") }
+                  : op,
+              ),
+              allow: [...part.allow, "numbers"],
+            }
+          : part,
+      ),
+      finishes: 2,
+    });
+    if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    const codes = (output: unknown) =>
+      (
+        output as { validation_errors?: { code: string }[] }
+      ).validation_errors?.map(({ code }) => code) ?? [];
+    expect(
+      turn.content.map((part) =>
+        part.content_type === "tool_use" ? codes(part.output) : [],
+      ),
+    ).toEqual([[], [], [], [], [], [], ["cross-reference"], []]);
+    const result = turn.last.result as {
+      plan: WordDocumentPlan;
+      rows: { row: number; status: string }[];
+    };
+    expect(result.rows).toContainEqual(
+      expect.objectContaining({ row: 4, status: "left_out" }),
+    );
+    const rebuilt = wordPartsFromContent(turn.content, snapshot)!;
+    expect([...rebuilt.draft.parts.keys()]).toEqual([2, 4, 5, 6]);
+    expect(
+      canonicalWordPlan(
+        assembleWordParts(
+          snapshot,
+          rebuilt.draft.readToken,
+          rebuilt.draft.plan,
+          rebuilt.draft.parts,
+        ).plan,
+      ),
+    ).toBe(canonicalWordPlan(result.plan));
+  });
+
   it("sends the rest in place once the reordering is left out", async () => {
     const snapshot = capture();
     const ref = inPlaceParagraph(snapshot);
@@ -158,7 +222,13 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
           ["b215-b422", "keep"],
         ]),
       },
-      parts: [{ row: 4, ops: opsReplacing(ref) }],
+      parts: [
+        {
+          row: 4,
+          ops: opsReplacing(ref),
+          allow: ["numbers", "clause-numbering", "term", "kept-unchanged"],
+        },
+      ],
     });
     if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
     const accepted = (turn.last.result as { plan: WordDocumentPlan }).plan;
@@ -264,6 +334,9 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
       readToken: "read",
       plan: parsed.plan,
       parts: new Map([[3, part]]),
+      allow: new Map(),
+      waived: new Map(),
+      named: { unwritten: new Set(), parts: new WeakSet() },
     };
     expect(wordPartRows(draft, snapshot)[3].title).toContain(" – ");
     const flat = wordPartsWithout(
@@ -293,7 +366,13 @@ describe("a finished change in parts, row by row", { timeout: 60_000 }, () => {
           ["b215-b422", "keep"],
         ]),
       },
-      parts: [{ row: 4, ops: opsReplacing(ref) }],
+      parts: [
+        {
+          row: 4,
+          ops: opsReplacing(ref),
+          allow: ["numbers", "clause-numbering", "term", "kept-unchanged"],
+        },
+      ],
     });
     const { draft } = wordPartsFromContent(turn.content, snapshot)!;
     for (const structure of [false, true]) {

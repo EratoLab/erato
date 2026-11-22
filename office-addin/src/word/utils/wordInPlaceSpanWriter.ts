@@ -67,7 +67,7 @@ function runsOf(list: readonly Token[]): WordInPlaceRun[] {
 }
 
 /** Longest common subsequence of token keys, as matched index pairs. */
-function matches(
+export function wordMatchedPairs(
   a: readonly string[],
   b: readonly string[],
 ): [number, number][] {
@@ -109,7 +109,7 @@ export function planWordSpanEdits(
     characterMarks(target),
   );
   if (live.length * wanted.length > MAX_DIFF_CELLS) return undefined;
-  const pairs = matches(live.map(tokenKey), wanted.map(tokenKey));
+  const pairs = wordMatchedPairs(live.map(tokenKey), wanted.map(tokenKey));
   if (!pairs.length) return undefined;
   const edits: WordSpanEdit[] = [];
   const bounds: [number, number][] = [

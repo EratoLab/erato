@@ -130,7 +130,7 @@ export async function recordPartsTurn(
   }: {
     messageId?: string;
     plan: Record<string, unknown>;
-    parts: { row: number; ops: unknown }[];
+    parts: { row: number; ops: unknown; allow?: string[] }[];
     finish?: boolean;
     /** A second finish at the same revision leaves rows without a part as they are. */
     finishes?: number;
@@ -178,7 +178,13 @@ export async function recordPartsTurn(
   for (const part of parts) {
     last = await run(
       WORD_WRITE_SECTION_TOOL,
-      { snapshot: snapshot.token, draft_id, row: part.row, ops: part.ops },
+      {
+        snapshot: snapshot.token,
+        draft_id,
+        row: part.row,
+        ops: part.ops,
+        ...(part.allow ? { allow: part.allow } : {}),
+      },
       executors.write,
     );
     if (last.ok) ({ revision } = last.result as { revision: number });

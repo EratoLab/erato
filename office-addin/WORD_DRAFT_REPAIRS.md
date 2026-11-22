@@ -75,12 +75,14 @@ no title, since Word numbers it by its place.
 `submit_document_plan` with `{snapshot, readToken, draft_id, revision,
 finish:true}` assembles every part and runs the full pipeline. Its receipt
 carries `result.plan`, as a repair's does, so review and Apply are unchanged,
-plus `result.rows`. A finish with rows still unwritten is refused once; a
-second finish at the same revision accepts the change with those rows kept and
-names them in `notInProposal`. A smaller plan accepted after a section plan
-names the parts the section plan announced and it leaves out. A refused finish
-names the row to send again; the same refusal twice at one revision ends the
-step. The section draft has the read session's lifetime, like the repair draft.
+plus `result.rows`. A finish with rows still unwritten, or with findings of the
+code checks below, is refused once, in one refusal with the pipeline's own
+errors. A later finish that would name only rows an earlier refusal named
+accepts the change with those rows as they are in the document and names them
+in `notInProposal`, so a row that has used its tries never costs the whole
+change. A smaller plan accepted after a section plan names the parts the
+section plan announced and it leaves out. A refused finish names the row to
+send again; the same pipeline refusal twice at one revision ends the step. The section draft has the read session's lifetime, like the repair draft.
 The read contract describes the part tools on every complete read, since the
 pane does not know which tools a request offers.
 
@@ -111,3 +113,60 @@ plan only and the card's Structure row agrees with Apply's route. Rows and
 Check first both read the review of the plan Apply writes; the assembler's
 record of where each entry came from maps its review rows to section plan
 rows (`wordPartsApplied`).
+
+### Code checks
+
+Each part is also compared with the capture (ERMAIN-1298, `wordPartChecks.ts`).
+The rules come from the document itself, so they need no language tables, and
+meaning is left to the review:
+
+- `numbers`: the numbers and amounts of the replaced blocks, as a multiset,
+  against the new text; clause markers, a heading's own number and references
+  to the document's sections by their old or new numbers are left out, and the
+  numbers of blocks the part deletes may reappear in its new text, as in a
+  merge.
+- `clause-numbering`: the clause markers such as "(1)" or "a)" of the replaced
+  paragraphs, in order, against the new lines.
+- `term`: a term of the section plan's `terms` that a replaced paragraph has
+  and its new text lacks.
+- `row-scope`: a new line that repeats its block word for word, as the same
+  kind of block (a list item's list type and level included) with the same
+  bold and italic spans as the read shows them (keep it by reference), or a
+  part that keeps every block of its rewrite row.
+- `kept-unchanged`: a part that leaves more than half of its row's body
+  paragraphs (paragraphs and list items; headings and tables do not count)
+  unchanged.
+
+A part's `allow` waives `numbers`, `clause-numbering`, `term`,
+`kept-unchanged` or `cross-reference` when its change is intended. The contract
+offers `kept-unchanged` already with a row's first part, since the model wrote
+the keeps itself and a section-sized row with a targeted change keeps most of
+its paragraphs; the others only once their error names the change. The receipt
+and the finish's `rows` list what a check found and the part allowed as
+`allowed`; the card does not show them yet (ERMAIN-1307). A refused part names the
+line and says the fix; the shipping pipeline's own errors come in the same
+refusal.
+
+The finish checks every written row again on the final section plan and then
+`cross-reference`: new text that refers, by a heading's number such as "§ 10"
+or "12.1", to a section whose heading the change deletes, or newly to a
+section it moves, or by its old number to a section it renumbers. A reference
+the replaced text already made counts as well, except for a move. Where an old
+number now belongs to another section, it still means the old section as often
+as the replaced text used it, unless the new text writes the old section's new
+number or uses the other section's old number less. A section moved when some
+shortest way to the new order moves it and its place among the sections
+changed, top-level sections counting alike whatever their size: in a swap both
+sides count, a section between them does not. A refusal names the row to send
+again, or to finish again to leave it unchanged; that finish lists the row as
+`left_out` in `result.rows`, and the card shows it as left out, with the step
+to ask Erato to redo it.
+
+Section numbers come from heading text with a word or sign ("§ 10",
+"Section 3", "Article 5") or dots ("10.1"); a bare "3." is too common in text
+to tell a reference. A heading Word numbers itself has no number in its text,
+so references to it are not checked, nor is text in keep rows. A section the
+request names by number or by a full title of at least two words that no row
+of the section plan changes, moves or renames gets one `fix_requests` entry on
+the section plan's receipt, not a refusal, since a request may name a section
+only for context.
