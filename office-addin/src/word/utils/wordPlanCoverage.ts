@@ -149,7 +149,8 @@ function readBlocks(snapshot: WordAuthoringSnapshot): Set<number> {
   );
 }
 
-const titled = (entry: WordOutlineEntry | undefined) =>
+/** An outline entry the document names by its own title. */
+export const wordTitledEntry = (entry: WordOutlineEntry | undefined) =>
   !!entry &&
   entry.tag !== "P" &&
   !!entry.title &&
@@ -161,7 +162,8 @@ function partChain(sections: WordCaptureSections, block: number): string[] {
   const chain = sections.outline
     .map((entry, k) => ({ entry, k }))
     .filter(
-      ({ entry }) => titled(entry) && entry.from <= block && block < entry.to,
+      ({ entry }) =>
+        wordTitledEntry(entry) && entry.from <= block && block < entry.to,
     )
     .sort((a, b) => a.entry.level - b.entry.level)
     .map(({ k }) => String(k));
@@ -201,7 +203,7 @@ function leftOutPart(
   changed: readonly number[],
 ): WordLeftOutPart {
   const entry = key === "start" ? undefined : sections.outline[Number(key)];
-  if (titled(entry)) return { title: entry!.title };
+  if (wordTitledEntry(entry)) return { title: entry!.title };
   const span = entry
     ? Array.from({ length: entry.to - entry.from }, (_, i) => entry.from + i)
     : [];
@@ -258,34 +260,63 @@ export function wordPartsNotInProposal(
   return parts;
 }
 
-/** `notInProposal` is for the card, the note for the model when a later turn replays the call; an
- * empty card name stands for a part without text. */
+/** How the card names a left-out part; an empty name stands for a part without text. */
+export const wordLeftOutPartName = (part: WordLeftOutPart) =>
+  part.title ?? (part.passage !== undefined ? `“${part.passage}”` : "");
+
+export const WORD_LEFT_OUT_EARLIER =
+  "which an earlier attempt of this request changed";
+
+/** `notInProposal` is for the card, the note for the model when a later turn replays the call. */
 export function wordNotInProposalReceipt(
   parts: readonly WordLeftOutPart[],
+  reason = WORD_LEFT_OUT_EARLIER,
 ): { notInProposal: string[]; notInProposalNote: string } | undefined {
-  if (!parts.length) return undefined;
-  const spoken = parts.map((part) =>
+  return wordNotInProposalGroups([{ parts, reason }]);
+}
+
+/** Left-out parts with why each was meant to change; a part named in an earlier group is not
+ * named again. */
+export function wordNotInProposalGroups(
+  groups: readonly { parts: readonly WordLeftOutPart[]; reason: string }[],
+): { notInProposal: string[]; notInProposalNote: string } | undefined {
+  const seen = new Set<string>();
+  const named = groups
+    .map(({ parts, reason }) => ({
+      reason,
+      parts: parts.filter((part) => {
+        const key = JSON.stringify(part);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    }))
+    .filter(({ parts }) => parts.length);
+  if (!named.length) return undefined;
+  const spoken = (part: WordLeftOutPart) =>
     part.title !== undefined
       ? `"${part.title}"`
       : part.passage !== undefined
         ? wordPassageName(part.passage)
-        : "a part without text",
-  );
+        : "a part without text";
   const note = (count: number) =>
-    `Not in this proposal: ${wordNamedParts(spoken, count)}, which an earlier attempt of this request changed. The card tells the user the same; name them when you describe this proposal.`;
-  let count = Math.min(MAX_NOT_IN_PROPOSAL_NAMES, spoken.length);
+    `Not in this proposal: ${named
+      .map(
+        ({ parts, reason }) =>
+          `${wordNamedParts(parts.map(spoken), count)}, ${reason}`,
+      )
+      .join(
+        "; ",
+      )}. The card tells the user the same; name them when you describe this proposal.`;
+  const all = named.flatMap(({ parts }) => parts);
+  let count = Math.min(MAX_NOT_IN_PROPOSAL_NAMES, all.length);
   while (
     count > 1 &&
     utf8ByteLength(JSON.stringify(note(count))) > MAX_WORD_RECEIPT_FIELD_BYTES
   )
     count--;
   return {
-    notInProposal: parts
-      .slice(0, MAX_LISTED)
-      .map(
-        (part) =>
-          part.title ?? (part.passage !== undefined ? `“${part.passage}”` : ""),
-      ),
+    notInProposal: all.slice(0, MAX_LISTED).map(wordLeftOutPartName),
     notInProposalNote: note(count),
   };
 }

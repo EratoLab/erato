@@ -2,6 +2,11 @@ export const isDefaultTableStyle = (styleId: string, name: string) =>
   styleId.toLowerCase() === "tablenormal" ||
   name.toLowerCase() === "normal table";
 
+/** Word's "Table Grid", by its canonical w:name (aliases follow a comma) or its built-in ID. */
+export const isTableGridStyle = (styleId: string, name: string) =>
+  styleId.toLowerCase() === "tablegrid" ||
+  name.split(",", 1)[0].trim().toLowerCase() === "table grid";
+
 /** A Paragraph.styleBuiltIn value (Office.js Word.BuiltInStyleName) that a canonical style name maps to. */
 export type WordBuiltInParagraphStyle =
   | "Normal"

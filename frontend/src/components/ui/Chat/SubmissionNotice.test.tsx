@@ -121,6 +121,26 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     ).toBeInTheDocument();
   });
 
+  it("speaks for the section plan and parts of a change in parts", async () => {
+    const { unmount } = await renderNotice(
+      message(
+        [
+          tool("plan_document_sections", { status: "success", result: {} }),
+          timedOut("write_document_section"),
+        ],
+        { submission_outcome: unresolved("timeout") },
+      ),
+    );
+    expect(screen.getByText(NO_RESPONSE)).toBeInTheDocument();
+    unmount();
+    await renderNotice(
+      message([rejected("plan_document_sections", "wrong-request")], {
+        submission_outcome: unresolved("context_unavailable"),
+      }),
+    );
+    expect(screen.getByText(RELOADED)).toBeInTheDocument();
+  });
+
   it("says Word didn't respond when no pane was connected to run the plan", async () => {
     await renderNotice(
       message(

@@ -82,15 +82,17 @@ export interface WordScopedExpansion {
   origins: WordScopedOrigins;
 }
 
-const EXPANDED_PATH = /^\/(entries|deleted|stories|sections)\/(\d+)(\/.*)?$/;
-const EXPANDED_PATH_IN_TEXT =
+/** A validator path into a plan's collections, alone and inside a message. */
+export const WORD_PLAN_PATH =
+  /^\/(entries|deleted|stories|sections)\/(\d+)(\/.*)?$/;
+export const WORD_PLAN_PATH_IN_TEXT =
   /\/(?:entries|deleted|stories|sections)\/\d+(?:\/[\w-]+)*/g;
 
 function scopedPath(
   path: string,
   origins: WordScopedOrigins,
 ): { path: string; kept?: string } {
-  const match = EXPANDED_PATH.exec(path);
+  const match = WORD_PLAN_PATH.exec(path);
   if (!match)
     return {
       path: /^\/(entries|deleted|stories|sections|scope|version)$/.test(path)
@@ -148,7 +150,7 @@ export function wordScopedIssues(
 ): WordPlanDiagnostics {
   return issues.map((issue) => {
     const { path, kept } = scopedPath(issue.path, origins);
-    const message = issue.message.replace(EXPANDED_PATH_IN_TEXT, (found) => {
+    const message = issue.message.replace(WORD_PLAN_PATH_IN_TEXT, (found) => {
       const mapped = scopedPath(found, origins);
       return mapped.kept ? `unchanged ${mapped.kept}` : mapped.path;
     });

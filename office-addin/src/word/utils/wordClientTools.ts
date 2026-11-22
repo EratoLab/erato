@@ -1,4 +1,8 @@
 import { registerClientToolExecutor } from "@erato/frontend/library";
+import {
+  WORD_PLAN_SECTIONS_TOOL,
+  WORD_WRITE_SECTION_TOOL,
+} from "@erato/frontend/word-review";
 
 import { wordApprovalScopeOptions } from "./wordApprovalScope";
 import {
@@ -9,6 +13,7 @@ import {
   createWordCommentSubmissionExecutor,
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 } from "./wordCommentSubmission";
+import { createWordDocumentPartExecutors } from "./wordDocumentPartTools";
 import {
   captureUnavailable,
   wordDocumentReadSession,
@@ -41,6 +46,7 @@ export function registerWordClientTools({
   bindingIdentity: () => string | undefined;
 }): () => void {
   const submit = createWordDocumentSubmissionExecutor(wordDocumentReadSession);
+  const parts = createWordDocumentPartExecutors(wordDocumentReadSession);
   const read: ClientToolExecutor = (input, context) => {
     if (readEnabled()) return wordDocumentReadSession.execute(input, context);
     return context?.hostGrant
@@ -58,6 +64,12 @@ export function registerWordClientTools({
     ),
     registerClientToolExecutor(WORD_SUBMIT_PLAN_TOOL, (input, context) =>
       readEnabled() ? submit(input, context) : inclusionOff(),
+    ),
+    registerClientToolExecutor(WORD_PLAN_SECTIONS_TOOL, (input, context) =>
+      readEnabled() ? parts.plan(input, context) : inclusionOff(),
+    ),
+    registerClientToolExecutor(WORD_WRITE_SECTION_TOOL, (input, context) =>
+      readEnabled() ? parts.write(input, context) : inclusionOff(),
     ),
     registerClientToolExecutor(WORD_READ_TOOL, read, undefined, {
       acceptsGrantCalls: true,

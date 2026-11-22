@@ -15,6 +15,13 @@ import {
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
 import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
+import { wordBlockIndex } from "./wordDocumentOutline";
+import {
+  finishWordParts,
+  wordPartRowLabel,
+  wordPartRows,
+  wordPartsFinishRejected,
+} from "./wordDocumentParts";
 import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
@@ -30,7 +37,8 @@ import {
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
 import {
-  wordNotInProposalReceipt,
+  WORD_LEFT_OUT_EARLIER,
+  wordNotInProposalGroups,
   wordPartsNotInProposal,
   wordSubmissionBlocks,
 } from "./wordPlanCoverage";
@@ -43,6 +51,7 @@ import {
   WordScopedSubmissionError,
 } from "./wordScopedSubmission";
 
+import type { WordPartsDraft } from "./wordDocumentParts";
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type { WordScopedOrigins } from "./wordScopedSubmission";
 import type {
@@ -61,6 +70,36 @@ export { WORD_SUBMIT_PLAN_ACTION, WORD_SUBMIT_PLAN_TOOL };
 
 type WordScopedSubmissionKind = "scoped_edit" | "table_cell";
 
+const NEEDS_READ = [
+  "too-large",
+  "incomplete-read",
+  "expired",
+  "outside-read-scope",
+  "in-place-unavailable",
+];
+
+/** Submissions and their part calls classify a refusal alike; only a read admits a recovery read. */
+export const wordSubmissionRecovery = (
+  issues: WordPlanDiagnostics | undefined,
+): "read_current_context" | "repair_arguments" =>
+  issues?.some(({ code }) => NEEDS_READ.includes(code))
+    ? "read_current_context"
+    : "repair_arguments";
+
+/** The body blocks a section plan announces changing; a smaller plan accepted instead names the
+ * parts it leaves out. Moves are left out, as for any refused attempt. */
+function wordPartsAnnouncedBlocks(
+  draft: WordPartsDraft,
+  snapshot: WordAuthoringSnapshot,
+): Set<number> {
+  const index = wordBlockIndex(snapshot);
+  return new Set(
+    draft.plan.rows.flatMap((row) =>
+      row.action === "keep" ? [] : row.refs.map((ref) => index.get(ref)!),
+    ),
+  );
+}
+
 export function createWordDocumentSubmissionExecutor(
   session: WordDocumentReadSession,
 ): ClientToolExecutor {
@@ -69,11 +108,13 @@ export function createWordDocumentSubmissionExecutor(
     const result = await execute(input, context);
     if (result.ok) return result;
     const snapshot = context && session.snapshotForSubmission(context);
+    // A refused finish changed nothing the section plan did not announce, which acceptance names.
     if (
       context &&
       snapshot &&
       object(input) &&
-      input.snapshot === snapshot.token
+      input.snapshot === snapshot.token &&
+      !("finish" in input)
     )
       session.drafts.refused(
         context.toolCallId,
@@ -88,15 +129,6 @@ export function createWordDocumentSubmissionExecutor(
       snapshot.used ||
       !!snapshot.issue ||
       context?.signal?.aborted;
-    const needsRead = result.validationErrors?.some(({ code }) =>
-      [
-        "too-large",
-        "incomplete-read",
-        "expired",
-        "outside-read-scope",
-        "in-place-unavailable",
-      ].includes(code),
-    );
     return {
       ...result,
       validationErrors: result.validationErrors?.length
@@ -108,31 +140,37 @@ export function createWordDocumentSubmissionExecutor(
         recovery: unavailable
           ? "cannot_continue"
           : (result.submissionFeedback?.recovery ??
-            (needsRead ? "read_current_context" : "repair_arguments")),
+            wordSubmissionRecovery(result.validationErrors)),
       },
     };
   };
 }
 
-/** A scoped_edit whose snapshot or token is not this request's active read; never parsed as a
- * full plan, which would send the model to write one. */
+/** A scoped_edit or finish whose snapshot or token is not this request's active read; never parsed
+ * as a full plan, which would send the model to write one. */
 function scopedTokenRefusal(
   snapshot: WordAuthoringSnapshot,
   input: Record<string, unknown>,
 ): ClientToolExecutionResult {
+  const finish = "finish" in input;
   const expired =
     snapshot.revoked || snapshot.used || input.snapshot !== snapshot.token;
   const code = snapshot.issue ?? (expired ? "expired" : "incomplete-read");
+  const token = finish
+    ? "Use the final readToken of this request's complete read, as the section plan did."
+    : WORD_SCOPED_TOKEN_MESSAGE;
   const message = snapshot.issue
     ? `This document capture is unavailable: ${snapshot.issue}.`
     : snapshot.completeReadIssue
-      ? "Use an active readToken from a target read of this request; this document is too large for a complete read."
+      ? finish
+        ? "This document is too large for a complete read, so it cannot be changed in parts. Change it with scoped_edit after target reads."
+        : "Use an active readToken from a target read of this request; this document is too large for a complete read."
       : expired
-        ? `Use this request's active snapshot. ${WORD_SCOPED_TOKEN_MESSAGE}`
-        : WORD_SCOPED_TOKEN_MESSAGE;
+        ? `Use this request's active snapshot. ${token}`
+        : token;
   return {
     ok: false,
-    error: "Scoped edit rejected.",
+    error: finish ? "Document plan finish rejected." : "Scoped edit rejected.",
     validationErrors: [
       {
         path: expired || snapshot.issue ? "/snapshot" : "/readToken",
@@ -249,7 +287,7 @@ function createSubmissionExecutor(
             ) ||
             input.readToken !== snapshot.readToken))
       )
-        return "scoped_edit" in input
+        return "scoped_edit" in input || "finish" in input
           ? sparseRejection(input, scopedTokenRefusal(snapshot, input))
           : prepareWordDocumentSubmission(input, context, session);
       if (session.drafts.accepted)
@@ -258,6 +296,16 @@ function createSubmissionExecutor(
           error: "A document plan has already been accepted for this request.",
         };
       const submitted = JSON.parse(serialized) as Record<string, unknown>;
+      const finish =
+        "finish" in submitted
+          ? finishWordParts(submitted, snapshot, session.drafts.parts)
+          : undefined;
+      if (finish && !finish.ok)
+        return session.drafts.remember(
+          context.toolCallId,
+          serialized,
+          finish.result,
+        );
       const kind: WordScopedSubmissionKind | undefined =
         "scoped_edit" in submitted
           ? "scoped_edit"
@@ -285,12 +333,14 @@ function createSubmissionExecutor(
         expansion?.plan ??
         (kind === "table_cell"
           ? expandWordTableCellSubmission(submitted, snapshot)
-          : session.drafts.materialize(submitted));
+          : finish
+            ? finish.assembly.plan
+            : session.drafts.materialize(submitted));
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
         session,
-        expansion?.origins,
+        { origins: expansion?.origins, inPlaceOnly: !!expansion || !!finish },
       );
       // The read session may have been cleared while preparation was pending.
       if (
@@ -315,22 +365,58 @@ function createSubmissionExecutor(
           "draft_id" in input ||
           "table_cell" in input ||
           "scoped_edit" in input;
-        const notInProposal = wordNotInProposalReceipt(
-          wordPartsNotInProposal(
-            snapshot,
-            session.drafts.refusedAttempts,
-            wordSubmissionBlocks(kind ? submitted : value, snapshot),
-          ),
+        const accepted = wordSubmissionBlocks(
+          kind ? submitted : value,
+          snapshot,
         );
+        const sectionPlan = finish ? undefined : session.drafts.parts.current;
+        const notInProposal = wordNotInProposalGroups([
+          {
+            parts: (finish?.unwritten ?? []).map((r) =>
+              wordPartRowLabel(finish!.draft.plan.rows[r], snapshot),
+            ),
+            reason: "which the section plan announced but no part wrote",
+          },
+          {
+            parts: sectionPlan
+              ? wordPartsNotInProposal(
+                  snapshot,
+                  [wordPartsAnnouncedBlocks(sectionPlan, snapshot)],
+                  accepted,
+                )
+              : [],
+            reason: "which the section plan of this request announced",
+          },
+          {
+            parts: wordPartsNotInProposal(
+              snapshot,
+              session.drafts.refusedAttempts,
+              accepted,
+            ),
+            reason: WORD_LEFT_OUT_EARLIER,
+          },
+        ]);
         if (expanded || notInProposal)
           result = {
             ...prepared,
             result: {
               ...(prepared.result as object),
               ...(expanded ? { plan: value } : {}),
+              ...(finish
+                ? {
+                    rows: wordPartRows(finish.draft, snapshot, {
+                      finished: true,
+                    }),
+                  }
+                : {}),
               ...notInProposal,
             },
           };
+      } else if (finish) {
+        result = sparseRejection(
+          input,
+          wordPartsFinishRejected(prepared, finish, snapshot),
+        );
       } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the
         // expanded plan the model never saw.
@@ -392,12 +478,16 @@ function createSubmissionExecutor(
   };
 }
 
-/** `origins` is set for a sparse change; its diagnostics then point at that change. */
-async function prepareWordDocumentSubmission(
+/** `origins` is set for a sparse change; its diagnostics then point at that change. `inPlaceOnly`
+ * refuses, as for a sparse change, what a host that never imports the whole document cannot apply. */
+export async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,
-  origins?: WordScopedOrigins,
+  {
+    origins,
+    inPlaceOnly = !!origins,
+  }: { origins?: WordScopedOrigins; inPlaceOnly?: boolean } = {},
 ): Promise<ClientToolExecutionResult> {
   if (!context || context.signal?.aborted)
     return {
@@ -482,7 +572,7 @@ async function prepareWordDocumentSubmission(
       plan,
       snapshot,
       prepared,
-      !!origins,
+      inPlaceOnly,
     );
     if (wholeDocument)
       return scopedWholeDocumentRefusal(wholeDocument, snapshot);
