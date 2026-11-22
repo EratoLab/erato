@@ -55,7 +55,12 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   failed: false,
   spokenPartDone: false,
 }));
-const sequences = new Map<string, number>();
+/**
+ * The last audio chunk played for the current response, so that a resumed
+ * stream's replay is not said twice. Every stream numbers its audio from 0,
+ * an approval continuation too, though it speaks for the same message.
+ */
+let lastSequence = -1;
 let activeMessage: string | undefined;
 let accepting = false;
 let acceptingStream: string | undefined;
@@ -233,6 +238,7 @@ export function beginSpeechResponse(streamKey?: string) {
   acceptingStream = streamKey;
   stopSpeechPlayback();
   activeMessage = undefined;
+  lastSequence = -1;
   accepting =
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
@@ -353,12 +359,8 @@ export function playSpeechChunk(
     (activeMessage && activeMessage !== messageId)
   )
     return;
-  if (sequence <= (sequences.get(messageId) ?? -1)) return;
-  sequences.set(messageId, sequence);
-  if (sequences.size > 100) {
-    const oldest = sequences.keys().next().value;
-    if (oldest !== undefined) sequences.delete(oldest);
-  }
+  if (sequence <= lastSequence) return;
+  lastSequence = sequence;
   activeMessage = messageId;
   if (held !== null) {
     held.push({ audio, sampleRate });
