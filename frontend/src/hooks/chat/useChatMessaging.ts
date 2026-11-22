@@ -939,7 +939,7 @@ export function useChatMessaging(
       if (messaging.getStreaming(stoppedKey).currentMessageId) {
         // The server's copy can lag behind what was read: it hears the stop
         // only later, and a refetch can read the row before it saves it.
-        messaging.keepStreamedAnswer(stoppedKey);
+        messaging.keepStreamedAnswer(stoppedKey, { saved: false });
         messaging.setStreaming(
           { isStreaming: false, isFinalizing: false },
           stoppedKey,
@@ -1346,7 +1346,12 @@ export function useChatMessaging(
               useMessagingStore.getState().getStreaming(activeStreamKey)
                 .currentMessageId === responseData.message_id
             ) {
-              useMessagingStore.getState().keepStreamedAnswer(activeStreamKey);
+              useMessagingStore
+                .getState()
+                .keepStreamedAnswer(activeStreamKey, { saved: false });
+            } else if (!streamKeyRef?.replays) {
+              // A new turn runs, so the chat's earlier answers are saved.
+              useMessagingStore.getState().markAnswersSaved(activeStreamKey);
             }
             handleAssistantMessageStarted(responseData, activeStreamKey);
             break;
@@ -1376,6 +1381,9 @@ export function useChatMessaging(
             break;
 
           case "assistant_message_completed":
+            useMessagingStore
+              .getState()
+              .markAnswersSaved(activeStreamKey, [responseData.message_id]);
             endWaitTurn(activeStreamKey);
             endSpeechResponse(activeStreamKey, responseData.message_id);
             logger.log(
@@ -1443,7 +1451,7 @@ export function useChatMessaging(
                 // Before the store write below, which is what re-renders.
                 setSubmittingForKey(activeStreamKey, false);
                 const messaging = useMessagingStore.getState();
-                messaging.keepStreamedAnswer(activeStreamKey);
+                messaging.keepStreamedAnswer(activeStreamKey, { saved: true });
                 messaging.setStreaming(
                   { isStreaming: false, isFinalizing: false },
                   activeStreamKey,
@@ -1631,8 +1639,11 @@ export function useChatMessaging(
       // copy, as after an uninterrupted turn; resetting here drops it from
       // the list until then.
       const messaging = useMessagingStore.getState();
-      if (!messaging.getStreaming(resumeStreamKey).isFinalizing) {
-        messaging.keepStreamedAnswer(resumeStreamKey);
+      const streamingNow = messaging.getStreaming(resumeStreamKey);
+      if (!streamingNow.isFinalizing) {
+        messaging.keepStreamedAnswer(resumeStreamKey, {
+          saved: !streamingNow.isStreaming,
+        });
         endWaitTurn(resumeStreamKey);
         resetStreaming(resumeStreamKey);
       }
@@ -1839,6 +1850,7 @@ export function useChatMessaging(
               connectionError.response?.status === 404;
             if (generationGone) {
               resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+              useMessagingStore.getState().markAnswersSaved(resumeStreamKey);
             }
             const errorMessage = connectionError.message;
             if (!errorMessage.includes("404")) {

@@ -11,6 +11,7 @@ import type { Message } from "@/types/chat";
 const logger = createLogger("STATE", "messagingStore");
 export const NEW_CHAT_STREAM_KEY = "__new_chat__";
 const EMPTY_MESSAGES: Record<string, Message> = {};
+const NO_KEPT_ANSWERS: Record<string, KeptAnswer> = {};
 
 export const getStreamKey = (chatId: string | null | undefined): string => {
   return chatId ?? NEW_CHAT_STREAM_KEY;
@@ -28,17 +29,24 @@ export interface StreamingState {
   pendingLabel?: string | null;
 }
 
+/** An answer as the reader last saw it, standing in for the server's copy. */
+export interface KeptAnswer {
+  message: Message;
+  /** The server has the answer saved: its next copy wins, even if shorter. */
+  saved: boolean;
+}
+
 // Add user messages to the store
 export interface MessagingStore {
   streaming: StreamingState;
   streamingByKey: Record<string, StreamingState>;
   apiMessagesByKey: Record<string, Record<string, Message>>;
   /**
-   * Answers as the reader last saw them, shown while the copy that replaces
-   * them (a refetch that has not caught up, a reattached stream replaying
-   * from its start) is shorter.
+   * Answers as the reader last saw them, shown in their own place while the
+   * copy there (a refetch that has not caught up, a reattached stream
+   * replaying from its start) is shorter, until the server has them saved.
    */
-  keptAnswersByKey: Record<string, Record<string, Message>>;
+  keptAnswersByKey: Record<string, Record<string, KeptAnswer>>;
   hiddenMessageIdsByKey: Record<string, string[]>;
   streamKeyAliases: Record<string, string>;
   activeStreamKey: string;
@@ -59,8 +67,16 @@ export interface MessagingStore {
     streamKey?: string | null,
   ) => void;
   resetStreaming: (streamKey?: string | null) => void;
-  /** Keeps the streamed answer on screen until a copy at least as long replaces it. */
-  keepStreamedAnswer: (streamKey?: string | null) => void;
+  /** Keeps the streamed answer on screen until the server's copy replaces it. */
+  keepStreamedAnswer: (
+    streamKey: string | null | undefined,
+    options: { saved: boolean },
+  ) => void;
+  /** The server has saved these answers (all of the chat's when omitted). */
+  markAnswersSaved: (
+    streamKey: string | null | undefined,
+    messageIds?: string[],
+  ) => void;
   clearAllStreaming: () => void;
   getApiMessages: (streamKey?: string | null) => Record<string, Message>;
   getHiddenMessageIds: (streamKey?: string | null) => string[];
@@ -140,11 +156,17 @@ export const useMessagingStore = create<MessagingStore>()(
       ) =>
         state.userMessagesByKey[resolveStreamKeyFromState(state, streamKey)] ??
         EMPTY_MESSAGES;
-      const getKeptAnswersForKey = (state: MessagingStore, streamKey: string) =>
+      const getKeptAnswersForKey = (
+        state: MessagingStore,
+        streamKey: string,
+      ): Record<string, KeptAnswer> =>
         state.keptAnswersByKey[resolveStreamKeyFromState(state, streamKey)] ??
-        EMPTY_MESSAGES;
-      const longer = (kept: Message | undefined, content: ContentPart[]) =>
-        !!kept && contentSize(kept.content) > contentSize(content);
+        NO_KEPT_ANSWERS;
+      const longer = (
+        kept: KeptAnswer | undefined,
+        content: ContentPart[],
+      ): kept is KeptAnswer =>
+        !!kept && contentSize(kept.message.content) > contentSize(content);
 
       const buildRenderableMessages = (
         state: MessagingStore,
@@ -168,15 +190,13 @@ export const useMessagingStore = create<MessagingStore>()(
           localUserMessages,
         );
         const keptAnswers = getKeptAnswersForKey(state, streamKey);
-        const keptList = Object.values(keptAnswers);
-        const shownMessages =
-          keptList.length > 0 ? { ...combinedMessages } : combinedMessages;
-        keptList.forEach((kept) => {
-          const shown = combinedMessages[kept.id];
-          if (hiddenMessageIds.has(kept.id)) return;
-          if (!shown) shownMessages[kept.id] = kept;
-          else if (longer(kept, shown.content))
-            shownMessages[kept.id] = { ...shown, content: kept.content };
+        let shownMessages = combinedMessages;
+        Object.entries(keptAnswers).forEach(([id, kept]) => {
+          const shown = combinedMessages[id] as Message | undefined;
+          if (!shown || !longer(kept, shown.content)) return;
+          if (shownMessages === combinedMessages)
+            shownMessages = { ...combinedMessages };
+          shownMessages[id] = { ...shown, content: kept.message.content };
         });
 
         if (!currentStreaming.currentMessageId) {
@@ -203,7 +223,7 @@ export const useMessagingStore = create<MessagingStore>()(
           [currentStreaming.currentMessageId]: {
             id: currentStreaming.currentMessageId,
             content: longer(kept, currentStreaming.content)
-              ? kept.content
+              ? kept.message.content
               : currentStreaming.content,
             submission_outcome: currentStreaming.submissionOutcome,
             role: "assistant",
@@ -423,7 +443,7 @@ export const useMessagingStore = create<MessagingStore>()(
             "messaging/resetStreaming",
           );
         },
-        keepStreamedAnswer: (streamKey) => {
+        keepStreamedAnswer: (streamKey, { saved }) => {
           set(
             (prev) => {
               const resolvedKey = resolveStreamKeyFromState(
@@ -433,10 +453,12 @@ export const useMessagingStore = create<MessagingStore>()(
               const streaming = getStreamingForKey(prev, resolvedKey);
               const id = streaming.currentMessageId;
               const keptForKey = prev.keptAnswersByKey[resolvedKey] ?? {};
+              const earlier = id ? keptForKey[id] : undefined;
               if (
                 !id ||
-                contentSize(streaming.content) <=
-                  contentSize(keptForKey[id]?.content ?? [])
+                (contentSize(streaming.content) <=
+                  contentSize(earlier?.message.content ?? []) &&
+                  (!saved || earlier?.saved))
               ) {
                 return prev;
               }
@@ -447,13 +469,18 @@ export const useMessagingStore = create<MessagingStore>()(
                   [resolvedKey]: {
                     ...keptForKey,
                     [id]: {
-                      id,
-                      content: streaming.content,
-                      submission_outcome: streaming.submissionOutcome,
-                      role: "assistant",
-                      createdAt:
-                        streaming.createdAt ?? new Date().toISOString(),
-                      status: "complete",
+                      message: longer(earlier, streaming.content)
+                        ? earlier.message
+                        : {
+                            id,
+                            content: streaming.content,
+                            submission_outcome: streaming.submissionOutcome,
+                            role: "assistant",
+                            createdAt:
+                              streaming.createdAt ?? new Date().toISOString(),
+                            status: "complete",
+                          },
+                      saved: saved || !!earlier?.saved,
                     },
                   },
                 },
@@ -461,6 +488,36 @@ export const useMessagingStore = create<MessagingStore>()(
             },
             false,
             "messaging/keepStreamedAnswer",
+          );
+        },
+        markAnswersSaved: (streamKey, messageIds) => {
+          set(
+            (prev) => {
+              const resolvedKey = resolveStreamKeyFromState(
+                prev,
+                resolveStreamKey(streamKey),
+              );
+              const keptForKey = prev.keptAnswersByKey[resolvedKey];
+              const ids = Object.keys(keptForKey ?? {}).filter(
+                (id) =>
+                  !keptForKey[id].saved &&
+                  (!messageIds || messageIds.includes(id)),
+              );
+              if (ids.length === 0) return prev;
+              const next = { ...keptForKey };
+              ids.forEach((id) => {
+                next[id] = { ...next[id], saved: true };
+              });
+              return {
+                ...prev,
+                keptAnswersByKey: {
+                  ...prev.keptAnswersByKey,
+                  [resolvedKey]: next,
+                },
+              };
+            },
+            false,
+            "messaging/markAnswersSaved",
           );
         },
         clearAllStreaming: () => {
@@ -492,10 +549,13 @@ export const useMessagingStore = create<MessagingStore>()(
               messages.forEach((message) => {
                 nextById[message.id] = message;
               });
+              // Until the server has it saved, a copy that has not caught
+              // up (or a list without the row yet) keeps the stand-in.
               const stillKept = Object.fromEntries(
                 Object.entries(prev.keptAnswersByKey[resolvedKey] ?? {}).filter(
                   ([id, kept]) =>
-                    !(id in nextById) || longer(kept, nextById[id].content),
+                    !kept.saved &&
+                    (!(id in nextById) || longer(kept, nextById[id].content)),
                 ),
               );
 

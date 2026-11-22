@@ -1507,6 +1507,87 @@ describe("useChatMessaging", () => {
       }
     });
 
+    it("shows the saved copy of a reattached voice reply once it finished, even when it is shorter", async () => {
+      const harness = setupChatMessagingTest();
+      const resumeCalls: ResumeOptions[] = [];
+      mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+        if (url.includes("/resumestream")) {
+          resumeCalls.push(callbacks);
+          return vi.fn();
+        }
+        sseCallbacks = callbacks;
+        return vi.fn();
+      });
+      await harness.startStreaming();
+      const spoken = (text: string) => ({
+        message_type: "spoken_delta",
+        message_id: "assistant-voice",
+        content_index: 1,
+        new_text: text,
+      });
+      const written = (text: string) => ({
+        message_type: "text_delta",
+        message_id: "assistant-voice",
+        content_index: 0,
+        new_text: text,
+      });
+      await harness.sendSSEEvent({
+        message_type: "assistant_message_started",
+        message_id: "assistant-voice",
+      });
+      await harness.sendSSEEvent(written("Done, I added"));
+      await harness.sendSSEEvent(spoken("Done, I added the paragraph."));
+      await act(async () => {
+        sseCallbacks.onError?.(
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+      });
+      const replay = async (data: object) => {
+        await act(async () => {
+          resumeCalls[0].onMessage?.(streamEvent(data));
+        });
+      };
+
+      // The saved reply drops the spoken part that the written text repeats.
+      const saved = [
+        { content_type: "text", text: "Done, I added the paragraph." },
+      ];
+      mockFetchChatMessages.mockResolvedValueOnce({
+        messages: [
+          ...mockMessages,
+          {
+            id: "assistant-voice",
+            content: saved,
+            role: "assistant",
+            created_at: "2023-01-01T12:02:00.000Z",
+            chat_id: "chat1",
+            updated_at: "2023-01-01T12:02:30.000Z",
+            is_message_in_active_thread: true,
+          },
+        ],
+      });
+      await replay({
+        message_type: "assistant_message_started",
+        message_id: "assistant-voice",
+      });
+      await replay(written("Done, I added the paragraph."));
+      await replay(spoken("Done, I added the paragraph."));
+      await replay({
+        message_type: "assistant_message_completed",
+        message_id: "assistant-voice",
+        content: saved,
+      });
+      await act(async () => {
+        resumeCalls[0].onClose?.();
+      });
+
+      await waitFor(() =>
+        expect(
+          harness.result.current.messages["assistant-voice"].content,
+        ).toEqual(saved),
+      );
+    });
+
     it("does not leave the chat locked when a reattached answer's completion refetch fails", async () => {
       const waitUntilOnline = vi
         .spyOn(connectivity, "waitUntilOnline")
