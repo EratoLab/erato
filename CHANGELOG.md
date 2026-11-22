@@ -96,7 +96,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Stability improvements
 
-**The chat survives a dropped connection (ERMAIN-1185).** When the connection drops while an answer is written, the chat says "Connection lost. Reconnecting…" and picks the answer up again (`resumestream`) once the server can be reached, instead of failing. A request without a response, or an answer stream with nothing for 30 s (not even its one-second keep-alive), counts as a dropped connection; reads (GET) give up after 45 s without a response. Queries wait while the server cannot be reached. Stop works while offline: the answer ends at once with the text read so far, and the stop reaches the server once the connection is back. If the user sends again first, the stop goes out before the new message and never after it, so it cannot end the new answer.
+**The chat survives a dropped connection (ERMAIN-1185).** When the connection drops while an answer is written, the chat says "Connection lost. Reconnecting…" and picks the answer up again (`resumestream`) once the server can be reached, instead of failing. A request without a response, or an answer stream with nothing for 30 s (not even its one-second keep-alive), counts as a dropped connection; reads (GET) give up after 45 s without a response. Queries wait while the server cannot be reached. Stop works while offline: the answer ends at once with the text read so far, and the stop reaches the server once the connection is back. If the user sends again before the stop has reached the server, the new message waits until it has, so the stop cannot end the new answer.
 
 #### Security
 

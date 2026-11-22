@@ -2092,7 +2092,7 @@ describe("useChatMessaging", () => {
       }
     });
 
-    it("holds the next question until a hanging stop settles, and does not send that stop again", async () => {
+    it("holds the next question until a hanging stop is delivered, and never sends it after the question", async () => {
       const waitUntilOnline = vi
         .spyOn(connectivity, "waitUntilOnline")
         .mockResolvedValue(undefined);
@@ -2119,18 +2119,115 @@ describe("useChatMessaging", () => {
         expect(requests).toEqual([]);
         expect(sent).toBe(false);
 
+        // It timed out, so it goes out again before the question.
         await act(async () => {
           await vi.advanceTimersByTimeAsync(2_000);
         });
-        expect(requests).toEqual(["submitstream"]);
+        expect(requests).toEqual(["abort", "submitstream"]);
 
         await act(async () => {
           await vi.advanceTimersByTimeAsync(20_000);
         });
-        expect(requests).toEqual(["submitstream"]);
-        expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(1);
+        expect(requests).toEqual(["abort", "submitstream"]);
+        expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(2);
       } finally {
         vi.useRealTimers();
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("keeps a stop pending through a question sent while still offline, and sends it before the question", async () => {
+      const waits: Array<() => void> = [];
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              waits.push(resolve);
+            }),
+        );
+      try {
+        const { result } = await startDroppedAnswer();
+        let online = false;
+        const requests: string[] = [];
+        mockFetchAbortMessageStream.mockImplementation(async () => {
+          requests.push("abort");
+          if (!online) throw offlineFailure();
+          return { abort_requested: true };
+        });
+        mockCreateSSEConnection.mockImplementation((url: string, options) => {
+          requests.push(url.split("/").pop() ?? url);
+          if (!url.includes("/resumestream")) sseCallbacks = options;
+          return vi.fn();
+        });
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+
+        await act(async () => {
+          void result.current.sendMessage("Next question");
+        });
+        expect(requests).toEqual(["abort", "abort"]);
+        expect(result.current.isPendingResponse).toBe(true);
+
+        online = true;
+        await act(async () => {
+          waits.splice(0).forEach((resolve) => resolve());
+        });
+        await waitFor(() =>
+          expect(requests).toEqual(["abort", "abort", "abort", "submitstream"]),
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("lets Stop drop a question that waits for an undelivered stop, and still delivers the stop", async () => {
+      const waits: Array<() => void> = [];
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          (signal?: AbortSignal) =>
+            new Promise<void>((resolve, reject) => {
+              waits.push(resolve);
+              signal?.addEventListener("abort", () => reject(signal.reason));
+            }),
+        );
+      try {
+        const { result } = await startDroppedAnswer();
+        mockFetchAbortMessageStream
+          .mockRejectedValueOnce(offlineFailure())
+          .mockRejectedValueOnce(offlineFailure());
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+        let sent: Promise<string | undefined> = Promise.resolve(undefined);
+        await act(async () => {
+          sent = result.current.sendMessage("Next question");
+        });
+
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await expect(sent).resolves.toBeUndefined();
+        expect(result.current.isPendingResponse).toBe(false);
+        expect(
+          Object.values(result.current.messages).some((message) =>
+            message.content.some(
+              (part) => "text" in part && part.text === "Next question",
+            ),
+          ),
+        ).toBe(false);
+
+        await act(async () => {
+          waits.splice(0).forEach((resolve) => resolve());
+        });
+        await waitFor(() =>
+          expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(3),
+        );
+      } finally {
         waitUntilOnline.mockRestore();
       }
     });

@@ -1,10 +1,17 @@
-import { connectivity } from "@/lib/connectivity/connectivity";
+import {
+  connectivity,
+  reconnectBackoffMs,
+} from "@/lib/connectivity/connectivity";
+import { abortableDelay } from "@/utils/abortableDelay";
 
 interface PendingStop {
-  send: () => Promise<boolean>;
-  sending: Promise<boolean> | null;
-  superseded: boolean;
-  waitForNetwork: AbortController;
+  attempt: () => Promise<boolean>;
+  delivered: boolean;
+  /** Replaced by a newer Stop, or the chat view went away. */
+  dropped: boolean;
+  /** A newer turn in the chat waits for this Stop. */
+  newerTurn: boolean;
+  dropSignal: AbortController;
 }
 
 export interface StopDeliveryOptions {
@@ -19,85 +26,112 @@ export interface StopDeliveryOptions {
 
 /**
  * Stops the server has not heard yet, per chat. The server stops whatever turn
- * runs in the chat, so a Stop must never reach a turn the user started after
- * pressing it: the next turn settles it first (`settle`), and from then on it
- * is not sent again.
+ * runs in the chat, so a Stop stays pending until it is delivered, and a newer
+ * turn in the chat goes out only after that (`settle`): the Stop can never
+ * land after it.
  */
 export function createStopDelivery() {
   const pendingStops = new Map<string, PendingStop>();
 
-  const supersede = (stop: PendingStop) => {
-    stop.superseded = true;
-    stop.waitForNetwork.abort();
+  const drop = (stop: PendingStop) => {
+    stop.dropped = true;
+    stop.dropSignal.abort();
+  };
+
+  /** Tries until delivered, waiting for the connection between tries. */
+  const deliverWhenOnline = async (
+    stop: PendingStop,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    for (let failures = 0; ; failures += 1) {
+      await connectivity.waitUntilOnline(signal);
+      if (failures > 0)
+        await abortableDelay(reconnectBackoffMs(failures - 1), signal);
+      if (stop.delivered || (await stop.attempt())) return;
+    }
   };
 
   return {
-    /** Sends the Stop now and, if it cannot be delivered, once more when the connection is back. */
+    /** Sends the Stop now, and again whenever the connection is back, until delivered. */
     deliver(streamKey: string, options: StopDeliveryOptions): void {
       const previous = pendingStops.get(streamKey);
-      if (previous) supersede(previous);
+      if (previous) drop(previous);
+      let sending: Promise<boolean> | null = null;
       const stop: PendingStop = {
-        send: options.send,
-        sending: null,
-        superseded: false,
-        waitForNetwork: new AbortController(),
+        // Tries running at once share one request.
+        attempt: () => {
+          sending ??= options
+            .send()
+            .catch(() => false)
+            .then((delivered) => {
+              sending = null;
+              if (delivered) {
+                stop.delivered = true;
+                if (pendingStops.get(streamKey) === stop)
+                  pendingStops.delete(streamKey);
+              }
+              return delivered;
+            });
+          return sending;
+        },
+        delivered: false,
+        dropped: false,
+        newerTurn: false,
+        dropSignal: new AbortController(),
       };
       pendingStops.set(streamKey, stop);
-      const attempt = async () => {
-        const sending = options.send();
-        stop.sending = sending;
-        try {
-          return await sending;
-        } finally {
-          stop.sending = null;
-        }
-      };
-      // Read through a call: another turn can supersede it while this awaits.
-      const superseded = () => stop.superseded;
+      // Read through a call: a newer turn can start while this awaits.
+      const quiet = () => stop.newerTurn || stop.dropped;
       const undelivered = () => {
-        if (!superseded()) options.onUndelivered();
+        if (!quiet()) options.onUndelivered();
       };
 
       void (async () => {
         const fallback = setTimeout(undelivered, options.undeliveredAfterMs);
-        const delivered = await attempt();
+        const delivered = await stop.attempt();
         clearTimeout(fallback);
-        if (!delivered) {
-          undelivered();
-          const online = await connectivity
-            .waitUntilOnline(stop.waitForNetwork.signal)
-            .then(
-              () => true,
-              () => false,
-            );
-          if (online && !superseded() && (await attempt()) && !superseded())
-            options.onDeliveredLate();
+        if (delivered) return;
+        undelivered();
+        try {
+          await deliverWhenOnline(stop, stop.dropSignal.signal);
+        } catch {
+          return;
         }
-        if (pendingStops.get(streamKey) === stop)
-          pendingStops.delete(streamKey);
+        if (!quiet()) options.onDeliveredLate();
       })();
     },
 
     /**
      * Called as a new turn starts in the chat; its request waits for the
-     * returned promise. A Stop still in flight is awaited, one waiting for the
-     * connection is sent once now, and neither is sent again. `null` when none
+     * returned promise, which resolves once the pending Stop is delivered and
+     * rejects when `signal` aborts or the Stop is dropped. `null` when no Stop
      * is pending.
      */
-    settle(streamKey: string): Promise<void> | null {
+    settle(streamKey: string, signal: AbortSignal): Promise<void> | null {
       const stop = pendingStops.get(streamKey);
       if (!stop) return null;
-      pendingStops.delete(streamKey);
-      supersede(stop);
-      return (stop.sending ?? stop.send()).then(
-        () => undefined,
-        () => undefined,
-      );
+      stop.newerTurn = true;
+      const stopped = new AbortController();
+      const stopWaiting = () => stopped.abort();
+      signal.addEventListener("abort", stopWaiting, { once: true });
+      stop.dropSignal.signal.addEventListener("abort", stopWaiting, {
+        once: true,
+      });
+      if (signal.aborted || stop.dropped) stopWaiting();
+      return (async () => {
+        try {
+          if (stop.delivered || (await stop.attempt())) return;
+          await deliverWhenOnline(stop, stopped.signal);
+        } finally {
+          signal.removeEventListener("abort", stopWaiting);
+          stop.dropSignal.signal.removeEventListener("abort", stopWaiting);
+        }
+      })();
     },
 
-    /** Gives up on every Stop still waiting, as the chat view goes away. */
+    /** Gives up on every Stop still pending, as the chat view goes away. */
     dropAll(): void {
-      pendingStops.forEach(supersede);
+      pendingStops.forEach(drop);
       pendingStops.clear();
     },
   };

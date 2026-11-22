@@ -2205,7 +2205,9 @@ export function useChatMessaging(
         prepare?.onAbandoned?.();
         return undefined;
       }
-      const stopSettled = stops.settle(streamKey);
+      // Stop cancels this wait as it cancels a host preparation.
+      const stopWait = new AbortController();
+      const stopSettled = stops.settle(streamKey, stopWait.signal);
       logger.log(
         `[DEBUG_STREAMING] sendMessage called. Content: "${content}", Files: ${inputFileIds?.length ?? 0}, Model: ${modelId ?? "default"}, Assistant: ${assistantId ?? "none"}`,
       );
@@ -2259,6 +2261,20 @@ export function useChatMessaging(
         "[DEBUG_STREAMING] sendMessage: isSubmittingRef.current set to true.",
       );
 
+      // Nothing reached the server, so no refetch can restore these rows.
+      const dropSend = () => {
+        removeUserMessages([userMessage.id], streamKey);
+        endWaitTurn(streamKey);
+        resetStreaming(streamKey);
+        if (silentChatId) {
+          setAwaitingFirstStreamChunkForNewChat(false);
+          setNewlyCreatedChatId(null);
+          setNewlyCreatedChatIdInStore(null);
+        }
+        setSubmittingForKey(streamKey, false);
+        prepare?.onAbandoned?.();
+      };
+
       let effectiveActionFacet = actionFacet;
       if (prepare) {
         const controller = new AbortController();
@@ -2289,20 +2305,25 @@ export function useChatMessaging(
           }
         }
         if (!prepared || controller.signal.aborted) {
-          // Nothing reached the server, so no refetch can restore these rows.
-          removeUserMessages([userMessage.id], streamKey);
-          endWaitTurn(streamKey);
-          resetStreaming(streamKey);
-          if (silentChatId) {
-            setAwaitingFirstStreamChunkForNewChat(false);
-            setNewlyCreatedChatId(null);
-            setNewlyCreatedChatIdInStore(null);
-          }
-          setSubmittingForKey(streamKey, false);
-          prepare.onAbandoned?.();
+          dropSend();
           return undefined;
         }
         effectiveActionFacet = prepared.actionFacet;
+      }
+
+      if (stopSettled) {
+        preparationAbortByKeyRef.current[streamKey] = stopWait;
+        const stopDelivered = await stopSettled.then(
+          () => true,
+          () => false,
+        );
+        if (preparationAbortByKeyRef.current[streamKey] === stopWait) {
+          delete preparationAbortByKeyRef.current[streamKey];
+        }
+        if (!stopDelivered) {
+          dropSend();
+          return undefined;
+        }
       }
 
       // A brand-new chat gets its seed on chat_created, once it has an id.
@@ -2437,7 +2458,6 @@ export function useChatMessaging(
 
         const connectionStreamKeyRef = { current: streamKey };
 
-        if (stopSettled) await stopSettled;
         // Store the abort function in both the ref AND the global store
         // This allows external code (like createNewChat) to abort the connection
         const cleanup = createSSEConnection(sseUrl, {
@@ -2720,7 +2740,7 @@ export function useChatMessaging(
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
       }
-      const stopSettled = stops.settle(streamKey);
+      const stopSettled = stops.settle(streamKey, new AbortController().signal);
 
       // Read from the store, not the render closure, so this callback does not
       // depend on `messages`/`messageOrder`, which change on every stream chunk.
@@ -2892,7 +2912,7 @@ export function useChatMessaging(
         );
         return;
       }
-      const stopSettled = stops.settle(streamKey);
+      const stopSettled = stops.settle(streamKey, new AbortController().signal);
 
       // Clear any previous streaming state and close existing SSE connection
       resetStreaming(streamKey);
@@ -3237,7 +3257,7 @@ export function useChatMessaging(
         beginWaitTurn(streamKey, { continuation: true });
       }
 
-      const stopSettled = stops.settle(streamKey);
+      const stopSettled = stops.settle(streamKey, new AbortController().signal);
       const connect = (
         resolve: () => void,
         reject: (reason: unknown) => void,
@@ -3377,7 +3397,13 @@ export function useChatMessaging(
         setSSEAbortCallback(cleanup, streamKey);
       };
       return stopSettled
-        ? stopSettled.then(() => new Promise<void>(connect))
+        ? stopSettled.then(
+            () => new Promise<void>(connect),
+            (error: unknown) => {
+              rollBackUnaccepted(streamKey);
+              throw error;
+            },
+          )
         : new Promise<void>(connect);
     },
     [
