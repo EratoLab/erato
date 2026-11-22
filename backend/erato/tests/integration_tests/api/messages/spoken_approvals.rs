@@ -481,3 +481,206 @@ async fn a_sentence_before_the_call_keeps_the_stop_and_its_own_recording(pool: P
     assert_ne!(paths[0], paths[1], "each recording has a path of its own");
     speech.abort();
 }
+
+/// The spoken, text and tool parts of a stored message, in order.
+async fn reply_parts(state: &erato::state::AppState, message_id: Uuid) -> Vec<(String, String)> {
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    stored.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|part| {
+            let kind = part["content_type"].as_str()?;
+            matches!(kind, "spoken" | "text" | "tool_use").then(|| {
+                (
+                    kind.to_string(),
+                    part["text"].as_str().unwrap_or_default().to_string(),
+                )
+            })
+        })
+        .collect()
+}
+
+fn natural(config: &mut erato::config::AppConfig, speech_url: &str) {
+    speak_with(config, speech_url);
+    config.audio_conversational.reply_speech.wording =
+        erato_config::reply_speech::ReplySpeechWording::Natural;
+}
+
+fn part(kind: &str, text: &str) -> (String, String) {
+    (kind.to_string(), text.to_string())
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn each_model_call_of_a_natural_reply_speaks_its_own_part(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, _, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| natural(config, &speech_url),
+    )
+    .await;
+    {
+        let mut mocks = llm.mocks();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["Was steht an?"], &["call_list"]));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "<spoken>Ich schaue nach.</spoken>",
+                    &[("call_list", "list_reminders", json!({}))],
+                ),
+            );
+        });
+        answer_turn(
+            &mut mocks,
+            "call_list",
+            "<spoken>Nichts für diese Woche.</spoken>Für diese Woche sind keine Erinnerungen geplant.",
+        );
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    let events = send(&server, chat_id, "Was steht an?", true).await;
+    let spoken: String = events
+        .iter()
+        .filter(|event| event["message_type"] == "spoken_delta")
+        .filter_map(|event| event["new_text"].as_str())
+        .collect();
+    assert_eq!(spoken, "Ich schaue nach.Nichts für diese Woche.");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "spoken_end")
+            .count(),
+        2
+    );
+    assert_eq!(
+        extract_answer(&events),
+        "Für diese Woche sind keine Erinnerungen geplant."
+    );
+    let message_id: Uuid = events
+        .iter()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .and_then(|event| event["message_id"].as_str())
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [
+            part("spoken", "Ich schaue nach."),
+            part("tool_use", ""),
+            part("spoken", "Nichts für diese Woche."),
+            part("text", "Für diese Woche sind keine Erinnerungen geplant."),
+        ]
+    );
+    speech.abort();
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_spoken_part_before_an_approval_stays_spoken_after_the_decision(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| natural(config, &speech_url),
+    )
+    .await;
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Vorgelesen", next_friday(), 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let recorder = RequestBodyRecorder::new();
+    {
+        let mut mocks = llm.mocks();
+        let spy = Spy(recorder.clone());
+        mocks.mock_with_options(0, None, move |when, then| {
+            when.post().path("/v1/chat/completions").matcher(spy);
+            then.status(http::StatusCode::INTERNAL_SERVER_ERROR);
+        });
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["Lösch Vorgelesen"],
+                    &["call_narrated"],
+                ));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "<spoken>Ich lösche die Erinnerung.</spoken>",
+                    &[(
+                        "call_narrated",
+                        "cancel_reminder",
+                        json!({"reminder_id": item.id}),
+                    )],
+                ),
+            );
+        });
+        answer_turn(
+            &mut mocks,
+            "call_narrated",
+            "<spoken>Erledigt.</spoken>Die Erinnerung Vorgelesen ist gelöscht.",
+        );
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    send(&server, chat_id, "Lösch Vorgelesen", true).await;
+    let (message_id, request) = parked(&state, chat_id).await;
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [part("spoken", "Ich lösche die Erinnerung.")]
+    );
+
+    let response = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+            "conversational_audio_back": true,
+        }))
+        .await;
+    response.assert_status_ok();
+    assert_eq!(
+        extract_answer(&events(&response)),
+        "Die Erinnerung Vorgelesen ist gelöscht."
+    );
+    assert_eq!(
+        reply_parts(&state, message_id).await,
+        [
+            part("spoken", "Ich lösche die Erinnerung."),
+            part("tool_use", ""),
+            part("spoken", "Erledigt."),
+            part("text", "Die Erinnerung Vorgelesen ist gelöscht."),
+        ]
+    );
+    let continuation: Vec<String> = recorder
+        .bodies()
+        .into_iter()
+        .filter(|body| body.contains("\"role\":\"tool\""))
+        .collect();
+    assert!(!continuation.is_empty());
+    for body in continuation {
+        assert!(body.contains("<spoken>Ich lösche die Erinnerung.</spoken>"));
+        assert!(body.contains("Begin your reply with <spoken>"));
+    }
+    speech.abort();
+}
