@@ -25717,7 +25717,7 @@ async fn resume_parked_generation(
             action_facet_args: generation_parameters.action_facet_args.clone(),
         });
     // Boxed: inline, the generation state is copied into every continuation
-    // wrapper's frame, which overflows the test thread stack in debug builds.
+    // wrapper's debug frame, about 1.6 MiB more stack for a resumed turn.
     let (end_content, generation_metadata) = Box::pin(stream_generate_chat_completion(
         tx.clone(),
         app_state,
