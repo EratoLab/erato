@@ -7,6 +7,10 @@ import { getFacetDisplayName } from "@/components/ui/Chat/FacetSelector";
 import { ModelSelectorOptionContent } from "@/components/ui/Chat/ModelSelector";
 import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
+import {
+  MarkdownExcerpt,
+  ReadOnlyMarkdown,
+} from "@/components/ui/Markdown/ReadOnlyMarkdown";
 import { FileTextIcon, ResolvedIcon } from "@/components/ui/icons";
 import {
   useAvailableModels,
@@ -362,6 +366,10 @@ export function AssistantHubDiff({
   );
 }
 
+function getAssistantHubVersionDescription(version: AssistantHubVersion) {
+  return version.long_description || (version.assistant.description ?? "");
+}
+
 export function AssistantHubVersionCard({
   version,
   categories,
@@ -387,6 +395,7 @@ export function AssistantHubVersionCard({
     .map((category) => category.display_name);
   const creatorName = version.creator.display_name;
   const assistantName = version.assistant.name;
+  const description = getAssistantHubVersionDescription(version);
   const avatarLetter = assistantName.trim().charAt(0).toLocaleUpperCase();
   const currentRating =
     version.review_average_score == null
@@ -421,9 +430,7 @@ export function AssistantHubVersionCard({
         </div>
       </div>
       <p className="mt-4 line-clamp-3 text-sm text-theme-fg-secondary">
-        {version.long_description.length > 0
-          ? version.long_description
-          : (version.assistant.description ?? "")}
+        <MarkdownExcerpt>{description}</MarkdownExcerpt>
       </p>
       <div className="mt-auto flex min-h-6 items-center justify-between gap-3 pt-4">
         {currentRating != null && version.review_count > 0 ? (
@@ -469,9 +476,7 @@ export function AssistantHubVersionCard({
         </h3>
       </div>
       <p className="line-clamp-3 text-sm text-theme-fg-secondary">
-        {version.long_description.length > 0
-          ? version.long_description
-          : (version.assistant.description ?? "")}
+        <MarkdownExcerpt>{description}</MarkdownExcerpt>
       </p>
       <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-4 text-xs text-theme-fg-muted">
         {(() => {
@@ -608,10 +613,7 @@ export function AssistantHubVersionOverviewSection({
       ? null
       : getAssistantHubDisplayScore(version.review_average_score, ratingMode);
   const hasRating = currentRating != null && version.review_count > 0;
-  const description =
-    version.long_description.length > 0
-      ? version.long_description
-      : (version.assistant.description ?? "");
+  const description = getAssistantHubVersionDescription(version);
 
   return (
     <Card variant="surface" as="section" size="lg">
@@ -703,9 +705,11 @@ export function AssistantHubVersionOverviewSection({
             message: "Description",
           })}
         </h2>
-        <p className="whitespace-pre-wrap text-theme-fg-primary">
-          {description}
-        </p>
+        {description && (
+          <div className="overflow-x-auto break-words text-theme-fg-primary">
+            <ReadOnlyMarkdown>{description}</ReadOnlyMarkdown>
+          </div>
+        )}
       </div>
       {version.keywords.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">

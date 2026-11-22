@@ -161,31 +161,34 @@ vi.mock("@/components/ui/Chat/StarterPromptsSection", () => ({
 }));
 
 describe("AssistantWelcomeScreen", () => {
-  it("does not render starter prompts on the assistant welcome screen", () => {
-    const assistant: AssistantWithFiles = {
-      id: "assistant-1",
-      name: "Budget Assistant",
-      description: "Helps with finance questions",
-      prompt: "Use the supplied policy docs to answer questions.",
-      created_at: "2026-03-23T08:00:00.000Z",
-      facet_ids: [],
-      starter_prompts: [],
-      enforce_facet_settings: false,
-      mcp_server_ids: [],
-      updated_at: "2026-03-23T09:00:00.000Z",
-      files: [],
-      can_edit: false,
-    };
+  const assistant: AssistantWithFiles = {
+    id: "assistant-1",
+    name: "Budget Assistant",
+    description: "Helps with finance questions",
+    prompt: "Use the supplied policy docs to answer questions.",
+    created_at: "2026-03-23T08:00:00.000Z",
+    facet_ids: [],
+    starter_prompts: [],
+    enforce_facet_settings: false,
+    mcp_server_ids: [],
+    updated_at: "2026-03-23T09:00:00.000Z",
+    files: [],
+    can_edit: false,
+  };
 
+  const renderWelcome = (value = assistant) =>
     render(
       <ThemeProvider enableCustomTheme={false}>
         <I18nProvider i18n={i18n}>
           <MemoryRouter>
-            <AssistantWelcomeScreen assistant={assistant} />
+            <AssistantWelcomeScreen assistant={value} />
           </MemoryRouter>
         </I18nProvider>
       </ThemeProvider>,
     );
+
+  it("does not render starter prompts on the assistant welcome screen", () => {
+    renderWelcome();
 
     expect(
       screen.queryByTestId("starter-prompts-section"),
@@ -199,8 +202,44 @@ describe("AssistantWelcomeScreen", () => {
     expect(
       screen.getByTestId("assistant-welcome-avatar-initial"),
     ).toHaveTextContent("B");
+    expect(screen.getByText("Helps with finance questions").tagName).toBe("P");
     expect(screen.queryByText("System Prompt")).not.toBeInTheDocument();
   });
+
+  it("renders the saved description as Markdown on first view", () => {
+    renderWelcome({
+      ...assistant,
+      description:
+        "A **finance assistant**.\n\nUse it for *planning*.\n\n- Budgets\n- [Policy guide](https://example.com/policies)",
+    });
+
+    const welcome = within(
+      screen.getByTestId("assistant-welcome-screen-default"),
+    );
+    const bold = welcome.getByText("finance assistant");
+    expect(bold.tagName).toBe("STRONG");
+    expect(bold.closest("p")).toHaveTextContent("A finance assistant.");
+    const emphasis = welcome.getByText("planning");
+    expect(emphasis.tagName).toBe("EM");
+    expect(emphasis.closest("p")).toHaveTextContent("Use it for planning.");
+    const list = welcome.getByRole("list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    const link = within(list).getByRole("link", { name: "Policy guide" });
+    expect(link).toHaveAttribute("href", "https://example.com/policies");
+    expect(link.closest("button")).toBeNull();
+  });
+
+  it.each(["", undefined])(
+    "omits the description for a saved description of %s",
+    (description) => {
+      renderWelcome({ ...assistant, description });
+
+      const welcome = within(
+        screen.getByTestId("assistant-welcome-screen-default"),
+      );
+      expect(welcome.queryByRole("paragraph")).not.toBeInTheDocument();
+    },
+  );
 
   it("opens assistant configuration from the large name and renders edit as a secondary button", () => {
     const assistant: AssistantWithFiles = {
