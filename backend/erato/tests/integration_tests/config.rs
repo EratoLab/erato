@@ -3763,6 +3763,17 @@ fn part_tools_must_be_configured() {
 }
 
 #[test]
+#[should_panic(
+    expected = "part tool 'client/write_part' schema: two alternatives of /$defs/block/anyOf lead back to it through the same property"
+)]
+fn part_tool_schemas_reject_alternatives_that_recurse_through_the_same_property() {
+    migrate_config_with_action_facets(&PART_TOOLS.replace(
+        r#"parameters = '{"type":"object","properties":{"row":{"type":"integer"}}}'"#,
+        r##"parameters = '{"type":"object","properties":{"blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}},"$defs":{"block":{"anyOf":[{"type":"object","properties":{"type":{"const":"list"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}},{"type":"object","properties":{"type":{"const":"table"},"children":{"type":"array","items":{"$ref":"#/$defs/block"}}}}]}}}'"##,
+    ));
+}
+
+#[test]
 #[should_panic(expected = "submission.max_row_tries must be 1–10")]
 fn part_tries_are_bounded() {
     migrate_config_with_action_facets(&format!("{PART_TOOLS}max_row_tries = 0\n"));

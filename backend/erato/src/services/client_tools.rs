@@ -1415,9 +1415,13 @@ mod tests {
         );
     }
 
-    fn issues(policy: &SubmissionPolicy, mut input: Value) -> Vec<(String, String, String)> {
-        policy.decode_stringified(&mut input);
-        match policy.validate(&input) {
+    fn issues(policy: &SubmissionPolicy, input: Value) -> Vec<(String, String, String)> {
+        check_issues(&policy.arguments, input)
+    }
+
+    fn check_issues(check: &ArgumentCheck, mut input: Value) -> Vec<(String, String, String)> {
+        check.decode_stringified(&mut input);
+        match check.validate(&input) {
             None => Vec::new(),
             Some(ClientToolOutcome::ValidationFailed(issues, None)) => issues
                 .into_iter()
@@ -1660,6 +1664,65 @@ mod tests {
                 "enum",
                 r#"value is not one of ["add","replace","remove"]"#
             )]
+        );
+    }
+
+    /// The Word section writer's `ops`: forms told apart only by their own
+    /// keys, checked as a part call.
+    #[test]
+    fn a_mistake_inside_a_part_op_names_the_field_of_its_form() {
+        let text = json!({"type":"string","minLength":1});
+        let op = |properties: Value, required: &[&str]| {
+            json!({"type":"object","properties":properties,"required":required,
+                "additionalProperties":false})
+        };
+        let check = ArgumentCheck::compile(&json!({"type":"object","required":["row","ops"],
+        "additionalProperties":false,"properties":{
+            "row":{"type":"integer"},
+            "ops":{"type":"array","minItems":1,"items":{"anyOf":[
+                op(json!({"keep":text}), &["keep"]),
+                op(json!({"replace":text,"text":text}), &["replace", "text"]),
+                op(json!({"insert":text}), &["insert"]),
+                op(json!({"delete":text,"reason":text}), &["delete", "reason"])
+            ]}}
+        }}))
+        .unwrap();
+        assert!(erato_config::client_tool_schema::fanned_choices(&check.schema).is_empty());
+        let write = |op: Value| json!({"row":2,"ops":[{"keep":"b1"}, op]});
+        let missing_text = issue("/ops/1", "required", r#""text" is a required property"#);
+        assert_eq!(
+            check_issues(&check, write(json!({"replace":"b2"}))),
+            vec![missing_text.clone()]
+        );
+        assert_eq!(
+            check_issues(&check, write(json!({"replace":["b2","b3"]}))),
+            vec![
+                missing_text,
+                issue("/ops/1/replace", "type", r#"value is not of type "string""#)
+            ]
+        );
+        assert_eq!(
+            check_issues(&check, write(json!({"delete":"b3"}))),
+            vec![issue(
+                "/ops/1",
+                "required",
+                r#""reason" is a required property"#
+            )]
+        );
+        assert_eq!(
+            check_issues(&check, write(json!({"modify":"b2"}))),
+            vec![
+                issue(
+                    "/ops/1",
+                    "required",
+                    r#"one of these is required: "keep"; or "replace" and "text"; or "insert"; or "delete" and "reason""#
+                ),
+                issue(
+                    "/ops/1",
+                    "additionalProperties",
+                    "Additional properties are not allowed ('modify' was unexpected)"
+                )
+            ]
         );
     }
 

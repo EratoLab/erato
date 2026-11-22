@@ -2489,14 +2489,10 @@ impl AppConfig {
                                 qualified, error
                             );
                         }
-                        let fanned = crate::client_tool_schema::fanned_choices(&value);
-                        if !fanned.is_empty() {
-                            panic!(
-                                "Client tool '{}' submission schema: two alternatives of {} lead back to it through the same property; a failed check would repeat once per alternative at every nesting level. Give that property to one alternative only, or pick the alternative with if/then.",
-                                qualified,
-                                fanned.join(", ")
-                            );
-                        }
+                        refuse_fanned_choices(
+                            &format!("Client tool '{qualified}' submission schema"),
+                            &value,
+                        );
                     }
                 }
                 Ok(_) => panic!(
@@ -8709,6 +8705,19 @@ fn configured_non_submission_tool<'a>(
         .find(|tool| tool.qualified_name() == name && tool.submission.is_none())
 }
 
+/// Panics when two alternatives of a choice in a schema checked before
+/// dispatch lead back to that choice through the same property: a failed
+/// check collects every alternative's errors at every nesting level.
+fn refuse_fanned_choices(subject: &str, schema: &serde_json::Value) {
+    let fanned = crate::client_tool_schema::fanned_choices(schema);
+    if !fanned.is_empty() {
+        panic!(
+            "{subject}: two alternatives of {} lead back to it through the same property; a failed check would repeat once per alternative at every nesting level. Give that property to one alternative only, or pick the alternative with if/then.",
+            fanned.join(", ")
+        );
+    }
+}
+
 /// Panics unless the part tools of a submission are configured non-submission,
 /// non-durable tools with compiling schemas that belong to this submission
 /// only, are no recovery read and are never offered to a delegated task, and
@@ -8760,9 +8769,15 @@ fn validate_submission_parts(
         }
         let compiled = serde_json::from_str::<serde_json::Value>(&part.parameters)
             .map_err(|error| error.to_string())
-            .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| ()));
-        if let Err(error) = compiled {
-            panic!("Client tool '{qualified}' part tool '{name}' has an invalid schema: {error}");
+            .and_then(|schema| crate::client_tool_schema::compile(&schema).map(|_| schema));
+        match compiled {
+            Ok(schema) => refuse_fanned_choices(
+                &format!("Client tool '{qualified}' part tool '{name}' schema"),
+                &schema,
+            ),
+            Err(error) => panic!(
+                "Client tool '{qualified}' part tool '{name}' has an invalid schema: {error}"
+            ),
         }
         if let Some(other) = tools.values().find(|other| {
             other.qualified_name() != qualified
