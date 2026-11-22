@@ -738,6 +738,7 @@ export function useChatMessaging(
         }
 
         // Force a network fetch for completion/close paths, even when current hook chatId is null.
+        const requestedAt = Date.now();
         const refetchResult = await fetchChatMessages({
           pathParams: { chatId: effectiveChatId },
         });
@@ -767,7 +768,7 @@ export function useChatMessaging(
               (message) => message.is_message_in_active_thread !== false,
             ) ?? null;
         if (refetchedApiMessages) {
-          setApiMessages(refetchedApiMessages, effectiveStreamKey);
+          setApiMessages(refetchedApiMessages, effectiveStreamKey, requestedAt);
         }
         clearHiddenMessageIds(effectiveStreamKey);
 

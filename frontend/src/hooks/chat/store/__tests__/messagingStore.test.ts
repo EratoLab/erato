@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleMessageComplete } from "../../handlers/handleMessageComplete";
 import { useMessagingStore } from "../messagingStore";
@@ -176,11 +176,55 @@ describe("messagingStore kept answers", () => {
       status: "complete" as const,
       content: text("Done, I added the paragraph."),
     };
-    useMessagingStore.getState().setApiMessages([userMessage, saved], "chat1");
+    useMessagingStore
+      .getState()
+      .setApiMessages([userMessage, saved], "chat1", Date.now());
 
     expect(
       useMessagingStore.getState().getRenderableMessages("chat1").a1.content,
     ).toEqual(saved.content);
+  });
+
+  it("is not replaced by a copy requested before the server had the answer saved", () => {
+    const now = vi.spyOn(Date, "now");
+    try {
+      const read = text("the text read before the stop");
+      keepAnswer("a1", read);
+      const copy = (content: ContentPart[]) => ({
+        id: "a1",
+        role: "assistant" as const,
+        createdAt: "2026-02-18T12:00:01.000Z",
+        status: "complete" as const,
+        content,
+      });
+      // A refetch starts at 1000, before the stop reached the server; the
+      // next turn starts at 2000; the stale read lands after it.
+      now.mockReturnValue(2_000);
+      useMessagingStore.getState().markAnswersSaved("chat1");
+      useMessagingStore
+        .getState()
+        .setApiMessages([userMessage, copy([])], "chat1", 1_000);
+      expect(
+        useMessagingStore.getState().getRenderableMessages("chat1").a1.content,
+      ).toEqual(read);
+
+      useMessagingStore
+        .getState()
+        .setApiMessages([userMessage, copy([])], "chat1");
+      expect(
+        useMessagingStore.getState().getRenderableMessages("chat1").a1.content,
+      ).toEqual(read);
+
+      const savedCopy = text("the stopped answer");
+      useMessagingStore
+        .getState()
+        .setApiMessages([userMessage, copy(savedCopy)], "chat1", 2_500);
+      expect(
+        useMessagingStore.getState().getRenderableMessages("chat1").a1.content,
+      ).toEqual(savedCopy);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("stands in only in its own place, never beside another version of the turn", () => {

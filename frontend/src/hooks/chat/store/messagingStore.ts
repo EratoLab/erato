@@ -32,8 +32,11 @@ export interface StreamingState {
 /** An answer as the reader last saw it, standing in for the server's copy. */
 export interface KeptAnswer {
   message: Message;
-  /** The server has the answer saved: its next copy wins, even if shorter. */
-  saved: boolean;
+  /**
+   * When the client learnt the server has the answer saved. A copy fetched
+   * after that wins, even if shorter; one requested earlier can be stale.
+   */
+  savedAt: number | null;
 }
 
 // Add user messages to the store
@@ -80,7 +83,12 @@ export interface MessagingStore {
   clearAllStreaming: () => void;
   getApiMessages: (streamKey?: string | null) => Record<string, Message>;
   getHiddenMessageIds: (streamKey?: string | null) => string[];
-  setApiMessages: (messages: Message[], streamKey?: string | null) => void;
+  /** `requestedAt`: when the fetch that read `messages` started, if known. */
+  setApiMessages: (
+    messages: Message[],
+    streamKey?: string | null,
+    requestedAt?: number,
+  ) => void;
   hideMessageIds: (messageIds: string[], streamKey?: string | null) => void;
   clearHiddenMessageIds: (streamKey?: string | null) => void;
   clearApiMessages: (streamKey?: string | null) => void;
@@ -458,7 +466,7 @@ export const useMessagingStore = create<MessagingStore>()(
                 !id ||
                 (contentSize(streaming.content) <=
                   contentSize(earlier?.message.content ?? []) &&
-                  (!saved || earlier?.saved))
+                  (!saved || earlier?.savedAt != null))
               ) {
                 return prev;
               }
@@ -480,7 +488,7 @@ export const useMessagingStore = create<MessagingStore>()(
                               streaming.createdAt ?? new Date().toISOString(),
                             status: "complete",
                           },
-                      saved: saved || !!earlier?.saved,
+                      savedAt: earlier?.savedAt ?? (saved ? Date.now() : null),
                     },
                   },
                 },
@@ -500,13 +508,14 @@ export const useMessagingStore = create<MessagingStore>()(
               const keptForKey = prev.keptAnswersByKey[resolvedKey];
               const ids = Object.keys(keptForKey ?? {}).filter(
                 (id) =>
-                  !keptForKey[id].saved &&
+                  keptForKey[id].savedAt === null &&
                   (!messageIds || messageIds.includes(id)),
               );
               if (ids.length === 0) return prev;
               const next = { ...keptForKey };
+              const savedAt = Date.now();
               ids.forEach((id) => {
-                next[id] = { ...next[id], saved: true };
+                next[id] = { ...next[id], savedAt };
               });
               return {
                 ...prev,
@@ -540,7 +549,7 @@ export const useMessagingStore = create<MessagingStore>()(
           const state = get();
           return getHiddenMessageIdsForKey(state, resolveStreamKey(streamKey));
         },
-        setApiMessages: (messages, streamKey) =>
+        setApiMessages: (messages, streamKey, requestedAt) =>
           set(
             (prev) => {
               const inputKey = resolveStreamKey(streamKey);
@@ -549,13 +558,17 @@ export const useMessagingStore = create<MessagingStore>()(
               messages.forEach((message) => {
                 nextById[message.id] = message;
               });
-              // Until the server has it saved, a copy that has not caught
-              // up (or a list without the row yet) keeps the stand-in.
+              // A copy at least as long replaces the stand-in, and once the
+              // answer is saved, any copy fetched after that.
               const stillKept = Object.fromEntries(
                 Object.entries(prev.keptAnswersByKey[resolvedKey] ?? {}).filter(
                   ([id, kept]) =>
-                    !kept.saved &&
-                    (!(id in nextById) || longer(kept, nextById[id].content)),
+                    !(
+                      (id in nextById && !longer(kept, nextById[id].content)) ||
+                      (kept.savedAt !== null &&
+                        requestedAt !== undefined &&
+                        requestedAt >= kept.savedAt)
+                    ),
                 ),
               );
 
