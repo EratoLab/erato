@@ -1419,6 +1419,7 @@ describe("listening against the endpoint", () => {
       speechMs: 900,
       recordedMs: 1_950,
       overVoice: false,
+      audioAt: Date.now() + 50,
     };
     const deciding = (
       approves = true,
