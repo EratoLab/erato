@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { recordingSignals, withFrame } from "./recordingSignals";
+import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 
 describe("what the detector heard in a recording", () => {
   it("counts speech by sample time from the start, and the first speech once", () => {
@@ -14,7 +14,20 @@ describe("what the detector heard in a recording", () => {
       speechMs: 64,
       recordedMs: 160,
       overVoice: false,
+      audioAt: 1_000,
     });
+  });
+
+  it("times frames from the microphone's first sample, behind the silence heard first", () => {
+    // Asked for at 1 000; the first sample came at 1 400, the detector hears
+    // 300 ms of silence before it: speech in its 11th frame was said at 1 420.
+    let signals = audioFrom(recordingSignals(1_000, false), 1_400, 300);
+    for (let frame = 0; frame < 10; frame += 1)
+      signals = withFrame(signals, 32, 0);
+    signals = withFrame(signals, 32, 0.9);
+    expect(signals.startedAt).toBe(1_000);
+    expect(signals.firstSpeechAt).toBe(1_420);
+    expect(signals.endedAt).toBe(1_452);
   });
 
   it("a silent recording has no first speech", () => {

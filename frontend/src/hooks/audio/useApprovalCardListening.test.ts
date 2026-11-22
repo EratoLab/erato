@@ -230,6 +230,7 @@ describe("ERMAIN-1259: what deciding by voice needs from the turn", () => {
       speechMs: 900,
       recordedMs: 2_000,
       overVoice: false,
+      audioAt: 1_000,
     };
     mic.state.turn = {
       ended: true,
