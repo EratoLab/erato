@@ -3365,13 +3365,13 @@ list = "Ich sehe mir die {table} an."
 
 How a reply is spoken in conversation mode, when Audio-back is on. Approval cards have their own setting, `approval_speech`.
 
-With `natural`, one model call writes two parts: first a short spoken part for the ear, then the complete written answer, the same a typed question would get, with lists, tables and code. The voice says only the spoken part and starts as soon as it is written; the chat keeps the written answer and shows what the voice said, folded, above it. After a tool call the next model call starts again with a spoken part. The spoken part's style comes from `turn_instructions.spoken_reply`; without it, the built-in instruction asks for one to three short sentences. The instruction that asks for the two parts is built into Erato, in English, and the model answers in the user's language. A reply that does not keep the format is stored as written and read as written, and counted in `erato_reply_split_fallback_total`. For pure conversation ("Danke", "Hallo") the model may write no written part; the spoken text is then the message. Later turns see only the written answers of earlier replies.
+With `natural`, one model call writes two parts: first a short spoken part for the ear, then the complete written answer, the same a typed question would get, with lists, tables and code. The voice says only the spoken part and starts as soon as it is written; the chat keeps the written answer, and shows what the voice said, folded, above it where `show_in_chat` is on. After a tool call the next model call starts again with a spoken part. The spoken part's style comes from `turn_instructions.spoken_reply`; without it, the built-in instruction asks for one to three short sentences. The instruction that asks for the two parts is built into Erato, in English, and the model answers in the user's language. A reply that does not keep the format is stored as written and read as written, and counted in `erato_reply_split_fallback_total`. For pure conversation ("Danke", "Hallo") the model may write no written part; the spoken text is then the message. Later turns see only the written answers of earlier replies.
 
 With `precise`, the reply is read as written, as before this setting existed: `turn_instructions.spoken_reply`, when set, shapes the whole reply, and the voice reads that text with the same clean-up as the read-aloud button (tables and code are not read out). Without `spoken_reply`, the model writes as for a typed message.
 
 The read-aloud button always reads the written text. A continuation after an approval keeps the form its turn started with, whatever the setting is by then.
 
-The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`) and are listed under `setting_orders.reply_speech`; the user's own choice (`preference_reply_speech_wording`) where the deciding level allows it. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
+The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`, `show_in_chat`) and are listed under `setting_orders.reply_speech`; the user's own wording (`preference_reply_speech_wording`) where the deciding level allows it, and their own `preference_reply_speech_show_in_chat` always. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
 
 **Type:** `object`
 
@@ -3389,14 +3389,38 @@ Messages written in `natural` hold a `spoken` part that Erato versions before th
 
 {/* erato_toml_config_key: audio_conversational.reply_speech.user_choice */}
 
-Whether a user may choose the wording for themselves, unless an audience setting says otherwise.
+Whether a user may choose the wording for themselves, unless an audience setting says otherwise. It does not limit `show_in_chat`.
 
 **Type:** `boolean` · **Default:** `true`
+
+#### `audio_conversational.reply_speech.show_in_chat`
+
+{/* erato_toml_config_key: audio_conversational.reply_speech.show_in_chat */}
+
+Whether the chat shows what the voice said for a reply in conversation: a muted "Spoken" line while the voice speaks, then folded above the written answer, with a small play button and the recording's length inside the fold where `keep_reply_audio` kept the recording. Off, the chat shows the written answer only, and the read-aloud button stays available on replies that have a recording. An audience can set it like the wording. A user can always choose it for themselves under Settings, Audio, Voice ("Show what the voice said in the chat") and go back to the organization's value, since it changes only what that user sees; what is stored is `keep_reply_audio`.
+
+**Type:** `boolean` · **Default:** `false`
 
 ```toml
 [audio_conversational.reply_speech]
 wording = "natural"
 user_choice = true
+show_in_chat = false
+```
+
+#### `audio_conversational.keep_reply_audio`
+
+{/* erato_toml_config_key: audio_conversational.keep_reply_audio */}
+
+Whether the voice of a reply in conversation is stored, so it can be played again from the chat. Off, the voice is streamed while it speaks and nothing is kept: no audio file, no file record, no reference in the message. On, each reply's voice is stored as a WAV file in the default file storage (`speech/<chat>/<message>-<file>.wav`) with a file record that names the provider, model and voice; anyone who can read the chat, including people it is shared with, can play it. Stored recordings stay until they are deleted from the file storage: removing an archived chat does not remove its files.
+
+Keeping recordings of a voice is personal data processing that needs its own purpose and retention; switch it on only where that is settled. Switching it off keeps recordings stored earlier playable. The user's own speech is never stored in conversation mode or dictation: it is transcribed and dropped. Read-aloud and spoken approval cards store nothing either.
+
+**Type:** `boolean` · **Default:** `false`
+
+```toml
+[audio_conversational]
+keep_reply_audio = false
 ```
 
 ### `model_permissions`

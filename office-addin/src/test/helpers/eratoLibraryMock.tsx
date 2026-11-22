@@ -334,6 +334,7 @@ export const DEFAULT_STUBS = {
     userDisplayName: "",
     isEmpty: false,
     isAttachmentOnly: false,
+    showsLoading: false,
     attachmentIds: [],
     filesById: {},
     relatedFiles: [],

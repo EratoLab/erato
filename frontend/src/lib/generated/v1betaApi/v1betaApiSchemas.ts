@@ -4162,6 +4162,13 @@ export type ReplySpeechStyleResponse = {
    * The audience whose value applies, by its display name.
    */
   audience?: string;
+  /**
+   * Whether the chat shows what the voice said: the spoken text, folded,
+   * and a play button where the recording was kept. The caller may always
+   * choose it for themselves: it changes only what they see.
+   */
+  show_in_chat: boolean;
+  show_in_chat_source: ReplySpeechStyleSource;
   source: ReplySpeechStyleSource;
   /**
    * Whether the caller may choose their own wording.
@@ -6144,12 +6151,12 @@ export type UpdateProfilePreferencesRequest = {
    * `null` follows the organisation again. Kept even where the user may
    * not choose, and then not used.
    */
-  preference_approval_speech_amount?: null | undefined;
+  preference_approval_speech_amount?: string | null | undefined;
   /**
    * How approval cards are worded aloud: `precise` or `natural`, like the
    * amount.
    */
-  preference_approval_speech_wording?: null | undefined;
+  preference_approval_speech_wording?: string | null | undefined;
   /**
    * Additional contextual information about the user for the assistant.
    */
@@ -6177,10 +6184,15 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_nickname?: string | null | undefined;
   /**
+   * Whether the chat shows what the voice said in conversation; `null`
+   * follows the organisation again.
+   */
+  preference_reply_speech_show_in_chat?: boolean | null | undefined;
+  /**
    * How replies are spoken in conversation: `natural` or `precise`, like
    * the amount.
    */
-  preference_reply_speech_wording?: null | undefined;
+  preference_reply_speech_wording?: string | null | undefined;
   /**
    * Set `true` to explicitly clear the start screen (welcome screen even
    * though an audience pin exists), `false` to inherit again. Clearing
@@ -6213,7 +6225,7 @@ export type UpdateProfilePreferencesRequest = {
    * What the voice says while the user waits: `normal`, `long_only` or
    * `off`, like the amount.
    */
-  preference_wait_lines_amount?: null | undefined;
+  preference_wait_lines_amount?: string | null | undefined;
 };
 
 export type UsageBucket = {
@@ -6299,6 +6311,11 @@ export type UserProfile = {
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
+  /**
+   * Whether the chat shows what the voice said, as the user chose; absent
+   * follows the organisation.
+   */
+  preference_reply_speech_show_in_chat?: boolean;
   preference_reply_speech_wording?: ReplySpeechWording;
   /**
    * True when the user explicitly cleared their start screen. This is

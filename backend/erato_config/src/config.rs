@@ -3735,6 +3735,7 @@ mod audio_config_tests {
             ReplySpeechConfig {
                 wording: ReplySpeechWording::Natural,
                 user_choice: false,
+                show_in_chat: false,
             }
         );
         assert_eq!(
@@ -3745,6 +3746,12 @@ mod audio_config_tests {
             load_conversational("").reply_speech.wording,
             ReplySpeechWording::Precise
         );
+    }
+
+    #[test]
+    fn reply_audio_is_not_kept_unless_chosen() {
+        assert!(!load_conversational("").keep_reply_audio);
+        assert!(load_conversational("keep_reply_audio = true\n").keep_reply_audio);
     }
 
     #[test]
@@ -9490,6 +9497,12 @@ pub struct AudioConversationalConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub reply_speech: crate::reply_speech::ReplySpeechConfig,
+    /// Whether the reply voice is stored with the message, so it can be
+    /// played again later. Off, the voice is only streamed while it speaks.
+    /// Defaults to `false`: keeping voice recordings is an explicit choice.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub keep_reply_audio: bool,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -9552,6 +9565,7 @@ impl Default for AudioConversationalConfig {
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
             reply_speech: crate::reply_speech::ReplySpeechConfig::default(),
+            keep_reply_audio: false,
         }
     }
 }

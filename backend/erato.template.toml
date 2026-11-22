@@ -475,7 +475,8 @@ chat_provider_ids = ["test-token-limit"]
 # hesitation_words_replace_base = false # true: hesitation_words replaces the base; an empty list then holds nothing back
 # talk_over_voice = false # Let the user start speaking while the voice talks; the voice yields
 # talk_over_voice_min_speech_ms = 500 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner but stops on more coughs and "mhm"
-# reply_speech = { wording = "natural", user_choice = true } # natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is
+# reply_speech = { wording = "natural", user_choice = true, show_in_chat = false } # natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
+# keep_reply_audio = false # Store each reply's voice so it can be played again; off streams it only
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30

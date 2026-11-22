@@ -1826,10 +1826,29 @@ msgid "chat.audio_read_card"
 msgstr "Odczytaj kartę"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/MessageContent.tsx
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay"
 msgstr "Odtwórz ponownie odpowiedź głosową"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.failed"
+msgstr "Nie udało się odtworzyć nagrania. Załaduj czat ponownie, aby spróbować jeszcze raz."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.length"
+msgstr "Odtwórz ponownie odpowiedź głosową, {length}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.stop"
+msgstr "Zatrzymaj odtwarzanie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SpokenReply.tsx
+msgid "chat.audio_replay.unavailable"
+msgstr "Nagranie jest niedostępne."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -3233,7 +3252,7 @@ msgstr "Rozmowa może zawierać poufne informacje"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.spoken_reply.label"
-msgstr ""
+msgstr "Powiedziane"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
@@ -6233,6 +6252,16 @@ msgstr ""
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.saveFailed"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.description"
+msgstr "Dodaje zwiniętą linię „Powiedziane” nad każdą odpowiedzią w rozmowie, z przyciskiem odtwarzania, jeśli Twoja organizacja przechowuje nagranie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.showInChat.label"
+msgstr "Pokaż w czacie, co powiedział głos"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

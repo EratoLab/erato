@@ -11,7 +11,13 @@ import { VoiceOutputSetting } from "./VoiceOutputSetting";
 import type { Messages } from "@lingui/core";
 
 const api = vi.hoisted(() => ({
-  replies: { wording: "natural", user_choice: true, source: "user" },
+  replies: {
+    wording: "natural",
+    user_choice: true,
+    source: "user",
+    show_in_chat: false,
+    show_in_chat_source: "deployment",
+  },
   cards: { wording: "precise", user_choice: false },
   update: vi.fn(async () => ({})),
 }));
@@ -24,13 +30,19 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchUpdateProfilePreferences: api.update,
   fetchApprovalSpeechStyle: vi.fn(),
 }));
+const refreshVoiceTraces = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/hooks/audio/voiceTraces", () => ({ refreshVoiceTraces }));
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
   i18n.activate("en");
 });
 
-beforeEach(() => api.update.mockClear());
+const REPLIES = { ...api.replies };
+beforeEach(() => {
+  api.update.mockClear();
+  api.replies = { ...REPLIES };
+});
 
 const renderSetting = () =>
   render(
@@ -78,6 +90,44 @@ describe("voice output setting", () => {
     await waitFor(() =>
       expect(api.update).toHaveBeenCalledWith({
         body: { preference_reply_speech_wording: null },
+      }),
+    );
+  });
+
+  it("shows what the voice said in the chat only when the user asks for it", async () => {
+    renderSetting();
+    const box = screen.getByRole("checkbox", {
+      name: "Show what the voice said in the chat",
+    });
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_show_in_chat: true },
+      }),
+    );
+    expect(refreshVoiceTraces).toHaveBeenCalled();
+  });
+
+  it("leaves showing the trace to the user when the wording is locked", async () => {
+    api.replies = {
+      ...api.replies,
+      user_choice: false,
+      show_in_chat: true,
+      show_in_chat_source: "user",
+    };
+    renderSetting();
+    const box = screen.getByRole("checkbox", {
+      name: "Show what the voice said in the chat",
+    });
+    expect(box).toBeChecked();
+    expect(box).toBeEnabled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use my organization's setting" }),
+    );
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_show_in_chat: null },
       }),
     );
   });

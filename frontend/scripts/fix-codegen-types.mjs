@@ -82,6 +82,26 @@ const schemaStringFieldFixes = [
     to: "starter_prompts?: AssistantStarterPrompt[] | null | undefined;",
   },
   {
+    from: "preference_approval_speech_amount?: null | undefined;",
+    to: "preference_approval_speech_amount?: string | null | undefined;",
+  },
+  {
+    from: "preference_approval_speech_wording?: null | undefined;",
+    to: "preference_approval_speech_wording?: string | null | undefined;",
+  },
+  {
+    from: "preference_wait_lines_amount?: null | undefined;",
+    to: "preference_wait_lines_amount?: string | null | undefined;",
+  },
+  {
+    from: "preference_reply_speech_wording?: null | undefined;",
+    to: "preference_reply_speech_wording?: string | null | undefined;",
+  },
+  {
+    from: "preference_reply_speech_show_in_chat?: null | undefined;",
+    to: "preference_reply_speech_show_in_chat?: boolean | null | undefined;",
+  },
+  {
     from: "welcome_message?: null | undefined;",
     to: "welcome_message?: string | null | undefined;",
   },

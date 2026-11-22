@@ -345,7 +345,7 @@ impl SpeechSession {
         if self.task.is_abort_requested() {
             return Err(eyre!("Speech cancelled"));
         }
-        if pcm.is_empty() {
+        if pcm.is_empty() || !app.config.audio_conversational.keep_reply_audio {
             return Ok(None);
         }
         let data = wav(&pcm, sample_rate)?;

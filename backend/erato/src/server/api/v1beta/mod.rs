@@ -1132,10 +1132,24 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_reply_speech_wording: Option<Option<String>>,
+    /// Whether the chat shows what the voice said in conversation; `null`
+    /// follows the organisation again.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_reply_speech_show_in_chat: Option<Option<bool>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "de")]
     pub preference_language: Option<String>,
+}
+
+fn deserialize_patch_optional_bool<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<bool>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Some(Option::<bool>::deserialize(deserializer)?))
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -1256,6 +1270,7 @@ pub async fn update_profile_preferences(
             approval_speech_wording,
             wait_lines_amount,
             reply_speech_wording,
+            reply_speech_show_in_chat: request.preference_reply_speech_show_in_chat,
         },
     )
     .await
@@ -1313,6 +1328,7 @@ pub async fn update_profile_preferences(
         .reply_speech_wording
         .as_deref()
         .and_then(models::user_preference::parse_style_name);
+    profile.preference_reply_speech_show_in_chat = updated_prefs.reply_speech_show_in_chat;
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );

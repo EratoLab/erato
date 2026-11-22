@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { forgetSpokenStyle } from "@/hooks/audio/spokenStyle";
+import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
 import {
   approvalSpeechStyleQuery,
   fetchUpdateProfilePreferences,
@@ -11,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
 import { toast } from "../Toast";
 
@@ -108,23 +110,13 @@ export function VoiceOutputSetting() {
   const [saving, setSaving] = useState(false);
 
   // `null` clears the user's own value: the organization's applies again.
-  const save = async (
-    patch: Partial<
-      Record<
-        | "preference_reply_speech_wording"
-        | "preference_approval_speech_wording"
-        | "preference_approval_speech_amount",
-        string | null
-      >
-    >,
-  ) => {
+  const save = async (body: UpdateProfilePreferencesRequest) => {
     setSaving(true);
     try {
-      // The generated request type reads these string fields as null-only.
-      const body = patch as UpdateProfilePreferencesRequest;
       await fetchUpdateProfilePreferences({ body });
       forgetSpokenStyle();
       await Promise.all([
+        refreshVoiceTraces(),
         queryClient.invalidateQueries({
           queryKey: replySpeechStyleQuery({}).queryKey,
         }),
@@ -182,6 +174,43 @@ export function VoiceOutputSetting() {
           void save({ preference_reply_speech_wording: null })
         }
       />
+      {replies.data && (
+        <div className="space-y-1">
+          <Checkbox
+            checked={replies.data.show_in_chat}
+            onCheckedChange={(shown) =>
+              void save({ preference_reply_speech_show_in_chat: shown })
+            }
+            disabled={saving}
+            label={t({
+              id: "preferences.dialog.audio.voice.showInChat.label",
+              message: "Show what the voice said in the chat",
+            })}
+          />
+          <p className="pl-6 text-sm text-theme-fg-secondary">
+            {t({
+              id: "preferences.dialog.audio.voice.showInChat.description",
+              message:
+                "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording.",
+            })}
+          </p>
+          {replies.data.show_in_chat_source === "user" && (
+            <button
+              type="button"
+              className="pl-6 text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50"
+              onClick={() =>
+                void save({ preference_reply_speech_show_in_chat: null })
+              }
+              disabled={saving}
+            >
+              {t({
+                id: "preferences.dialog.audio.voice.followOrganization",
+                message: "Use my organization's setting",
+              })}
+            </button>
+          )}
+        </div>
+      )}
       <WordingRow
         heading={t({
           id: "preferences.dialog.audio.voice.cards.heading",

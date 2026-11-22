@@ -342,6 +342,27 @@ async fn the_answer_after_a_decision_is_spoken_like_the_turn_it_continues(pool: 
     let continued = decide(spoken_chat, true).await;
     assert_eq!(extract_answer(&continued), "Gesprochen erledigt.");
     assert!(has_audio(&continued), "{continued:?}");
+    // Without `keep_reply_audio` the voice is only streamed, never stored.
+    let stored = Messages::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(spoken_chat))
+        .all(&state.db)
+        .await
+        .unwrap();
+    assert!(!stored.is_empty());
+    assert!(stored.iter().all(|message| {
+        !message
+            .raw_message
+            .to_string()
+            .contains("audio_file_pointer")
+    }));
+    assert!(
+        erato::db::entity::file_uploads::Entity::find()
+            .all(&state.db)
+            .await
+            .unwrap()
+            .iter()
+            .all(|file| file.audio_synthesis.is_none())
+    );
 
     send(&server, typed_chat, "Lösch Getippt", false).await;
     let continued = decide(typed_chat, false).await;
@@ -377,7 +398,10 @@ async fn a_sentence_before_the_call_keeps_the_stop_and_its_own_recording(pool: P
         true,
         "de-DE",
         Some(McpToolApprovalPreset::Permissive),
-        |config| speak_with(config, &speech_url),
+        |config| {
+            speak_with(config, &speech_url);
+            config.audio_conversational.keep_reply_audio = true;
+        },
     )
     .await;
     let item = scheduled_items::create_checked(

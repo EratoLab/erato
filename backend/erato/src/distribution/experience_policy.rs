@@ -263,6 +263,9 @@ pub struct AudienceReplySpeech {
     /// Whether the audience's users may choose their own; absent keeps the
     /// deployment's `reply_speech.user_choice`.
     pub user_choice: Option<bool>,
+    /// Whether the chat shows what the voice said; absent keeps the
+    /// deployment's `reply_speech.show_in_chat`.
+    pub show_in_chat: Option<bool>,
 }
 
 fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
@@ -278,6 +281,9 @@ fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
                 }
                 "user_choice" => {
                     serde_json::from_value(value).map(|choice| speech.user_choice = Some(choice))
+                }
+                "show_in_chat" => {
+                    serde_json::from_value(value).map(|shown| speech.show_in_chat = Some(shown))
                 }
                 _ => return None,
             })
@@ -1170,17 +1176,19 @@ mod tests {
             document.audiences["engineering"].reply_speech.clone()
         };
         assert_eq!(
-            audience(r#"{"wording": "loud", "user_choice": false}"#),
+            audience(r#"{"wording": "loud", "user_choice": false, "show_in_chat": "no"}"#),
             Some(AudienceReplySpeech {
                 wording: None,
                 user_choice: Some(false),
+                show_in_chat: None,
             })
         );
         assert_eq!(
-            audience(r#"{"wording": "precise", "length": 3}"#),
+            audience(r#"{"wording": "precise", "length": 3, "show_in_chat": true}"#),
             Some(AudienceReplySpeech {
                 wording: Some(erato_config::reply_speech::ReplySpeechWording::Precise),
                 user_choice: None,
+                show_in_chat: Some(true),
             })
         );
         assert_eq!(audience(r#""precise""#), None);

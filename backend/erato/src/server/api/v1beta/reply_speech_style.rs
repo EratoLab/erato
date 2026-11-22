@@ -36,6 +36,12 @@ pub struct ReplySpeechStyleResponse {
     pub audience: Option<String>,
     /// Whether the caller may choose their own wording.
     pub user_choice: bool,
+    /// Whether the chat shows what the voice said: the spoken text, folded,
+    /// and a play button where the recording was kept. The caller may always
+    /// choose it for themselves: it changes only what they see.
+    pub show_in_chat: bool,
+    /// Where `show_in_chat` comes from.
+    pub show_in_chat_source: ReplySpeechStyleSource,
 }
 
 pub fn matching_audiences<'a>(
@@ -52,12 +58,20 @@ pub fn matching_audiences<'a>(
     )
 }
 
+/// The caller's own values, from their preferences.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OwnReplySpeech {
+    pub wording: Option<ReplySpeechWording>,
+    pub show_in_chat: Option<bool>,
+}
+
 /// Each field comes from the first audience in the order that sets it, else
-/// from the deployment; the user's own value counts only where allowed.
+/// from the deployment; the user's own wording counts only where allowed, and
+/// their own `show_in_chat` always.
 pub fn resolve(
     config: &ReplySpeechConfig,
     audiences: &[(&str, &AudienceReplySpeech)],
-    own: Option<ReplySpeechWording>,
+    own: OwnReplySpeech,
 ) -> ReplySpeechStyleResponse {
     let mut style = ReplySpeechStyleResponse {
         wording: audiences
@@ -70,15 +84,25 @@ pub fn resolve(
             config.user_choice,
             audiences.iter().map(|(_, set)| set.user_choice),
         ),
+        show_in_chat: config.show_in_chat,
+        show_in_chat_source: ReplySpeechStyleSource::Deployment,
     };
+    if let Some(shown) = audiences.iter().find_map(|(_, set)| set.show_in_chat) {
+        style.show_in_chat = shown;
+        style.show_in_chat_source = ReplySpeechStyleSource::Audience;
+    }
+    if let Some(shown) = own.show_in_chat {
+        style.show_in_chat = shown;
+        style.show_in_chat_source = ReplySpeechStyleSource::User;
+    }
     if let Some((name, _)) = audiences.first() {
         style.source = ReplySpeechStyleSource::Audience;
         style.audience = Some((*name).to_string());
     }
     if style.user_choice
-        && let Some(own) = own
+        && let Some(wording) = own.wording
     {
-        style.wording = own;
+        style.wording = wording;
         style.source = ReplySpeechStyleSource::User;
     }
     style
@@ -95,7 +119,10 @@ pub async fn resolve_for(app_state: &AppState, me_user: &MeProfile) -> ReplySpee
     resolve(
         &app_state.config.audio_conversational.reply_speech,
         &audiences,
-        me_user.preference_reply_speech_wording,
+        OwnReplySpeech {
+            wording: me_user.preference_reply_speech_wording,
+            show_in_chat: me_user.preference_reply_speech_show_in_chat,
+        },
     )
 }
 
@@ -127,26 +154,38 @@ mod tests {
         AudienceReplySpeech {
             wording,
             user_choice,
+            show_in_chat: None,
+        }
+    }
+
+    fn own(wording: ReplySpeechWording) -> OwnReplySpeech {
+        OwnReplySpeech {
+            wording: Some(wording),
+            show_in_chat: None,
         }
     }
 
     #[test]
     fn the_deployment_then_the_audience_then_the_user_where_allowed() {
         let config = ReplySpeechConfig::default();
-        let plain = resolve(&config, &[], None);
+        let plain = resolve(&config, &[], OwnReplySpeech::default());
         assert_eq!(plain.wording, ReplySpeechWording::Precise);
         assert_eq!(plain.source, ReplySpeechStyleSource::Deployment);
         assert!(plain.user_choice);
 
         let natural = audience(Some(ReplySpeechWording::Natural), None);
-        let by_audience = resolve(&config, &[("Vertrieb", &natural)], None);
+        let by_audience = resolve(
+            &config,
+            &[("Vertrieb", &natural)],
+            OwnReplySpeech::default(),
+        );
         assert_eq!(by_audience.wording, ReplySpeechWording::Natural);
         assert_eq!(by_audience.audience.as_deref(), Some("Vertrieb"));
 
         let own = resolve(
             &config,
             &[("Vertrieb", &natural)],
-            Some(ReplySpeechWording::Precise),
+            own(ReplySpeechWording::Precise),
         );
         assert_eq!(own.wording, ReplySpeechWording::Precise);
         assert_eq!(own.source, ReplySpeechStyleSource::User);
@@ -159,7 +198,7 @@ mod tests {
         let kept = resolve(
             &config,
             &[("Vertrieb", &locked)],
-            Some(ReplySpeechWording::Precise),
+            own(ReplySpeechWording::Precise),
         );
         assert_eq!(kept.wording, ReplySpeechWording::Natural);
         assert_eq!(kept.source, ReplySpeechStyleSource::Audience);
@@ -168,9 +207,10 @@ mod tests {
         let closed = ReplySpeechConfig {
             wording: ReplySpeechWording::Natural,
             user_choice: false,
+            show_in_chat: false,
         };
         assert_eq!(
-            resolve(&closed, &[], Some(ReplySpeechWording::Precise)).wording,
+            resolve(&closed, &[], own(ReplySpeechWording::Precise)).wording,
             ReplySpeechWording::Natural
         );
     }
@@ -183,10 +223,57 @@ mod tests {
         let style = resolve(
             &config,
             &[("Pilot", &lock_only), ("Vertrieb", &wording_only)],
-            Some(ReplySpeechWording::Precise),
+            own(ReplySpeechWording::Precise),
         );
         assert_eq!(style.wording, ReplySpeechWording::Natural);
         assert!(!style.user_choice);
         assert_eq!(style.audience.as_deref(), Some("Pilot"));
+    }
+
+    #[test]
+    fn the_spoken_trace_is_hidden_unless_someone_shows_it() {
+        let config = ReplySpeechConfig::default();
+        assert!(!resolve(&config, &[], OwnReplySpeech::default()).show_in_chat);
+
+        let shown = AudienceReplySpeech {
+            show_in_chat: Some(true),
+            ..AudienceReplySpeech::default()
+        };
+        let by_audience = resolve(&config, &[("Vertrieb", &shown)], OwnReplySpeech::default());
+        assert!(by_audience.show_in_chat);
+        assert_eq!(
+            by_audience.show_in_chat_source,
+            ReplySpeechStyleSource::Audience
+        );
+
+        let hide = OwnReplySpeech {
+            wording: None,
+            show_in_chat: Some(false),
+        };
+        let mine = resolve(&config, &[("Vertrieb", &shown)], hide);
+        assert!(!mine.show_in_chat);
+        assert_eq!(mine.show_in_chat_source, ReplySpeechStyleSource::User);
+        assert_eq!(mine.source, ReplySpeechStyleSource::Audience);
+    }
+
+    #[test]
+    fn a_wording_lock_leaves_showing_the_trace_to_the_user() {
+        let locked = AudienceReplySpeech {
+            wording: Some(ReplySpeechWording::Natural),
+            user_choice: Some(false),
+            show_in_chat: Some(false),
+        };
+        let style = resolve(
+            &ReplySpeechConfig::default(),
+            &[("Vertrieb", &locked)],
+            OwnReplySpeech {
+                wording: Some(ReplySpeechWording::Precise),
+                show_in_chat: Some(true),
+            },
+        );
+        assert_eq!(style.wording, ReplySpeechWording::Natural);
+        assert!(!style.user_choice);
+        assert!(style.show_in_chat);
+        assert_eq!(style.show_in_chat_source, ReplySpeechStyleSource::User);
     }
 }

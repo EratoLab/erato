@@ -3,6 +3,7 @@ import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
 import { memo, useCallback, useMemo, useState } from "react";
 
+import { useVoiceTracesShown } from "@/hooks/audio/voiceTraces";
 import { useImageLightbox } from "@/hooks/ui/useImageLightbox";
 import { useMessageFeedbackFeature } from "@/providers/FeatureConfigProvider";
 import { hasToolCalls as messageHasToolCalls } from "@/utils/adapters/toolCallAdapter";
@@ -114,6 +115,11 @@ export interface ChatMessageRendererState {
   /** True when the host draws nothing at all for this message. */
   isEmpty: boolean;
   /**
+   * The reply is still loading and nothing of it shows yet: no part at all,
+   * or only what the voice says while the chat hides it.
+   */
+  showsLoading: boolean;
+  /**
    * True for a user message that is nothing but its attachments, such as a
    * transcript-mode recording, which is sent with an empty text part. The host
    * then draws no body, since a theme would tint it into an empty bubble.
@@ -200,6 +206,15 @@ export const useChatMessageRenderer = ({
   const hasOnlyBlankText = message.content.every(
     (part) => part.content_type === "text" && part.text.trim() === "",
   );
+  const isVoiceTrace = (part: UiChatMessage["content"][number]) =>
+    part.content_type === "spoken" ||
+    part.content_type === "audio_file_pointer";
+  const voiceTracesShown = useVoiceTracesShown(
+    message.content.some(isVoiceTrace),
+  );
+  const nothingShown = voiceTracesShown
+    ? message.content.length === 0
+    : message.content.every(isVoiceTrace);
 
   return {
     isUser,
@@ -213,6 +228,7 @@ export const useChatMessageRenderer = ({
       !message.loading &&
       !message.error &&
       !taskResult,
+    showsLoading: Boolean(message.loading) && nothingShown,
     isAttachmentOnly:
       isUser &&
       hasOnlyBlankText &&
@@ -295,6 +311,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
     role,
     userDisplayName,
     isEmpty,
+    showsLoading,
     isAttachmentOnly,
     attachmentIds,
     filesById,
@@ -418,7 +435,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
               above the body instead, see the hoisted slot. */}
             {!isUser && attachments}
 
-            {message.loading && message.content.length === 0 && (
+            {message.loading && showsLoading && (
               <div className="mt-2">
                 <LoadingIndicator
                   state={message.loading.state}

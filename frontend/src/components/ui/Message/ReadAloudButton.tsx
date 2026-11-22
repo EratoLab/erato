@@ -6,6 +6,7 @@ import { memo } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { toggleReadAloud, useReadAloud } from "@/hooks/audio/readAloud";
+import { useVoiceTracesShown } from "@/hooks/audio/voiceTraces";
 import { useMessageActionsFeature } from "@/providers/FeatureConfigProvider";
 
 import { SpeakerIcon, StopIcon, WarningCircleIcon } from "../icons";
@@ -40,13 +41,15 @@ export const ReadAloudButton = memo(function ReadAloudButton({
   const status = useReadAloud((state) =>
     state.messageId === messageId ? state.status : null,
   );
+  // The message's own replay button stands in for reading it aloud, where shown.
+  const replayShown = useVoiceTracesShown(Boolean(readAloud?.hasSpokenAudio));
 
   if (
     !readAloudEnabled ||
     audioModeActive ||
     !readAloud?.isFinished ||
     !readAloud.hasText ||
-    readAloud.hasSpokenAudio
+    replayShown
   ) {
     return null;
   }
