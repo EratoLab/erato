@@ -5349,11 +5349,6 @@ msgid "officeAddin.word.parts.titleStopped"
 msgstr "Zmiany niedokończone"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.titleWriting"
-msgstr "Pisanie zmian"
-
-#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Wstaw akapity"
@@ -5506,11 +5501,6 @@ msgstr "Zastosowano. Erato nie mógł potem wyświetlić listy komentarzy dokume
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Zastosowano: {title}"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewReceipt.tsx
-msgid "officeAddin.word.planReceipt.proposed"
-msgstr "Zaproponowano: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
@@ -5901,6 +5891,11 @@ msgstr "Zastosować zmiany sprawdzone powyżej?"
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planTitle.summary"
 #~ msgstr "Przepisz jako nową wersję"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.receipt.proposed"
+msgstr "Zaproponowano: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx

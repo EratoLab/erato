@@ -5349,11 +5349,6 @@ msgid "officeAddin.word.parts.titleStopped"
 msgstr "Änderungen nicht fertig"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.titleWriting"
-msgstr "Die Änderungen werden geschrieben"
-
-#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Absätze einfügen"
@@ -5506,11 +5501,6 @@ msgstr "Angewendet. Erato konnte die Kommentare des Dokuments danach nicht aufli
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Angewendet: {title}"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewReceipt.tsx
-msgid "officeAddin.word.planReceipt.proposed"
-msgstr "Vorgeschlagen: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
@@ -5901,6 +5891,11 @@ msgstr "Die oben geprüften Änderungen anwenden?"
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planTitle.summary"
 #~ msgstr "Als neue Fassung umschreiben"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.receipt.proposed"
+msgstr "Vorgeschlagen: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx

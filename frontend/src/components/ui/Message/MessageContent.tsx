@@ -2121,8 +2121,7 @@ export const MessageContent = memo(function MessageContent({
         if (cluster.kind === "trace") {
           // The trace block is the "current writer" while no later renderable
           // (text/image) content exists below it.
-          const lastTracePartIndex =
-            cluster.startIndex + cluster.parts.length - 1;
+          const lastTracePartIndex = cluster.endIndex;
           // A card shown while the message streams follows the work the trace still does.
           const hasLaterContent =
             (!!hasSubmittedCard && !isStreaming) ||

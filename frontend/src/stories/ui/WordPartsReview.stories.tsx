@@ -43,11 +43,7 @@ function progress(
       title: TITLES[k],
       state,
     })),
-    structure: {
-      moves: [{ row: 4, title: "§ 6 Preise und Zahlungsbedingungen" }],
-      merges: [{ row: 5, title: "§ 7 Haftung, § 8 Gewährleistung" }],
-      renames: [],
-    },
+    structure: { moved: [4], merged: [5], renamed: [] },
     stopped: false,
     ...extra,
   };
@@ -81,7 +77,9 @@ function PartsCard({
         <WordPartsReview
           progress={value}
           title={
-            value.finished ? "Changes in 6 sections" : "Writing the changes"
+            value.finished
+              ? "Changes in 6 sections"
+              : (value.intent ?? "Document changes in parts")
           }
           top={
             value.finished && (

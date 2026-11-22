@@ -17,6 +17,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useId, useMemo } from "react";
 
+import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { wordPartsChangesByRow } from "../hooks/useWordPlanParts";
 import { useWordWrite } from "../providers/WordWriteProvider";
 import {
@@ -64,6 +65,17 @@ export function WordDocumentPartsCard({ callId }: { callId: string }) {
     return planning ? { kind: "planning", callId: planning } : undefined;
   }, sameState);
   const progress = state?.kind === "parts" ? state.progress : undefined;
+  const generating = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.status === "sending",
+    Object.is,
+  );
+  // An earlier change that stopped is one line, like every card but the newest proposal.
+  const copyGone = useWordCopyGone({
+    generating,
+    hasCopy: !!snapshot,
+    revoked: !!snapshot?.revoked,
+  });
   // Rebuilt when a row changes, never per streamed token, from the calls the chat stored.
   const changes = useMemo(() => {
     if (!progress || progress.stopped || !snapshot || messageId === undefined)
@@ -94,32 +106,41 @@ export function WordDocumentPartsCard({ callId }: { callId: string }) {
     id: "officeAddin.word.parts.label",
     message: "Document changes in parts",
   });
-  if (progress.stopped)
+  if (progress.stopped) {
+    const stoppedTitle = t({
+      id: "officeAddin.word.parts.titleStopped",
+      message: "Changes not finished",
+    });
     return (
       <WordReviewCard
         label={label}
         testId="word-document-parts-card"
-        collapsed={false}
+        collapsed={copyGone}
+        receipt={
+          <div
+            className="word-review__receipt"
+            data-testid="word-review-receipt"
+          >
+            <strong>{stoppedTitle}</strong>
+          </div>
+        }
         detailsId={detailsId}
         footer={
-          <p className="word-review__hint">
-            {t({
-              id: "officeAddin.word.parts.stopped",
-              message:
-                "Erato stopped before finishing, so there is nothing to apply. Send your request again to continue.",
-            })}
-          </p>
+          copyGone ? null : (
+            <p className="word-review__hint">
+              {t({
+                id: "officeAddin.word.parts.stopped",
+                message:
+                  "Erato stopped before finishing, so there is nothing to apply. Send your request again to continue.",
+              })}
+            </p>
+          )
         }
       >
-        <WordReviewHeader
-          title={t({
-            id: "officeAddin.word.parts.titleStopped",
-            message: "Changes not finished",
-          })}
-          scope={progress.intent}
-        />
+        <WordReviewHeader title={stoppedTitle} scope={progress.intent} />
       </WordReviewCard>
     );
+  }
   return (
     <WordReviewCard
       label={label}
@@ -132,10 +153,8 @@ export function WordDocumentPartsCard({ callId }: { callId: string }) {
         progress={progress}
         changes={changes}
         snapshot={snapshot}
-        title={t({
-          id: "officeAddin.word.parts.titleWriting",
-          message: "Writing the changes",
-        })}
+        // The chat's step already says that Erato writes the changes.
+        title={progress.intent ?? label}
       />
     </WordReviewCard>
   );

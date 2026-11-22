@@ -9,8 +9,8 @@ import { isAcceptedWordSubmission } from "./wordHistoryParts";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
- * The card of a change in parts (ERMAIN-1297): one row per section the section plan changes, plus
- * a Structure row for what moves, read from the message's own calls so it fills while Erato writes.
+ * The card of a change in parts (ERMAIN-1297): one row per section the section plan changes, moves
+ * or renames, read from the message's own calls so it fills while Erato writes.
  */
 
 /** `writing` until a part for the row is accepted; after the finish its receipt decides. */
@@ -24,18 +24,19 @@ export type WordPartsRowState =
 export interface WordPartsSectionRow {
   /** The section plan's row number, from 1. */
   row: number;
-  action: "rewrite" | "delete";
+  /** `keep` only for a section that moves or gets a new title, which Apply does without a part. */
+  action: "rewrite" | "delete" | "keep";
   /** The document's own name for the row, as the pane's receipt gives it; empty for untitled text. */
   title: string;
   state: WordPartsRowState;
 }
 
+/** Section plan rows, from 1, by what they do to the document's order and titles. */
 export interface WordPartsStructure {
-  /** Rows that change place: `after` names the row they now follow, `first` that none does. */
-  moves: { row: number; title: string; after?: string; first?: true }[];
+  moved: number[];
   /** Rewrite rows that join blocks from different places. */
-  merges: { row: number; title: string }[];
-  renames: { row: number; title: string; newTitle: string }[];
+  merged: number[];
+  renamed: number[];
 }
 
 /** A row's status in the pane's section plan and finish receipts; `left_out`: the finish checks
@@ -148,7 +149,7 @@ export function wordPartsPlanningCall(
 /** The change moves or merges sections, which Apply writes by replacing the whole document. */
 export const wordPartsReorders = (progress: WordPartsProgress): boolean =>
   !progress.reorderingLeftOut &&
-  (!!progress.structure?.moves.length || !!progress.structure?.merges.length);
+  (!!progress.structure?.moved.length || !!progress.structure?.merged.length);
 
 const MAX_SOURCE_BLOCKS = 100_000;
 const RANGE = /^\s*(b[1-9]\d*)\s*(?:[-–]\s*(b[1-9]\d*))?\s*$/u;
@@ -306,31 +307,16 @@ function structureOf(
       renamed: row.newTitle !== undefined && !leftOut(row),
     })),
   );
-  const named = (r: number) => receipt[r].newTitle ?? receipt[r].title;
-  const moves = layout.moved.map((r) => {
-    let before = r - 1;
-    while (before >= 0 && receipt[before].action === "delete") before--;
-    return {
-      row: r + 1,
-      title: receipt[r].title,
-      ...(before < 0
-        ? { first: true as const }
-        : named(before)
-          ? { after: named(before) }
-          : {}),
-    };
-  });
-  const merges = layout.merged.map((r) => ({
-    row: r + 1,
-    title: receipt[r].title,
-  }));
-  const renames = layout.renamed.map((r) => ({
-    row: r + 1,
-    title: receipt[r].title,
-    newTitle: receipt[r].newTitle!,
-  }));
-  return moves.length || merges.length || renames.length
-    ? { moves, merges, renames }
+  const rows = (indexes: number[]) => indexes.map((r) => r + 1);
+  const structure = {
+    moved: rows(layout.moved),
+    merged: rows(layout.merged),
+    renamed: rows(layout.renamed),
+  };
+  return structure.moved.length ||
+    structure.merged.length ||
+    structure.renamed.length
+    ? structure
     : undefined;
 }
 
@@ -390,18 +376,6 @@ export function wordPartsProgress(
     if (row.action === "delete" || written.has(row.row)) return "ready";
     return generating ? "writing" : "not-written";
   };
-  const rows = receipt.flatMap((row): WordPartsSectionRow[] =>
-    row.action === "rewrite" || row.action === "delete"
-      ? [
-          {
-            row: row.row,
-            action: row.action,
-            title: row.title,
-            state: state(row),
-          },
-        ]
-      : [],
-  );
   const input: Record<string, unknown> = object(plan.input) ? plan.input : {};
   const structure = structureOf(
     receipt,
@@ -412,6 +386,26 @@ export function wordPartsProgress(
     finish?.reordering === "changed_in_word"
       ? (finish.reordering as WordPartsReorderingLeftOut)
       : undefined;
+  // Leaving out the reordering also keeps every title, so a kept section then changes nothing.
+  const restructured = new Set(
+    reorderingLeftOut
+      ? []
+      : [...(structure?.moved ?? []), ...(structure?.renamed ?? [])],
+  );
+  const rows = receipt.flatMap((row): WordPartsSectionRow[] =>
+    row.action === "rewrite" || row.action === "delete"
+      ? [
+          {
+            row: row.row,
+            action: row.action,
+            title: row.title,
+            state: state(row),
+          },
+        ]
+      : row.action === "keep" && restructured.has(row.row)
+        ? [{ row: row.row, action: "keep", title: row.title, state: "ready" }]
+        : [],
+  );
   const progress = {
     callId: plan.tool_call_id ?? "",
     draftId,

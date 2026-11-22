@@ -5,7 +5,10 @@ import {
   isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
-import { groupSubmissionSteps } from "@/lib/trace/submissionSteps";
+import {
+  groupSubmissionSteps,
+  submissionSpan,
+} from "@/lib/trace/submissionSteps";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { shallowEqual } from "@/utils/chat/stableValues";
 
@@ -536,7 +539,13 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
  * (non-trace) or a `Trace` cluster.
  */
 export type TraceCluster =
-  | { kind: "trace"; parts: TraceablePart[]; startIndex: number }
+  | {
+      kind: "trace";
+      parts: TraceablePart[];
+      startIndex: number;
+      /** The last content index the cluster covers, parts moved after it included. */
+      endIndex: number;
+    }
   | { kind: "passthrough"; part: ContentPart; index: number };
 
 export const groupIntoTraceClusters = (
@@ -551,14 +560,28 @@ export const groupIntoTraceClusters = (
         : [],
     ),
   );
+  // Text or a card between the calls of a submission in parts follows its one step.
+  const span = submissionSpan(content);
+  let deferred: TraceCluster[] = [];
   let buffer: TraceablePart[] = [];
   let bufferStart = 0;
+  let bufferEnd = 0;
 
   const flush = () => {
     if (buffer.length > 0) {
-      out.push({ kind: "trace", parts: buffer, startIndex: bufferStart });
+      out.push({
+        kind: "trace",
+        parts: buffer,
+        startIndex: bufferStart,
+        endIndex:
+          span && bufferStart <= span.from && bufferEnd >= span.from
+            ? Math.max(bufferEnd, span.to)
+            : bufferEnd,
+      });
       buffer = [];
     }
+    out.push(...deferred);
+    deferred = [];
   };
 
   content.forEach((part, index) => {
@@ -578,7 +601,12 @@ export const groupIntoTraceClusters = (
       isBudgetDecision
     ) {
       if (buffer.length === 0) bufferStart = index;
+      bufferEnd = index;
       buffer.push(part);
+      return;
+    }
+    if (span && index > span.from && index <= span.to) {
+      deferred.push({ kind: "passthrough", part, index });
       return;
     }
     flush();

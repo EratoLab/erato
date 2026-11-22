@@ -13,9 +13,9 @@ import {
   toggledKeys,
   useWordReviewJumpFocus,
   WordCheckFirst,
+  WordNotChangedLine,
   WordReviewHeader,
 } from "./WordReviewCardParts";
-import { wordNotChangedText } from "./wordPlanLabels";
 
 import type { WordAuthoringSnapshot } from "@/lib/wordReview/wordDocumentPlan";
 import type {
@@ -32,6 +32,7 @@ import "./wordReview.css";
 
 export interface WordPartsReviewProps {
   progress: WordPartsProgress;
+  /** The card's heading; the intent goes under it unless it is the heading. */
   title: string;
   /** Between Check first and the rows: the change's Apply, on top of the card. */
   top?: ReactNode;
@@ -43,11 +44,9 @@ export interface WordPartsReviewProps {
   locatable?: ReadonlySet<string>;
   /** Further parts the proposal leaves as they were, by title, named after the card's own rows. */
   notChanged?: readonly string[];
-  /** The change holds content only Word draws, as the plan review says. */
-  checkInWord?: boolean;
 }
 
-/** What the card says right after Send, until the section plan is accepted. */
+/** What the card says from the section plan's first streamed arguments until the pane accepts it. */
 export const wordPartsPlanningText = () =>
   t({
     id: "officeAddin.word.parts.planning",
@@ -62,7 +61,7 @@ export const wordPartsReorderingText = () =>
       "Reordering replaces the whole document; Undo takes it back only as a whole.",
   });
 
-type Mark = "writing" | "ready" | "removed" | "not-changed";
+type Mark = "writing" | "ready" | "removed" | "moved" | "renamed";
 
 function pill(mark: Mark): { label: string; tone: string } {
   switch (mark) {
@@ -82,12 +81,14 @@ function pill(mark: Mark): { label: string; tone: string } {
         label: planRowStatusLabel("removed"),
         tone: WORD_PILL_TONE.neutral,
       };
-    case "not-changed":
+    case "moved":
       return {
-        label: t({
-          id: "officeAddin.word.parts.notChanged",
-          message: "Not changed",
-        }),
+        label: t({ id: "officeAddin.word.parts.moved", message: "Moved" }),
+        tone: WORD_PILL_TONE.neutral,
+      };
+    case "renamed":
+      return {
+        label: t({ id: "officeAddin.word.parts.renamed", message: "Renamed" }),
         tone: WORD_PILL_TONE.neutral,
       };
   }
@@ -111,8 +112,8 @@ function progressText(progress: WordPartsProgress): string | undefined {
   });
 }
 
-/** A change in parts: the intent, the count, and each section by its own title, marked writing,
- * ready or not changed; once finished, one line names what stays as it was. */
+/** A change in parts: the intent, the count, and each section by its own title, marked writing or
+ * ready; once finished, one line names what stays as it was. */
 export function WordPartsReview({
   progress,
   title,
@@ -123,7 +124,6 @@ export function WordPartsReview({
   onLocate,
   locatable,
   notChanged = [],
-  checkInWord = false,
 }: WordPartsReviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
@@ -148,21 +148,25 @@ export function WordPartsReview({
     setFocusKey(rowKey);
   };
   const finished = progress.finished !== undefined;
-  const merged = new Set(progress.structure?.merges.map((merge) => merge.row));
+  const merged = new Set(progress.structure?.merged);
+  const renamed = new Set(progress.structure?.renamed);
   // A merge joins blocks from other places, so it goes with the reordering the finish left out.
   const unchanged = (row: WordPartsSectionRow) =>
     finished &&
     (row.state !== "ready" ||
       (!!progress.reorderingLeftOut && merged.has(row.row)));
+  // A section left as it was has no mark: the one line names it.
   const mark = (row: WordPartsSectionRow): Mark | undefined =>
-    progress.stopped
+    progress.stopped || unchanged(row)
       ? undefined
-      : unchanged(row)
-        ? "not-changed"
-        : row.state !== "ready"
-          ? "writing"
-          : row.action === "delete"
-            ? "removed"
+      : row.state !== "ready"
+        ? "writing"
+        : row.action === "delete"
+          ? "removed"
+          : row.action === "keep"
+            ? renamed.has(row.row)
+              ? "renamed"
+              : "moved"
             : "ready";
   const changedInWord = () =>
     t({
@@ -176,9 +180,7 @@ export function WordPartsReview({
           message: `${name} (${reason})`,
         })
       : name;
-  const rowNames = progress.rows
-    .filter(unchanged)
-    .map((row) => row.title || untitled());
+  const unchangedRows = progress.rows.filter(unchanged);
   const gaps = [
     ...(finished && progress.reorderingLeftOut
       ? [
@@ -191,20 +193,23 @@ export function WordPartsReview({
           ),
         ]
       : []),
-    ...progress.rows
-      .filter(unchanged)
-      .map((row) =>
-        named(
-          row.title || untitled(),
-          row.state === "changed-in-word" ? changedInWord() : undefined,
-        ),
+    ...unchangedRows.map((row) =>
+      named(
+        row.title || untitled(),
+        row.state === "changed-in-word" ? changedInWord() : undefined,
       ),
-    ...notChanged.filter((name) => !rowNames.includes(name)),
+    ),
+    ...notChanged.filter(
+      (name) => !unchangedRows.some((row) => row.title === name),
+    ),
   ];
   const status = progressText(progress);
   return (
     <div ref={containerRef} className="word-plan-review">
-      <WordReviewHeader title={title} scope={progress.intent}>
+      <WordReviewHeader
+        title={title}
+        scope={progress.intent === title ? undefined : progress.intent}
+      >
         {status && (
           <p className="word-review__hint" role="status">
             {status}
@@ -219,69 +224,55 @@ export function WordPartsReview({
       {top && (
         <div className="word-plan-review__section word-parts__top">{top}</div>
       )}
-      <ul
-        className="word-parts__rows"
-        aria-label={t({
-          id: "officeAddin.word.parts.rows",
-          message: "Sections",
-        })}
-      >
-        {progress.rows.map((row) => {
-          const key = `row:${row.row}`;
-          const rowChanges = unchanged(row)
-            ? []
-            : (changes?.get(row.row) ?? []);
-          const shown = mark(row);
-          return (
-            <WordReviewRow
-              key={key}
-              rowKey={key}
-              title={row.title || untitled()}
-              pill={shown && <Pill mark={shown} />}
-              open={open.has(key)}
-              onOpenChange={(next) => toggle(setOpen, key, next)}
-              detail={
-                rowChanges.length ? (
-                  <ul className="word-review__list word-parts__changes">
-                    {rowChanges.map((change) => (
-                      <WordPlanChangeRow
-                        key={change.key}
-                        row={change}
-                        snapshot={snapshot}
-                        onLocate={onLocate}
-                        locatable={
-                          !!change.locateRef &&
-                          !!locatable?.has(change.locateRef)
-                        }
-                        open={openChanges.has(change.key)}
-                        onOpenChange={(next) =>
-                          toggle(setOpenChanges, change.key, next)
-                        }
-                      />
-                    ))}
-                  </ul>
-                ) : undefined
-              }
-            />
-          );
-        })}
-      </ul>
-      {!!gaps.length && (
-        <p
-          className="word-review__hint word-plan-review__hint [overflow-wrap:anywhere]"
-          data-testid="word-plan-not-changed"
-        >
-          {wordNotChangedText(gaps)}
-        </p>
-      )}
-      {checkInWord && (
-        <p className="word-review__hint word-plan-review__hint">
-          {t({
-            id: "officeAddin.word.planReview.checkInWord",
-            message:
-              "Objects, pagination and page appearance are not drawn here. Check them in Word after applying.",
+      <WordNotChangedLine names={gaps} className="word-plan-review__hint" />
+      {progress.rows.length > 0 && (
+        <ul
+          className="word-parts__rows"
+          aria-label={t({
+            id: "officeAddin.word.parts.rows",
+            message: "Sections",
           })}
-        </p>
+        >
+          {progress.rows.map((row) => {
+            const key = `row:${row.row}`;
+            const rowChanges = unchanged(row)
+              ? []
+              : (changes?.get(row.row) ?? []);
+            const shown = mark(row);
+            return (
+              <WordReviewRow
+                key={key}
+                rowKey={key}
+                title={row.title || untitled()}
+                pill={shown && <Pill mark={shown} />}
+                open={open.has(key)}
+                onOpenChange={(next) => toggle(setOpen, key, next)}
+                detail={
+                  rowChanges.length ? (
+                    <ul className="word-review__list word-parts__changes">
+                      {rowChanges.map((change) => (
+                        <WordPlanChangeRow
+                          key={change.key}
+                          row={change}
+                          snapshot={snapshot}
+                          onLocate={onLocate}
+                          locatable={
+                            !!change.locateRef &&
+                            !!locatable?.has(change.locateRef)
+                          }
+                          open={openChanges.has(change.key)}
+                          onOpenChange={(next) =>
+                            toggle(setOpenChanges, change.key, next)
+                          }
+                        />
+                      ))}
+                    </ul>
+                  ) : undefined
+                }
+              />
+            );
+          })}
+        </ul>
       )}
     </div>
   );

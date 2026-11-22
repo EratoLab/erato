@@ -5142,6 +5142,7 @@ msgid "officeAddin.word.layout.width"
 msgstr "Seitenbreite"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: names.length
 #: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.notChanged"
 msgstr "Nicht geändert: {listed}. Bitten Sie in Ihrer nächsten Nachricht darum."
@@ -5153,8 +5154,8 @@ msgstr "{more, plural, one {Nicht geändert: {listed} und # weiterer Teil. Bitte
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.notChanged"
-msgstr "Nicht geändert"
+msgid "officeAddin.word.parts.moved"
+msgstr "Verschoben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5180,6 +5181,11 @@ msgstr "Fertig"
 #: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.reasonChangedInWord"
 msgstr "in Word geändert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renamed"
+msgstr "Umbenannt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5244,7 +5250,6 @@ msgstr "Änderungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
-#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.planReview.checkInWord"
 msgstr "Objekte, Seitenumbrüche und das Seitenbild werden hier nicht dargestellt. Prüfe sie nach dem Anwenden in Word."
 

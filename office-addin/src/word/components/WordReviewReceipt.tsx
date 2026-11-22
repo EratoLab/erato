@@ -82,10 +82,10 @@ export function WordReviewReceipt({
               : wordUndoneText(title)
             : outcome === "adjusted"
               ? wordPlanAdjustedHeadline()
-              : kind === "plan" && review.status !== "done"
+              : review.status !== "done"
                 ? // Only a card the pane applied says so; any other says what it proposed.
                   t({
-                    id: "officeAddin.word.planReceipt.proposed",
+                    id: "officeAddin.word.receipt.proposed",
                     message: `Proposed: ${title}`,
                   })
                 : kind === "plan"

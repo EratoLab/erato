@@ -5142,9 +5142,10 @@ msgid "officeAddin.word.layout.width"
 msgstr "Largeur de page"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: names.length
 #: src/components/ui/WordReview/wordPlanLabels.ts
 msgid "officeAddin.word.notChanged"
-msgstr "Non modifié : {listed}. Demandez ces changements dans votre prochain message."
+msgstr "{0, plural, one {Non modifié : {listed}. Demandez ce changement dans votre prochain message.} other {Non modifié : {listed}. Demandez ces changements dans votre prochain message.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/wordPlanLabels.ts
@@ -5153,8 +5154,8 @@ msgstr "{more, plural, one {Non modifié : {listed} et # autre. Demandez ces cha
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
-msgid "officeAddin.word.parts.notChanged"
-msgstr "Non modifié"
+msgid "officeAddin.word.parts.moved"
+msgstr "Déplacé"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5180,6 +5181,11 @@ msgstr "Prêt"
 #: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.reasonChangedInWord"
 msgstr "modifié dans Word"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.renamed"
+msgstr "Renommé"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
@@ -5244,7 +5250,6 @@ msgstr "Modifications"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordDocumentPlanReview.tsx
-#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.planReview.checkInWord"
 msgstr "Les objets, la pagination et l’apparence des pages ne sont pas affichés ici. Vérifiez-les dans Word après l’application."
 

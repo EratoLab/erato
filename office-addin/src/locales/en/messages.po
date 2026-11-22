@@ -5349,11 +5349,6 @@ msgid "officeAddin.word.parts.titleStopped"
 msgstr "Changes not finished"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordDocumentPartsCard.tsx
-msgid "officeAddin.word.parts.titleWriting"
-msgstr "Writing the changes"
-
-#. js-lingui-explicit-id
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planAction.insert"
 #~ msgstr "Insert paragraphs"
@@ -5506,11 +5501,6 @@ msgstr "Applied. Erato couldn't list the document's comments afterwards, so chec
 #: src/word/components/WordReviewReceipt.tsx
 msgid "officeAddin.word.planReceipt.applied"
 msgstr "Applied: {title}"
-
-#. js-lingui-explicit-id
-#: src/word/components/WordReviewReceipt.tsx
-msgid "officeAddin.word.planReceipt.proposed"
-msgstr "Proposed: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewReceipt.tsx
@@ -5901,6 +5891,11 @@ msgstr "Apply the changes reviewed above?"
 #: src/word/components/wordPlanLabels.ts
 #~ msgid "officeAddin.word.planTitle.summary"
 #~ msgstr "Rewrite as a new version"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordReviewReceipt.tsx
+msgid "officeAddin.word.receipt.proposed"
+msgstr "Proposed: {title}"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordEditReport.tsx

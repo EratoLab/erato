@@ -296,7 +296,10 @@ export function wordNotChangedText(names: readonly string[]): string {
       })
     : t({
         id: "officeAddin.word.notChanged",
-        message: `Not changed: ${listed}. Ask for them in your next message.`,
+        message: plural(names.length, {
+          one: `Not changed: ${listed}. Ask for it in your next message.`,
+          other: `Not changed: ${listed}. Ask for them in your next message.`,
+        }),
       });
 }
 

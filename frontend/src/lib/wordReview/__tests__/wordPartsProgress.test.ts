@@ -156,7 +156,7 @@ describe("the parts card's rows", () => {
     expect(wordPartsProgress(content, false)!.rows[0].state).toBe("ready");
   });
 
-  it("names the moves, merges and renames of the structure by the rows' own titles", () => {
+  it("lists a kept section that moves or gets a new title as a row, and counts the structure", () => {
     const rows: Row[] = [
       { source: "b1-b10", action: "keep" },
       { source: "b31-b40", action: "keep", title: "§ 2 Lagerung" },
@@ -176,21 +176,19 @@ describe("the parts card's rows", () => {
       "§ 8 Schluss",
     ];
     const progress = wordPartsProgress([sectionPlan(rows, titles)], true)!;
-    expect(progress.rows.map((row) => [row.title, row.state])).toEqual([
-      ["§ 3 Lieferung", "writing"],
-      ["§ 5 Haftung, § 7 Gewährleistung", "writing"],
-      ["§ 6 Sonstiges", "ready"],
+    expect(
+      progress.rows.map((row) => [row.title, row.action, row.state]),
+    ).toEqual([
+      ["§ 4 Lagerung", "keep", "ready"],
+      ["§ 3 Lieferung", "rewrite", "writing"],
+      ["§ 2 Abnahme", "keep", "ready"],
+      ["§ 5 Haftung, § 7 Gewährleistung", "rewrite", "writing"],
+      ["§ 6 Sonstiges", "delete", "ready"],
     ]);
     expect(progress.structure).toEqual({
-      moves: [
-        { row: 2, title: "§ 4 Lagerung", after: "§ 1 Gegenstand" },
-        { row: 3, title: "§ 3 Lieferung", after: "§ 2 Lagerung" },
-      ],
-      merges: [{ row: 5, title: "§ 5 Haftung, § 7 Gewährleistung" }],
-      renames: [
-        { row: 2, title: "§ 4 Lagerung", newTitle: "§ 2 Lagerung" },
-        { row: 4, title: "§ 2 Abnahme", newTitle: "§ 4 Abnahme" },
-      ],
+      moved: [2, 3],
+      merged: [5],
+      renamed: [2, 4],
     });
   });
 
@@ -318,11 +316,7 @@ describe("the parts card's rows", () => {
       ["§ 4 Preise, § 6 Zahlung", "ready"],
       ["§ 7 Schluss", "ready"],
     ]);
-    expect(progress.structure).toEqual({
-      moves: [],
-      merges: [{ row: 4, title: "§ 4 Preise, § 6 Zahlung" }],
-      renames: [],
-    });
+    expect(progress.structure).toEqual({ moved: [], merged: [4], renamed: [] });
     expect(progress.reorderingLeftOut).toBeUndefined();
     expect(wordPartsReorders(progress)).toBe(true);
 
@@ -335,8 +329,8 @@ describe("the parts card's rows", () => {
       ],
       false,
     )!;
-    expect(mergeKept.structure?.merges).toEqual([]);
-    expect(mergeKept.structure?.moves).toHaveLength(1);
+    expect(mergeKept.structure?.merged).toEqual([]);
+    expect(mergeKept.structure?.moved).toHaveLength(1);
     expect(mergeKept.reorderingLeftOut).toBe("changed_in_word");
     expect(wordPartsReorders(mergeKept)).toBe(false);
   });

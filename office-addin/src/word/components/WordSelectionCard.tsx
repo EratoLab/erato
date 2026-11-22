@@ -27,6 +27,7 @@ import { wordDeniedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
 import { useWordWrite } from "../providers/WordWriteProvider";
@@ -662,6 +663,12 @@ export function WordSelectionCard({
     expectedIdentity: artifact?.itemIdentity,
     currentIdentity: documentIdentity,
   });
+  // A capture rebuilt from history is no copy to write to either.
+  const copyGone = useWordCopyGone({
+    generating: isGenerating,
+    hasCopy: !!capture,
+    revoked: !gate.allowed && gate.reason === "no-capture",
+  });
   const replacement = useMemo(() => {
     if (!rewritable) return null;
     const split = splitWordSelectionReplacement(
@@ -1120,8 +1127,9 @@ export function WordSelectionCard({
     review.status === "done" ||
     review.status === "denied" ||
     review.status === "reverted";
+  const folds = completed || (idle && !isGenerating && copyGone);
   const collapsed =
-    completed &&
+    folds &&
     !review.detailsExpanded &&
     !review.revertStale &&
     !review.revertFailed;
@@ -1268,7 +1276,7 @@ export function WordSelectionCard({
             </p>
           )}
           <div className="word-review__actions">
-            {completed && (
+            {folds && (
               <WordReviewDetailsToggle
                 collapsed={collapsed}
                 controls={detailsId}

@@ -451,7 +451,7 @@ describe("tool budget approvals", () => {
         reasoningPart("Continuing"),
       ];
       expect(groupIntoTraceClusters(parts)).toEqual([
-        { kind: "trace", parts, startIndex: 0 },
+        { kind: "trace", parts, startIndex: 0, endIndex: 3 },
       ]);
       renderTrace(parts, { isStreaming });
       expect(screen.getByText("Tool-call budget")).toBeInTheDocument();
@@ -464,7 +464,7 @@ describe("tool budget approvals", () => {
   it("leaves pending budget requests available to the approval-card renderer", () => {
     const request = budgetRequest();
     expect(groupIntoTraceClusters([toolUsePart(), request])).toEqual([
-      { kind: "trace", parts: [toolUsePart()], startIndex: 0 },
+      { kind: "trace", parts: [toolUsePart()], startIndex: 0, endIndex: 0 },
       { kind: "passthrough", part: request, index: 1 },
     ]);
   });
@@ -489,9 +489,14 @@ describe("tool budget approvals", () => {
     expect(
       groupIntoTraceClusters([...parts, text, reasoningPart("More")]),
     ).toEqual([
-      { kind: "trace", parts, startIndex: 0 },
+      { kind: "trace", parts, startIndex: 0, endIndex: 2 },
       { kind: "passthrough", part: text, index: 3 },
-      { kind: "trace", parts: [reasoningPart("More")], startIndex: 4 },
+      {
+        kind: "trace",
+        parts: [reasoningPart("More")],
+        startIndex: 4,
+        endIndex: 4,
+      },
     ]);
   });
 });
@@ -730,5 +735,95 @@ describe("Trace — a submission written in parts", () => {
     expect(
       small.container.querySelectorAll("[data-testid='tool-call-item']"),
     ).toHaveLength(2);
+  });
+
+  it("reads part accounting only on Erato's own calls", () => {
+    const { container } = renderTrace([
+      call(
+        "erp",
+        "get_part",
+        "success",
+        { part: { tries_remaining: 1, calls_remaining: 1 } },
+        { display: { title: "Get part", server_name: "ERP" } },
+      ),
+      call("own", "lookup_part", "error", { part: { id: 7 } }),
+    ]);
+    expect(screen.queryByTestId("trace-submission-step")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-tool-status='error']"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps another server's call and a budget decision between parts as rows of their own", () => {
+    const { container } = renderTrace([
+      read("read-1"),
+      plan,
+      call(
+        "lookup",
+        "lookup_customer",
+        "error",
+        { status: "error" },
+        { display: { title: "Look up customer", server_name: "CRM" } },
+      ),
+      budgetRequest(),
+      budgetDecision(true),
+      redone,
+      written("part-2b"),
+      finish,
+    ]);
+    expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
+    const group = step();
+    const lookup = container.querySelector(
+      "[data-tool-name='lookup_customer']",
+    );
+    expect(lookup).toHaveAttribute("data-tool-status", "error");
+    expect(group).not.toContainElement(lookup as HTMLElement);
+    expect(group).not.toHaveTextContent("Tool-call budget");
+    expect(screen.getByText("Tool-call budget")).toBeInTheDocument();
+    expect(group).toHaveAttribute("data-step-status", "done");
+  });
+
+  it("says Interrupted for a finished turn whose submission never ended", () => {
+    renderTrace([read("read-1"), plan, written("part-2")]);
+    expect(step()).toHaveAttribute("data-step-status", "interrupted");
+    expect(
+      screen.getByRole("button", { name: /Writing the changes/ }),
+    ).toHaveTextContent("Interrupted");
+  });
+
+  it("keeps the step whole when Erato writes text between part calls", () => {
+    const text: ContentPart = { content_type: "text", text: "Now § 3." };
+    const after: ContentPart = { content_type: "text", text: "Done." };
+    expect(
+      groupIntoTraceClusters([
+        read("read-1"),
+        plan,
+        text,
+        written("part-2"),
+        finish,
+        after,
+      ]),
+    ).toEqual([
+      {
+        kind: "trace",
+        parts: [read("read-1"), plan, written("part-2"), finish],
+        startIndex: 0,
+        endIndex: 4,
+      },
+      { kind: "passthrough", part: text, index: 2 },
+      { kind: "passthrough", part: after, index: 5 },
+    ]);
+    const writing = call("part-3", "write_section", "preparing", null);
+    expect(
+      groupIntoTraceClusters([read("read-1"), plan, text, writing]),
+    ).toEqual([
+      {
+        kind: "trace",
+        parts: [read("read-1"), plan, writing],
+        startIndex: 0,
+        endIndex: 3,
+      },
+      { kind: "passthrough", part: text, index: 2 },
+    ]);
   });
 });

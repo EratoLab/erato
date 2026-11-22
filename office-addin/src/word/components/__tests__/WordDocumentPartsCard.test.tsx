@@ -272,7 +272,7 @@ describe("the card of a change in parts", () => {
         .map((item) => item.textContent),
     ).toEqual(titles.map((title) => `${title}Writing…`));
     expect(container).toHaveTextContent(
-      /^Writing the changesPlain wording for warehouse staff\.0 of 6 sections ready/,
+      /^Plain wording for warehouse staff\.0 of 6 sections ready/,
     );
     expect(screen.queryByRole("button")).toBeNull();
   });
@@ -311,7 +311,7 @@ describe("the card of a change in parts", () => {
       within(rowsList())
         .getAllByRole("listitem")
         .map((item) => item.textContent),
-    ).toEqual(["§ 1 GegenstandReady"]);
+    ).toEqual(["§ 1 GegenstandReady", "§ 3 AbnahmeMoved"]);
     expect(screen.queryByRole("button", { name: actions })).toBeNull();
     fireEvent.click(within(rowNamed("§ 1 Gegenstand")).getByRole("button"));
     expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Kurz.");
@@ -323,6 +323,40 @@ describe("the card of a change in parts", () => {
     expect(written.indexOf("§ 3 Abnahme")).toBeLessThan(
       written.indexOf("§ 2 Lieferung"),
     );
+  });
+
+  it("keeps Copy draft for a reordering Word for the web refuses, as its refusal says", async () => {
+    const snapshot = document();
+    const turn = await recordPartsTurn(snapshot, {
+      messageId: String(mock.artifact.messageId),
+      plan: {
+        intent: "§ 3 before § 2, and § 1 shorter.",
+        rows: [
+          { source: "b1-b2", action: "rewrite", change: "Shorter." },
+          { source: "b5-b6", action: "keep" },
+          { source: "b3-b4", action: "keep" },
+        ],
+      },
+      parts: SHORTER_ONE,
+    });
+    if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    mock.messageStatus = "completed";
+    mock.content = turn.content;
+    wordHost(snapshot);
+    vi.stubGlobal("Office", {
+      context: { diagnostics: { platform: "OfficeOnline" } },
+    });
+    mount(snapshot, "erato-word-document-plan", planOf(turn));
+
+    expect(
+      await screen.findByText(
+        /Copy the draft and apply it in Word for Windows or Mac/,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /^(Apply|Replace)/ }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
   });
 
   it("names a section Erato didn't get to in the one line for what stays, and applies the rest", async () => {
@@ -341,10 +375,10 @@ describe("the card of a change in parts", () => {
     expect(
       await screen.findByTestId("word-plan-not-changed"),
     ).toHaveTextContent(
-      /^Not changed: § 3 Abnahme\. Ask for them in your next message\.$/,
+      /^Not changed: § 3 Abnahme\. Ask for it in your next message\.$/,
     );
     expect(screen.getAllByTestId("word-plan-not-changed")).toHaveLength(1);
-    expect(rowNamed("§ 3 Abnahme")).toHaveTextContent("Not changed");
+    expect(rowNamed("§ 3 Abnahme")).toHaveTextContent(/^§ 3 Abnahme$/);
     expect(within(rowNamed("§ 3 Abnahme")).queryByRole("button")).toBeNull();
     expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Ready");
     expect(screen.queryByRole("button", { name: actions })).toBeNull();
@@ -390,6 +424,74 @@ describe("the card of a change in parts", () => {
     expect(screen.queryByRole("list", { name: "Sections" })).toBeNull();
   });
 
+  it("folds an earlier stopped change to its one line once a later request took a new copy", async () => {
+    const snapshot = document();
+    const turn = await recordPartsTurn(snapshot, {
+      messageId: String(mock.artifact.messageId),
+      plan: THREE,
+      parts: SHORTER_ONE,
+      finish: false,
+    });
+    mock.messageStatus = "completed";
+    mock.content = turn.content;
+    snapshot.revoked = true;
+    const { container } = mount(
+      snapshot,
+      "erato-word-document-parts",
+      turn.sectionPlanCall,
+    );
+
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Changes not finished$/,
+    );
+    expect(screen.getByText("Shorter § 1 and § 3.")).not.toBeVisible();
+    expect(container).not.toHaveTextContent(/Erato stopped before finishing/);
+  });
+
+  it("keeps a fresh proposal open while its copy binds after the message completes", async () => {
+    const snapshot = document();
+    const messageId = String(mock.artifact.messageId);
+    const turn = await recordPartsTurn(snapshot, {
+      messageId,
+      plan: THREE,
+      parts: SHORTER_ONE,
+      finishes: 2,
+    });
+    if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    mock.content = turn.content;
+    snapshot.ownerMessageId = messageId;
+    const capture: WordDocumentCapture = {
+      identity: "doc-A",
+      authoring: snapshot,
+      ordinalMap: new Map(),
+      paragraphsSent: snapshot.blocks.length,
+      renderedOrdinals: new Set(),
+      partialOrdinal: null,
+    };
+    const card = (captures: Map<string, WordDocumentCapture>) => (
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={captures}
+        restoreRequest={vi.fn()}
+      >
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={planOf(turn)}
+        />
+      </WordWriteProvider>
+    );
+    const { rerender } = render(card(new Map()), { wrapper: Conversation });
+    mock.messageStatus = "completed";
+    rerender(card(new Map()));
+    expect(screen.queryByTestId("word-review-receipt")).toBeNull();
+
+    rerender(card(new Map([[messageId, capture]])));
+    expect(
+      await screen.findByRole("button", { name: /^(Apply|Replace)/ }),
+    ).toBeEnabled();
+    expect(screen.queryByTestId("word-review-receipt")).toBeNull();
+  });
+
   it("names a removal Word changed meanwhile once, with why", async () => {
     inPlace.on = true;
     setWordInPlaceCapabilitiesForTests(wordInPlaceCapabilities("PC"));
@@ -415,11 +517,11 @@ describe("the card of a change in parts", () => {
     mount(snapshot, "erato-word-document-plan", planOf(turn));
 
     const removal = await waitFor(() => rowNamed("§ 3 Abnahme"));
-    expect(removal).toHaveTextContent(/^§ 3 AbnahmeNot changed$/);
+    expect(removal).toHaveTextContent(/^§ 3 Abnahme$/);
     expect(within(removal).queryByRole("button")).toBeNull();
     expect(screen.getAllByTestId("word-plan-not-changed")).toHaveLength(1);
     expect(screen.getByTestId("word-plan-not-changed")).toHaveTextContent(
-      "Not changed: § 3 Abnahme (changed in Word). Ask for them in your next message.",
+      "Not changed: § 3 Abnahme (changed in Word). Ask for it in your next message.",
     );
     expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Ready");
   });

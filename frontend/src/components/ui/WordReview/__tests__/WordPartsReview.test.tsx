@@ -53,11 +53,7 @@ const finished: WordPartsProgress = {
     },
     { row: 8, action: "delete", title: "§ 12 Sonstiges", state: "ready" },
   ],
-  structure: {
-    moves: [{ row: 3, title: "§ 6 Lagerung", after: "§ 3 Lieferung" }],
-    merges: [{ row: 6, title: "§ 7 Haftung, § 9 Schluss" }],
-    renames: [{ row: 3, title: "§ 6 Lagerung", newTitle: "§ 4 Lagerung" }],
-  },
+  structure: { moved: [3], merged: [6], renamed: [3] },
   finished: "finish",
   stopped: false,
 };
@@ -85,7 +81,7 @@ afterEach(cleanup);
 const line = () => screen.getByTestId("word-plan-not-changed");
 
 describe("the rows of a change in parts", () => {
-  it("marks each row by its own title as ready, not changed or removed, with one line for what stays, nothing red", () => {
+  it("marks each row by its own title as ready or removed and names what stays in one line, nothing red", () => {
     const { container } = render(
       <WordPartsReview
         progress={finished}
@@ -101,9 +97,9 @@ describe("the rows of a change in parts", () => {
         .map((item) => item.textContent),
     ).toEqual([
       "§ 3 LieferungReady",
-      "§ 5 AbnahmeNot changed",
+      "§ 5 Abnahme",
       "§ 7 Haftung, § 9 SchlussReady",
-      "§ 11 GewährleistungNot changed",
+      "§ 11 Gewährleistung",
       "§ 12 SonstigesRemoved",
     ]);
     expect(line()).toHaveTextContent(
@@ -234,7 +230,9 @@ describe("the rows of a change in parts", () => {
       />,
       { wrapper },
     );
-    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent("Not changed");
+    expect(row("§ 7 Haftung, § 9 Schluss").textContent).toBe(
+      "§ 7 Haftung, § 9 Schluss",
+    );
     expect(line()).toHaveTextContent(
       "Not changed: the order of the sections (changed in Word), § 5 Abnahme (changed in Word), § 7 Haftung, § 9 Schluss, § 11 Gewährleistung, § 1 Gegenstand and 2 more. Ask for them in your next message.",
     );
@@ -256,11 +254,73 @@ describe("the rows of a change in parts", () => {
       />,
       { wrapper },
     );
-    expect(row("§ 7 Haftung, § 9 Schluss")).toHaveTextContent(
-      "§ 7 Haftung, § 9 SchlussNot changed",
+    expect(row("§ 7 Haftung, § 9 Schluss").textContent).toBe(
+      "§ 7 Haftung, § 9 Schluss",
     );
     expect(line()).toHaveTextContent(
       "Not changed: § 7 Haftung, § 9 Schluss, § 1 Gegenstand. Ask for them in your next message.",
     );
+  });
+
+  it("puts the one line right under Apply, says it for one name and names an untitled section once", () => {
+    render(
+      <WordPartsReview
+        progress={{
+          ...finished,
+          rows: [
+            finished.rows[0],
+            { row: 9, action: "rewrite", title: "", state: "not-written" },
+          ],
+        }}
+        title="Changes"
+        top={<button type="button">Apply</button>}
+        notChanged={[""]}
+      />,
+      { wrapper },
+    );
+    expect(line()).toHaveTextContent(
+      "Not changed: Text without a title. Ask for it in your next message.",
+    );
+    const apply = screen.getByRole("button", { name: "Apply" });
+    const rows = screen.getByRole("list", { name: "Sections" });
+    expect(
+      apply.compareDocumentPosition(line()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      line().compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("marks a kept section that moves or gets a new title, and draws no list without rows", () => {
+    render(
+      <WordPartsReview
+        progress={{
+          ...finished,
+          rows: [
+            { row: 3, action: "keep", title: "§ 6 Lagerung", state: "ready" },
+            { row: 5, action: "keep", title: "§ 2 Preise", state: "ready" },
+          ],
+          structure: { moved: [5], merged: [], renamed: [3] },
+        }}
+        title="Changes"
+      />,
+      { wrapper },
+    );
+    expect(
+      within(screen.getByRole("list", { name: "Sections" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["§ 6 LagerungRenamed", "§ 2 PreiseMoved"]);
+    cleanup();
+
+    render(
+      <WordPartsReview
+        progress={{ ...finished, rows: [], intent: "Shorter." }}
+        title="Shorter."
+      />,
+      { wrapper },
+    );
+    expect(screen.queryByRole("list", { name: "Sections" })).toBeNull();
+    expect(screen.getAllByText("Shorter.")).toHaveLength(1);
   });
 });

@@ -8,8 +8,11 @@ import {
 } from "@/lib/wordReview/wordPlanReview";
 
 import { WordDocumentPlanReview } from "./WordDocumentPlanReview";
-import { WordReviewCard, WordReviewDetailsToggle } from "./WordReviewCardParts";
-import { wordNotChangedText } from "./wordPlanLabels";
+import {
+  WordNotChangedLine,
+  WordReviewCard,
+  WordReviewDetailsToggle,
+} from "./WordReviewCardParts";
 
 import type {
   WordAuthoringSnapshot,
@@ -110,6 +113,7 @@ export function WordProposalCard({
       footer={
         adapter ? (
           <>
+            {/* A folded card shows only its line, not why it cannot be applied. */}
             {!body && !collapsed && adapter.apply}
             <div className="word-review__actions">
               {status?.onToggleDetails && (
@@ -145,14 +149,7 @@ export function WordProposalCard({
             onLocate={snapshot ? adapter?.locate : undefined}
           />
         ))}
-      {!!notInProposal?.length && (
-        <p
-          className="word-review__hint [overflow-wrap:anywhere]"
-          data-testid="word-plan-not-changed"
-        >
-          {wordNotChangedText(notInProposal)}
-        </p>
-      )}
+      {notInProposal && <WordNotChangedLine names={notInProposal} />}
       {status?.notice}
     </WordReviewCard>
   );

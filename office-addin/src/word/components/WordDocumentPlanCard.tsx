@@ -44,6 +44,7 @@ import {
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import {
   useWordPlanParts,
   wordPartsChangesByRow,
@@ -223,6 +224,14 @@ export function WordDocumentPlanCard({
   const idle = review.status === "idle";
   const applying = review.status === "applying";
   const issue = plan ? validateWordDocumentPlan(plan, snapshot) : "invalid";
+  const ownsCapture = !!snapshot && snapshot.ownerMessageId === messageId;
+  // Gone after a pane reload, or once a later request took a new copy: the card then folds and
+  // offers no Apply, like every card but the newest proposal.
+  const copyGone = useWordCopyGone({
+    generating,
+    hasCopy: !!snapshot,
+    revoked: !ownsCapture || issue === "expired",
+  });
   const configuredAskActions = useMemo(
     () => artifact?.alwaysAskClientActions ?? [],
     [artifact],
@@ -244,7 +253,7 @@ export function WordDocumentPlanCard({
     !issue &&
     !planReview?.noChange &&
     gate.allowed &&
-    snapshot?.ownerMessageId === messageId &&
+    ownsCapture &&
     offered;
   const availability = wordInPlaceAvailability();
   const unavailable = availability.enabled ? undefined : availability.reason;
@@ -703,11 +712,11 @@ export function WordDocumentPlanCard({
     host.updateReview(key, { status: "denied", capture });
   };
   const completed = ["done", "denied", "reverted"].includes(review.status);
-  // The document copy the plan was written against is gone (the pane reloaded, or a later request
-  // took a new one), so the card has no Apply and folds like every card but the newest proposal.
-  const expired =
-    !snapshot || snapshot.ownerMessageId !== messageId || issue === "expired";
-  const folds = completed || (idle && !generating && expired);
+  // An Apply Word refused wrote nothing; once a later request took a new copy, its card folds too.
+  const folds =
+    completed ||
+    (idle && !generating && copyGone) ||
+    (review.status === "error" && !!snapshot?.revoked);
   const collapsed = folds && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
   // Only the Apply's own result: a later Revert attempt replaces the diagnostic.
@@ -830,7 +839,7 @@ export function WordDocumentPlanCard({
     ? wordAuthoringIssueText(issue, snapshot?.issueDetails)
     : !gate.allowed
       ? wordBlockedReasonText(gate.reason)
-      : snapshot?.ownerMessageId !== messageId
+      : !ownsCapture
         ? wordAuthoringIssueText("no-capture")
         : !offered
           ? t({
@@ -851,20 +860,23 @@ export function WordDocumentPlanCard({
               else cannotLocate();
             }
           : undefined;
+  // A change in parts says its route only when Apply replaces the whole document.
+  const routeText =
+    reorderingText ??
+    (parts && !replaces
+      ? undefined
+      : block
+        ? wordRoutePreviewText(
+            wordWholeDocumentBlockRoute(block),
+            wordPlanPassages(plan),
+          )
+        : routePreview);
   const applyControl = refusal ? (
     idle && <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
-  ) : expired && idle ? null : confirmImport && (idle || applying) ? (
+  ) : copyGone && idle ? null : confirmImport && (idle || applying) ? (
     <WordImportConfirm
       key={key}
-      routeText={
-        reorderingText ??
-        (block
-          ? wordRoutePreviewText(
-              wordWholeDocumentBlockRoute(block),
-              wordPlanPassages(plan),
-            )
-          : routePreview)
-      }
+      routeText={routeText}
       web={web}
       notice={coauthorsNotice}
       comments={
@@ -916,7 +928,7 @@ export function WordDocumentPlanCard({
       onConfirmedChange={(checked) =>
         setCommentsTicked(checked ? commentPlan?.fingerprint : undefined)
       }
-      routeText={reorderingText ?? routePreview}
+      routeText={routeText}
       notice={coauthorsNotice}
       applyLabel={applyLabel}
       canApply={ready && !host.operationInProgress}
@@ -933,9 +945,9 @@ export function WordDocumentPlanCard({
     />
   ) : (
     <>
-      {routePreview && idle && offered && (
+      {routeText && idle && offered && (
         <p className="word-review__hint" data-testid="word-plan-route">
-          {reorderingText ?? routePreview}
+          {routeText}
         </p>
       )}
       {(idle || applying) && offered && coauthorsNotice}
@@ -1048,7 +1060,6 @@ export function WordDocumentPlanCard({
             snapshot={shown}
             onLocate={shown ? locateSource : undefined}
             locatable={planReview.locatable}
-            checkInWord={planReview.checkInWord}
             notChanged={notInProposal}
           />
         )
@@ -1056,33 +1067,34 @@ export function WordDocumentPlanCard({
       adapter={{
         locate: locateSource,
         apply: applyControl,
-        // A change in parts offers only Apply and Undo; Word's own Undo and Compare do the rest.
+        // A change in parts offers only Apply and Undo, and Copy draft where a refusal points at it.
         actions: (
           <>
-            {snapshot && !parts && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  copyText(
-                    wordPlanDraftText(plan, snapshot),
-                    t({
-                      id: "officeAddin.word.authoring.copied",
-                      message: "Draft copied.",
-                    }),
-                    t({
-                      id: "officeAddin.word.authoring.copyFailed",
-                      message: "The draft could not be copied.",
-                    }),
-                  )
-                }
-              >
-                {t({
-                  id: "officeAddin.word.authoring.copy",
-                  message: "Copy draft",
-                })}
-              </Button>
-            )}
+            {snapshot &&
+              (!parts || !!refusal || !!review.documentPlanDiagnostic) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() =>
+                    copyText(
+                      wordPlanDraftText(plan, snapshot),
+                      t({
+                        id: "officeAddin.word.authoring.copied",
+                        message: "Draft copied.",
+                      }),
+                      t({
+                        id: "officeAddin.word.authoring.copyFailed",
+                        message: "The draft could not be copied.",
+                      }),
+                    )
+                  }
+                >
+                  {t({
+                    id: "officeAddin.word.authoring.copy",
+                    message: "Copy draft",
+                  })}
+                </Button>
+              )}
             {adjustedOutcome && !parts && (
               <Button
                 type="button"
