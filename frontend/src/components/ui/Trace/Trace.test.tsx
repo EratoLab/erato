@@ -637,7 +637,7 @@ describe("Trace — a submission written in parts", () => {
     });
   });
 
-  it("shows the reads and parts as one step, with no red row for a part sent again", () => {
+  it("shows the reads and parts as one folded step, with no red row for a part sent again", () => {
     const { container } = renderTrace([
       reasoningPart("**Reading**\n\nThe whole contract first."),
       read("read-1"),
@@ -664,6 +664,10 @@ describe("Trace — a submission written in parts", () => {
       "[data-testid='tool-call-item']",
     ))
       expect(step()).toContainElement(row as HTMLElement);
+    const toggle = screen.getByRole("button", { name: /Writing the changes/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("says Failed on the step for a real end failure, with only the call that ended it inside", () => {
@@ -694,8 +698,8 @@ describe("Trace — a submission written in parts", () => {
     expect(step()).toContainElement(failed[0] as HTMLElement);
   });
 
-  it("takes in the part Erato is still writing, and runs while the turn does", () => {
-    renderTrace(
+  it("takes in the part Erato is still writing, and is only its line while the turn runs", () => {
+    const { container } = renderTrace(
       [
         read("read-1"),
         plan,
@@ -707,6 +711,24 @@ describe("Trace — a submission written in parts", () => {
     expect(screen.getAllByTestId("trace-submission-step")).toHaveLength(1);
     expect(step()).toHaveAttribute("data-step-status", "running");
     expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(step()).toHaveTextContent(/^Writing the changesRunning$/);
+    expect(step().querySelector("button")).toBeNull();
+    expect(
+      container.querySelectorAll("[data-testid='tool-call-item']"),
+    ).toHaveLength(0);
+    cleanup();
+
+    renderTrace(
+      [
+        read("read-1"),
+        plan,
+        written("part-2"),
+        call("part-3", "write_section", "preparing", null),
+      ],
+      { waitingCall: { toolCallId: "part-3" } },
+    );
+    expect(step()).toHaveAttribute("data-step-status", "waiting");
+    expect(step().querySelector("button")).toBeNull();
   });
 
   it("leaves another server's call and a submission without parts as rows of their own", () => {

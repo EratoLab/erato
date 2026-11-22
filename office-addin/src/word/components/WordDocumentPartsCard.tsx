@@ -4,6 +4,7 @@ import {
   useHostArtifact,
   WordPartsReview,
   wordPartsPlanningText,
+  wordPartsTitleText,
   WordReviewCard,
   WordReviewGenerating,
   WordReviewHeader,
@@ -39,6 +40,13 @@ const stateKey = (state: PartsState) =>
       ? `planning:${state.callId}`
       : "";
 const sameState = (a: PartsState, b: PartsState) => stateKey(a) === stateKey(b);
+
+/** The card's name, and its heading while it lists no section. */
+export const wordPartsLabelText = () =>
+  t({
+    id: "officeAddin.word.parts.label",
+    message: "Document changes in parts",
+  });
 
 /**
  * A change in parts while Erato writes it: one line while Erato plans it, then the section plan's
@@ -102,10 +110,7 @@ export function WordDocumentPartsCard({ callId }: { callId: string }) {
       <WordReviewGenerating label={wordPartsPlanningText()} />
     ) : null;
   if (progress?.callId !== callId) return null;
-  const label = t({
-    id: "officeAddin.word.parts.label",
-    message: "Document changes in parts",
-  });
+  const label = wordPartsLabelText();
   if (progress.stopped) {
     const stoppedTitle = t({
       id: "officeAddin.word.parts.titleStopped",
@@ -153,8 +158,8 @@ export function WordDocumentPartsCard({ callId }: { callId: string }) {
         progress={progress}
         changes={changes}
         snapshot={snapshot}
-        // The chat's step already says that Erato writes the changes.
-        title={progress.intent ?? label}
+        // The same heading as once finished, so the top of the card stays when writing finishes.
+        title={wordPartsTitleText(progress) ?? label}
       />
     </WordReviewCard>
   );

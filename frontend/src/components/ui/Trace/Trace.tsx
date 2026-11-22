@@ -389,7 +389,8 @@ const stepsOf = (parts: TraceablePart[]): LogicalStep[] => {
 
 /**
  * One submission written in parts, as one row: its card shows the progress, so the row only says
- * that Erato writes the changes and how that ended. It opens to the calls it is made of.
+ * that Erato writes the changes and how that ended. Once ended, the user can open it to the calls
+ * it is made of.
  */
 const SubmissionStep = ({
   status,
@@ -397,7 +398,7 @@ const SubmissionStep = ({
   isCollapsed,
   isLastStep,
   children,
-}: BaseStepProps & { children: ReactNode }) => (
+}: BaseStepProps & { children?: ReactNode }) => (
   <div data-testid="trace-submission-step" data-step-status={status}>
     <TraceStep
       // eslint-disable-next-line lingui/no-unlocalized-strings -- content discriminator
@@ -489,6 +490,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
         />
       );
     case "submission":
+      // While Erato writes, the step is only its line: the card shows the progress.
       return (
         <SubmissionStep
           status={args.status}
@@ -496,17 +498,20 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
         >
-          <TraceTimeline
-            logicalSteps={args.step.steps}
-            isTraceActive={args.isStreaming}
-            hasLaterContent={args.hasLaterContent}
-            renderMarkdown={args.renderMarkdown}
-            showDoneMarker={false}
-            showThinkingPlaceholder={false}
-            maskReasoningText={args.maskReasoningText}
-            toolDecisions={args.toolDecisions}
-            waitingCall={args.waitingCall}
-          />
+          {args.status === "running" ||
+          args.status === "waiting" ? undefined : (
+            <TraceTimeline
+              logicalSteps={args.step.steps}
+              isTraceActive={args.isStreaming}
+              hasLaterContent={args.hasLaterContent}
+              renderMarkdown={args.renderMarkdown}
+              showDoneMarker={false}
+              showThinkingPlaceholder={false}
+              maskReasoningText={args.maskReasoningText}
+              toolDecisions={args.toolDecisions}
+              waitingCall={args.waitingCall}
+            />
+          )}
         </SubmissionStep>
       );
     case "tool_use":

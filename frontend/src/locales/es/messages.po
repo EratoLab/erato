@@ -5199,6 +5199,11 @@ msgstr "Secciones"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.title"
+msgstr "{count, plural, one {Cambios en # sección} other {Cambios en # secciones}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.untitled"
 msgstr "Texto sin título"
 

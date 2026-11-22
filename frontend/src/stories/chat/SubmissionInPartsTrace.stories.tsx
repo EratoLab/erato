@@ -96,7 +96,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A large change Erato writes in parts, in the 360 px pane: the reads and every part call show as one Writing the changes step; a part sent again leaves no red row.",
+          "A large change Erato writes in parts, in the 360 px pane: the reads and every part call show as one Writing the changes step, only its line while Erato writes and folded once done, until the user opens it; a part sent again leaves no red row.",
       },
     },
   },
@@ -112,6 +112,21 @@ export const WhilePlanning: Story = {
       read("read-1"),
       read("read-2"),
       call("plan", "plan_document_sections", "preparing", null),
+    ],
+    isStreaming: true,
+  },
+};
+
+export const WhileWriting: Story = {
+  args: {
+    content: [
+      thinking,
+      read("read-1"),
+      read("read-2"),
+      plan,
+      sentAgain("part-2a"),
+      written("part-2b"),
+      call("part-3", "write_document_section", "preparing", null),
     ],
     isStreaming: true,
   },

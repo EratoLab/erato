@@ -5199,6 +5199,11 @@ msgstr "Abschnitte"
 
 #. js-lingui-explicit-id
 #: src/components/ui/WordReview/WordPartsReview.tsx
+msgid "officeAddin.word.parts.title"
+msgstr "{count, plural, one {Änderungen in # Abschnitt} other {Änderungen in # Abschnitten}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/WordReview/WordPartsReview.tsx
 msgid "officeAddin.word.parts.untitled"
 msgstr "Text ohne Überschrift"
 

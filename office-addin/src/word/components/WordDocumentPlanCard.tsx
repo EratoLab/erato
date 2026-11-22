@@ -9,6 +9,7 @@ import {
   useWordMessageLineage,
   WordPartsReview,
   wordPartsReorderingText,
+  wordPartsTitleText,
   WordProposalCard,
   WordReviewGenerating,
   WordUndoLine,
@@ -28,6 +29,7 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { wordPartsLabelText } from "./WordDocumentPartsCard";
 import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
   WordPlanCommentConfirm,
@@ -1047,7 +1049,7 @@ export function WordDocumentPlanCard({
         parts && (
           <WordPartsReview
             progress={parts.progress}
-            title={planTitle}
+            title={wordPartsTitleText(parts.progress) ?? wordPartsLabelText()}
             top={
               <>
                 {statusAlert}

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 
-import { WordPartsReview } from "../WordPartsReview";
+import { WordPartsReview, wordPartsTitleText } from "../WordPartsReview";
 
 import type { WordPartsProgress } from "@/lib/wordReview/wordPartsProgress";
 import type { WordPlanRow } from "@/lib/wordReview/wordPlanReview";
@@ -71,6 +71,10 @@ const change: WordPlanRow = {
   },
 };
 
+const rowTexts = () =>
+  within(screen.getByRole("list", { name: "Sections" }))
+    .getAllByRole("listitem")
+    .map((item) => item.textContent);
 const row = (name: string) =>
   within(screen.getByRole("list", { name: "Sections" }))
     .getAllByRole("listitem")
@@ -81,25 +85,20 @@ afterEach(cleanup);
 const line = () => screen.getByTestId("word-plan-not-changed");
 
 describe("the rows of a change in parts", () => {
-  it("marks each row by its own title as ready or removed and names what stays in one line, nothing red", () => {
+  it("lists only the sections that change, with no count and no Ready, and names the rest in one line, nothing red", () => {
     const { container } = render(
       <WordPartsReview
         progress={finished}
-        title="Changes in 5 sections"
+        title="Changes in 3 sections"
         changes={new Map([[2, [change]]])}
       />,
       { wrapper },
     );
-    expect(screen.getByText("2 of 4 sections ready")).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("list", { name: "Sections" }))
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual([
-      "§ 3 LieferungReady",
-      "§ 5 Abnahme",
-      "§ 7 Haftung, § 9 SchlussReady",
-      "§ 11 Gewährleistung",
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByText(/sections ready|Ready/)).toBeNull();
+    expect(rowTexts()).toEqual([
+      "§ 3 Lieferung",
+      "§ 7 Haftung, § 9 Schluss",
       "§ 12 SonstigesRemoved",
     ]);
     expect(line()).toHaveTextContent(
@@ -111,7 +110,6 @@ describe("the rows of a change in parts", () => {
         name: /Leave out|Include|Redo|Write the missing|reordering/,
       }),
     ).toBeNull();
-    expect(within(row("§ 5 Abnahme")).queryByRole("button")).toBeNull();
     fireEvent.click(within(row("§ 3 Lieferung")).getByRole("button"));
     expect(row("§ 3 Lieferung")).toHaveTextContent(
       "Lieferung innerhalb von 14 Tagen.",
@@ -140,11 +138,7 @@ describe("the rows of a change in parts", () => {
     expect(
       screen.getByText("Plain wording; § 4 and § 6 swap places."),
     ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("list", { name: "Sections" }))
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual([
+    expect(rowTexts()).toEqual([
       "§ 3 LieferungReady",
       "§ 7 Haftung, § 9 SchlussWriting…",
       "§ 11 GewährleistungWriting…",
@@ -230,9 +224,7 @@ describe("the rows of a change in parts", () => {
       />,
       { wrapper },
     );
-    expect(row("§ 7 Haftung, § 9 Schluss").textContent).toBe(
-      "§ 7 Haftung, § 9 Schluss",
-    );
+    expect(rowTexts()).toEqual(["§ 3 Lieferung", "§ 12 SonstigesRemoved"]);
     expect(line()).toHaveTextContent(
       "Not changed: the order of the sections (changed in Word), § 5 Abnahme (changed in Word), § 7 Haftung, § 9 Schluss, § 11 Gewährleistung, § 1 Gegenstand and 2 more. Ask for them in your next message.",
     );
@@ -254,9 +246,7 @@ describe("the rows of a change in parts", () => {
       />,
       { wrapper },
     );
-    expect(row("§ 7 Haftung, § 9 Schluss").textContent).toBe(
-      "§ 7 Haftung, § 9 Schluss",
-    );
+    expect(rowTexts()).toEqual(["§ 3 Lieferung", "§ 12 SonstigesRemoved"]);
     expect(line()).toHaveTextContent(
       "Not changed: § 7 Haftung, § 9 Schluss, § 1 Gegenstand. Ask for them in your next message.",
     );
@@ -306,11 +296,7 @@ describe("the rows of a change in parts", () => {
       />,
       { wrapper },
     );
-    expect(
-      within(screen.getByRole("list", { name: "Sections" }))
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["§ 6 LagerungRenamed", "§ 2 PreiseMoved"]);
+    expect(rowTexts()).toEqual(["§ 6 LagerungRenamed", "§ 2 PreiseMoved"]);
     cleanup();
 
     render(
@@ -322,5 +308,21 @@ describe("the rows of a change in parts", () => {
     );
     expect(screen.queryByRole("list", { name: "Sections" })).toBeNull();
     expect(screen.getAllByText("Shorter.")).toHaveLength(1);
+  });
+
+  it("counts the sections the card lists in one heading, while writing and once finished", () => {
+    const writing = {
+      ...finished,
+      finished: undefined,
+      rows: finished.rows.map((row) => ({ ...row, state: "writing" as const })),
+    };
+    expect(wordPartsTitleText(writing)).toBe("Changes in 5 sections");
+    expect(wordPartsTitleText(finished)).toBe("Changes in 3 sections");
+    expect(wordPartsTitleText({ ...finished, rows: [finished.rows[0]] })).toBe(
+      "Changes in 1 section",
+    );
+    expect(
+      wordPartsTitleText({ ...finished, rows: [finished.rows[1]] }),
+    ).toBeUndefined();
   });
 });

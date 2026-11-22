@@ -180,6 +180,10 @@ function wordHost(snapshot: WordAuthoringSnapshot) {
 }
 
 const rowsList = () => screen.getByRole("list", { name: "Sections" });
+const rowTexts = () =>
+  within(rowsList())
+    .getAllByRole("listitem")
+    .map((item) => item.textContent);
 const rowNamed = (name: string) =>
   within(rowsList())
     .getAllByRole("listitem")
@@ -243,7 +247,7 @@ describe("the card of a change in parts", () => {
     expect(screen.queryByRole("list", { name: "Sections" })).toBeNull();
   });
 
-  it("shows the intent, the count and every section of a six-section request marked writing", async () => {
+  it("shows the heading, the intent, the count and every section of a six-section request marked writing", async () => {
     const titles = [1, 2, 3, 4, 5, 6].map((n) => `§ ${n} Abschnitt ${n}`);
     const snapshot = document(titles);
     const turn = await recordPartsTurn(snapshot, {
@@ -266,18 +270,14 @@ describe("the card of a change in parts", () => {
       turn.sectionPlanCall,
     );
 
-    expect(
-      within(rowsList())
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(titles.map((title) => `${title}Writing…`));
+    expect(rowTexts()).toEqual(titles.map((title) => `${title}Writing…`));
     expect(container).toHaveTextContent(
-      /^Plain wording for warehouse staff\.0 of 6 sections ready/,
+      /^Changes in 6 sectionsPlain wording for warehouse staff\.0 of 6 sections ready/,
     );
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("puts Apply on top, says once what the reordering means, and offers nothing per row", async () => {
+  it("keeps the heading from writing, puts Apply on top, says once what the reordering means, and offers nothing per row", async () => {
     const snapshot = document();
     const turn = await recordPartsTurn(snapshot, {
       messageId: String(mock.artifact.messageId),
@@ -292,6 +292,17 @@ describe("the card of a change in parts", () => {
       parts: SHORTER_ONE,
     });
     if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
+    mock.content = turn.content.filter(
+      (part) =>
+        part.content_type !== "tool_use" ||
+        part.tool_name !== "submit_document_plan",
+    );
+    mount(snapshot, "erato-word-document-parts", turn.sectionPlanCall);
+    expect(
+      screen.getByRole("heading", { name: "Changes in 2 sections" }),
+    ).toBeVisible();
+    cleanup();
+
     mock.messageStatus = "completed";
     mock.content = turn.content;
     const insert = wordHost(snapshot);
@@ -301,17 +312,17 @@ describe("the card of a change in parts", () => {
       name: /^(Apply|Replace)/,
     });
     expect(
+      screen.getByRole("heading", { name: "Changes in 2 sections" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/sections ready/)).toBeNull();
+    expect(
       apply.compareDocumentPosition(rowsList()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByTestId("word-plan-route")).toHaveTextContent(
       /^Reordering replaces the whole document; Undo takes it back only as a whole\.$/,
     );
-    expect(
-      within(rowsList())
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["§ 1 GegenstandReady", "§ 3 AbnahmeMoved"]);
+    expect(rowTexts()).toEqual(["§ 1 Gegenstand", "§ 3 AbnahmeMoved"]);
     expect(screen.queryByRole("button", { name: actions })).toBeNull();
     fireEvent.click(within(rowNamed("§ 1 Gegenstand")).getByRole("button"));
     expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Kurz.");
@@ -378,9 +389,7 @@ describe("the card of a change in parts", () => {
       /^Not changed: § 3 Abnahme\. Ask for it in your next message\.$/,
     );
     expect(screen.getAllByTestId("word-plan-not-changed")).toHaveLength(1);
-    expect(rowNamed("§ 3 Abnahme")).toHaveTextContent(/^§ 3 Abnahme$/);
-    expect(within(rowNamed("§ 3 Abnahme")).queryByRole("button")).toBeNull();
-    expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Ready");
+    expect(rowTexts()).toEqual(["§ 1 Gegenstand"]);
     expect(screen.queryByRole("button", { name: actions })).toBeNull();
     expect(screen.getByRole("button", { name: /^Apply/ })).toBeEnabled();
   });
@@ -516,14 +525,13 @@ describe("the card of a change in parts", () => {
     mock.content = turn.content;
     mount(snapshot, "erato-word-document-plan", planOf(turn));
 
-    const removal = await waitFor(() => rowNamed("§ 3 Abnahme"));
-    expect(removal).toHaveTextContent(/^§ 3 Abnahme$/);
-    expect(within(removal).queryByRole("button")).toBeNull();
-    expect(screen.getAllByTestId("word-plan-not-changed")).toHaveLength(1);
-    expect(screen.getByTestId("word-plan-not-changed")).toHaveTextContent(
+    expect(
+      await screen.findByTestId("word-plan-not-changed"),
+    ).toHaveTextContent(
       "Not changed: § 3 Abnahme (changed in Word). Ask for it in your next message.",
     );
-    expect(rowNamed("§ 1 Gegenstand")).toHaveTextContent("Ready");
+    expect(screen.getAllByTestId("word-plan-not-changed")).toHaveLength(1);
+    expect(rowTexts()).toEqual(["§ 1 Gegenstand"]);
   });
 
   it("folds a finished change in parts to what it proposed after a reload, without Apply", async () => {

@@ -97,10 +97,43 @@ function pill(mark: Mark): { label: string; tone: string } {
 const untitled = () =>
   t({ id: "officeAddin.word.parts.untitled", message: "Text without a title" });
 
+/** Once finished, a row whose part did not go in stays as it was, and a merge goes with a
+ * reordering the finish left out, since it joins blocks from other places. */
+const keptAsItWas = (progress: WordPartsProgress) => {
+  const merged = new Set(progress.structure?.merged);
+  return (row: WordPartsSectionRow) =>
+    progress.finished !== undefined &&
+    (row.state !== "ready" ||
+      (!!progress.reorderingLeftOut && merged.has(row.row)));
+};
+
+/** The rows the card lists: every row while Erato writes, only those that change once finished. */
+const listedRows = (progress: WordPartsProgress) => {
+  const kept = keptAsItWas(progress);
+  return progress.rows.filter((row) => !kept(row));
+};
+
+/** The card's heading, the same while Erato writes and once finished; undefined without rows. */
+export function wordPartsTitleText(
+  progress: WordPartsProgress,
+): string | undefined {
+  const count = listedRows(progress).length;
+  return count
+    ? t({
+        id: "officeAddin.word.parts.title",
+        message: plural(count, {
+          one: "Changes in # section",
+          other: "Changes in # sections",
+        }),
+      })
+    : undefined;
+}
+
 function progressText(progress: WordPartsProgress): string | undefined {
   const rewrites = progress.rows.filter((row) => row.action === "rewrite");
-  // A stopped change has nothing to apply, so it counts nothing as ready.
-  if (progress.stopped || !rewrites.length) return undefined;
+  // A stopped change has nothing to apply and a finished one lists only what changes.
+  if (progress.stopped || progress.finished !== undefined || !rewrites.length)
+    return undefined;
   const ready = rewrites.filter((row) => row.state === "ready").length;
   const total = rewrites.length;
   return t({
@@ -113,7 +146,7 @@ function progressText(progress: WordPartsProgress): string | undefined {
 }
 
 /** A change in parts: the intent, the count, and each section by its own title, marked writing or
- * ready; once finished, one line names what stays as it was. */
+ * ready; once finished, only the sections that change, and one line names what stays as it was. */
 export function WordPartsReview({
   progress,
   title,
@@ -148,16 +181,12 @@ export function WordPartsReview({
     setFocusKey(rowKey);
   };
   const finished = progress.finished !== undefined;
-  const merged = new Set(progress.structure?.merged);
   const renamed = new Set(progress.structure?.renamed);
-  // A merge joins blocks from other places, so it goes with the reordering the finish left out.
-  const unchanged = (row: WordPartsSectionRow) =>
-    finished &&
-    (row.state !== "ready" ||
-      (!!progress.reorderingLeftOut && merged.has(row.row)));
-  // A section left as it was has no mark: the one line names it.
+  const unchanged = keptAsItWas(progress);
+  const listed = progress.rows.filter((row) => !unchanged(row));
+  // Once finished every listed section is ready, so only what moves, renames or goes is marked.
   const mark = (row: WordPartsSectionRow): Mark | undefined =>
-    progress.stopped || unchanged(row)
+    progress.stopped
       ? undefined
       : row.state !== "ready"
         ? "writing"
@@ -167,7 +196,9 @@ export function WordPartsReview({
             ? renamed.has(row.row)
               ? "renamed"
               : "moved"
-            : "ready";
+            : finished
+              ? undefined
+              : "ready";
   const changedInWord = () =>
     t({
       id: "officeAddin.word.parts.reasonChangedInWord",
@@ -225,7 +256,7 @@ export function WordPartsReview({
         <div className="word-plan-review__section word-parts__top">{top}</div>
       )}
       <WordNotChangedLine names={gaps} className="word-plan-review__hint" />
-      {progress.rows.length > 0 && (
+      {listed.length > 0 && (
         <ul
           className="word-parts__rows"
           aria-label={t({
@@ -233,11 +264,9 @@ export function WordPartsReview({
             message: "Sections",
           })}
         >
-          {progress.rows.map((row) => {
+          {listed.map((row) => {
             const key = `row:${row.row}`;
-            const rowChanges = unchanged(row)
-              ? []
-              : (changes?.get(row.row) ?? []);
+            const rowChanges = changes?.get(row.row) ?? [];
             const shown = mark(row);
             return (
               <WordReviewRow

@@ -5,6 +5,7 @@ import {
   WordPartsReview,
   wordPartsPlanningText,
   wordPartsReorderingText,
+  wordPartsTitleText,
 } from "../../components/ui/WordReview/WordPartsReview";
 import {
   WordReviewCard,
@@ -51,6 +52,8 @@ function progress(
 
 const READY = TITLES.map(() => "ready" as const);
 
+const LABEL = "Document changes in parts";
+
 /** The card in the 360 px pane, Apply on top once Erato finished. */
 function PartsCard({
   value,
@@ -68,7 +71,7 @@ function PartsCard({
   return (
     <div style={{ width: 360 }}>
       <WordReviewCard
-        label="Document changes in parts"
+        label={LABEL}
         testId="word-parts-story"
         collapsed={false}
         detailsId="word-parts-story-details"
@@ -76,11 +79,7 @@ function PartsCard({
       >
         <WordPartsReview
           progress={value}
-          title={
-            value.finished
-              ? "Changes in 6 sections"
-              : (value.intent ?? "Document changes in parts")
-          }
+          title={wordPartsTitleText(value) ?? LABEL}
           top={
             value.finished && (
               <>
@@ -105,7 +104,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A large Word change written in parts, in the 360 px pane: one line while Erato plans it, then the intent, how many sections are ready and each section's title marked writing or ready; after the finish, Apply on top and one line for what stays as it was.",
+          "A large Word change written in parts, in the 360 px pane: one line while Erato plans it, then one heading, the intent, how many sections are ready and each section's title marked writing or ready; after the finish, the same heading and intent, Apply on top, one line for what stays as it was and only the sections that change.",
       },
     },
   },
@@ -149,6 +148,7 @@ export const ReadyWithNotChanged: Story = {
 /** Every card but the newest open proposal folds to its one line, also after a reload. */
 function FoldedCards() {
   const [open, setOpen] = useState<string>();
+  const ready = progress(READY, { finished: "finish" });
   const cards = [
     { id: "older", line: "Proposed: Changes in 6 sections" },
     { id: "applied", line: "Applied: Change 3 paragraphs" },
@@ -182,8 +182,8 @@ function FoldedCards() {
             }
           >
             <WordPartsReview
-              progress={progress(READY, { finished: "finish" })}
-              title="Changes in 6 sections"
+              progress={ready}
+              title={wordPartsTitleText(ready) ?? LABEL}
             />
           </WordReviewCard>
         );

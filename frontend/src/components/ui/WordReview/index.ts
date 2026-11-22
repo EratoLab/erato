@@ -9,6 +9,7 @@ export {
   WordPartsReview,
   wordPartsPlanningText,
   wordPartsReorderingText,
+  wordPartsTitleText,
   type WordPartsReviewProps,
 } from "./WordPartsReview";
 export {
