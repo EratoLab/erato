@@ -1,7 +1,9 @@
 import {
   createWordXmlComparison,
+  removeWordAddedTableIndents,
   removeWordDetectedLanguages,
   removeWordRedetectedLanguage,
+  wordPackageRoots,
   wordXmlElements,
 } from "@erato/frontend/word-review";
 
@@ -23,6 +25,7 @@ import {
 } from "./wordDocumentPackageCodec";
 
 import type { WordInPlaceOp, WordInPlaceStoryTarget } from "./wordInPlacePlan";
+import type { WordHousekeepingCounts } from "@erato/frontend/word-review";
 
 const PKG = "http://schemas.microsoft.com/office/2006/xmlPackage";
 const CT = "http://schemas.openxmlformats.org/package/2006/content-types";
@@ -292,24 +295,31 @@ export function wordPackageFingerprint(ooxml: string): string {
 }
 
 /** The fingerprint of a complete package a write produced, against `replaced`, the package before
- * that write: Word's re-detected proofing language in the written paragraphs is left out
- * (WORD_HOUSEKEEPING "proofing-language"), and `redetected` counts it. `strict` is the package's
- * own fingerprint where the caller has it, used when nothing was left out. */
+ * that write: Word's re-detected proofing language in the written paragraphs and its indent on a
+ * styled table the write added are left out (WORD_HOUSEKEEPING "proofing-language" and
+ * "table-indent"), and `housekeeping` counts them. `strict` is the package's own fingerprint where
+ * the caller has it, used when nothing was left out. */
 export function wordWrittenPackageFingerprint(
   ooxml: string,
   replaced: string,
   strict?: string,
-): { fingerprint: string; redetected: number } {
+): { fingerprint: string; housekeeping: WordHousekeepingCounts } {
   const doc = parseWordXml(ooxml);
-  const redetected = removeWordRedetectedLanguage(doc, () =>
-    parseWordXml(replaced),
+  let original: Document | undefined;
+  const before = () => (original ??= parseWordXml(replaced));
+  const housekeeping: WordHousekeepingCounts = {};
+  const redetected = removeWordRedetectedLanguage(doc, before);
+  if (redetected) housekeeping["proofing-language"] = redetected;
+  const indents = removeWordAddedTableIndents(wordPackageRoots(doc), () =>
+    wordPackageRoots(before()),
   );
+  if (indents) housekeeping["table-indent"] = indents;
   return {
     fingerprint:
-      !redetected && strict
+      !redetected && !indents && strict
         ? strict
         : createWordXmlComparison(doc).fingerprint(),
-    redetected,
+    housekeeping,
   };
 }
 

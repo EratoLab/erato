@@ -12,6 +12,7 @@ import {
 } from "../wordHousekeeping";
 import {
   createWordXmlComparison,
+  removeWordAddedTableIndents,
   removeWordDetectedLanguages,
   removeWordRedetectedLanguage,
 } from "../wordXmlComparison";
@@ -784,5 +785,207 @@ describe("people-list", () => {
       after([person("Maya", "AD"), person("Lena")], ["Maya", "Lena"]),
     ).not.toBe(base);
     expect(after([person("Maya")], ["Maya", "Lena"])).not.toBe(base);
+  });
+});
+
+describe("table-indent", () => {
+  // What a Word PC import gave a new table in Table Grid natively (ERMAIN-1306).
+  const border = (side: string, sz = 4, space = 0, val = "single") =>
+    `<w:${side} w:val="${val}" w:sz="${sz}" w:space="${space}" w:color="auto"/>`;
+  const tableStyle = (id: string, borders: string, basedOn = "") =>
+    `<w:style w:type="table" w:styleId="${id}"><w:name w:val="${id}"/>${basedOn ? `<w:basedOn w:val="${basedOn}"/>` : ""}<w:tblPr>${borders ? `<w:tblBorders>${borders}</w:tblBorders>` : ""}</w:tblPr></w:style>`;
+  const GRID = tableStyle(
+    "TableGrid",
+    border("top") + border("left") + border("bottom"),
+  );
+  const properties = (style: string | null, indent = "") =>
+    `${style ? `<w:tblStyle w:val="${style}"/>` : ""}<w:tblW w:w="5000" w:type="pct"/>${indent}${LOOK_DEFAULT}`;
+  const indent = (w: string, type = "dxa") =>
+    `<w:tblInd w:w="${w}" w:type="${type}"/>`;
+  const grid = (tblPr: string, text: string) =>
+    `<w:tbl><w:tblPr>${tblPr}</w:tblPr><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p/>`;
+  const KEPT = grid(
+    `<w:tblStyle w:val="TableGrid"/><w:tblW w:w="9400" w:type="dxa"/>${indent("-8")}`,
+    "Kept",
+  );
+  const roots = (body: string, styles: string) =>
+    wordPackageRoots(parse(pkg({ body, styles })));
+  const write = ({
+    expected,
+    written,
+    replaced = KEPT,
+    styles = GRID,
+  }: {
+    expected: string;
+    written: string;
+    replaced?: string;
+    styles?: string;
+  }) => {
+    const [before, after] = [expected, written].map((body) =>
+      parse(pkg({ body, styles })),
+    );
+    const dropped = removeWordAddedTableIndents(
+      wordPackageRoots(after),
+      () => roots(replaced, styles),
+      wordPackageRoots(before),
+    );
+    return {
+      dropped,
+      alike:
+        createWordXmlComparison(before).fingerprint() ===
+        createWordXmlComparison(after).fingerprint(),
+    };
+  };
+  const added = (style: string | null, w: string, type = "dxa") => ({
+    expected: KEPT + grid(properties(style), "New"),
+    written: KEPT + grid(properties(style, indent(w, type)), "New"),
+  });
+
+  it("reads a new styled table alike with the indent Word adds to offset its left border", () => {
+    expect(write(added("TableGrid", "-8"))).toEqual({
+      dropped: 1,
+      alike: true,
+    });
+    expect(write(added("TableGrid", "-3")).alike).toBe(true);
+    expect(write(added("TableGrid", "0")).alike).toBe(true);
+    expect(write(added("TableGrid", "5")).alike).toBe(true);
+  });
+
+  it("measures the left border along the style chain, with its spacing, and as 0 without one", () => {
+    const spaced =
+      GRID + tableStyle("Spaced", border("left", 8, 4), "TableGrid");
+    const inherited = GRID + tableStyle("Inherited", "", "TableGrid");
+    const open = tableStyle("TableGrid", border("top") + border("bottom"));
+    const nil = tableStyle("TableGrid", border("left", 0, 0, "nil"));
+    const start = tableStyle("TableGrid", border("start"));
+    expect(write({ ...added("Spaced", "-45"), styles: spaced }).alike).toBe(
+      true,
+    );
+    expect(write({ ...added("Spaced", "-101"), styles: spaced }).alike).toBe(
+      false,
+    );
+    expect(
+      write({ ...added("Inherited", "-8"), styles: inherited }).alike,
+    ).toBe(true);
+    expect(write({ ...added("TableGrid", "-8"), styles: start }).alike).toBe(
+      true,
+    );
+    for (const styles of [open, nil]) {
+      expect(write({ ...added("TableGrid", "0"), styles }).alike).toBe(true);
+      expect(write({ ...added("TableGrid", "-8"), styles }).alike).toBe(false);
+    }
+  });
+
+  it("still sees an indent past the left border, to the right or in another unit", () => {
+    expect(write(added("TableGrid", "-11"))).toEqual({
+      dropped: 0,
+      alike: false,
+    });
+    expect(write(added("TableGrid", "6")).alike).toBe(false);
+    expect(write(added("TableGrid", "-8", "pct")).alike).toBe(false);
+    expect(write(added("Missing", "-8")).alike).toBe(false);
+  });
+
+  it("still sees an indent where Word's offset was not measured: another border type, or a looping style chain without a left border", () => {
+    const double = tableStyle("TableGrid", border("left", 4, 0, "double"));
+    const looped =
+      tableStyle("TableGrid", border("top"), "Looped") +
+      tableStyle("Looped", "", "TableGrid");
+    expect(write({ ...added("TableGrid", "-8"), styles: double }).alike).toBe(
+      false,
+    );
+    expect(write({ ...added("TableGrid", "-8"), styles: looped }).alike).toBe(
+      false,
+    );
+  });
+
+  it("still sees an indent on a table without a style, or on a table the write kept", () => {
+    expect(write(added(null, "-8")).alike).toBe(false);
+    const kept = grid(properties("TableGrid"), "Kept as it was");
+    expect(
+      write({
+        expected: kept,
+        written: grid(properties("TableGrid", indent("-8")), "Kept as it was"),
+        replaced: kept,
+      }),
+    ).toEqual({ dropped: 0, alike: false });
+  });
+
+  it("tells a new table from a kept one by the whole table, one copy each", () => {
+    const kept = grid(properties("TableGrid"), "Kept");
+    const copy = grid(properties("TableGrid", indent("-8")), "Kept");
+    expect(
+      write({
+        expected: kept + grid(properties("TableGrid"), "New"),
+        written: kept + grid(properties("TableGrid", indent("-8")), "New"),
+        replaced: kept,
+      }),
+    ).toEqual({ dropped: 1, alike: true });
+    expect(
+      write({ expected: kept + kept, written: kept + copy, replaced: kept }),
+    ).toEqual({ dropped: 1, alike: true });
+  });
+
+  it("leaves an indent the write itself gave the table", () => {
+    expect(
+      write({
+        expected: KEPT + grid(properties("TableGrid", indent("-8")), "New"),
+        written: KEPT + grid(properties("TableGrid", indent("-8")), "New"),
+      }),
+    ).toEqual({ dropped: 0, alike: true });
+  });
+
+  it("still sees a changed indent and any other change to the new table", () => {
+    expect(
+      write({
+        expected: KEPT + grid(properties("TableGrid", indent("0")), "New"),
+        written: KEPT + grid(properties("TableGrid", indent("-8")), "New"),
+      }),
+    ).toEqual({ dropped: 0, alike: false });
+    expect(
+      write({
+        expected: KEPT + grid(properties("TableGrid"), "New"),
+        written:
+          KEPT +
+          grid(
+            properties("TableGrid", indent("-8")).replace(
+              LOOK_DEFAULT,
+              `<w:jc w:val="center"/>${LOOK_DEFAULT}`,
+            ),
+            "New",
+          ),
+      }),
+    ).toEqual({ dropped: 1, alike: false });
+    expect(
+      write({
+        expected: KEPT + grid(properties("TableGrid"), "New"),
+        written: KEPT + grid(properties("TableGrid", indent("-8")), "Edited"),
+      }).alike,
+    ).toBe(false);
+  });
+
+  it("without the package the write meant, reads Word's later indents on the added table alike", () => {
+    const fingerprint = (body: string) => {
+      const doc = parse(pkg({ body, styles: GRID }));
+      const dropped = removeWordAddedTableIndents(wordPackageRoots(doc), () =>
+        roots(KEPT, GRID),
+      );
+      return {
+        dropped,
+        fingerprint: createWordXmlComparison(doc).fingerprint(),
+      };
+    };
+    const after = (kept: string, w: string, text = "New") =>
+      fingerprint(kept + grid(properties("TableGrid", indent(w)), text));
+    const applied = after(KEPT, "-8");
+    expect(applied.dropped).toBe(1);
+    expect(after(KEPT, "5")).toEqual(applied);
+    expect(after(KEPT, "360").fingerprint).not.toBe(applied.fingerprint);
+    expect(after(KEPT, "5", "Edited").fingerprint).not.toBe(
+      applied.fingerprint,
+    );
+    expect(
+      after(KEPT.replace(indent("-8"), indent("-3")), "-8").fingerprint,
+    ).not.toBe(applied.fingerprint);
   });
 });

@@ -1157,6 +1157,123 @@ describe(
   },
 );
 
+describe(
+  "a new table in the document's table style on Word PC (ERMAIN-1306)",
+  { timeout: 30_000 },
+  () => {
+    const HEADER = "Step";
+    const source = () =>
+      realisticWordPackageXml().replace(
+        '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+        '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>',
+      );
+    const tablePlan = (snapshot: WordAuthoringSnapshot): WordDocumentPlan => {
+      const refs = snapshot.blocks.map((b) => b.ref);
+      const status = snapshot.blocks.findIndex((b) =>
+        b.text.startsWith("Status"),
+      );
+      return {
+        version: 1,
+        snapshot: snapshot.token,
+        readToken: "read-proof",
+        scope: "document",
+        entries: [
+          { kind: "keep", source: refs.slice(0, status + 1) },
+          {
+            kind: "insert",
+            contextRefs: [refs[status]],
+            blocks: [
+              {
+                id: "deadlines",
+                type: "table",
+                text: "",
+                format: { styleRef: "TableGrid" },
+                rows: [
+                  [HEADER, "Deadline"],
+                  ["Call-off", "5 working days"],
+                ].map((texts, r) => ({
+                  cells: texts.map((text, c) => ({
+                    blocks: [
+                      { id: `deadlines-${r}-${c}`, type: "paragraph", text },
+                    ],
+                  })),
+                })),
+              },
+            ],
+          },
+          { kind: "keep", source: refs.slice(status + 1) },
+        ],
+        deleted: [],
+      };
+    };
+    /** Sets the w:tblInd of the table whose first cell reads HEADER, as Word PC writes it. */
+    const indent = (w: string) => (xml: string) => {
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const table = Array.from(doc.getElementsByTagNameNS(W, "tbl")).find(
+        (t) => t.getElementsByTagNameNS(W, "t")[0]?.textContent === HEADER,
+      );
+      const properties = table?.getElementsByTagNameNS(W, "tblPr")[0];
+      if (!properties) throw new Error("No new table");
+      Array.from(properties.getElementsByTagNameNS(W, "tblInd")).forEach((e) =>
+        e.remove(),
+      );
+      const element = doc.createElementNS(W, "w:tblInd");
+      element.setAttributeNS(W, "w:w", w);
+      element.setAttributeNS(W, "w:type", "dxa");
+      properties.getElementsByTagNameNS(W, "tblW")[0].after(element);
+      return new XMLSerializer().serializeToString(doc);
+    };
+    async function applied() {
+      const host = installWordOoxmlHost(source(), {
+        profile: "word-pc-16.0.20326",
+      });
+      const snapshot = await captureRealisticSnapshot();
+      host.userEdit(indent("-8"), "after-import");
+      const result = await applyWordDocumentPlan(
+        JSON.stringify(tablePlan(snapshot)),
+        snapshot,
+        "message-A",
+      );
+      expect(result).toMatchObject({
+        status: "applied",
+        outcome: { route: "import", housekeeping: { "table-indent": 1 } },
+      });
+      return { host, result };
+    }
+    const revert = (
+      result: Awaited<ReturnType<typeof applyWordDocumentPlan>>,
+    ) => revertWordDocumentPlan(result.before!, result.afterFingerprint!);
+
+    beforeEach(() => {
+      delete window.WORD_IN_PLACE_APPLY;
+      return setWordInPlace("pc", false);
+    });
+    afterEach(() => {
+      window.WORD_IN_PLACE_APPLY = true;
+    });
+
+    it("reverts after Word moved the new table's indent again", async () => {
+      const { host, result } = await applied();
+      host.userEdit(indent("5"));
+      expect(await revert(result)).toMatchObject({
+        status: "reverted",
+        outcome: { route: "import", housekeeping: { "table-indent": 1 } },
+      });
+      expect(host.ooxml()).not.toContain(HEADER);
+    });
+
+    it("still refuses Revert after the user moved the new table", async () => {
+      const { host, result } = await applied();
+      host.userEdit(indent("720"));
+      expect(await revert(result)).toMatchObject({
+        status: "stale",
+        diagnostic: { stage: "preflight", reason: "source-changed" },
+      });
+      expect(host.insert).toHaveBeenCalledOnce();
+    });
+  },
+);
+
 describe("whole-document writes on Word for the web by default", () => {
   const sections = (snapshot: WordAuthoringSnapshot) =>
     JSON.stringify({

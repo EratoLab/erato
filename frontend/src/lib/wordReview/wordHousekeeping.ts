@@ -13,7 +13,8 @@ export type WordHousekeepingId =
   | "glossary-rsids"
   | "placeholder-entries"
   | "font-obfuscation-key"
-  | "view-zoom";
+  | "view-zoom"
+  | "table-indent";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -129,6 +130,16 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
       'ERMAIN-1248 native, Word for Mac 16.115.1, 2026-11-19: about 10 minutes after an import Apply, the AutoRecovery save put w:zoom w:percent="140" into a package read without it, with no paragraph event (a saved and an unsaved German document); the next import Apply on a capture taken before it went stale on /word/settings.xml alone',
     scope: "any",
   },
+  {
+    id: "table-indent",
+    element:
+      "w:tblPr/w:tblInd in dxa on a styled table the write added and gave no indent, from minus its single left border's width and spacing up to half that width (only 0 without a left border)",
+    part: "/word/document.xml",
+    hosts: ["Word PC"],
+    probe:
+      "ERMAIN-1306 native, Word PC 16.0.20625, 2026-11-22 (first seen on 16.0.20527): an import gives a new table in Table Grid w:tblInd -8 for a 1/2 pt single left border (-3 in compatibility mode 15), -15 for 1 1/2 pt (0 in mode 15), -45 for 1 pt with 4 pt spacing and 0 without a left border, whatever the other tables' indents; an unstyled new table gets none. Once (fix run 1, the first styled Apply after open) Word moved the new table to +5 after the verify read, and Revert went stale on it. Word's read of a file whose tables lack w:tblInd already gives them one (round 1 unsaved fixture), so tables the write kept are left out; thinner, double or other border types were not measured",
+    scope: "written",
+  },
 ];
 
 const elements = (root: Document | Element, local: string) =>
@@ -175,32 +186,42 @@ function tableLookMask(look: Element): number | undefined {
 export function createWordConditionalTableStyles(
   doc: Document,
 ): (table: Element) => boolean | undefined {
-  const styles = new Map(
-    elements(doc, "style")
-      .filter((s) => s.getAttributeNS(W, "type") === "table")
-      .map((s) => [s.getAttributeNS(W, "styleId") ?? "", s]),
-  );
+  const styles = tableStyles(doc);
   const fallback = [...styles.values()].find((s) =>
     ["1", "true", "on"].includes(s.getAttributeNS(W, "default") ?? ""),
   );
   return (table) => {
     const properties = child(table, "tblPr");
     const named = properties && child(properties, "tblStyle");
-    let style = named
+    const style = named
       ? styles.get(named.getAttributeNS(W, "val") ?? "")
       : fallback;
     if (named && !style) return undefined;
-    const seen = new Set<Element>();
-    while (style && !seen.has(style)) {
-      seen.add(style);
-      if (child(style, "tblStylePr")) return true;
-      const basedOn = child(style, "basedOn");
-      if (!basedOn) return false;
-      style = styles.get(basedOn.getAttributeNS(W, "val") ?? "");
-      if (!style) return undefined;
-    }
-    return false;
+    return tableStyleChain(styles, style)?.some((s) => child(s, "tblStylePr"));
   };
+}
+
+const tableStyles = (root: Document | Element): Map<string, Element> =>
+  new Map(
+    elements(root, "style")
+      .filter((s) => s.getAttributeNS(W, "type") === "table")
+      .map((s) => [s.getAttributeNS(W, "styleId") ?? "", s]),
+  );
+
+/** The table styles from `first` along w:basedOn, each once; undefined when one it names is missing. */
+function tableStyleChain(
+  styles: ReadonlyMap<string, Element>,
+  first: Element | undefined,
+): Element[] | undefined {
+  const chain: Element[] = [];
+  for (let style = first; style && !chain.includes(style); ) {
+    chain.push(style);
+    const basedOn = child(style, "basedOn");
+    if (!basedOn) break;
+    style = styles.get(basedOn.getAttributeNS(W, "val") ?? "");
+    if (!style) return undefined;
+  }
+  return chain;
 }
 
 /** list-instance-id. */
@@ -770,4 +791,71 @@ export function wordPackageRoots(doc: Document): WordPackageRoots {
       roots.set(part.getAttributeNS(PKG, "name") ?? "", data.firstElementChild);
   }
   return roots;
+}
+
+/** The left border a table's own w:tblBorders or else its style chain gives it, as width and
+ * spacing in twips; none without one, undefined when the chain can't be read or Word's indent for
+ * the border's type was not measured. */
+function leftBorder(
+  properties: Element,
+  styles: ReadonlyMap<string, Element>,
+): { width: number; space: number } | undefined {
+  const chain = tableStyleChain(
+    styles,
+    styles.get(value(child(properties, "tblStyle"))),
+  );
+  if (!chain?.length) return undefined;
+  const border = [properties, ...chain.map((s) => child(s, "tblPr"))]
+    .map((tblPr) => {
+      const borders = tblPr && child(tblPr, "tblBorders");
+      return borders && (child(borders, "left") ?? child(borders, "start"));
+    })
+    .find(Boolean);
+  if (!border || ["nil", "none"].includes(value(border)))
+    return { width: 0, space: 0 };
+  const size = border.getAttributeNS(W, "sz") || "0";
+  const space = border.getAttributeNS(W, "space") || "0";
+  if (value(border) !== "single" || !/^\d+$/.test(size) || !/^\d+$/.test(space))
+    return undefined;
+  return { width: Number(size) * 2.5, space: Number(space) * 20 };
+}
+
+/**
+ * table-indent: whether a table's own w:tblInd is one Word PC writes to offset the table's left
+ * border, by the table styles of `roots`, the table's package: dxa, on a styled table, from minus
+ * the border's width and spacing up to half its width. removeWordAddedTableIndents decides which
+ * tables it covers.
+ */
+export function createWordBorderIndents(
+  roots: WordPackageRoots,
+): (table: Element, part: string) => boolean {
+  const styles = new Map<string, Map<string, Element>>();
+  return (table, part) => {
+    const properties = child(table, "tblPr");
+    const indent = properties && child(properties, "tblInd");
+    const width = indent?.getAttributeNS(W, "w") ?? "";
+    if (
+      !properties ||
+      !indent ||
+      !child(properties, "tblStyle") ||
+      indent.children.length ||
+      !onlyW(indent, ["w", "type"]) ||
+      indent.getAttributeNS(W, "type") !== "dxa" ||
+      !/^-?\d+$/.test(width)
+    )
+      return false;
+    const path = part.startsWith("/word/glossary/")
+      ? GLOSSARY_STYLES
+      : "/word/styles.xml";
+    if (!styles.has(path)) {
+      const root = roots.get(path);
+      styles.set(path, root ? tableStyles(root) : new Map());
+    }
+    const border = leftBorder(properties, styles.get(path)!);
+    return (
+      !!border &&
+      -(border.width + border.space) <= Number(width) &&
+      Number(width) <= border.width / 2
+    );
+  };
 }
