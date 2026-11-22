@@ -6221,6 +6221,12 @@ pub struct AssistantsConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub enable_edit_sharing: bool,
 
+    /// Whether the direct assistant Share dialog offers the organization target.
+    /// Defaults to `true`.
+    #[serde(default = "default_assistants_enable_direct_organization_sharing")]
+    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    pub enable_direct_organization_sharing: bool,
+
     // Whether to show recent assistants in the chat sidebar.
     // Defaults to `false`.
     #[serde(default)]
@@ -6275,6 +6281,8 @@ impl Default for AssistantsConfig {
             enabled: false,
             tools_menu_description_display: AssistantToolsMenuDescriptionDisplay::default(),
             enable_edit_sharing: default_assistants_enable_edit_sharing(),
+            enable_direct_organization_sharing:
+                default_assistants_enable_direct_organization_sharing(),
             usage_view_enabled: false,
             show_recent_items: false,
             show_recent_items_collapsible: false,
@@ -7120,6 +7128,10 @@ Complete the task within this conversation: do not ask clarifying questions, do 
 }
 
 fn default_assistants_enable_edit_sharing() -> bool {
+    true
+}
+
+fn default_assistants_enable_direct_organization_sharing() -> bool {
     true
 }
 

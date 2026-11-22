@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { useToastStore } from "@/components/ui/Toast/toastStore";
+import {
+  ORGANIZATION_SUBJECT_ID,
+  ORGANIZATION_SUBJECT_ID_TYPE,
+} from "@/types/sharing";
 
 import { SharingDialog } from "./SharingDialog";
 
@@ -14,11 +18,18 @@ import type { OrganizationMember } from "@/types/sharing";
 const createGrant = vi.fn<(input: { subject_id: string }) => Promise<void>>();
 const deleteGrant = vi.fn<(grantId: string) => Promise<void>>();
 let grants: ShareGrant[] = [];
+let enableDirectOrganizationSharing: boolean;
 
 const members: OrganizationMember[] = [
   { id: "ada", display_name: "Ada", type: "user", subject_type_id: "id" },
   { id: "bob", display_name: "Bob", type: "user", subject_type_id: "id" },
 ];
+const group: OrganizationMember = {
+  id: "engineering",
+  display_name: "Engineering",
+  type: "group",
+  subject_type_id: "organization_group_id",
+};
 
 vi.mock("@/hooks/sharing", () => ({
   useShareGrants: () => ({
@@ -28,8 +39,12 @@ vi.mock("@/hooks/sharing", () => ({
     createGrant,
     deleteGrant,
   }),
-  useOrganizationMembersSearch: () => ({
-    members,
+  useOrganizationMembersSearch: ({
+    subjectTypeFilter,
+  }: {
+    subjectTypeFilter: string;
+  }) => ({
+    members: subjectTypeFilter === "group" ? [group] : members,
     isLoading: false,
     error: null,
     isSearching: false,
@@ -37,7 +52,10 @@ vi.mock("@/hooks/sharing", () => ({
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
-  useAssistantsFeature: () => ({ enableEditSharing: false }),
+  useAssistantsFeature: () => ({
+    enableEditSharing: false,
+    enableDirectOrganizationSharing,
+  }),
 }));
 
 function deferred() {
@@ -88,7 +106,53 @@ describe("SharingDialog", () => {
     createGrant.mockReset();
     deleteGrant.mockReset();
     grants = [];
+    enableDirectOrganizationSharing = true;
     useToastStore.setState({ toasts: [] });
+  });
+
+  it("offers the full organization in Groups when enabled", async () => {
+    createGrant.mockResolvedValue();
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Groups" }));
+    expect(screen.getByText("Full organization")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(addButton());
+    await settle();
+
+    expect(createGrant).toHaveBeenCalledWith({
+      subject_type: "organization",
+      subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
+      subject_id: ORGANIZATION_SUBJECT_ID,
+      role: "viewer",
+    });
+  });
+
+  it("hides the organization target and still grants access to users and groups when disabled", async () => {
+    enableDirectOrganizationSharing = false;
+    createGrant.mockResolvedValue();
+    renderDialog();
+
+    fireEvent.click(checkbox("Ada"));
+    fireEvent.click(addButton());
+    await settle();
+    expect(createGrant).toHaveBeenCalledWith(
+      expect.objectContaining({ subject_type: "user", subject_id: "ada" }),
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Groups" }));
+    expect(screen.queryByText("Full organization")).not.toBeInTheDocument();
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(addButton());
+    await settle();
+
+    expect(createGrant).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject_type: "organization_group",
+        subject_id: "engineering",
+      }),
+    );
   });
 
   it("sends each grant once when Add is clicked again while it is pending", async () => {
@@ -142,15 +206,16 @@ describe("SharingDialog", () => {
     expect(toastTitles("success")).toEqual(["Access granted successfully"]);
   });
 
-  it("removes a grant once when its removal is confirmed again while pending", async () => {
+  it("lists and removes an existing organization grant when the target is disabled", async () => {
+    enableDirectOrganizationSharing = false;
     grants = [
       {
         id: "grant-1",
         resource_type: "assistant",
         resource_id: "assistant-1",
-        subject_type: "user",
-        subject_id_type: "id",
-        subject_id: "carol",
+        subject_type: "organization",
+        subject_id_type: ORGANIZATION_SUBJECT_ID_TYPE,
+        subject_id: ORGANIZATION_SUBJECT_ID,
         role: "viewer",
         created_at: "2026-01-01T00:00:00Z",
         updated_at: "2026-01-01T00:00:00Z",
@@ -160,6 +225,7 @@ describe("SharingDialog", () => {
     deleteGrant.mockReturnValue(pending.promise);
     renderDialog();
 
+    expect(screen.getByText("Full organization")).toBeInTheDocument();
     const confirmRemoval = () => {
       fireEvent.click(screen.getByRole("button", { name: "Remove" }));
       fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -168,6 +234,7 @@ describe("SharingDialog", () => {
     confirmRemoval();
 
     expect(deleteGrant).toHaveBeenCalledTimes(1);
+    expect(deleteGrant).toHaveBeenCalledWith("grant-1");
 
     pending.resolve();
     await settle();

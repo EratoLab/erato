@@ -151,6 +151,8 @@ interface AssistantsFeatureConfig {
   delegationTasksApprovalMode: DelegationTasksApprovalMode;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
+  /** Whether the direct Share dialog offers the organization target */
+  enableDirectOrganizationSharing: boolean;
   usageViewEnabled: boolean;
   toolsMenuDescriptionDisplay: AssistantToolsMenuDescriptionDisplay;
   /** Whether recent assistants should be shown in the sidebar */
@@ -374,6 +376,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationTasksAllowAsync: false,
     delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
+    enableDirectOrganizationSharing: true,
     usageViewEnabled: false,
     toolsMenuDescriptionDisplay: "truncated",
     showRecentItems: false,
@@ -535,6 +538,8 @@ function createFeatureConfig(
       delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
       delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
+      enableDirectOrganizationSharing:
+        environment.assistantsEnableDirectOrganizationSharing ?? true,
       usageViewEnabled: environment.assistantsUsageViewEnabled ?? false,
       toolsMenuDescriptionDisplay:
         environment.assistantsToolsMenuDescriptionDisplay ?? "truncated",

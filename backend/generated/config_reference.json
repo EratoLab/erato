@@ -575,6 +575,12 @@
     "security_relevance": "unreviewed",
     "stability": "deprecated"
   },
+  "assistants.enable_direct_organization_sharing": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "assistants.enable_edit_sharing": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",

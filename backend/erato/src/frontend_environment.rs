@@ -39,6 +39,8 @@ const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_S
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_EDIT_SHARING: &str = "ASSISTANTS_ENABLE_EDIT_SHARING";
+const FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING: &str =
+    "ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS: &str = "ASSISTANTS_SHOW_RECENT_ITEMS";
 const FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE: &str =
     "ASSISTANTS_SHOW_RECENT_ITEMS_COLLAPSIBLE";
@@ -520,6 +522,10 @@ fn build_frontend_environment_with(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_EDIT_SHARING.to_string(),
         Value::Bool(config.assistants.enable_edit_sharing),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING.to_string(),
+        Value::Bool(config.assistants.enable_direct_organization_sharing),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_ASSISTANTS_SHOW_RECENT_ITEMS.to_string(),
@@ -1581,6 +1587,31 @@ impl erato_memory::HeapSize for FrontedEnvironment {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn direct_organization_sharing_is_exposed_to_the_frontend() {
+        let mut config = AppConfig::default();
+        let configured = serde_json::from_value(serde_json::json!({
+            "enable_direct_organization_sharing": false
+        }))
+        .unwrap();
+        let default = serde_json::from_value(serde_json::json!({})).unwrap();
+
+        for (assistants, expected) in [
+            (config.assistants.clone(), true),
+            (default, true),
+            (configured, false),
+        ] {
+            config.assistants = assistants;
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING),
+                Some(&Value::Bool(expected))
+            );
+        }
+    }
 
     #[test]
     fn scheduled_page_follows_the_delivery_executor() {

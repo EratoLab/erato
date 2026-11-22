@@ -509,6 +509,8 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = false
 # # Whether assistants can be shared with edit access (default: true)
 # enable_edit_sharing = true
+# # Set to false to hide the organization target in the direct Share dialog (default: true)
+# enable_direct_organization_sharing = false
 # # Whether to show recent assistant items in the chat sidebar (default: false)
 # show_recent_items = false
 # # Whether the recent assistants sidebar section is rendered as a collapsible
