@@ -5,6 +5,7 @@ import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
 import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
+import * as waitLines from "@/hooks/audio/waitLines";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import {
@@ -105,6 +106,19 @@ vi.mock("@/utils/sse/sseClient", () => {
       // Return a cleanup function
       return vi.fn();
     }),
+  };
+});
+
+vi.mock("@/hooks/audio/waitLines", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/audio/waitLines")>();
+  return {
+    ...actual,
+    waitTurnAnswered: vi.fn(actual.waitTurnAnswered),
+    waitTurnAudio: vi.fn(actual.waitTurnAudio),
+    waitTurnSpeaks: vi.fn(actual.waitTurnSpeaks),
+    waitTurnSpokenEnd: vi.fn(actual.waitTurnSpokenEnd),
+    waitTurnTool: vi.fn(actual.waitTurnTool),
   };
 });
 
@@ -1693,6 +1707,53 @@ describe("useChatMessaging", () => {
     mockInvalidateQueries.mockClear();
     await toolUpdate("cancel_reminder", "success");
     expect(mockInvalidateQueries).toHaveBeenCalledWith(scheduledRefresh);
+  });
+
+  it("lets a spoken part pause the wait lines and the written answer end them", async () => {
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+    await startStreaming("brief me on the account");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-spoken-1",
+    });
+    vi.mocked(waitLines.waitTurnAnswered).mockClear();
+    const delta = (message_type: string, new_text: string) =>
+      sendSSEEvent({
+        message_type,
+        message_id: "assistant-spoken-1",
+        content_index: 0,
+        new_text,
+      });
+
+    await delta("spoken_delta", "I'll check the account and the visit notes.");
+    await sendSSEEvent({
+      message_type: "audio_delta",
+      message_id: "assistant-spoken-1",
+      sequence: 0,
+      audio: "AQIDBA==",
+      sample_rate: 24000,
+    });
+    await sendSSEEvent({
+      message_type: "spoken_end",
+      message_id: "assistant-spoken-1",
+    });
+    await sendSSEEvent({
+      message_type: "tool_call_update",
+      message_id: "assistant-spoken-1",
+      content_index: 1,
+      tool_call_id: "call-read",
+      tool_name: "crm_query",
+      status: "in_progress",
+      output: {},
+    });
+    expect(waitLines.waitTurnSpeaks).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnAudio).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnSpokenEnd).toHaveBeenCalledOnce();
+    expect(waitLines.waitTurnTool).toHaveBeenCalled();
+    expect(waitLines.waitTurnAnswered).not.toHaveBeenCalled();
+
+    await delta("text_delta", "Here is the briefing.");
+    expect(waitLines.waitTurnAnswered).toHaveBeenCalledOnce();
   });
 
   it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {

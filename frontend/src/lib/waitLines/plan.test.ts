@@ -221,6 +221,89 @@ describe("nextWaitStep", () => {
     });
   });
 
+  it("pauses after the reply's spoken part until a tool call starts", () => {
+    const spoke = turn({
+      said: [
+        { kind: "opener", startedAt: 3200, endedAt: 4000 },
+        { kind: "reply", startedAt: 9000, endedAt: 16000 },
+      ],
+    });
+    expect(nextWaitStep("normal", timing, spoke, 40000)).toEqual({
+      kind: "wait",
+    });
+    const calling = turn({
+      ...spoke,
+      tools: [{ id: "a", startedAt: 16500, ready: true }],
+    });
+    // The gap counts from the spoken part's end.
+    expect(nextWaitStep("normal", timing, calling, 18000)).toEqual({
+      kind: "wake",
+      at: 20000,
+    });
+    expect(nextWaitStep("normal", timing, calling, 20000)).toEqual({
+      kind: "say",
+      line: "tool",
+      toolCallId: "a",
+    });
+  });
+
+  it("goes on with the fixed lines after a spoken part and a call without a line", () => {
+    const calling = turn({
+      said: [{ kind: "reply", startedAt: 1000, endedAt: 3000 }],
+      tools: [{ id: "a", startedAt: 3500, ready: false, silent: true }],
+    });
+    expect(nextWaitStep("normal", timing, calling, 3600)).toEqual({
+      kind: "wake",
+      at: 12000,
+    });
+    expect(nextWaitStep("normal", timing, calling, 12000)).toEqual({
+      kind: "say",
+      line: "still",
+      repeat: false,
+    });
+    // The call may have ended: the model still works on the answer.
+    const ended = turn({
+      ...calling,
+      tools: [{ ...calling.tools[0], endedAt: 5000 }],
+    });
+    expect(nextWaitStep("normal", timing, ended, 12000)).toEqual({
+      kind: "say",
+      line: "still",
+      repeat: false,
+    });
+  });
+
+  it("counts the reply's spoken part toward the cap", () => {
+    const full = turn({
+      said: [
+        { kind: "opener", startedAt: 3200, endedAt: 4000 },
+        { kind: "reply", startedAt: 5000, endedAt: 9000 },
+        { kind: "tool", toolCallId: "a", startedAt: 13000, endedAt: 14000 },
+      ],
+      tools: [
+        { id: "a", startedAt: 9500, ready: true },
+        { id: "b", startedAt: 15000, ready: true },
+      ],
+    });
+    expect(nextWaitStep("normal", timing, full, 21000)).toEqual({
+      kind: "wake",
+      at: 22000,
+    });
+  });
+
+  it("pauses again at a later spoken part", () => {
+    const again = turn({
+      said: [
+        { kind: "reply", startedAt: 1000, endedAt: 3000 },
+        { kind: "reply", startedAt: 9000, endedAt: 11000 },
+      ],
+      tools: [{ id: "a", startedAt: 3500, endedAt: 8000, ready: true }],
+    });
+    expect(nextWaitStep("normal", timing, again, 30000)).toEqual({
+      kind: "wait",
+    });
+  });
+
   it("leaves out a kind without lines", () => {
     expect(
       nextWaitStep("normal", timing, turn({ unavailable: ["opener"] }), 5000),
