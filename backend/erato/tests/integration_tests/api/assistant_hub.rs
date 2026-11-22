@@ -4,6 +4,9 @@ use axum::http;
 use erato::config::{
     AssistantHubCategoryConfig, AssistantHubReviewerPermissionsConfig, AssistantHubReviewerRule,
 };
+use erato::models::share_grant::{
+    ORGANIZATION_SUBJECT_ID, ORGANIZATION_SUBJECT_ID_TYPE, ORGANIZATION_SUBJECT_TYPE,
+};
 use erato::policy::engine::PolicyEngine;
 use serde_json::{Value, json};
 use sqlx::Pool;
@@ -744,7 +747,25 @@ async fn test_assistant_hub_user_reviews_are_upserted_summarized_and_visibility_
 async fn test_published_current_assistant_hub_version_is_listed_for_audience_viewer(
     pool: Pool<Postgres>,
 ) {
-    let app_state = test_app_state(assistant_hub_app_config(), pool).await;
+    assert_assistant_hub_publication_for_audience(pool, false).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_publication_for_organization_when_direct_picker_is_disabled(
+    pool: Pool<Postgres>,
+) {
+    assert_assistant_hub_publication_for_audience(pool, true).await;
+}
+
+async fn assert_assistant_hub_publication_for_audience(
+    pool: Pool<Postgres>,
+    organization_wide: bool,
+) {
+    let mut config = assistant_hub_app_config();
+    if organization_wide {
+        config.assistants.enable_direct_organization_sharing = false;
+    }
+    let app_state = test_app_state(config, pool).await;
     let server = create_test_server(app_state.clone());
 
     let owner_subject = "assistant-hub-owner";
@@ -799,6 +820,15 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
     .await
     .expect("failed to create source assistant");
 
+    let (subject_type, subject_id_type, subject_id) = if organization_wide {
+        (
+            ORGANIZATION_SUBJECT_TYPE,
+            ORGANIZATION_SUBJECT_ID_TYPE,
+            ORGANIZATION_SUBJECT_ID.to_string(),
+        )
+    } else {
+        ("user", "id", viewer.id.to_string())
+    };
     let submission_response = server
         .post(&format!(
             "/api/v1beta/assistant-hub/assistants/{}/versions",
@@ -812,9 +842,9 @@ async fn test_published_current_assistant_hub_version_is_listed_for_audience_vie
             "version_comment": "Initial hub publication",
             "creator_review_comment": "Ready for review",
             "audience_grants": [{
-                "subject_type": "user",
-                "subject_id_type": "id",
-                "subject_id": viewer.id.to_string(),
+                "subject_type": subject_type,
+                "subject_id_type": subject_id_type,
+                "subject_id": subject_id,
                 "role": "viewer"
             }]
         }))

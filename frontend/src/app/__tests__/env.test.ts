@@ -2,6 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { env } from "@/app/env";
 
+describe("env assistantsEnableDirectOrganizationSharing", () => {
+  afterEach(() => {
+    delete window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING;
+  });
+
+  it("defaults to true when the backend omits the setting", () => {
+    expect(env().assistantsEnableDirectOrganizationSharing).toBe(true);
+  });
+
+  it.each([true, false])("reads the backend value (%s)", (value) => {
+    window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING = value;
+    expect(env().assistantsEnableDirectOrganizationSharing).toBe(value);
+  });
+});
+
 describe("env keepToolsDropdownOpen", () => {
   afterEach(() => {
     delete window.KEEP_TOOLS_DROPDOWN_OPEN;

@@ -56,6 +56,7 @@ export type Env = {
   delegationTasksAllowAsync: boolean;
   delegationTasksApprovalMode: DelegationTasksApprovalMode;
   assistantsEnableEditSharing?: boolean;
+  assistantsEnableDirectOrganizationSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
   assistantsToolsMenuDescriptionDisplay?: AssistantToolsMenuDescriptionDisplay;
   assistantsShowRecentItems: boolean;
@@ -184,6 +185,7 @@ declare global {
     DELEGATION_TASKS_ALLOW_ASYNC?: boolean;
     DELEGATION_TASKS_APPROVAL_MODE?: string;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
+    ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
     ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY?: string;
     ASSISTANTS_SHOW_RECENT_ITEMS?: boolean;
@@ -422,6 +424,8 @@ export const env = (): Env => {
     import.meta.env.VITE_ASSISTANTS_ENABLE_EDIT_SHARING === "false"
       ? false
       : (window.ASSISTANTS_ENABLE_EDIT_SHARING ?? true);
+  const assistantsEnableDirectOrganizationSharing =
+    window.ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING ?? true;
   const descriptionDisplay =
     import.meta.env.VITE_ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY ??
     window.ASSISTANTS_TOOLS_MENU_DESCRIPTION_DISPLAY;
@@ -702,6 +706,7 @@ export const env = (): Env => {
     delegationTasksAllowAsync,
     delegationTasksApprovalMode,
     assistantsEnableEditSharing,
+    assistantsEnableDirectOrganizationSharing,
     assistantsUsageViewEnabled,
     assistantsToolsMenuDescriptionDisplay,
     assistantsShowRecentItems,

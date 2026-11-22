@@ -3,6 +3,9 @@
 use axum::Router;
 use axum::http;
 use axum_test::TestServer;
+use erato::models::share_grant::{
+    ORGANIZATION_SUBJECT_ID, ORGANIZATION_SUBJECT_ID_TYPE, ORGANIZATION_SUBJECT_TYPE,
+};
 use erato::policy::engine::PolicyEngine;
 use erato::server::router::router;
 use serde_json::{Value, json};
@@ -534,6 +537,72 @@ async fn test_full_assistant_sharing_flow(pool: Pool<Postgres>) {
     let file_details: Value = file_response.json();
     assert_eq!(file_details["id"], file.id.to_string());
     assert_eq!(file_details["filename"], "test_file.txt");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_organization_share_grants_are_managed_when_direct_picker_is_disabled(
+    pool: Pool<Postgres>,
+) {
+    let mut config = hermetic_app_config(None, None);
+    config.assistants.enable_direct_organization_sharing = false;
+    let server = create_test_server(test_app_state(config, pool).await);
+    let member_token = JwtTokenBuilder::new()
+        .subject("organization-member")
+        .email("organization-member@example.com")
+        .build();
+
+    let created = server
+        .post("/api/v1beta/assistants")
+        .json(&json!({ "name": "Organization assistant", "prompt": "Help the organization" }))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(created.status_code(), http::StatusCode::CREATED);
+    let assistant: Value = created.json();
+    let assistant_id = assistant["id"].as_str().unwrap();
+
+    let created_grant = server
+        .post("/api/v1beta/share-grants")
+        .json(&json!({
+            "resource_type": "assistant",
+            "resource_id": assistant_id,
+            "subject_type": ORGANIZATION_SUBJECT_TYPE,
+            "subject_id_type": ORGANIZATION_SUBJECT_ID_TYPE,
+            "subject_id": ORGANIZATION_SUBJECT_ID,
+            "role": "viewer"
+        }))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(created_grant.status_code(), http::StatusCode::CREATED);
+    let grant_response: Value = created_grant.json();
+    let grant_id = grant_response["id"].as_str().expect("expected a grant ID");
+
+    let listed = server
+        .get(&format!(
+            "/api/v1beta/share-grants?resource_type=assistant&resource_id={assistant_id}"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(listed.status_code(), http::StatusCode::OK);
+    let listed_grants: Value = listed.json();
+    assert_eq!(listed_grants["grants"][0]["id"], grant_id);
+
+    let assistant_path = format!("/api/v1beta/assistants/{assistant_id}");
+    let accessible = server
+        .get(&assistant_path)
+        .with_bearer_token(&member_token)
+        .await;
+    assert_eq!(accessible.status_code(), http::StatusCode::OK);
+
+    let removed = server
+        .delete(&format!("/api/v1beta/share-grants/{grant_id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_eq!(removed.status_code(), http::StatusCode::NO_CONTENT);
+    let inaccessible = server
+        .get(&assistant_path)
+        .with_bearer_token(&member_token)
+        .await;
+    assert_eq!(inaccessible.status_code(), http::StatusCode::NOT_FOUND);
 }
 
 /// Test that archiving a shared assistant removes it from the recipient's overview
