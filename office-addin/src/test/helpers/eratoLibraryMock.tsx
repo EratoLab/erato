@@ -380,6 +380,7 @@ export const DEFAULT_STUBS = {
   ChatMessage: StubNothing,
   ClientOperationPoller: StubNothing,
   DelegatedRunOpenProvider: StubPassthrough,
+  McpSettingsOpenProvider: StubPassthrough,
   DelegatedRunsSection: StubNothing,
   DesktopSidecarClientTools: StubNothing,
   DesktopSidecarConfigurationSync: StubNothing,

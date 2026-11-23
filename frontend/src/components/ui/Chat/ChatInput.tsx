@@ -97,7 +97,6 @@ import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
-import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useIsMobile } from "@/hooks/useResponsive";
 import {
@@ -164,7 +163,7 @@ import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
-import { buildMcpToolsSection } from "./mcpToolsSection";
+import { buildMcpToolsSection, describeAllowChanges } from "./mcpToolsSection";
 import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnouncements";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -1008,6 +1007,7 @@ export const ChatInput = ({
   const {
     isAvailable: canMentionAssistants,
     suggested: suggestedAssistants,
+    suggestedFromUsage,
     all: mentionableAssistants,
   } = useMentionableAssistants(assistantId);
 
@@ -1015,7 +1015,7 @@ export const ChatInput = ({
   // Gated like the mentions: on a host-injected feature flag plus a live
   // listing, never on env — the add-in gets the group through the same hook.
   const { isAvailable: canBrowseMcpTools, servers: mcpServers } =
-    useBrowsableMcpServers();
+    useBrowsableMcpServers({ assistantId, chatId });
   const mcpWriteTools = useChatMcpWriteTools({
     chatId,
     isAvailable: canBrowseMcpTools,
@@ -1028,9 +1028,6 @@ export const ChatInput = ({
     chatId,
     isAvailable: canBrowseMcpTools,
   });
-  // A server awaiting authorization connects in the settings dialog; hosts
-  // without that chrome get the tool browser, which states the status.
-  const openMcpServersSettings = useOpenMcpServersSettings();
 
   // --- Wait-or-background for mentioned sends ------------------------------
   // Gated on the feature flags rather than `canMentionAssistants`: a restored
@@ -2336,19 +2333,17 @@ export const ChatInput = ({
     () =>
       canMentionAssistants
         ? buildAssistantMentionSection({
-            assistants: suggestedAssistants,
-            descriptionDisplay: toolsMenuDescriptionDisplay,
-            onSelect: insertAssistantMention,
-            onBrowse: () => setIsAssistantBrowserOpen(true),
+            suggested: suggestedAssistants,
+            suggestedFromUsage,
+            onOpen: () => setIsAssistantBrowserOpen(true),
             disabled: composeLocked,
           })
         : undefined,
     [
       canMentionAssistants,
       composeLocked,
-      insertAssistantMention,
       suggestedAssistants,
-      toolsMenuDescriptionDisplay,
+      suggestedFromUsage,
     ],
   );
 
@@ -2356,40 +2351,64 @@ export const ChatInput = ({
     () =>
       canBrowseMcpTools
         ? buildMcpToolsSection({
-            writeToolsEnabled: mcpWriteTools.enabled,
-            onToggleWriteTools: mcpWriteTools.toggle,
-            onBrowse: () => setIsMcpToolsBrowserOpen(true),
             servers: mcpServers,
             disabledServerIds: disabledMcpServers.disabledServerIds,
-            onToggleServer: disabledMcpServers.toggleServer,
-            serverSwitchesLocked: !disabledMcpServers.isReady,
-            disabledToolPatterns: disabledMcpTools.disabledToolPatterns,
-            onConnect:
-              openMcpServersSettings ?? (() => setIsMcpToolsBrowserOpen(true)),
-            disabled:
-              composeLocked ||
-              mcpWriteTools.isSaving ||
-              disabledMcpServers.isSaving ||
-              disabledMcpTools.isSaving,
-            pausesHostActions: pausesHostActionsWhenWritesOff,
+            writeToolsEnabled: mcpWriteTools.enabled,
+            onOpen: () => setIsMcpToolsBrowserOpen(true),
+            disabled: composeLocked,
           })
         : undefined,
     [
       canBrowseMcpTools,
       composeLocked,
       disabledMcpServers.disabledServerIds,
-      disabledMcpServers.isReady,
-      disabledMcpServers.isSaving,
-      disabledMcpServers.toggleServer,
-      disabledMcpTools.disabledToolPatterns,
-      disabledMcpTools.isSaving,
       mcpServers,
+      mcpWriteTools.enabled,
+    ],
+  );
+
+  // With changes off, the composer says so where the next send's modes are
+  // drawn, so a paused document edit is never a mystery; ending the mode
+  // turns changes back on.
+  const readOnlyMode = useMemo<ComposerMode | null>(
+    () =>
+      canBrowseMcpTools && !mcpWriteTools.enabled
+        ? {
+            id: "connectors.read-only",
+            label: t({
+              id: "chatInput.connectors.readOnlyMode.label",
+              message: "Read only",
+            }),
+            icon: "lock",
+            description: describeAllowChanges({
+              enabled: false,
+              pausesHostActions: pausesHostActionsWhenWritesOff,
+            }),
+            endLabel: t({
+              id: "chatInput.connectors.readOnlyMode.end",
+              message: "Allow changes again",
+            }),
+            onEnd: mcpWriteTools.toggle,
+            endedAnnouncement: t({
+              id: "chatInput.connectors.readOnlyMode.ended",
+              message: "Changes allowed again.",
+            }),
+            locked: composeLocked || mcpWriteTools.isSaving,
+          }
+        : null,
+    [
+      canBrowseMcpTools,
+      composeLocked,
       mcpWriteTools.enabled,
       mcpWriteTools.isSaving,
       mcpWriteTools.toggle,
-      openMcpServersSettings,
       pausesHostActionsWhenWritesOff,
     ],
+  );
+  const visibleComposerModes = useMemo(
+    () =>
+      readOnlyMode ? [...(composerModes ?? []), readOnlyMode] : composerModes,
+    [composerModes, readOnlyMode],
   );
 
   // Collapse the file-upload button and the Tools dropdown into a single "+"
@@ -3502,6 +3521,8 @@ export const ChatInput = ({
               focusInput();
             }}
             assistants={mentionableAssistants}
+            suggested={suggestedAssistants}
+            descriptionDisplay={toolsMenuDescriptionDisplay}
             onSelect={insertAssistantMention}
           />
         )}
@@ -3522,6 +3543,16 @@ export const ChatInput = ({
               disabledMcpTools.isSaving
             }
             disabledServerIds={disabledMcpServers.disabledServerIds}
+            onToggleServer={disabledMcpServers.toggleServer}
+            serverSwitchesLocked={
+              composeLocked ||
+              !disabledMcpServers.isReady ||
+              disabledMcpServers.isSaving
+            }
+            writeToolsEnabled={mcpWriteTools.enabled}
+            onToggleWriteTools={mcpWriteTools.toggle}
+            writeSwitchLocked={composeLocked || mcpWriteTools.isSaving}
+            pausesHostActions={pausesHostActionsWhenWritesOff}
           />
         )}
 
@@ -3847,9 +3878,11 @@ export const ChatInput = ({
                     )}
                   </>
                 ))}
-              {composerModes !== undefined && (
+              {/* Mounted whenever a mode can appear, so the announcement
+                  after the last one ends is still read. */}
+              {(visibleComposerModes !== undefined || canBrowseMcpTools) && (
                 <ComposerModeChips
-                  modes={composerModes}
+                  modes={visibleComposerModes ?? []}
                   onFocusComposer={focusInput}
                 />
               )}

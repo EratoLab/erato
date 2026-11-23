@@ -135,7 +135,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
         renderSettings={(props) => (
           <WordSettingsDialog
             {...props}
-            openTab={settingsTab}
+            openTab={settingsTab ?? props.openTab}
             onClose={() => {
               setSettingsTab(undefined);
               props.onClose();
