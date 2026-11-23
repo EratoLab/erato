@@ -21,6 +21,73 @@ export const CONTENT_RESIZED_EVENT = "erato:content-resized";
  */
 const FOLLOW_BOTTOM_THRESHOLD_PX = 8;
 
+/**
+ * How long after the person's own wheel, swipe or scroll key a scroll counts
+ * as theirs; a swipe keeps the list moving for a while after the finger lifts.
+ */
+const USER_SCROLL_WINDOW_MS = 1200;
+
+/** How far a finger moves up or down before it scrolls rather than taps. */
+const TOUCH_SLOP_PX = 10;
+
+/** Whether a box between the target and the list can scroll up itself. */
+const scrollsInside = (target: EventTarget | null, list: HTMLElement) => {
+  for (
+    let element = target instanceof Element ? target : null;
+    element && element !== list;
+    element = element.parentElement
+  ) {
+    if (
+      element.scrollTop > 0 &&
+      element.scrollHeight > element.clientHeight &&
+      /(auto|scroll)/.test(window.getComputedStyle(element).overflowY)
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const isEditable = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable ||
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT");
+
+/* eslint-disable lingui/no-unlocalized-strings -- KeyboardEvent.key constants, not user-facing text. */
+const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
+/* eslint-enable lingui/no-unlocalized-strings */
+
+/**
+ * Audio mode: the person talks hands-free and often does not touch the page,
+ * so the view follows the conversation instead of the stream.
+ */
+export interface ConversationFollow {
+  /**
+   * Where the view rests while it follows the conversation, as a scrollTop:
+   * the bottom, or above it to keep the start of a written answer in view.
+   */
+  target: (container: HTMLDivElement) => number;
+  /** Changes when the person starts a new turn: the view goes to it. */
+  turn: string;
+}
+
+/**
+ * - `conversation`: the view rests where `target` puts it.
+ * - `bottom`: the person went to the bottom by hand; the view stays there.
+ * - `held`: the person scrolled away by hand; the view stays where they left it.
+ */
+type ConversationFollowMode = "conversation" | "bottom" | "held";
+
 interface UseScrollToBottomOptions {
   /**
    * Whether to enable auto-scrolling to bottom
@@ -64,6 +131,12 @@ interface UseScrollToBottomOptions {
    * Whether automatic dependency-driven scrolls should be paused.
    */
   autoScrollPaused?: boolean;
+
+  /**
+   * Audio mode: follow the conversation, which replaces the automatic scrolls
+   * above while it is set.
+   */
+  conversation?: ConversationFollow | null;
 }
 
 /**
@@ -139,6 +212,9 @@ interface ScrollToBottomResult {
 
   /** Function to manually check and update scroll position */
   checkScrollPosition: () => void;
+
+  /** Audio mode: whether the person scrolled away from the conversation. */
+  isConversationHeld: boolean;
 }
 
 /**
@@ -162,6 +238,7 @@ export function useScrollToBottom({
   transitionDuration = 300,
   isTransitioning = false,
   autoScrollPaused = false,
+  conversation = null,
 }: UseScrollToBottomOptions = {}): ScrollToBottomResult {
   // Ref for the scrollable container element - use more specific type
   const containerRef = useRef<HTMLDivElement>(null);
@@ -187,6 +264,47 @@ export function useScrollToBottom({
   const followsBottom = useRef(true);
   const holdsStill = useRef(false);
   holdsStill.current = autoScrollPaused || isTransitioning;
+
+  const conversationRef = useRef(conversation);
+  conversationRef.current = conversation;
+  const transitioning = useRef(isTransitioning);
+  transitioning.current = isTransitioning;
+  const followMode = useRef<ConversationFollowMode>("conversation");
+  const ownScroll = useRef<number | null>(null);
+  const [isConversationHeld, setIsConversationHeld] = useState(false);
+
+  const setFollowMode = useCallback((mode: ConversationFollowMode) => {
+    followMode.current = mode;
+    setIsConversationHeld(mode === "held");
+    // While the view follows, its place is set on every change of size, so
+    // the browser must not move it for content above; a person reading
+    // further up keeps the browser's anchoring, which holds their text still.
+    const container = containerRef.current;
+    if (container && conversationRef.current) {
+      container.style.overflowAnchor = mode === "held" ? "" : "none";
+    }
+  }, []);
+
+  // Instant, and re-read on every change of size: a smooth scroll's end is
+  // fixed when it starts, so content that grows meanwhile lands below it.
+  const pinConversation = useCallback(() => {
+    const container = containerRef.current;
+    const follow = conversationRef.current;
+    if (!container || !follow || transitioning.current) return;
+    if (followMode.current === "held") return;
+    const bottom = container.scrollHeight - container.clientHeight;
+    const top = Math.max(
+      0,
+      followMode.current === "bottom"
+        ? bottom
+        : Math.min(bottom, follow.target(container)),
+    );
+    if (Math.abs(container.scrollTop - top) < 1) return;
+    container.style.scrollBehavior = "auto";
+    container.scrollTop = top;
+    // The scroll event this causes is the list's, not the person's.
+    ownScroll.current = container.scrollTop;
+  }, []);
 
   // Memoize the scroll position check function for performance
   const checkIfUserIsScrolledUp = useCallback(() => {
@@ -256,12 +374,23 @@ export function useScrollToBottom({
 
   // Force a scroll to bottom regardless of current scroll position
   const scrollToBottom = useCallback(() => {
+    if (conversationRef.current) {
+      setFollowMode("bottom");
+      pinConversation();
+      return;
+    }
     if (useSmoothScroll) {
       smoothScrollToBottom();
     } else {
       instantScrollToBottom();
     }
-  }, [useSmoothScroll, smoothScrollToBottom, instantScrollToBottom]);
+  }, [
+    useSmoothScroll,
+    smoothScrollToBottom,
+    instantScrollToBottom,
+    setFollowMode,
+    pinConversation,
+  ]);
 
   useEffect(() => {
     if (autoScrollPaused && containerRef.current) {
@@ -324,6 +453,10 @@ export function useScrollToBottom({
       lastScrollTop = scrollTop;
     };
     const keepBottom = () => {
+      if (conversationRef.current) {
+        pinConversation();
+        return;
+      }
       if (!followsBottom.current || holdsStill.current) return;
       container.scrollTop = container.scrollHeight;
     };
@@ -333,7 +466,189 @@ export function useScrollToBottom({
       container.removeEventListener("scroll", followScrolling);
       container.removeEventListener(CONTENT_RESIZED_EVENT, keepBottom);
     };
-  }, [enabled]);
+  }, [enabled, pinConversation]);
+
+  const followsConversation = enabled && conversation !== null;
+  const conversationTurn = conversation?.turn;
+  const scrollStateRef = useRef(scrollState);
+  scrollStateRef.current = scrollState;
+
+  // Audio mode starts where the person is: reading further up stays held.
+  useEffect(() => {
+    if (!followsConversation) return;
+    const { hasScrolledToBottom: loaded, isUserScrolledUp: away } =
+      scrollStateRef.current;
+    setFollowMode(loaded && away ? "held" : "conversation");
+    pinConversation();
+  }, [followsConversation, setFollowMode, pinConversation]);
+
+  // A new turn, spoken or typed, brings the view to it: the person is there.
+  const lastTurn = useRef(conversationTurn);
+  useEffect(() => {
+    const previous = lastTurn.current;
+    lastTurn.current = conversationTurn;
+    // Audio mode starting is not a turn: the person's place is kept above.
+    if (previous === conversationTurn || previous === undefined) return;
+    if (!followsConversation) return;
+    setFollowMode("conversation");
+    pinConversation();
+  }, [conversationTurn, followsConversation, setFollowMode, pinConversation]);
+
+  useEffect(() => {
+    if (followsConversation && !isTransitioning) pinConversation();
+  }, [followsConversation, isTransitioning, pinConversation]);
+
+  // Audio mode: any change of size keeps the view where it rests (a card
+  // mounting or opening, the composer changing height, an answer folding).
+  // Only the person's own scrolling moves it elsewhere.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !followsConversation) return;
+
+    const resizes = new ResizeObserver(() => pinConversation());
+    const observeChildren = () => {
+      resizes.disconnect();
+      resizes.observe(container);
+      for (const child of Array.from(container.children)) {
+        resizes.observe(child);
+      }
+    };
+    observeChildren();
+    const childrenChange = new MutationObserver(observeChildren);
+    childrenChange.observe(container, { childList: true });
+
+    container.style.overflowAnchor =
+      followMode.current === "held" ? "" : "none";
+
+    let userScrollAt = Number.NEGATIVE_INFINITY;
+    let dragging = false;
+    let touchMoved = false;
+    let touchStart: { x: number; y: number } | null = null;
+    let lastTop = container.scrollTop;
+    const byUser = () => {
+      userScrollAt = Date.now();
+    };
+    // Scrolling up wins at once, before the list has moved, unless a box
+    // inside the list (a card's preview) takes the scroll itself.
+    const holdUp = (target: EventTarget | null) => {
+      byUser();
+      if (scrollsInside(target, container)) return;
+      if (container.scrollTop > 0 && followMode.current !== "held") {
+        setFollowMode("held");
+      }
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) holdUp(event.target);
+      else byUser();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      touchMoved = false;
+      touchStart =
+        event.touches.length > 0
+          ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+          : null;
+    };
+    // A tap, or a finger drifting on a button, is not a scroll; nor is a
+    // sideways swipe across a wide table.
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length === 0 || touchStart === null) return;
+      const dx = event.touches[0].clientX - touchStart.x;
+      const dy = event.touches[0].clientY - touchStart.y;
+      if (Math.abs(dy) < TOUCH_SLOP_PX || Math.abs(dy) < Math.abs(dx)) return;
+      touchMoved = true;
+      if (dy > 0) holdUp(event.target);
+      else byUser();
+    };
+    // A swipe goes on moving the list after the finger lifts.
+    const onTouchEnd = () => {
+      if (touchMoved) byUser();
+    };
+    // On the document: the list scrolls with the keys also when the page,
+    // not the list, has the focus. Not while typing, in a menu elsewhere, or
+    // with Space on a button, which presses it.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!SCROLL_KEYS.has(event.key) || event.defaultPrevented) return;
+      const target = event.target;
+      const onPage = target === document.body || target === container;
+      if (!onPage && !(target instanceof Node && container.contains(target)))
+        return;
+      if (isEditable(target) || (event.key === " " && !onPage)) return;
+      const up =
+        event.key === "ArrowUp" ||
+        event.key === "PageUp" ||
+        event.key === "Home" ||
+        (event.key === " " && event.shiftKey);
+      if (up) holdUp(event.target);
+      else byUser();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const bounds = container.getBoundingClientRect();
+      const scrollbarWidth = container.offsetWidth - container.clientWidth;
+      if (
+        scrollbarWidth > 0 &&
+        event.clientX >= bounds.right - scrollbarWidth
+      ) {
+        dragging = true;
+        byUser();
+      }
+    };
+    const onPointerUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      byUser();
+    };
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const movedUp = scrollTop < lastTop - 1;
+      lastTop = scrollTop;
+      const atBottom =
+        scrollHeight - scrollTop - clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
+      if (ownScroll.current !== null) {
+        const own = Math.abs(scrollTop - ownScroll.current) < 1;
+        ownScroll.current = null;
+        if (own) return;
+      }
+      const byPerson =
+        dragging || Date.now() - userScrollAt <= USER_SCROLL_WINDOW_MS;
+      if (byPerson) {
+        // Content shrinking moves the list up to its new bottom: that is the
+        // browser, even right after the person's input.
+        if (atBottom && movedUp) return;
+        const mode = atBottom ? "bottom" : "held";
+        if (followMode.current !== mode) setFollowMode(mode);
+        return;
+      }
+      // Unannounced: an overlay scrollbar (phones, macOS) or the scrollbar's
+      // arrows move the list up; content shrinking ends at the bottom.
+      if (movedUp && !atBottom) {
+        if (followMode.current !== "held") setFollowMode("held");
+      } else if (atBottom && followMode.current === "held") {
+        setFollowMode("bottom");
+      }
+    };
+
+    container.addEventListener("wheel", onWheel, { passive: true });
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: true });
+    container.addEventListener("touchend", onTouchEnd, { passive: true });
+    document.addEventListener("keydown", onKeyDown);
+    container.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointerup", onPointerUp);
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      resizes.disconnect();
+      childrenChange.disconnect();
+      container.style.overflowAnchor = "";
+      container.removeEventListener("wheel", onWheel);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+      document.removeEventListener("keydown", onKeyDown);
+      container.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointerup", onPointerUp);
+      container.removeEventListener("scroll", onScroll);
+    };
+  }, [followsConversation, setFollowMode, pinConversation]);
 
   // Handle automatic scrolling on initial load and when new messages arrive
   useEffect(() => {
@@ -345,6 +660,16 @@ export function useScrollToBottom({
     // During transitions, we just reset state but don't scroll yet
     if (isTransitioning) {
       dispatch({ type: "RESET_SCROLL_STATE" });
+      return;
+    }
+
+    if (conversationRef.current) {
+      pinConversation();
+      // Typed chat takes over from here when audio mode ends.
+      if (followMode.current !== "held") {
+        dispatch({ type: "SCROLL_TO_BOTTOM" });
+        dispatch({ type: "SET_INITIALLY_LOADED", value: true });
+      }
       return;
     }
 
@@ -410,5 +735,6 @@ export function useScrollToBottom({
     isNearTop,
     initiallyLoaded,
     checkScrollPosition: checkIfUserIsScrolledUp,
+    isConversationHeld: followsConversation && isConversationHeld,
   };
 }

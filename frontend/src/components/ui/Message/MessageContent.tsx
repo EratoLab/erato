@@ -64,6 +64,11 @@ import {
   useTraceFeature,
 } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
+import {
+  rehypeWrittenStart,
+  useFollowsConversation,
+  writtenAnswerStart,
+} from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -1553,6 +1558,11 @@ export const MessageContent = memo(function MessageContent({
     [foldsWordPlan, messageContent],
   );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
+  const followsConversation = useFollowsConversation();
+  const writtenStart = React.useMemo(
+    () => (followsConversation ? writtenAnswerStart(content) : -1),
+    [followsConversation, content],
+  );
   const { maskReasoningText } = useTraceFeature();
   const textActions = useMessageTextActionsFeature();
   // The markers are what the toolbar on marked text recognises as the text of
@@ -1900,7 +1910,7 @@ export const MessageContent = memo(function MessageContent({
   );
 
   const renderMarkdown = React.useCallback(
-    (text: string, textBlockPrefix?: string) => {
+    (text: string, textBlockPrefix?: string, writtenStart = false) => {
       const mentionLinkedText =
         mentionedAssistants && mentionedAssistants.length > 0
           ? linkAssistantMentions(text, mentionedAssistants)
@@ -1918,6 +1928,7 @@ export const MessageContent = memo(function MessageContent({
                     rehypeRaw,
                     [rehypeSanitize, markdownSanitizeSchema],
                     rehypeKatex,
+                    ...(writtenStart ? [rehypeWrittenStart] : []),
                     ...(textBlockPrefix === undefined
                       ? []
                       : [
@@ -2281,6 +2292,7 @@ export const MessageContent = memo(function MessageContent({
               {renderMarkdown(
                 displayText,
                 marksTextBlocks ? String(index) : undefined,
+                index === writtenStart,
               )}
             </React.Fragment>
           );
