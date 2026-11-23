@@ -1,7 +1,9 @@
 import { t } from "@lingui/core/macro";
 import { skipToken } from "@tanstack/react-query";
-import { useId } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 
+import { Input } from "@/components/ui/Input/Input";
+import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 import { useListMcpServerTools } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
@@ -10,6 +12,7 @@ import {
 } from "@/utils/chat/mcpToolPatterns";
 
 import { Button } from "../Controls/Button";
+import { Checkbox } from "../Controls/Checkbox";
 import { Alert } from "../Feedback/Alert";
 import { ModalBase } from "../Modal/ModalBase";
 import { EntityRow } from "../Settings/EntityRow";
@@ -32,6 +35,15 @@ import type { ReactNode } from "react";
 // the one opened second reads the other's listing instead of probing again.
 const TOOLS_STALE_TIME_MS = 5 * 60 * 1000;
 
+// eslint-disable-next-line lingui/no-unlocalized-strings -- field names of the server listing
+const SEARCH_KEYS = ["display_name", "id"];
+
+const inThisChatCaption = () =>
+  t({
+    id: "chatInput.connectors.tool.switchCaption",
+    message: "In this chat",
+  });
+
 /** The per-chat switch of one tool row; absent on a read-only browser. */
 interface McpToolSwitch {
   disabledToolPatterns: string[];
@@ -50,7 +62,6 @@ function McpToolBrowserRow({
   tool: McpServerTool;
   toolSwitch: McpToolSwitch | null;
 }) {
-  const switchId = useId();
   const toolTitle = tool.title;
   const isOn =
     toolSwitch === null ||
@@ -74,35 +85,24 @@ function McpToolBrowserRow({
       data-testid="mcp-tools-browser-tool"
       control={
         toolSwitch ? (
-          <label
-            htmlFor={switchId}
-            className="flex cursor-pointer items-center gap-2 text-xs text-theme-fg-secondary"
-          >
-            <input
-              id={switchId}
-              type="checkbox"
-              checked={isOn}
-              disabled={toolSwitch.locked || coveringPattern !== null}
-              onChange={() => toolSwitch.onToggleTool(serverId, tool.name)}
-              aria-label={t({
-                id: "chatInput.connectors.tool.switchLabel",
-                message: `Use ${toolTitle} in this chat`,
-              })}
-              data-testid="mcp-tools-browser-tool-switch"
-              className="size-4 accent-[var(--theme-fg-accent)] focus:ring-theme-fg-accent focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
-            />
-            <span aria-hidden="true">
-              {coveringPattern !== null
+          <Checkbox
+            checked={isOn}
+            disabled={toolSwitch.locked || coveringPattern !== null}
+            onCheckedChange={() => toolSwitch.onToggleTool(serverId, tool.name)}
+            aria-label={t({
+              id: "chatInput.connectors.tool.switchLabel",
+              message: `Use ${toolTitle} in this chat`,
+            })}
+            data-testid="mcp-tools-browser-tool-switch"
+            label={
+              coveringPattern !== null
                 ? t({
                     id: "chatInput.connectors.tool.switchedOffByRule",
                     message: `Switched off for this chat by the rule ${coveringPattern}`,
                   })
-                : t({
-                    id: "chatInput.connectors.tool.switchCaption",
-                    message: "In this chat",
-                  })}
-            </span>
-          </label>
+                : inThisChatCaption()
+            }
+          />
         ) : undefined
       }
     />
@@ -214,7 +214,7 @@ function McpServerToolsList({
 export interface McpToolsBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Every server the user may see; the rows say which are connected. */
+  /** The servers this chat can use; the rows say which are connected. */
   servers: McpServerStatus[];
   /**
    * The chat's switched-off `server/tool` patterns. Together with
@@ -225,31 +225,49 @@ export interface McpToolsBrowserModalProps {
   onToggleTool?: (serverId: string, toolName: string) => void;
   /**
    * Locks the tool switches alone: the chat's list is not known yet, so a
-   * flip has no base. The rows and the Authorize affordance stay live.
+   * flip has no base. The rows and the Connect affordance stay live.
    */
   toolSwitchesLocked?: boolean;
   /**
    * Servers switched off for the chat as a whole. Their tools are still
-   * listed — the server switch is in the composer, not here — but the
-   * per-tool switches are moot while it is off, so they are locked and the
-   * row says so.
+   * listed, but the per-tool switches are moot while the server is off, so
+   * they are locked and the row says so.
    */
   disabledServerIds?: string[];
+  /** Puts a per-chat switch on every connected server's row. */
+  onToggleServer?: (serverId: string) => void;
+  /** Locks the server switches alone, for the same reason as the tools'. */
+  serverSwitchesLocked?: boolean;
+  /**
+   * The chat's write setting. Together with `onToggleWriteTools` it puts the
+   * "Allow changes" switch in the dialog's footer.
+   */
+  writeToolsEnabled?: boolean;
+  onToggleWriteTools?: () => void;
+  writeSwitchLocked?: boolean;
+  /**
+   * Whether this host also proposes actions of its own (the add-ins), so
+   * the write switch's description names that those pause too.
+   */
+  pausesHostActions?: boolean;
 }
 
 /**
- * The tool list behind the composer's "Browse tools…" row: every server the
- * user may see, each expanding to the tools the model is offered from it,
- * with the same badges the settings pane shows. Where the host hands in the
- * chat's per-tool switch, each row flips that one tool for this chat alone;
- * the account-wide decisions stay in Settings, which this links to, so a
- * decision never has two homes — and the two controls never look alike
- * (a checkbox here, radios there).
+ * The connectors dialog behind the composer's "Connectors…" row: every server
+ * this chat can use, with a search over their names. Each connected server
+ * has a switch for this chat and opens to the tools it offers, each with its
+ * own switch; a server still waiting for the user has Connect instead, and
+ * those come last. The footer holds the chat's "Allow changes" switch.
  *
- * A server awaiting the user's OAuth connection shows the Authorize
- * affordance instead of tools. The OAuth round-trip is web-shaped and lives
- * in the settings dialog, so authorizing means opening it there; hosts with
- * no such dialog (the add-in) get the status line alone.
+ * Account-wide decisions stay in Settings, which this links to, so a decision
+ * never has two homes — and the two controls never look alike (a checkbox
+ * here, radios there). Connecting opens the settings on that server; a host
+ * without the web app's settings dialog supplies its own opener through
+ * `McpSettingsOpenProvider`.
+ *
+ * The write description deliberately says "tools marked read-only": under
+ * protocol defaults an unannotated tool is not read-only, so with changes off
+ * it disappears too, and "read-only tools" would misdescribe that.
  */
 export function McpToolsBrowserModal({
   isOpen,
@@ -259,36 +277,109 @@ export function McpToolsBrowserModal({
   onToggleTool,
   toolSwitchesLocked = false,
   disabledServerIds = [],
+  onToggleServer,
+  serverSwitchesLocked = false,
+  writeToolsEnabled = true,
+  onToggleWriteTools,
+  writeSwitchLocked = false,
+  pausesHostActions = false,
 }: McpToolsBrowserModalProps) {
   const openMcpServersSettings = useOpenMcpServersSettings();
+  const writeDescriptionId = useId();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const closeAndReset = useCallback(() => {
+    setSearchQuery("");
+    onClose();
+  }, [onClose]);
 
   const openSettings = openMcpServersSettings
-    ? () => {
-        onClose();
-        openMcpServersSettings();
+    ? (serverId?: string) => {
+        closeAndReset();
+        openMcpServersSettings(serverId);
       }
     : null;
 
+  const matches = useFuzzySearch({
+    items: servers,
+    keys: SEARCH_KEYS,
+    query: searchQuery,
+    // The list is short and the user is narrowing it, not searching prose.
+    minMatchCharLength: 1,
+  });
+  // Servers still waiting for the user come last: what this chat can use
+  // right now is what people look for first.
+  const orderedMatches = useMemo(
+    () => [
+      ...matches.filter(
+        (server) => server.connection_status !== "NEEDS_AUTHENTICATION",
+      ),
+      ...matches.filter(
+        (server) => server.connection_status === "NEEDS_AUTHENTICATION",
+      ),
+    ],
+    [matches],
+  );
+
   const isEditable = onToggleTool !== undefined;
+
+  const writeDescription = writeToolsEnabled
+    ? t({
+        id: "chatInput.connectors.allowChanges.descriptionOn",
+        message: "Connected tools may create, change and delete things.",
+      })
+    : pausesHostActions
+      ? t({
+          id: "chatInput.connectors.allowChanges.descriptionOffHostActions",
+          message:
+            "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
+        })
+      : t({
+          id: "chatInput.connectors.allowChanges.descriptionOff",
+          message: "Off: only tools the server marks read-only are offered.",
+        });
 
   return (
     <ModalBase
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={closeAndReset}
       title={t({
-        id: "chatInput.connectors.browseTitle",
-        message: "Connected tools",
+        id: "chatInput.connectors.dialogTitle",
+        message: "Connectors",
       })}
       contentClassName="max-w-lg"
+      footer={
+        onToggleWriteTools ? (
+          <div className="space-y-1">
+            <Checkbox
+              checked={writeToolsEnabled}
+              disabled={writeSwitchLocked}
+              onCheckedChange={() => onToggleWriteTools()}
+              label={t({
+                id: "chatInput.connectors.allowChanges.label",
+                message: "Allow changes",
+              })}
+              aria-describedby={writeDescriptionId}
+              data-testid="mcp-tools-browser-allow-changes"
+            />
+            <p
+              id={writeDescriptionId}
+              className="text-xs text-theme-fg-secondary"
+            >
+              {writeDescription}
+            </p>
+          </div>
+        ) : undefined
+      }
     >
       <div className="space-y-3" data-testid="mcp-tools-browser">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-theme-fg-secondary">
             {isEditable
               ? t({
-                  id: "chatInput.connectors.browseDescriptionWithSwitches",
+                  id: "chatInput.connectors.dialogDescriptionWithSwitches",
                   message:
-                    "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings.",
+                    "What this chat may use. Switch a connector off, or open it to switch single tools off, for this chat only.",
                 })
               : t({
                   id: "chatInput.connectors.browseDescription",
@@ -301,7 +392,7 @@ export function McpToolsBrowserModal({
               type="button"
               variant="link"
               size="sm"
-              onClick={openSettings}
+              onClick={() => openSettings()}
               data-testid="mcp-tools-browser-manage"
             >
               {t({
@@ -320,75 +411,122 @@ export function McpToolsBrowserModal({
             })}
           </Alert>
         ) : (
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto">
-            {servers.map((server) => {
-              const needsAuthentication =
-                server.connection_status === "NEEDS_AUTHENTICATION";
-              const isServerSwitchedOff = disabledServerIds.includes(server.id);
-              const description = mcpServerDescription(server);
-              const toolSwitch: McpToolSwitch | null =
-                onToggleTool !== undefined
-                  ? {
-                      disabledToolPatterns: disabledToolPatterns ?? [],
-                      onToggleTool,
-                      locked: toolSwitchesLocked || isServerSwitchedOff,
-                    }
-                  : null;
-              return (
-                <EntityRow
-                  key={server.id}
-                  icon={
-                    <ResolvedIcon
-                      iconId="simpleicons-modelcontextprotocol"
-                      className="size-4 text-theme-fg-secondary"
-                    />
-                  }
-                  name={server.id}
-                  status={mcpServerStatus(server)}
-                  caption={
-                    isServerSwitchedOff
-                      ? t({
-                          id: "chatInput.connectors.server.switchedOff",
-                          message: "Switched off for this chat",
-                        })
-                      : undefined
-                  }
-                  data-testid="mcp-tools-browser-server"
-                  action={
-                    needsAuthentication && openSettings ? (
+          <>
+            <Input
+              type="search"
+              // Focused in the opening commit, so a key typed right after
+              // opening cannot reach the composer behind the overlay.
+              autoFocus // eslint-disable-line jsx-a11y/no-autofocus -- the dialog opens to narrow the list
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t({
+                id: "chatInput.connectors.searchPlaceholder",
+                message: "Search connectors...",
+              })}
+              aria-label={t({
+                id: "chatInput.connectors.searchPlaceholder",
+                message: "Search connectors...",
+              })}
+              data-testid="mcp-tools-browser-search"
+            />
+            {orderedMatches.length === 0 ? (
+              <p className="py-6 text-center text-sm text-theme-fg-muted">
+                {t({
+                  id: "chatInput.connectors.noResults",
+                  message: "No connectors match your search",
+                })}
+              </p>
+            ) : (
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+                {orderedMatches.map((server) => {
+                  const needsAuthentication =
+                    server.connection_status === "NEEDS_AUTHENTICATION";
+                  const isServerSwitchedOff = disabledServerIds.includes(
+                    server.id,
+                  );
+                  const serverName = server.display_name;
+                  const description = mcpServerDescription(server);
+                  const toolSwitch: McpToolSwitch | null =
+                    onToggleTool !== undefined
+                      ? {
+                          disabledToolPatterns: disabledToolPatterns ?? [],
+                          onToggleTool,
+                          locked: toolSwitchesLocked || isServerSwitchedOff,
+                        }
+                      : null;
+                  let action: ReactNode;
+                  if (needsAuthentication) {
+                    action = openSettings ? (
                       <Button
                         variant="primary"
                         size="sm"
                         icon={<LinkIcon className="size-4" />}
-                        onClick={openSettings}
+                        onClick={() => openSettings(server.id)}
                         data-testid="mcp-tools-browser-authorize"
                       >
                         {t({
-                          id: "preferences.dialog.mcpServers.oauth.authorize",
-                          message: "Authorize",
+                          id: "chatInput.connectors.connect",
+                          message: "Connect",
                         })}
                       </Button>
-                    ) : undefined
+                    ) : undefined;
+                  } else if (onToggleServer) {
+                    action = (
+                      <Checkbox
+                        checked={!isServerSwitchedOff}
+                        disabled={serverSwitchesLocked}
+                        onCheckedChange={() => onToggleServer(server.id)}
+                        aria-label={t({
+                          id: "chatInput.connectors.server.switchLabel",
+                          message: `Use ${serverName} in this chat`,
+                        })}
+                        label={inThisChatCaption()}
+                        data-testid="mcp-tools-browser-server-switch"
+                      />
+                    );
                   }
-                >
-                  {description !== null ? (
-                    <p className="text-sm text-theme-fg-secondary">
-                      {description}
-                    </p>
-                  ) : null}
-                  {/* Nothing to list before the user connects; the
-                      enumeration would only echo the status back. */}
-                  {needsAuthentication ? null : (
-                    <McpServerToolsList
-                      serverId={server.id}
-                      isActive={isOpen}
-                      toolSwitch={toolSwitch}
-                    />
-                  )}
-                </EntityRow>
-              );
-            })}
-          </div>
+                  return (
+                    <EntityRow
+                      key={server.id}
+                      icon={
+                        <ResolvedIcon
+                          iconId="simpleicons-modelcontextprotocol"
+                          className="size-4 text-theme-fg-secondary"
+                        />
+                      }
+                      name={serverName}
+                      status={mcpServerStatus(server)}
+                      caption={
+                        isServerSwitchedOff
+                          ? t({
+                              id: "chatInput.connectors.server.switchedOff",
+                              message: "Switched off for this chat",
+                            })
+                          : undefined
+                      }
+                      data-testid="mcp-tools-browser-server"
+                      action={action}
+                    >
+                      {description !== null ? (
+                        <p className="text-sm text-theme-fg-secondary">
+                          {description}
+                        </p>
+                      ) : null}
+                      {/* Nothing to list before the user connects; the
+                          enumeration would only echo the status back. */}
+                      {needsAuthentication ? null : (
+                        <McpServerToolsList
+                          serverId={server.id}
+                          isActive={isOpen}
+                          toolSwitch={toolSwitch}
+                        />
+                      )}
+                    </EntityRow>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </ModalBase>

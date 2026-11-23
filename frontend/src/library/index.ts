@@ -37,6 +37,10 @@ export { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicator
 export { CountBadge } from "@/components/ui/Controls/CountBadge";
 export { DelegatedRunOpenProvider } from "@/providers/DelegatedRunOpenProvider";
 export {
+  McpSettingsOpenProvider,
+  type McpSettingsOpener,
+} from "@/providers/McpSettingsOpenProvider";
+export {
   OutlookSourceNavigationProvider,
   type OutlookSourceNavigator,
 } from "@/providers/OutlookSourceNavigationProvider";
@@ -168,11 +172,9 @@ export {
 } from "@/components/ui/Chat/McpToolsBrowserModal";
 export {
   buildMcpToolsSection,
-  mcpToolsServerItemId,
+  summarizeMcpConnectors,
   MCP_TOOLS_SECTION_ID,
-  MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
-  MCP_TOOLS_BROWSE_ITEM_ID,
-  MCP_TOOLS_SERVER_ITEM_ID_PREFIX,
+  MCP_TOOLS_OPEN_ITEM_ID,
 } from "@/components/ui/Chat/mcpToolsSection";
 export {
   ServersToolsPane,
@@ -817,7 +819,10 @@ export type {
   ThreadMessageAttachmentItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
-export { useMcpBrowserAuthorization } from "@/hooks/ui/useMcpBrowserAuthorization";
+export {
+  useMcpBrowserAuthorization,
+  useMcpBrowserSettingsOpener,
+} from "@/hooks/ui/useMcpBrowserAuthorization";
 
 // Mount beside the host's <Toaster />: a host that can authorize an MCP
 // server has to be able to report how that authorization ended, including

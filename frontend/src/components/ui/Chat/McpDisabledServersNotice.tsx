@@ -1,5 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 
+import { useMcpServerDisplayName } from "@/hooks/chat/useMcpServerDisplayName";
+
 import { InfoIcon } from "../icons";
 
 interface McpDisabledServersNoticeProps {
@@ -15,18 +17,19 @@ interface McpDisabledServersNoticeProps {
  * error; unlike it there is no affordance — the remedy is the connectors
  * switch in the composer, right below.
  *
- * A server's id doubles as its display name everywhere (settings pane,
- * composer rows) — the listing API exposes no separate label to resolve.
+ * Servers are named as the listing names them, falling back to the id.
  */
 export const McpDisabledServersNotice = ({
   serverIds,
 }: McpDisabledServersNoticeProps) => {
+  const displayName = useMcpServerDisplayName();
+
   if (serverIds.length === 0) {
     return null;
   }
 
   const serverCount = serverIds.length;
-  const serverList = serverIds.join(", ");
+  const serverList = serverIds.map(displayName).join(", ");
 
   return (
     <div

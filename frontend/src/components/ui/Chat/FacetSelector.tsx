@@ -127,10 +127,11 @@ export const FacetSelector = ({
         continue;
       }
       // The group label is only worth a row when there is something above it
-      // to separate the group from.
+      // to separate the group from; a group without one gets a divider.
       section.items.forEach((item, index) => {
-        const sectionHeader =
-          index === 0 && items.length > 0 ? section.header : undefined;
+        const opensGroup = index === 0 && items.length > 0;
+        const sectionHeader = opensGroup ? section.header : undefined;
+        const separatorBefore = opensGroup && section.header == null;
         items.push(
           isAddMenuToolItem(item)
             ? {
@@ -143,6 +144,7 @@ export const FacetSelector = ({
                 checked: item.checked,
                 disabled: item.disabled,
                 sectionHeader,
+                separatorBefore,
               }
             : {
                 id: item.id,
@@ -154,6 +156,7 @@ export const FacetSelector = ({
                 disabled: item.disabled,
                 closesImmediately: item.closesImmediately,
                 sectionHeader,
+                separatorBefore,
               },
         );
       });

@@ -3335,14 +3335,36 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Dodaj pliki i narzędzia"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.description"
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.allowChanges.descriptionOff"
 msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
+msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu, a działania w tej aplikacji są wstrzymane."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.allowChanges.descriptionOn"
+msgstr "Połączone narzędzia mogą tworzyć, zmieniać i usuwać elementy."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.allowChanges.label"
+msgstr "Zezwalaj na zmiany"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionHostActions"
-msgstr ""
+#~ msgid "chatInput.connectors.allowWrites.description"
+#~ msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3351,13 +3373,13 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.label"
-msgstr "Zezwalaj na operacje zapisu"
+#~ msgid "chatInput.connectors.allowWrites.label"
+#~ msgstr "Zezwalaj na operacje zapisu"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.browse"
-msgstr "Przeglądaj narzędzia…"
+#~ msgid "chatInput.connectors.browse"
+#~ msgstr "Przeglądaj narzędzia…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3366,13 +3388,28 @@ msgstr "Narzędzia, które każdy połączony serwer oferuje w Twoich czatach. O
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
-msgid "chatInput.connectors.browseDescriptionWithSwitches"
-msgstr "Narzędzia, które każdy połączony serwer oferuje w tym czacie. Wyłącz narzędzie, aby nie było używane w tym czacie; o tym, co w ogóle może być uruchamiane, decydujesz w Ustawieniach."
+#~ msgid "chatInput.connectors.browseDescriptionWithSwitches"
+#~ msgstr "Narzędzia, które każdy połączony serwer oferuje w tym czacie. Wyłącz narzędzie, aby nie było używane w tym czacie; o tym, co w ogóle może być uruchamiane, decydujesz w Ustawieniach."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
-msgid "chatInput.connectors.browseTitle"
-msgstr "Połączone narzędzia"
+#~ msgid "chatInput.connectors.browseTitle"
+#~ msgstr "Połączone narzędzia"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.connect"
+msgstr "Połącz"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.dialogDescriptionWithSwitches"
+msgstr "Z czego ten czat może korzystać. Wyłącz konektor albo otwórz go, aby wyłączyć pojedyncze narzędzia – tylko w tym czacie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.dialogTitle"
+msgstr "Konektory"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3380,29 +3417,89 @@ msgid "chatInput.connectors.manageInSettings"
 msgstr "Zarządzaj w Ustawieniach"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.sectionHeader"
-msgstr "Konektory"
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.noResults"
+msgstr "Nie znaleziono pasujących konektorów"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.allToolsDisabled"
-msgstr "Wszystkie narzędzia wyłączone"
+msgid "chatInput.connectors.open"
+msgstr "Konektory…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.end"
+msgstr "Ponownie zezwól na zmiany"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.ended"
+msgstr "Zmiany znów dozwolone."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.label"
+msgstr "Tylko odczyt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.searchPlaceholder"
+msgstr "Szukaj konektorów..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.disabledTools"
-msgstr "{disabledToolCount, plural, one {# narzędzie wyłączone} few {# narzędzia wyłączone} other {# narzędzi wyłączonych}}"
+#~ msgid "chatInput.connectors.sectionHeader"
+#~ msgstr "Konektory"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.someToolsDisabled"
-msgstr "Niektóre narzędzia wyłączone"
+#~ msgid "chatInput.connectors.server.allToolsDisabled"
+#~ msgstr "Wszystkie narzędzia wyłączone"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.server.disabledTools"
+#~ msgstr "{disabledToolCount, plural, one {# narzędzie wyłączone} few {# narzędzia wyłączone} other {# narzędzi wyłączonych}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.server.someToolsDisabled"
+#~ msgstr "Niektóre narzędzia wyłączone"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
 msgid "chatInput.connectors.server.switchedOff"
 msgstr "Wyłączony w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.server.switchLabel"
+msgstr "Używaj {serverName} w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.allOn"
+msgstr "{onCount, plural, one {# włączony} few {Wszystkie włączone: #} many {Wszystkie włączone: #} other {Wszystkie włączone: #}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.countsOff"
+msgstr "Włączone: {onCount}, wyłączone: {offCount}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.namedOff"
+msgstr "Wyłączone: {names}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.readOnly"
+msgstr "tylko odczyt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.toConnect"
+msgstr "{toConnectCount, plural, one {# do połączenia} few {# do połączenia} many {# do połączenia} other {# do połączenia}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3446,19 +3543,38 @@ msgstr "Czekaj na odpowiedź"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantMentionPopover.tsx
-#: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.browse"
 msgstr "Przeglądaj asystentów…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantBrowserModal.tsx
-msgid "chatInput.mentions.browseTitle"
-msgstr "Wspomnij asystenta"
+#~ msgid "chatInput.mentions.browseTitle"
+#~ msgstr "Wspomnij asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.dialogDescription"
+msgstr "Przekazuje Twoją wiadomość wybranemu asystentowi. Ten czat pozostaje bez zmian."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.dialogTitle"
+msgstr "Zapytaj asystenta"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantBrowserModal.tsx
 msgid "chatInput.mentions.noResults"
 msgstr "Nie znaleziono pasujących asystentów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open"
+msgstr "Zapytaj asystenta…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.description"
+msgstr "{moreCount, plural, one {{firstName} i # inny, z którego często korzystasz} few {{firstName} i # inne, z których często korzystasz} many {{firstName} i # innych, z których często korzystasz} other {{firstName} i # innych, z których często korzystasz}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -3476,7 +3592,6 @@ msgid "chatInput.mentions.searchPlaceholder"
 msgstr "Szukaj asystentów..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/assistantMentionSection.ts
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chatInput.mentions.sectionHeader"
 msgstr "Asystenci"
@@ -6682,7 +6797,6 @@ msgid "preferences.dialog.mcpServers.loading"
 msgstr "Ładowanie statusu serwerów MCP..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorize"
 msgstr "Autoryzuj"

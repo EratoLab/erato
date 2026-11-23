@@ -2,6 +2,7 @@ import { action } from "@storybook/addon-actions";
 import { useState } from "react";
 
 import { ChatInputAddMenu } from "../../components/ui/Chat/ChatInputAddMenu";
+import { buildAssistantMentionSection } from "../../components/ui/Chat/assistantMentionSection";
 import { buildMcpToolsSection } from "../../components/ui/Chat/mcpToolsSection";
 import {
   BrainIcon,
@@ -173,83 +174,70 @@ export const WithEmailSection: Story = {
 const CONNECTOR_SERVERS: McpServerStatus[] = [
   {
     id: "linear",
-    display_name: "linear",
+    display_name: "Linear",
     connection_status: "SUCCESS",
     authentication_mode: "oauth2",
   },
   {
     id: "github",
-    display_name: "github",
+    display_name: "GitHub",
     connection_status: "SUCCESS",
     authentication_mode: "oauth2",
   },
   {
     id: "jira",
-    display_name: "jira",
+    display_name: "Jira",
     connection_status: "NEEDS_AUTHENTICATION",
     authentication_mode: "oauth2",
   },
   {
     id: "wiki",
-    display_name: "wiki",
+    display_name: "Wiki",
     connection_status: "FAILURE",
     authentication_mode: "none",
   },
 ];
 
 /**
- * The "Connectors" group below the tools: one switch per server (a server
- * awaiting authorization gets a connect row instead), the per-chat write
- * switch (a checkbox row that keeps the menu open) and the row into the tool
- * browser. The write description credits the server's read-only marking on
- * purpose — an unannotated tool is not read-only and disappears with writes
- * off too.
+ * The connectors and the assistants below the tools, one row each. The
+ * connectors row says their state in one line and opens the connectors
+ * dialog; the assistants row opens the assistant dialog. Neither group has a
+ * header: the row names it, and the menu draws a divider.
  */
-function ConnectorsMenu({
-  pausesHostActions = false,
+function DialogRowsMenu({
+  writeToolsEnabled = true,
 }: {
-  pausesHostActions?: boolean;
+  writeToolsEnabled?: boolean;
 }) {
-  const [writeToolsEnabled, setWriteToolsEnabled] = useState(true);
-  const [disabledServerIds, setDisabledServerIds] = useState<string[]>([
-    "github",
-  ]);
   return (
     <InteractiveMenu
       extraSections={[
         buildMcpToolsSection({
-          writeToolsEnabled,
-          onToggleWriteTools: () => {
-            action("toggle: allow write operations")();
-            setWriteToolsEnabled((previous) => !previous);
-          },
-          onBrowse: action("browse tools"),
           servers: CONNECTOR_SERVERS,
-          disabledServerIds,
-          onToggleServer: (serverId) => {
-            action("toggle: server")(serverId);
-            setDisabledServerIds((previous) =>
-              previous.includes(serverId)
-                ? previous.filter((id) => id !== serverId)
-                : [...previous, serverId],
-            );
-          },
-          onConnect: action("connect server"),
-          pausesHostActions,
+          disabledServerIds: ["github"],
+          writeToolsEnabled,
+          onOpen: action("open connectors dialog"),
+        }),
+        buildAssistantMentionSection({
+          suggested: [
+            { id: "researcher", name: "Researcher" },
+            { id: "editor", name: "Editor" },
+          ],
+          onOpen: action("open assistant dialog"),
         }),
       ]}
     />
   );
 }
 
-export const WithConnectorsSection: Story = {
-  name: "With connectors section (server switches + write switch + browse)",
-  render: () => <ConnectorsMenu />,
+export const WithConnectorsAndAssistants: Story = {
+  name: "With connectors and assistants rows",
+  render: () => <DialogRowsMenu />,
 };
 
-export const WithConnectorsSectionInOutlook: Story = {
-  name: "With connectors section (Outlook host copy)",
-  render: () => <ConnectorsMenu pausesHostActions />,
+export const WithConnectorsReadOnly: Story = {
+  name: "With connectors row while changes are off",
+  render: () => <DialogRowsMenu writeToolsEnabled={false} />,
 };
 
 export const Processing: Story = {
