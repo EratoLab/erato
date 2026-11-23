@@ -752,7 +752,28 @@ async fn one_step_of_several_declined(pool: Pool<Postgres>, decision: &str) {
     chat.decide(json!({"decision":decision}))
         .await
         .assert_status_ok();
-    assert_eq!(chat.requests().len(), 2);
+    assert_eq!(
+        chat.requests().len(),
+        1,
+        "the closing request offers no tools"
+    );
+    let note = erato::services::chained_apply::DECLINED_REMAINING_CHANGES_NOTE;
+    let closing: Vec<Value> = chat
+        .recorder
+        .bodies()
+        .iter()
+        .map(|body| serde_json::from_str::<Value>(body).unwrap())
+        .filter(|body| body.to_string().contains(note))
+        .collect();
+    assert_eq!(closing.len(), 1);
+    let last = closing[0]["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["role"], "user");
+    assert_eq!(last["content"], note);
+    assert!(
+        chat.events
+            .iter()
+            .any(|event| event.to_string().contains("SAID_WHAT_IS_LEFT"))
+    );
     assert!(
         !chat
             .events
