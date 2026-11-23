@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 
 import { useFacets } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { gistToolLine } from "@/lib/toolCallGist/gistLabels";
 
 import { ClientToolDecisionList } from "./ClientToolDecisionList";
 import { EntityRow } from "./EntityRow";
@@ -22,15 +23,26 @@ export const useApprovalTools = (
   return data?.approval_tools ?? NO_TOOLS;
 };
 
-/** The approval tools as rows of the shared decision list. */
-export const approvalToolRows = (tools: readonly ApprovalToolInfo[]) =>
-  tools.map((tool) => ({
-    qualifiedName: tool.qualified_name,
-    label: tool.title,
-
-    asksEveryTime: tool.approval === "every_call",
-    "data-testid": `client-tool-decision-${tool.qualified_name}`,
-  }));
+/**
+ * The approval tools as rows of the shared decision list, each named from its
+ * label in the user's language. A tool without one, or one whose name would
+ * read like another row's, keeps the deployment's title.
+ */
+export const approvalToolRows = (tools: readonly ApprovalToolInfo[]) => {
+  const lines = tools.map((tool) => gistToolLine(tool.label));
+  return tools.map((tool, index) => {
+    const line = lines[index];
+    const unique =
+      line !== undefined &&
+      lines.filter((other) => other === line).length === 1;
+    return {
+      qualifiedName: tool.qualified_name,
+      label: unique ? line : tool.title,
+      asksEveryTime: tool.approval === "every_call",
+      "data-testid": `client-tool-decision-${tool.qualified_name}`,
+    };
+  });
+};
 
 /**
  * The Servers & Tools row for changes in Office apps: Ask, Always or Never

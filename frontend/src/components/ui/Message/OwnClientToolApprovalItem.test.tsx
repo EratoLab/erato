@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { componentRegistry } from "@/config/componentRegistry";
@@ -491,6 +497,95 @@ describe("Allow all on a stop with a chained change", () => {
         }),
       ),
     );
+  });
+});
+
+/** Registers or removes executors the way a pane does after the card is up. */
+const afterRender = (change: () => void) =>
+  act(async () => {
+    change();
+    await Promise.resolve();
+  });
+
+describe("a chained change when the pane registers its tool later", () => {
+  it("turns into the host card once the tool can run here, and back when it goes", async () => {
+    hostCard = () => <div data-testid="host-card" />;
+    renderCard(chainedRequest());
+    expect(
+      screen.getByTestId("chained-approval-elsewhere"),
+    ).toBeInTheDocument();
+
+    let unregister = () => {};
+    await afterRender(() => {
+      unregister = registerApplyExecutor();
+    });
+    expect(screen.getByTestId("host-card")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("chained-approval-elsewhere"),
+    ).not.toBeInTheDocument();
+
+    await afterRender(() => unregister());
+    expect(screen.queryByTestId("host-card")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("chained-approval-elsewhere"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Allow all for the change once the tool can run here", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withTask(chainedRequest(), "2026-11-23T09:59:00Z"),
+      continueToolApproval,
+    );
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+    expect(
+      screen.queryByTestId("tool-approval-allow-all"),
+    ).not.toBeInTheDocument();
+
+    await afterRender(registerApplyExecutor);
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          itemDecisions: [
+            { approvalId: APPLY_ID, decision: "approve" },
+            { approvalId: "task-a", decision: "approve" },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("hands the voice a decision once the tool can run here", async () => {
+    renderCard(chainedRequest(), undefined, true);
+    const before = spoken.decide;
+    expect(before?.(APPLY_ID)).toBeUndefined();
+
+    await afterRender(registerApplyExecutor);
+    // The voice reads whether it may decide when the card is drawn.
+    expect(spoken.decide).not.toBe(before);
+    expect(spoken.decide?.(APPLY_ID)).toBeDefined();
+  });
+
+  it("does not draw the host card again when nothing it shows changed", async () => {
+    let renders = 0;
+    hostCard = () => {
+      renders += 1;
+      return <div data-testid="host-card" />;
+    };
+    const unregister = registerApplyExecutor();
+    renderCard(chainedRequest());
+    const drawn = renders;
+
+    await afterRender(() => {
+      registerClientToolExecutor("search_sidecar_index", () =>
+        Promise.resolve({ ok: true as const, result: {} }),
+      );
+      // A pane registering its tools again removes and adds them in one go.
+      unregister();
+      registerApplyExecutor();
+    });
+    expect(renders).toBe(drawn);
   });
 });
 

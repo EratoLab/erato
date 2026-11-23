@@ -21,6 +21,7 @@ import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
   clientToolApprovalScopeAnchor,
   getClientToolHeaders,
+  useClientToolRegistry,
 } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
@@ -908,9 +909,11 @@ export const McpToolApprovalCard = ({
   };
   // A card that needs a choice on screen, or a change only another device can
   // make, is never decided by voice.
-  const screenOnlyKey = approvalItems
-    .map((item) => `${item.approval_id}:${onlyItsCardApproves(item)}`)
-    .join("\n");
+  const screenOnlyKey = useClientToolRegistry(() =>
+    approvalItems
+      .map((item) => `${item.approval_id}:${onlyItsCardApproves(item)}`)
+      .join("\n"),
+  );
   const decideByVoice = useCallback(
     (approvalId: string): Omit<VoiceDecision, "approves"> | undefined => {
       const item = ownVoiceItem(approvalId);
