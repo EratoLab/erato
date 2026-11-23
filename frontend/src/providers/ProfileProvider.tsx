@@ -1,5 +1,6 @@
 import { createContext, useMemo, type ReactNode } from "react";
 
+import { usePrimeMainLanguage } from "@/hooks/audio/spokenLanguage";
 import { usePrimeVoiceTraces } from "@/hooks/audio/voiceTraces";
 import { useClientLocaleReport } from "@/hooks/profile/useClientLocaleReport";
 import { useProfileApi } from "@/hooks/profile/useProfileApi";
@@ -20,6 +21,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const { profile, isLoading, error } = useProfileApi();
   useClientLocaleReport(profile);
   usePrimeVoiceTraces(profile?.id);
+  usePrimeMainLanguage(profile?.id);
 
   // Memoize context value to prevent unnecessary rerenders of consumers
   const value = useMemo(

@@ -4825,10 +4825,7 @@
             "description": "The language to say the lines in, any language code such as `de`:\nthe one the user spoke. The user's language when omitted. A language\nwithout lines gets none.",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -9270,10 +9267,7 @@
             "description": "The instruction type, e.g. `spoken_reply`."
           },
           "language": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": "string",
             "description": "For `spoken_language`: the code of the language the user spoke."
           }
         }
@@ -14295,7 +14289,6 @@
           "candidates",
           "main",
           "allowed",
-          "offered",
           "own",
           "app_language",
           "source",
@@ -14311,7 +14304,7 @@
           },
           "app_language": {
             "type": "string",
-            "description": "The caller's app language as a speakable code: their main language\nwhile they list none."
+            "description": "The caller's app language as a language code: their main language\nwhile they list none."
           },
           "audience": {
             "type": "string",
@@ -14331,13 +14324,6 @@
           "main": {
             "type": "string",
             "description": "The language the voice speaks when the caller's language is unclear."
-          },
-          "offered": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The languages the caller may pick from for \"Languages I speak\"."
           },
           "own": {
             "type": "array",
@@ -16739,7 +16725,7 @@
             "items": {
               "type": "string"
             },
-            "description": "The languages the user speaks in conversation, up to three ISO 639-1\ncodes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app\nlanguage again. A language that is not offered to the user (see\n`GET /me/spoken-language`) is rejected."
+            "description": "The languages the user speaks in conversation, up to three ISO 639-1\ncodes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app\nlanguage again. Any language code is taken, except one outside the\nallowed languages (see `GET /me/spoken-language`)."
           },
           "preference_starting_assistant_cleared": {
             "type": "boolean",

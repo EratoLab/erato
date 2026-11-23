@@ -12,7 +12,7 @@ use crate::distribution::experience_policy::{
 use crate::state::AppState;
 use axum::{Extension, Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
-use erato_config::spoken_language::{SPEAKABLE_LANGUAGES, SpokenLanguageConfig, language_code};
+use erato_config::spoken_language::{SpokenLanguageConfig, language_code};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -39,11 +39,9 @@ pub struct SpokenLanguageResponse {
     pub main: String,
     /// The languages people may speak here; empty means any.
     pub allowed: Vec<String>,
-    /// The languages the caller may pick from for "Languages I speak".
-    pub offered: Vec<String>,
     /// The caller's own languages as stored, also where they do not apply.
     pub own: Vec<String>,
-    /// The caller's app language as a speakable code: their main language
+    /// The caller's app language as a language code: their main language
     /// while they list none.
     pub app_language: String,
     /// Where the last value that applied came from.
@@ -130,21 +128,12 @@ pub fn resolve(
     if let Some(at) = candidates.iter().position(|code| *code == main) {
         candidates[..=at].rotate_right(1);
     }
-    let offered = if allowed.is_empty() {
-        SPEAKABLE_LANGUAGES
-            .iter()
-            .map(|code| code.to_string())
-            .collect()
-    } else {
-        allowed.clone()
-    };
 
     SpokenLanguageResponse {
         follow_speaker,
         candidates,
         main,
         allowed,
-        offered,
         own: stored,
         app_language,
         source,
@@ -243,16 +232,6 @@ mod tests {
     }
 
     #[test]
-    fn the_speakable_languages_are_the_word_checks() {
-        let mut built: Vec<String> = lingua::Language::all()
-            .iter()
-            .map(|language| language.iso_code_639_1().to_string())
-            .collect();
-        built.sort();
-        assert_eq!(built, SPEAKABLE_LANGUAGES);
-    }
-
-    #[test]
     fn nothing_set_follows_any_language_from_the_app_language() {
         let resolved = resolve(&SpokenLanguageConfig::default(), &[], None, "de");
         assert!(resolved.follow_speaker);
@@ -260,7 +239,6 @@ mod tests {
         assert_eq!(resolved.recognizer_hint(), None);
         assert_eq!(resolved.main, "de");
         assert_eq!(resolved.source, SpokenLanguageSource::Deployment);
-        assert_eq!(resolved.offered.len(), SPEAKABLE_LANGUAGES.len());
         assert!(resolved.user_choice);
     }
 
@@ -291,7 +269,6 @@ mod tests {
         let resolved = resolve(&config, &[], None, "en");
         assert_eq!(resolved.main, "en");
         assert_eq!(resolved.candidates, ["en", "de", "fr"]);
-        assert_eq!(resolved.offered, ["de", "en", "fr"]);
 
         let sales = audience(None, Some(&["de", "en"]), None);
         let resolved = resolve(&config, &[("Sales", &sales)], None, "en");

@@ -1945,7 +1945,7 @@ export type ContentPartTurnInstructionMarker = {
   /**
    * For `spoken_language`: the code of the language the user spoke.
    */
-  language?: string | null | undefined;
+  language?: string;
 };
 
 /**
@@ -4577,7 +4577,7 @@ export type SpokenLanguageResponse = {
    */
   allowed: string[];
   /**
-   * The caller's app language as a speakable code: their main language
+   * The caller's app language as a language code: their main language
    * while they list none.
    */
   app_language: string;
@@ -4601,10 +4601,6 @@ export type SpokenLanguageResponse = {
    * The language the voice speaks when the caller's language is unclear.
    */
   main: string;
-  /**
-   * The languages the caller may pick from for "Languages I speak".
-   */
-  offered: string[];
   /**
    * The caller's own languages as stored, also where they do not apply.
    */
@@ -6286,8 +6282,8 @@ export type UpdateProfilePreferencesRequest = {
   /**
    * The languages the user speaks in conversation, up to three ISO 639-1
    * codes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app
-   * language again. A language that is not offered to the user (see
-   * `GET /me/spoken-language`) is rejected.
+   * language again. Any language code is taken, except one outside the
+   * allowed languages (see `GET /me/spoken-language`).
    */
   preference_spoken_languages?: string[] | null | undefined;
   /**

@@ -47,7 +47,11 @@ async fn a_person_lists_the_languages_they_speak(pool: Pool<Postgres>) {
     assert_eq!(listed["candidates"], json!(["hi", "en"]));
     assert_eq!(listed["source"], "user");
 
-    for rejected in [json!(["xx"]), json!(["de", "en", "fr", "hi"]), json!("de")] {
+    for rejected in [
+        json!(["German!"]),
+        json!(["de", "en", "fr", "hi"]),
+        json!("de"),
+    ] {
         let status = server
             .put("/api/v1beta/me/profile/preferences")
             .with_bearer_token(TEST_JWT_TOKEN)
@@ -66,6 +70,15 @@ async fn a_person_lists_the_languages_they_speak(pool: Pool<Postgres>) {
         .await
         .assert_status_ok();
     assert_eq!(spoken().await["own"], json!(["hi", "en"]));
+
+    // Any language, also one the word check does not know.
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_spoken_languages": ["vi", "en"] }))
+        .await
+        .assert_status_ok();
+    assert_eq!(spoken().await["candidates"], json!(["vi", "en"]));
 
     for cleared in [json!(null), json!([])] {
         server
@@ -115,7 +128,7 @@ async fn the_deployment_limits_the_languages(pool: Pool<Postgres>) {
     // The app language is not allowed: the first allowed one is the main one.
     let unset = spoken().await;
     assert_eq!(unset["main"], "de");
-    assert_eq!(unset["offered"], json!(["de", "sv"]));
+    assert_eq!(unset["allowed"], json!(["de", "sv"]));
     assert_eq!(unset["follow_speaker"], false);
 
     save(json!(["hi", "sv"]))

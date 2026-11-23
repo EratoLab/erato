@@ -94,16 +94,16 @@ pub struct UpdateUserPreferencesInput {
 }
 
 /// The languages a user says they speak, as codes in their order without
-/// repeats, or `None` when one is not `offered` or there are more than
-/// [`MAX_USER_SPOKEN_LANGUAGES`]. An empty list is valid: it clears the
-/// choice.
+/// repeats, or `None` when one is not a language code, is outside a
+/// non-empty `allowed`, or there are more than [`MAX_USER_SPOKEN_LANGUAGES`].
+/// An empty list is valid: it clears the choice.
 ///
 /// [`MAX_USER_SPOKEN_LANGUAGES`]: erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES
-pub fn normalize_spoken_languages(tags: &[String], offered: &[String]) -> Option<Vec<String>> {
+pub fn normalize_spoken_languages(tags: &[String], allowed: &[String]) -> Option<Vec<String>> {
     let (languages, malformed) =
         erato_config::spoken_language::language_codes(tags.iter().map(String::as_str));
     (malformed.is_empty()
-        && languages.iter().all(|code| offered.contains(code))
+        && (allowed.is_empty() || languages.iter().all(|code| allowed.contains(code)))
         && languages.len() <= erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES)
         .then_some(languages)
 }

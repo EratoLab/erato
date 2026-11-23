@@ -17,19 +17,6 @@ const PLACE: &str = "audio_conversational.spoken_language";
 /// How many languages a user may list as the languages they speak.
 pub const MAX_USER_SPOKEN_LANGUAGES: usize = 3;
 
-/// The languages the word check can tell apart, as ISO 639-1 codes: the
-/// languages its detector is built with. These are offered to a person
-/// wherever an admin allows any language. Another language still works where
-/// an admin lists it; the recognizer's guess alone then decides.
-pub const SPEAKABLE_LANGUAGES: &[&str] = &[
-    "ar", "de", "en", "es", "fr", "hi", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "uk", "zh",
-];
-
-/// Whether the word check knows a language code.
-pub fn is_speakable(code: &str) -> bool {
-    SPEAKABLE_LANGUAGES.contains(&code)
-}
-
 /// The ISO 639 code a tag names (`hi`, `hi-IN`, `de_DE` → `de`), or `None`
 /// for a tag that is not a language tag.
 pub fn language_code(tag: &str) -> Option<String> {
@@ -205,7 +192,5 @@ mod tests {
         assert_eq!(language_code("fil").as_deref(), Some("fil"));
         assert_eq!(language_code("German"), None);
         assert_eq!(language_code(""), None);
-        assert!(is_speakable("hi"));
-        assert!(!is_speakable("sv"));
     }
 }

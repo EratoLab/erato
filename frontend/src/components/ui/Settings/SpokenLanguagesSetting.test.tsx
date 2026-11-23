@@ -16,7 +16,6 @@ const BASE: SpokenLanguageResponse = {
   candidates: [],
   main: "en",
   allowed: [],
-  offered: ["de", "en", "hi", "tr"],
   own: [],
   app_language: "en",
   source: "deployment",
@@ -33,6 +32,9 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   spokenLanguageQuery: () => ({ queryKey: ["spoken-language"] }),
   fetchUpdateProfilePreferences: api.update,
 }));
+
+const refreshMainLanguage = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/hooks/audio/spokenLanguage", () => ({ refreshMainLanguage }));
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -87,6 +89,7 @@ describe("languages I speak", () => {
         body: { preference_spoken_languages: ["hi", "en"] },
       }),
     );
+    expect(refreshMainLanguage).toHaveBeenCalled();
   });
 
   it("removes a language and goes back to the app language", async () => {
@@ -98,6 +101,26 @@ describe("languages I speak", () => {
         body: { preference_spoken_languages: null },
       }),
     );
+  });
+
+  it("offers any language where the organization allows any", () => {
+    renderSetting();
+    const picker = screen.getByRole("combobox", { name: "Add a language" });
+    const values = Array.from(picker.querySelectorAll("option")).map((option) =>
+      option.getAttribute("value"),
+    );
+    expect(values).toEqual(expect.arrayContaining(["hi", "vi", "sv", "tr"]));
+    expect(values).not.toContain("en");
+  });
+
+  it("offers only the organization's languages where it lists them", () => {
+    api.spoken = { ...BASE, allowed: ["de", "sv"], main: "de" };
+    renderSetting();
+    const picker = screen.getByRole("combobox", { name: "Add a language" });
+    const values = Array.from(picker.querySelectorAll("option"))
+      .map((option) => option.getAttribute("value"))
+      .filter(Boolean);
+    expect(values).toEqual(["sv"]);
   });
 
   it("offers no more than three languages", () => {
@@ -114,7 +137,6 @@ describe("languages I speak", () => {
       main: "de",
       candidates: ["de", "fr"],
       allowed: ["fr", "de"],
-      offered: ["fr", "de"],
     };
     renderSetting();
     expect(listed()).toHaveLength(1);
@@ -139,7 +161,6 @@ describe("languages I speak", () => {
       own: ["hi"],
       main: "de",
       allowed: ["de", "fr"],
-      offered: ["de", "fr"],
       source: "user",
     };
     renderSetting();
@@ -158,7 +179,6 @@ describe("languages I speak", () => {
       own: ["hi"],
       user_choice: false,
       allowed: ["de", "en"],
-      offered: ["de", "en"],
       source: "audience",
     };
     renderSetting();
@@ -177,7 +197,6 @@ describe("languages I speak", () => {
       ...BASE,
       own: ["hi", "de"],
       allowed: ["de", "fr"],
-      offered: ["de", "fr"],
       source: "user",
     };
     renderSetting();

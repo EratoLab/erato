@@ -8704,7 +8704,7 @@ export type WaitLinesQueryParams = {
    * the one the user spoke. The user's language when omitted. A language
    * without lines gets none.
    */
-  language?: string | null | undefined;
+  language?: string;
 };
 
 export type WaitLinesError = Fetcher.ErrorWrapper<undefined>;

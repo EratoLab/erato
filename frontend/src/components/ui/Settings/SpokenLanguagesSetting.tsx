@@ -3,11 +3,13 @@ import { useLingui } from "@lingui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
+import { refreshMainLanguage } from "@/hooks/audio/spokenLanguage";
 import {
   fetchUpdateProfilePreferences,
   spokenLanguageQuery,
   useSpokenLanguage,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { ISO_639_1_CODES } from "@/lib/isoLanguageCodes";
 
 import { Select } from "../Input/Select";
 import { toast } from "../Toast";
@@ -48,7 +50,12 @@ export function SpokenLanguagesSetting() {
   // Without a list of their own the person sees the language the voice
   // falls back to, as the server resolved it, and adding starts from it.
   const shown = ownListed && !locked ? data.own : [data.main];
-  const offered = data.offered
+  // Any language where the organization allows any; those the browser
+  // cannot name are left out of the picker.
+  const pickable = data.allowed.length
+    ? data.allowed
+    : ISO_639_1_CODES.filter((code) => nameOf(code) !== code);
+  const offered = pickable
     .filter((code) => !shown.includes(code))
     .map((code) => ({ code, name: nameOf(code) }))
     .sort((a, b) => a.name.localeCompare(b.name, i18n.locale));
@@ -66,9 +73,12 @@ export function SpokenLanguagesSetting() {
       await fetchUpdateProfilePreferences({
         body: { preference_spoken_languages: languages },
       });
-      await queryClient.invalidateQueries({
-        queryKey: spokenLanguageQuery({}).queryKey,
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: spokenLanguageQuery({}).queryKey,
+        }),
+        refreshMainLanguage(),
+      ]);
     } catch {
       toast.error({
         title: t({
