@@ -39,6 +39,10 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
 }));
 const refreshVoiceTraces = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@/hooks/audio/voiceTraces", () => ({ refreshVoiceTraces }));
+// "Languages I speak" has its own tests and endpoint.
+vi.mock("./SpokenLanguagesSetting", () => ({
+  SpokenLanguagesSetting: () => <div data-testid="spoken-languages" />,
+}));
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -63,6 +67,25 @@ const renderSetting = () =>
   );
 
 describe("voice output setting", () => {
+  it("lists the languages the person speaks under how the voice sounds", () => {
+    renderSetting();
+    const sound = screen.getByRole("heading", { name: "How it sounds" });
+    const languages = screen.getByTestId("spoken-languages");
+    expect(
+      sound.compareDocumentPosition(languages) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    const shown = screen.queryByRole("heading", {
+      name: "What the chat shows",
+    });
+    if (shown) {
+      expect(
+        languages.compareDocumentPosition(shown) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
   it("saves the user's own reply wording", async () => {
     renderSetting();
     const replies = screen.getByRole("tablist", {

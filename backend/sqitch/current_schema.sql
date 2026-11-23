@@ -843,11 +843,13 @@ CREATE TABLE public.user_preferences (
     reply_speech_show_in_chat boolean,
     reply_speech_spoken boolean,
     approval_speech_spoken boolean,
+    spoken_languages text[],
     CONSTRAINT user_preferences_approval_speech_amount_check CHECK ((approval_speech_amount = ANY (ARRAY['full'::text, 'short'::text]))),
     CONSTRAINT user_preferences_approval_speech_wording_check CHECK ((approval_speech_wording = ANY (ARRAY['precise'::text, 'natural'::text]))),
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_reply_speech_wording_check CHECK ((reply_speech_wording = ANY (ARRAY['natural'::text, 'precise'::text]))),
+    CONSTRAINT user_preferences_spoken_languages_check CHECK (((cardinality(spoken_languages) >= 1) AND (cardinality(spoken_languages) <= 3))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
     CONSTRAINT user_preferences_starting_assistant_state_check CHECK ((NOT (starting_assistant_cleared AND ((starting_hub_assistant_id IS NOT NULL) OR (starting_assistant_id IS NOT NULL))))),
     CONSTRAINT user_preferences_wait_lines_amount_check CHECK ((wait_lines_amount = ANY (ARRAY['normal'::text, 'long_only'::text, 'off'::text])))

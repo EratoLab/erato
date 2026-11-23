@@ -3421,6 +3421,50 @@ user_choice = true
 show_in_chat = false
 ```
 
+#### `audio_conversational.spoken_language`
+
+{/* erato_toml_config_key: audio_conversational.spoken_language */}
+
+Which language the voice speaks in conversation mode: its wait lines, lookup lines, spoken cards and the reply. The voice follows the language the user speaks, turn by turn, chosen among the user's languages. The interface language is a separate setting (`i18n.language`).
+
+A user lists the languages they speak under Settings, Audio, Voice ("Languages I speak"), up to three, the first one being their main language. Any language can be listed, limited to `languages` where that is set. A user who lists nothing has their app language as the main language, and the voice may follow any allowed language. A user who lists one language always hears that language.
+
+The value is resolved like `wait_lines`: this deployment value; the audiences of the experience policy that set `spoken_language` (`follow_speaker`, `languages`, `user_choice`) and are listed under `setting_orders.spoken_language`; the user's own languages where the deciding level allows it. A user's languages are limited to the allowed `languages`; when none of theirs is allowed, the first allowed language is their main language. `GET /api/v1beta/me/spoken-language` returns the resolved value and where it came from. A value of the wrong kind keeps its default, and an unknown key or an entry that is not a language code is ignored, each with a warning at startup. A `languages` list with no language code in it does not allow any language: the voice then keeps to each user's main language, as with `follow_speaker = false`. In an audience block such a list is ignored, and the next level's list applies.
+
+**Type:** `object`
+
+#### `audio_conversational.spoken_language.follow_speaker`
+
+{/* erato_toml_config_key: audio_conversational.spoken_language.follow_speaker */}
+
+Whether the voice follows the language the user speaks. Off, the voice always speaks the user's main language; the recognizer is still told all the user's languages, so what they say is transcribed in the language they speak.
+
+**Type:** `boolean` · **Default:** `true`
+
+#### `audio_conversational.spoken_language.languages`
+
+{/* erato_toml_config_key: audio_conversational.spoken_language.languages */}
+{/* erato_toml_config_key: audio_conversational.spoken_language.languages.[] */}
+
+The languages people may speak here, as ISO 639-1 codes (`de`, `en`, `hi`, `tr`), in order. Any language can be listed, not only the interface languages; a region (`de-AT`) counts as its language. The word check confirms what the recognizer heard for `ar`, `de`, `en`, `es`, `fr`, `hi`, `it`, `ja`, `ko`, `nl`, `pl`, `pt`, `ru`, `tr`, `uk` and `zh`; for other languages the recognizer's guess alone decides. With an empty list, users can pick any language. The list is sent to the speech recognizer as the expected languages where the recognizer takes them (OpenAI `gpt-transcribe`). Empty allows any language; the recognizer then gets the user's own languages, or no hint.
+
+**Type:** `array` · **Default:** `[]`
+
+#### `audio_conversational.spoken_language.user_choice`
+
+{/* erato_toml_config_key: audio_conversational.spoken_language.user_choice */}
+
+Whether a user may list the languages they speak, unless an audience setting says otherwise. Off, a user's main language is their app language, or the first allowed language when the app language is not allowed.
+
+**Type:** `boolean` · **Default:** `true`
+
+```toml
+[audio_conversational.spoken_language]
+follow_speaker = true
+languages = ["de", "en", "tr"]
+user_choice = true
+```
+
 #### `audio_conversational.keep_reply_audio`
 
 {/* erato_toml_config_key: audio_conversational.keep_reply_audio */}

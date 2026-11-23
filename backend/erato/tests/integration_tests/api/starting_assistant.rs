@@ -116,6 +116,7 @@ async fn install_policy_with_ids(
                 approval_speech: None,
                 wait_lines: None,
                 reply_speech: None,
+                spoken_language: None,
             },
         );
     }

@@ -110,6 +110,10 @@ const schemaStringFieldFixes = [
     to: "preference_approval_speech_spoken?: boolean | null | undefined;",
   },
   {
+    from: "preference_spoken_languages?: null | undefined;",
+    to: "preference_spoken_languages?: string[] | null | undefined;",
+  },
+  {
     from: "welcome_message?: null | undefined;",
     to: "welcome_message?: string | null | undefined;",
   },

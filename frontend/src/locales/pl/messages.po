@@ -6154,6 +6154,76 @@ msgid "preferences.dialog.audio.miccheck.verdict.poor"
 msgstr "Słabo"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.add"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.description.fixed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.fallback"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.fromApp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.heading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.main"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.moveUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.moveUp.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.notAllowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.remove"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.remove.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.saveFailed"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.test.description"
 msgstr "Rozpocznij test i mów — paski powinny się poruszać, a aktywne urządzenie powinno odpowiadać wybranemu."
@@ -6229,6 +6299,7 @@ msgid "preferences.dialog.audio.voice.hear.heading"
 msgstr "Co słyszysz"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.locked"
 msgstr ""

@@ -28,6 +28,7 @@ pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
 pub mod sharepoint;
+pub mod spoken_language_settings;
 pub mod starting_assistant;
 pub mod token_usage;
 pub mod user_tool_approval_settings;
@@ -278,6 +279,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             get(reply_speech_style::reply_speech_style),
         )
         .route("/wait-lines", get(wait_lines::wait_lines))
+        .route(
+            "/spoken-language",
+            get(spoken_language_settings::spoken_language),
+        )
         .route(
             "/messages/{message_id}/progress-speech",
             post(wait_lines::progress_speech),
@@ -579,6 +584,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         approval_voice_commands::interpret_approval_voice_command,
         approval_speech_style::approval_speech_style,
         reply_speech_style::reply_speech_style,
+        spoken_language_settings::spoken_language,
         wait_lines::wait_lines,
         wait_lines::progress_speech,
         message_text_actions::explain_message_text,
@@ -653,6 +659,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         approval_speech_style::ApprovalSpeechStyleSource,
         reply_speech_style::ReplySpeechStyleResponse,
         reply_speech_style::ReplySpeechStyleSource,
+        spoken_language_settings::SpokenLanguageResponse,
+        spoken_language_settings::SpokenLanguageSource,
         erato_config::reply_speech::ReplySpeechWording,
         wait_lines::WaitLinesResponse,
         wait_lines::WaitLinesSource,
@@ -1150,6 +1158,14 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_approval_speech_spoken: Option<Option<bool>>,
+    /// The languages the user speaks in conversation, up to three ISO 639-1
+    /// codes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app
+    /// language again. Any language code is taken, except one outside the
+    /// allowed languages (see `GET /me/spoken-language`).
+    #[serde(default, deserialize_with = "deserialize_patch_optional_list")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub preference_spoken_languages: Option<Option<Vec<String>>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "de")]
@@ -1163,6 +1179,15 @@ where
     D: Deserializer<'de>,
 {
     Ok(Some(Option::<bool>::deserialize(deserializer)?))
+}
+
+fn deserialize_patch_optional_list<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<Vec<String>>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Some(Option::<Vec<String>>::deserialize(deserializer)?))
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -1262,6 +1287,37 @@ pub async fn update_profile_preferences(
     let approval_speech_wording = style_patch(request.preference_approval_speech_wording)?;
     let wait_lines_amount = style_patch(request.preference_wait_lines_amount)?;
     let reply_speech_wording = style_patch(request.preference_reply_speech_wording)?;
+    let allowed = match &request.preference_spoken_languages {
+        Some(Some(_)) => {
+            let mut allowed = spoken_language_settings::resolve_for(&app_state, &me_user)
+                .await
+                .allowed;
+            if !allowed.is_empty() {
+                // A list saved while more was allowed can still be reordered.
+                allowed.extend(
+                    me_user
+                        .preference_spoken_languages
+                        .iter()
+                        .flatten()
+                        .cloned(),
+                );
+            }
+            allowed
+        }
+        _ => Vec::new(),
+    };
+    let spoken_languages = request
+        .preference_spoken_languages
+        .map(|patch| {
+            patch
+                .map(|tags| {
+                    models::user_preference::normalize_spoken_languages(&tags, &allowed)
+                        .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
+                })
+                .transpose()
+                .map(|languages| languages.filter(|languages| !languages.is_empty()))
+        })
+        .transpose()?;
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
@@ -1286,6 +1342,7 @@ pub async fn update_profile_preferences(
             reply_speech_show_in_chat: request.preference_reply_speech_show_in_chat,
             reply_speech_spoken: request.preference_reply_speech_spoken,
             approval_speech_spoken: request.preference_approval_speech_spoken,
+            spoken_languages,
         },
     )
     .await
@@ -1346,6 +1403,8 @@ pub async fn update_profile_preferences(
     profile.preference_reply_speech_show_in_chat = updated_prefs.reply_speech_show_in_chat;
     profile.preference_reply_speech_spoken = updated_prefs.reply_speech_spoken;
     profile.preference_approval_speech_spoken = updated_prefs.approval_speech_spoken;
+    profile.preference_spoken_languages =
+        models::user_preference::stored_spoken_languages(updated_prefs.spoken_languages);
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );

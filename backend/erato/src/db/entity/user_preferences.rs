@@ -42,6 +42,7 @@ pub struct Model {
     pub reply_speech_show_in_chat: Option<bool>,
     pub reply_speech_spoken: Option<bool>,
     pub approval_speech_spoken: Option<bool>,
+    pub spoken_languages: Option<Vec<String>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

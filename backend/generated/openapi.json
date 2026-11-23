@@ -4742,6 +4742,35 @@
         ]
       }
     },
+    "/api/v1beta/me/spoken-language": {
+      "get": {
+        "tags": [
+          "spoken_language_settings"
+        ],
+        "summary": "Which languages the voice may speak to the caller in conversational audio\nmode.",
+        "operationId": "spoken_language",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpokenLanguageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/starter-prompts": {
       "get": {
         "tags": [],
@@ -14335,6 +14364,75 @@
           }
         }
       },
+      "SpokenLanguageResponse": {
+        "type": "object",
+        "required": [
+          "follow_speaker",
+          "candidates",
+          "main",
+          "allowed",
+          "own",
+          "app_language",
+          "source",
+          "user_choice"
+        ],
+        "properties": {
+          "allowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The languages people may speak here; empty means any."
+          },
+          "app_language": {
+            "type": "string",
+            "description": "The caller's app language as a language code: their main language\nwhile they list none."
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The languages the voice chooses among, `main` first, as ISO 639-1\ncodes. Empty means any language. Also the recognizer's expected\nlanguages when not empty."
+          },
+          "follow_speaker": {
+            "type": "boolean",
+            "description": "Whether the voice follows the language the caller speaks. Off, it\nalways speaks `main`; the candidates still tell the recognizer what\nthe caller may say."
+          },
+          "main": {
+            "type": "string",
+            "description": "The language the voice speaks when the caller's language is unclear."
+          },
+          "own": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The caller's own languages as stored, also where they do not apply."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SpokenLanguageSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may list their own languages."
+          }
+        }
+      },
+      "SpokenLanguageSource": {
+        "type": "string",
+        "description": "Where the caller's languages come from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
       "StartMcpServerOauthResponse": {
         "type": "object",
         "required": [
@@ -16715,6 +16813,16 @@
             ],
             "description": "How replies are spoken in conversation: `natural` or `precise`, like\nthe amount."
           },
+          "preference_spoken_languages": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The languages the user speaks in conversation, up to three ISO 639-1\ncodes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app\nlanguage again. Any language code is taken, except one outside the\nallowed languages (see `GET /me/spoken-language`)."
+          },
           "preference_starting_assistant_cleared": {
             "type": "boolean",
             "description": "Set `true` to explicitly clear the start screen (welcome screen even\nthough an audience pin exists), `false` to inherit again. Clearing\nalso removes any own pick; picking also un-clears."
@@ -16872,6 +16980,13 @@
           "preference_reply_speech_wording": {
             "$ref": "#/components/schemas/ReplySpeechWording",
             "description": "How replies are spoken in conversation, as the user chose; absent\nfollows the organisation."
+          },
+          "preference_spoken_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The languages the user speaks, first = main, as ISO 639-1 codes;\nabsent follows the app language."
           },
           "preference_starting_assistant_cleared": {
             "type": "boolean",

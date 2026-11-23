@@ -26,6 +26,9 @@ pub(crate) struct AudioTranscriptionRequest {
     pub(crate) audio_bytes: Vec<u8>,
     pub(crate) filename: String,
     pub(crate) max_output_tokens: u32,
+    /// The languages the speaker is expected to use, main first; empty when
+    /// any may come. Only sent to a model that takes them.
+    pub(crate) expected_languages: Vec<String>,
 }
 
 /// What a transcriber heard: the words, and the language it says they are in
@@ -256,6 +259,18 @@ pub(crate) struct OpenAiAudioTranscriptionClient {
     client: reqwest::Client,
     endpoint: Url,
     model: String,
+    takes_expected_languages: bool,
+}
+
+/// Whether a transcription model takes `languages[]`. Only `gpt-transcribe`
+/// does; `whisper-1` and `gpt-4o(-mini)-transcribe` know only a single
+/// `language`, and a field they do not know can fail the request.
+fn takes_expected_languages(model_name: &str) -> bool {
+    let model_name = model_name.trim().to_ascii_lowercase();
+    model_name
+        .rsplit('/')
+        .next()
+        .is_some_and(|name| name.starts_with("gpt-transcribe"))
 }
 
 #[derive(Deserialize)]
@@ -332,6 +347,7 @@ impl OpenAiAudioTranscriptionClient {
             client,
             endpoint,
             model: config.model_name.clone(),
+            takes_expected_languages: takes_expected_languages(&config.model_name),
         })
     }
 
@@ -341,21 +357,29 @@ impl OpenAiAudioTranscriptionClient {
         &self,
         audio_bytes: Vec<u8>,
         filename: String,
+        expected_languages: &[String],
     ) -> Result<Transcription, Report> {
-        let file = Part::bytes(audio_bytes)
-            .file_name(filename)
-            .mime_str("audio/wav")?;
-        let form = Form::new()
-            .part("file", file)
-            .text("model", self.model.clone())
-            .text("response_format", "json");
-        let response = self
-            .client
-            .post(self.endpoint.clone())
-            .multipart(form)
-            .send()
-            .await
-            .wrap_err("Audio transcription request failed")?;
+        let hinted = self.takes_expected_languages && !expected_languages.is_empty();
+        let mut response = self
+            .post_audio(
+                audio_bytes.clone(),
+                filename.clone(),
+                if hinted { expected_languages } else { &[] },
+            )
+            .await?;
+        // A provider that refuses the hint must not cost the user their words.
+        if hinted
+            && matches!(
+                response.status(),
+                reqwest::StatusCode::BAD_REQUEST | reqwest::StatusCode::UNPROCESSABLE_ENTITY
+            )
+        {
+            warn!(
+                status = %response.status(),
+                "Audio transcription provider refused the expected languages; trying without them"
+            );
+            response = self.post_audio(audio_bytes, filename, &[]).await?;
+        }
         if !response.status().is_success() {
             // Provider bodies can contain request contents; keep them out of
             // errors that are logged or passed back through the socket protocol.
@@ -374,21 +398,51 @@ impl OpenAiAudioTranscriptionClient {
     }
 }
 
+impl OpenAiAudioTranscriptionClient {
+    async fn post_audio(
+        &self,
+        audio_bytes: Vec<u8>,
+        filename: String,
+        languages: &[String],
+    ) -> Result<reqwest::Response, Report> {
+        let file = Part::bytes(audio_bytes)
+            .file_name(filename)
+            .mime_str("audio/wav")?;
+        let mut form = Form::new()
+            .part("file", file)
+            .text("model", self.model.clone())
+            .text("response_format", "json");
+        for language in languages {
+            form = form.text("languages[]", language.clone());
+        }
+        self.client
+            .post(self.endpoint.clone())
+            .multipart(form)
+            .send()
+            .await
+            .wrap_err("Audio transcription request failed")
+    }
+}
+
 #[async_trait]
 impl AudioTranscriber for OpenAiAudioTranscriptionClient {
     async fn transcribe(
         &self,
         request: AudioTranscriptionRequest,
     ) -> Result<Transcription, Report> {
-        self.send_transcription(request.audio_bytes, request.filename)
-            .await
-            .map_err(|error| {
-                warn!(%error, "Audio transcription provider call failed");
-                Report::new(AudioTranscriptionProviderError {
-                    code: AudioTranscriptionErrorCode::ProviderError,
-                    block_reason: None,
-                })
+        self.send_transcription(
+            request.audio_bytes,
+            request.filename,
+            &request.expected_languages,
+        )
+        .await
+        .map_err(|error| {
+            warn!(%error, "Audio transcription provider call failed");
+            Report::new(AudioTranscriptionProviderError {
+                code: AudioTranscriptionErrorCode::ProviderError,
+                block_reason: None,
             })
+        })
     }
 }
 
@@ -650,6 +704,7 @@ mod tests {
             audio_bytes,
             filename: filename.into(),
             max_output_tokens: 512,
+            expected_languages: Vec::new(),
         }
     }
 
@@ -747,13 +802,108 @@ mod tests {
             let (base_url, _requests, server) = mock_server(StatusCode::OK, body).await;
             let client = OpenAiAudioTranscriptionClient::new(&config(base_url), None).unwrap();
             let transcription = client
-                .send_transcription(vec![0], "audio.wav".into())
+                .send_transcription(vec![0], "audio.wav".into(), &[])
                 .await
                 .unwrap();
             assert_eq!(transcription.text, "Hallo", "{body}");
             assert_eq!(transcription.language.as_deref(), language, "{body}");
             server.abort();
         }
+    }
+
+    #[tokio::test]
+    async fn sends_the_expected_languages_only_to_a_model_that_takes_them() {
+        let expected = vec!["hi".to_string(), "en".to_string()];
+        for (model, sent) in [
+            ("gpt-transcribe", true),
+            ("gpt-transcribe-2026-07-28", true),
+            ("openai/GPT-Transcribe", true),
+            ("whisper-1", false),
+            ("gpt-4o-transcribe", false),
+            ("gpt-4o-mini-transcribe", false),
+        ] {
+            let (base_url, mut requests, server) =
+                mock_server(StatusCode::OK, r#"{"text":"Namaste"}"#).await;
+            let mut config = config(base_url);
+            config.model_name = model.into();
+            let client = OpenAiAudioTranscriptionClient::new(&config, None).unwrap();
+            client
+                .send_transcription(vec![0], "audio.wav".into(), &expected)
+                .await
+                .unwrap();
+            let languages: Vec<Vec<u8>> = requests
+                .recv()
+                .await
+                .unwrap()
+                .fields
+                .into_iter()
+                .filter(|field| field.name == "languages[]")
+                .map(|field| field.bytes)
+                .collect();
+            let wanted: Vec<Vec<u8>> = if sent {
+                vec![b"hi".to_vec(), b"en".to_vec()]
+            } else {
+                Vec::new()
+            };
+            assert_eq!(languages, wanted, "{model}");
+            server.abort();
+        }
+
+        let (base_url, mut requests, server) =
+            mock_server(StatusCode::OK, r#"{"text":"Hallo"}"#).await;
+        let mut config = config(base_url);
+        config.model_name = "gpt-transcribe".into();
+        let client = OpenAiAudioTranscriptionClient::new(&config, None).unwrap();
+        client
+            .send_transcription(vec![0], "audio.wav".into(), &[])
+            .await
+            .unwrap();
+        let request = requests.recv().await.unwrap();
+        assert!(
+            request
+                .fields
+                .iter()
+                .all(|field| field.name != "languages[]")
+        );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn a_provider_that_refuses_the_expected_languages_still_transcribes() {
+        let seen = Arc::new(Mutex::new(Vec::<bool>::new()));
+        let app = Router::new()
+            .route(
+                "/provider/v1/audio/transcriptions",
+                post(
+                    |State(seen): State<Arc<Mutex<Vec<bool>>>>, mut multipart: Multipart| async move {
+                        let mut hinted = false;
+                        while let Some(field) = multipart.next_field().await.unwrap() {
+                            hinted |= field.name() == Some("languages[]");
+                            let _ = field.bytes().await;
+                        }
+                        seen.lock().unwrap().push(hinted);
+                        if hinted {
+                            (StatusCode::BAD_REQUEST, r#"{"error":"unknown field"}"#)
+                        } else {
+                            (StatusCode::OK, r#"{"text":"Namaste"}"#)
+                        }
+                    },
+                ),
+            )
+            .with_state(Arc::clone(&seen));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut config = config(format!("http://{addr}/provider/v1"));
+        config.model_name = "gpt-transcribe".into();
+        let client = OpenAiAudioTranscriptionClient::new(&config, None).unwrap();
+        let transcription = client
+            .send_transcription(vec![0], "audio.wav".into(), &["hi".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(transcription.text, "Namaste");
+        assert_eq!(*seen.lock().unwrap(), [true, false]);
+        server.abort();
     }
 
     #[tokio::test]
@@ -799,7 +949,7 @@ mod tests {
             let (base_url, mut requests, server) = mock_server(status, body).await;
             let client = OpenAiAudioTranscriptionClient::new(&config(base_url), None).unwrap();
             let error = client
-                .send_transcription(vec![0], "audio.wav".into())
+                .send_transcription(vec![0], "audio.wav".into(), &[])
                 .await
                 .unwrap_err();
             let message = format!("{error:?}");

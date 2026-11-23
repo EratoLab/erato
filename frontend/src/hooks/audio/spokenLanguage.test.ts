@@ -1,11 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  mainLanguage,
   noteSpokenTurnLanguage,
+  refreshMainLanguage,
   resetSpokenLanguage,
   spokenTurnLanguage,
   takeSpokenTurnLanguage,
 } from "./spokenLanguage";
+
+const fetchSpokenLanguage = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
+  fetchSpokenLanguage,
+}));
 
 vi.mock("@/lib/i18n", async (original) => ({
   ...(await original<typeof import("@/lib/i18n")>()),
@@ -26,5 +33,26 @@ describe("spoken language of a turn", () => {
     noteSpokenTurnLanguage("en");
     expect(takeSpokenTurnLanguage()).toBe("en");
     expect(spokenTurnLanguage()).toBe("en");
+  });
+});
+
+describe("the person's main language", () => {
+  beforeEach(() => resetSpokenLanguage());
+
+  it("is the first language they speak once the backend answers", async () => {
+    const before = mainLanguage();
+    fetchSpokenLanguage.mockResolvedValueOnce({ main: "hi" });
+    await refreshMainLanguage();
+    expect(mainLanguage()).toBe("hi");
+
+    resetSpokenLanguage();
+    expect(mainLanguage()).toBe(before);
+  });
+
+  it("stays the interface language when the backend cannot answer", async () => {
+    const before = mainLanguage();
+    fetchSpokenLanguage.mockRejectedValueOnce(new Error("offline"));
+    await refreshMainLanguage();
+    expect(mainLanguage()).toBe(before);
   });
 });

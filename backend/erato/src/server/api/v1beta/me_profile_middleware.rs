@@ -149,6 +149,11 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_approval_speech_spoken: Option<bool>,
+    /// The languages the user speaks, first = main, as ISO 639-1 codes;
+    /// absent follows the app language.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_spoken_languages: Option<Vec<String>>,
 }
 
 impl UserProfile {
@@ -182,6 +187,7 @@ impl UserProfile {
             preference_reply_speech_show_in_chat: None,
             preference_reply_speech_spoken: None,
             preference_approval_speech_spoken: None,
+            preference_spoken_languages: None,
         }
     }
 
@@ -267,6 +273,8 @@ impl UserProfile {
             self.preference_reply_speech_show_in_chat = prefs.reply_speech_show_in_chat;
             self.preference_reply_speech_spoken = prefs.reply_speech_spoken;
             self.preference_approval_speech_spoken = prefs.approval_speech_spoken;
+            self.preference_spoken_languages =
+                crate::models::user_preference::stored_spoken_languages(prefs.spoken_languages);
             self.client_tool_decisions =
                 crate::models::user_preference::client_tool_decisions_from_json(
                     &prefs.client_tool_decisions,

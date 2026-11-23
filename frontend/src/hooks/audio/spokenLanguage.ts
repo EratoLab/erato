@@ -1,8 +1,11 @@
 import { i18n } from "@lingui/core";
+import { useEffect } from "react";
 import { create } from "zustand";
 
+import { fetchSpokenLanguage } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { catalogLoaded, loadCatalog } from "@/lib/i18n";
 import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
+import { useOptionalFeatureConfig } from "@/providers/FeatureConfigProvider";
 
 import { deploymentSpokenCardLanguages } from "./spokenStyle";
 
@@ -16,6 +19,9 @@ interface SpokenLanguageState {
   unsent?: string;
   /** The language of the turn the voice answers now, or answered last. */
   turn?: string;
+  /** The person's main language as the backend resolves it from "Languages
+   *  I speak" and the organization's settings; unknown until asked. */
+  main?: string;
 }
 
 export const useSpokenLanguage = create<SpokenLanguageState>(() => ({}));
@@ -55,11 +61,38 @@ export function voiceTurnLanguage(): string {
 }
 
 /**
- * The person's own language, for what the spoken language has no words for.
- * The interface language, which the page also stores as the profile's.
+ * The person's own language, for what the spoken language has no words for:
+ * the first of the languages they speak, else the interface language.
  */
 export function mainLanguage(): string {
-  return i18n.locale;
+  return useSpokenLanguage.getState().main ?? i18n.locale;
+}
+
+let mainAsked = 0;
+
+/** Asks the backend for the person's main language again, after a change. */
+export async function refreshMainLanguage(): Promise<void> {
+  const mine = ++mainAsked;
+  try {
+    const { main } = await fetchSpokenLanguage({});
+    if (mine !== mainAsked) return;
+    useSpokenLanguage.setState({ main });
+    // A card said in it is worded from its catalog.
+    void loadCatalog(main);
+  } catch {
+    // The interface language stands in until the next ask.
+  }
+}
+
+/** Asks once the person is known, where conversation mode is on. */
+export function usePrimeMainLanguage(userId: string | undefined): void {
+  const features = useOptionalFeatureConfig();
+  const conversational = Boolean(features?.audioConversational.enabled);
+  useEffect(() => {
+    if (!conversational || !userId) return;
+    useSpokenLanguage.setState({ main: undefined });
+    void refreshMainLanguage();
+  }, [conversational, userId]);
 }
 
 /** Whether `language` has words for a whole card and its sentences are loaded. */
@@ -85,5 +118,9 @@ export function cardLanguage(turn: string | undefined): string {
 
 /** For tests. */
 export function resetSpokenLanguage() {
-  useSpokenLanguage.setState({ unsent: undefined, turn: undefined });
+  useSpokenLanguage.setState({
+    unsent: undefined,
+    turn: undefined,
+    main: undefined,
+  });
 }

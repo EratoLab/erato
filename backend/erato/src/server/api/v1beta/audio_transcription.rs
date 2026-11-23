@@ -1,3 +1,4 @@
+use super::spoken_language_settings::{self, SpokenLanguageResponse};
 use crate::db::entity::file_uploads;
 use crate::models;
 use crate::models::file_upload::{
@@ -203,6 +204,9 @@ struct ConversationalTurn {
     chat_id: Option<Uuid>,
     /// Each piece's words and the language the recognizer heard in it.
     pieces: BTreeMap<usize, (String, Option<String>)>,
+    /// The languages the voice may speak to the user, resolved when the turn
+    /// starts, so a changed setting applies from the next turn.
+    languages: Option<SpokenLanguageResponse>,
 }
 
 impl ConversationalTurn {
@@ -213,6 +217,16 @@ impl ConversationalTurn {
             .filter(|text| !text.is_empty())
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    /// The languages to tell the recognizer to expect; none outside
+    /// conversation mode or where any language may come.
+    fn expected_languages(&self) -> Vec<String> {
+        self.languages
+            .as_ref()
+            .and_then(SpokenLanguageResponse::recognizer_hint)
+            .map(<[String]>::to_vec)
+            .unwrap_or_default()
     }
 
     /// The language the recognizer heard in most of the turn's words; none
@@ -254,17 +268,25 @@ async fn decide_spoken_language(
             }),
         None => None,
     };
-    let main_language = super::read_aloud::speech_language(app_state, me_user)
-        .code()
-        .to_string();
+    let languages = match &turn.languages {
+        Some(languages) => languages.clone(),
+        None => spoken_language_settings::resolve_for(app_state, me_user).await,
+    };
+    let candidates = match languages.candidates.as_slice() {
+        [] => Candidates::Any,
+        list => Candidates::Only(list),
+    };
+    // A chat begun in a language that is no longer allowed does not keep it.
+    let chat_language = chat_language
+        .filter(|code| languages.candidates.is_empty() || languages.candidates.contains(code));
     let recognizer_language = turn.recognizer_language();
     let decision = spoken_language::decide(SpokenLanguageInput {
         text: &text,
         recognizer_language: recognizer_language.as_deref(),
-        candidates: Candidates::Any,
+        candidates,
         chat_language: chat_language.as_deref(),
-        main_language: &main_language,
-        follow_speaker: true,
+        main_language: &languages.main,
+        follow_speaker: languages.follow_speaker,
     });
     decision.log();
     Some(decision.language)
@@ -517,10 +539,17 @@ async fn handle_dictation_control_frame(
                     * 1000
             });
             *audio_feature = Some(selected_audio_feature);
+            let conversational = matches!(mode, DictationMode::Conversational);
+            let languages = if conversational {
+                Some(spoken_language_settings::resolve_for_turn(app_state, me_user).await)
+            } else {
+                None
+            };
             *turn = ConversationalTurn {
-                conversational: matches!(mode, DictationMode::Conversational),
+                conversational,
                 chat_id: chat_id.as_deref().and_then(|id| Uuid::parse_str(id).ok()),
                 pieces: BTreeMap::new(),
+                languages,
             };
             *chunk_duration_ms = Some(resolved_chunk_duration_ms);
             *next_chunk_index = 0;
@@ -614,6 +643,7 @@ async fn handle_dictation_audio_bytes(
         Some(chat_provider_headers_context),
         &pending,
         validated_chunk.provider_audio_bytes,
+        turn.expected_languages(),
     )
     .await
     {
@@ -977,6 +1007,7 @@ async fn handle_audio_bytes(
         Some(chat_provider_headers_context),
         &pending,
         validated_chunk.provider_audio_bytes,
+        Vec::new(),
     )
     .await
     {
@@ -1504,6 +1535,7 @@ async fn transcribe_audio_chunk_with_retry(
     chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
+    expected_languages: Vec<String>,
 ) -> Result<TranscribedChunk, Report> {
     let config = audio_feature.config(app_state);
     let max_attempts = config.max_attempts.max(1);
@@ -1524,6 +1556,7 @@ async fn transcribe_audio_chunk_with_retry(
             chat_provider_headers_context,
             pending,
             audio_bytes.clone(),
+            expected_languages.clone(),
         )
         .await
         {
@@ -1588,6 +1621,7 @@ async fn transcribe_audio_chunk(
     chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
+    expected_languages: Vec<String>,
 ) -> Result<Transcription, Report> {
     let provider = audio_provider(app_state, audio_feature)?;
     debug!(
@@ -1608,6 +1642,7 @@ async fn transcribe_audio_chunk(
             audio_bytes,
             filename: format!("audio-chunk-{}.wav", pending.chunk_index),
             max_output_tokens: max_output_tokens_for_chunk(app_state, audio_feature, pending),
+            expected_languages,
         })
         .await?;
     let text = transcription.text.trim().to_string();
@@ -1812,6 +1847,7 @@ async fn retry_failed_chunks(
             Some(chat_provider_headers_context),
             &pending,
             provider_audio_bytes,
+            Vec::new(),
         )
         .await
         {
@@ -2063,6 +2099,7 @@ mod tests {
         let turn = |pieces: &[(&str, Option<&str>)]| ConversationalTurn {
             conversational: true,
             chat_id: None,
+            languages: None,
             pieces: pieces
                 .iter()
                 .enumerate()

@@ -89,10 +89,39 @@ pub struct UpdateUserPreferencesInput {
     /// Whether approval cards are read aloud in conversation; `Some(None)`
     /// follows the organisation again.
     pub approval_speech_spoken: Option<Option<bool>>,
+    /// The languages the user speaks, already checked with
+    /// [`normalize_spoken_languages`]; `Some(None)` follows the app language
+    /// again.
+    pub spoken_languages: Option<Option<Vec<String>>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
     pub language: Option<String>,
+}
+
+/// The languages a user says they speak, as codes in their order without
+/// repeats, or `None` when one is not a language code, is outside a
+/// non-empty `allowed`, or there are more than [`MAX_USER_SPOKEN_LANGUAGES`].
+/// An empty list is valid: it clears the choice.
+///
+/// [`MAX_USER_SPOKEN_LANGUAGES`]: erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES
+pub fn normalize_spoken_languages(tags: &[String], allowed: &[String]) -> Option<Vec<String>> {
+    let (languages, malformed) =
+        erato_config::spoken_language::language_codes(tags.iter().map(String::as_str));
+    (malformed.is_empty()
+        && (allowed.is_empty() || languages.iter().all(|code| allowed.contains(code)))
+        && languages.len() <= erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES)
+        .then_some(languages)
+}
+
+/// The stored languages as they apply: a row is kept as it was saved, even
+/// where the languages offered have changed since; the allowed list limits
+/// it when it is resolved.
+pub fn stored_spoken_languages(stored: Option<Vec<String>>) -> Option<Vec<String>> {
+    let (mut languages, _) =
+        erato_config::spoken_language::language_codes(stored?.iter().map(String::as_str));
+    languages.truncate(erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES);
+    (!languages.is_empty()).then_some(languages)
 }
 
 /// The canonical IANA name, or `None` for anything the zone database does
@@ -392,6 +421,9 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.approval_speech_spoken {
             model.approval_speech_spoken = ActiveValue::Set(value);
         }
+        if let Some(value) = input.spoken_languages {
+            model.spoken_languages = ActiveValue::Set(value);
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -442,6 +474,7 @@ async fn upsert_user_preferences_row(
             reply_speech_show_in_chat: ActiveValue::Set(input.reply_speech_show_in_chat.flatten()),
             reply_speech_spoken: ActiveValue::Set(input.reply_speech_spoken.flatten()),
             approval_speech_spoken: ActiveValue::Set(input.approval_speech_spoken.flatten()),
+            spoken_languages: ActiveValue::Set(input.spoken_languages.flatten()),
             ..Default::default()
         };
 

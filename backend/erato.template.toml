@@ -476,6 +476,7 @@ chat_provider_ids = ["test-token-limit"]
 # talk_over_voice = false # Let the user start speaking while the voice talks; the voice yields
 # talk_over_voice_min_speech_ms = 500 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner but stops on more coughs and "mhm"
 # reply_speech = { spoken = true, wording = "natural", user_choice = true, show_in_chat = false } # spoken: replies are spoken (users may turn it off where user_choice allows); natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
+# spoken_language = { follow_speaker = true, languages = [], user_choice = true } # The voice speaks the language the user speaks; languages: the allowed ones (empty: any), also sent to the recognizer
 # keep_reply_audio = false # Store each reply's voice so it can be played again; off streams it only
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200

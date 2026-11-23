@@ -12,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { SpokenLanguagesSetting } from "./SpokenLanguagesSetting";
 import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
 import { toast } from "../Toast";
@@ -364,6 +365,7 @@ export function VoiceOutputSetting() {
           })
         }
       />
+      <SpokenLanguagesSetting />
 
       {replies.data && (
         <>

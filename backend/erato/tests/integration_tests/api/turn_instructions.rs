@@ -331,6 +331,7 @@ async fn the_users_choice_and_an_audience_lock_apply_at_turn_time(pool: Pool<Pos
                     show_in_chat: None,
                     spoken: None,
                 }),
+                spoken_language: None,
             },
         )]
         .into(),

@@ -78,6 +78,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
                 approval_speech: None,
                 wait_lines: None,
                 reply_speech: None,
+                spoken_language: None,
             },
         )]),
         priority_order: vec!["engineering".to_string()],
