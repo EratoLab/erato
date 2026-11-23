@@ -1776,12 +1776,22 @@ describe("asking the card for one field", () => {
   // The visit report create from MS staging: three details said, six
   // fields behind "more", each said only on request.
   const visitReport = () =>
-    spokenApprovalPieces(spokenApprovalFor("mcp_tool", visitReportCalls[1]), {
-      language: "de",
-      now: new Date("2026-11-23T17:00:00Z"),
-      timeZone: "Europe/Berlin",
-      voiceApproval: true,
-    });
+    spokenApprovalPieces(
+      spokenApprovalFor(
+        "mcp_tool",
+        (
+          visitReportCalls as unknown as Parameters<
+            typeof spokenApprovalFor
+          >[1][]
+        )[1],
+      ),
+      {
+        language: "de",
+        now: new Date("2026-11-23T17:00:00Z"),
+        timeZone: "Europe/Berlin",
+        voiceApproval: true,
+      },
+    );
 
   /** The card read to its end; what is said only on request is not loaded. */
   const heardVisitReport = async () => {

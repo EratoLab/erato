@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { messages as deMessages } from "@/locales/de/messages.json";
 
-import calls from "./fixtures/spokenCards/visitReport.json";
+import visitReport from "./fixtures/spokenCards/visitReport.json";
 import {
   MAX_COMMAND_PIECES,
   spokenApprovalFor,
@@ -27,10 +27,11 @@ afterEach(() => i18n.activate(previous));
 
 // The visit report create and the opportunity update from MS staging,
 // 2026-11-23: the create shows five fields and four behind "more".
-const [UPDATE, CREATE] = calls;
+type Call = Parameters<typeof spokenApprovalFor>[1];
+const [UPDATE, CREATE] = visitReport as unknown as Call[];
 
 const piecesOf = (
-  call: (typeof calls)[number],
+  call: Call,
   language: string,
   options: Partial<SpokenOptions> = {},
 ): SpokenPiece[] => {
