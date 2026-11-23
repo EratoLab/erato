@@ -8291,8 +8291,10 @@ pub struct ClientToolConfig {
 
     /// Who calls the tool. `server`: never offered to a model; the server
     /// calls it after a submission that names it in `submission.apply` was
-    /// accepted, so the change the client checked is the change it applies.
-    /// Requires `requires_client_registration`. Default: `model`.
+    /// accepted, so the change the client checked is the change it applies,
+    /// or, when no submission names it, after the model proposed one of its
+    /// `client_actions` through `propose_client_action`. Requires
+    /// `requires_client_registration`. Default: `model`.
     #[serde(default, skip_serializing_if = "ClientToolCalledBy::is_model")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub called_by: ClientToolCalledBy,
@@ -8999,7 +9001,8 @@ fn validate_submission_parts(
 }
 
 /// Panics unless every server-called tool is applied by exactly one
-/// submission and can be dispatched like one, every `submission.apply` names
+/// submission, or by none and lists client actions, and can be dispatched
+/// like one, every `submission.apply` names
 /// such a tool with usable settings, and each facet action id belongs to at
 /// most one server-called tool.
 fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
@@ -9099,9 +9102,11 @@ fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
                     .is_some_and(|apply| apply.tool == qualified)
             })
             .count();
-        if appliers != 1 {
+        // No applier: it carries out the client actions a facet lets the model
+        // propose, and `propose_client_action` is its caller.
+        if appliers > 1 || (appliers == 0 && tool.client_actions.is_empty()) {
             panic!(
-                "Client tool '{qualified}' sets called_by = \"server\" and must be named by exactly one submission.apply.tool, not {appliers}."
+                "Client tool '{qualified}' sets called_by = \"server\" and must be named by exactly one submission.apply.tool, or list the client_actions it carries out, not {appliers} submissions."
             );
         }
         for action in &tool.client_actions {

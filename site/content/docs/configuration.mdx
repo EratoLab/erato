@@ -8422,7 +8422,7 @@ max_changes = 5
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.apply.max_changes */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.apply.consumed_reads.[] */}
 
-- **`called_by`** _(default: `"model"`)_ - `server` makes a tool the apply tool of exactly one submission. It is never offered to the model and needs `requires_client_registration = true`; it cannot be a submission, durable, a part tool, read by tasks or set `approval_scope = "context"`. It is offered only to a client that registered it and only when the user did not set it to Never; Never also hides the submission and its part tools.
+- **`called_by`** _(default: `"model"`)_ - `server` makes a tool the apply tool of exactly one submission, or, when no submission names it, the tool that carries out the `client_actions` it lists when the model proposes one through `propose_client_action`. It is never offered to the model and needs `requires_client_registration = true`; it cannot be a submission, durable, a part tool, read by tasks or set `approval_scope = "context"`. It is offered only to a client that registered it and only when the user did not set it to Never; Never also hides the submission and its part tools.
 - **`approval`** _(default: `"user_decision"`)_ - `user_decision` follows the user's Ask, Always or Never for the tool; a server-called tool asks while the user has stored none. `every_call` asks on every call and never offers Always. `none` runs without asking and is left out of the user's settings; a server-called tool cannot use it. `every_call` and `none` cannot be combined with `child_access = "read"`.
 - **`client_actions`** _(default: `[]`)_ - The action facet action ids the tool carries out. An action facet whose `client_actions_always_ask` lists one the call uses makes that call ask every time in that facet. An id belongs to at most one server-called tool.
 - **`submission.apply.tool`** - Qualified name of the `called_by = "server"` tool that applies the submission. Without an `apply` table, acceptance ends generation as before.
@@ -8435,7 +8435,16 @@ the result says it did not fully apply or asks for a follow-up, or the
 submission said more changes follow. A result that asks the user to decide
 something on screen first parks the same call again once, as a question that
 takes no standing Always and no decision by voice. `GET /me/facets` lists the
-apply tools the facets reach in `approval_tools`.
+apply tools the facets reach in `approval_tools`, each with its `client_actions`.
+
+A proposed client action whose server-called tool the client registered is
+carried out the same way: the server calls the tool with
+`{proposal_call_id, action, item_identity}` through its approval, where
+`item_identity` is the request's `item_identity` or `document_identity` facet
+argument, else null. The answer ends after an action that applied cleanly. An
+action whose tool the user set to Never is not offered to the model. Actions
+without such a tool, or on a client that did not register it, keep the client's
+own flow.
 
 ### Compact replay of earlier client tool calls
 

@@ -1502,6 +1502,11 @@ pub struct ApprovalToolInfo {
     /// `user_decision` (Ask, Always or Never) or `every_call`, which asks
     /// every time and offers no Always.
     approval: String,
+    /// The action facet action ids the tool carries out, such as
+    /// `outlook.reply`: a client's own decisions for these actions now follow
+    /// the tool's decision.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    client_actions: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1698,6 +1703,7 @@ fn approval_tools(
                 _ => "user_decision",
             }
             .to_string(),
+            client_actions: tool.client_actions.clone(),
         })
         .collect();
     listed.sort_by(|a, b| a.qualified_name.cmp(&b.qualified_name));

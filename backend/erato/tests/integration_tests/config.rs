@@ -3914,12 +3914,63 @@ fn a_server_called_tool_always_has_a_decision() {
 }
 
 #[test]
-#[should_panic(expected = "must be named by exactly one submission.apply.tool, not 0")]
-fn a_server_called_tool_belongs_to_a_submission() {
-    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
-        "[client_tools.tools.submit.submission.apply]\ntool = \"word/apply_document_plan\"\nmore_steps = \"/more_changes\"\n",
-        "",
+#[should_panic(
+    expected = "must be named by exactly one submission.apply.tool, or list the client_actions it carries out, not 0"
+)]
+fn a_server_called_tool_belongs_to_a_submission_or_to_actions() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY
+            .replace(
+                "[client_tools.tools.submit.submission.apply]\ntool = \"word/apply_document_plan\"\nmore_steps = \"/more_changes\"\n",
+                "",
+            )
+            .replace("client_actions = [\"word.apply_document_plan\"]\n", ""),
+    );
+}
+
+const PROPOSAL_TOOL: &str = r#"
+[client_tools.tools.outlook_open_reply]
+name = "open_reply"
+namespace = "outlook"
+description = "Open a reply to the email"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["outlook.reply"]
+
+[action_facets.facets.outlook_reply_from_read]
+display_name = "Reply"
+template = "Reply."
+allowed_args = ["body_format"]
+client_actions = ["outlook.reply"]
+"#;
+
+#[test]
+fn a_server_called_tool_may_carry_out_proposed_actions() {
+    let config = migrate_config_with_action_facets(PROPOSAL_TOOL);
+    let tool = &config.client_tools.tools["outlook_open_reply"];
+    assert_eq!(tool.called_by, erato::config::ClientToolCalledBy::Server);
+    assert!(erato::services::chained_apply::is_proposal_tool(
+        &config.client_tools.tools,
+        tool
     ));
+    assert_eq!(
+        erato::services::chained_apply::proposal_tool(&config.client_tools.tools, "outlook.reply")
+            .map(|tool| tool.qualified_name()),
+        Some("outlook/open_reply".to_string())
+    );
+}
+
+#[test]
+fn a_submission_apply_tool_never_carries_out_a_proposal() {
+    let config = migrate_config_with_action_facets(CHAINED_APPLY);
+    assert!(
+        erato::services::chained_apply::proposal_tool(
+            &config.client_tools.tools,
+            "word.apply_document_plan"
+        )
+        .is_none()
+    );
 }
 
 #[test]

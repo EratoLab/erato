@@ -109,6 +109,10 @@ max_changes = 5
 
 The apply tool writes, so its executor must run a call at most once per call id: a backend restart drops the parked turn, and the client may see the call again.
 
+### Proposed client actions
+
+A `called_by = "server"` tool that no submission names carries out the `client_actions` it lists. When the model proposes one of them through `propose_client_action` and the requesting client registered the tool, the server chains to it as above: call id `<proposal call id>.apply`, input `{proposal_call_id, action, item_identity}`, the same gate (the facet's `client_actions_always_ask` matched against the proposed action), the same dispatch to the owning transport and the same continue rule without `more_steps`, so the answer ends after an action that applied cleanly. `item_identity` is the request's `item_identity` or `document_identity` facet argument, else null; the client must act only on that item. The proposal's stored output carries `apply.call_id`. An action whose tool the user set to Never is left out of the proposal tool's choices. Actions without such a tool, or on a client that did not register it, keep the client's own flow, and the client still runs an action on the user's own click.
+
 ## Native schema enforcement
 
 Server validation and host validation work with every existing tool-capable provider. Native constrained generation is an additional optimization. Enable it only for a model and endpoint verified to support strict tool arguments:

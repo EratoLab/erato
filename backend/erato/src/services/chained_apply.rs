@@ -103,6 +103,7 @@ pub struct ChainedApplyState {
 pub fn latest_outcome(chained: &BTreeMap<String, ChainedApplyState>) -> Option<&SubmissionOutcome> {
     chained
         .values()
+        .filter(|state| state.submission_outcome.is_some())
         .max_by_key(|state| state.order)
         .and_then(|state| state.submission_outcome.as_ref())
 }
@@ -268,33 +269,194 @@ pub fn offer_apply_tools(
         }) else {
             continue;
         };
-        if !crate::services::client_tools::client_tool_is_available(apply, registered)
-            || decisions.get(&qualified) == Some(&ClientToolDecision::NeverAllow)
+        offer_server_tool(
+            apply,
+            offered,
+            registered,
+            decisions,
+            facet_always_ask,
+            &mcp_has_tool,
+            &executor_for,
+        );
+    }
+}
+
+/// Offers one server-called tool, when the client registered it, the user did
+/// not set it to Never and no other tool takes its name. Returns the policy.
+fn offer_server_tool<'a>(
+    apply: &ClientToolConfig,
+    offered: &'a mut HashMap<String, OfferedClientTool>,
+    registered: &[String],
+    decisions: &BTreeMap<String, ClientToolDecision>,
+    facet_always_ask: &[String],
+    mcp_has_tool: &impl Fn(&str) -> bool,
+    executor_for: &impl Fn(
+        &ClientToolConfig,
+    ) -> Option<crate::services::client_operations::ExecutorBinding>,
+) -> Option<&'a mut OfferedClientTool> {
+    let qualified = apply.qualified_name();
+    if !crate::services::client_tools::client_tool_is_available(apply, registered)
+        || decisions.get(&qualified) == Some(&ClientToolDecision::NeverAllow)
+    {
+        return None;
+    }
+    // The offer's own name rule: an MCP tool of the same name would take
+    // the chained call.
+    let selection =
+        crate::services::client_tools::select_client_tools(vec![apply], &[], mcp_has_tool);
+    if selection.offered.is_empty() || offered.contains_key(&apply.name) {
+        tracing::warn!(
+            "Not chaining the apply tool '{qualified}': another tool already uses the name '{}'",
+            apply.name
+        );
+        return None;
+    }
+    let mut policy = OfferedClientTool::prepare(apply, &json!({"type": "object"})).ok()?;
+    policy.executor = executor_for(apply);
+    policy.always_ask_actions = facet_always_ask
+        .iter()
+        .filter(|action| apply.client_actions.contains(action))
+        .cloned()
+        .collect();
+    offered.insert(apply.name.clone(), policy);
+    offered.get_mut(&apply.name)
+}
+
+/// Whether a server-called tool carries out proposed client actions: no
+/// submission applies it, so `propose_client_action` is its only caller.
+pub fn is_proposal_tool(
+    tools: &HashMap<String, ClientToolConfig>,
+    tool: &ClientToolConfig,
+) -> bool {
+    let qualified = tool.qualified_name();
+    tool.called_by == ClientToolCalledBy::Server
+        && !tool.client_actions.is_empty()
+        && !tools.values().any(|owner| {
+            owner
+                .submission
+                .as_ref()
+                .and_then(|submission| submission.apply.as_ref())
+                .is_some_and(|apply| apply.tool == qualified)
+        })
+}
+
+/// The configured tool that carries out a proposed client action.
+pub fn proposal_tool<'a>(
+    tools: &'a HashMap<String, ClientToolConfig>,
+    action: &str,
+) -> Option<&'a ClientToolConfig> {
+    tools.values().find(|tool| {
+        tool.client_actions.iter().any(|known| known == action) && is_proposal_tool(tools, tool)
+    })
+}
+
+/// The facet's client actions without those whose tool the user set to
+/// Never: an action the user turned off is not proposed.
+pub fn proposable_actions(
+    tools: &HashMap<String, ClientToolConfig>,
+    actions: &[String],
+    decisions: &BTreeMap<String, ClientToolDecision>,
+) -> Vec<String> {
+    actions
+        .iter()
+        .filter(|action| {
+            proposal_tool(tools, action).is_none_or(|tool| {
+                decisions.get(&tool.qualified_name()) != Some(&ClientToolDecision::NeverAllow)
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+/// The request's facet argument that names the open item, which a chained
+/// proposal carries so the client acts only on the item the answer was made
+/// for.
+pub const ITEM_IDENTITY_ARGS: [&str; 2] = ["item_identity", "document_identity"];
+const MAX_ITEM_IDENTITY_CHARS: usize = 512;
+
+pub fn item_identity(args: Option<&HashMap<String, String>>) -> Option<String> {
+    let args = args?;
+    ITEM_IDENTITY_ARGS
+        .iter()
+        .find_map(|key| args.get(*key))
+        .filter(|identity| {
+            !identity.is_empty() && identity.chars().count() <= MAX_ITEM_IDENTITY_CHARS
+        })
+        .cloned()
+}
+
+/// Adds the tool of every action the facet lets the model propose, when the
+/// client registered it and the user did not set it to Never. Like an apply
+/// tool, it is never offered to the model.
+#[allow(clippy::too_many_arguments)]
+pub fn offer_proposal_tools(
+    tools: &HashMap<String, ClientToolConfig>,
+    offered: &mut HashMap<String, OfferedClientTool>,
+    facet_actions: &[String],
+    registered: &[String],
+    decisions: &BTreeMap<String, ClientToolDecision>,
+    facet_always_ask: &[String],
+    item_identity: Option<&str>,
+    mcp_has_tool: impl Fn(&str) -> bool,
+    executor_for: impl Fn(
+        &ClientToolConfig,
+    ) -> Option<crate::services::client_operations::ExecutorBinding>,
+) {
+    for action in facet_actions {
+        let Some(tool) = proposal_tool(tools, action) else {
+            continue;
+        };
+        if offered
+            .values()
+            .any(|policy| policy.config.qualified_name() == tool.qualified_name())
         {
             continue;
         }
-        // The offer's own name rule: an MCP tool of the same name would take
-        // the chained call.
-        let selection =
-            crate::services::client_tools::select_client_tools(vec![apply], &[], &mcp_has_tool);
-        if selection.offered.is_empty() || offered.contains_key(&apply.name) {
-            tracing::warn!(
-                "Not chaining the apply tool '{qualified}': another tool already uses the name '{}'",
-                apply.name
-            );
-            continue;
+        if let Some(policy) = offer_server_tool(
+            tool,
+            offered,
+            registered,
+            decisions,
+            facet_always_ask,
+            &mcp_has_tool,
+            &executor_for,
+        ) {
+            policy.proposal = true;
+            policy.item_identity = item_identity.map(str::to_owned);
         }
-        let Ok(mut policy) = OfferedClientTool::prepare(apply, &json!({"type": "object"})) else {
-            continue;
-        };
-        policy.executor = executor_for(apply);
-        policy.always_ask_actions = facet_always_ask
-            .iter()
-            .filter(|action| apply.client_actions.contains(action))
-            .cloned()
-            .collect();
-        offered.insert(apply.name.clone(), policy);
     }
+}
+
+/// The offered tool that carries out a proposed action.
+pub fn offered_proposal_tool<'a>(
+    offered: &'a HashMap<String, OfferedClientTool>,
+    action: &str,
+) -> Option<&'a OfferedClientTool> {
+    offered.values().find(|policy| {
+        policy.proposal
+            && policy
+                .config
+                .client_actions
+                .iter()
+                .any(|known| known == action)
+    })
+}
+
+/// The chained call's input for a proposed action: which proposal, which
+/// action, and the item the answer was made for.
+pub fn proposal_input(proposal_call_id: &str, action: &str, item_identity: Option<&str>) -> Value {
+    json!({
+        "proposal_call_id": proposal_call_id,
+        "action": action,
+        "item_identity": item_identity,
+    })
+}
+
+/// The model reads this for a proposal the server carries out next.
+pub fn chained_proposal_text(action: &str) -> String {
+    format!(
+        "Proposed client action '{action}'. The user decides in the chat; the result of carrying it out follows. Do not call this tool again for this request and do not claim the action has been carried out before its result says so."
+    )
 }
 
 /// The names of the offered tools the server calls, which the dispatch loop

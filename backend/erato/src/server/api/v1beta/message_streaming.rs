@@ -5323,10 +5323,17 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
             );
         } else {
-            chat_request_tools.push(crate::services::client_actions::build_client_action_tool(
+            let actions = crate::services::chained_apply::proposable_actions(
+                &app_state.config.client_tools.tools,
                 &facet_config.client_actions,
-                effective_model_settings.compat_omit_strict,
-            ));
+                me_profile_input.client_tool_decisions,
+            );
+            if !actions.is_empty() {
+                chat_request_tools.push(crate::services::client_actions::build_client_action_tool(
+                    &actions,
+                    effective_model_settings.compat_omit_strict,
+                ));
+            }
         }
     }
     // Offer top-level `client_tools` (returning round-trip tools) selected by
@@ -5496,6 +5503,23 @@ async fn prepare_chat_request_with_adapters_memory_inner(
             &mut offered_client_tools,
         )
         .await?;
+    }
+    if !is_delegated_run
+        && chat.mcp_write_tools_enabled
+        && let Some(action_facet) = user_input.action_facet.as_ref()
+        && let Some(facet_config) = app_state.config.action_facets.facets.get(&action_facet.id)
+    {
+        crate::services::chained_apply::offer_proposal_tools(
+            &app_state.config.client_tools.tools,
+            &mut offered_client_tools,
+            &facet_config.client_actions,
+            &generation_request_context.registered_client_tools,
+            me_profile_input.client_tool_decisions,
+            &facet_config.client_actions_always_ask,
+            crate::services::chained_apply::item_identity(Some(&action_facet.args)).as_deref(),
+            |name| mcp_claimed_names.contains(name),
+            |tool| generation_request_context.executor_for_tool(tool).cloned(),
+        );
     }
     // Both delegation routes are offered here. They are request-scoped like
     // the client-action tool and never offered inside a delegated run itself
@@ -9065,15 +9089,78 @@ async fn stream_generate_chat_completion<'a>(
                     match validated {
                         Ok(action) => {
                             client_action_already_proposed = true;
-                            (
-                                ToolCallStatus::Success,
-                                BgToolCallStatus::Success,
-                                MessageToolCallStatus::Success,
-                                json!({ "status": "proposed", "action": action }),
-                                format!(
-                                    "Proposed client action '{action}' to the user. The user's application will ask for confirmation and perform it. Do not call this tool again for this request and do not claim the action has been executed."
+                            // The action's tool is on this client: the server
+                            // carries it out next, through the tool's approval.
+                            let chained = (!is_delegated_run)
+                                .then(|| {
+                                    crate::services::chained_apply::offered_proposal_tool(
+                                        &offered_client_tools,
+                                        &action,
+                                    )
+                                })
+                                .flatten();
+                            match chained {
+                                Some(proposal_tool) => {
+                                    let call_id = unfinished_tool_call.call_id.clone();
+                                    let chained_id = format!(
+                                        "{call_id}{}",
+                                        crate::services::chained_apply::CALL_ID_SUFFIX
+                                    );
+                                    chained_applies.insert(
+                                        chained_id.clone(),
+                                        crate::services::chained_apply::ChainedApplyState {
+                                            submission_call_id: call_id.clone(),
+                                            submission_tool: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                                            apply_tool: proposal_tool.config.qualified_name(),
+                                            actions: vec![action.clone()],
+                                            order: chained_applies.len() as u32,
+                                            ..Default::default()
+                                        },
+                                    );
+                                    // Reserved like a submission attempt: never an ordinary charge.
+                                    tool_charges.insert(
+                                        chained_id.clone(),
+                                        crate::services::client_operations::ToolCallCharge {
+                                            charged: true,
+                                            ..Default::default()
+                                        },
+                                    );
+                                    unfinished_tool_calls.push_front(genai::chat::ToolCall {
+                                        call_id: chained_id.clone(),
+                                        fn_name: proposal_tool.config.name.clone(),
+                                        fn_arguments:
+                                            crate::services::chained_apply::proposal_input(
+                                                &call_id,
+                                                &action,
+                                                proposal_tool.item_identity.as_deref(),
+                                            ),
+                                        thought_signatures: None,
+                                    });
+                                    save_chain!();
+                                    (
+                                        ToolCallStatus::Success,
+                                        BgToolCallStatus::Success,
+                                        MessageToolCallStatus::Success,
+                                        json!({
+                                            "status": "proposed",
+                                            "action": action,
+                                            "apply": { "call_id": chained_id },
+                                        }),
+                                        crate::services::chained_apply::chained_proposal_text(
+                                            &action,
+                                        ),
+                                    )
+                                }
+                                None => (
+                                    ToolCallStatus::Success,
+                                    BgToolCallStatus::Success,
+                                    MessageToolCallStatus::Success,
+                                    json!({ "status": "proposed", "action": action }),
+                                    format!(
+                                        "Proposed client action '{action}' to the user. The user's application will ask for confirmation and perform it. Do not call this tool again for this request and do not claim the action has been executed."
+                                    ),
                                 ),
-                            )
+                            }
                         }
                         Err(error) => (
                             ToolCallStatus::Error,
@@ -10394,18 +10481,18 @@ async fn stream_generate_chat_completion<'a>(
                             &mut output_value,
                         );
                     }
-                    let max_changes = tool_policy
-                        .and_then(|policy| {
-                            offered_client_tools.values().find_map(|submission| {
-                                let apply =
-                                    submission.config.submission.as_ref()?.apply.as_ref()?;
-                                (apply.tool == policy.config.qualified_name())
-                                    .then_some(apply.max_changes)
-                            })
+                    // A proposed action has no run of changes to count down.
+                    let max_changes = tool_policy.and_then(|policy| {
+                        offered_client_tools.values().find_map(|submission| {
+                            let apply = submission.config.submission.as_ref()?.apply.as_ref()?;
+                            (apply.tool == policy.config.qualified_name())
+                                .then_some(apply.max_changes)
                         })
-                        .unwrap_or(chained_applies_run);
-                    output_value["changes_left"] =
-                        json!(max_changes.saturating_sub(chained_applies_run));
+                    });
+                    if let Some(max_changes) = max_changes {
+                        output_value["changes_left"] =
+                            json!(max_changes.saturating_sub(chained_applies_run));
+                    }
                     response_text = output_value.to_string();
                     after_apply = Some(next);
                 }
@@ -10643,6 +10730,10 @@ async fn stream_generate_chat_completion<'a>(
                     current_turn_tool_responses.push((batch_position, response));
                 }
                 match after_apply {
+                    // The rest of the model's batch still runs and its results
+                    // go back to the model.
+                    Some(crate::services::chained_apply::AfterApply::End)
+                        if !unfinished_tool_calls.is_empty() => {}
                     Some(crate::services::chained_apply::AfterApply::End) => {
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
@@ -26104,6 +26195,32 @@ async fn resume_parked_generation(
                     .and_then(|context| context.executor_for_tool(tool).cloned())
             },
         );
+        if chat.mcp_write_tools_enabled
+            && let Some(facet) = generation_parameters
+                .action_facet_id
+                .as_deref()
+                .and_then(|id| app_state.config.action_facets.facets.get(id))
+        {
+            crate::services::chained_apply::offer_proposal_tools(
+                &app_state.config.client_tools.tools,
+                &mut offered_client_tools,
+                &facet.client_actions,
+                &registered,
+                me_profile_input.client_tool_decisions,
+                &facet.client_actions_always_ask,
+                crate::services::chained_apply::item_identity(
+                    generation_parameters.action_facet_args.as_ref(),
+                )
+                .as_deref(),
+                |name| mcp_claimed_names.contains(name),
+                |tool| {
+                    generation_parameters
+                        .request_context
+                        .as_ref()
+                        .and_then(|context| context.executor_for_tool(tool).cloned())
+                },
+            );
+        }
     } else {
         // The run's own persisted binding, which it inherited at launch: a
         // resume or an approval from another client must not move the grant.

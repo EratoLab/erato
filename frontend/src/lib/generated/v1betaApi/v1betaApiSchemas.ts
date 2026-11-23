@@ -334,6 +334,12 @@ export type ApprovalToolInfo = {
    * every time and offers no Always.
    */
   approval: string;
+  /**
+   * The action facet action ids the tool carries out, such as
+   * `outlook.reply`: a client's own decisions for these actions now follow
+   * the tool's decision.
+   */
+  client_actions?: string[];
   label?: ToolCallLabel;
   /**
    * `namespace/name`, the key of its stored decision.
