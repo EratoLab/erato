@@ -3335,19 +3335,17 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Agregar archivos y herramientas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOff"
 msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
 msgstr "Desactivado: solo se ofrecen las herramientas que el servidor marca como de solo lectura, y las acciones en esta aplicación quedan en pausa."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOn"
 msgstr "Las herramientas conectadas pueden crear, cambiar y eliminar elementos."
 
@@ -3479,17 +3477,17 @@ msgstr "Usar {serverName} en este chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.allOn"
-msgstr "{onCount, plural, one {# activado} other {Los # activados}}"
+msgstr "{onCount, plural, one {# activado} other {Todos los # activados}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.countsOff"
-msgstr "{onCount} activados, {offCount} desactivados"
+msgstr "Activados: {onCount}, desactivados: {offCount}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.namedOff"
-msgstr "Desactivados: {names}"
+msgstr "{offCount, plural, one {Desactivado: {names}} other {Desactivados: {names}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3575,6 +3573,11 @@ msgstr "Preguntar a un asistente…"
 #: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.open.description"
 msgstr "{moreCount, plural, one {{firstName} y # más que usas a menudo} other {{firstName} y # más que usas a menudo}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.descriptionUnranked"
+msgstr "{moreCount, plural, one {{firstName} y # más} other {{firstName} y # más}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

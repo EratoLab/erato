@@ -200,7 +200,6 @@ export const DEFAULT_STUBS = {
     subscribe: () => noop,
   },
   useMcpBrowserAuthorization: () => noop,
-  useMcpBrowserSettingsOpener: () => noop,
   ActionBar: StubPassthrough,
   ComponentSlot: StubNothing,
   ListGroupHeading: StubPassthrough,

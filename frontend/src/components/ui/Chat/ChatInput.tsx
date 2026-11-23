@@ -159,7 +159,7 @@ import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
 import { ModelSelector } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
-import { buildMcpToolsSection } from "./mcpToolsSection";
+import { buildMcpToolsSection, describeAllowChanges } from "./mcpToolsSection";
 import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnouncements";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -970,6 +970,7 @@ export const ChatInput = ({
   const {
     isAvailable: canMentionAssistants,
     suggested: suggestedAssistants,
+    suggestedFromUsage,
     all: mentionableAssistants,
   } = useMentionableAssistants(assistantId);
 
@@ -977,7 +978,7 @@ export const ChatInput = ({
   // Gated like the mentions: on a host-injected feature flag plus a live
   // listing, never on env — the add-in gets the group through the same hook.
   const { isAvailable: canBrowseMcpTools, servers: mcpServers } =
-    useBrowsableMcpServers(assistantId);
+    useBrowsableMcpServers({ assistantId, chatId });
   const mcpWriteTools = useChatMcpWriteTools({
     chatId,
     isAvailable: canBrowseMcpTools,
@@ -2296,11 +2297,17 @@ export const ChatInput = ({
       canMentionAssistants
         ? buildAssistantMentionSection({
             suggested: suggestedAssistants,
+            suggestedFromUsage,
             onOpen: () => setIsAssistantBrowserOpen(true),
             disabled: composeLocked,
           })
         : undefined,
-    [canMentionAssistants, composeLocked, suggestedAssistants],
+    [
+      canMentionAssistants,
+      composeLocked,
+      suggestedAssistants,
+      suggestedFromUsage,
+    ],
   );
 
   const mcpToolsSection = useMemo(
@@ -2336,17 +2343,10 @@ export const ChatInput = ({
               message: "Read only",
             }),
             icon: "lock",
-            description: pausesHostActionsWhenWritesOff
-              ? t({
-                  id: "chatInput.connectors.allowChanges.descriptionOffHostActions",
-                  message:
-                    "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
-                })
-              : t({
-                  id: "chatInput.connectors.allowChanges.descriptionOff",
-                  message:
-                    "Off: only tools the server marks read-only are offered.",
-                }),
+            description: describeAllowChanges({
+              enabled: false,
+              pausesHostActions: pausesHostActionsWhenWritesOff,
+            }),
             endLabel: t({
               id: "chatInput.connectors.readOnlyMode.end",
               message: "Allow changes again",

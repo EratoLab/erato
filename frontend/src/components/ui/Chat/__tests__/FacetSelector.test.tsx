@@ -232,11 +232,7 @@ describe("FacetSelector", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual([
-      "Web search",
-      "Connectors…1 on",
-      "Ask an assistant…Researcher",
-    ]);
+    ).toEqual(["Web search", "Connectors…1 on", "Ask an assistant…Researcher"]);
     expect(within(menu).getAllByRole("separator")).toHaveLength(2);
     expect(within(menu).queryByRole("group")).not.toBeInTheDocument();
   });
@@ -288,7 +284,7 @@ describe("FacetSelector", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 
     const row = await screen.findByRole("menuitem", { name: /Connectors…/ });
-    expect(row).toHaveTextContent("Linear off · read only");
+    expect(row).toHaveTextContent("Off: Linear · read only");
     fireEvent.click(row);
     expect(onOpenConnectors).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();

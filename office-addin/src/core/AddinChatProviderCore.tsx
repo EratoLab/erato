@@ -4,7 +4,6 @@ import {
   DesktopSidecarConfigurationSync,
   getSupportedFileTypes,
   mapMessageToUiMessage,
-  McpSettingsOpenProvider,
   recentChatsQuery,
   removeArchivedChatFromLists,
   seedGenerationStatusFromListing,
@@ -19,7 +18,6 @@ import {
   useFileCapabilitiesContext,
   useFileDropzone,
   useFileUploadStore,
-  useMcpBrowserSettingsOpener,
   useGenerationStatusStore,
   useInfiniteRecentChats,
   useMessagingStore,
@@ -134,7 +132,6 @@ export function AddinChatProviderCore({
   const sessionHistory = useInfiniteRecentChats({
     filters: sessionFilters,
   });
-  const openMcpSettingsInBrowser = useMcpBrowserSettingsOpener();
 
   return (
     <AddinHistoryFilterStoreContext.Provider value={filterStore}>
@@ -149,12 +146,7 @@ export function AddinChatProviderCore({
             platform={platform}
             session={session}
           >
-            {/* The pane has a Router but not the web app's settings dialog,
-                so connecting a server or managing them all goes to the
-                browser. */}
-            <McpSettingsOpenProvider onOpen={openMcpSettingsInBrowser}>
-              {children}
-            </McpSettingsOpenProvider>
+            {children}
           </AddinChatDataProvider>
         )}
       </SessionController>

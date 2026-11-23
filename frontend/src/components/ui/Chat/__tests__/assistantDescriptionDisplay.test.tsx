@@ -32,11 +32,13 @@ describe("assistant descriptions in the assistant dialog", () => {
         ).not.toBeInTheDocument();
       } else if (descriptionDisplay === "full") {
         expect(screen.getByText(assistant.description)).not.toHaveClass(
-          "truncate",
+          "line-clamp-2",
         );
       } else {
+        // Two lines, as the menu rows clamped them before.
         expect(screen.getByText(assistant.description)).toHaveClass(
-          "truncate",
+          "line-clamp-2",
+          "whitespace-normal",
         );
       }
     },

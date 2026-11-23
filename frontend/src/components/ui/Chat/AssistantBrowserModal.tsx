@@ -13,7 +13,10 @@ import type { AssistantToolsMenuDescriptionDisplay } from "@/app/env";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type React from "react";
 
-const SEARCH_KEYS = ["name", "description"];
+// Descriptions are searched only where they are shown, so a match is always
+// on text the user can see.
+const NAME_KEYS = ["name"];
+const NAME_AND_DESCRIPTION_KEYS = ["name", "description"];
 
 // No fill of its own — the well sits on the modal shell. The inset is off the
 // size scale and is what publishes the concentric corner the rows read.
@@ -64,7 +67,7 @@ export function AssistantBrowserModal({
   }, [assistants, suggested]);
   const matches = useFuzzySearch({
     items: orderedAssistants,
-    keys: SEARCH_KEYS,
+    keys: descriptionDisplay === "none" ? NAME_KEYS : NAME_AND_DESCRIPTION_KEYS,
     query: searchQuery,
     // A single character is a legitimate filter here: the list is short and the
     // user is narrowing it, not searching prose.
@@ -154,7 +157,8 @@ export function AssistantBrowserModal({
                   <span
                     className={clsx(
                       "w-full text-sm text-theme-fg-secondary",
-                      descriptionDisplay === "truncated" && "truncate",
+                      descriptionDisplay === "truncated" &&
+                        "line-clamp-2 whitespace-normal break-words",
                     )}
                   >
                     {assistant.description}

@@ -24,12 +24,13 @@ interface FacetSelectorProps {
   keepOpenOnSelect?: boolean;
   /**
    * Extra group appended below the tools — the same section the mobile "+"
-   * menu renders, so both hosts offer identical assistant rows.
+   * menu renders, so both hosts offer the same row into the assistant dialog.
    */
   assistantSection?: AddMenuSection;
   /**
-   * The connectors group (write toggle, tool browser) rendered between the
-   * facets and the assistants — again the same section the "+" menu shows.
+   * The connectors row (its summary, opening the connectors dialog) rendered
+   * between the facets and the assistants — again the same section the "+"
+   * menu shows.
    */
   mcpToolsSection?: AddMenuSection;
   /** Disable the whole control (composer lock). */

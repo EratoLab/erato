@@ -129,7 +129,7 @@ describe("ChatInputAddControls", () => {
     const row = screen.getByTestId("chat-input-add-menu-extra-connectors");
     expect(row).toHaveAttribute("role", "menuitem");
     expect(row).toHaveTextContent("Connectors…");
-    expect(row).toHaveTextContent("Linear off · 1 to connect");
+    expect(row).toHaveTextContent("Off: Linear · 1 to connect");
 
     fireEvent.click(row);
     expect(onOpen).toHaveBeenCalledTimes(1);

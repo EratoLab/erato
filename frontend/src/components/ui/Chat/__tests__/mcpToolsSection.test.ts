@@ -5,6 +5,7 @@ import {
   buildMcpToolsSection,
   MCP_TOOLS_OPEN_ITEM_ID,
   MCP_TOOLS_SECTION_ID,
+  describeAllowChanges,
   summarizeMcpConnectors,
 } from "../mcpToolsSection";
 
@@ -68,7 +69,7 @@ describe("buildMcpToolsSection", () => {
       onOpen: vi.fn(),
     });
 
-    expect(section.items[0].description).toBe("Notion off · read only");
+    expect(section.items[0].description).toBe("Off: Notion · read only");
   });
 
   it("is disabled while the composer is locked", () => {
@@ -92,12 +93,12 @@ describe("summarizeMcpConnectors", () => {
     expect(summary({ servers: [dynamics] })).toBe("1 on");
   });
 
-  it("names up to two switched-off connectors by their display name", () => {
+  it("names up to two switched-off connectors by their display name, state first", () => {
     expect(summary({ disabledServerIds: ["dynamics"] })).toBe(
-      "Dynamics 365 off",
+      "Off: Dynamics 365",
     );
     expect(summary({ disabledServerIds: ["dynamics", "notion"] })).toBe(
-      "Dynamics 365, Notion off",
+      "Off: Dynamics 365, Notion",
     );
   });
 
@@ -108,7 +109,7 @@ describe("summarizeMcpConnectors", () => {
         servers,
         disabledServerIds: ["dynamics", "notion", "teams"],
       }),
-    ).toBe("1 on, 3 off");
+    ).toBe("On: 1, off: 3");
   });
 
   it("says how many connectors still wait for the user to connect", () => {
@@ -133,5 +134,21 @@ describe("summarizeMcpConnectors", () => {
 
   it("only speaks of connecting when no connector is connected yet", () => {
     expect(summary({ servers: [linear] })).toBe("1 to connect");
+  });
+});
+
+describe("describeAllowChanges", () => {
+  it("describes the switch by its current state", () => {
+    expect(
+      describeAllowChanges({ enabled: true, pausesHostActions: true }),
+    ).toBe("Connected tools may create, change and delete things.");
+    expect(
+      describeAllowChanges({ enabled: false, pausesHostActions: false }),
+    ).toBe("Off: only tools the server marks read-only are offered.");
+    expect(
+      describeAllowChanges({ enabled: false, pausesHostActions: true }),
+    ).toBe(
+      "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
+    );
   });
 });

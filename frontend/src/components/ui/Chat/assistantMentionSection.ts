@@ -9,6 +9,11 @@ export const ASSISTANT_MENTION_OPEN_ITEM_ID = "ask-assistant";
 interface AssistantMentionSectionOptions {
   /** The assistants the user turns to most, most used first. */
   suggested: MentionableAssistant[];
+  /**
+   * Whether `suggested` comes from the user's usage. Without usage it is
+   * just the list's start, and the row must not claim the user uses them.
+   */
+  suggestedFromUsage?: boolean;
   /** Opens the assistant dialog. */
   onOpen: () => void;
   disabled?: boolean;
@@ -26,6 +31,7 @@ interface AssistantMentionSectionOptions {
  */
 export function buildAssistantMentionSection({
   suggested,
+  suggestedFromUsage = true,
   onOpen,
   disabled = false,
 }: AssistantMentionSectionOptions): AddMenuSection {
@@ -36,13 +42,21 @@ export function buildAssistantMentionSection({
       ? undefined
       : moreCount === 0
         ? firstName
-        : t({
-            id: "chatInput.mentions.open.description",
-            message: plural(moreCount, {
-              one: `${firstName} and # more you use often`,
-              other: `${firstName} and # more you use often`,
-            }),
-          });
+        : suggestedFromUsage
+          ? t({
+              id: "chatInput.mentions.open.description",
+              message: plural(moreCount, {
+                one: `${firstName} and # more you use often`,
+                other: `${firstName} and # more you use often`,
+              }),
+            })
+          : t({
+              id: "chatInput.mentions.open.descriptionUnranked",
+              message: plural(moreCount, {
+                one: `${firstName} and # more`,
+                other: `${firstName} and # more`,
+              }),
+            });
 
   return {
     id: ASSISTANT_MENTION_SECTION_ID,

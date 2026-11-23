@@ -3335,19 +3335,17 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Add files and tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOff"
 msgstr "Off: only tools the server marks read-only are offered."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
 msgstr "Off: only tools the server marks read-only are offered, and actions in this application are paused."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOn"
 msgstr "Connected tools may create, change and delete things."
 
@@ -3484,12 +3482,12 @@ msgstr "{onCount, plural, one {# on} other {All # on}}"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.countsOff"
-msgstr "{onCount} on, {offCount} off"
+msgstr "On: {onCount}, off: {offCount}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.namedOff"
-msgstr "{names} off"
+msgstr "{offCount, plural, one {Off: {names}} other {Off: {names}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3575,6 +3573,11 @@ msgstr "Ask an assistant…"
 #: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.open.description"
 msgstr "{moreCount, plural, one {{firstName} and # more you use often} other {{firstName} and # more you use often}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.descriptionUnranked"
+msgstr "{moreCount, plural, one {{firstName} and # more} other {{firstName} and # more}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

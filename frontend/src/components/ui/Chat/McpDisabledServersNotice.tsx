@@ -14,19 +14,19 @@ interface McpDisabledServersNoticeProps {
  * Quiet footnote on an assistant message whose generation withheld one or
  * more MCP servers the user switched off for the chat. Like the needs-auth
  * note it is part of the record of how the response was produced, not an
- * error; unlike it there is no affordance — the remedy is the connectors
- * switch in the composer, right below.
+ * error; unlike it there is no affordance — the remedy is the composer's
+ * Connectors dialog, right below.
  *
  * Servers are named as the listing names them, falling back to the id.
  */
 export const McpDisabledServersNotice = ({
   serverIds,
-}: McpDisabledServersNoticeProps) => {
-  const displayName = useMcpServerDisplayName();
+}: McpDisabledServersNoticeProps) =>
+  // Every message mounts this; only one with servers to report subscribes.
+  serverIds.length === 0 ? null : <DisabledServersNote serverIds={serverIds} />;
 
-  if (serverIds.length === 0) {
-    return null;
-  }
+const DisabledServersNote = ({ serverIds }: McpDisabledServersNoticeProps) => {
+  const displayName = useMcpServerDisplayName();
 
   const serverCount = serverIds.length;
   const serverList = serverIds.map(displayName).join(", ");

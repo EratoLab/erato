@@ -3335,19 +3335,17 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Dateien und Tools hinzufügen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOff"
 msgstr "Aus: Es werden nur Tools angeboten, die der Server als schreibgeschützt kennzeichnet."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
 msgstr "Aus: Es werden nur Tools angeboten, die der Server als schreibgeschützt kennzeichnet, und Aktionen in dieser Anwendung sind pausiert."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOn"
 msgstr "Verbundene Tools dürfen Dinge anlegen, ändern und löschen."
 
@@ -3484,12 +3482,12 @@ msgstr "{onCount, plural, one {# an} other {Alle # an}}"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.countsOff"
-msgstr "{onCount} an, {offCount} aus"
+msgstr "An: {onCount}, aus: {offCount}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.namedOff"
-msgstr "{names} aus"
+msgstr "{offCount, plural, one {Aus: {names}} other {Aus: {names}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3575,6 +3573,11 @@ msgstr "Einen Assistenten fragen…"
 #: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.open.description"
 msgstr "{moreCount, plural, one {{firstName} und # weiterer, den Sie oft nutzen} other {{firstName} und # weitere, die Sie oft nutzen}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.descriptionUnranked"
+msgstr "{moreCount, plural, one {{firstName} und # weiterer} other {{firstName} und # weitere}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

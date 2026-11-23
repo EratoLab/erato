@@ -3335,19 +3335,17 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Dodaj pliki i narzędzia"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOff"
 msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
 msgstr "Wyłączone: oferowane są tylko narzędzia, które serwer oznacza jako tylko do odczytu, a działania w tej aplikacji są wstrzymane."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+#: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.allowChanges.descriptionOn"
 msgstr "Połączone narzędzia mogą tworzyć, zmieniać i usuwać elementy."
 
@@ -3489,7 +3487,7 @@ msgstr "Włączone: {onCount}, wyłączone: {offCount}"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
 msgid "chatInput.connectors.summary.namedOff"
-msgstr "Wyłączone: {names}"
+msgstr "{offCount, plural, one {Wyłączony: {names}} few {Wyłączone: {names}} many {Wyłączone: {names}} other {Wyłączone: {names}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3575,6 +3573,11 @@ msgstr "Zapytaj asystenta…"
 #: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.open.description"
 msgstr "{moreCount, plural, one {{firstName} i # inny, z którego często korzystasz} few {{firstName} i # inne, z których często korzystasz} many {{firstName} i # innych, z których często korzystasz} other {{firstName} i # innych, z których często korzystasz}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.descriptionUnranked"
+msgstr "{moreCount, plural, one {{firstName} i # inny} few {{firstName} i # inne} many {{firstName} i # innych} other {{firstName} i # innych}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx

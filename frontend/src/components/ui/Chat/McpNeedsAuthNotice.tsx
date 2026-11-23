@@ -35,13 +35,18 @@ interface McpNeedsAuthNoticeProps {
 export const McpNeedsAuthNotice = ({
   serverIds,
   showConnect = true,
-}: McpNeedsAuthNoticeProps) => {
+}: McpNeedsAuthNoticeProps) =>
+  // Every message mounts this; only one with servers to report subscribes.
+  serverIds.length === 0 ? null : (
+    <NeedsAuthNote serverIds={serverIds} showConnect={showConnect} />
+  );
+
+const NeedsAuthNote = ({
+  serverIds,
+  showConnect,
+}: Required<McpNeedsAuthNoticeProps>) => {
   const openMcpServersSettings = useOpenMcpServersSettings();
   const displayName = useMcpServerDisplayName();
-
-  if (serverIds.length === 0) {
-    return null;
-  }
 
   const serverCount = serverIds.length;
   const serverList = serverIds.map(displayName).join(", ");

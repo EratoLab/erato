@@ -819,10 +819,7 @@ export type {
   ThreadMessageAttachmentItem,
 } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 
-export {
-  useMcpBrowserAuthorization,
-  useMcpBrowserSettingsOpener,
-} from "@/hooks/ui/useMcpBrowserAuthorization";
+export { useMcpBrowserAuthorization } from "@/hooks/ui/useMcpBrowserAuthorization";
 
 // Mount beside the host's <Toaster />: a host that can authorize an MCP
 // server has to be able to report how that authorization ended, including

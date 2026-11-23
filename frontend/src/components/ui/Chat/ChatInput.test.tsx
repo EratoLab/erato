@@ -55,6 +55,7 @@ import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextChipFaceProps,
   ComposerContextItem,
+  ComposerMode,
 } from "./ComposerContext/types";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { TeamsTranscriptContextEntry } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
@@ -7314,6 +7315,7 @@ describe("ChatInput", () => {
       props: {
         pausesHostActionsWhenWritesOff?: boolean;
         assistantId?: string;
+        composerModes?: ComposerMode[];
       } = {},
     ) => {
       const queryClient = new QueryClient({
@@ -7542,16 +7544,59 @@ describe("ChatInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("lists only the assistant's servers in an assistant's chat", async () => {
+    it("lists only the assistant's servers in a new chat with an assistant", async () => {
       enableConnectors([CONNECTED, UNCONNECTED]);
       mockUseGetAssistant.mockReturnValue({
         data: { id: "assistant-1", mcp_server_ids: ["linear"] },
         isPending: false,
       });
-      await renderComposer("chat-1", vi.fn(), { assistantId: "assistant-1" });
+      await renderComposer(null, vi.fn(), { assistantId: "assistant-1" });
 
       expect(browser()).toHaveAttribute("data-server-ids", "linear");
       expect(connectorsRow().description).toBe("1 on");
+    });
+
+    // The web app hands the assistant in only until the chat exists.
+    it("keeps the assistant's servers once the chat exists, from the chat itself", async () => {
+      enableConnectors([CONNECTED, UNCONNECTED]);
+      mockUseChatDetail.mockReturnValue({
+        data: {
+          id: "chat-1",
+          assistant_id: "assistant-1",
+          mcp_write_tools_enabled: true,
+        },
+      });
+      mockUseGetAssistant.mockReturnValue({
+        data: { id: "assistant-1", mcp_server_ids: ["linear"] },
+        isPending: false,
+      });
+      await renderComposer("chat-1");
+
+      expect(browser()).toHaveAttribute("data-server-ids", "linear");
+    });
+
+    it("draws the Read only mode after the host's own modes", async () => {
+      enableConnectors();
+      mockUseChatDetail.mockReturnValue({
+        data: { id: "chat-1", mcp_write_tools_enabled: false },
+      });
+      await renderComposer("chat-1", vi.fn(), {
+        composerModes: [
+          {
+            id: "outlook.scheduling",
+            label: "Scheduling",
+            icon: "calendar",
+            endLabel: "End scheduling",
+            onEnd: vi.fn(),
+          },
+        ],
+      });
+
+      expect(
+        Array.from(
+          document.querySelectorAll('[data-ui="composer-mode-chip"]'),
+        ).map((chip) => chip.getAttribute("aria-label")),
+      ).toEqual(["Scheduling", "Read only"]);
     });
 
     it("waits for the assistant before offering its servers", async () => {
@@ -7585,7 +7630,7 @@ describe("ChatInput", () => {
         body: { disabled_mcp_server_ids: ["linear"] },
       });
       expect(browser()).toHaveAttribute("data-disabled-servers", "linear");
-      expect(connectorsRow().description).toBe("Linear off");
+      expect(connectorsRow().description).toBe("Off: Linear");
 
       // The row is the writer for an existing chat: nothing rides on the send.
       fireEvent.change(textarea, { target: { value: "without linear" } });

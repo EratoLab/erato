@@ -24,6 +24,7 @@ import {
 } from "../Settings/mcpServerStatus";
 import { groupMcpTools } from "../Settings/mcpToolGroups";
 import { LinkIcon, ResolvedIcon } from "../icons";
+import { describeAllowChanges } from "./mcpToolsSection";
 
 import type {
   McpServerStatus,
@@ -323,21 +324,10 @@ export function McpToolsBrowserModal({
 
   const isEditable = onToggleTool !== undefined;
 
-  const writeDescription = writeToolsEnabled
-    ? t({
-        id: "chatInput.connectors.allowChanges.descriptionOn",
-        message: "Connected tools may create, change and delete things.",
-      })
-    : pausesHostActions
-      ? t({
-          id: "chatInput.connectors.allowChanges.descriptionOffHostActions",
-          message:
-            "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
-        })
-      : t({
-          id: "chatInput.connectors.allowChanges.descriptionOff",
-          message: "Off: only tools the server marks read-only are offered.",
-        });
+  const writeDescription = describeAllowChanges({
+    enabled: writeToolsEnabled,
+    pausesHostActions,
+  });
 
   return (
     <ModalBase
@@ -364,7 +354,7 @@ export function McpToolsBrowserModal({
             />
             <p
               id={writeDescriptionId}
-              className="text-xs text-theme-fg-secondary"
+              className="pl-6 text-sm text-theme-fg-secondary"
             >
               {writeDescription}
             </p>
@@ -430,12 +420,14 @@ export function McpToolsBrowserModal({
               data-testid="mcp-tools-browser-search"
             />
             {orderedMatches.length === 0 ? (
-              <p className="py-6 text-center text-sm text-theme-fg-muted">
-                {t({
-                  id: "chatInput.connectors.noResults",
-                  message: "No connectors match your search",
-                })}
-              </p>
+              <div className="py-8 text-center">
+                <p className="text-sm text-theme-fg-muted">
+                  {t({
+                    id: "chatInput.connectors.noResults",
+                    message: "No connectors match your search",
+                  })}
+                </p>
+              </div>
             ) : (
               <div className="max-h-[60vh] space-y-3 overflow-y-auto">
                 {orderedMatches.map((server) => {
@@ -495,7 +487,11 @@ export function McpToolsBrowserModal({
                         />
                       }
                       name={serverName}
-                      status={mcpServerStatus(server)}
+                      // Switched off, the row says only that: a green
+                      // "Connected" tone beside it would read as on.
+                      status={
+                        isServerSwitchedOff ? null : mcpServerStatus(server)
+                      }
                       caption={
                         isServerSwitchedOff
                           ? t({
