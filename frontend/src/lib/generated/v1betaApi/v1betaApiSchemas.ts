@@ -334,12 +334,14 @@ export type ApprovalToolInfo = {
    * every time and offers no Always.
    */
   approval: string;
+  label?: ToolCallLabel;
   /**
    * `namespace/name`, the key of its stored decision.
    */
   qualified_name: string;
   /**
-   * What the tool does, for the settings list.
+   * What the tool does, in the package's words. A client that can name the
+   * change from `label` in the user's language shows that instead.
    */
   title: string;
 };

@@ -13,7 +13,10 @@ import {
 } from "./ApprovalDecisionActions";
 import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
-import { OwnClientToolApprovalItem } from "./OwnClientToolApprovalItem";
+import {
+  onlyItsCardApproves,
+  OwnClientToolApprovalItem,
+} from "./OwnClientToolApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
 import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import { WaitingTaskItem } from "./WaitingTaskItem";
@@ -368,6 +371,11 @@ export const ApprovalQueueCard = ({
           onDecideAll={onDecideAll}
           isBusy={isBusy}
           testId="approval-queue-bulk"
+          allowsAll={queue.some(
+            (item) =>
+              staged[item.approval_id] === undefined &&
+              !onlyItsCardApproves(item),
+          )}
         />
       )}
       {waitingCount > 0 && (
