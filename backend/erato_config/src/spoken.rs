@@ -154,17 +154,17 @@ pub const MAX_SPOKEN_NAME_CHARS: usize = 64;
 pub struct SpokenNamesConfig {
     /// The spoken name of a field, keyed by the field's exact name.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub field_names: HashMap<String, String>,
     /// What each value of a choice field is called, keyed by the field's
     /// exact name and then by the value as the tool writes it.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub choice_labels: HashMap<String, HashMap<String, String>>,
     /// What the records of a table are called, in the plural, keyed by the
     /// table's exact name.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub table_names: HashMap<String, String>,
     /// One field's own natural sentence variants, by sentence type
     /// (`changed`, `set`, `updated`) and then by the field's exact name (or
@@ -172,7 +172,7 @@ pub struct SpokenNamesConfig {
     /// Only a `table.field` variant may leave out `{field}`, such as
     /// `"opportunity.estimatedclosedate" = "Der Abschluss verschiebt sich {from} {to}."`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub sentences: HashMap<String, HashMap<String, String>>,
 }
 
@@ -542,38 +542,38 @@ pub struct SpokenNumberWordsConfig {
     /// Words that are a number alone and inside a compound: `zwei = 2`,
     /// `zwanzig = 20`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub numbers: HashMap<String, u64>,
     /// Words that may be a number or another word (`ein`, `one`, `second`):
     /// inside a compound they are a number, alone only maybe, so the voice
     /// then neither calls a change asked for nor unasked.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub ambiguous: HashMap<String, u64>,
     /// Words that multiply what comes before them: `hundert = 100`,
     /// `thousand = 1000`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub multipliers: HashMap<String, u64>,
     /// Words that join the parts of one number: `und`, `and`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub joiners: Vec<String>,
     /// Ordinals as the stem before an ending: `zwanzigst = 20`,
     /// `third = 3`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub ordinals: HashMap<String, u64>,
     /// Ordinal stems that may be another word (`acht` in "achte darauf",
     /// `erst` in "als Erstes"): inside a compound an ordinal, alone only
     /// maybe, like `ambiguous`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub ambiguous_ordinals: HashMap<String, u64>,
     /// What may follow an ordinal stem (`en` in "zwanzigsten"); `""` lets a
     /// stem stand alone, as in English.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub ordinal_endings: Vec<String>,
 }
 
@@ -978,32 +978,32 @@ pub enum ApprovalSpeechWording {
 #[serde(default)]
 pub struct ApprovalSpeechConfig {
     /// The deployment's amount: `full` or `short`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub amount: ApprovalSpeechAmount,
     /// Details a short reading says before it holds back the rest, 0 to 3.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub short_details: u8,
     /// The deployment's wording: `precise` or `natural`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub wording: ApprovalSpeechWording,
     /// Whether a user may choose their own amount and wording. `false` is a
     /// lock no audience reopens; with `true`, a supervisor's audience may
     /// still close it.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub user_choice: bool,
     /// Per language tag, natural sentence variants by sentence type
     /// (`changed`, `set`, `updated`), replacing the built-in ones. A variant
     /// without exactly its slots is ignored with a warning; each one in use
     /// is logged at startup with sample values. The check guards the slots,
     /// not the meaning: the sentence is its author's responsibility.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub sentences: HashMap<String, HashMap<String, String>>,
     /// Per language tag, the words a spoken card says as code (number
     /// words, ordinals, times, a value's direction) and reads the user's
     /// words with, added to the built-in German and English ones. A
     /// language says the whole card only with `full_card = true`.
     #[serde(skip)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub words: crate::approval_speech_words::ApprovalSpeechWordsByLanguage,
 }
 

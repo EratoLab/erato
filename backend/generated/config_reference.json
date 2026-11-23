@@ -139,283 +139,283 @@
   },
   "approval_change_requests.limit_note": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_change_requests.max_chars": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_change_requests.max_rounds": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_change_requests.note": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.amount": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.sentences.<language>.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.short_details": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.user_choice": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.wording": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.dictation_verbs.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.dictation_words.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.difference_fillers.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.from": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.full_card": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.locale": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.numbers.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.ordinals.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.time": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.time_full_hour": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_speech.words.<language>.to": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "approval_voice_commands.chat_provider_id": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "approval_voice_commands.enabled": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "approval_voice_commands.model_timeout_ms": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "approval_voice_commands.prompt": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.approve.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.casual_approvals.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.conditions.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.continuations.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.fillers.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.hesitations.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.leading_no.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.negations.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.question_first.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.question_verbs.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.reject.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.repeat.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.skip.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.stop.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.wh_words.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_commands.words.<language>.yes_particles.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.echo_tail_ms": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.enabled": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.min_speech_ms_per_syllable": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "approval_voice_decisions.phrases.<language>.leading.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.phrases.<language>.phrase": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.phrases.<language>.trailing.[]": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "approval_voice_decisions.receipt_ttl_seconds": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
@@ -655,13 +655,13 @@
   },
   "audio_conversational.card_end_of_turn_silence_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.card_min_speech_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -685,7 +685,7 @@
   },
   "audio_conversational.end_of_turn_silence_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -697,19 +697,19 @@
   },
   "audio_conversational.hesitation_words.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.hesitation_words_replace_base": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.hesitations.<language>.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
@@ -721,7 +721,7 @@
   },
   "audio_conversational.keep_reply_audio": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -763,7 +763,7 @@
   },
   "audio_conversational.min_speech_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -787,19 +787,19 @@
   },
   "audio_conversational.reply_speech.show_in_chat": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.reply_speech.user_choice": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.reply_speech.wording": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
@@ -811,13 +811,13 @@
   },
   "audio_conversational.talk_over_voice": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.talk_over_voice_min_speech_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -829,133 +829,133 @@
   },
   "audio_conversational.voice_start_buffer_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.voice_start_max_wait_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "audio_conversational.wait_lines.amount": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.first_after_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.long_after_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.max_per_turn": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.min_gap_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.phrases.<language>.long.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.phrases.<language>.opener.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.phrases.<language>.opener_short.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.phrases.<language>.still.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.still_after_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.still_quiet_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.still_repeat_max": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.still_repeat_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.taper_after_turns": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.tool_after_ms": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.tools.<key>.items": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.tools.<key>.list": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.tools.<key>.search": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.tools.<key>.server": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_conversational.wait_lines.user_choice": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
@@ -1051,13 +1051,13 @@
   },
   "audio_read_aloud.enabled": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "audio_read_aloud.speech_provider": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
@@ -2063,7 +2063,7 @@
   },
   "client_tools.tools.<key>.replay.max_input_field_bytes": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2087,7 +2087,7 @@
   },
   "client_tools.tools.<key>.submission.max_part_calls": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2099,7 +2099,7 @@
   },
   "client_tools.tools.<key>.submission.max_row_tries": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2111,13 +2111,13 @@
   },
   "client_tools.tools.<key>.submission.part_key": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "client_tools.tools.<key>.submission.part_tools.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2423,7 +2423,7 @@
   },
   "desktop_sidecar.strict_mode": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
@@ -4625,49 +4625,49 @@
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.client_id": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.client_secret": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.enabled": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.grant_type": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.scope": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.subject_credential": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
   "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.token_endpoint": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unstable"
   },
@@ -4745,7 +4745,7 @@
   },
   "mcp_servers.<server-id>.display_name": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -4757,19 +4757,19 @@
   },
   "mcp_servers.<server-id>.glossary.choice_labels.<field-name>.<choice-value>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "mcp_servers.<server-id>.glossary.field_names.<field-name>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "mcp_servers.<server-id>.glossary.vocabularies.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -4787,13 +4787,13 @@
   },
   "mcp_servers.<server-id>.mcp_apps.enabled": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "mcp_servers.<server-id>.mcp_apps.sandbox_origin": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -4829,7 +4829,7 @@
   },
   "mcp_servers.<server-id>.surface_hints": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -4961,7 +4961,7 @@
   },
   "mcp_servers_global.organization_email_domains.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -5009,61 +5009,61 @@
   },
   "mcp_servers_global.surfaces.<surface>.accept.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.chat_provider_id": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.enabled": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt.fallback": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt.label": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt.prompt": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt.prompt_name": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.explain.prompt.source": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "message_text_actions.quote_enabled": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -5177,43 +5177,43 @@
   },
   "scheduled.templates.enabled": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.priority_order.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.templates.<template-id>.description": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.templates.<template-id>.message": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.templates.<template-id>.name": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.templates.<template-id>.title": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "scheduled.templates.templates.<template-id>.type": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -5351,85 +5351,85 @@
   },
   "spoken_number_words.<language>.ambiguous.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.ambiguous_ordinals.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.joiners.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.multipliers.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.numbers.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.ordinal_endings.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_number_words.<language>.ordinals.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_readings.<language>.<written-form>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_readings.<language>.<written-form>.sentence_final": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_readings.<language>.<written-form>.spoken": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "alpha"
   },
   "spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "spoken_vocabularies.<key>.<key>.field_names.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "spoken_vocabularies.<key>.<key>.sentences.<key>.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
   "spoken_vocabularies.<key>.<key>.table_names.<key>": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -5549,25 +5549,25 @@
   },
   "tool_labels.allow_other_provider": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "high",
     "stability": "alpha"
   },
   "tool_labels.chat_provider_id": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "tool_labels.enabled": {
     "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "medium",
     "stability": "alpha"
   },
   "turn_instructions.spoken_reply.prompt": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

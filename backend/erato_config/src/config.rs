@@ -1054,7 +1054,7 @@ pub struct AppConfig {
 
     /// Actions offered on text the user marks in a chat message.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub message_text_actions: MessageTextActionsConfig,
 
     /// User-approved replacement of conversational context with a summary.
@@ -1064,7 +1064,7 @@ pub struct AppConfig {
 
     /// A model that labels the MCP calls the generic rules cannot.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::security_relevance(level = "medium"))]
     #[facet(erato_config::default_value_security(level = "more_secure"))]
@@ -1073,7 +1073,7 @@ pub struct AppConfig {
     /// Understanding what the user says while an approval card waits in
     /// conversational audio mode.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::security_relevance(level = "medium"))]
     #[facet(erato_config::default_value_security(level = "more_secure"))]
@@ -1082,7 +1082,7 @@ pub struct AppConfig {
     /// Deciding a waiting approval card by voice in conversational audio
     /// mode.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::security_relevance(level = "high"))]
     #[facet(erato_config::default_value_security(level = "more_secure"))]
@@ -1091,7 +1091,7 @@ pub struct AppConfig {
     /// What the model is told when the user asks for a waiting tool call to
     /// be changed instead of allowing or denying it, and how far that goes.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub approval_change_requests: ApprovalChangeRequestsConfig,
 
@@ -1177,12 +1177,12 @@ pub struct AppConfig {
     // audio modes above: it works with `audio_conversational` disabled.
     #[serde(default)]
     #[facet(erato_config::stability(level = "alpha"))]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub audio_read_aloud: AudioReadAloudConfig,
 
     /// Instructions the model gets on a single turn, by type.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub turn_instructions: TurnInstructionsConfig,
 
     /// How much a waiting approval card says aloud and how it is worded, in
@@ -1191,7 +1191,7 @@ pub struct AppConfig {
         default,
         deserialize_with = "crate::spoken::deserialize_approval_speech"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub approval_speech: ApprovalSpeechConfig,
 
@@ -1202,7 +1202,7 @@ pub struct AppConfig {
         default,
         deserialize_with = "crate::spoken::deserialize_spoken_vocabularies"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub spoken_vocabularies: SpokenVocabulariesConfig,
 
     /// Number words by language tag, so that a number or date a person says
@@ -1214,7 +1214,7 @@ pub struct AppConfig {
         default,
         deserialize_with = "crate::spoken::deserialize_spoken_number_words"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub spoken_number_words: SpokenNumberWordsByLanguage,
 
@@ -1226,7 +1226,7 @@ pub struct AppConfig {
         default,
         deserialize_with = "crate::spoken_readings::deserialize_spoken_readings"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub spoken_readings: crate::spoken_readings::SpokenReadingsByLanguage,
 
@@ -1274,7 +1274,7 @@ pub struct AppConfig {
     // The web app's Scheduled page. The page itself is shown when
     // `scheduled_deliveries.enabled` is true.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub scheduled: ScheduledConfig,
 
     // **Deprecated**: Please use `chat_providers` instead for multiple provider support and better flexibility.
@@ -1351,7 +1351,7 @@ pub struct DesktopSidecarConfig {
     /// configuration cannot set or relax it. Requires
     /// `client_tools.durable_operations_enabled`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::security_relevance(level = "high"))]
     pub strict_mode: bool,
@@ -4378,7 +4378,7 @@ pub struct ApprovalVoiceCommandsConfig {
     /// negations, conditions and question words feed the guards.
     #[serde(deserialize_with = "crate::voice_command_words::deserialize_voice_command_words")]
     #[facet(erato_config::security_relevance(level = "high"))]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub words: crate::voice_command_words::VoiceCommandWordsByLanguage,
 }
@@ -4411,7 +4411,7 @@ pub struct ApprovalVoiceDecisionsConfig {
     /// warning when it could be heard by mistake.
     #[serde(deserialize_with = "crate::confirmation_phrases::deserialize_confirmation_phrases")]
     #[facet(erato_config::security_relevance(level = "high"))]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub phrases: crate::confirmation_phrases::ConfirmationPhrasesByLanguage,
 }
@@ -4522,18 +4522,18 @@ mod approval_voice_commands_tests {
 pub struct ApprovalChangeRequestsConfig {
     /// The note the model reads as the withdrawn call's result, next to the
     /// user's words.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub note: String,
     /// The note the model reads once a turn has taken more than `max_rounds`
     /// change requests. The model then answers without tools.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub limit_note: String,
     /// How many change requests one turn may take; the next one ends the turn
     /// with a short answer.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_rounds: u32,
     /// The longest change request accepted, in characters.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_chars: usize,
 }
 
@@ -5063,7 +5063,7 @@ pub struct McpServerConfig {
     /// bidi or invisible formatting characters. When omitted, the server id is
     /// shown tidied up.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub display_name: Option<String>,
     // The type of transport that the MCP server uses.
     // Supported values are:
@@ -5117,7 +5117,7 @@ pub struct McpServerConfig {
     /// fields and the meaning of its choice values. Display only: it never
     /// changes what a call does or whether it asks.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub glossary: McpGlossaryConfig,
     /// Whether this server is told, with a tool call, which surface the call
     /// comes from (the web app, an Office add-in, the Teams tab or the Teams
@@ -5132,12 +5132,12 @@ pub struct McpServerConfig {
     /// call's MCP metadata, never as a tool argument, so the model never sees
     /// it. Off by default: other servers receive nothing.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub surface_hints: bool,
     /// Interactive views (MCP Apps) that this server's tools declare. Off by
     /// default: the server's tools then work as they always have.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub mcp_apps: McpAppsConfig,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
@@ -5165,7 +5165,7 @@ pub struct McpAppsConfig {
     /// Whether the views this server's tools declare are read and offered to
     /// the web app. A view never reaches the model.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub enabled: bool,
     /// The origin the web app loads this server's views from, such as
     /// `https://mcp-apps.example.net`: `http` or `https`, a host and an
@@ -5174,7 +5174,7 @@ pub struct McpAppsConfig {
     /// sends Erato's cookies with requests from the same site.
     /// Required when `enabled` is set.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub sandbox_origin: Option<String>,
 }
 
@@ -5219,12 +5219,12 @@ pub struct McpGlossaryConfig {
     /// What people call a field, keyed by the field's exact name in the
     /// tool's arguments.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub field_names: HashMap<String, String>,
     /// What each value of a choice field means, keyed by the field's exact
     /// name and then by the value as the tool writes it.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub choice_labels: HashMap<String, HashMap<String, String>>,
     /// Names of `[spoken_vocabularies]` whose words the voice uses for this
     /// server's fields, choice values and tables, in the listener's language.
@@ -5232,7 +5232,7 @@ pub struct McpGlossaryConfig {
     /// an entry wins; a name without one is spoken as the card shows it. A
     /// field or value the names above cover is spoken with their word.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub vocabularies: Vec<String>,
 }
 
@@ -5422,7 +5422,7 @@ pub struct McpServerForwardedAuthenticationConfig {
     #[serde(default)]
     #[facet(erato_config::hide_in_docs(hidden = true))]
     #[facet(erato_config::stability(level = "unstable"))]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub custom_token_exchange: Option<McpCustomTokenExchangeConfig>,
     pub credential: McpServerForwardedCredential,
     #[serde(default = "default_mcp_forwarded_auth_header_name")]
@@ -5447,7 +5447,7 @@ impl Default for McpServerForwardedAuthenticationConfig {
 #[serde(default, deny_unknown_fields)]
 #[facet(erato_config::hide_in_docs(hidden = true))]
 #[facet(erato_config::stability(level = "unstable"))]
-#[facet(erato_config::introduced_in(version = "unreleased"))]
+#[facet(erato_config::introduced_in(version = "0.9.0"))]
 pub struct McpCustomTokenExchangeConfig {
     pub enabled: bool,
     pub subject_credential: McpServerForwardedCredential,
@@ -5612,7 +5612,7 @@ pub struct McpServersGlobalConfig {
     /// Email domains that count as inside the organisation on approval cards
     /// and trace rows, next to the signed-in user's own domain.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub organization_email_domains: Vec<String>,
 
     /// Maximum number of seconds the synthetic `wait` tool may defer a
@@ -5633,7 +5633,7 @@ pub struct McpServersGlobalConfig {
     /// `surface_hints`. An entry replaces the built-in list of that surface;
     /// a surface with neither is sent no hint.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub surfaces: HashMap<String, McpSurfaceConfig>,
 }
 
@@ -5643,7 +5643,7 @@ pub struct McpServersGlobalConfig {
 pub struct McpSurfaceConfig {
     /// MIME types the surface can show, most preferred first, such as
     /// `["image/svg+xml", "image/png"]`. Exact `type/subtype` values only.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub accept: Vec<String>,
 }
 
@@ -8389,7 +8389,7 @@ pub struct ClientToolReplayConfig {
     /// JSON bytes a kept argument may have before it is left out of the
     /// replayed call. Default 2048, at most 65536.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_input_field_bytes: Option<usize>,
 }
 
@@ -8633,7 +8633,7 @@ pub struct ClientToolSubmissionConfig {
     /// call is checked against its own schema, does not end generation and
     /// uses neither an attempt nor the ordinary tool budget. Default: none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub part_tools: Vec<String>,
     /// Part calls per request, across all part tools. Must be 1–200.
     /// Default: 40.
@@ -8641,7 +8641,7 @@ pub struct ClientToolSubmissionConfig {
         default = "default_submission_max_part_calls",
         skip_serializing_if = "is_default_submission_max_part_calls"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_part_calls: u32,
     /// Calls per part, the part being named by `part_key`. Must be 1–10.
     /// Default: 3.
@@ -8649,7 +8649,7 @@ pub struct ClientToolSubmissionConfig {
         default = "default_submission_max_row_tries",
         skip_serializing_if = "is_default_submission_max_row_tries"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_row_tries: u32,
     /// JSON Pointer to the argument of a part call that names its part. The
     /// calls of a part tool without that argument share one part. Default:
@@ -8658,7 +8658,7 @@ pub struct ClientToolSubmissionConfig {
         default = "default_submission_part_key",
         skip_serializing_if = "is_default_submission_part_key"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub part_key: String,
 }
 
@@ -9448,38 +9448,38 @@ pub struct AudioConversationalConfig {
     /// Silence in milliseconds that ends the speaker's turn and sends it.
     /// Defaults to `1800`; allowed from `500` to `5000`.
     #[serde(default = "default_end_of_turn_silence_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub end_of_turn_silence_ms: u32,
     /// Silence in milliseconds that ends what the user says to a waiting
     /// approval card. Shorter than a conversation's, because card commands
     /// are a few words. Defaults to `1000`; allowed from `500` to `5000`.
     #[serde(default = "default_card_end_of_turn_silence_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub card_end_of_turn_silence_ms: u32,
     /// Speech, in milliseconds, the voice detector must count before a
     /// conversational turn can end. It counts only what it is fairly sure is
     /// speech, often just the vowels: a short word is far shorter than it
     /// sounds. Defaults to `250`; allowed from `32` to `2000`.
     #[serde(default = "default_min_speech_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub min_speech_ms: u32,
     /// The same while a waiting approval card listens, whose commands are the
     /// shortest words there are ("Stopp", "Ja"). Defaults to `64`; allowed
     /// from `32` to `2000`.
     #[serde(default = "default_card_min_speech_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub card_min_speech_ms: u32,
     /// Audio, in milliseconds, a voice starting from silence waits for before
     /// it plays, so its first syllable does not stand alone before the speech
     /// provider's first pause. `0` plays at once. Defaults to `400`; allowed
     /// from `0` to `2000`. Also used when a message is read aloud.
     #[serde(default = "default_voice_start_buffer_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub voice_start_buffer_ms: u32,
     /// The longest such a voice waits, in milliseconds; what has come by
     /// then plays. Defaults to `350`; allowed from `0` to `2000`.
     #[serde(default = "default_voice_start_max_wait_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub voice_start_max_wait_ms: u32,
     /// Hesitation sounds added to the built-in German and English base. A
     /// conversational turn whose words are all hesitation sounds does not
@@ -9489,13 +9489,13 @@ pub struct AudioConversationalConfig {
     /// voice-command `hesitations` are trimmed, never these. Defaults to
     /// none.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub hesitation_words: Vec<String>,
     /// Whether `hesitation_words` replaces the built-in base instead of
     /// adding to it. With an empty list, no turn is held back as a
     /// hesitation. Defaults to `false`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub hesitation_words_replace_base: bool,
     /// Hesitation sounds per language tag, usually from a content package,
     /// added to the list above for a user whose interface is in that
@@ -9508,18 +9508,18 @@ pub struct AudioConversationalConfig {
         default,
         deserialize_with = "crate::language_words::deserialize_hesitations"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub hesitations: HashMap<String, Vec<String>>,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub talk_over_voice: bool,
     /// How long, in milliseconds, speech over the voice must last before the
     /// voice stops. Defaults to `500`; allowed from `200` to `2000`.
     #[serde(default = "default_talk_over_voice_min_speech_ms")]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub talk_over_voice_min_speech_ms: u32,
     /// What the voice says while the user waits for an answer: an opener,
     /// a line per slow tool call, and lines for long waits.
@@ -9530,7 +9530,7 @@ pub struct AudioConversationalConfig {
         default,
         deserialize_with = "crate::wait_lines::deserialize_wait_lines"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub wait_lines: Box<crate::wait_lines::WaitLinesConfig>,
     /// How a reply is spoken: a short answer for the ear with the complete
@@ -9539,14 +9539,14 @@ pub struct AudioConversationalConfig {
         default,
         deserialize_with = "crate::reply_speech::deserialize_reply_speech"
     )]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub reply_speech: crate::reply_speech::ReplySpeechConfig,
     /// Whether the reply voice is stored with the message, so it can be
     /// played again later. Off, the voice is only streamed while it speaks.
     /// Defaults to `false`: keeping voice recordings is an explicit choice.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub keep_reply_audio: bool,
 }
 

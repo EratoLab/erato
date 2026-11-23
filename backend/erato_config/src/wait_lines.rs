@@ -40,66 +40,66 @@ pub enum WaitLinesAmount {
 #[serde(default)]
 pub struct WaitLinesConfig {
     /// `normal`, `long_only` or `off`. Defaults to `normal`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub amount: WaitLinesAmount,
     /// When the opener ("Einen Moment.") is due, and never before the
     /// transcript is back. Defaults to `3000`; allowed from `1500` to `10000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub first_after_ms: u32,
     /// How long a tool call runs before its line is due. Defaults to `1500`;
     /// allowed from `0` to `10000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub tool_after_ms: u32,
     /// When the "still on it" line is due. Defaults to `12000`; allowed from
     /// `5000` to `60000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub still_after_ms: u32,
     /// The "still on it" line waits until nothing was said for this long, so
     /// it is skipped while tool lines keep coming. Defaults to `8000`;
     /// allowed from `2000` to `30000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub still_quiet_ms: u32,
     /// When the "this takes longer" line is due. Defaults to `22000`;
     /// allowed from `10000` to `120000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub long_after_ms: u32,
     /// After the long line, "still on it" again every this many
     /// milliseconds until the turn ends. `0` says it no more. Defaults to
     /// `18000`; allowed `0` or from `10000` to `60000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub still_repeat_ms: u32,
     /// How many "still on it" lines at most after the long line, so a turn
     /// that hangs goes quiet while the screen shows the wait. Defaults to
     /// `3`; allowed from `0` to `20`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub still_repeat_max: u32,
     /// From the end of one line to the start of the next. Defaults to
     /// `4000`; allowed from `1000` to `15000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub min_gap_ms: u32,
     /// Openers, tool lines and the first "still on it" in one turn at most;
     /// the long line and the repeats after it are outside this cap. `0` says
     /// nothing at all. Defaults to `3`; allowed from `0` to `5`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub max_per_turn: u32,
     /// After this many turns with an opener, the opener comes from the short
     /// set. `0` never shortens. Defaults to `3`; allowed up to `50`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub taper_after_turns: u32,
     /// Whether a user may choose their own amount. `false` is a lock no
     /// audience reopens; with `true`, a supervisor's audience may still
     /// close it. Defaults to `true`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub user_choice: bool,
     /// Lines per language tag, by slot. A language or slot without lines
     /// says nothing.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub phrases: HashMap<String, WaitLinePhrasesConfig>,
     /// Tool call line templates per language tag. `search` holds
     /// `{search}`; `items` and `list` hold `{table}`; `server`, said for a
     /// read-only call none of the others can name, holds `{server}`. A
     /// template not set, or empty, says nothing.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub tools: HashMap<String, WaitLineToolsConfig>,
 }
 
@@ -108,26 +108,26 @@ pub struct WaitLinesConfig {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
 #[serde(default)]
 pub struct WaitLinePhrasesConfig {
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub opener: Option<Vec<String>>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub opener_short: Option<Vec<String>>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub still: Option<Vec<String>>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub long: Option<Vec<String>>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
 #[serde(default)]
 pub struct WaitLineToolsConfig {
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub search: Option<String>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub items: Option<String>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub list: Option<String>,
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub server: Option<String>,
 }
 
