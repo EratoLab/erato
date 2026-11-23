@@ -2,9 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import languageBase from "@/lib/generated/languageBase.json";
+import { addCatalog, forgetLoadedCatalogs } from "@/lib/i18n";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
 import { messages as deMessages } from "@/locales/de/messages.json";
+import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { noteChangeSending, useApprovalChanges } from "./approvalChanges";
 import { quietSpokenTurn, useSpeechPlayback } from "./speechPlayback";
@@ -58,6 +60,7 @@ beforeEach(() => {
   forgetApprovalCards.mockClear();
   started.clear();
   resetSpokenLanguage();
+  forgetLoadedCatalogs();
   useSpeechPlayback.setState({
     conversational: true,
     enabled: true,
@@ -114,13 +117,11 @@ describe("useSpokenApprovalCard", () => {
     it("says the card in German to German speech under an English interface", async () => {
       const { i18n } = await import("@lingui/core");
       expect(i18n.locale).toBe("en");
-      // Before the German catalog is there, the card is said in English.
       expect(spokenCard("de").language).toBe("en");
-      i18n.load("de", deMessages as unknown as Messages);
+      addCatalog("de", deMessages as unknown as Messages);
       const card = spokenCard("de");
       expect(card.language).toBe("de");
       expect(card.pieces[0].text).toBe(GERMAN_POINTER);
-      // The interface stays English.
       expect(i18n.locale).toBe("en");
     });
 
@@ -129,12 +130,29 @@ describe("useSpokenApprovalCard", () => {
       const previous = i18n.locale;
       i18n.load("de", deMessages as unknown as Messages);
       i18n.activate("de");
+      addCatalog("en", enMessages as unknown as Messages);
       try {
         expect(spokenCard(undefined).pieces[0].text).toBe(GERMAN_POINTER);
         const card = spokenCard("en");
         expect(card.language).toBe("en");
         expect(card.pieces[0].text).toBe("A decision is waiting on screen.");
         expect(i18n.locale).toBe("de");
+      } finally {
+        i18n.activate(previous);
+      }
+    });
+
+    it("says only the pointer in a Polish interface without an English catalog", async () => {
+      const { i18n } = await import("@lingui/core");
+      const previous = i18n.locale;
+      i18n.load("pl", { "spokenCard.pointer": "Na ekranie czeka decyzja." });
+      i18n.activate("pl");
+      try {
+        const card = spokenCard("pl");
+        expect(card.language).toBe("pl");
+        expect(card.pieces.map((piece) => piece.text)).toEqual([
+          "Na ekranie czeka decyzja.",
+        ]);
       } finally {
         i18n.activate(previous);
       }

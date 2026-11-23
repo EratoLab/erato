@@ -4,7 +4,7 @@
 //! receipt, which the decision then carries.
 
 use super::approval_access::check_waiting_approval_of_user;
-use super::me_profile_middleware::{MeProfile, normalize_supported_language};
+use super::me_profile_middleware::MeProfile;
 use super::message_streaming::ParkedApprovalState;
 use crate::models::message::VoiceDecisionOutcome;
 use crate::policy::engine::PolicyEngine;
@@ -110,15 +110,10 @@ pub async fn interpret_approval_voice_command(
     if !switches.voice_commands {
         return Err(StatusCode::NOT_FOUND);
     }
-    let language = request
-        .language
-        .as_deref()
-        .and_then(crate::services::spoken_language::language_code)
-        .unwrap_or_else(|| {
-            normalize_supported_language(me_user.preference_language.as_deref())
-                .unwrap_or(&me_user.preferred_language)
-                .to_string()
-        });
+    let language =
+        super::read_aloud::voice_language(&app_state, &me_user, request.language.as_deref())
+            .code()
+            .to_string();
     let input = VoiceCommandInput {
         transcript: &request.transcript,
         language: &language,

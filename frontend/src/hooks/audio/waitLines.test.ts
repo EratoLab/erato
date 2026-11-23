@@ -361,7 +361,6 @@ describe("wait lines", () => {
     );
     await vi.advanceTimersByTimeAsync(3000);
     expect(sources).toHaveLength(1);
-    // The German lines are kept beside the English ones.
     fetchWaitLines.mockResolvedValue(response({ unchanged: true, lines: [] }));
     const german = await lines.prepareWaitLines();
     expect(german?.clips.opener.map((clip) => clip.text)).toEqual([

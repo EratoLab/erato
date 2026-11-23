@@ -246,7 +246,10 @@ pub async fn read_message_aloud(
     // A reply to a spoken question is read in the language it was asked in.
     let spoken = crate::services::spoken_language::of_turn(&app_state.db, message_id)
         .await
-        .map_err(|error| log_internal_server_error(error.into()))?;
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Cannot read the spoken language of the turn");
+            None
+        });
     let language = voice_language(&app_state, &me_user, spoken.as_deref());
     if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);

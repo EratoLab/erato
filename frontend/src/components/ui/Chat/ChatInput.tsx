@@ -1,4 +1,3 @@
-import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import {
@@ -53,6 +52,7 @@ import {
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
 import {
+  dropUnsentSpokenLanguage,
   mainLanguage,
   noteSpokenTurnLanguage,
   useSpokenLanguage,
@@ -107,6 +107,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { useChatSession } from "@/providers/ChatProvider";
 import {
   useUploadFeature,
@@ -246,7 +247,7 @@ const likelySpokenLanguages = (): string[] => {
     ...browser,
   ]
     .filter((language): language is string => Boolean(language))
-    .map((language) => language.split(/[-_]/)[0].toLowerCase());
+    .map(primaryLanguage);
   return [...new Set(languages)].slice(0, 3);
 };
 
@@ -624,7 +625,7 @@ export const ChatInput = ({
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
   const hesitationLanguage =
-    useSpokenLanguage((state) => state.turn) ?? i18n.locale;
+    useSpokenLanguage((state) => state.turn) ?? mainLanguage();
   const isHesitationOnly = useMemo(
     () =>
       hesitationMatcher(
@@ -646,7 +647,10 @@ export const ChatInput = ({
     useSpeechPlayback.setState({
       conversational: isAudioMode && Boolean(speechEnabled),
     });
-    if (!isAudioMode) stopSpeechPlayback();
+    if (!isAudioMode) {
+      stopSpeechPlayback();
+      dropUnsentSpokenLanguage();
+    }
     // Asked again each time audio mode starts, so a changed voice brings
     // lines in that voice; in each language the user may speak, so the
     // first turn in one already has its lines.

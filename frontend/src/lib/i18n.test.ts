@@ -2,6 +2,7 @@ import { detect, fromNavigator } from "@lingui/detect-locale";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
+  addCatalog,
   catalogLoaded,
   detectLocale,
   dynamicActivate,
@@ -409,7 +410,7 @@ describe("i18n Module Exports", () => {
 describe("inLocale", () => {
   it("takes the messages of another loaded catalog without switching the interface", () => {
     const previous = i18n.locale;
-    i18n.load("de", { "test.inLocale": "Hallo" });
+    addCatalog("de", { "test.inLocale": "Hallo" });
     i18n.load("en", { "test.inLocale": "Hello" });
     i18n.activate("en");
     const changes = vi.fn();
@@ -420,10 +421,8 @@ describe("inLocale", () => {
       expect(i18n.locale).toBe("en");
       expect(i18n._("test.inLocale")).toBe("Hello");
       expect(changes).not.toHaveBeenCalled();
-      // A language without a catalog keeps the interface's.
       expect(catalogLoaded("pl")).toBe(false);
       expect(inLocale("pl", () => i18n._("test.inLocale"))).toBe("Hello");
-      // Restored even when composing throws.
       expect(() =>
         inLocale("de", () => {
           throw new Error("boom");

@@ -491,7 +491,6 @@ async fn a_spoken_turn_keeps_its_language_and_names_it_to_the_model(pool: Pool<P
         erato::services::spoken_language::of_input_parameters(typed_user.input_parameters.as_ref()),
         None
     );
-    // The chat keeps the language of its latest spoken message.
     assert_eq!(
         erato::services::spoken_language::of_chat(
             &state.db,
@@ -517,10 +516,17 @@ async fn a_spoken_turn_keeps_its_language_and_names_it_to_the_model(pool: Pool<P
         .iter()
         .filter(|body| body.contains("Zeig mir die Angebote") && !body.contains("Typed afterwards"))
         .collect();
-    assert!(!spoken_bodies.is_empty());
-    for body in spoken_bodies {
-        let at = body.find(sentence).expect("spoken turn names its language");
-        assert!(at < body.find("Zeig mir die Angebote").unwrap());
+    // The chat title is asked for with the same words, without instructions.
+    let named: Vec<_> = spoken_bodies
+        .iter()
+        .filter(|body| body.contains(sentence))
+        .collect();
+    assert!(
+        !named.is_empty(),
+        "no request names the language: {spoken_bodies:?}"
+    );
+    for body in named {
+        assert!(body.find(sentence).unwrap() < body.find("Zeig mir die Angebote").unwrap());
     }
     for body in bodies
         .iter()

@@ -1,4 +1,5 @@
 import { fetchWaitLines } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { nextWaitStep } from "@/lib/waitLines/plan";
 import { toolWaitLine } from "@/lib/waitLines/toolLine";
 import { createSSEConnection } from "@/utils/sse/sseClient";
@@ -163,7 +164,7 @@ const WAIT_LINES_READ_TIMEOUT_MS = 120_000;
  */
 export function prepareWaitLines(language?: string): Promise<Loaded | null> {
   if (unsupported) return Promise.resolve(null);
-  const key = language ?? "";
+  const key = language ? primaryLanguage(language) : "";
   const pending = loadingLines.get(key);
   if (pending) return pending;
   const known = loadedLines.get(key);
@@ -200,7 +201,11 @@ export function prepareWaitLines(language?: string): Promise<Loaded | null> {
 
 /** The lines of the turn's language: none for a language without lines. */
 const linesOf = (current: Turn | null): Loaded | null =>
-  current ? (loadedLines.get(current.language ?? "") ?? null) : null;
+  current
+    ? (loadedLines.get(
+        current.language ? primaryLanguage(current.language) : "",
+      ) ?? null)
+    : null;
 
 /** For tests: forget everything. */
 export function resetWaitLines() {

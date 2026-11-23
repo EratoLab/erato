@@ -21,7 +21,6 @@ describe("spoken language of a turn", () => {
     expect(spokenTurnLanguage()).toBeUndefined();
     expect(takeSpokenTurnLanguage()).toBe("de");
     expect(spokenTurnLanguage()).toBe("de");
-    // A typed message carries none, and the voice keeps German.
     expect(takeSpokenTurnLanguage()).toBeUndefined();
     expect(spokenTurnLanguage()).toBe("de");
     noteSpokenTurnLanguage("en");
