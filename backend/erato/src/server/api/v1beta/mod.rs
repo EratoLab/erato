@@ -1491,8 +1491,14 @@ pub struct FacetsResponse {
 pub struct ApprovalToolInfo {
     /// `namespace/name`, the key of its stored decision.
     qualified_name: String,
-    /// What the tool does, for the settings list.
+    /// What the tool does, in the package's words. A client that can name the
+    /// change from `label` in the user's language shows that instead.
     title: String,
+    /// The change in the same terms as a tool call's label (`action` and
+    /// `object_kind`), when the tool has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    label: Option<crate::models::message::ToolCallLabel>,
     /// `user_decision` (Ask, Always or Never) or `every_call`, which asks
     /// every time and offers no Always.
     approval: String,
@@ -1682,6 +1688,11 @@ fn approval_tools(
         .map(|tool| ApprovalToolInfo {
             qualified_name: tool.qualified_name(),
             title: tool.description.clone(),
+            label: crate::services::tool_display::client_tool_call_display(
+                tool,
+                &serde_json::json!({}),
+            )
+            .and_then(|display| display.label),
             approval: match tool.approval {
                 ClientToolApproval::EveryCall => "every_call",
                 _ => "user_decision",

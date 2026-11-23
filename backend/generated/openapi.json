@@ -6258,13 +6258,17 @@
             "type": "string",
             "description": "`user_decision` (Ask, Always or Never) or `every_call`, which asks\nevery time and offers no Always."
           },
+          "label": {
+            "$ref": "#/components/schemas/ToolCallLabel",
+            "description": "The change in the same terms as a tool call's label (`action` and\n`object_kind`), when the tool has one."
+          },
           "qualified_name": {
             "type": "string",
             "description": "`namespace/name`, the key of its stored decision."
           },
           "title": {
             "type": "string",
-            "description": "What the tool does, for the settings list."
+            "description": "What the tool does, in the package's words. A client that can name the\nchange from `label` in the user's language shows that instead."
           }
         }
       },

@@ -21,6 +21,7 @@ use crate::config::{
 };
 use crate::models::message::{ContentPart, InputMessage, MessageRole, ToolDisplayMetadata};
 use crate::models::user_preference::ClientToolDecision;
+use crate::services::client_operations::ToolCallCharge;
 use crate::services::client_tools::{ClientToolOutcome, OfferedClientTool};
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::prompt_composition::replay_policy::ToolReplayPolicy;
@@ -29,6 +30,27 @@ use crate::services::submission_correction::SubmissionOutcome;
 /// Appended to the accepted submission's call id. A model's call id never
 /// carries it, so the chained call cannot collide with one.
 pub const CALL_ID_SUFFIX: &str = ".apply";
+/// Length of a chained call's id as a model provider sees it.
+const PROVIDER_CALL_ID_CHARS: usize = 9;
+
+/// The id a model provider sees for a chained call: `.` is not a valid call id
+/// character for some providers, and Mistral takes only 9 characters of
+/// `[A-Za-z0-9]`. Derived from the chained id, so every request of the answer
+/// and every later replay sends the same one.
+pub fn provider_call_id(call_id: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    call_id.strip_suffix(CALL_ID_SUFFIX)?;
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let digest = Sha256::digest(call_id.as_bytes());
+    Some(
+        digest
+            .iter()
+            .take(PROVIDER_CALL_ID_CHARS)
+            .map(|byte| ALPHABET[usize::from(*byte) % ALPHABET.len()] as char)
+            .collect(),
+    )
+}
+
 /// The reason of a chained call whose client went away before it answered.
 pub const PANE_GONE: &str = "pane_gone";
 /// Largest `client_confirmation` a decision may carry, as JSON.
@@ -142,19 +164,47 @@ pub fn apply_input(submission_call_id: &str, result: &Value) -> Value {
     })
 }
 
-/// Removes the top-level argument `pointer` names and returns its value.
-pub fn take_more_steps(input: &mut Value, pointer: &str) -> Option<Value> {
+/// Removes the top-level argument `pointer` names and returns its value with
+/// its position among the arguments. The others keep their order, so a
+/// replay sends the call as the model did.
+pub fn take_more_steps(input: &mut Value, pointer: &str) -> Option<(Value, usize)> {
     let key = pointer.strip_prefix('/')?;
-    input.as_object_mut()?.remove(key)
+    let object = input.as_object_mut()?;
+    let position = object.keys().position(|name| name == key)?;
+    let mut taken = None;
+    for (index, (name, value)) in std::mem::take(object).into_iter().enumerate() {
+        if index == position {
+            taken = Some(value);
+        } else {
+            object.insert(name, value);
+        }
+    }
+    taken.map(|value| (value, position))
 }
 
-/// The arguments as the model sent them, for the schema check.
-pub fn with_more_steps(input: &Value, pointer: &str, value: &Value) -> Value {
-    let mut restored = input.clone();
-    if let (Some(key), Some(object)) = (pointer.strip_prefix('/'), restored.as_object_mut()) {
-        object.insert(key.to_string(), value.clone());
+/// The arguments as the model sent them: `value` put back at `position`
+/// (last when unknown).
+pub fn with_more_steps(
+    input: &Value,
+    pointer: &str,
+    value: &Value,
+    position: Option<usize>,
+) -> Value {
+    let (Some(key), Some(object)) = (pointer.strip_prefix('/'), input.as_object()) else {
+        return input.clone();
+    };
+    let position = position.unwrap_or(object.len()).min(object.len());
+    let mut restored = serde_json::Map::new();
+    for (index, (name, existing)) in object.iter().enumerate() {
+        if index == position {
+            restored.insert(key.to_string(), value.clone());
+        }
+        restored.insert(name.clone(), existing.clone());
     }
-    restored
+    if position == object.len() {
+        restored.insert(key.to_string(), value.clone());
+    }
+    Value::Object(restored)
 }
 
 /// The apply configuration of a submission, when its apply tool is offered.
@@ -201,6 +251,7 @@ pub fn offer_apply_tools(
     registered: &[String],
     decisions: &BTreeMap<String, ClientToolDecision>,
     facet_always_ask: &[String],
+    mcp_has_tool: impl Fn(&str) -> bool,
     executor_for: impl Fn(
         &ClientToolConfig,
     ) -> Option<crate::services::client_operations::ExecutorBinding>,
@@ -221,9 +272,13 @@ pub fn offer_apply_tools(
         {
             continue;
         }
-        if offered.contains_key(&apply.name) {
+        // The offer's own name rule: an MCP tool of the same name would take
+        // the chained call.
+        let selection =
+            crate::services::client_tools::select_client_tools(vec![apply], &[], &mcp_has_tool);
+        if selection.offered.is_empty() || offered.contains_key(&apply.name) {
             tracing::warn!(
-                "Not chaining the apply tool '{qualified}': another offered tool already uses the name '{}'",
+                "Not chaining the apply tool '{qualified}': another tool already uses the name '{}'",
                 apply.name
             );
             continue;
@@ -438,10 +493,10 @@ pub fn consumed_read_output(
 #[derive(Debug, Clone, Default)]
 pub struct AnswerCuts {
     pub replay: ToolReplayPolicy,
-    /// Submissions with an apply table.
-    pub submissions: HashSet<String>,
-    pub consumed_reads: HashSet<String>,
-    pub apply_tools: HashSet<String>,
+    /// Submissions with an apply table, with their `more_steps` pointer.
+    pub submissions: HashMap<String, Option<String>>,
+    /// The reads each apply tool's change uses up, by apply tool.
+    pub consumed_reads: HashMap<String, HashSet<String>>,
 }
 
 impl AnswerCuts {
@@ -450,6 +505,13 @@ impl AnswerCuts {
             replay: ToolReplayPolicy::from_client_tools(config),
             ..Default::default()
         };
+        let model_name = |qualified: &str| {
+            config
+                .tools
+                .values()
+                .find(|candidate| candidate.qualified_name() == qualified)
+                .map(|tool| tool.name.clone())
+        };
         for tool in config.tools.values() {
             let Some(submission) = &tool.submission else {
                 continue;
@@ -457,22 +519,15 @@ impl AnswerCuts {
             let Some(apply) = &submission.apply else {
                 continue;
             };
-            cuts.submissions.insert(tool.name.clone());
-            for read in submission.consumed_reads() {
-                if let Some(read) = config
-                    .tools
-                    .values()
-                    .find(|candidate| candidate.qualified_name() == *read)
-                {
-                    cuts.consumed_reads.insert(read.name.clone());
-                }
-            }
-            if let Some(applier) = config
-                .tools
-                .values()
-                .find(|candidate| candidate.qualified_name() == apply.tool)
-            {
-                cuts.apply_tools.insert(applier.name.clone());
+            cuts.submissions
+                .insert(tool.name.clone(), apply.more_steps.clone());
+            if let Some(applier) = model_name(&apply.tool) {
+                cuts.consumed_reads.entry(applier).or_default().extend(
+                    submission
+                        .consumed_reads()
+                        .iter()
+                        .filter_map(|read| model_name(read)),
+                );
             }
         }
         cuts
@@ -482,15 +537,27 @@ impl AnswerCuts {
         self.submissions.is_empty()
     }
 
-    /// The model-facing results of the answer's earlier calls once a chained
-    /// apply ran and the answer goes on, by call id: every read of the
-    /// replaced state shortened to its receipt.
-    pub fn consumed_reads_in(&self, content: &[ContentPart]) -> HashMap<String, Value> {
+    fn consumed_by(&self, apply_tool: &str, read: &str) -> bool {
+        self.consumed_reads
+            .get(apply_tool)
+            .is_some_and(|reads| reads.contains(read))
+    }
+
+    /// The model-facing results of the answer's earlier calls once chained
+    /// applies of `applied` ran and the answer goes on, by call id: every read
+    /// of the state they replaced shortened to its receipt.
+    pub fn consumed_reads_in(
+        &self,
+        content: &[ContentPart],
+        applied: &HashSet<String>,
+    ) -> HashMap<String, Value> {
         content
             .iter()
             .filter_map(|part| match part {
                 ContentPart::ToolUse(tool_use)
-                    if self.consumed_reads.contains(&tool_use.tool_name) =>
+                    if applied
+                        .iter()
+                        .any(|apply| self.consumed_by(apply, &tool_use.tool_name)) =>
                 {
                     let output = tool_use.output.as_ref()?;
                     let shortened =
@@ -502,32 +569,56 @@ impl AnswerCuts {
             .collect()
     }
 
-    /// Applies the in-answer cuts to the replay of the answer in progress, as
-    /// a continuation rebuilds it: an accepted chained submission reads as
-    /// its receipt, and the reads before the latest apply that ran read as
-    /// theirs, as they did before the answer stopped.
-    pub fn apply_to_replay(&self, messages: &mut [InputMessage]) {
+    /// Applies the in-answer changes to the replay of the answer in progress,
+    /// as a continuation rebuilds it: an accepted chained submission reads as
+    /// its receipt, a read an apply after it used up reads as its receipt,
+    /// and a submission's call carries its `more_steps` argument as the model
+    /// sent it (from the charges, by call id), as they did before the answer
+    /// stopped.
+    pub fn apply_to_replay(
+        &self,
+        messages: &mut [InputMessage],
+        charges: &HashMap<String, ToolCallCharge>,
+    ) {
         if self.is_empty() {
             return;
         }
-        let last_apply = messages.iter().rposition(|message| {
-            matches!(
-                (&message.role, &message.content),
-                (MessageRole::Tool, ContentPart::ToolUse(tool_use))
-                    if self.apply_tools.contains(&tool_use.tool_name) && tool_use.output.is_some()
-            )
-        });
-        for (index, message) in messages.iter_mut().enumerate() {
-            if message.role != MessageRole::Tool {
-                continue;
+        let mut last_apply: HashMap<&str, usize> = HashMap::new();
+        for (index, message) in messages.iter().enumerate() {
+            if let (MessageRole::Tool, ContentPart::ToolUse(tool_use)) =
+                (&message.role, &message.content)
+                && tool_use.output.is_some()
+                && let Some((name, _)) = self.consumed_reads.get_key_value(&tool_use.tool_name)
+            {
+                last_apply.insert(name.as_str(), index);
             }
+        }
+        for (index, message) in messages.iter_mut().enumerate() {
             let ContentPart::ToolUse(tool_use) = &mut message.content else {
                 continue;
             };
+            if message.role == MessageRole::Assistant {
+                if let Some(Some(pointer)) = self.submissions.get(&tool_use.tool_name)
+                    && let Some(charge) = charges.get(&tool_use.tool_call_id)
+                    && let Some(value) = &charge.more_steps
+                    && let Some(input) = tool_use.input.as_mut()
+                {
+                    *input = with_more_steps(
+                        input,
+                        pointer,
+                        value,
+                        charge.more_steps_at.map(|at| at as usize),
+                    );
+                }
+                continue;
+            }
+            if message.role != MessageRole::Tool {
+                continue;
+            }
             let Some(output) = tool_use.output.as_ref() else {
                 continue;
             };
-            let chained_submission = self.submissions.contains(&tool_use.tool_name)
+            let chained_submission = self.submissions.contains_key(&tool_use.tool_name)
                 && output
                     .pointer("/apply/call_id")
                     .is_some_and(Value::is_string);
@@ -537,8 +628,9 @@ impl AnswerCuts {
                     &tool_use.tool_name,
                     &self.replay,
                 ))
-            } else if last_apply.is_some_and(|last| index < last)
-                && self.consumed_reads.contains(&tool_use.tool_name)
+            } else if last_apply
+                .iter()
+                .any(|(apply, last)| index < *last && self.consumed_by(apply, &tool_use.tool_name))
             {
                 consumed_read_output(output, &tool_use.tool_name, &self.replay)
             } else {
@@ -745,18 +837,160 @@ mod tests {
     }
 
     #[test]
-    fn more_steps_is_taken_out_and_put_back_for_the_check() {
-        let mut input = json!({"snapshot":"s","more_changes":true});
+    fn more_steps_is_taken_out_and_put_back_where_the_model_sent_it() {
+        let sent = json!({"snapshot":"s","more_changes":true,"readToken":"t","scoped_edit":{}});
+        let mut input = sent.clone();
+        let (value, position) = take_more_steps(&mut input, "/more_changes").unwrap();
+        assert_eq!((value.clone(), position), (json!(true), 1));
         assert_eq!(
-            take_more_steps(&mut input, "/more_changes"),
-            Some(json!(true))
+            input,
+            json!({"snapshot":"s","readToken":"t","scoped_edit":{}})
         );
-        assert_eq!(input, json!({"snapshot":"s"}));
         assert_eq!(take_more_steps(&mut input, "/more_changes"), None);
+        let restored = with_more_steps(&input, "/more_changes", &value, Some(position));
+        assert_eq!(restored.to_string(), sent.to_string());
         assert_eq!(
-            with_more_steps(&input, "/more_changes", &Value::Null),
+            with_more_steps(
+                &json!({"snapshot":"s"}),
+                "/more_changes",
+                &Value::Null,
+                None
+            ),
             json!({"snapshot":"s","more_changes":null})
         );
+    }
+
+    #[test]
+    fn an_mcp_tool_of_the_same_name_keeps_the_apply_tool_off_the_chain() {
+        let submit = ClientToolConfig {
+            name: "submit_comment_changes".into(),
+            namespace: Some("word".into()),
+            submission: Some(crate::config::ClientToolSubmissionConfig {
+                max_attempts: 3,
+                apply: Some(ClientToolSubmissionApplyConfig {
+                    tool: "word/apply_comment_changes".into(),
+                    more_steps: None,
+                    max_changes: 5,
+                    consumed_reads: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let tools: HashMap<String, ClientToolConfig> = [submit.clone(), apply_tool()]
+            .into_iter()
+            .map(|tool| (tool.name.clone(), tool))
+            .collect();
+        let offer = |mcp_name: &'static str| {
+            let mut offered = HashMap::from([(
+                submit.name.clone(),
+                OfferedClientTool::prepare(&submit, &json!({"type": "object"})).unwrap(),
+            )]);
+            offer_apply_tools(
+                &tools,
+                &mut offered,
+                &[],
+                &BTreeMap::new(),
+                &[],
+                |name| name == mcp_name,
+                |_| None,
+            );
+            offered.contains_key("apply_comment_changes")
+        };
+        assert!(offer("some_other_tool"));
+        assert!(!offer("apply_comment_changes"));
+    }
+
+    #[test]
+    fn an_apply_cuts_only_the_reads_its_own_submission_used_up() {
+        use crate::config::{
+            ClientToolReplayConfig, ClientToolReplayMode, ClientToolSubmissionConfig,
+        };
+        use crate::models::message::{ToolCallStatus, ToolUse};
+        let receipt = ClientToolReplayConfig {
+            mode: ClientToolReplayMode::Receipt,
+            keep_output_fields: vec!["$.status".into()],
+            ..Default::default()
+        };
+        let tool = |name: &str| ClientToolConfig {
+            name: name.into(),
+            namespace: Some("word".into()),
+            replay: receipt.clone(),
+            ..Default::default()
+        };
+        let submission = |name: &str, apply: &str, read: &str| ClientToolConfig {
+            submission: Some(ClientToolSubmissionConfig {
+                max_attempts: 3,
+                recovery_read_tools: vec![format!("word/{read}")],
+                apply: Some(ClientToolSubmissionApplyConfig {
+                    tool: format!("word/{apply}"),
+                    more_steps: None,
+                    max_changes: 5,
+                    consumed_reads: None,
+                }),
+                ..Default::default()
+            }),
+            ..tool(name)
+        };
+        let config = ClientToolsConfig {
+            tools: [
+                submission("submit_document_plan", "apply_document_plan", "read_blocks"),
+                submission("submit_comments", "apply_comments", "read_comments"),
+                tool("apply_document_plan"),
+                tool("apply_comments"),
+                tool("read_blocks"),
+                tool("read_comments"),
+            ]
+            .into_iter()
+            .map(|tool| (tool.name.clone(), tool))
+            .collect(),
+            ..Default::default()
+        };
+        let cuts = AnswerCuts::from_config(&config);
+        let used = |id: &str, name: &str| ToolUse {
+            tool_call_id: id.into(),
+            tool_name: name.into(),
+            status: ToolCallStatus::Success,
+            input: Some(json!({})),
+            output: Some(json!({"status":"success","result":{"text":"FULL"}})),
+            ..Default::default()
+        };
+        let content = vec![
+            ContentPart::ToolUse(used("blocks", "read_blocks")),
+            ContentPart::ToolUse(used("comments", "read_comments")),
+        ];
+        let applied = HashSet::from(["apply_comments".to_string()]);
+        let cut = cuts.consumed_reads_in(&content, &applied);
+        assert_eq!(cut.keys().collect::<Vec<_>>(), [&"comments".to_string()]);
+
+        let mut replay: Vec<InputMessage> = [
+            used("blocks", "read_blocks"),
+            used("comments", "read_comments"),
+            used("apply", "apply_comments"),
+        ]
+        .into_iter()
+        .map(|tool_use| InputMessage {
+            role: MessageRole::Tool,
+            content: ContentPart::ToolUse(tool_use),
+        })
+        .collect();
+        cuts.apply_to_replay(&mut replay, &HashMap::new());
+        let full = |index: usize| {
+            matches!(&replay[index].content, ContentPart::ToolUse(tool_use)
+                if tool_use.output.as_ref().unwrap().to_string().contains("FULL"))
+        };
+        assert!(full(0), "the document read still describes the document");
+        assert!(!full(1));
+    }
+
+    #[test]
+    fn a_chained_call_reaches_the_provider_under_an_id_every_provider_takes() {
+        let id = provider_call_id("aB3dE6gH9.apply").unwrap();
+        assert_eq!(id.len(), PROVIDER_CALL_ID_CHARS);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()), "{id}");
+        assert_eq!(provider_call_id("aB3dE6gH9.apply"), Some(id.clone()));
+        assert_ne!(provider_call_id("aB3dE6gH8.apply"), Some(id));
+        assert_eq!(provider_call_id("aB3dE6gH9"), None);
     }
 
     #[test]

@@ -462,6 +462,28 @@ pub struct ToolCallCharge {
     /// took out of the call before anything else saw it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub more_steps: Option<serde_json::Value>,
+    /// Where `more_steps` sat among the call's arguments.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more_steps_at: Option<u32>,
+    /// Settled against the per-message tool-call limit: counted, or exempt
+    /// as a chained apply is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub charged: bool,
+}
+
+impl ToolCallCharge {
+    /// Whether the call was already charged: reserved, refused or counted. A
+    /// charge that only holds the `more_steps` value is not one.
+    pub fn is_charged(&self) -> bool {
+        self.charged
+            || self.more_steps.is_none()
+            || *self
+                != Self {
+                    more_steps: self.more_steps.clone(),
+                    more_steps_at: self.more_steps_at,
+                    ..Default::default()
+                }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
