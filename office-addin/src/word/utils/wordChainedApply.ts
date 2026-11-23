@@ -25,6 +25,29 @@ export function wordChainedApplyCallId(
     : undefined;
 }
 
+/**
+ * Whether the user cancelled the server's apply call for an accepted submission or asked for a
+ * different change: nothing was written, and the same request may submit again.
+ */
+export function wordChainedApplyDeclined(
+  content: readonly ContentPart[] | undefined,
+  submissionCallId: string | undefined,
+): boolean {
+  const applyCallId = wordChainedApplyCallId(content, submissionCallId);
+  const part = applyCallId
+    ? (content ?? []).find(
+        (candidate) =>
+          candidate.content_type === "tool_use" &&
+          candidate.tool_call_id === applyCallId,
+      )
+    : undefined;
+  if (part?.content_type !== "tool_use" || part.status !== "error")
+    return false;
+  const output: unknown = part.output;
+  const status = object(output) ? output.status : undefined;
+  return status === "rejected" || status === "change_requested";
+}
+
 export type WordChainedApplyState =
   | { kind: "waiting" }
   | { kind: "applying" }

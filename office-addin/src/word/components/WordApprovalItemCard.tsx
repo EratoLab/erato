@@ -5,6 +5,11 @@ import {
 import { t } from "@lingui/core/macro";
 
 import { WordCommentChangesCard } from "./WordCommentChangesCard";
+import {
+  WordDecisionChoices,
+  wordCommentsStandingLabel,
+  wordPlanStandingLabel,
+} from "./WordDecisionChoices";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { useWordLiveCapture } from "../hooks/useWordChainedApply";
 import { wordAcceptedPlan } from "../utils/wordAcceptedSubmissions";
@@ -73,7 +78,17 @@ function WordChainedApprovalCard({
     onDecide,
   };
   // After a reload the pane no longer holds the copy the change was checked on.
-  const readAgain = () => <>{renderDefault({ note: wordReadAgainText() })}</>;
+  const readAgain = () => (
+    <WordReadAgainCard
+      item={item}
+      decision={decision}
+      standingLabel={
+        item.tool_name === WORD_APPLY_PLAN_TOOL
+          ? wordPlanStandingLabel()
+          : wordCommentsStandingLabel()
+      }
+    />
+  );
   if (item.tool_name === WORD_APPLY_PLAN_TOOL) {
     if (!plan || plan.messageId !== messageId || !live) return readAgain();
     return (
@@ -96,5 +111,64 @@ function WordChainedApprovalCard({
         decision={decision}
       />
     </HostArtifactProvider>
+  );
+}
+
+const displayText = (display: unknown, key: "title" | "description") => {
+  const value =
+    typeof display === "object" && display !== null
+      ? (display as Record<string, unknown>)[key]
+      : undefined;
+  return typeof value === "string" && value ? value : undefined;
+};
+
+/**
+ * A waiting change whose review the pane lost: the server's title and summary of it, why it is
+ * read again, and the card's own Apply and Cancel. Apply answers stale, so Erato reads again.
+ */
+function WordReadAgainCard({
+  item,
+  decision,
+  standingLabel,
+}: {
+  item: ApprovalItemCardProps["item"];
+  decision: WordCardDecision;
+  standingLabel: string;
+}) {
+  const title = displayText(item.display, "title");
+  const summary = displayText(item.display, "description");
+  return (
+    <div className="space-y-1" data-testid="word-chained-read-again">
+      {title ? (
+        <p
+          dir="auto"
+          className="text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+        >
+          {title}
+        </p>
+      ) : null}
+      {summary ? (
+        <p
+          dir="auto"
+          className="text-sm text-theme-fg-secondary [overflow-wrap:anywhere]"
+        >
+          {summary}
+        </p>
+      ) : null}
+      <p className="text-sm text-theme-fg-secondary">{wordReadAgainText()}</p>
+      <WordDecisionChoices
+        decision={decision}
+        title={t({
+          id: "officeAddin.word.chained.consent",
+          message: "Apply this change?",
+        })}
+        applyLabel={t({
+          id: "officeAddin.word.chained.apply",
+          message: "Apply change",
+        })}
+        canApply
+        standingLabel={standingLabel}
+      />
+    </div>
   );
 }

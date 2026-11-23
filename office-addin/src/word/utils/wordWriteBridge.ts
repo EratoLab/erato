@@ -1,5 +1,6 @@
 import type { WordReviewState } from "./wordReviewState";
 import type { WordRevertSlot } from "../providers/WordWriteProvider";
+import type { ContentPart } from "@erato/frontend/library";
 
 /** What the pane knows about an assistant message of the open chat, read from its stored turn. */
 export interface WordMessageContext {
@@ -7,6 +8,8 @@ export interface WordMessageContext {
   identity?: string;
   /** The user's request this message answers. */
   requestText?: string;
+  /** The message's parts as the pane has them now. */
+  content?: readonly ContentPart[];
 }
 
 /**

@@ -14,7 +14,10 @@ import {
   wordPlanContentJson,
 } from "@erato/frontend/word-review";
 
-import { rememberWordAcceptedPlan } from "./wordAcceptedSubmissions";
+import {
+  rememberWordAcceptedPlan,
+  wordAcceptedChangeDeclined,
+} from "./wordAcceptedSubmissions";
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
 import { wordPlanApprovalPreview } from "./wordApprovalPreview";
 import {
@@ -355,6 +358,9 @@ function createSubmissionExecutor(
         return "scoped_edit" in input || "finish" in input
           ? sparseRejection(input, scopedTokenRefusal(snapshot, input))
           : prepareWordDocumentSubmission(input, context, session);
+      session.drafts.releaseDeclined((callId) =>
+        wordAcceptedChangeDeclined(context.messageId, callId),
+      );
       if (session.drafts.accepted)
         return {
           ok: false,
@@ -511,7 +517,7 @@ function createSubmissionExecutor(
       }
       let result = prepared;
       if (prepared.ok) {
-        session.drafts.accepted = true;
+        session.drafts.accept(context.toolCallId);
         const expanded =
           "draft_id" in input ||
           "table_cell" in input ||

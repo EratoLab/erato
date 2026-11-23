@@ -1,3 +1,6 @@
+import { wordChainedApplyDeclined } from "./wordChainedApply";
+import { wordWriteBridge } from "./wordWriteBridge";
+
 /**
  * The submissions this pane accepted, by call id, so the server's apply call for one finds the
  * plan the pane checked. Pane memory only: after a reload the apply finds none and reads again.
@@ -29,4 +32,16 @@ export function wordAcceptedPlan(callId: string): WordAcceptedPlan | undefined {
 
 export function forgetWordAcceptedPlansForTests(): void {
   accepted.clear();
+}
+
+/**
+ * Whether the change a request accepted was declined in the decision place, so a new submission
+ * of the same answer is checked as the first one was.
+ */
+export function wordAcceptedChangeDeclined(
+  messageId: string,
+  submissionCallId: string | undefined,
+): boolean {
+  const content = wordWriteBridge()?.messageContext(messageId).content;
+  return wordChainedApplyDeclined(content, submissionCallId);
 }

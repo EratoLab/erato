@@ -9,7 +9,9 @@ import {
 
 import type { WordCardDecision } from "../WordDecisionChoices";
 
-const shown = vi.hoisted(() => ({ props: {} }));
+const shown: { props: Record<string, unknown> } = vi.hoisted(() => ({
+  props: {},
+}));
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");

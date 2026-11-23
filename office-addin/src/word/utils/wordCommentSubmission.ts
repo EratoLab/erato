@@ -3,6 +3,7 @@ import {
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 } from "@erato/frontend/word-review";
 
+import { wordAcceptedChangeDeclined } from "./wordAcceptedSubmissions";
 import { wordCommentApprovalPreview } from "./wordApprovalPreview";
 import {
   parseWordCommentChanges,
@@ -195,6 +196,13 @@ export function createWordCommentSubmissionExecutor(
       current.answers.set(context.toolCallId, { serialized, result });
       return result;
     };
+    if (
+      current.accepted &&
+      wordAcceptedChangeDeclined(context.messageId, current.accepted)
+    ) {
+      current.accepted = null;
+      current.rejected = 0;
+    }
     if (current.accepted)
       return remember(
         terminalFail(

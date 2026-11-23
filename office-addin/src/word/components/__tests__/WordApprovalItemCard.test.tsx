@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WordApprovalItemCard } from "../WordApprovalItemCard";
@@ -9,6 +9,19 @@ import type { ApprovalItemCardProps } from "@erato/frontend/library";
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
   return mock.createEratoLibraryMock({
+    ActionConfirmationCard: (card: {
+      title: string;
+      allowOnceLabel?: string;
+      denyLabel?: string;
+      onAllowOnce?: () => void;
+      onDeny?: () => void;
+    }) => (
+      <div>
+        <p>{card.title}</p>
+        <button onClick={card.onAllowOnce}>{card.allowOnceLabel}</button>
+        <button onClick={card.onDeny}>{card.denyLabel}</button>
+      </div>
+    ),
     useConversationMessage: () => ({
       id: "message-A",
       role: "assistant",
@@ -53,13 +66,20 @@ beforeEach(() => {
 });
 
 describe("Word's card in the decision place", () => {
-  it("after a reload shows the server's title and summary with the read-again line", () => {
+  it("after a reload shows the server's title and summary with the read-again line and its own Apply and Cancel", () => {
     const card = props();
     render(<WordApprovalItemCard {...card} />);
-    expect(card.renderDefault).toHaveBeenCalledWith({
-      note: "The document has to be read again before this change can be made.",
-    });
-    expect(screen.getByTestId("generic-card")).toHaveTextContent("read again");
+    expect(card.renderDefault).not.toHaveBeenCalled();
+    const shown = screen.getByTestId("word-chained-read-again");
+    expect(shown).toHaveTextContent("Change “Vertrag.docx”");
+    expect(shown).toHaveTextContent("Change 1 paragraph");
+    expect(shown).toHaveTextContent(
+      "The document has to be read again before this change can be made.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Apply change" }));
+    expect(card.onDecide).toHaveBeenCalledWith("approve", {});
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(card.onDecide).toHaveBeenCalledWith("reject");
   });
 
   it("leaves other tools and hosts to the generic card", () => {

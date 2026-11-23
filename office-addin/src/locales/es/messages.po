@@ -3893,6 +3893,11 @@ msgid "officeAddin.word.chained.applied"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.apply"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordChainedApply.ts
 msgid "officeAddin.word.chained.applying"
 msgstr ""
@@ -3900,6 +3905,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/word/utils/wordChainedApply.ts
 msgid "officeAddin.word.chained.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.consent"
 msgstr ""
 
 #. js-lingui-explicit-id

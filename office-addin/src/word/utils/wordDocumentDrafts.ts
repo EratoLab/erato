@@ -147,6 +147,8 @@ export class WordDocumentDraftStore {
   /** The section plan and parts of a change sent in parts. */
   readonly parts = new WordPartsDraftStore();
   accepted = false;
+  /** The call whose plan was accepted, while `accepted`. */
+  acceptedCallId?: string;
 
   clear(): void {
     this.parts.clear();
@@ -156,6 +158,23 @@ export class WordDocumentDraftStore {
     this.replies.clear();
     this.attempts.clear();
     this.accepted = false;
+    this.acceptedCallId = undefined;
+  }
+
+  accept(callId: string): void {
+    this.accepted = true;
+    this.acceptedCallId = callId;
+  }
+
+  /**
+   * The accepted plan was declined before anything was written: the request may plan again on
+   * the same copy. Redelivered calls still get their first answer.
+   */
+  releaseDeclined(declined: (callId: string | undefined) => boolean): void {
+    if (this.accepted && declined(this.acceptedCallId)) {
+      this.accepted = false;
+      this.acceptedCallId = undefined;
+    }
   }
 
   /** The latest rejected full plan or repair, as materialized. */

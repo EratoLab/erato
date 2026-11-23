@@ -1,6 +1,5 @@
 import {
   addUnsetClientToolDecisions,
-  extractTextFromContent,
   useApprovalTools,
   useConversationDropzone,
   useUploadFeature,
@@ -15,6 +14,7 @@ import { buildWordArtifact } from "./utils/buildWordArtifact";
 import { WORD_CLIENT_ACTION_DECISIONS_KEY } from "./utils/clientActionPolicy";
 import { setWordChainedApply } from "./utils/wordAuthoringContract";
 import { getWordDocumentIdentity } from "./utils/wordDocumentIdentity";
+import { wordMessageContext } from "./utils/wordMessageContext";
 import { AddinChatCore, AddinChatCoreView } from "../core/AddinChatCore";
 import {
   carryOverClientDecisions,
@@ -147,25 +147,15 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     });
   }, [chainedApply, offeredApplyTools, clientActionsByFacetId]);
   // Read when an apply runs without its copy, as after a reload: the request and its document.
-  const messagesRef = useRef(messagesWithArtifact);
-  messagesRef.current = messagesWithArtifact;
+  const messagesRef = useRef({ messages: messagesWithArtifact, messageOrder });
+  messagesRef.current = { messages: messagesWithArtifact, messageOrder };
   const messageContext = useCallback(
-    (messageId: string): WordMessageContext => {
-      const message = messagesRef.current[messageId];
-      const request = message?.previous_message_id
-        ? messagesRef.current[message.previous_message_id]
-        : undefined;
-      const requestText = request
-        ? extractTextFromContent(request.content)
-        : undefined;
-      const identity =
-        message?.hostArtifact?.itemIdentity ??
-        request?.action_facet_args?.document_identity;
-      return {
-        ...(identity ? { identity } : {}),
-        ...(requestText ? { requestText } : {}),
-      };
-    },
+    (messageId: string): WordMessageContext =>
+      wordMessageContext(
+        messagesRef.current.messages,
+        messagesRef.current.messageOrder,
+        messageId,
+      ),
     [],
   );
 

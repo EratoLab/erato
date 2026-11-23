@@ -14,12 +14,18 @@ import {
 import { WORD_CLIENT_ACTIONS } from "../wordClientActions";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import { createWordDocumentSubmissionExecutor } from "../wordDocumentSubmission";
+import { wordMessageContext } from "../wordMessageContext";
+import { setWordWriteBridge } from "../wordWriteBridge";
 
 import type { WordDocumentApplyResult } from "../wordApplyDocumentPlan";
 import type { WordClientActionRun } from "../wordClientActions";
 import type * as WordPlanApplyModule from "../wordPlanApply";
 import type { WordWriteBridge } from "../wordWriteBridge";
-import type { ClientToolCallContext } from "@erato/frontend/library";
+import type {
+  ClientToolCallContext,
+  ContentPart,
+  Message,
+} from "@erato/frontend/library";
 
 const routing = vi.hoisted(() => ({
   override: undefined as
@@ -141,7 +147,10 @@ beforeEach(() => {
   localStorage.clear();
   forgetWordAcceptedPlansForTests();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  setWordWriteBridge(null);
+  vi.restoreAllMocks();
+});
 
 describe("the server's apply of an accepted plan", () => {
   it("writes the plan once per call id, then reserves the next copy", async () => {
@@ -335,6 +344,53 @@ describe("the server's apply of an accepted plan", () => {
   });
 });
 
+describe("a change declined in the decision place", () => {
+  const declined = (status: string): ContentPart[] =>
+    [
+      {
+        content_type: "tool_use",
+        tool_call_id: "submit-A",
+        tool_name: "submit_document_plan",
+        status: "success",
+        output: { apply: { call_id: "submit-A.apply" }, result: {} },
+      },
+      {
+        content_type: "tool_use",
+        tool_call_id: "submit-A.apply",
+        tool_name: "apply_document_plan",
+        status: "error",
+        output: { status },
+      },
+    ] as unknown as ContentPart[];
+
+  it.each(["rejected", "change_requested"])(
+    "lets the same answer submit another plan once the change was %s",
+    async (status) => {
+      const { snapshot, session, bridge } = await accepted();
+      const submit = createWordDocumentSubmissionExecutor(session);
+      const again = () => {
+        const plan = examplePlan(snapshot.token);
+        plan.readToken = snapshot.readToken!;
+        return plan;
+      };
+      setWordWriteBridge(bridge);
+      expect(
+        await submit(again(), { ...submission, toolCallId: "submit-B" }),
+      ).toMatchObject({
+        ok: false,
+        error: "A document plan has already been accepted for this request.",
+      });
+      setWordWriteBridge({
+        ...bridge,
+        messageContext: () => ({ content: declined(status) }),
+      });
+      expect(
+        await submit(again(), { ...submission, toolCallId: "submit-C" }),
+      ).toMatchObject({ ok: true });
+    },
+  );
+});
+
 describe("an apply without its copy", () => {
   const reloadedPane = (
     stored: { identity?: string; requestText?: string },
@@ -366,6 +422,44 @@ describe("an apply without its copy", () => {
       },
     });
     expect(session.liveCapture(undefined)).toBeUndefined();
+  });
+
+  it("after a reload finds the request while the approved answer streams again", async () => {
+    // As the pane holds them once Allow starts the continuation: the answer is the streaming
+    // copy, without its link to the user's message.
+    const messages: Record<string, Message> = {
+      "user-A": {
+        id: "user-A",
+        role: "user",
+        content: [{ content_type: "text", text: "Shorten chapter 3" }],
+        createdAt: "2026-11-23T20:57:09Z",
+        action_facet_args: { document_identity: "doc-A" },
+      },
+      "message-A": {
+        id: "message-A",
+        role: "assistant",
+        content: [],
+        createdAt: "2026-11-23T21:05:02Z",
+        status: "sending",
+      },
+    };
+    const session = new WordDocumentReadSession();
+    const bridge = bridgeFor("doc-A");
+    bridge.messageContext = (id) =>
+      wordMessageContext(messages, ["user-A", "message-A"], id);
+    const apply = createWordApplyPlanExecutor({
+      session,
+      readEnabled: () => true,
+      bridge: () => bridge,
+    });
+    expect(await apply(applyInput(), applyContext())).toMatchObject({
+      ok: true,
+      result: {
+        status: "stale",
+        reason: "capture_lost",
+        snapshot: expect.any(String),
+      },
+    });
   });
 
   it("answers stale without a copy when reading the document is off", async () => {
