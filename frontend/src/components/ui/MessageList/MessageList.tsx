@@ -679,6 +679,10 @@ export const MessageList = memo<MessageListProps>(
       let lastScrollTop = container.scrollTop;
 
       const resumeIfNearBottom = () => {
+        // Only a paused answer needs bringing back. A smooth scroll on every
+        // wheel event races the user's own scroll in WebKit and leaves the
+        // page's scrollTop short of the screen, so hover lands above the pointer.
+        if (!isAutoScrollPaused) return;
         if (isNearScrollBottom(container, autoScrollResumeBottomThresholdPx)) {
           resumeAutoScrollForActiveCompletion();
           scrollToBottom();
