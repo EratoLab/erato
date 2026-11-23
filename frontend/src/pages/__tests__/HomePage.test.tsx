@@ -89,6 +89,17 @@ describe("HomePage", () => {
     });
   });
 
+  it("keeps the Settings link and fragment when redirecting from the root", () => {
+    mockStartingAssistant({ data: {} });
+
+    renderPage("/?preferencesDialog=open&preferencesTab=disclaimers#footer");
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/chat/new?preferencesDialog=open&preferencesTab=disclaimers#footer",
+      { replace: true },
+    );
+  });
+
   it("falls back to the welcome screen when the request fails", () => {
     mockStartingAssistant({
       error: { status: 500, payload: "boom" } as unknown as ReturnType<

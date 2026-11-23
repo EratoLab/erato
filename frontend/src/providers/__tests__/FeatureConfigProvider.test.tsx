@@ -121,6 +121,7 @@ describe("FeatureConfigProvider", () => {
       errorReportEnvironment: "test",
       userPreferencesEnabled: true,
       userPreferencesDataTabEnabled: true,
+      disclaimersTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
       maxUploadSizeBytes: 52428800, // 50 MB - matches backend default
       audioTranscriptionEnabled: false,
@@ -233,6 +234,7 @@ describe("FeatureConfigProvider", () => {
         userPreferences: {
           enabled: true,
           dataTabEnabled: true,
+          disclaimersTabEnabled: true,
           mcpServersTabEnabled: false,
           desktopSidecarTabEnabled: false,
         },

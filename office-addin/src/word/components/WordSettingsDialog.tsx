@@ -37,6 +37,7 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   return (
     <AddinSettingsDialogCore
       {...props}
+      supportsDisclaimers
       audioInputSupported={supportsAudioCapture}
       hostContribution={{
         tabLabel: t({

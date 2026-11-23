@@ -64,6 +64,7 @@ const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLE
 const FRONTEND_ENV_KEY_MESSAGE_TEXT_QUOTE_ENABLED: &str = "MESSAGE_TEXT_QUOTE_ENABLED";
 const FRONTEND_ENV_KEY_MESSAGE_TEXT_EXPLAIN_ENABLED: &str = "MESSAGE_TEXT_EXPLAIN_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
+const FRONTEND_ENV_KEY_DISCLAIMERS_TAB_ENABLED: &str = "DISCLAIMERS_TAB_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
     "USER_PREFERENCES_DATA_TAB_ENABLED";
 const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
@@ -634,6 +635,10 @@ fn build_frontend_environment_with(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED.to_string(),
         Value::Bool(config.user_preferences.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_DISCLAIMERS_TAB_ENABLED.to_string(),
+        Value::Bool(config.disclaimers.settings_tab_visible()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED.to_string(),
@@ -1586,7 +1591,48 @@ impl erato_memory::HeapSize for FrontedEnvironment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::DisclaimerConfig;
     use std::path::PathBuf;
+
+    #[test]
+    fn disclaimers_frontend_html_exposes_only_tab_visibility() {
+        let mut config = AppConfig::default();
+        for (enabled, populated, expected) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (true, true, true),
+        ] {
+            config.disclaimers.enable_settings_tab = enabled;
+            config.disclaimers.disclaimers.clear();
+            if populated {
+                config.disclaimers.disclaimers.insert(
+                    "fixture-notice-id".into(),
+                    DisclaimerConfig {
+                        title: "Fixture notice title".into(),
+                        content: "Fixture notice body".into(),
+                    },
+                );
+            }
+            for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+                let environment = build_frontend_environment(&config, kind);
+                let mut html = Vec::new();
+                inject_environment_script_tag(
+                    b"<html><head></head><body></body></html>",
+                    &mut html,
+                    &environment,
+                    &[],
+                    None,
+                )
+                .unwrap();
+                let html = String::from_utf8(html).unwrap();
+                assert!(html.contains(&format!("window.DISCLAIMERS_TAB_ENABLED = {expected};")));
+                assert!(!html.contains("fixture-notice-id"));
+                assert!(!html.contains("Fixture notice title"));
+                assert!(!html.contains("Fixture notice body"));
+            }
+        }
+    }
 
     #[test]
     fn direct_organization_sharing_is_exposed_to_the_frontend() {

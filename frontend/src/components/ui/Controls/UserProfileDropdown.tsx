@@ -1,8 +1,12 @@
 import { t } from "@lingui/core/macro";
 import { clsx } from "clsx";
-import { memo, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { memo, useCallback, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import {
+  isDisclaimersSettingsLink,
+  settingsClosedLocation,
+} from "@/lib/disclaimersSettingsLink";
 import {
   useAuthFeature,
   useUserPreferencesFeature,
@@ -23,35 +27,36 @@ interface UserProfileDropdownProps {
 
 export const UserProfileDropdown = memo<UserProfileDropdownProps>(
   ({ userProfile, onSignOut, className }) => {
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] =
-      useState(false);
+    const [searchParams] = useSearchParams();
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [openFromMenu, setOpenFromMenu] = useState(false);
     /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
+    const openFromUrl = searchParams.get("preferencesDialog") === "open";
     const requestedPreferencesTab = searchParams.get("preferencesTab");
     const selectedMcpServerId = searchParams.get("mcpServerId") ?? undefined;
-    useEffect(() => {
-      if (searchParams.get("preferencesDialog") === "open")
-        setIsPreferencesDialogOpen(true);
-    }, [searchParams]);
-    const clearPreferencesDialogSearchParams = useCallback(() => {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("preferencesDialog");
-      nextParams.delete("preferencesTab");
-      nextParams.delete("mcpServerId");
-      setSearchParams(nextParams, { replace: true });
-    }, [searchParams, setSearchParams]);
-
     const closePreferencesDialog = useCallback(() => {
-      setIsPreferencesDialogOpen(false);
-      if (searchParams.get("preferencesDialog") === "open") {
-        clearPreferencesDialogSearchParams();
+      setOpenFromMenu(false);
+      if (openFromUrl) {
+        navigate(settingsClosedLocation(location), { replace: true });
       }
-    }, [clearPreferencesDialogSearchParams, searchParams]);
+    }, [location, navigate, openFromUrl]);
     /* eslint-enable lingui/no-unlocalized-strings */
 
     // Check if logout should be shown
     const { showLogout } = useAuthFeature();
     const { mcpServersTabEnabled } = useUserPreferencesFeature();
+    // Keep supporting legacy OAuth return URLs.
+    const openMcpTab =
+      mcpServersTabEnabled &&
+      (requestedPreferencesTab === "mcpServers" ||
+        requestedPreferencesTab === "serversTools");
+    const initialTab = isDisclaimersSettingsLink(searchParams)
+      ? "disclaimers"
+      : openMcpTab
+        ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
+          "serversTools"
+        : undefined;
 
     // Create dropdown items array
     const dropdownItems = [
@@ -61,7 +66,7 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           message: "Settings",
         }),
         icon: <SettingsIcon className="size-4" />,
-        onClick: () => setIsPreferencesDialogOpen(true),
+        onClick: () => setOpenFromMenu(true),
       },
       ...(showLogout
         ? [
@@ -92,17 +97,9 @@ export const UserProfileDropdown = memo<UserProfileDropdownProps>(
           }
         />
         <UserPreferencesDialog
-          isOpen={isPreferencesDialogOpen}
+          isOpen={openFromMenu || openFromUrl}
           onClose={closePreferencesDialog}
-          initialTab={
-            // Keep supporting legacy OAuth return URLs.
-            (requestedPreferencesTab === "mcpServers" ||
-              requestedPreferencesTab === "serversTools") &&
-            mcpServersTabEnabled
-              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal tab id
-                "serversTools"
-              : undefined
-          }
+          initialTab={initialTab}
           selectedMcpServerId={selectedMcpServerId}
           userProfile={userProfile}
         />

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { Link, MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+
+import { disclaimersSettingsHref } from "@/lib/disclaimersSettingsLink";
 
 import { UserProfileDropdown } from "./UserProfileDropdown";
 
@@ -29,6 +31,16 @@ function LocationProbe() {
   return <div data-testid="search">{useLocation().search}</div>;
 }
 
+function DisclaimerLink() {
+  const location = useLocation();
+  return (
+    <>
+      <Link to={disclaimersSettingsHref(location)}>Read disclaimers</Link>
+      <output>{`${location.pathname}${location.search}${location.hash}`}</output>
+    </>
+  );
+}
+
 function renderCallback(search: string) {
   render(
     <MemoryRouter initialEntries={[`/${search}`]}>
@@ -54,5 +66,28 @@ describe("MCP settings handoff", () => {
   it("still opens the legacy MCP settings tab", async () => {
     renderCallback("?preferencesDialog=open&preferencesTab=mcpServers");
     expect(await screen.findByText("serversTools")).toBeInTheDocument();
+  });
+});
+
+describe("Disclaimers settings handoff", () => {
+  it("selects Disclaimers on a direct load", async () => {
+    renderCallback("?preferencesDialog=open&preferencesTab=disclaimers");
+    expect(await screen.findByText("disclaimers")).toBeInTheDocument();
+  });
+
+  it("opens from an in-app link and preserves the page URL on close", async () => {
+    render(
+      <MemoryRouter initialEntries={["/chat?keep=value#footer"]}>
+        <UserProfileDropdown onSignOut={vi.fn()} />
+        <DisclaimerLink />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Read disclaimers" }));
+    expect(await screen.findByText("disclaimers")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(
+      await screen.findByText("/chat?keep=value#footer"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("disclaimers")).toBeNull();
   });
 });

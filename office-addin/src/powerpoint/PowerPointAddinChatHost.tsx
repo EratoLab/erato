@@ -48,7 +48,9 @@ export function PowerPointAddinChatHost({ controller }: AddinChatHostProps) {
           rerunRef={rerunRef}
         />
       )}
-      renderSettings={(props) => <AddinSettingsDialogCore {...props} />}
+      renderSettings={(props) => (
+        <AddinSettingsDialogCore {...props} supportsDisclaimers />
+      )}
     />
   );
 }

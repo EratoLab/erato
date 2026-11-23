@@ -6420,6 +6420,26 @@ msgid "preferences.dialog.desktopSidecar.unavailable.description"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.empty"
+msgstr "Es sind keine Hinweise konfiguriert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loadError"
+msgstr "Die Hinweise konnten nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loading"
+msgstr "Hinweise werden geladen…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.retry"
+msgstr "Erneut versuchen"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.fields.additionalInformation.help"
 #~ msgstr "Beliebiger zusätzlicher Kontext, den der Assistent wissen soll."
@@ -7042,6 +7062,11 @@ msgstr "Daten"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.tabs.desktopSidecar"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.disclaimers"
+msgstr "Hinweise"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
