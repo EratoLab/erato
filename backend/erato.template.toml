@@ -354,6 +354,9 @@ chat_provider_ids = ["test-token-limit"]
 # disable_chat_input_autofocus = true
 # # Keep the Tools dropdown open after toggling tools/facets (default: false)
 # keep_tools_dropdown_open = true
+# # Show the "you are interacting with an AI" notice beneath the chat input (default: false).
+# # It never shows on phone-sized screens.
+# show_usage_advisory = true
 # # Layout of the chat input before a conversation starts: "centered" (default) or "bottom"
 # chat_input_empty_state_layout = "bottom"
 # # Whether to hide logout functionality from the UI (default: false)

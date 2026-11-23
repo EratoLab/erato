@@ -3260,21 +3260,6 @@ msgid "chat.submission.word.readNoResponse"
 msgstr "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.always"
-msgstr "Any task run for you here needs your approval first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.asyncOnly"
-msgstr "If any of this runs as a background task, you will be asked to approve it first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.plan"
-msgstr "If this is split into separate tasks, you will be asked to approve the plan before any of it runs."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerToolChips.tsx
 msgid "chat.toolChips.announce.deselected"
 msgstr "{name} deselected."

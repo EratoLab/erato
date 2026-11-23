@@ -1160,9 +1160,22 @@ describe("ChatInput", () => {
       });
       mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
 
-      await renderComposer();
+      const { container } = await renderComposer();
 
       expect(screen.queryByText(plainAdvisory)).not.toBeInTheDocument();
+      expect(container.querySelector("form")).not.toHaveClass("pb-0");
+    });
+
+    it("shows nothing below the composer on a phone, even when enabled", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
+
+      const { container } = await renderComposer();
+
+      expect(
+        container.querySelector('[data-ui="chat-usage-advisory"]'),
+      ).toBeNull();
+      expect(container.querySelector("form")).not.toHaveClass("pb-0");
     });
 
     it("leaves the advisory and the form padding to the parent when renderUsageAdvisory is false", async () => {

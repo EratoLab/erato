@@ -53,10 +53,6 @@ export function injectFrontendEnv() {
   if (import.meta.env.VITE_DELEGATION_TASKS_ALLOW_ASYNC === "true") {
     window.DELEGATION_TASKS_ALLOW_ASYNC ??= true;
   }
-  if (import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE) {
-    window.DELEGATION_TASKS_APPROVAL_MODE ??=
-      import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE;
-  }
 
   // Release builds follow the deployment's per-host `word_apply` settings (wordApplyPolicy);
   // development builds write in place on every host so the in-place writer stays exercised.

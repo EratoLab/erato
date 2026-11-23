@@ -3597,6 +3597,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "frontend.show_usage_advisory": {
+    "default_value_security": "unknown_none",
+    "introduced_in": "unreleased",
+    "security_relevance": "none",
+    "stability": "beta"
+  },
   "frontend.sidebar_chat_history_show_metadata": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
