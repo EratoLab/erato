@@ -685,6 +685,7 @@ export {
 } from "@/config/componentRegistry";
 export {
   CLIENT_TOOL_SCOPE_CHANGED,
+  clientToolAvailabilityChanged,
   clientToolScopeChanged,
   registerClientToolExecutor,
   type ClientToolApprovalScope,

@@ -4,12 +4,14 @@ import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 
 import {
   clientToolApprovalScopeAnchor,
+  clientToolAvailabilityChanged,
   getChildClientToolHeaders,
   getClientToolExecutor,
   getClientToolHeaders,
   registerClientToolExecutor,
   resetClientToolRegistryForTests,
   runClientToolCall,
+  subscribeClientToolExecutors,
 } from "./clientToolExecutors";
 
 import type {
@@ -52,6 +54,38 @@ it("keeps legacy registrations available and prevents older cleanup removing a r
   expect(getClientToolHeaders()["X-Erato-Client-Tools"]).toBe(
     "fetch_availability",
   );
+});
+
+describe("registry changes", () => {
+  const read = async () => ({ ok: true as const, result: null });
+  const flush = () => Promise.resolve();
+
+  it("tells subscribers once per change, after registering again in one go", async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeClientToolExecutors(listener);
+    const first = registerClientToolExecutor("apply_document_plan", read);
+    await flush();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    first();
+    registerClientToolExecutor("apply_document_plan", read);
+    await flush();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    // An older cleanup leaves the replacement, so nothing changed.
+    first();
+    await flush();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    clientToolAvailabilityChanged();
+    await flush();
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+    registerClientToolExecutor("read_comments", read);
+    await flush();
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("approval scopes", () => {

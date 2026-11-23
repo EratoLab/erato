@@ -1,6 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useId, useRef } from "react";
 
+import { useClientToolRegistry } from "@/hooks/chat/clientToolExecutors";
 import {
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -127,6 +128,12 @@ export const ApprovalQueueCard = ({
         ] as SidecarReviewLink | undefined;
         return link?.state === "open";
       }).length,
+  );
+  const allowsAll = useClientToolRegistry(() =>
+    queue.some(
+      (item) =>
+        staged[item.approval_id] === undefined && !onlyItsCardApproves(item),
+    ),
   );
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement | null>(null);
@@ -371,11 +378,7 @@ export const ApprovalQueueCard = ({
           onDecideAll={onDecideAll}
           isBusy={isBusy}
           testId="approval-queue-bulk"
-          allowsAll={queue.some(
-            (item) =>
-              staged[item.approval_id] === undefined &&
-              !onlyItsCardApproves(item),
-          )}
+          allowsAll={allowsAll}
         />
       )}
       {waitingCount > 0 && (

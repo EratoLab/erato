@@ -1,7 +1,10 @@
 import { memo, useCallback } from "react";
 
 import { componentRegistry } from "@/config/componentRegistry";
-import { getClientToolExecutor } from "@/hooks/chat/clientToolExecutors";
+import {
+  getClientToolExecutor,
+  useClientToolRegistry,
+} from "@/hooks/chat/clientToolExecutors";
 
 import { ChainedApprovalItem } from "./ChainedApprovalItem";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
@@ -33,7 +36,8 @@ export const onlyItsCardApproves = (
 /**
  * The turn's own client tool call in the decision place: the host's own card
  * where one is registered, else the generic one. A chained item whose tool
- * cannot run here always gets the generic card, which offers no approval.
+ * cannot run here always gets the generic card, which offers no approval,
+ * until the tool's executor is registered here.
  *
  * Memoized, so a caller that keeps `onDecide` stable does not redraw a host
  * card on every render of the message around it.
@@ -80,7 +84,7 @@ export const OwnClientToolApprovalItem = memo(
       },
       [approvalId, chained, onDecide],
     );
-    const runsHere = approvableHere(item);
+    const runsHere = useClientToolRegistry(() => approvableHere(item));
     const renderDefault = useCallback(
       (options?: { note?: ReactNode }): ReactNode =>
         item.chained ? (
