@@ -25545,23 +25545,22 @@ pub(crate) async fn run_continuation(
         && chained_items.len() == plan_decisions.len()
         && mcp_decisions.is_empty()
         && child_decisions.is_empty();
-    if only_chained
-        && approved_calls.is_empty()
-        && change_requests.is_empty()
-        && !plan_decisions.iter().any(|(approval_id, decision)| {
-            matches!(
-                decision,
-                ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
-            ) && chained_items.iter().any(|item| {
-                &item.approval_id == approval_id
-                    && generation_parameters
-                        .turn_consumption
-                        .chained_applies
-                        .get(&item.tool_call_id)
-                        .is_some_and(|state| state.more_steps)
-            })
+    let declined_one_of_several = plan_decisions.iter().any(|(approval_id, decision)| {
+        matches!(
+            decision,
+            ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
+        ) && chained_items.iter().any(|item| {
+            &item.approval_id == approval_id
+                && generation_parameters
+                    .turn_consumption
+                    .chained_applies
+                    .get(&item.tool_call_id)
+                    .is_some_and(|state| state.more_steps)
         })
-    {
+    });
+    let only_chained_declines =
+        only_chained && approved_calls.is_empty() && change_requests.is_empty();
+    if only_chained_declines && !declined_one_of_several {
         let mut metadata = message
             .generation_metadata
             .as_ref()
@@ -25658,6 +25657,9 @@ pub(crate) async fn run_continuation(
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
         !change_requests.is_empty(),
         change_on_chained,
+        // One step of several cancelled: the model only reports what was
+        // and was not done, so it is given no tools to go on with the rest.
+        only_chained_declines && declined_one_of_several,
     )
     .await
 }
@@ -25843,6 +25845,7 @@ async fn resume_parked_generation(
     change_requested: bool,
     // That change request was on a chained apply's card.
     change_on_chained: bool,
+    declined_remaining_changes: bool,
 ) -> Result<(), Report> {
     // A change request past the turn's limit ends the turn the way the
     // budget's "answer now" does, so a misunderstanding cannot loop.
@@ -26222,6 +26225,7 @@ async fn resume_parked_generation(
     )
     .await?;
     let answer_without_tools = change_limit_reached
+        || declined_remaining_changes
         || crate::services::tool_call_budget::choices(&parsed.content)
             .last()
             .is_some_and(|(_, choice)| {
@@ -26261,6 +26265,11 @@ async fn resume_parked_generation(
         if change_limit_reached {
             format!(
                 "The turn ended after repeated change requests, so the tool '{}' was not run.",
+                tool_name
+            )
+        } else if declined_remaining_changes {
+            format!(
+                "The user declined the remaining changes, so the tool '{}' was not run.",
                 tool_name
             )
         } else if denied_mcp_tools
@@ -26358,6 +26367,10 @@ async fn resume_parked_generation(
     if change_limit_reached {
         chat_request.messages.push(GenAiChatMessage::user(
             app_state.config.approval_change_requests.limit_note.clone(),
+        ));
+    } else if declined_remaining_changes {
+        chat_request.messages.push(GenAiChatMessage::user(
+            crate::services::chained_apply::DECLINED_REMAINING_CHANGES_NOTE,
         ));
     } else if answer_without_tools {
         chat_request.messages.push(GenAiChatMessage::user(
@@ -26789,6 +26802,7 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map_or(&[], |context| context.strict_mode_executors.as_slice()),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
+        false,
         false,
         false,
     )
