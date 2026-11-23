@@ -261,6 +261,9 @@ export const stepForMeaning = (
       );
     }
     case "read_text": {
+      // A text short enough to be said whole is said, not another text read.
+      if (index !== undefined && !named && pieces[index].role === "text")
+        return listen({ type: "repeat", index });
       const texts = longTexts(pieces);
       if (texts.length === 0)
         return listen({ type: "notice", notice: { kind: "no_text" } });

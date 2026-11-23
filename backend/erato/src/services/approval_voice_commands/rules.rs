@@ -1560,7 +1560,9 @@ fn field_tokens(field: &str) -> Vec<String> {
 
 /// Whether a word the user said names this piece's field, by any of its
 /// names: the same word, the head of a compound ("Datum" for
-/// "Abschlussdatum"), or an inflected form ("Teilnehmern").
+/// "Abschlussdatum"), or an inflected form ("Teilnehmern"). A field the
+/// listener has not heard is named only by its own word or an inflection:
+/// a vague "the date" never picks it.
 fn field_matches(piece: &CardPiece, word: &str, lists: &CommandWords) -> bool {
     if word.chars().count() < 3 || lists.generic.contains(word) {
         return false;
@@ -1572,9 +1574,10 @@ fn field_matches(piece: &CardPiece, word: &str, lists: &CommandWords) -> bool {
         .flat_map(|name| field_tokens(name))
         .any(|token| {
             token == word
-                || (word.len() >= 4 && token.ends_with(word))
                 || (token.len() >= 5 && word.starts_with(token.as_str()))
-                || (word.len() >= 6 && token.starts_with(word))
+                || (!piece.on_request
+                    && ((word.len() >= 4 && token.ends_with(word))
+                        || (word.len() >= 6 && token.starts_with(word))))
         })
 }
 
@@ -1597,7 +1600,7 @@ fn glued_matches(piece: &CardPiece, joined: &str) -> bool {
         .iter()
         .chain(piece.names.iter())
         .flat_map(|name| field_tokens(name))
-        .any(|token| token == joined || token.ends_with(joined))
+        .any(|token| token == joined || (!piece.on_request && token.ends_with(joined)))
 }
 
 /// The segment's words, with two or three in a row joined where together
@@ -1773,6 +1776,7 @@ fn pattern(
     // The voice asked which field to say: naming one answers it.
     if input.question == Some(VoiceQuestion::WhichField)
         && !negated
+        && !names_a_value(segment)
         && let Reference::Piece(id) = reference(segment, input.pieces, lists)
     {
         return Some(Segment::Nav(VoiceMeaning::Repeat, Some(id)));
@@ -1826,28 +1830,12 @@ fn pattern(
             )),
             Reference::Piece(id) => Some(Segment::Nav(VoiceMeaning::Repeat, Some(id))),
             Reference::Several(ids) => Some(Segment::Which(ids)),
-            Reference::Unknown => None,
+            // "what are the remaining changes?" asks for the rest.
+            Reference::Unknown => (rest_question(segment, lists) == Some(true) && !negated)
+                .then_some(Segment::Nav(VoiceMeaning::Rest, None)),
         };
     }
-    let asks_rest = segment.iter().any(|word| word == "rest")
-        || (segment
-            .iter()
-            .any(|word| lists.rest_ask.contains(word.as_str()))
-            && segment.iter().enumerate().any(|(index, word)| {
-                lists.rest_what.contains(word.as_str())
-                    && !starts_again(segment, index, &lists.again)
-            }));
-    if asks_rest {
-        // "Was steht heute noch in meinem Kalender?" asks about something else.
-        let only_rest_words = segment.iter().all(|word| {
-            let word = word.as_str();
-            lists.generic.contains(word)
-                || lists.rest_ask.contains(word)
-                || lists.rest_what.contains(word)
-                || lists.rest_words.contains(word)
-                || lists.leading.contains(word)
-                || lists.noise_words.contains(word)
-        });
+    if let Some(only_rest_words) = rest_question(segment, lists) {
         return (only_rest_words && !negated).then_some(Segment::Nav(VoiceMeaning::Rest, None));
     }
     if negated {
@@ -1869,6 +1857,38 @@ fn pattern(
         return Some(Segment::Nav(VoiceMeaning::Skip, None));
     }
     None
+}
+
+/// Whether the segment asks for the rest of the card, and if so whether it
+/// holds nothing but words of such a question. "Was steht heute noch in
+/// meinem Kalender?" asks about something else.
+fn rest_question(segment: &[String], lists: &CommandWords) -> Option<bool> {
+    let asks = segment.iter().any(|word| word == "rest")
+        || (segment
+            .iter()
+            .any(|word| lists.rest_ask.contains(word.as_str()))
+            && segment.iter().enumerate().any(|(index, word)| {
+                lists.rest_what.contains(word.as_str())
+                    && !starts_again(segment, index, &lists.again)
+            }));
+    asks.then(|| {
+        segment.iter().all(|word| {
+            let word = word.as_str();
+            lists.generic.contains(word)
+                || lists.rest_ask.contains(word)
+                || lists.rest_what.contains(word)
+                || lists.rest_words.contains(word)
+                || lists.leading.contains(word)
+                || lists.noise_words.contains(word)
+        })
+    })
+}
+
+/// A number among the words: a field named with one is being changed.
+fn names_a_value(segment: &[String]) -> bool {
+    segment
+        .iter()
+        .any(|word| word.chars().any(|c| c.is_ascii_digit()))
 }
 
 pub(super) fn match_rules(

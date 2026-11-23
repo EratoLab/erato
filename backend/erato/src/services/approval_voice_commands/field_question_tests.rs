@@ -166,14 +166,19 @@ fn a_field_named_in_the_listeners_language_is_found_by_its_vocabulary_name() {
 #[test]
 fn words_that_fit_two_fields_ask_which_one() {
     let mut card = visit_report(true);
+    card[2].names = vec!["Abschlussdatum".into()];
     card[4].names = vec!["Besuchsdatum".into()];
     let command = rules_on(&card, "das Datum nochmal", "de", None).expect("rules");
     assert_eq!(command.meaning, VoiceMeaning::Repeat);
     assert_eq!(command.piece_id, None);
     assert_eq!(
         command.candidates,
-        vec!["detail:Visitedon".to_string(), "detail:Followupdate".into()]
+        vec!["detail:Opportunity".to_string(), "detail:Visitedon".into()]
     );
+    // A field not heard yet is never picked by a vague word.
+    let english = visit_report(false);
+    assert_eq!(rules_on(&english, "what was the date?", "en", None), None);
+    assert_eq!(rules_on(&english, "what was the update?", "en", None), None);
     // One more word that fits only one of them settles it.
     assert_eq!(
         repeat_of(&rules_on(&card, "das Nachfassdatum nochmal", "de", None)),
@@ -196,6 +201,35 @@ fn words_that_fit_two_fields_ask_which_one() {
         rules_on(&card, "das zweite", "de", Some(VoiceQuestion::WhichField)),
         None
     );
+    // Named with a new value, it is no answer to the question.
+    for words in ["Nachfassdatum auf den 22.", "Nachfassdatum 22"] {
+        assert_ne!(
+            repeat_of(&rules_on(
+                &card,
+                words,
+                "de",
+                Some(VoiceQuestion::WhichField)
+            )),
+            Some("detail:Followupdate"),
+            "{words}"
+        );
+    }
+}
+
+#[test]
+fn a_question_for_what_is_left_stays_the_rest() {
+    let card = visit_report(false);
+    for words in [
+        "what are the remaining changes?",
+        "what are the changes left?",
+        "what were the changes left?",
+    ] {
+        assert_eq!(
+            rules_on(&card, words, "en", None).map(|command| command.meaning),
+            Some(VoiceMeaning::Rest),
+            "{words}"
+        );
+    }
 }
 
 #[test]

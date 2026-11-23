@@ -3742,7 +3742,7 @@
             "description": "The message has no approval waiting for a decision"
           },
           "413": {
-            "description": "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters"
+            "description": "Words over 300 characters, more than 32 pieces, a piece id over 64, a field name over 100 characters or more than 6 other names of a field"
           }
         },
         "security": [

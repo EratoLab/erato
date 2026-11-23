@@ -1885,6 +1885,20 @@ describe("asking the card for one field", () => {
     ]);
   });
 
+  it("a short text asked for by name is said, not another text read", () => {
+    const short = {
+      ...CARD[CARD.findIndex(namesLongText)],
+      id: "text:Note",
+      readOut: undefined,
+      values: [],
+    };
+    const pieces = [...CARD, short];
+    expect(stepForMeaning("read_text", "text:Note", pieces).event).toEqual({
+      type: "repeat",
+      index: pieces.length - 1,
+    });
+  });
+
   it("a long text asked for by name is read, not only named", () => {
     const step = stepForMeaning(
       "repeat",

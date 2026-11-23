@@ -353,7 +353,13 @@ const loadPieces = (indices: number[]) => {
         closeStream = undefined;
         close?.();
         const playing = currentPiece();
-        if (playing !== null && !loaded[playing].done) fail();
+        // A field said on request loads in its own request.
+        if (
+          playing !== null &&
+          indices.includes(playing) &&
+          !loaded[playing].done
+        )
+          fail();
       },
     },
   );
