@@ -16,5 +16,6 @@ contents at the top covering:
 
 ## Releases
 
+- [0.8.0 to 0.9.0](0_8_0_to_0_9_0.md)
 - [0.7.0 to 0.8.0](0_7_0_to_0_8_0.md)
 - [0.6.2 to 0.7.0](0_6_2_to_0_7_0.md)

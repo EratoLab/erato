@@ -270,7 +270,7 @@ mod tests {
             let value = &generated[format!("{prefix}{field}")];
             assert_eq!(value["hide_in_docs"], true, "{field}");
             assert_eq!(value["stability"], "unstable", "{field}");
-            assert_eq!(value["introduced_in"], "unreleased", "{field}");
+            assert_eq!(value["introduced_in"], "0.9.0", "{field}");
         }
     }
 

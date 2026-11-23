@@ -36,17 +36,17 @@ pub enum ReplySpeechWording {
 pub struct ReplySpeechConfig {
     /// `natural` or `precise`. Defaults to `precise` until the `natural`
     /// spoken-reply wording is applied where it is used.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub wording: ReplySpeechWording,
     /// Whether a user may choose their own wording, unless a supervisor's
     /// audience setting says otherwise. Defaults to `true`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub user_choice: bool,
     /// Whether the chat shows what the voice said, folded above the written
     /// answer, with a play button when the recording is kept. A user may
     /// always choose it for themselves. Defaults to `false`: the chat shows
     /// the written answer only.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub show_in_chat: bool,
 }
 
