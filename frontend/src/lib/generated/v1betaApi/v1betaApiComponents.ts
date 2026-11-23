@@ -8375,6 +8375,111 @@ export const useListScheduledTemplates = <
   });
 };
 
+export type SpokenLanguageError = Fetcher.ErrorWrapper<undefined>;
+
+export type SpokenLanguageVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchSpokenLanguage = (
+  variables: SpokenLanguageVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.SpokenLanguageResponse,
+    SpokenLanguageError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/spoken-language",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function spokenLanguageQuery(variables: SpokenLanguageVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.SpokenLanguageResponse>;
+};
+
+export function spokenLanguageQuery(
+  variables: SpokenLanguageVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.SpokenLanguageResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function spokenLanguageQuery(
+  variables: SpokenLanguageVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/spoken-language",
+      operationId: "spokenLanguage",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchSpokenLanguage(variables, signal),
+  };
+}
+
+export const useSuspenseSpokenLanguage = <
+  TData = Schemas.SpokenLanguageResponse,
+>(
+  variables: SpokenLanguageVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.SpokenLanguageResponse,
+      SpokenLanguageError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.SpokenLanguageResponse,
+    SpokenLanguageError,
+    TData
+  >({
+    ...spokenLanguageQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useSpokenLanguage = <TData = Schemas.SpokenLanguageResponse,>(
+  variables: SpokenLanguageVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.SpokenLanguageResponse,
+      SpokenLanguageError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.SpokenLanguageResponse,
+    SpokenLanguageError,
+    TData
+  >({
+    ...spokenLanguageQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type StarterPromptsError = Fetcher.ErrorWrapper<undefined>;
 
 export type StarterPromptsVariables = V1betaApiContext["fetcherOptions"];
@@ -10363,6 +10468,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/scheduled-templates";
       operationId: "listScheduledTemplates";
       variables: ListScheduledTemplatesVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/spoken-language";
+      operationId: "spokenLanguage";
+      variables: SpokenLanguageVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/starter-prompts";

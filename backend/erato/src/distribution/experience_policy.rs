@@ -30,12 +30,17 @@ pub const WAIT_LINES_SETTING: &str = "wait_lines";
 /// The `setting_orders` key of how a reply is spoken in conversational audio
 /// mode. Like approval speech, an audience takes part only once listed under it.
 pub const REPLY_SPEECH_SETTING: &str = "reply_speech";
+
+/// The `setting_orders` key of which language the voice speaks, resolved
+/// like wait lines.
+pub const SPOKEN_LANGUAGE_SETTING: &str = "spoken_language";
 /// The settings an audience sets in a block of its own, each with its own
 /// order.
-const VOICE_SETTINGS: [&str; 3] = [
+const VOICE_SETTINGS: [&str; 4] = [
     APPROVAL_SPEECH_SETTING,
     WAIT_LINES_SETTING,
     REPLY_SPEECH_SETTING,
+    SPOKEN_LANGUAGE_SETTING,
 ];
 
 /// The shared resolution-contract fixture: the cases every resolver of this
@@ -253,6 +258,62 @@ pub struct ExperienceAudience {
     /// order. A field that does not parse is ignored on its own.
     #[serde(default, deserialize_with = "lenient_reply_speech")]
     pub reply_speech: Option<AudienceReplySpeech>,
+    /// Which language the voice speaks for this audience, where an admin set
+    /// it, resolved like `wait_lines` in the [`SPOKEN_LANGUAGE_SETTING`]
+    /// order, field by field.
+    #[serde(default, deserialize_with = "lenient_spoken_language")]
+    pub spoken_language: Option<AudienceSpokenLanguage>,
+}
+
+/// A supervisor's choice for which language the voice speaks to an audience.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct AudienceSpokenLanguage {
+    pub follow_speaker: Option<bool>,
+    /// The allowed languages as speakable codes; empty allows any. Codes the
+    /// word check does not know are dropped with a warning, and a list left
+    /// with none of its codes is ignored, so a typo never opens it to any
+    /// language.
+    pub languages: Option<Vec<String>>,
+    /// `false` keeps the audience's users from listing their own languages;
+    /// `true` cannot reopen a choice the deployment closed.
+    pub user_choice: Option<bool>,
+}
+
+fn lenient_spoken_language<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<AudienceSpokenLanguage>, D::Error> {
+    lenient_block(
+        deserializer,
+        SPOKEN_LANGUAGE_SETTING,
+        |spoken: &mut AudienceSpokenLanguage, key, value| {
+            Some(match key {
+                "follow_speaker" => serde_json::from_value(value)
+                    .map(|follow| spoken.follow_speaker = Some(follow)),
+                "user_choice" => {
+                    serde_json::from_value(value).map(|choice| spoken.user_choice = Some(choice))
+                }
+                "languages" => serde_json::from_value::<Vec<String>>(value).map(|tags| {
+                    let (languages, unknown) =
+                        erato_config::spoken_language::speakable_languages(
+                            tags.iter().map(String::as_str),
+                        );
+                    for tag in &unknown {
+                        tracing::warn!(
+                            block = SPOKEN_LANGUAGE_SETTING,
+                            %tag,
+                            "An audience's spoken language is not one the word check knows and is ignored"
+                        );
+                    }
+                    if languages.is_empty() && !unknown.is_empty() {
+                        return;
+                    }
+                    spoken.languages = Some(languages);
+                }),
+                _ => return None,
+            })
+        },
+    )
 }
 
 /// A supervisor's choice for how an audience's replies are spoken.
@@ -582,6 +643,7 @@ fn voice_block_warnings(document: &ExperiencePolicyDocument) -> Vec<String> {
             .filter(|(_, audience)| match setting {
                 APPROVAL_SPEECH_SETTING => audience.approval_speech.is_some(),
                 REPLY_SPEECH_SETTING => audience.reply_speech.is_some(),
+                SPOKEN_LANGUAGE_SETTING => audience.spoken_language.is_some(),
                 _ => audience.wait_lines.is_some(),
             })
             .map(|(name, audience)| (name.as_str(), audience.id.as_deref()))
@@ -879,6 +941,7 @@ mod tests {
             approval_speech: None,
             wait_lines: None,
             reply_speech: None,
+            spoken_language: None,
         };
         assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
         assert!(!audience.is_active_at(expires_at));
@@ -1120,6 +1183,47 @@ mod tests {
     }
 
     #[test]
+    fn a_spoken_language_block_keeps_known_languages_and_its_lock() {
+        let audience = |block: &str| {
+            let document = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "subjects": [{{"subject_type": "organization"}}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                            "spoken_language": {block}
+                        }}
+                    }},
+                    "priority_order": ["engineering"]
+                }}"#
+            ))
+            .unwrap_or_else(|error| panic!("{block}: {error}"));
+            document.audiences["engineering"].spoken_language.clone()
+        };
+        assert_eq!(
+            audience(r#"{"languages": ["DE", "hi-IN", "xx"], "user_choice": false}"#),
+            Some(AudienceSpokenLanguage {
+                follow_speaker: None,
+                languages: Some(vec!["de".into(), "hi".into()]),
+                user_choice: Some(false),
+            })
+        );
+        // A list of only unknown codes must not open the voice to any language.
+        assert_eq!(
+            audience(r#"{"languages": ["xx"], "follow_speaker": "no"}"#),
+            Some(AudienceSpokenLanguage::default())
+        );
+        assert_eq!(
+            audience(r#"{"languages": [], "follow_speaker": false}"#),
+            Some(AudienceSpokenLanguage {
+                follow_speaker: Some(false),
+                languages: Some(Vec::new()),
+                user_choice: None,
+            })
+        );
+    }
+
+    #[test]
     fn a_typo_in_one_wait_lines_field_keeps_the_others() {
         let audience = |block: &str| {
             let document = parse_experience_policy(&format!(
@@ -1293,6 +1397,7 @@ mod tests {
             approval_speech: None,
             wait_lines: None,
             reply_speech: None,
+            spoken_language: None,
         }
     }
 

@@ -9,6 +9,7 @@ pub mod confirmation_phrases;
 pub mod language_words;
 pub mod reply_speech;
 pub mod spoken;
+pub mod spoken_language;
 pub mod spoken_readings;
 pub mod startup_log;
 pub mod voice_command_words;

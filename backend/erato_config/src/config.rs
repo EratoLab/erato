@@ -1767,6 +1767,7 @@ impl AppConfig {
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_reply_speech(&schema);
+        warn_misshaped_spoken_language(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_language_data(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
@@ -1790,6 +1791,7 @@ impl AppConfig {
         warn_misshaped_spoken_entries(&schema);
         warn_misshaped_approval_speech(&schema);
         warn_misshaped_reply_speech(&schema);
+        warn_misshaped_spoken_language(&schema);
         warn_misshaped_wait_lines(&schema);
         warn_misshaped_language_data(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
@@ -9542,6 +9544,15 @@ pub struct AudioConversationalConfig {
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub reply_speech: crate::reply_speech::ReplySpeechConfig,
+    /// Which language the voice speaks: the one the user speaks, among the
+    /// user's languages and the ones allowed here.
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken_language::deserialize_spoken_language"
+    )]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub spoken_language: crate::spoken_language::SpokenLanguageConfig,
     /// Whether the reply voice is stored with the message, so it can be
     /// played again later. Off, the voice is only streamed while it speaks.
     /// Defaults to `false`: keeping voice recordings is an explicit choice.
@@ -9610,6 +9621,7 @@ impl Default for AudioConversationalConfig {
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
             wait_lines: Box::default(),
             reply_speech: crate::reply_speech::ReplySpeechConfig::default(),
+            spoken_language: crate::spoken_language::SpokenLanguageConfig::default(),
             keep_reply_audio: false,
         }
     }
@@ -9844,6 +9856,12 @@ fn warn_misshaped_wait_lines(schema: &Config) {
 fn warn_misshaped_reply_speech(schema: &Config) {
     for warning in crate::reply_speech::misshaped_reply_speech(schema) {
         tracing::warn!("Reply speech setting dropped: {warning}.");
+    }
+}
+
+fn warn_misshaped_spoken_language(schema: &Config) {
+    for warning in crate::spoken_language::misshaped_spoken_language(schema) {
+        tracing::warn!("Spoken language setting dropped: {warning}.");
     }
 }
 

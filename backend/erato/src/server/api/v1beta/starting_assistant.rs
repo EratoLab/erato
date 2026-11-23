@@ -505,6 +505,7 @@ mod tests {
             approval_speech: None,
             wait_lines: None,
             reply_speech: None,
+            spoken_language: None,
         }
     }
 
@@ -852,6 +853,7 @@ mod tests {
             approval_speech: None,
             wait_lines: None,
             reply_speech: None,
+            spoken_language: None,
         };
         let policy = policy_with(
             vec![

@@ -4538,6 +4538,55 @@ export type SnoozeScheduledItemRequest = {
   until: string;
 };
 
+export type SpokenLanguageResponse = {
+  /**
+   * The languages people may speak here; empty means any.
+   */
+  allowed: string[];
+  /**
+   * The caller's app language as a speakable code: their main language
+   * while they list none.
+   */
+  app_language: string;
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * The languages the voice chooses among, `main` first, as ISO 639-1
+   * codes. Empty means any language. Also the recognizer's expected
+   * languages when not empty.
+   */
+  candidates: string[];
+  /**
+   * Whether the voice follows the language the caller speaks. Off, it
+   * always speaks `main`.
+   */
+  follow_speaker: boolean;
+  /**
+   * The language the voice speaks when the caller's language is unclear.
+   */
+  main: string;
+  /**
+   * The languages the caller may pick from for "Languages I speak".
+   */
+  offered: string[];
+  /**
+   * The caller's own languages as stored, also where they do not apply.
+   */
+  own: string[];
+  source: SpokenLanguageSource;
+  /**
+   * Whether the caller may list their own languages.
+   */
+  user_choice: boolean;
+};
+
+/**
+ * Where the caller's languages come from.
+ */
+export type SpokenLanguageSource = "deployment" | "audience" | "user";
+
 export type StartMcpServerOauthResponse = {
   authorization_url: string;
 };
@@ -6201,6 +6250,12 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_reply_speech_wording?: string | null | undefined;
   /**
+   * The languages the user speaks in conversation, up to three ISO 639-1
+   * codes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app
+   * language again. A code the word check does not know is rejected.
+   */
+  preference_spoken_languages?: string[] | null | undefined;
+  /**
    * Set `true` to explicitly clear the start screen (welcome screen even
    * though an audience pin exists), `false` to inherit again. Clearing
    * also removes any own pick; picking also un-clears.
@@ -6324,6 +6379,11 @@ export type UserProfile = {
    */
   preference_reply_speech_show_in_chat?: boolean;
   preference_reply_speech_wording?: ReplySpeechWording;
+  /**
+   * The languages the user speaks, first = main, as ISO 639-1 codes;
+   * absent follows the app language.
+   */
+  preference_spoken_languages?: string[];
   /**
    * True when the user explicitly cleared their start screen. This is
    * deliberately distinct from "never set": a clear must keep suppressing

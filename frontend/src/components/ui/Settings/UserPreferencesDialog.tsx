@@ -53,6 +53,7 @@ import {
 } from "../icons";
 import { AppearanceTabContent } from "./AppearanceTabContent";
 import { AudioInputTabContent } from "./AudioInputTabContent";
+import { SpokenLanguagesSetting } from "./SpokenLanguagesSetting";
 import { TextSizeSetting } from "./TextSizeSetting";
 import { VoiceOutputSetting } from "./VoiceOutputSetting";
 import { mcpAuthorizationToastKey } from "./mcpAuthorizationToasts";
@@ -754,6 +755,9 @@ export function UserPreferencesDialog({
                 />
                 {voiceOutputSettingsEnabled && isOpen ? (
                   <VoiceOutputSetting />
+                ) : null}
+                {audioConversationalEnabled && isOpen ? (
+                  <SpokenLanguagesSetting />
                 ) : null}
               </section>
             ) : null}

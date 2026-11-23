@@ -809,6 +809,24 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "audio_conversational.spoken_language.follow_speaker": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.spoken_language.languages.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
+  "audio_conversational.spoken_language.user_choice": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "alpha"
+  },
   "audio_conversational.talk_over_voice": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",

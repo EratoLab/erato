@@ -6174,6 +6174,76 @@ msgid "preferences.dialog.audio.miccheck.verdict.poor"
 msgstr "Schlecht"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.add"
+msgstr "Sprache hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.allowed"
+msgstr "Deine Organisation erlaubt: {allowedNames}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.description"
+msgstr "Im Gesprächsmodus antwortet die Stimme in der Sprache, die du sprichst, aus diesen Sprachen. Setze deine Hauptsprache an den Anfang: Die Stimme nimmt sie, wenn sie es nicht erkennen kann."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.description.fixed"
+msgstr "Im Gesprächsmodus spricht die Stimme immer deine erste Sprache hier."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.fromApp"
+msgstr "Deine App-Sprache, bis du eine weitere hinzufügst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.heading"
+msgstr "Sprachen, die ich spreche"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.main"
+msgstr "Hauptsprache"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.moveUp"
+msgstr "Nach oben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.moveUp.label"
+msgstr "{language} nach oben schieben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.notAllowed"
+msgstr "Hier nicht verwendet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.remove"
+msgstr "Entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.remove.label"
+msgstr "{language} entfernen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.saveFailed"
+msgstr "Deine Sprachen konnten nicht gespeichert werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.useAppLanguage"
+msgstr "Meine App-Sprache verwenden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx
 msgid "preferences.dialog.audio.test.description"
 msgstr "Starten Sie den Test und sprechen Sie — die Pegelbalken sollten sich bewegen und das angezeigte Gerät mit Ihrer Auswahl übereinstimmen."
@@ -6229,6 +6299,7 @@ msgid "preferences.dialog.audio.voice.heading"
 msgstr "Sprachausgabe"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.locked"
 msgstr "Von deiner Organisation festgelegt"

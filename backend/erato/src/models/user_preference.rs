@@ -83,10 +83,37 @@ pub struct UpdateUserPreferencesInput {
     /// Whether the chat shows what the voice said; `Some(None)` follows the
     /// organisation again.
     pub reply_speech_show_in_chat: Option<Option<bool>>,
+    /// The languages the user speaks, already checked with
+    /// [`normalize_spoken_languages`]; `Some(None)` follows the app language
+    /// again.
+    pub spoken_languages: Option<Option<Vec<String>>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
     pub language: Option<String>,
+}
+
+/// The languages a user says they speak, as speakable codes in their order
+/// without repeats, or `None` when one is not speakable or there are more
+/// than [`MAX_USER_SPOKEN_LANGUAGES`]. An empty list is valid: it clears the
+/// choice.
+///
+/// [`MAX_USER_SPOKEN_LANGUAGES`]: erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES
+pub fn normalize_spoken_languages(tags: &[String]) -> Option<Vec<String>> {
+    let (languages, unknown) =
+        erato_config::spoken_language::speakable_languages(tags.iter().map(String::as_str));
+    (unknown.is_empty()
+        && languages.len() <= erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES)
+        .then_some(languages)
+}
+
+/// The stored languages as they apply today: a code the word check no
+/// longer knows is left out, so an older row never stops the voice.
+pub fn stored_spoken_languages(stored: Option<Vec<String>>) -> Option<Vec<String>> {
+    let (mut languages, _) =
+        erato_config::spoken_language::speakable_languages(stored?.iter().map(String::as_str));
+    languages.truncate(erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES);
+    (!languages.is_empty()).then_some(languages)
 }
 
 /// The canonical IANA name, or `None` for anything the zone database does
@@ -380,6 +407,9 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.reply_speech_show_in_chat {
             model.reply_speech_show_in_chat = ActiveValue::Set(value);
         }
+        if let Some(value) = input.spoken_languages {
+            model.spoken_languages = ActiveValue::Set(value);
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -428,6 +458,7 @@ async fn upsert_user_preferences_row(
                 input.reply_speech_wording.flatten().map(style_name),
             ),
             reply_speech_show_in_chat: ActiveValue::Set(input.reply_speech_show_in_chat.flatten()),
+            spoken_languages: ActiveValue::Set(input.spoken_languages.flatten()),
             ..Default::default()
         };
 
