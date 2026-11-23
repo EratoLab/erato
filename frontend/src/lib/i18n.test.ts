@@ -407,6 +407,9 @@ describe("i18n Module Exports", () => {
   });
 });
 
+// An id in a variable: the catalog extractor reads only literal ids.
+const PROBE_ID = ["test", "inLocale"].join(".");
+
 describe("inLocale", () => {
   it("takes the messages of another loaded catalog without switching the interface", () => {
     const previous = i18n.locale;
@@ -417,12 +420,12 @@ describe("inLocale", () => {
     const unsubscribe = i18n.on("change", changes);
     try {
       expect(catalogLoaded("de")).toBe(true);
-      expect(inLocale("de", () => i18n._("test.inLocale"))).toBe("Hallo");
+      expect(inLocale("de", () => i18n._(PROBE_ID))).toBe("Hallo");
       expect(i18n.locale).toBe("en");
-      expect(i18n._("test.inLocale")).toBe("Hello");
+      expect(i18n._(PROBE_ID)).toBe("Hello");
       expect(changes).not.toHaveBeenCalled();
       expect(catalogLoaded("pl")).toBe(false);
-      expect(inLocale("pl", () => i18n._("test.inLocale"))).toBe("Hello");
+      expect(inLocale("pl", () => i18n._(PROBE_ID))).toBe("Hello");
       expect(() =>
         inLocale("de", () => {
           throw new Error("boom");
