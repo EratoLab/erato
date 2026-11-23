@@ -6,7 +6,7 @@ import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
 
 import { noteChangeSending, useApprovalChanges } from "./approvalChanges";
-import { quietSpokenTurn, useSpeechPlayback } from "./speechPlayback";
+import { useSpeechPlayback } from "./speechPlayback";
 import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
 import type { VoiceChange } from "./approvalChanges";
@@ -14,7 +14,6 @@ import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 
 const speakApprovalCard = vi.fn();
-const offerApprovalCard = vi.fn();
 const forgetApprovalCards = vi.fn();
 const started = new Set<string>();
 
@@ -23,10 +22,6 @@ vi.mock("./approvalSpeech", () => ({
   speakApprovalCard: (card: { key: string }) => {
     started.add(card.key);
     speakApprovalCard(card);
-  },
-  offerApprovalCard: (card: { key: string }) => {
-    started.add(card.key);
-    offerApprovalCard(card);
   },
   forgetApprovalCards: (keys: readonly string[]) => forgetApprovalCards(keys),
 }));
@@ -51,7 +46,6 @@ const spokenKeys = () =>
 
 beforeEach(() => {
   speakApprovalCard.mockClear();
-  offerApprovalCard.mockClear();
   forgetApprovalCards.mockClear();
   started.clear();
   useSpeechPlayback.setState({
@@ -60,7 +54,6 @@ beforeEach(() => {
     cards: true,
     playing: false,
     spokenTurn: "chat-1",
-    quietTurn: undefined,
   });
 });
 
@@ -115,7 +108,6 @@ describe("useSpokenApprovalCard", () => {
       initialProps: card,
     });
     expect(speakApprovalCard).not.toHaveBeenCalled();
-    expect(offerApprovalCard).not.toHaveBeenCalled();
     // Turned on again while the card waits: it is read.
     act(() => useSpeechPlayback.setState({ cards: true }));
     rerender(card);
@@ -157,15 +149,6 @@ describe("useSpokenApprovalCard", () => {
       `${queue.messageId}:t:b`,
       `${queue.messageId}:t:c`,
     ]);
-  });
-
-  it("1.9: after Stop during the turn's words the card waits to be asked for", () => {
-    useSpeechPlayback.setState({ playing: true });
-    act(() => quietSpokenTurn());
-    expect(useSpeechPlayback.getState().playing).toBe(false);
-    renderHook(() => useSpokenApprovalCard(props()));
-    expect(speakApprovalCard).not.toHaveBeenCalled();
-    expect(offerApprovalCard).toHaveBeenCalledTimes(1);
   });
 
   describe("a card that corrects one changed by voice", () => {

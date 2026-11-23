@@ -13,7 +13,6 @@ import { takeWithdrawnCard } from "./approvalChanges";
 import {
   approvalSpoken,
   forgetApprovalCards,
-  offerApprovalCard,
   speakApprovalCard,
 } from "./approvalSpeech";
 import {
@@ -90,9 +89,6 @@ export function useSpokenApprovalCard({
   );
   const cardsSpoken = useSpeechPlayback((state) => state.cards);
   const spokenTurn = voicedTurn && cardsSpoken;
-  const quiet = useSpeechPlayback(
-    (state) => chatId !== null && state.quietTurn === chatId,
-  );
   // A reply paused by the user talking over it may still go on.
   const modelSpeaking = useSpeechPlayback(
     (state) => state.playing || state.paused,
@@ -164,10 +160,7 @@ export function useSpokenApprovalCard({
       change: item ? change?.(item.approvalId) : undefined,
       decision: decision ? { ...decision, approves } : undefined,
     };
-    // A stop during the turn's own words means quiet: the card waits to be
-    // asked for.
-    if (quiet) offerApprovalCard(card);
-    else speakApprovalCard(card);
+    speakApprovalCard(card);
   }, [
     active,
     approval,
@@ -180,7 +173,6 @@ export function useSpokenApprovalCard({
     key,
     messageId,
     modelSpeaking,
-    quiet,
     responding,
     spokenTurn,
     style,

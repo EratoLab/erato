@@ -2608,7 +2608,9 @@ refetch and synchronize configuration; there is no policy-guide hot reload.
 
 Configure speech output separately from chat and transcription. The registry uses
 `[speech_providers.provider.<id>]`. Set `audio_conversational.speech_provider` to
-that ID and select conversational mode to hear responses: replies are spoken by default (`audio_conversational.reply_speech.spoken`), and a user turns them off under Settings, Audio, Voice where the admin allows it.
+that ID and select conversational mode to hear responses: replies are spoken
+by default (`audio_conversational.reply_speech.spoken`), and a user turns them
+off under Settings, Audio, Voice where the admin allows it.
 The `speech_provider` setting is available only in `audio_conversational`.
 Other input modes do not generate speech. Spoken replies stream audio while text is generated, combining complete sentences
 into passages of up to 2000 characters. Short passages wait up to 250 ms for
@@ -3381,7 +3383,7 @@ The value a user hears is resolved like `approval_speech`: this deployment value
 
 {/* erato_toml_config_key: audio_conversational.reply_speech.spoken */}
 
-Whether replies are spoken when a user enters conversational audio mode, where `speech_provider` is set. There is no switch in the composer: what applies is this value, an audience's `spoken`, and the user's own choice under Settings, Audio, Voice ("Speak replies") where `user_choice` allows it. The server checks it again at the start of every turn, so a turn is spoken only where it applies. Off, replies are written only, wait lines are not said, and approval cards are not read aloud either.
+Whether replies are spoken when a user enters conversational audio mode, where `speech_provider` is set. There is no switch in the composer: what applies is this value, an audience's `spoken`, and the user's own choice under Settings, Audio, Voice ("Speak replies") where `user_choice` allows it. The server checks it again at the start of every new turn, so a turn is spoken only where it applies; a continuation after an approval keeps the form its turn started with. Off, replies are written only, wait lines are not said, and approval cards are not read aloud either.
 
 **Type:** `boolean` · **Default:** `true`
 

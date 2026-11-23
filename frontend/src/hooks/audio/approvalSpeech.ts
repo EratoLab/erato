@@ -447,11 +447,6 @@ export function stopApprovalSpeech() {
   publish({ speaking: false });
 }
 
-/** Cuts the piece being said short and goes on with the next. */
-export function skipApprovalPiece() {
-  apply({ type: "skip" });
-}
-
 /**
  * Moves the card being spoken on by what the listener asked for. Only the
  * card under `key` is steered, so words heard for a card that has since
@@ -606,18 +601,6 @@ export function sayPreparedNotice(notice: PreparedNotice) {
     false,
     prepared,
   );
-}
-
-/** Keeps a waiting card ready to be said on request, without saying it. */
-export function offerApprovalCard(card: SpeakableCard) {
-  started.add(card.key);
-  useApprovalSpeech.setState({ available: card });
-}
-
-/** Says the waiting card again, from its start: the control a user taps. */
-export function replayApprovalCard() {
-  const { available } = useApprovalSpeech.getState();
-  if (available) speakApprovalCard(available);
 }
 
 /**

@@ -9501,7 +9501,6 @@ describe("ChatInput", () => {
           enabled: true,
           playing: false,
           spokenTurn: undefined,
-          quietTurn: undefined,
         });
         useApprovalListening.setState({
           pending: null,
@@ -9696,7 +9695,6 @@ describe("ChatInput", () => {
             playing: true,
             paused: false,
           });
-          expect(useSpeechPlayback.getState().quietTurn).toBeUndefined();
           // The microphone waits over the voice again.
           await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
           expect(recorderOptions().voiceSpeaking).toBe(true);
@@ -9744,8 +9742,6 @@ describe("ChatInput", () => {
               description: "“Moment, lieber morgen”",
             }),
           ]);
-          // The turn was not quieted: the card is still read aloud.
-          expect(useSpeechPlayback.getState().quietTurn).toBeUndefined();
           expect(toggleDictation).toHaveBeenCalledTimes(1);
 
           decideCard();

@@ -34,11 +34,6 @@ interface SpeechState {
    */
   spokenTurn?: string;
   /**
-   * The stream whose voice the user stopped: a card it stops on is not
-   * spoken on its own then, but waits to be asked for.
-   */
-  quietTurn?: string;
-  /**
    * The reply's spoken part has all its audio and the written answer is
    * streaming: once the voice is quiet the microphone may listen, and what
    * the user says waits until the answer is complete.
@@ -285,7 +280,6 @@ export function beginSpeechResponse(streamKey?: string) {
     spokenPartDone: false,
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
-    quietTurn: undefined,
   });
 }
 
@@ -364,16 +358,10 @@ export function replyCallsTool(streamKey?: string) {
     useSpeechPlayback.setState({ spokenPartDone: false });
 }
 
-/** The user stopped the voice: quiet for the rest of this turn. */
-export function quietSpokenTurn() {
-  stopSpeechPlayback();
-  useSpeechPlayback.setState((state) => ({ quietTurn: state.spokenTurn }));
-}
 export function moveSpeechStream(from: string, to: string) {
   if (acceptingStream === from) acceptingStream = to;
-  const { spokenTurn, quietTurn } = useSpeechPlayback.getState();
+  const { spokenTurn } = useSpeechPlayback.getState();
   if (spokenTurn === from) useSpeechPlayback.setState({ spokenTurn: to });
-  if (quietTurn === from) useSpeechPlayback.setState({ quietTurn: to });
 }
 export function speechFailed(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;

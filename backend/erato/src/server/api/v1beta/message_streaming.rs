@@ -22735,14 +22735,13 @@ pub(crate) async fn start_continuation(
     let client_stream_guard = task.client_stream_guard();
     // The turn instruction for a spoken reply is in the stored prompt the
     // continuation reuses, so only the speech itself is decided here.
-    read_back_reply(
+    enable_reply_speech(
         &task,
         app_state,
         app_state.voice_switches().await,
         me_user,
         request.conversational_audio_back,
-    )
-    .await;
+    );
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(

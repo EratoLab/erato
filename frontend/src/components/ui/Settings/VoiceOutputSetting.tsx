@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { useState } from "react";
 
-import { forgetSpokenStyle } from "@/hooks/audio/spokenStyle";
 import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
 import {
   approvalSpeechStyleQuery,
@@ -108,7 +107,7 @@ function WordingRow({
   return (
     <div className="space-y-2">
       <div className="space-y-1">
-        <h4 className="text-sm font-medium text-theme-fg-primary">{heading}</h4>
+        <h4 className="text-sm text-theme-fg-primary">{heading}</h4>
         <p className="text-sm text-theme-fg-secondary">{description}</p>
       </div>
       {wording !== undefined && (
@@ -189,7 +188,7 @@ function GroupHeading({
   return (
     <h3
       className={clsx(
-        "text-sm font-medium text-theme-fg-secondary",
+        "text-sm font-medium text-theme-fg-primary",
         !first && "border-t border-[var(--theme-border-subtle)] pt-4",
       )}
     >
@@ -215,7 +214,6 @@ export function VoiceOutputSetting() {
     setSaving(true);
     try {
       await fetchUpdateProfilePreferences({ body });
-      forgetSpokenStyle();
       await Promise.all([
         refreshVoiceTraces(),
         queryClient.invalidateQueries({

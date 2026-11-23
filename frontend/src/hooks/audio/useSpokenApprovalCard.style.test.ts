@@ -14,7 +14,6 @@ const speakApprovalCard = vi.fn();
 vi.mock("./approvalSpeech", () => ({
   approvalSpoken: () => false,
   speakApprovalCard: (card: unknown) => speakApprovalCard(card),
-  offerApprovalCard: () => {},
   forgetApprovalCards: () => {},
 }));
 vi.mock("./spokenStyle", () => ({
@@ -56,7 +55,6 @@ beforeEach(() => {
     playing: false,
     paused: false,
     spokenTurn: "chat-1",
-    quietTurn: undefined,
   });
 });
 

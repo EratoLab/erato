@@ -196,12 +196,9 @@ it("1.10: reads the answer after a decision back when the stopped turn was spoke
   p.beginSpeechResponse("chat-1");
   expect(p.readsBackContinuation("chat-1")).toBe(true);
   expect(p.readsBackContinuation("chat-2")).toBe(false);
-  // A stop keeps the turn spoken; the quiet ends with the next response.
-  p.quietSpokenTurn();
-  expect(p.useSpeechPlayback.getState().quietTurn).toBe("chat-1");
+  // A stop keeps the turn spoken.
+  p.stopSpeechPlayback();
   expect(p.readsBackContinuation("chat-1")).toBe(true);
-  p.beginSpeechResponse("chat-1");
-  expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
 });
 
 it("lowers every voice while the user may be talking over it, and restores it", async () => {
@@ -271,7 +268,7 @@ describe("talking over a reply", () => {
       paused: false,
     });
     // The turn stays spoken, so a card it stops on is still said.
-    expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
+    expect(p.useSpeechPlayback.getState().spokenTurn).toBeDefined();
   });
 
   it("a new response ends a pause", async () => {
