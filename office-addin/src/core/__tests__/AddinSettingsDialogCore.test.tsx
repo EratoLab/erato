@@ -1,12 +1,18 @@
 import { i18n } from "@lingui/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useHref, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinSettingsDialogCore } from "../AddinSettingsDialogCore";
 
-import type { TabRailProps } from "@erato/frontend/library";
+import type * as EratoLibrary from "@erato/frontend/library";
+import type { ReactNode } from "react";
 
-const featureFlags = vi.hoisted(() => ({ audio: false, mcpServers: false }));
+const featureFlags = vi.hoisted(() => ({
+  audio: false,
+  mcpServers: false,
+  disclaimers: false,
+}));
 const authorizeInBrowser = vi.hoisted(() => vi.fn());
 
 vi.mock("@erato/frontend/library", async () => {
@@ -14,11 +20,31 @@ vi.mock("@erato/frontend/library", async () => {
   // host-neutral file; a test-only stub set is neither.
   // eslint-disable-next-line import/no-restricted-paths
   const mock = await import("../../test/helpers/eratoLibraryMock");
+  const { TabRail, isDisclaimersSettingsLink, settingsClosedLocation } =
+    await vi.importActual<typeof EratoLibrary>("@erato/frontend/library");
 
   return mock.createEratoLibraryMock({
     AppearanceTabContent: () => <div data-testid="appearance-settings" />,
     TextSizeSetting: () => <div data-testid="text-size-settings" />,
     AudioInputTabContent: () => <div data-testid="microphone-controls" />,
+    DisclaimersPane: () => <h2>Organization AI policy</h2>,
+    ModalBase: ({
+      children,
+      isOpen,
+      onClose,
+    }: {
+      children: ReactNode;
+      isOpen: boolean;
+      onClose: () => void;
+    }) =>
+      isOpen ? (
+        <div role="dialog">
+          <button onClick={onClose}>Close</button>
+          {children}
+        </div>
+      ) : null,
+    isDisclaimersSettingsLink,
+    settingsClosedLocation,
     useMcpBrowserAuthorization: () => authorizeInBrowser,
     ServersToolsPane: ({
       mcp,
@@ -30,31 +56,7 @@ vi.mock("@erato/frontend/library", async () => {
           Authorize in browser
         </button>
       ) : null,
-    // Renders real tabs from the options: the assertions below resolve tabs
-    // by role and name and panels through the tab ids, so a null stub would
-    // turn them into false failures and a permissive one into false passes.
-    TabRail: ({
-      options,
-      value,
-      onChange,
-      "aria-label": ariaLabel,
-    }: TabRailProps<string>) => (
-      <div role="tablist" aria-label={ariaLabel}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            id={option.id}
-            type="button"
-            role="tab"
-            aria-selected={value === option.value ? "true" : "false"}
-            aria-controls={option.panelId}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    ),
+    TabRail,
     useFeatureConfig: () => ({
       audioTranscription: { enabled: featureFlags.audio },
       audioDictation: { enabled: false },
@@ -62,6 +64,7 @@ vi.mock("@erato/frontend/library", async () => {
       userPreferences: {
         desktopSidecarTabEnabled: false,
         mcpServersTabEnabled: featureFlags.mcpServers,
+        disclaimersTabEnabled: featureFlags.disclaimers,
       },
     }),
   });
@@ -72,14 +75,79 @@ vi.mock("../UserSettingsTabContent", () => ({
 
 const tabNames = () => screen.getAllByRole("tab").map((tab) => tab.textContent);
 
+function LocationProbe() {
+  const href = useHref(useLocation());
+  return <output>{href}</output>;
+}
+
 describe("AddinSettingsDialogCore", () => {
   beforeEach(() => {
     authorizeInBrowser.mockClear();
     i18n.activate("en");
     featureFlags.audio = false;
     featureFlags.mcpServers = false;
+    featureFlags.disclaimers = false;
   });
   afterEach(cleanup);
+
+  it("opens the last tab from a task-pane link and cleans the URL on close", () => {
+    featureFlags.disclaimers = true;
+    render(
+      <MemoryRouter
+        basename="/office-addin"
+        initialEntries={[
+          "/office-addin/word?keep=value&preferencesDialog=open&preferencesTab=disclaimers#footer",
+        ]}
+      >
+        <AddinSettingsDialogCore
+          isOpen={false}
+          onClose={() => {}}
+          supportsDisclaimers
+          hostContribution={{ tabLabel: "Word", content: <p>Word options</p> }}
+        />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    const tab = screen.getByRole("tab", { name: "Disclaimers" });
+    expect(tabNames().slice(-2)).toEqual(["Word", "Disclaimers"]);
+    expect(tab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Disclaimers" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Organization AI policy" }),
+    ).toBeVisible();
+    tab.focus();
+    fireEvent.keyDown(tab, { key: "ArrowLeft" });
+    expect(screen.getByRole("tab", { name: "Word" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByText("/office-addin/word?keep=value#footer"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens Appearance when the linked Disclaimers tab is disabled", () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/word?preferencesDialog=open&preferencesTab=disclaimers",
+        ]}
+      >
+        <AddinSettingsDialogCore
+          isOpen={false}
+          onClose={() => {}}
+          supportsDisclaimers
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("tab", { name: "Disclaimers" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Appearance" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
 
   it("keeps the unsupported explanation available when audio features are disabled", () => {
     render(

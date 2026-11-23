@@ -1,15 +1,19 @@
 import {
   AppearanceTabContent,
   AudioInputTabContent,
+  DisclaimersPane,
   ModalBase,
   ServersToolsPane,
   TabRail,
   TextSizeSetting,
+  isDisclaimersSettingsLink,
+  settingsClosedLocation,
   useFeatureConfig,
   useMcpBrowserAuthorization,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState, type ReactNode } from "react";
+import { useInRouterContext, useLocation, useNavigate } from "react-router-dom";
 
 import { UserSettingsTabContent } from "./UserSettingsTabContent";
 
@@ -18,7 +22,8 @@ export type AddinSettingsTab =
   | "user"
   | "audio"
   | "serversTools"
-  | "host";
+  | "host"
+  | "disclaimers";
 
 export interface AddinSettingsHostContribution {
   /** Tool-only contributions need no host tab; content controls tab visibility. */
@@ -40,16 +45,49 @@ export interface AddinSettingsDialogCoreProps {
   onClose: () => void;
   hostContribution?: AddinSettingsHostContribution;
   audioInputSupported?: boolean;
-  /** The tab the dialog shows each time it opens; the first tab when unset. */
+  supportsDisclaimers?: boolean;
+  /** Tab to select when opening the dialog. */
   openTab?: AddinSettingsTab;
 }
 
 /** Shared settings surface; host tabs and host-specific copy are opt-in. */
-export function AddinSettingsDialogCore({
+export function AddinSettingsDialogCore(props: AddinSettingsDialogCoreProps) {
+  const inRouter = useInRouterContext();
+  return props.supportsDisclaimers && inRouter ? (
+    <RoutedAddinSettingsDialog {...props} />
+  ) : (
+    <AddinSettingsDialog {...props} />
+  );
+}
+
+function RoutedAddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const linkOpen = isDisclaimersSettingsLink(
+    new URLSearchParams(location.search),
+  );
+
+  return (
+    <AddinSettingsDialog
+      {...props}
+      isOpen={props.isOpen || linkOpen}
+      openTab={linkOpen ? "disclaimers" : props.openTab}
+      onClose={() => {
+        props.onClose();
+        if (linkOpen) {
+          navigate(settingsClosedLocation(location), { replace: true });
+        }
+      }}
+    />
+  );
+}
+
+function AddinSettingsDialog({
   isOpen,
   onClose,
   hostContribution,
   audioInputSupported = true,
+  supportsDisclaimers = false,
   openTab,
 }: AddinSettingsDialogCoreProps) {
   const featureConfig = useFeatureConfig();
@@ -66,14 +104,8 @@ export function AddinSettingsDialogCore({
     hostContribution?.serversToolsEntities != null ||
     desktopSidecarEnabled ||
     mcpServersEnabled;
-  const [activeTab, setActiveTab] = useState<AddinSettingsTab>(
-    () => (isOpen && openTab) || "appearance",
-  );
-  const [wasOpen, setWasOpen] = useState(isOpen);
-  if (wasOpen !== isOpen) {
-    setWasOpen(isOpen);
-    if (isOpen && openTab) setActiveTab(openTab);
-  }
+  const disclaimersEnabled =
+    supportsDisclaimers && featureConfig.userPreferences.disclaimersTabEnabled;
 
   const tabOrder = useMemo<AddinSettingsTab[]>(
     () => [
@@ -82,9 +114,31 @@ export function AddinSettingsDialogCore({
       ...(audioSettingsEnabled ? (["audio"] as const) : []),
       ...(serversToolsTabEnabled ? (["serversTools"] as const) : []),
       ...(hostContribution?.content != null ? (["host"] as const) : []),
+      ...(disclaimersEnabled ? (["disclaimers"] as const) : []),
     ],
-    [audioSettingsEnabled, serversToolsTabEnabled, hostContribution],
+    [
+      audioSettingsEnabled,
+      serversToolsTabEnabled,
+      hostContribution,
+      disclaimersEnabled,
+    ],
   );
+
+  const requestedTab =
+    isOpen && openTab
+      ? tabOrder.includes(openTab)
+        ? openTab
+        : "appearance"
+      : undefined;
+  const [lastRequestedTab, setLastRequestedTab] = useState(requestedTab);
+  const [selectedTab, setActiveTab] = useState<AddinSettingsTab>(
+    requestedTab ?? "appearance",
+  );
+  if (requestedTab !== lastRequestedTab) {
+    setLastRequestedTab(requestedTab);
+    if (requestedTab) setActiveTab(requestedTab);
+  }
+  const activeTab = tabOrder.includes(selectedTab) ? selectedTab : "appearance";
 
   const tabLabels: Record<AddinSettingsTab, string> = {
     appearance: t({
@@ -104,6 +158,10 @@ export function AddinSettingsDialogCore({
       message: "MCP & Apps",
     }),
     host: hostContribution?.tabLabel ?? "",
+    disclaimers: t({
+      id: "officeAddin.settings.tabs.disclaimers",
+      message: "Disclaimers",
+    }),
   };
 
   const tabGroupId = useId();
@@ -114,6 +172,7 @@ export function AddinSettingsDialogCore({
     audio: `${tabGroupId}-tab-audio`,
     serversTools: `${tabGroupId}-tab-servers-tools`,
     host: `${tabGroupId}-tab-host`,
+    disclaimers: `${tabGroupId}-tab-disclaimers`,
   };
 
   const panelIds: Record<AddinSettingsTab, string> = {
@@ -122,6 +181,7 @@ export function AddinSettingsDialogCore({
     audio: `${tabGroupId}-panel-audio`,
     serversTools: `${tabGroupId}-panel-servers-tools`,
     host: `${tabGroupId}-panel-host`,
+    disclaimers: `${tabGroupId}-panel-disclaimers`,
   };
 
   const dialogTitle = t({
@@ -315,6 +375,20 @@ export function AddinSettingsDialogCore({
                 </p>
               </div>
               {hostContribution.content}
+            </section>
+          ) : null}
+          {disclaimersEnabled ? (
+            <section
+              id={panelIds.disclaimers}
+              role="tabpanel"
+              aria-labelledby={tabIds.disclaimers}
+              hidden={activeTab !== "disclaimers"}
+              tabIndex={0}
+              className="h-full overflow-y-auto"
+            >
+              {isOpen && activeTab === "disclaimers" ? (
+                <DisclaimersPane />
+              ) : null}
             </section>
           ) : null}
         </div>

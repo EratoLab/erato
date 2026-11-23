@@ -11,6 +11,7 @@ pub mod chat_history_compaction;
 pub mod client_operations;
 pub mod delegated_run_retry;
 pub mod desktop_sidecar;
+mod disclaimers;
 pub mod entra_id;
 pub(crate) mod file_resolution;
 pub mod mcp_servers;
@@ -172,6 +173,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
         .route("/starter-prompts", get(starter_prompts))
+        .route("/disclaimers", get(disclaimers::list_disclaimers))
         .route(
             "/starting-assistant",
             get(starting_assistant::starting_assistant),
@@ -525,6 +527,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         update_profile_preferences,
         facets,
         starter_prompts,
+        disclaimers::list_disclaimers,
         chat_messages,
         submit_message_feedback,
         delete_message_feedback,

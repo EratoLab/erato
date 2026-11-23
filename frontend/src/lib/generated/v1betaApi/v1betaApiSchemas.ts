@@ -2227,6 +2227,16 @@ export type DesktopSidecarUiPackageTokenResponse = {
   url: string;
 };
 
+export type Disclaimer = {
+  content: string;
+  id: string;
+  title: string;
+};
+
+export type DisclaimersResponse = {
+  disclaimers: Disclaimer[];
+};
+
 export type DisconnectMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };

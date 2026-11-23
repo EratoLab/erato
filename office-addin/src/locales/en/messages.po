@@ -1946,6 +1946,11 @@ msgstr "Microphone"
 #~ msgstr "Desktop Sidecar"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.tabs.disclaimers"
+msgstr "Disclaimers"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.tabs.outlook"
 msgstr "Outlook"

@@ -1,6 +1,7 @@
 import { createBrowserClientInfo } from "@erato/frontend/library";
 
 import { ExcelAddinSessionController } from "./excelSession";
+import { createNeutralAddinChatHost } from "../core/AddinChatCore";
 import { NeutralAddinChatPage } from "../core/NeutralAddinChatPage";
 import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
 import { OfficeDocumentAuthProvider } from "../providers/OfficeDocumentAuthProvider";
@@ -13,6 +14,10 @@ const EXCEL_SIDECAR_CLIENT_INFO = createBrowserClientInfo({
   name: "erato-office-addin",
   version: import.meta.env.VITE_APP_VERSION ?? "unversioned",
   hostApplication: "Microsoft Excel add-in",
+});
+
+const ExcelAddinChatHost = createNeutralAddinChatHost(undefined, {
+  supportsDisclaimers: true,
 });
 
 export default function ExcelApp() {
@@ -28,6 +33,7 @@ export default function ExcelApp() {
                   <NeutralAddinChatPage
                     platform="excel"
                     SessionController={ExcelAddinSessionController}
+                    Host={ExcelAddinChatHost}
                   />
                 </div>
               </AuthGate>

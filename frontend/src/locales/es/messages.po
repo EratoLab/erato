@@ -6420,6 +6420,26 @@ msgid "preferences.dialog.desktopSidecar.unavailable.description"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.empty"
+msgstr "No hay avisos legales configurados."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loadError"
+msgstr "No se pudieron cargar los avisos legales."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loading"
+msgstr "Cargando avisos legales…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.retry"
+msgstr "Reintentar"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.fields.additionalInformation.help"
 #~ msgstr "Cualquier contexto adicional que quieras que conozca el asistente."
@@ -7042,6 +7062,11 @@ msgstr "Datos"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.tabs.desktopSidecar"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.disclaimers"
+msgstr "Avisos legales"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -4674,6 +4674,106 @@ export const useUiPackageToken = <
   });
 };
 
+export type ListDisclaimersError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListDisclaimersVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchListDisclaimers = (
+  variables: ListDisclaimersVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.DisclaimersResponse,
+    ListDisclaimersError,
+    undefined,
+    {},
+    {},
+    {}
+  >({ url: "/api/v1beta/me/disclaimers", method: "get", ...variables, signal });
+
+export function listDisclaimersQuery(variables: ListDisclaimersVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.DisclaimersResponse>;
+};
+
+export function listDisclaimersQuery(
+  variables: ListDisclaimersVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.DisclaimersResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listDisclaimersQuery(
+  variables: ListDisclaimersVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/disclaimers",
+      operationId: "listDisclaimers",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListDisclaimers(variables, signal),
+  };
+}
+
+export const useSuspenseListDisclaimers = <
+  TData = Schemas.DisclaimersResponse,
+>(
+  variables: ListDisclaimersVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DisclaimersResponse,
+      ListDisclaimersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.DisclaimersResponse,
+    ListDisclaimersError,
+    TData
+  >({
+    ...listDisclaimersQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListDisclaimers = <TData = Schemas.DisclaimersResponse,>(
+  variables: ListDisclaimersVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.DisclaimersResponse,
+      ListDisclaimersError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.DisclaimersResponse,
+    ListDisclaimersError,
+    TData
+  >({
+    ...listDisclaimersQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type FacetsError = Fetcher.ErrorWrapper<undefined>;
 
 export type FacetsVariables = V1betaApiContext["fetcherOptions"];
@@ -10273,6 +10373,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/desktop-sidecar/ui-package-token";
       operationId: "uiPackageToken";
       variables: UiPackageTokenVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/disclaimers";
+      operationId: "listDisclaimers";
+      variables: ListDisclaimersVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/facets";
