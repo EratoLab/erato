@@ -18,7 +18,7 @@ The words are a speech transcript: they may hold filler words, a misheard word, 
 Meanings:
 - skip: go on with the next piece; the user knows this part ("weiter", "hab ich", "kenn ich schon", "next", "I know that").
 - rest: say only what is left of the card ("was noch?", "was wird sonst geändert?", "what else is updated?").
-- repeat: say a piece again, the current one or the one whose field is named ("nochmal", "wie war das Datum?", "what was the probability again?").
+- repeat: say a piece again, the current one or the one whose field is named, also a field the card says only when asked ("nochmal", "wie war das Datum?", "was stand in der Zusammenfassung?", "what was the probability again?", "tell me the summary once more").
 - read_text: read a long text of the card aloud ("lies mir die Beschreibung vor", "read me the note").
 - stop: stop talking; the card keeps waiting ("stopp", "ruhe", "wait").
 - change: the user wants the action done differently: another value, a part left out, kept or added ("nimm den 22.", "ohne Anna", "die Wahrscheinlichkeit lass, wie sie ist"). A yes with a condition or a change is a change ("ja, aber nimm den 22.").
@@ -32,7 +32,7 @@ Rules:
 - When in doubt between approve or reject and anything else, answer unclear. A question, a condition or a change is never approve.
 - When the words could be a change of this card or a new request, answer unclear.
 - Several meanings in a row ("hab ich, was noch?"): answer the last one.
-- piece_id: for repeat and read_text, the id of the piece meant; for repeat without a named field, the current piece. Otherwise null. Field names may be in another language than the user's words; match them by meaning ("Datum" can mean "Close date")."#;
+- piece_id: for repeat and read_text, the id of the piece meant; for repeat without a named field, the current piece. Otherwise null. Field names may be in another language than the user's words or written as one glued word; match them by meaning ("Datum" can mean "Close date", "next steps" can mean "Nextsteps"). A field's other names name it too. If the words name a field the card does not have, or fit two fields equally, answer unclear."#;
 
 const MAX_REPLY_TOKENS: u32 = 512;
 pub const MAX_REPLY_BYTES: usize = 2 * 1024;
@@ -79,7 +79,14 @@ pub(super) fn build_request(prompt: &str, input: &VoiceCommandInput<'_>) -> Chat
         if let Some(field) = piece.field.as_deref() {
             card.push_str(&format!(", field {}", shown_field(field)));
         }
+        if !piece.names.is_empty() {
+            let names: Vec<String> = piece.names.iter().map(|name| shown_field(name)).collect();
+            card.push_str(&format!(" (also {})", names.join(", ")));
+        }
         card.push_str(&format!(", {state}"));
+        if piece.on_request {
+            card.push_str(", said only when asked");
+        }
         if input.current_piece_id == Some(piece.id.as_str()) {
             card.push_str(", being spoken now");
         }
@@ -88,6 +95,9 @@ pub(super) fn build_request(prompt: &str, input: &VoiceCommandInput<'_>) -> Chat
     let asked = match input.question {
         Some(super::VoiceQuestion::WhichText) => {
             "THE VOICE JUST ASKED: which of the card's texts to read. Words that name one text's field answer it: read_text with that piece.\n"
+        }
+        Some(super::VoiceQuestion::WhichField) => {
+            "THE VOICE JUST ASKED: which of several fields to say. Words that name one field answer it: repeat with that piece.\n"
         }
         None => "",
     };

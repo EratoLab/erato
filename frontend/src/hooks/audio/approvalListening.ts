@@ -61,6 +61,8 @@ import type {
 export const VOICE_COMMAND_TIMEOUT_MS = 8_000;
 /** What the endpoint takes of the user's words. */
 const MAX_TRANSCRIPT_CHARS = 300;
+/** Other names of one field the endpoint takes. */
+const MAX_FIELD_NAMES = 6;
 /** What a change request takes of them: `max_chars` of `[approval_change_requests]` by default. */
 const MAX_CHANGE_CHARS = 1_000;
 /** The confirmation is short; past this the change goes out anyway. */
@@ -87,6 +89,11 @@ interface ApprovalListeningState {
    */
   askedWhichText: string | null;
   /**
+   * The card whose voice just asked which of several fields to say: the
+   * next words to it may answer that by naming one.
+   */
+  askedWhichField: string | null;
+  /**
    * The card the user told to stop. It keeps listening, but acts only on
    * words that resume the card ("weiter", "nochmal", "was noch", "lies …
    * vor"); to anything else, a yes, a no or a change included, it says
@@ -111,6 +118,7 @@ export const useApprovalListening = create<ApprovalListeningState>(() => ({
   quiet: null,
   heard: null,
   askedWhichText: null,
+  askedWhichField: null,
   stopped: null,
   listening: null,
   misses: {},
@@ -159,6 +167,8 @@ export interface MeaningStep {
   change?: true;
   /** The voice asks which text to read; the next words may answer it. */
   asksWhichText?: true;
+  /** The voice asks which field to say; the next words may answer it. */
+  asksWhichField?: true;
   /** The voice was told to stop: it listens on, silent to what it cannot use. */
   stops?: true;
   /** The words decide the card: the decision goes out with this receipt. */
@@ -171,6 +181,13 @@ export interface MeaningStep {
 export interface MeaningContext {
   /** The voice had just asked which text to read. */
   askedWhichText?: boolean;
+  /** The piece the voice was saying when the words came. */
+  current?: number | null;
+  /**
+   * For a repeat without a piece: the fields the words fit equally, by id.
+   * The voice asks which one instead of guessing.
+   */
+  candidates?: readonly string[];
   /** The voice had been told to stop. */
   stopped?: boolean;
   /**
@@ -217,15 +234,36 @@ export const stepForMeaning = (
       return listen({ type: "skip" });
     case "rest":
       return listen({ type: "rest" });
-    case "repeat":
-      // A text named in answer to "which text" is read, not its piece again.
-      if (context.askedWhichText && named)
+    case "repeat": {
+      // A text named in answer to "which text", or asked for by name while
+      // the voice says something else, is read, not its piece again.
+      if (named && (context.askedWhichText || index !== context.current))
         return listen({ type: "read", index });
+      const which = (context.candidates ?? []).flatMap((id) => {
+        const at = indexOf(pieces, id);
+        return at === undefined ? [] : [at];
+      });
+      // Several fields fit the words: ask which, never guess by order.
+      if (index === undefined && which.length > 1)
+        return {
+          ...listen({
+            type: "notice",
+            notice: {
+              kind: "which_field",
+              fields: which.map((at) => spokenPieceField(pieces[at]) ?? ""),
+            },
+          }),
+          asksWhichField: true,
+        };
       // No piece to repeat: the card again, from its start.
       return listen(
         index === undefined ? { type: "start" } : { type: "repeat", index },
       );
+    }
     case "read_text": {
+      // A text short enough to be said whole is said, not another text read.
+      if (index !== undefined && !named && pieces[index].role === "text")
+        return listen({ type: "repeat", index });
       const texts = longTexts(pieces);
       if (texts.length === 0)
         return listen({ type: "notice", notice: { kind: "no_text" } });
@@ -343,12 +381,17 @@ export const commandPieces = (
   const states = heardStates(flow);
   return pieces.map((piece, index) => {
     const field = spokenPieceField(piece);
+    const names = (piece.names ?? [])
+      .slice(0, MAX_FIELD_NAMES)
+      .map((name) => Array.from(name).slice(0, 100).join(""));
     return {
       id: piece.id,
       role: piece.role,
       ...(field ? { field: Array.from(field).slice(0, 100).join("") } : {}),
       state: states[index],
       ...(piece.mustSay ? { must_say: true } : {}),
+      ...(names.length > 0 ? { names } : {}),
+      ...(piece.onRequest ? { on_request: true } : {}),
     };
   });
 };
@@ -467,15 +510,21 @@ export async function heardApprovalWords(
   const overVoice = takeTalkedOver(key, flow);
   const current = currentPiece(flow);
   const listening = useApprovalListening.getState();
+  const askedWhichField = listening.askedWhichField === key;
   const context: MeaningContext = {
     askedWhichText: listening.askedWhichText === key,
+    current,
     stopped: listening.stopped === key,
     ...(card.decision ? { byVoice: { approves: card.decision.approves } } : {}),
     misses: listening.misses[key] ?? 0,
   };
   const signals = card.decision ? voiceSignals(key, recording) : undefined;
   // A question is answered by the next words only.
-  useApprovalListening.setState({ pending: key, askedWhichText: null });
+  useApprovalListening.setState({
+    pending: key,
+    askedWhichText: null,
+    askedWhichField: null,
+  });
   noteHeard(key, { words, meaning: null });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), VOICE_COMMAND_TIMEOUT_MS);
@@ -493,7 +542,11 @@ export async function heardApprovalWords(
             : {}),
           pieces: commandPieces(pieces, flow) as ApprovalCardPiece[],
           ...(current !== null ? { current_piece_id: pieces[current].id } : {}),
-          ...(context.askedWhichText ? { question: "which_text" } : {}),
+          ...(context.askedWhichText
+            ? { question: "which_text" }
+            : askedWhichField
+              ? { question: "which_field" }
+              : {}),
           ...(card.decision ? { approval_id: card.decision.approvalId } : {}),
           ...(signals ? { signals } : {}),
         },
@@ -502,10 +555,12 @@ export async function heardApprovalWords(
     );
     const pieceId = (answer as { piece_id?: string | null }).piece_id;
     const decision = (answer as { decision?: ApprovalVoiceDecision }).decision;
+    const { candidates } = answer;
     noteHeard(key, { meaning: answer.meaning });
     step = stepForMeaning(answer.meaning, pieceId, pieces, {
       ...context,
       ...(decision ? { decision } : {}),
+      ...(candidates ? { candidates } : {}),
     });
   } catch (error) {
     // 409: the card was decided meanwhile; it says nothing more.
@@ -542,6 +597,8 @@ export async function heardApprovalWords(
   if (step.event) steerApprovalCard(key, step.event);
   if (step.asksWhichText)
     useApprovalListening.setState({ askedWhichText: key });
+  if (step.asksWhichField)
+    useApprovalListening.setState({ askedWhichField: key });
   if (step.stops) useApprovalListening.setState({ stopped: key });
   if (!step.listen) useApprovalListening.setState({ quiet: key });
 }

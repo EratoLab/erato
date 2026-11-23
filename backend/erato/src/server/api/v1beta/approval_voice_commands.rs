@@ -95,7 +95,7 @@ pub struct ApprovalVoiceCommandRequest {
         (status = BAD_REQUEST, description = "Empty words, a piece id twice or empty, or a current piece that is not on the card"),
         (status = NOT_FOUND, description = "Voice commands are off, or the message does not exist or is not in a chat of the user"),
         (status = CONFLICT, description = "The message has no approval waiting for a decision"),
-        (status = PAYLOAD_TOO_LARGE, description = "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters")
+        (status = PAYLOAD_TOO_LARGE, description = "Words over 300 characters, more than 32 pieces, a piece id over 64, a field name over 100 characters or more than 6 other names of a field")
     ),
     security(("bearer_auth" = []))
 )]
@@ -153,6 +153,7 @@ pub async fn interpret_approval_voice_command(
             command: VoiceCommand {
                 meaning: VoiceMeaning::Noise,
                 piece_id: None,
+                candidates: Vec::new(),
                 source: VoiceCommandSource::Rules,
                 decision: None,
             },
@@ -162,6 +163,7 @@ pub async fn interpret_approval_voice_command(
             command: VoiceCommand {
                 meaning: VoiceMeaning::Approve,
                 piece_id: None,
+                candidates: Vec::new(),
                 source: VoiceCommandSource::Rules,
                 decision: None,
             },

@@ -1132,6 +1132,22 @@ const noticeSentence = (
         }),
       });
     }
+    case "which_field": {
+      const named = notice.fields.every((field) => field.length > 0);
+      const fields = named
+        ? new Intl.ListFormat(locale, { type: "disjunction" }).format(
+            notice.fields,
+          )
+        : "";
+      const shape = named ? "named" : "unnamed";
+      return t({
+        id: "spokenCard.notice.whichField",
+        message: select(shape, {
+          named: `Which field: ${fields}?`,
+          other: "Which field? Please say its name.",
+        }),
+      });
+    }
     case "unavailable":
       return t({
         id: "spokenCard.notice.unavailable",

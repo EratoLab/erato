@@ -9341,6 +9341,11 @@ msgstr "{commands, select, withText {Das habe ich nicht verstanden. Möglich sin
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichField"
+msgstr "{shape, select, named {Welches Feld: {fields}?} other {Welches Feld? Bitte den Namen sagen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.whichText"
 msgstr "{shape, select, named {Welchen Text: {texts}?} other {Welchen Text? Die Texte stehen auf dem Bildschirm.}}"
 
