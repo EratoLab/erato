@@ -2510,6 +2510,35 @@
         ]
       }
     },
+    "/api/v1beta/me/disclaimers": {
+      "get": {
+        "tags": [
+          "disclaimers"
+        ],
+        "summary": "List the configured notices for the Settings dialog.",
+        "operationId": "list_disclaimers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisclaimersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/facets": {
       "get": {
         "tags": [],
@@ -9705,6 +9734,39 @@
           "url": {
             "type": "string",
             "description": "Root-relative URL of the package archive; `<url>/manifest.json` is the\nmanifest. Resolve it against the origin this response came from."
+          }
+        }
+      },
+      "Disclaimer": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "DisclaimersResponse": {
+        "type": "object",
+        "required": [
+          "disclaimers"
+        ],
+        "properties": {
+          "disclaimers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Disclaimer"
+            }
           }
         }
       },

@@ -6440,6 +6440,26 @@ msgid "preferences.dialog.desktopSidecar.unavailable.description"
 msgstr "Start the desktop sidecar, then try connecting again."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.empty"
+msgstr "No disclaimers are configured."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loadError"
+msgstr "Could not load disclaimers."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loading"
+msgstr "Loading disclaimers…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.retry"
+msgstr "Retry"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.fields.additionalInformation.help"
 #~ msgstr "Any additional context you want the assistant to know."
@@ -7062,6 +7082,11 @@ msgstr "Data"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.tabs.desktopSidecar"
 #~ msgstr "Desktop Sidecar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.disclaimers"
+msgstr "Disclaimers"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

@@ -111,6 +111,12 @@ export {
   type EntityRowStatus,
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
+export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
+export {
+  disclaimersSettingsHref,
+  isDisclaimersSettingsLink,
+  settingsClosedLocation,
+} from "@/lib/disclaimersSettingsLink";
 export {
   McpToolPermissionsRoster,
   type McpToolPermissionsRosterProps,

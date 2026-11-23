@@ -2475,6 +2475,24 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "disclaimers.disclaimers.<key>.content": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "disclaimers.disclaimers.<key>.title": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "disclaimers.enable_settings_tab": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "environment": {
     "default_value_security": "unreviewed",
     "hide_in_docs": true,

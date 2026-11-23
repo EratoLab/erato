@@ -7259,6 +7259,33 @@ unpublish = ["editors", "reviewers"]
 make_current = ["editors", "reviewers"]
 ```
 
+### `disclaimers`
+
+{/* erato_toml_config_key: disclaimers */}
+{/* erato_toml_config_key: disclaimers.enable_settings_tab */}
+{/* erato_toml_config_key: disclaimers.disclaimers */}
+{/* erato_toml_config_key: disclaimers.disclaimers.<key>.title */}
+{/* erato_toml_config_key: disclaimers.disclaimers.<key>.content */}
+
+Configure read-only notices for signed-in users. The **Disclaimers** tab appears last in Settings on the web and in the Word, Excel, Outlook, and PowerPoint add-ins when `enable_settings_tab` is `true` and at least one notice is configured. The setting defaults to `false`.
+
+Each notice has an ID, a plain-text `title`, and Markdown `content`. Settings displays notices in ascending order by ID. The configured text appears as written in every UI language.
+
+```toml
+[disclaimers]
+enable_settings_tab = true
+
+[disclaimers.disclaimers.ai_policy]
+title = "Organization AI policy"
+content = """
+Verify generated answers before sharing them.
+
+Read the [organization AI policy](https://example.com/ai-policy) for details.
+"""
+```
+
+To link directly to the tab, use `/?preferencesDialog=open&preferencesTab=disclaimers` on the web, or add the same query parameters to the supported Office task-pane URL. If the tab is unavailable, the link opens the default Settings tab.
+
 ### `starter_prompts`
 
 {/* erato_toml_config_key: starter_prompts */}
