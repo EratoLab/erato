@@ -2082,6 +2082,11 @@ msgid "chat.compaction.suggestion"
 msgstr "Dieser Chat nähert sich seinem Kontextlimit. Komprimiere ihn, um mit einer Zusammenfassung fortzufahren. Einige Details können verloren gehen."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "chat.connection.lost"
+msgstr "Verbindung unterbrochen. Neuer Verbindungsversuch…"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Chat-Unterhaltung"

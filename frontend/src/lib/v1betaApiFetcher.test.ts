@@ -2,12 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setAuthRecoveryHandler } from "@/auth/authRecovery";
 import { setIdToken } from "@/auth/tokenStore";
+import {
+  connectivity,
+  isNetworkFailure,
+} from "@/lib/connectivity/connectivity";
 
 import {
   ClientOperationCoordinator,
   clientOperationApi,
 } from "./clientOperations/coordinator";
-import { v1betaApiFetch } from "./generated/v1betaApi/v1betaApiFetcher";
+import {
+  READ_RESPONSE_TIMEOUT_MS,
+  v1betaApiFetch,
+} from "./generated/v1betaApi/v1betaApiFetcher";
 
 describe("v1betaApiFetch optional query parameters", () => {
   afterEach(() => {
@@ -31,22 +38,14 @@ describe("v1betaApiFetch optional query parameters", () => {
     "omits the first-page cursor for %s and preserves later cursors",
     async (_name, list, endpoint) => {
       const fetchMock = mockFetch({ operations: [] });
-      const signal = new AbortController().signal;
+      const caller = new AbortController();
       const cursor = "550e8400-e29b-41d4-a716-446655440000";
 
-      await list(undefined, signal);
-      await list(cursor, signal);
+      await list(undefined, caller.signal);
+      await list(cursor, caller.signal);
 
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        1,
-        endpoint,
-        expect.objectContaining({ signal }),
-      );
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
-        `${endpoint}?after=${cursor}`,
-        expect.objectContaining({ signal }),
-      );
+      expect(fetchMock.mock.calls[0][0]).toBe(endpoint);
+      expect(fetchMock.mock.calls[1][0]).toBe(`${endpoint}?after=${cursor}`);
     },
   );
 
@@ -358,5 +357,203 @@ describe("v1betaApiFetch 401 auth recovery", () => {
     ).rejects.toBeDefined();
     expect(handler).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("v1betaApiFetch network failures", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function pendingUntilAborted() {
+    return vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+  }
+
+  it("times out a hanging read and reports it as a network failure", async () => {
+    vi.useFakeTimers();
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    vi.stubGlobal("fetch", pendingUntilAborted());
+
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "get",
+    });
+    const outcome = request.catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS);
+
+    const error = await outcome;
+    expect((error as Error).message).toBe("Network error (request timed out)");
+    expect(isNetworkFailure(error)).toBe(true);
+    expect(failure).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a read with a longer limit of its own wait past the default", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.stubGlobal("fetch", pendingUntilAborted());
+
+    let settled = false;
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/wait-lines",
+      method: "get",
+      readTimeoutMs: READ_RESPONSE_TIMEOUT_MS * 2,
+    }).catch((error: unknown) => error);
+    void request.then(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS + 1_000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS);
+    expect(((await request) as Error).message).toBe(
+      "Network error (request timed out)",
+    );
+  });
+
+  it("forwards the caller's abort and does not report it", async () => {
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    vi.stubGlobal("fetch", pendingUntilAborted());
+    const caller = new AbortController();
+
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "get",
+      signal: caller.signal,
+    });
+    caller.abort();
+
+    const error = await request.catch((e: unknown) => e);
+    expect(isNetworkFailure(error)).toBe(false);
+    expect(failure).not.toHaveBeenCalled();
+  });
+
+  it("marks a request that got no response", async () => {
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
+
+    const error = await v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "post",
+    }).catch((e: unknown) => e);
+
+    expect(isNetworkFailure(error)).toBe(true);
+    expect(failure).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an HTTP error as reachable", async () => {
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    const success = vi
+      .spyOn(connectivity, "reportNetworkSuccess")
+      .mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({ status: 500, payload: "boom" }),
+      }),
+    );
+
+    const error = await v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "get",
+    }).catch((e: unknown) => e);
+
+    expect(error).toEqual({ status: 500, payload: "boom" });
+    expect(isNetworkFailure(error)).toBe(false);
+    expect(failure).not.toHaveBeenCalled();
+    expect(success).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not time out writes", async () => {
+    vi.useFakeTimers();
+    let resolveFetch: (value: unknown) => void = () => {};
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/compact",
+      method: "post",
+    });
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS * 2);
+    resolveFetch({
+      ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ done: true }),
+    });
+
+    await expect(request).resolves.toEqual({ done: true });
+  });
+  it("does not cut a slow body once the response has started", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(connectivity, "reportNetworkSuccess").mockImplementation(() => {});
+    let finishBody: (value: unknown) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () =>
+          new Promise((resolve) => {
+            finishBody = resolve;
+          }),
+      }),
+    );
+
+    const request = v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "get",
+    });
+    await vi.advanceTimersByTimeAsync(READ_RESPONSE_TIMEOUT_MS * 2);
+    finishBody({ slow: true });
+
+    await expect(request).resolves.toEqual({ slow: true });
+  });
+
+  it("does not take a request that could not be built for a network failure", async () => {
+    const failure = vi
+      .spyOn(connectivity, "reportNetworkFailure")
+      .mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    const error = await v1betaApiFetch({
+      url: "/api/v1beta/me/budget",
+      method: "post",
+      body: circular,
+    }).catch((e: unknown) => e);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(isNetworkFailure(error)).toBe(false);
+    expect(failure).not.toHaveBeenCalled();
   });
 });

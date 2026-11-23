@@ -165,6 +165,7 @@ import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnou
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
 import { BudgetWarning } from "../Feedback/ChatWarnings/BudgetWarning";
+import { ConnectionWarning } from "../Feedback/ChatWarnings/ConnectionWarning";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
@@ -3305,6 +3306,8 @@ export const ChatInput = ({
         })}
         onSubmit={handleComposerSubmit}
       >
+        <ConnectionWarning />
+
         {/* Token usage warnings */}
         <ChatInputTokenUsage
           message={message}

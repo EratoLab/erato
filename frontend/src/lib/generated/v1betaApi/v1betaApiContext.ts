@@ -33,6 +33,11 @@ export type V1betaApiContext<
      * Query params to inject in the fetcher
      */
     queryParams?: {};
+    /**
+     * How long a GET may wait for its response to start, instead of the
+     * fetcher's default; `null` for no limit.
+     */
+    readTimeoutMs?: number | null;
   };
   queryOptions: {
     /**

@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState, type ReactNode } from "react";
 
+import { connectQueryClientToConnectivity } from "@/lib/connectivity/useConnectivityStatus";
+
 interface ApiProviderProps {
   children: ReactNode;
   enableDevtools?: boolean;
@@ -28,31 +30,36 @@ export function ApiProvider({
   enableDevtools = true,
 }: ApiProviderProps) {
   // Create a client that persists across renders but is unique per component instance
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 60 * 1000, // 1 minute
-            refetchOnWindowFocus: true,
-            retry: (failureCount, error: ApiError) => {
-              // Don't retry client errors that a retry can't change: auth
-              // issues (401/403) or a missing/inaccessible resource (404).
-              // Retrying a 404 would also delay the not-found route redirect.
-              if (
-                error.status === 401 ||
-                error.status === 403 ||
-                error.status === 404
-              ) {
-                return false;
-              }
-              // Retry other errors up to 2 times
-              return failureCount < 2;
-            },
+  const [queryClient] = useState(() => {
+    connectQueryClientToConnectivity();
+    return new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 1 minute
+          refetchOnWindowFocus: true,
+          retry: (failureCount, error: ApiError) => {
+            // Don't retry client errors that a retry can't change: auth
+            // issues (401/403) or a missing/inaccessible resource (404).
+            // Retrying a 404 would also delay the not-found route redirect.
+            if (
+              error.status === 401 ||
+              error.status === 403 ||
+              error.status === 404
+            ) {
+              return false;
+            }
+            // Retry other errors up to 2 times
+            return failureCount < 2;
           },
         },
-      }),
-  );
+        mutations: {
+          // A write held back while offline would leave its button spinning
+          // with no word; failing lets the user see it and try again.
+          networkMode: "always",
+        },
+      },
+    });
+  });
 
   return (
     <QueryClientProvider client={queryClient}>

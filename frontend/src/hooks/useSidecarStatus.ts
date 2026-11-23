@@ -20,6 +20,8 @@ export function useSidecarStatus(): UseQueryResult<
   const query = useQuery<SidecarStatusV1Result, Error>({
     queryKey: ["sidecar-status", snapshot.instanceId],
     enabled: supported,
+    // The local sidecar, not the server: no reason to wait for the server.
+    networkMode: "always",
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
     retry: false,

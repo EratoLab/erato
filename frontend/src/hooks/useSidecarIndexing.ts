@@ -54,6 +54,8 @@ export function useSidecarIndexing(): SidecarIndexingState {
     queryKey,
     enabled: supported,
     refetchInterval: 5_000,
+    // The local sidecar, not the server: no reason to wait for the server.
+    networkMode: "always",
     queryFn: async ({ signal }) => {
       if (!client) throw new Error("Sidecar unavailable");
       const [status, { mailboxes, warnings }, sourceResult] = await Promise.all(

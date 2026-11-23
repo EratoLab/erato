@@ -2082,6 +2082,11 @@ msgid "chat.compaction.suggestion"
 msgstr "Este chat se acerca a su límite de contexto. Compáctalo para continuar con un resumen. Algunos detalles pueden perderse."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
+msgid "chat.connection.lost"
+msgstr "Se perdió la conexión. Reconectando…"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/Chat.tsx
 msgid "chat.conversation.aria"
 msgstr "Conversación de chat"

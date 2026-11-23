@@ -9,6 +9,11 @@
 
 import { mergeApiAuthHeaders } from "@/auth/apiRequestAuth";
 import { fetchWithAuthRecovery } from "@/auth/authRecovery";
+import {
+  connectivity,
+  markNetworkFailure,
+  markStalledStream,
+} from "@/lib/connectivity/connectivity";
 import { FrontendRequestError, sanitizeHeaders } from "@/utils/errorReport";
 
 import { createLogger } from "../debugLogger";
@@ -29,6 +34,17 @@ export interface SSEOptions {
   onClose?: () => void;
   method?: "GET" | "POST"; // HTTP method to use
   body?: string; // Request body for POST requests
+  /**
+   * Treat the stream as dead when no bytes arrive for this long. Only for
+   * endpoints that send keep-alives more often than this; a connection that
+   * dropped without closing otherwise never errors.
+   */
+  idleTimeoutMs?: number;
+  /**
+   * Treat the request as dead when the response has not started after this
+   * long. Only for endpoints that answer right away.
+   */
+  connectTimeoutMs?: number;
 }
 
 const logger = createLogger("NETWORK", "SSE_CLIENT");
@@ -59,6 +75,8 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
     headers = {},
     method = "GET",
     body,
+    idleTimeoutMs,
+    connectTimeoutMs,
   } = options;
 
   const effectiveHeaders = mergeApiAuthHeaders({
@@ -139,6 +157,31 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
   logger.log("Using fetch-based approach for", method);
   abortController = new AbortController();
   const { signal } = abortController;
+  let stalled = false;
+  // Read through a call: the flag is set from a timer, which flow analysis
+  // can't see.
+  const isStalled = () => stalled;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  const clearIdleTimer = () => {
+    if (idleTimer !== null) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  };
+  const armStallTimer = (timeoutMs: number | undefined) => {
+    if (!timeoutMs) {
+      return;
+    }
+    clearIdleTimer();
+    idleTimer = setTimeout(() => {
+      logger.log(
+        `Nothing received for ${timeoutMs}ms, treating stream as dead`,
+      );
+      stalled = true;
+      abortController?.abort();
+    }, timeoutMs);
+  };
+  const armIdleTimer = () => armStallTimer(idleTimeoutMs);
 
   // Async generator over the stream reader
   async function* streamAsyncIterator(
@@ -165,8 +208,10 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       logger.log("Stream connected, starting to read using async generator");
       isConnected = true;
       onOpen?.();
+      armIdleTimer();
 
       for await (const value of streamAsyncIterator(reader)) {
+        armIdleTimer();
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
 
@@ -229,9 +274,14 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       }
       // Generator finishes when stream ends, reader lock released in generator's finally
       logger.log("Stream ended (async generator)");
+      clearIdleTimer();
       isConnected = false;
       closeOnce();
     } catch (err) {
+      clearIdleTimer();
+      if (isStalled()) {
+        throw err;
+      }
       if (signal.aborted || isAbortError(err)) {
         logger.log("Stream aborted");
         isConnected = false;
@@ -281,10 +331,17 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       // Turned away as signed out at connect time (the proxy rejected the request before it reached
       // the backend/stream): recover the session and reopen ONCE. Safe to replay — nothing was
       // processed. No-op for the web app, which registers no recovery handler.
-      response = await fetchWithAuthRecovery(
-        () => fetch(url, buildInit()),
-        "sse-signed-out",
-      );
+      // The connect timeout covers each send, not the session renewal between them.
+      const send = async () => {
+        armStallTimer(connectTimeoutMs);
+        try {
+          return await fetch(url, buildInit());
+        } finally {
+          clearIdleTimer();
+        }
+      };
+      response = await fetchWithAuthRecovery(send, "sse-signed-out");
+      connectivity.reportNetworkSuccess();
 
       if (!response.ok) {
         // Read the body so the caller can surface the validation reason
@@ -329,7 +386,8 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
       // Read the stream using the updated function with the async generator
       await readSSEStream(response.body); // Pass the stream directly
     } catch (err) {
-      if (signal.aborted || isAbortError(err)) {
+      clearIdleTimer();
+      if (!isStalled() && (signal.aborted || isAbortError(err))) {
         // This is just a normal abort, not an error
         logger.log("Request aborted");
         isConnected = false;
@@ -342,11 +400,21 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         cause instanceof FrontendRequestError
           ? cause
           : new FrontendRequestError(
-              cause.message,
+              isStalled() ? "SSE stream stalled" : cause.message,
               requestContext,
               response ? getResponseContext(response) : undefined,
               { cause },
             );
+      // Our own FrontendRequestErrors carry an HTTP response; anything else
+      // means the connection itself failed, before or during the stream.
+      if (!(cause instanceof FrontendRequestError)) {
+        if (isStalled()) {
+          markStalledStream(error);
+        } else {
+          markNetworkFailure(error);
+        }
+        connectivity.reportNetworkFailure();
+      }
       logger.log("Fetch error:", error.message);
       onError?.(error);
       isConnected = false;
@@ -355,6 +423,7 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
 
   // Return cleanup function
   return () => {
+    clearIdleTimer();
     if (abortController) {
       logger.log("Aborting fetch request");
       abortController.abort();

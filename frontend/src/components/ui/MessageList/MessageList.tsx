@@ -17,6 +17,7 @@ import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 import { getAssistantTurns } from "@/utils/chat/assistantTurns";
+import { contentSize } from "@/utils/chat/messageUtils";
 import {
   isSameMessage,
   shallowEqual,
@@ -466,15 +467,6 @@ interface LastSeenSnapshot {
   contentSize: number;
 }
 
-const getContentSize = (message: ChatMessage) =>
-  message.content.reduce(
-    (size, part) =>
-      size +
-      1 +
-      ("text" in part && typeof part.text === "string" ? part.text.length : 0),
-    0,
-  );
-
 const takeLastSeenSnapshot = (
   messageOrder: string[],
   messages: Record<string, ChatMessage>,
@@ -488,7 +480,7 @@ const takeLastSeenSnapshot = (
     sessionId,
     messageId,
     createdAt: Date.parse(message.createdAt),
-    contentSize: getContentSize(message),
+    contentSize: contentSize(message.content),
   };
 };
 
@@ -556,7 +548,7 @@ function useUnseenMessageCount({
       // Growth only: the post-stream refetch may normalize persisted content.
       if (
         lastSeenMessage.role !== "user" &&
-        getContentSize(lastSeenMessage) > lastSeen.contentSize
+        contentSize(lastSeenMessage.content) > lastSeen.contentSize
       ) {
         count += 1;
       }

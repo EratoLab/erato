@@ -18,6 +18,7 @@ import {
   fetchUiPackageToken,
   useOrganizationConfiguration,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { abortableDelay } from "@/utils/abortableDelay";
 
 import type {
   SidecarClientInfo,
@@ -319,19 +320,4 @@ export function DesktopSidecarConfigurationSync() {
   ]);
 
   return null;
-}
-
-function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, delayMs);
-    signal.addEventListener("abort", onAbort, { once: true });
-    if (signal.aborted) onAbort();
-  });
 }

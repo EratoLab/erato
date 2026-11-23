@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
@@ -9,7 +9,13 @@ import * as waitLines from "@/hooks/audio/waitLines";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import {
+  connectivity,
+  markNetworkFailure,
+  markStalledStream,
+} from "@/lib/connectivity/connectivity";
+import {
   chatMessagesQuery,
+  fetchAbortMessageStream,
   fetchChatMessages,
   recentChatsQuery,
   useChatMessages,
@@ -18,6 +24,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { contentSize } from "@/utils/chat/messageUtils";
 import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
@@ -94,6 +101,11 @@ vi.mock("zustand", async () => {
 });
 
 // Mock the SSE client module
+// Reconnect backoff would make the tests wait for real seconds.
+vi.mock("@/utils/abortableDelay", () => ({
+  abortableDelay: () => Promise.resolve(),
+}));
+
 vi.mock("@/utils/sse/sseClient", () => {
   return {
     createSSEConnection: vi.fn((url, options) => {
@@ -131,6 +143,7 @@ import { useChatMessaging } from "../useChatMessaging";
 import { resetReactAttemptsForTest } from "../useReactToTaskResult";
 
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Message } from "@/types/chat";
 import type { ReactNode } from "react";
 import type { StateCreator } from "zustand";
 
@@ -142,6 +155,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   chatMessagesQuery: vi.fn((variables: { pathParams: { chatId: string } }) => ({
     queryKey: ["chatMessages", { chatId: variables.pathParams.chatId }],
   })),
+  fetchAbortMessageStream: vi.fn(),
   fetchChatMessages: vi.fn(),
   fetchRecentChats: vi.fn(),
   generatingChatsQuery: vi.fn(() => ({ queryKey: ["generatingChats"] })),
@@ -225,6 +239,7 @@ const mockFetchChatMessages = fetchChatMessages as unknown as ReturnType<
 const mockUseMessageSubmitSse = useMessageSubmitSse as unknown as ReturnType<
   typeof vi.fn
 >;
+const mockFetchAbortMessageStream = vi.mocked(fetchAbortMessageStream);
 const mockCreateSSEConnection = createSSEConnection as unknown as ReturnType<
   typeof vi.fn
 >;
@@ -337,6 +352,9 @@ describe("useChatMessaging", () => {
         json: async () => ({ abort_requested: true }),
       }),
     );
+    mockFetchAbortMessageStream
+      .mockReset()
+      .mockResolvedValue({ abort_requested: true });
 
     // Default mock implementations
     mockUseChatMessages.mockReturnValue({
@@ -1274,6 +1292,961 @@ describe("useChatMessaging", () => {
     );
     expect(result.current.isStreaming).toBe(true);
     expect(result.current.error).toBeNull();
+  });
+
+  describe("when the connection drops mid-answer", () => {
+    const offlineFailure = () =>
+      markNetworkFailure(new Error("Network error (Failed to fetch)"));
+    const hangUntilAborted = (_variables: unknown, signal?: AbortSignal) =>
+      new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener("abort", () =>
+          reject(new Error("Network error (aborted)")),
+        );
+      });
+    // Every size the store shows for the answer, one per store update.
+    const watchAnswer = (messageId: string) => {
+      const sizes: number[] = [];
+      const record = () => {
+        const shown = useMessagingStore
+          .getState()
+          .getRenderableMessages("chat1")[messageId] as Message | undefined;
+        sizes.push(shown ? contentSize(shown.content) : -1);
+      };
+      record();
+      const unsubscribe = useMessagingStore.subscribe(record);
+      return {
+        sizes,
+        stop: unsubscribe,
+        neverShrank: () =>
+          sizes.every((size, index) => index === 0 || size >= sizes[index - 1]),
+      };
+    };
+    const streamEvent = (data: object) => ({
+      type: "message",
+      data: JSON.stringify(data),
+    });
+
+    // What reached the server, in order: stops and new turns.
+    const recordRequests = () => {
+      const requests: string[] = [];
+      mockFetchAbortMessageStream.mockImplementation(async () => {
+        requests.push("abort");
+        return { abort_requested: true };
+      });
+      mockCreateSSEConnection.mockImplementation((url: string, options) => {
+        requests.push(url.split("/").pop() ?? url);
+        if (!url.includes("/resumestream")) sseCallbacks = options;
+        return vi.fn();
+      });
+      return requests;
+    };
+    type ResumeOptions = {
+      onMessage?: (event: { data: string; type: string }) => void;
+      onError?: (error: Error) => void;
+      onClose?: () => void;
+      idleTimeoutMs?: number;
+    };
+
+    const startDroppedAnswer = async (
+      drop: Error | Event = new Event("error"),
+    ) => {
+      const harness = setupChatMessagingTest();
+      const resumeCalls: ResumeOptions[] = [];
+      mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+        if (url.includes("/resumestream")) {
+          resumeCalls.push(callbacks);
+          return vi.fn();
+        }
+        sseCallbacks = callbacks;
+        return vi.fn();
+      });
+      await harness.startStreaming();
+      await harness.sendSSEEvent({
+        message_type: "assistant_message_started",
+        message_id: "assistant-dropped",
+      });
+      await harness.sendSSEEvent({
+        message_type: "text_delta",
+        message_id: "assistant-dropped",
+        content_index: 0,
+        new_text: "read so far",
+      });
+      await act(async () => {
+        sseCallbacks.onError?.(drop);
+      });
+      return { ...harness, resumeCalls };
+    };
+
+    const failLastResume = async (
+      resumeCalls: ResumeOptions[],
+      error: Error,
+    ) => {
+      await act(async () => {
+        resumeCalls[resumeCalls.length - 1].onError?.(error);
+      });
+    };
+
+    it("keeps the answer streaming and reattaches once the network is back", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer();
+        expect(resumeCalls).toHaveLength(1);
+        expect(result.current.messages["assistant-dropped"].content).toEqual([
+          { content_type: "text", text: "read so far" },
+        ]);
+
+        await failLastResume(
+          resumeCalls,
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+        expect(result.current.isStreaming).toBe(true);
+        expect(result.current.error).toBeNull();
+        expect(resumeCalls).toHaveLength(1);
+
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() => expect(resumeCalls).toHaveLength(2));
+        expect(mockCreateSSEConnection).toHaveBeenLastCalledWith(
+          "/api/v1beta/me/messages/resumestream",
+          expect.objectContaining({
+            body: JSON.stringify({ chat_id: "chat1" }),
+          }),
+        );
+        expect(result.current.error).toBeNull();
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("never shows less of an answer while its reattached stream replays it", async () => {
+      const { resumeCalls } = await startDroppedAnswer();
+      const answer = watchAnswer("assistant-dropped");
+      const replay = async (data: object) => {
+        await act(async () => {
+          resumeCalls[0].onMessage?.(streamEvent(data));
+        });
+      };
+      const delta = (text: string) => ({
+        message_type: "text_delta",
+        message_id: "assistant-dropped",
+        content_index: 0,
+        new_text: text,
+      });
+
+      await replay({
+        message_type: "assistant_message_started",
+        message_id: "assistant-dropped",
+      });
+      await replay(delta("read "));
+      await replay(delta("so far"));
+      await replay(delta(", and the rest"));
+      await replay({
+        message_type: "assistant_message_completed",
+        message_id: "assistant-dropped",
+        content: [{ content_type: "text", text: "read so far, and the rest" }],
+      });
+      await act(async () => {
+        resumeCalls[0].onClose?.();
+      });
+      answer.stop();
+
+      expect(answer.sizes).not.toContain(-1);
+      expect(answer.neverShrank()).toBe(true);
+    });
+
+    it("does not leave the chat locked when a finished answer's completion refetch fails, and reads it again once back", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      try {
+        const harness = setupChatMessagingTest();
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-done",
+        });
+        const finished = [{ content_type: "text", text: "the whole answer" }];
+        mockFetchChatMessages.mockRejectedValueOnce(offlineFailure());
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_completed",
+          message_id: "assistant-done",
+          content: finished,
+        });
+
+        await waitFor(() =>
+          expect(harness.result.current.isPendingResponse).toBe(false),
+        );
+        expect(
+          harness.result.current.messages["assistant-done"].content,
+        ).toEqual(finished);
+
+        const readsBefore = mockFetchChatMessages.mock.calls.length;
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() =>
+          expect(mockFetchChatMessages.mock.calls.length).toBe(readsBefore + 1),
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("shows the saved copy of a reattached voice reply once it finished, even when it is shorter", async () => {
+      const harness = setupChatMessagingTest();
+      const resumeCalls: ResumeOptions[] = [];
+      mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+        if (url.includes("/resumestream")) {
+          resumeCalls.push(callbacks);
+          return vi.fn();
+        }
+        sseCallbacks = callbacks;
+        return vi.fn();
+      });
+      await harness.startStreaming();
+      const spoken = (text: string) => ({
+        message_type: "spoken_delta",
+        message_id: "assistant-voice",
+        content_index: 1,
+        new_text: text,
+      });
+      const written = (text: string) => ({
+        message_type: "text_delta",
+        message_id: "assistant-voice",
+        content_index: 0,
+        new_text: text,
+      });
+      await harness.sendSSEEvent({
+        message_type: "assistant_message_started",
+        message_id: "assistant-voice",
+      });
+      await harness.sendSSEEvent(written("Done, I added"));
+      await harness.sendSSEEvent(spoken("Done, I added the paragraph."));
+      await act(async () => {
+        sseCallbacks.onError?.(
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+      });
+      const replay = async (data: object) => {
+        await act(async () => {
+          resumeCalls[0].onMessage?.(streamEvent(data));
+        });
+      };
+
+      // The saved reply drops the spoken part that the written text repeats.
+      const saved = [
+        { content_type: "text", text: "Done, I added the paragraph." },
+      ];
+      mockFetchChatMessages.mockResolvedValueOnce({
+        messages: [
+          ...mockMessages,
+          {
+            id: "assistant-voice",
+            content: saved,
+            role: "assistant",
+            created_at: "2023-01-01T12:02:00.000Z",
+            chat_id: "chat1",
+            updated_at: "2023-01-01T12:02:30.000Z",
+            is_message_in_active_thread: true,
+          },
+        ],
+      });
+      await replay({
+        message_type: "assistant_message_started",
+        message_id: "assistant-voice",
+      });
+      await replay(written("Done, I added the paragraph."));
+      await replay(spoken("Done, I added the paragraph."));
+      await replay({
+        message_type: "assistant_message_completed",
+        message_id: "assistant-voice",
+        content: saved,
+      });
+      await act(async () => {
+        resumeCalls[0].onClose?.();
+      });
+
+      await waitFor(() =>
+        expect(
+          harness.result.current.messages["assistant-voice"].content,
+        ).toEqual(saved),
+      );
+    });
+
+    it("does not leave the chat locked when a reattached answer's completion refetch fails", async () => {
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockReturnValue(new Promise<void>(() => {}));
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer();
+        mockFetchChatMessages.mockRejectedValueOnce(offlineFailure());
+        const finished = [
+          { content_type: "text", text: "read so far, and the rest" },
+        ];
+        await act(async () => {
+          resumeCalls[0].onMessage?.(
+            streamEvent({
+              message_type: "assistant_message_completed",
+              message_id: "assistant-dropped",
+              content: finished,
+            }),
+          );
+        });
+        await act(async () => {
+          resumeCalls[0].onClose?.();
+        });
+
+        await waitFor(() =>
+          expect(result.current.isPendingResponse).toBe(false),
+        );
+        expect(result.current.messages["assistant-dropped"].content).toEqual(
+          finished,
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("keeps a reattached answer on screen until the completion refetch has it", async () => {
+      const { result, resumeCalls } = await startDroppedAnswer();
+      mockFetchChatMessages.mockReturnValue(new Promise(() => {}));
+      const finished = [
+        { content_type: "text", text: "read so far, and the rest" },
+      ];
+
+      await act(async () => {
+        resumeCalls[0].onMessage?.({
+          type: "message",
+          data: JSON.stringify({
+            message_type: "assistant_message_completed",
+            message_id: "assistant-dropped",
+            content: finished,
+          }),
+        });
+      });
+      await act(async () => {
+        resumeCalls[0].onClose?.();
+      });
+
+      expect(result.current.messages["assistant-dropped"].content).toEqual(
+        finished,
+      );
+    });
+
+    it("ends the turn when the user stops it while waiting for the network", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer();
+        await failLastResume(
+          resumeCalls,
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+        expect(result.current.isStreaming).toBe(true);
+
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        expect(result.current.isStreaming).toBe(false);
+        expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          networkBack();
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(resumeCalls).toHaveLength(1);
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("stops watching for silence after repeated stalls within one answer", async () => {
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockResolvedValue(undefined);
+      try {
+        const { resumeCalls } = await startDroppedAnswer();
+        expect(resumeCalls[0].idleTimeoutMs).toBeGreaterThan(0);
+
+        for (let stall = 1; stall <= 3; stall += 1) {
+          await failLastResume(
+            resumeCalls,
+            markStalledStream(new Error("SSE stream stalled")),
+          );
+          await waitFor(() => expect(resumeCalls).toHaveLength(stall + 1));
+        }
+
+        expect(resumeCalls[2].idleTimeoutMs).toBeGreaterThan(0);
+        expect(resumeCalls[3].idleTimeoutMs).toBeUndefined();
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("gives up after repeated failed reconnects while the network looks fine", async () => {
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockResolvedValue(undefined);
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer(
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+
+        for (let retry = 1; retry <= 5; retry += 1) {
+          await failLastResume(
+            resumeCalls,
+            markNetworkFailure(new Error("Failed to fetch")),
+          );
+          await waitFor(() => expect(resumeCalls).toHaveLength(retry + 1));
+        }
+        await failLastResume(
+          resumeCalls,
+          markNetworkFailure(new Error("Failed to fetch")),
+        );
+
+        // The sixth failed reattach is not retried; it ends the turn.
+        expect(waitUntilOnline).toHaveBeenCalledTimes(5);
+        expect(result.current.isStreaming).toBe(false);
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("still fails a resume that the server refused", async () => {
+      const waitUntilOnline = vi.spyOn(connectivity, "waitUntilOnline");
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer();
+        await failLastResume(
+          resumeCalls,
+          new Error("SSE request failed: 500 Internal Server Error"),
+        );
+
+        expect(waitUntilOnline).not.toHaveBeenCalled();
+        expect(result.current.isStreaming).toBe(false);
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("ends the turn at once when stopped while offline, even mid-reconnect", async () => {
+      const getStatus = vi
+        .spyOn(connectivity, "getStatus")
+        .mockReturnValue("offline");
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockReturnValue(new Promise<void>(() => {}));
+      try {
+        const cancelResume = vi.fn();
+        const harness = setupChatMessagingTest();
+        const { result } = harness;
+        mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+          if (url.includes("/resumestream")) {
+            return cancelResume;
+          }
+          sseCallbacks = callbacks;
+          return vi.fn();
+        });
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-dropped",
+        });
+        await harness.simulateConnectionError();
+        expect(result.current.isStreaming).toBe(true);
+
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+
+        expect(result.current.isStreaming).toBe(false);
+        expect(cancelResume).toHaveBeenCalled();
+      } finally {
+        getStatus.mockRestore();
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("does not reattach the answer it just stopped when closing the stream", async () => {
+      const getStatus = vi
+        .spyOn(connectivity, "getStatus")
+        .mockReturnValue("offline");
+      try {
+        const harness = setupChatMessagingTest();
+        let resumes = 0;
+        mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+          if (url.includes("/resumestream")) {
+            resumes += 1;
+            return vi.fn();
+          }
+          sseCallbacks = callbacks;
+          // Like the real client: closing reports the close synchronously.
+          return () => callbacks.onClose?.();
+        });
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-stopped",
+        });
+        await harness.sendSSEEvent({
+          message_type: "text_delta",
+          message_id: "assistant-stopped",
+          content_index: 0,
+          new_text: "partial answer",
+        });
+        // The answer's row exists from the start of the turn, so an earlier
+        // fetch holds an empty copy of it; offline, no refetch replaces it.
+        mockFetchChatMessages.mockReturnValue(new Promise(() => {}));
+        await act(async () => {
+          const messaging = useMessagingStore.getState();
+          messaging.setApiMessages(
+            [
+              ...Object.values(messaging.getApiMessages("chat1")),
+              {
+                id: "assistant-stopped",
+                role: "assistant",
+                content: [],
+                createdAt: "2026-02-18T12:00:01.000Z",
+                status: "complete",
+              },
+            ],
+            "chat1",
+          );
+        });
+
+        await act(async () => {
+          harness.result.current.cancelMessage();
+        });
+
+        expect(harness.result.current.isStreaming).toBe(false);
+        expect(harness.result.current.isPendingResponse).toBe(false);
+        expect(resumes).toBe(0);
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([{ content_type: "text", text: "partial answer" }]);
+      } finally {
+        getStatus.mockRestore();
+      }
+    });
+
+    it("keeps the text read so far until the server has saved the stopped answer", async () => {
+      const getStatus = vi
+        .spyOn(connectivity, "getStatus")
+        .mockReturnValue("offline");
+      try {
+        const harness = setupChatMessagingTest();
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-stopped",
+        });
+        await harness.sendSSEEvent({
+          message_type: "text_delta",
+          message_id: "assistant-stopped",
+          content_index: 0,
+          new_text: "partial answer",
+        });
+        mockFetchChatMessages.mockReturnValue(new Promise(() => {}));
+        await act(async () => {
+          harness.result.current.cancelMessage();
+        });
+
+        const serverCopy = (text: string) => ({
+          id: "assistant-stopped",
+          role: "assistant" as const,
+          content: text ? [{ content_type: "text" as const, text }] : [],
+          createdAt: "2026-02-18T12:00:01.000Z",
+          status: "complete" as const,
+        });
+        const refetch = async (text: string) => {
+          await act(async () => {
+            const messaging = useMessagingStore.getState();
+            messaging.setApiMessages(
+              [
+                ...Object.values(messaging.getApiMessages("chat1")).filter(
+                  (message) => message.id !== "assistant-stopped",
+                ),
+                serverCopy(text),
+              ],
+              "chat1",
+            );
+          });
+        };
+
+        // Back online, the chat is read before the server saved the stop.
+        await refetch("");
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([{ content_type: "text", text: "partial answer" }]);
+
+        await refetch("partial answer, and what the server wrote meanwhile");
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([
+          {
+            content_type: "text",
+            text: "partial answer, and what the server wrote meanwhile",
+          },
+        ]);
+      } finally {
+        getStatus.mockRestore();
+      }
+    });
+
+    it("keeps the text read so far through the next turn until the server's copy catches up", async () => {
+      const getStatus = vi
+        .spyOn(connectivity, "getStatus")
+        .mockReturnValue("offline");
+      try {
+        const harness = setupChatMessagingTest();
+        await harness.startStreaming();
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-stopped",
+        });
+        await harness.sendSSEEvent({
+          message_type: "text_delta",
+          message_id: "assistant-stopped",
+          content_index: 0,
+          new_text: "partial answer",
+        });
+        await act(async () => {
+          harness.result.current.cancelMessage();
+        });
+        getStatus.mockReturnValue("online");
+        const stopped = watchAnswer("assistant-stopped");
+
+        // Back online, the chat is read before the server saved the stop.
+        await act(async () => {
+          const messaging = useMessagingStore.getState();
+          messaging.setApiMessages(
+            [
+              ...Object.values(messaging.getApiMessages("chat1")),
+              {
+                id: "assistant-stopped",
+                role: "assistant",
+                content: [],
+                createdAt: "2026-02-18T12:00:01.000Z",
+                status: "complete",
+              },
+            ],
+            "chat1",
+          );
+        });
+        await act(async () => {
+          await harness.result.current.sendMessage("Next question");
+        });
+        await harness.sendSSEEvent({
+          message_type: "assistant_message_started",
+          message_id: "assistant-next",
+        });
+        stopped.stop();
+
+        expect(
+          harness.result.current.messages["assistant-stopped"].content,
+        ).toEqual([{ content_type: "text", text: "partial answer" }]);
+        expect(stopped.sizes).not.toContain(-1);
+        expect(stopped.neverShrank()).toBe(true);
+      } finally {
+        getStatus.mockRestore();
+      }
+    });
+
+    it("reads the chat once after a stop that reached the server late", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      mockFetchAbortMessageStream.mockRejectedValueOnce(offlineFailure());
+      try {
+        const { result } = await startDroppedAnswer();
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+        const readsBefore = mockFetchChatMessages.mock.calls.length;
+
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() =>
+          expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(2),
+        );
+        await waitFor(() =>
+          expect(mockFetchChatMessages.mock.calls.length).toBe(readsBefore + 1),
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("ends the turn when the stop request cannot reach the server, and sends it again once back", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      mockFetchAbortMessageStream.mockRejectedValueOnce(offlineFailure());
+      try {
+        const { result } = await startDroppedAnswer();
+        expect(result.current.isStreaming).toBe(true);
+
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+        expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() =>
+          expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(2),
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("ends the turn when the stop request hangs", async () => {
+      mockFetchAbortMessageStream.mockImplementationOnce(hangUntilAborted);
+      const { result } = await startDroppedAnswer();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        expect(result.current.isStreaming).toBe(true);
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+        expect(result.current.isStreaming).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // Offline: the stop fails, and the network comes back before anything
+    // notices. The user tries everything that starts a turn meanwhile.
+    it("starts nothing new in the chat while its stop is on the way, and never sends the stop after a newer turn", async () => {
+      const waits: Array<() => void> = [];
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              waits.push(resolve);
+            }),
+        );
+      try {
+        const { result } = await startDroppedAnswer();
+        mockFetchAbortMessageStream.mockRejectedValueOnce(offlineFailure());
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await waitFor(() => expect(result.current.isStreaming).toBe(false));
+        const requests = recordRequests();
+        const userMessages = () =>
+          Object.values(result.current.messages).filter(
+            (message) => message.role === "user",
+          ).length;
+        const usersBefore = userMessages();
+
+        expect(result.current.isPendingResponse).toBe(true);
+        await act(async () => {
+          await result.current.sendMessage("Next question");
+          await result.current.regenerateMessage("assistant-dropped");
+          await result.current.editMessage("msg1", "Edited question");
+        });
+        expect(requests).toEqual([]);
+        expect(userMessages()).toBe(usersBefore);
+
+        await act(async () => {
+          waits.splice(0).forEach((resolve) => resolve());
+        });
+        await waitFor(() =>
+          expect(result.current.isPendingResponse).toBe(false),
+        );
+        await act(async () => {
+          await result.current.sendMessage("Next question");
+        });
+        await act(async () => {
+          waits.splice(0).forEach((resolve) => resolve());
+        });
+        expect(requests).toEqual(["abort", "submitstream"]);
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("keeps the chat busy until a hanging stop is delivered, and never sends it after a newer turn", async () => {
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockResolvedValue(undefined);
+      const { result } = await startDroppedAnswer();
+      mockFetchAbortMessageStream.mockImplementationOnce(hangUntilAborted);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+        expect(result.current.isStreaming).toBe(false);
+        expect(result.current.isPendingResponse).toBe(true);
+
+        const requests = recordRequests();
+        await act(async () => {
+          await result.current.sendMessage("Next question");
+        });
+        expect(requests).toEqual([]);
+
+        // It timed out, so it goes out again; only then can the chat send.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(7_000);
+        });
+        expect(requests).toEqual(["abort"]);
+        expect(result.current.isPendingResponse).toBe(false);
+
+        await act(async () => {
+          await result.current.sendMessage("Next question");
+          await vi.advanceTimersByTimeAsync(20_000);
+        });
+        expect(requests).toEqual(["abort", "submitstream"]);
+      } finally {
+        vi.useRealTimers();
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("keeps trying a stop until it is delivered", async () => {
+      const waits: Array<() => void> = [];
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              waits.push(resolve);
+            }),
+        );
+      try {
+        const { result } = await startDroppedAnswer();
+        mockFetchAbortMessageStream
+          .mockRejectedValueOnce(offlineFailure())
+          .mockRejectedValueOnce(offlineFailure());
+        await act(async () => {
+          result.current.cancelMessage();
+        });
+        for (const calls of [2, 3]) {
+          await act(async () => {
+            waits.splice(0).forEach((resolve) => resolve());
+          });
+          await waitFor(() =>
+            expect(mockFetchAbortMessageStream).toHaveBeenCalledTimes(calls),
+          );
+        }
+        await waitFor(() =>
+          expect(result.current.isPendingResponse).toBe(false),
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
+
+    it("shows the stored answer without an error when it finished while offline", async () => {
+      const { result, resumeCalls } = await startDroppedAnswer();
+      await failLastResume(
+        resumeCalls,
+        new FrontendRequestError(
+          "SSE request failed: No active generation task found for this chat",
+          { method: "POST", url: "/api/v1beta/me/messages/resumestream" },
+          { status: 404, statusText: "Not Found" },
+        ),
+      );
+
+      expect(result.current.isStreaming).toBe(false);
+      expect(result.current.error).toBeNull();
+    });
+
+    it("reattaches a dropped answer even after earlier resumes in the chat failed", async () => {
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockReturnValue(new Promise<void>(() => {}));
+      try {
+        const harness = setupChatMessagingTest();
+        const resumeCalls: ResumeOptions[] = [];
+        mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+          if (url.includes("/resumestream")) {
+            resumeCalls.push(callbacks);
+            return vi.fn();
+          }
+          sseCallbacks = callbacks;
+          return vi.fn();
+        });
+        const dropAnswer = async (error: Error | Event) => {
+          await harness.startStreaming();
+          await harness.sendSSEEvent({
+            message_type: "assistant_message_started",
+            message_id: `assistant-${resumeCalls.length}`,
+          });
+          await act(async () => {
+            sseCallbacks.onError?.(error);
+          });
+        };
+        // A turn whose reattach the server refused uses up the chat's
+        // resume budget.
+        await dropAnswer(new Event("error"));
+        await failLastResume(
+          resumeCalls,
+          new Error("SSE request failed: 502 Bad Gateway"),
+        );
+        await dropAnswer(new Event("error"));
+        expect(harness.result.current.isStreaming).toBe(false);
+        const resumesBefore = resumeCalls.length;
+
+        await dropAnswer(markStalledStream(new Error("SSE stream stalled")));
+
+        expect(resumeCalls).toHaveLength(resumesBefore + 1);
+        expect(harness.result.current.isStreaming).toBe(true);
+        expect(String(harness.result.current.error)).not.toContain(
+          "SSE stream stalled",
+        );
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
+    });
   });
 
   it("should attempt resumestream on unexpected close during a regenerate stream", async () => {
@@ -2788,14 +3761,9 @@ describe("useChatMessaging", () => {
       result.current.cancelMessage();
     });
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      "/api/v1beta/me/messages/abortstream",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-id-token",
-        }),
-      }),
+    expect(mockFetchAbortMessageStream).toHaveBeenCalledWith(
+      { body: { chat_id: "chat1" } },
+      expect.any(AbortSignal),
     );
   });
 
@@ -4513,9 +5481,6 @@ describe("useChatMessaging", () => {
 
     it("stops a running preparation without asking the server to abort", async () => {
       mockCreateSSEConnection.mockClear();
-      const fetchSpy = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(new Response(null));
       const { result } = renderHook(() => useChatMessaging("chat1"), {
         wrapper: TestWrapper,
       });
@@ -4548,12 +5513,7 @@ describe("useChatMessaging", () => {
       expect(onAbandoned).toHaveBeenCalledTimes(1);
       expect(submitBodies()).toHaveLength(0);
       expect(hasUserText(result.current.messages, "Stop me")).toBe(false);
-      expect(
-        fetchSpy.mock.calls.some((call) =>
-          String(call[0]).includes("abortstream"),
-        ),
-      ).toBe(false);
-      fetchSpy.mockRestore();
+      expect(mockFetchAbortMessageStream).not.toHaveBeenCalled();
     });
 
     it("reports a prepared send refused as a duplicate", async () => {
