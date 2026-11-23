@@ -638,6 +638,74 @@ export function prepareApprovalNotice(
   return prepared;
 }
 
+/** A notice's audio, loaded while its approval waits and kept, not played. */
+export interface LoadedNotice {
+  text: string;
+  chunks: { text: string; audio: string; sampleRate: number }[];
+  state: "loading" | "done" | "failed";
+  /** Resolves once it is done or failed. */
+  settled: Promise<void>;
+  close(): void;
+}
+
+/**
+ * Asks the voice for `notice` about `messageId` now, while an approval of it
+ * still waits, and keeps the audio for whoever plays it: the voice speaks
+ * nothing for a message once its approval is gone. `null` where nothing may
+ * be said.
+ */
+export function loadApprovalNotice(
+  messageId: string,
+  notice: SpokenNotice,
+  language: string,
+): LoadedNotice | null {
+  if (!approvalSpeechAllowed()) return null;
+  const text = noticeText(notice, language);
+  if (text.trim().length === 0) return null;
+  let settle = () => {};
+  const loaded: LoadedNotice = {
+    text,
+    chunks: [],
+    state: "loading",
+    settled: new Promise<void>((resolve) => {
+      settle = resolve;
+    }),
+    close: () => {
+      closed = true;
+      stream();
+      end("failed");
+    },
+  };
+  let closed = false;
+  const end = (state: "done" | "failed") => {
+    if (loaded.state !== "loading") return;
+    loaded.state = state;
+    if (state === "failed") loaded.chunks = [];
+    settle();
+  };
+  // Audio far too short for its words was cut on the way: not said at all.
+  const complete = () =>
+    end(
+      loaded.chunks.length === 0 || audioTooShort(text, loaded.chunks)
+        ? "failed"
+        : "done",
+    );
+  const stream = openSpeech(messageId, language, [text], {
+    stale: () => closed,
+    audio: (_, chunk) => {
+      loaded.chunks.push({
+        text,
+        audio: chunk.audio,
+        sampleRate: chunk.sample_rate,
+      });
+    },
+    done: complete,
+    ended: complete,
+    failed: () => end("failed"),
+  });
+  return loaded;
+}
+
 /** Says a prepared notice from what was loaded; a failed one says nothing. */
 export function sayPreparedNotice(notice: PreparedNotice) {
   const prepared = notice as Prepared;

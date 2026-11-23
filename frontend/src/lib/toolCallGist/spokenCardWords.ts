@@ -1035,6 +1035,11 @@ const noticeSentence = (
         id: "spokenCard.notice.declined",
         message: "All right, I won't do it.",
       });
+    case "approved":
+      return t({
+        id: "spokenCard.notice.approved",
+        message: "All right, I'm running it now.",
+      });
     case "decision_failed":
       return t({
         id: "spokenCard.notice.decisionFailed",

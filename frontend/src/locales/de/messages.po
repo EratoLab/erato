@@ -9256,6 +9256,11 @@ msgstr "Das war alles."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.approved"
+msgstr "Gut, ich führe das jetzt aus."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeConflict"
 msgstr "Die Karte hat sich inzwischen geändert. Bitte auf dem Bildschirm nachsehen."
 
@@ -11549,6 +11554,11 @@ msgstr "Sie haben das erlaubt"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.allowedByVoice"
+msgstr "Sie haben das per Sprache erlaubt"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "Sie haben das für dieses Dokument erlaubt"
 
@@ -11576,6 +11586,11 @@ msgstr "Nicht ausgeführt: Sie haben eine Änderung gewünscht"
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.denied"
 msgstr "Sie haben das abgelehnt"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.deniedByVoice"
+msgstr "Sie haben das per Sprache abgelehnt"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts

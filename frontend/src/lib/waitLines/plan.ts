@@ -23,6 +23,8 @@
  *   said after it and it counts toward `maxPerTurn`. It may be the answer or
  *   a line before a tool call, so it pauses the wait: nothing more is said
  *   until a tool call starts after it.
+ * - The voice's word that an approval by voice was taken counts as a line
+ *   said too: nothing over it, `minGapMs` after it, and toward `maxPerTurn`.
  */
 
 export type WaitAmount = "normal" | "long_only" | "off";
@@ -47,8 +49,11 @@ export interface WaitTiming {
 export type WaitLineKind = "opener" | "tool" | "still" | "long";
 
 export interface SaidLine {
-  /** `reply`: the reply's own spoken part. */
-  kind: WaitLineKind | "reply";
+  /**
+   * `reply`: the reply's own spoken part; `ack`: the word that an approval
+   * by voice was taken.
+   */
+  kind: WaitLineKind | "reply" | "ack";
   toolCallId?: string;
   /** A "still on it" said again after the long line. */
   repeat?: boolean;

@@ -9256,6 +9256,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.approved"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeConflict"
 msgstr ""
 
@@ -11549,6 +11554,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.allowedByVoice"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForDocument"
 msgstr ""
 
@@ -11575,6 +11585,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.denied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.deniedByVoice"
 msgstr ""
 
 #. js-lingui-explicit-id
