@@ -317,8 +317,17 @@ jobs:
         run: rustup component add rustfmt
         working-directory: backend
 
+      # From the official image, not apt: the package needs a full
+      # `apt-get update`, which outlasts this job's timeout whenever
+      # archive.ubuntu.com is slow. The summary check only reads the plan.
       - name: "Install sqitch"
-        run: sudo apt-get update && sudo apt-get install -y sqitch
+        run: |
+          docker pull -q sqitch/sqitch:v1.6.1
+          # shellcheck disable=SC2016 # expanded when the wrapper runs
+          printf '#!/bin/sh\nexec docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo sqitch/sqitch:v1.6.1 "$@"\n' \
+            | sudo tee /usr/local/bin/sqitch > /dev/null
+          sudo chmod +x /usr/local/bin/sqitch
+          sqitch --version
 
       # Every step here should be conditional on "success() || failure()",
       # in order to prevent failing fast, so that we can run all linting steps in one run.
