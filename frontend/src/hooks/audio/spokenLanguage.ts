@@ -1,7 +1,9 @@
 import { i18n } from "@lingui/core";
 import { create } from "zustand";
 
+import { catalogLoaded, loadCatalog } from "@/lib/i18n";
 import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
+import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 
 import { deploymentSpokenCardLanguages } from "./spokenStyle";
 
@@ -22,6 +24,8 @@ export const useSpokenLanguage = create<SpokenLanguageState>(() => ({}));
 /** The backend decided the language of the conversational turn just spoken. */
 export function noteSpokenTurnLanguage(language: string) {
   useSpokenLanguage.setState({ unsent: language });
+  // A card later in the turn is worded from this language's catalog.
+  void loadCatalog(language);
 }
 
 /**
@@ -47,11 +51,14 @@ export function mainLanguage(): string {
   return i18n.locale;
 }
 
+/** Whether `language` has words for a whole card and its sentences are loaded. */
 const saysWholeCard = (language: string) =>
   spokenWordsFor(language, {
     now: new Date(),
     spokenCardLanguages: deploymentSpokenCardLanguages(),
-  }).full;
+  }).full &&
+  (primaryLanguage(language) === primaryLanguage(i18n.locale) ||
+    catalogLoaded(primaryLanguage(language)));
 
 /**
  * The language a spoken card is said in: the turn's when it has words for a

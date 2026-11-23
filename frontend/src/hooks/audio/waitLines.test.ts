@@ -240,6 +240,7 @@ describe("wait lines", () => {
     expect(path).toContain("/me/messages/m/progress-speech");
     expect(JSON.parse(options.body)).toEqual({
       text: "Ich sehe mir die Verkaufschancen an.",
+      language: "de",
     });
   });
 
@@ -334,6 +335,57 @@ describe("wait lines", () => {
     expect(next?.clips.opener.map((clip) => clip.text)).toEqual([
       "Neue Stimme.",
     ]);
+  });
+
+  it("says the lines of the language the turn was spoken in", async () => {
+    const { playback, lines } = await setup();
+    fetchWaitLines.mockClear();
+    fetchWaitLines.mockResolvedValue(
+      response({
+        language: "en",
+        version: "v1-en",
+        lines: [
+          {
+            slot: "opener",
+            text: "One moment.",
+            audio: "BQYHCA==",
+            sample_rate: 24000,
+          },
+        ],
+      }),
+    );
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { language: "en" });
+    expect(fetchWaitLines).toHaveBeenCalledWith(
+      expect.objectContaining({ queryParams: { language: "en" } }),
+    );
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(sources).toHaveLength(1);
+    // The German lines are kept beside the English ones.
+    fetchWaitLines.mockResolvedValue(response({ unchanged: true, lines: [] }));
+    const german = await lines.prepareWaitLines();
+    expect(german?.clips.opener.map((clip) => clip.text)).toEqual([
+      "Einen Moment.",
+    ]);
+  });
+
+  it("stays silent in a language without lines", async () => {
+    const { playback, lines } = await setup();
+    fetchWaitLines.mockResolvedValue(
+      response({ language: "hi", version: "v1-hi", lines: [], tools: {} }),
+    );
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { language: "hi" });
+    await vi.advanceTimersByTimeAsync(0);
+    lines.waitTurnTool("s", "m", "read", "in_progress", {
+      action: "other",
+      object_kind: "row",
+      source: "rules",
+      read: { object_kind: "row", query: { tables: ["opportunity"] } },
+    } as never);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(sources).toHaveLength(0);
+    expect(sse).not.toHaveBeenCalled();
   });
 
   it("keeps its lines when the server says they are unchanged", async () => {

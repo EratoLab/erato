@@ -98,6 +98,63 @@ export async function dynamicActivate(locale: string) {
   }
 }
 
+/**
+ * Loads `locale`'s catalog beside the active one without switching the
+ * interface, for text said in another language than the one shown. Resolves
+ * whether the catalog is there.
+ */
+export async function loadCatalog(locale: string): Promise<boolean> {
+  const supported = getSupportedLocale(locale);
+  if (!supported) return false;
+  if (catalogLoaded(supported)) return true;
+  const { commonPublicBasePath, frontendPlatform, frontendPublicBasePath } =
+    env();
+  try {
+    const messages = await loadMergedMessages({
+      commonPublicBasePath,
+      frontendPlatform,
+      frontendPublicBasePath,
+      locale: supported,
+    });
+    if (Object.keys(messages).length === 0) return false;
+    i18n.load(supported, messages);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `locale`'s catalog is loaded, the active one's always. */
+export function catalogLoaded(locale: string): boolean {
+  if (locale === i18n.locale) return true;
+  const loaded = (i18n as unknown as { _messages: Record<string, Messages> })
+    ._messages[locale] as Messages | undefined;
+  return loaded !== undefined && Object.keys(loaded).length > 0;
+}
+
+/**
+ * Runs `compose` with `locale`'s catalog, for text that is said, never shown:
+ * the interface keeps its language, and nothing re-renders. `compose` must
+ * be synchronous. Lingui keeps the active locale in `_locale`; a unit test
+ * guards that.
+ */
+export function inLocale<T>(locale: string, compose: () => T): T {
+  const target = i18n as unknown as {
+    _locale: string;
+    _locales: string | string[] | undefined;
+  };
+  if (target._locale === locale || !catalogLoaded(locale)) return compose();
+  const previous = { locale: target._locale, locales: target._locales };
+  target._locale = locale;
+  target._locales = undefined;
+  try {
+    return compose();
+  } finally {
+    target._locale = previous.locale;
+    target._locales = previous.locales;
+  }
+}
+
 // Initialize with detected locale
 export function initializeI18n() {
   const detectedLocale = detectLocale();

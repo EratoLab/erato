@@ -266,6 +266,13 @@ export type ApprovalSpeechAmount = "full" | "short";
  */
 export type ApprovalSpeechRequest = {
   /**
+   * The language the pieces are worded in, a code such as `de`; the
+   * user's language when omitted.
+   *
+   * @example de
+   */
+  language?: string;
+  /**
    * The spoken card's pieces in the order they are said: plain sentences,
    * at most 16 of them, each at most 400 and all together at most 2000
    * characters.
@@ -325,8 +332,8 @@ export type ApprovalVoiceCommandRequest = {
    */
   current_piece_id?: string;
   /**
-   * The language of the words as a tag such as `de`; the user's language
-   * when omitted.
+   * The language of the words as a tag such as `de`: the language the
+   * card was spoken in. The user's language when omitted.
    */
   language?: string;
   /**
@@ -334,6 +341,12 @@ export type ApprovalVoiceCommandRequest = {
    */
   pieces: ApprovalCardPiece[];
   question?: ApprovalVoiceQuestion;
+  /**
+   * The language the card on screen is shown in, when it differs from
+   * `language`: its confirmation phrase approves too, as read from the
+   * screen.
+   */
+  screen_language?: string;
   signals?: ApprovalVoiceSignals;
   /**
    * What the user said, as transcribed. At most 300 characters.
@@ -1929,6 +1942,10 @@ export type ContentPartTurnInstructionMarker = {
    * The instruction type, e.g. `spoken_reply`.
    */
   kind: string;
+  /**
+   * For `spoken_language`: the code of the language the user spoke.
+   */
+  language?: string;
 };
 
 /**
@@ -3186,6 +3203,15 @@ export type MessageSubmitRequest = {
    */
   selected_facet_ids?: string[];
   /**
+   * The language the user spoke this message in, in conversational audio
+   * mode, as the transcription decided it: a code such as `de`. Stored on
+   * the message and never shown; the voice of the reply follows it. A
+   * value that is not a language code is ignored.
+   *
+   * @example de
+   */
+  spoken_language?: string;
+  /**
    * Optional user-specified display name for a newly created chat.
    * Ignored when existing_chat_id is provided.
    */
@@ -3777,6 +3803,13 @@ export type PolicyGuidesConfig = {
 };
 
 export type ProgressSpeechRequest = {
+  /**
+   * The language the line is worded in, a code such as `de`; the user's
+   * language when omitted.
+   *
+   * @example de
+   */
+  language?: string;
   /**
    * The line, composed by the client from the tool call's label.
    */

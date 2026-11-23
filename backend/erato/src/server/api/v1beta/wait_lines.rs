@@ -299,7 +299,7 @@ pub struct WaitLinesQuery {
     /// without lines gets none.
     #[serde(default)]
     #[param(required = false)]
-    pub language: Option<String>,
+    pub language: String,
 }
 
 /// What the voice says while the caller waits, and the audio of its fixed
@@ -338,7 +338,8 @@ pub async fn wait_lines(
     let (amount, source, audience, user_choice) =
         resolve(config, &audiences, me_user.preference_wait_lines_amount);
 
-    let requested = requested_language(query.language.as_deref())?;
+    let requested =
+        requested_language(Some(query.language.as_str()).filter(|tag| !tag.is_empty()))?;
     let language = voice_language(&app_state, &me_user, requested.as_deref())
         .code()
         .to_string();

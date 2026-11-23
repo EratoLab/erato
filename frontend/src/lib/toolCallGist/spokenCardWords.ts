@@ -1,6 +1,8 @@
+import { i18n } from "@lingui/core";
 import { plural, select, t } from "@lingui/core/macro";
 
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
+import { catalogLoaded, inLocale } from "@/lib/i18n";
 
 import { changeNoteLabel } from "./changeLabels";
 import {
@@ -1866,5 +1868,27 @@ export const spokenWordsFor = (
     options,
     code,
   );
-  return own?.full_card === true ? said : { ...said, full: false };
+  // The sentences are catalog messages: taken from the language's own
+  // catalog where it is loaded, else from the one shown.
+  const bound =
+    primaryLanguage(i18n.locale) !== code && catalogLoaded(code)
+      ? inCatalogOf(said, code)
+      : said;
+  return own?.full_card === true ? bound : { ...bound, full: false };
 };
+
+/** `words` with every sentence taken from `locale`'s catalog. */
+const inCatalogOf = <T extends object>(words: T, locale: string): T =>
+  Object.fromEntries(
+    Object.entries(words).map(([key, value]: [string, unknown]) => [
+      key,
+      typeof value === "function"
+        ? (...args: unknown[]) =>
+            inLocale(locale, () =>
+              (value as (...a: unknown[]) => unknown)(...args),
+            )
+        : value !== null && typeof value === "object" && !Array.isArray(value)
+          ? inCatalogOf(value, locale)
+          : value,
+    ]),
+  ) as T;

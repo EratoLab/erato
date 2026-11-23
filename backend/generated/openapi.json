@@ -3643,7 +3643,7 @@
             }
           },
           "400": {
-            "description": "No pieces, or a piece with nothing to say"
+            "description": "No pieces, a piece with nothing to say, or a language that is not a language code"
           },
           "404": {
             "description": "Conversational speech is off, or the message does not exist or is not in a chat of the user"
@@ -3825,7 +3825,7 @@
             }
           },
           "400": {
-            "description": "The line is empty, too long or holds control characters"
+            "description": "The line is empty, too long or holds control characters, or the language is not a language code"
           },
           "404": {
             "description": "No voice, or the message is not in the caller's own chat"
@@ -4789,6 +4789,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "description": "The language to say the lines in, any language code such as `de`:\nthe one the user spoke. The user's language when omitted. A language\nwithout lines gets none.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4801,6 +4810,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "A language that is not a language code"
           },
           "401": {
             "description": "When no valid JWT token is provided"
@@ -6090,6 +6102,11 @@
           "pieces"
         ],
         "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language the pieces are worded in, a code such as `de`; the\nuser's language when omitted.",
+            "example": "de"
+          },
           "pieces": {
             "type": "array",
             "items": {
@@ -6195,7 +6212,7 @@
           },
           "language": {
             "type": "string",
-            "description": "The language of the words as a tag such as `de`; the user's language\nwhen omitted."
+            "description": "The language of the words as a tag such as `de`: the language the\ncard was spoken in. The user's language when omitted."
           },
           "pieces": {
             "type": "array",
@@ -6207,6 +6224,10 @@
           "question": {
             "$ref": "#/components/schemas/ApprovalVoiceQuestion",
             "description": "What the voice just asked, when the words may answer it."
+          },
+          "screen_language": {
+            "type": "string",
+            "description": "The language the card on screen is shown in, when it differs from\n`language`: its confirmation phrase approves too, as read from the\nscreen."
           },
           "signals": {
             "$ref": "#/components/schemas/ApprovalVoiceSignals",
@@ -9215,6 +9236,10 @@
           "kind": {
             "type": "string",
             "description": "The instruction type, e.g. `spoken_reply`."
+          },
+          "language": {
+            "type": "string",
+            "description": "For `spoken_language`: the code of the language the user spoke."
           }
         }
       },
@@ -11529,6 +11554,11 @@
             },
             "description": "IDs of facets selected by the user for this generation."
           },
+          "spoken_language": {
+            "type": "string",
+            "description": "The language the user spoke this message in, in conversational audio\nmode, as the transcription decided it: a code such as `de`. Stored on\nthe message and never shown; the voice of the reply follows it. A\nvalue that is not a language code is ignored.",
+            "example": "de"
+          },
           "title_by_user_provided": {
             "type": "string",
             "description": "Optional user-specified display name for a newly created chat.\nIgnored when existing_chat_id is provided."
@@ -12817,6 +12847,11 @@
           "text"
         ],
         "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language the line is worded in, a code such as `de`; the user's\nlanguage when omitted.",
+            "example": "de"
+          },
           "text": {
             "type": "string",
             "description": "The line, composed by the client from the tool call's label."
