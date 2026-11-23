@@ -25,6 +25,7 @@
  *   until a tool call starts after it.
  * - The voice's word that an approval by voice was taken counts as a line
  *   said too: nothing over it, `minGapMs` after it, and toward `maxPerTurn`.
+ *   It is said whatever the amount: it answers the user, it fills no wait.
  */
 
 export type WaitAmount = "normal" | "long_only" | "off";

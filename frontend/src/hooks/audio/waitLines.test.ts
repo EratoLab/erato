@@ -689,7 +689,7 @@ describe("the word that an approval by voice was taken", () => {
     const { playback, lines } = await setup();
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s", { continuation: true, opener: true });
-    expect(lines.sayAsideLine(CLIP)).toBe(true);
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(true);
     expect(sources).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(4000);
     // Still playing: nothing over it.
@@ -709,7 +709,7 @@ describe("the word that an approval by voice was taken", () => {
     });
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s", { continuation: true, opener: true });
-    lines.sayAsideLine(CLIP);
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
     endSources();
     await vi.advanceTimersByTimeAsync(20000);
     expect(sources).toHaveLength(0);
@@ -719,7 +719,7 @@ describe("the word that an approval by voice was taken", () => {
     const { playback, lines } = await setup();
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s", { continuation: true });
-    lines.sayAsideLine(CLIP);
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
     lines.waitTurnSpeaks("s");
     playback.spokenPartBegins("s");
     playback.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s");
@@ -741,10 +741,10 @@ describe("the word that an approval by voice was taken", () => {
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s", { continuation: true });
     lines.waitTurnSpeaks("s");
-    expect(lines.sayAsideLine(CLIP)).toBe(false);
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(false);
     lines.beginWaitTurn("s", { continuation: true });
     playback.useSpeechPlayback.setState({ enabled: false });
-    expect(lines.sayAsideLine(CLIP)).toBe(false);
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(false);
     expect(sources).toHaveLength(0);
   });
 
@@ -753,12 +753,12 @@ describe("the word that an approval by voice was taken", () => {
     const speechEnd = await import("./speechEnd");
     playback.beginSpeechResponse("s");
     lines.beginWaitTurn("s", { continuation: true });
-    lines.sayAsideLine(CLIP);
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
     expect(lines.waitLinePlaying()).toBe(true);
     speechEnd.microphoneOpened();
     expect(lines.waitLinePlaying()).toBe(false);
     lines.beginWaitTurn("s", { continuation: true });
-    lines.sayAsideLine(CLIP);
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
     lines.stopAsideLine();
     await vi.advanceTimersByTimeAsync(200);
     expect(lines.waitLinePlaying()).toBe(false);

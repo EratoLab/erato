@@ -671,9 +671,17 @@ async function decideByVoice(
   }
   let outcome: Awaited<ReturnType<typeof voice.send>>;
   try {
-    // Sending stops the card's voice at once: the sentence starts after.
+    // Sending stops the card's voice at once and starts the turn the
+    // sentence belongs to; it is said once the server took the approval.
     const sending = voice.send(decision, receipt);
-    if (decision === "approve") void sayApprovalAcknowledgement(key);
+    if (decision === "approve")
+      void sayApprovalAcknowledgement(
+        key,
+        sending.then(
+          (sent) => sent === "sent",
+          () => false,
+        ),
+      );
     outcome = await sending;
   } catch {
     outcome = "failed";

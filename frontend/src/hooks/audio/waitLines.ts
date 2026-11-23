@@ -589,21 +589,32 @@ function playLine(
   queue.flush();
 }
 
+/** The turn being waited for, to tell later whether it is still the same. */
+export function waitTurnNow(): object | null {
+  return turn;
+}
+
 /**
  * Says `clips` at once on the lines' queue, outside the plan: the word that
- * an approval by voice was taken. In the turn under way it counts as a line
- * said (nothing over it or right after it, and toward the turn's cap), and
- * the answer and the next card wait for it as for any line. Returns whether
- * it is said: not while a line plays, nor once the turn's answer or spoken
- * part has begun, nor where the voice cannot play.
+ * an approval by voice was taken. It belongs to the turn `of` (from
+ * `waitTurnNow`) and is said only while that turn is still waited for: not
+ * after the voice was stopped, talked over, or a microphone opened without
+ * the echo-cancelling hold. In the turn it counts as a line said (nothing
+ * over it or right after it, and toward the turn's cap), and the answer and
+ * the next card wait for it as for any line. Returns whether it is said: not
+ * while a line plays, nor once the turn's answer or spoken part has begun,
+ * nor where the voice cannot play.
  */
 export function sayAsideLine(
   clips: readonly { text: string; audio: string; sampleRate: number }[],
+  of: object | null,
 ): boolean {
   const context = playbackContext();
   const speech = useSpeechPlayback.getState();
   const current = turn;
   if (
+    current === null ||
+    current !== of ||
     clips.length === 0 ||
     busy ||
     context?.state !== "running" ||
@@ -611,19 +622,17 @@ export function sayAsideLine(
     !speech.conversational
   )
     return false;
-  if (current) {
-    const { state } = current;
-    if (
-      state.answerStarted ||
-      state.ended ||
-      current.parts.length > 0 ||
-      state.said.some((line) => line.kind === "reply") ||
-      speech.spokenTurn !== current.streamKey
-    )
-      return false;
-  }
+  const { state } = current;
+  if (
+    state.answerStarted ||
+    state.ended ||
+    current.parts.length > 0 ||
+    state.said.some((line) => line.kind === "reply") ||
+    speech.spokenTurn !== current.streamKey
+  )
+    return false;
   const said: SaidLine = { kind: "ack", startedAt: now() };
-  current?.state.said.push(said);
+  state.said.push(said);
   aside = said;
   playLine(context, clips, said, current);
   return aside === said;

@@ -498,7 +498,7 @@ interface Connection {
   close: ReturnType<typeof vi.fn>;
 }
 const connections: Connection[] = [];
-const sources: { onended: (() => void) | null }[] = [];
+const sources: { onended: (() => void) | null; stop: () => void }[] = [];
 
 vi.mock("@/utils/sse/sseClient", () => ({
   createSSEConnection: (url: string, options: SSEOptions) => {
@@ -1566,14 +1566,30 @@ describe("listening against the endpoint", () => {
     });
 
     describe("the voice says that an approval by voice was taken", () => {
-      /** A decision whose sending ends only when the test says so. */
+      /**
+       * A decision whose sending starts the turn read back, as the chat does,
+       * and ends only when the test says so.
+       */
+      let turnModules: {
+        playback: typeof import("./speechPlayback");
+        lines: typeof import("./waitLines");
+      } | null = null;
+      beforeEach(async () => {
+        turnModules = {
+          playback: await import("./speechPlayback"),
+          lines: await import("./waitLines"),
+        };
+      });
       const pending = () => {
         let release: (outcome: VoiceChangeOutcome) => void = () => {};
         const send = vi.fn(
-          (_decision: "approve" | "reject", _receipt: string | undefined) =>
-            new Promise<VoiceChangeOutcome>((resolve) => {
+          (_decision: "approve" | "reject", _receipt?: string) => {
+            turnModules?.playback.beginSpeechResponse("chat");
+            turnModules?.lines.beginWaitTurn("chat", { continuation: true });
+            return new Promise<VoiceChangeOutcome>((resolve) => {
               release = resolve;
-            }),
+            });
+          },
         );
         const decision: VoiceDecision = {
           approvalId: "call-7",
@@ -1591,8 +1607,22 @@ describe("listening against the endpoint", () => {
         if (!found) throw new Error("the sentence was not loaded");
         return found;
       };
+      /** Heard "Ich bestätige" on a card whose sending waits for the test. */
+      const approvedPending = async () => {
+        const { decision, send, release } = pending();
+        const { heardApprovalWords } = await heardCard(
+          undefined,
+          CARD,
+          decision,
+        );
+        const lines = await import("./waitLines");
+        answer("approve", { status: "accepted", receipt: "receipt-1" });
+        const heard = heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+        await vi.waitFor(() => expect(send).toHaveBeenCalled());
+        return { lines, heard, release };
+      };
 
-      it("is loaded with the words while the card waits, and said as the approval goes out, which does not wait for it", async () => {
+      it("is loaded with the words while the card waits, and said once the server took the approval, which does not wait for it", async () => {
         const { decision, send, release } = pending();
         const { heardApprovalWords } = await heardCard(
           undefined,
@@ -1623,38 +1653,52 @@ describe("listening against the endpoint", () => {
           pieces: [ACK],
           language: "de",
         });
-        expect(lines.waitLinePlaying()).toBe(false);
         audio(ack, 0);
-        await vi.waitFor(() => expect(lines.waitLinePlaying()).toBe(true));
+        await Promise.resolve();
+        // The audio is there, the server has not taken it yet.
+        expect(lines.waitLinePlaying()).toBe(false);
         release("sent");
         await heard;
+        await vi.waitFor(() => expect(lines.waitLinePlaying()).toBe(true));
         expect(notices()).toHaveLength(0);
         playOut();
         await vi.waitFor(() => expect(lines.waitLinePlaying()).toBe(false));
       });
 
-      it("a sending that fails stops it, and the failure is said next", async () => {
-        const { decision, release } = pending();
-        const { heardApprovalWords } = await heardCard(
-          undefined,
-          CARD,
-          decision,
-        );
-        const lines = await import("./waitLines");
-        answer("approve", { status: "accepted", receipt: "receipt-1" });
-        const heard = heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
-        await vi.waitFor(() => expect(connections.some(isAck)).toBe(true));
+      it("a sending the server refuses never says it, and the failure is said", async () => {
+        const { lines, heard, release } = await approvedPending();
         audio(ackConnection(), 0);
-        await vi.waitFor(() => expect(lines.waitLinePlaying()).toBe(true));
-        const playing = sources.at(-1);
         release("failed");
         await heard;
-        expect(playing?.stop).toHaveBeenCalled();
+        expect(sources.some((source) => source.onended === null)).toBe(false);
+        expect(lines.waitLinePlaying()).toBe(false);
+        expect(ackConnection().close).toHaveBeenCalled();
         expect(sentences(notices()[0])).toEqual([
           "Das ging nicht durch. Bitte auf dem Bildschirm entscheiden.",
         ]);
-        await vi.waitFor(() => expect(lines.waitLinePlaying()).toBe(false));
       });
+
+      it.each([
+        ["the voice is stopped", "stop"],
+        ["a microphone opens without the echo-cancelling hold", "microphone"],
+      ] as const)(
+        "%s while its audio loads: it is not said afterwards",
+        async (_, what) => {
+          const { lines, heard, release } = await approvedPending();
+          release("sent");
+          await heard;
+          if (what === "stop") {
+            const playback = await import("./speechPlayback");
+            playback.stopSpeechPlayback();
+          } else {
+            const speechEnd = await import("./speechEnd");
+            speechEnd.microphoneOpened();
+          }
+          audio(ackConnection(), 0);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          expect(lines.waitLinePlaying()).toBe(false);
+        },
+      );
 
       it("a sending that fails before its audio came never says it", async () => {
         const { decision } = deciding(true, "failed");

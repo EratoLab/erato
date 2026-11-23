@@ -1,6 +1,6 @@
 import { loadApprovalNotice } from "./approvalSpeech";
 import { deploymentConfirmationPhrases } from "./confirmationPhrases";
-import { sayAsideLine, stopAsideLine } from "./waitLines";
+import { sayAsideLine, stopAsideLine, waitTurnNow } from "./waitLines";
 
 import type { LoadedNotice, SpeakableCard } from "./approvalSpeech";
 
@@ -75,31 +75,37 @@ export function dropApprovalAcknowledgement() {
 }
 
 /**
- * Says the sentence for the card under `key`, whose approval was just sent.
- * Waits for its audio at most `ACKNOWLEDGEMENT_LATE_MS`; a sentence that
- * comes later, failed, or would start after the answer's voice has begun is
- * not said. Resolves once it is said or left out.
+ * Says the sentence for the card under `key`, whose approval was just sent,
+ * once the server took it (`accepted`) and the audio is there, both within
+ * `ACKNOWLEDGEMENT_LATE_MS` of the sending. It is said in the turn the
+ * approval began, and only while that turn is still waited for; a sentence
+ * that comes later, failed, or would start after the answer's voice has
+ * begun is not said. Resolves once it is said or left out.
  */
-export async function sayApprovalAcknowledgement(key: string): Promise<void> {
+export async function sayApprovalAcknowledgement(
+  key: string,
+  accepted: Promise<boolean>,
+): Promise<void> {
   const taken = held?.key === key ? held : null;
   held = null;
   if (!taken) return;
+  const of = waitTurnNow();
   const current = { cancelled: false, notice: taken.notice };
   attempt = current;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    taken.notice.settled,
-    new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, ACKNOWLEDGEMENT_LATE_MS);
+  const goesAhead = await Promise.race([
+    Promise.all([taken.notice.settled, accepted]).then(([, ok]) => ok),
+    new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), ACKNOWLEDGEMENT_LATE_MS);
     }),
   ]);
   clearTimeout(timer);
   if (attempt === current) attempt = null;
-  if (current.cancelled || taken.notice.state !== "done") {
+  if (!goesAhead || current.cancelled || taken.notice.state !== "done") {
     taken.notice.close();
     return;
   }
-  sayAsideLine(taken.notice.chunks);
+  sayAsideLine(taken.notice.chunks, of);
 }
 
 /**
