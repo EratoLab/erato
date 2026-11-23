@@ -457,6 +457,7 @@ export { OriginApprovalLink } from "@/components/ui/Message/OriginApprovalLink";
 export { OwnCallApprovalItem } from "@/components/ui/Message/OwnCallApprovalItem";
 export { OwnClientToolApprovalItem } from "@/components/ui/Message/OwnClientToolApprovalItem";
 export { approvableHere } from "@/components/ui/Message/OwnClientToolApprovalItem";
+export { onlyItsCardApproves } from "@/components/ui/Message/OwnClientToolApprovalItem";
 export { ParkedChildItem } from "@/components/ui/Message/ParkedChildItem";
 export { ParkedTaskNotice } from "@/components/ui/Message/ParkedTaskNotice";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
