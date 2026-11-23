@@ -1042,90 +1042,107 @@ describe("ChatInput", () => {
     });
   });
 
-  it("renders the AI usage advisory when enabled", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
-    });
-    const onSendMessage = vi.fn();
-    const advisory =
+  describe("AI usage advisory", () => {
+    const plainAdvisory =
       "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
 
-    mockUseOptionalTranslation.mockReturnValue(advisory);
+    const renderComposer = async (renderUsageAdvisory?: boolean) => {
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+      const { i18n } = await import("@lingui/core");
+      return render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              className="p-2 sm:p-4"
+              renderUsageAdvisory={renderUsageAdvisory}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+    };
 
-    const { i18n } = await import("@lingui/core");
-    const { container } = render(
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider i18n={i18n}>
-          <ChatInput onSendMessage={onSendMessage} />
-        </I18nProvider>
-      </QueryClientProvider>,
-    );
+    it.each([plainAdvisory, "Read our policy at https://example.com/ai."])(
+      "renders plain text as written (%s)",
+      async (advisory) => {
+        mockUseOptionalTranslation.mockReturnValue(advisory);
+        const { container } = await renderComposer();
 
-    expect(screen.getByText(advisory)).toBeInTheDocument();
-    expect(container.querySelector("form")).toHaveClass("pb-0");
-  });
-
-  it("hides the AI usage advisory when disabled by feature config", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
+        const text = screen.getByText(advisory);
+        expect(text).toBeInTheDocument();
+        expect(within(text).queryByRole("link")).not.toBeInTheDocument();
+        expect(container.querySelector("form")).toHaveClass("pb-0");
       },
-    });
-    const onSendMessage = vi.fn();
-    const advisory =
-      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
-
-    mockUseChatInputFeature.mockReturnValue({
-      autofocus: false,
-      showUsageAdvisory: false,
-    });
-    mockUseOptionalTranslation.mockReturnValue(advisory);
-
-    const { i18n } = await import("@lingui/core");
-    render(
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider i18n={i18n}>
-          <ChatInput onSendMessage={onSendMessage} />
-        </I18nProvider>
-      </QueryClientProvider>,
     );
 
-    expect(screen.queryByText(advisory)).not.toBeInTheDocument();
-  });
+    it("renders a policy link and emphasis in the advisory", async () => {
+      mockUseOptionalTranslation.mockReturnValue(
+        "**Verify answers.** Read our [AI policy](https://example.com/ai).",
+      );
+      await renderComposer();
 
-  it("leaves the advisory and the form padding to the parent when renderUsageAdvisory is false", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
+      const link = screen.getByRole("link", { name: "AI policy" });
+      expect(link).toHaveAttribute("href", "https://example.com/ai");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+      expect(
+        link.closest('[data-ui="chat-usage-advisory"]'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Verify answers.", { selector: "strong" }),
+      ).toBeInTheDocument();
     });
-    const advisory =
-      "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use.";
 
-    mockUseOptionalTranslation.mockReturnValue(advisory);
+    it("renders raw HTML and links with disallowed URLs as plain text", async () => {
+      mockUseOptionalTranslation.mockReturnValue(
+        '<span data-advisory-html="true">Read this.</span> [Policy](javascript:void(0))',
+      );
+      const { container } = await renderComposer();
+      const advisory = container.querySelector<HTMLElement>(
+        '[data-ui="chat-usage-advisory"]',
+      )!;
 
-    const { i18n } = await import("@lingui/core");
-    const { container } = render(
-      <QueryClientProvider client={queryClient}>
-        <I18nProvider i18n={i18n}>
-          <ChatInput
-            onSendMessage={vi.fn()}
-            className="p-2 sm:p-4"
-            renderUsageAdvisory={false}
-          />
-        </I18nProvider>
-      </QueryClientProvider>,
-    );
+      expect(advisory).toHaveTextContent("Read this. Policy");
+      expect(advisory.querySelector("[data-advisory-html]")).toBeNull();
+      expect(within(advisory).queryByRole("link")).not.toBeInTheDocument();
+    });
 
-    expect(screen.queryByText(advisory)).not.toBeInTheDocument();
-    const form = container.querySelector("form");
-    expect(form).toHaveClass("p-2", "sm:p-4");
-    expect(form).not.toHaveClass("pb-0");
+    it("omits the advisory and keeps form padding when the translation is missing", async () => {
+      const { container } = await renderComposer();
+
+      expect(
+        container.querySelector('[data-ui="chat-usage-advisory"]'),
+      ).toBeNull();
+      expect(container.querySelector("form")).not.toHaveClass("pb-0");
+    });
+
+    it("hides the AI usage advisory when disabled by feature config", async () => {
+      mockUseChatInputFeature.mockReturnValue({
+        autofocus: false,
+        showUsageAdvisory: false,
+      });
+      mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
+
+      await renderComposer();
+
+      expect(screen.queryByText(plainAdvisory)).not.toBeInTheDocument();
+    });
+
+    it("leaves the advisory and the form padding to the parent when renderUsageAdvisory is false", async () => {
+      mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
+
+      const { container } = await renderComposer(false);
+
+      expect(screen.queryByText(plainAdvisory)).not.toBeInTheDocument();
+      const form = container.querySelector("form");
+      expect(form).toHaveClass("p-2", "sm:p-4");
+      expect(form).not.toHaveClass("pb-0");
+    });
   });
 
   it("uses externally controlled model selection when provided", async () => {

@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 
+import { ReadOnlyMarkdown } from "@/components/ui/Markdown/ReadOnlyMarkdown";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
 
@@ -32,9 +33,11 @@ export function ChatUsageAdvisory() {
       style={advisoryStyle}
       data-ui="chat-usage-advisory"
     >
-      <p className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
-        {aiUsageAdvisory}
-      </p>
+      <div className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
+        <div>
+          <ReadOnlyMarkdown compact>{aiUsageAdvisory}</ReadOnlyMarkdown>
+        </div>
+      </div>
     </div>
   );
 }

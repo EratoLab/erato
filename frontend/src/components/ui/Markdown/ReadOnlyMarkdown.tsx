@@ -4,21 +4,29 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { Root } from "hast";
-import type { Components } from "react-markdown";
+import type { ComponentProps } from "react";
+import type { Components, ExtraProps } from "react-markdown";
 
 const remarkPlugins = [remarkGfm];
 
-const components: Components = {
-  a: ({ children, href, node: _node, ...props }) => (
-    <a
-      {...props}
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-theme-fg-accent underline hover:opacity-80"
-    >
+function MarkdownLink({
+  children,
+  node: _node,
+  ...props
+}: ComponentProps<"a"> & ExtraProps) {
+  return (
+    <a {...props} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
+  );
+}
+
+const components: Components = {
+  a: (props) => (
+    <MarkdownLink
+      {...props}
+      className="text-theme-fg-accent underline hover:opacity-80"
+    />
   ),
   blockquote: ({ children, node: _node, ...props }) => (
     <blockquote
@@ -84,9 +92,34 @@ const components: Components = {
   ),
 };
 
-export function ReadOnlyMarkdown({ children }: { children: string }) {
+const compactComponents: Components = {
+  ...components,
+  a: (props) =>
+    props.href ? (
+      <MarkdownLink
+        {...props}
+        className="text-inherit underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--theme-focus-ring)]"
+      />
+    ) : (
+      <>{props.children}</>
+    ),
+  p: "p",
+};
+
+export function ReadOnlyMarkdown({
+  children,
+  compact = false,
+}: {
+  children: string;
+  compact?: boolean;
+}) {
   return (
-    <Markdown remarkPlugins={remarkPlugins} components={components}>
+    <Markdown
+      // Keep bare URLs as plain text in compact notices.
+      remarkPlugins={compact ? undefined : remarkPlugins}
+      components={compact ? compactComponents : components}
+      skipHtml={compact}
+    >
       {children}
     </Markdown>
   );
