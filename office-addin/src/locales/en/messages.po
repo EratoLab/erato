@@ -5289,6 +5289,16 @@ msgid "officeAddin.word.context.sendInstead"
 msgstr "Send this instead"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.comments"
+msgstr "Every comment change, new comments included:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.plan"
+msgstr "Every change to the document:"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Ask again for in-place edits"

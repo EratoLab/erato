@@ -18,6 +18,8 @@ export interface WordWriteBridge {
   updateReview: (key: string, patch: Partial<WordReviewState>) => void;
   beginOperation: () => boolean;
   endOperation: () => void;
+  /** Keeps Word's operation until a write that outlived its timeout has ended. */
+  holdOperationUntil: (settled: Promise<void>, owner: string) => void;
   setRevertSlot: (slot: WordRevertSlot | null) => void;
   invalidateLocations: () => void;
   messageContext: (messageId: string) => WordMessageContext;

@@ -185,12 +185,19 @@ export function WordWriteProvider({
       updateReview,
       beginOperation,
       endOperation,
+      holdOperationUntil,
       setRevertSlot,
       invalidateLocations,
       messageContext: (messageId) => messageContextRef.current(messageId),
     });
     return () => setWordWriteBridge(null);
-  }, [updateReview, beginOperation, endOperation, invalidateLocations]);
+  }, [
+    updateReview,
+    beginOperation,
+    endOperation,
+    holdOperationUntil,
+    invalidateLocations,
+  ]);
   const value = useMemo<WordWriteContextValue>(
     () => ({
       documentIdentity,

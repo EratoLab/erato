@@ -131,6 +131,7 @@ export {
   clientToolDecisionOf,
   saveClientToolDecision,
 } from "@/lib/clientToolDecisions";
+export { alwaysAllowLockedLine } from "@/lib/toolCallGist/decisionLabels";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,

@@ -30,7 +30,10 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { WordDecisionChoices } from "./WordDecisionChoices";
+import {
+  WordDecisionChoices,
+  wordPlanStandingLabel,
+} from "./WordDecisionChoices";
 import { wordPartsLabelText } from "./WordDocumentPartsCard";
 import { WordImportConfirm, WordImportRefusal } from "./WordImportConfirm";
 import {
@@ -633,9 +636,10 @@ export function WordDocumentPlanCard({
   };
   const completed = ["done", "denied", "reverted"].includes(review.status);
   // An Apply Word refused wrote nothing; once a later request took a new copy, its card folds too.
+  // A parked change stays open: its answer waits for a decision.
   const folds =
     completed ||
-    (idle && !generating && copyGone) ||
+    (idle && !generating && copyGone && !decision) ||
     (review.status === "error" && !!snapshot?.revoked);
   const collapsed = folds && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
@@ -797,9 +801,30 @@ export function WordDocumentPlanCard({
             wordPlanPassages(plan),
           )
         : routePreview);
+  const consentTitle = t({
+    id: "officeAddin.word.planReview.consent",
+    message: "Apply the changes reviewed above?",
+  });
+  // A parked change this card cannot make is still declined here: the answer waits for it.
+  const declineOnly = decision && idle && (
+    <WordDecisionChoices
+      decision={decision}
+      title={consentTitle}
+      applyLabel={applyLabel}
+      canApply={false}
+      standingLabel={wordPlanStandingLabel()}
+    />
+  );
   const applyControl = refusal ? (
-    idle && <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
-  ) : copyGone && idle ? null : confirmImport && (idle || applying) ? (
+    idle && (
+      <>
+        <WordImportRefusal reason={refusal} onAskAgain={askAgainInPlace} />
+        {declineOnly}
+      </>
+    )
+  ) : copyGone && idle ? (
+    declineOnly || null
+  ) : confirmImport && (idle || applying) ? (
     <WordImportConfirm
       key={key}
       routeText={routeText}
@@ -880,15 +905,14 @@ export function WordDocumentPlanCard({
       {decision && idle && offered && (
         <WordDecisionChoices
           decision={decision}
-          title={t({
-            id: "officeAddin.word.planReview.consent",
-            message: "Apply the changes reviewed above?",
-          })}
+          title={consentTitle}
           applyLabel={applyLabel}
           canApply={ready}
+          standingLabel={wordPlanStandingLabel()}
           confirmation={coauthors ? { coauthors } : undefined}
         />
       )}
+      {!offered && declineOnly}
       {!decision && (idle || applying) && offered && !confirmCard && (
         <WordApplyButton
           applying={applying}

@@ -1,3 +1,4 @@
+import { wordPlanContentJson } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
@@ -396,7 +397,7 @@ describe("an answer whose changes the server applied", () => {
     ]);
     expect(artifact?.submittedCards?.[1]).toMatchObject({
       language: "erato-word-document-plan",
-      content: JSON.stringify(plan("call-2", "Second step.")),
+      content: wordPlanContentJson(plan("call-2", "Second step.")),
     });
     expect(artifact?.submittedCard).toBeUndefined();
   });

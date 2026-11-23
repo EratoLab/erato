@@ -81,6 +81,7 @@ function bridgeFor(
     endOperation: () => {
       busy = false;
     },
+    holdOperationUntil: vi.fn(),
     setRevertSlot: vi.fn(),
     invalidateLocations: vi.fn(),
     messageContext: () => stored,
@@ -408,6 +409,32 @@ describe("an apply without its copy", () => {
     expect(
       await apply(applyInput(), applyContext({ toolCallId: "other.apply" })),
     ).toEqual({ ok: true, result: { status: "applied" } });
+  });
+
+  it("answers unconfirmed for a write that began before the document is known again", async () => {
+    const session = new WordDocumentReadSession();
+    const apply = createWordApplyPlanExecutor({
+      session,
+      readEnabled: () => true,
+      bridge: () => bridgeFor(null),
+    });
+    markWordApplyWriting("submit-A.apply", "doc-A");
+    expect(await apply(applyInput(), applyContext())).toEqual({
+      ok: true,
+      result: { status: "unconfirmed", reason: "reloaded_during_write" },
+    });
+  });
+
+  it("takes the document a write began on from its marker when the answer names none", async () => {
+    const { apply } = reloadedPane({ requestText: "x" });
+    markWordApplyWriting("submit-A.apply", "doc-A");
+    expect(await apply(applyInput(), applyContext())).toMatchObject({
+      result: {
+        status: "unconfirmed",
+        reason: "reloaded_during_write",
+        snapshot: expect.any(String),
+      },
+    });
   });
 
   it("answers unconfirmed when pane storage cannot be read", async () => {

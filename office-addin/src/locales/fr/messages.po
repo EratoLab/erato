@@ -5289,6 +5289,16 @@ msgid "officeAddin.word.context.sendInstead"
 msgstr "Envoyer ceci à la place"
 
 #. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.comments"
+msgstr "Toute modification de commentaire, y compris les nouveaux commentaires :"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.plan"
+msgstr "Toute modification du document :"
+
+#. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
 msgid "officeAddin.word.importConfirm.askAgain"
 msgstr "Redemander des modifications directes"

@@ -83,23 +83,27 @@ function readJson(key: string): unknown {
   return raw ? (JSON.parse(raw) as unknown) : undefined;
 }
 
-/** Whether this browser already carried the host's choices over. */
-export function clientDecisionsCarriedOver(host: string): boolean {
+/** The server keys of a host whose choices this browser already carried over. */
+export function clientDecisionsCarriedOver(host: string): ReadonlySet<string> {
   try {
     const marker = readJson(CLIENT_DECISIONS_CARRIED_OVER_KEY);
-    return (
-      typeof marker === "object" &&
-      marker !== null &&
-      (marker as Record<string, unknown>)[host] === true
+    const keys =
+      typeof marker === "object" && marker !== null
+        ? (marker as Record<string, unknown>)[host]
+        : undefined;
+    return new Set(
+      Array.isArray(keys)
+        ? keys.filter((key): key is string => typeof key === "string")
+        : [],
     );
   } catch {
-    return false;
+    return new Set();
   }
 }
 
 /**
- * Carries a host's stored choices over to the server once per browser: only keys the server has
- * no decision for, in one save. The old store stays, so a rollback keeps the user's choices. A
+ * Carries a host's stored choices over to the server once per browser and server key, the first
+ * time the facets list that key: only keys the server has no decision for, in one save. The old store stays, so a rollback keeps the user's choices. A
  * failure is tried again on the next load.
  */
 export async function carryOverClientDecisions({
@@ -119,8 +123,10 @@ export async function carryOverClientDecisions({
   /** Writes the decisions the server has none for; resolves once saved. */
   save: (decisions: Record<string, CarriedDecision>) => Promise<unknown>;
 }): Promise<boolean> {
-  if (clientDecisionsCarriedOver(host)) return false;
-  const listed = mappings.filter((mapping) => offered.has(mapping.serverKey));
+  const done = clientDecisionsCarriedOver(host);
+  const listed = mappings.filter(
+    (mapping) => offered.has(mapping.serverKey) && !done.has(mapping.serverKey),
+  );
   if (listed.length === 0) return false;
   let stored: Record<string, ClientActionDecision>;
   try {
@@ -149,7 +155,7 @@ export async function carryOverClientDecisions({
       CLIENT_DECISIONS_CARRIED_OVER_KEY,
       JSON.stringify({
         ...(typeof marker === "object" && marker !== null ? marker : {}),
-        [host]: true,
+        [host]: [...done, ...listed.map((mapping) => mapping.serverKey)],
       }),
     );
     return true;

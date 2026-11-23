@@ -18,7 +18,10 @@ import { WORD_COMMENT_OP_META } from "@erato/frontend/word-review";
 import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
-import { WordDecisionChoices } from "./WordDecisionChoices";
+import {
+  WordDecisionChoices,
+  wordCommentsStandingLabel,
+} from "./WordDecisionChoices";
 import {
   wordBlockedReasonText,
   wordCommentTaintText,
@@ -31,6 +34,10 @@ import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentChangesTitle } from "../utils/wordApprovalPreview";
 import { wordChainedApplyText } from "../utils/wordChainedApply";
+import {
+  runWordCommentApply,
+  wordDraftCapture,
+} from "../utils/wordCommentApply";
 import {
   recordWordCommentOutcome,
   wordCommentAlwaysBlock,
@@ -78,15 +85,6 @@ const excerpt = (text: string) =>
   text.length > EXCERPT ? `${text.slice(0, EXCERPT - 1)}…` : text;
 
 const titleOf = wordCommentChangesTitle;
-
-/** The document a checked draft belongs to, as the decision place's card checks it. */
-const wordDraftCapture = (identity: string): WordCommentsCapture => ({
-  identity,
-  ordinalMap: new Map(),
-  paragraphsSent: 0,
-  renderedOrdinals: new Set(),
-  partialOrdinal: null,
-});
 
 function verbOf(row: WordCommentDraftRow): string {
   switch (row.op) {
@@ -535,63 +533,23 @@ export function WordCommentChangesCard({
         return false;
       }
       if (isGenerating || !offered || !beginOperation()) return false;
-      let held = false;
-      updateReview(batchKey, { status: "applying", capture: live.capture });
-      try {
-        const run = await entry.execute({
-          fenceContent: content,
-          capture: live.capture,
-          comments: {
-            selected: new Set(rows),
-            assistantAuthor: userModeOnly ? null : plan.authorName,
-            userModeRows: new Set(plan.userModeRows.keys()),
-          },
-        });
-        const result = run.commentResult;
-        if (result?.timedOut) {
-          // Word may still be writing: every card waits until the run has really ended.
-          holdOperationUntil(result.settled, batchKey);
-          held = true;
-        }
-        if (!result) {
-          updateReview(batchKey, { status: "no-capture", comments: lapse() });
-          return false;
-        }
-        const touched = new Map(
-          result.rows
-            .filter((row) => rows.includes(row.i))
-            .map((row) => [row.i, row]),
-        );
-        const merged = draft.rows.map(
-          (row) =>
-            touched.get(row.i) ??
-            cardState.rows.find((r) => r.i === row.i) ?? {
-              i: row.i,
-              op: row.op,
-              ...(row.ref ? { ref: row.ref } : {}),
-              status: "refused" as const,
-              code: "DESELECTED",
-            },
-        );
-        const state: WordCommentCardState = {
-          ...cardState,
-          rows: merged,
-          consent: "approved",
-          consentKind: cardState.consentKind ?? consentKind,
-        };
-        updateReview(batchKey, {
-          status: "done",
-          comments: state,
-          automatic: consentKind === "standing_grant",
-        });
-        recordOf(state);
-        return run.ok;
-      } catch {
-        updateReview(batchKey, { status: "write-failed" });
-        return false;
-      } finally {
-        if (!held) endOperation();
-      }
+      const outcome = await runWordCommentApply({
+        key: batchKey,
+        draft,
+        entry,
+        fenceContent: content,
+        capture: live.capture,
+        reviewCapture: live.capture,
+        rows,
+        assistantAuthor: userModeOnly ? null : plan.authorName,
+        userModeRows: new Set(plan.userModeRows.keys()),
+        previous: cardState,
+        consentKind,
+        host: { updateReview, holdOperationUntil, endOperation },
+      });
+      if (outcome.kind === "no-result")
+        updateReview(batchKey, { status: "no-capture", comments: lapse() });
+      return outcome.kind === "ran" && outcome.ok;
     },
     [
       capture,
@@ -858,12 +816,16 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {decision && !ran && idle && offered && (
+          {decision && !ran && idle && (
             <WordDecisionChoices
               decision={decision}
               title={titleOf(draft)}
               applyLabel={applyLabel}
-              canApply={gate.allowed && count > 0}
+              canApply={offered && gate.allowed && count > 0}
+              standingLabel={wordCommentsStandingLabel()}
+              alwaysLockedReason={
+                lockedReason ? alwaysBlockText(lockedReason) : undefined
+              }
               confirmation={{ selected: cardState.selected }}
             />
           )}

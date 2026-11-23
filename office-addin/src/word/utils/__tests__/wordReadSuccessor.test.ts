@@ -92,10 +92,52 @@ describe("the copy an applied change leaves for its answer", () => {
         },
       },
     );
-    expect(read.ok ? "" : read.validationErrors?.[0]?.code).not.toBe(
-      "capture-unavailable",
+    expect(read).toMatchObject({ ok: true, result: { snapshot: token } });
+    expect(session.liveCapture(token)).toBeDefined();
+  });
+
+  it("checks the new copy's complete-read budget as Send did", async () => {
+    const session = new WordDocumentReadSession(async () => ({
+      snapshot: readySnapshot(),
+      capture: {},
+      reusedVerifiedBody: false,
+    }));
+    const budget = vi.fn(async () => "too-large");
+    session.activate(readySnapshot(), context, undefined, {
+      request: "Shorten it",
+      budgetFor: () => budget,
+    });
+    const token = session.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+    });
+    await session.execute(
+      { snapshot: token },
+      { ...context, toolCallId: "read-2" },
+    );
+    expect(await session.completeReadIssue()).toBe("too-large");
+    expect(budget).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows only scoped reads of a copy rebuilt after a pane reload", async () => {
+    const session = new WordDocumentReadSession(async () => ({
+      snapshot: readySnapshot(),
+      capture: {},
+      reusedVerifiedBody: false,
+    }));
+    const token = session.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+      requestText: "Shorten it",
+    });
+    await session.execute(
+      { snapshot: token },
+      { ...context, toolCallId: "read-2" },
     );
     expect(session.liveCapture(token)).toBeDefined();
+    expect(await session.completeReadIssue()).toBe("budget-unavailable");
   });
 
   it("says the request has to be sent again when the copy cannot be read", async () => {

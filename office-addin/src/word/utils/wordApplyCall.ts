@@ -152,7 +152,11 @@ export function wordLostCaptureAnswer({
   started: boolean;
 }): ClientToolExecutionResult {
   const identity = bridge.documentIdentity();
-  if (!identity || !expectedIdentity || identity !== expectedIdentity)
+  const sameDocument =
+    identity && identity === expectedIdentity ? identity : undefined;
+  // Another document counts only when both are known: a write that may have begun never reads
+  // as "not changed", and an unknown document gets no new copy.
+  if (!started && identity && expectedIdentity && !sameDocument)
     return wordApplyAnswer({ status: "unavailable", reason: "other_document" });
   const stored = bridge.messageContext(context.messageId);
   const ownSession =
@@ -161,11 +165,11 @@ export function wordLostCaptureAnswer({
       : undefined;
   const requestText = ownSession ?? stored.requestText;
   const snapshot =
-    readEnabled() && requestText && context.chatId
+    sameDocument && readEnabled() && requestText && context.chatId
       ? session.reserveSuccessor({
           chatId: context.chatId,
           messageId: context.messageId,
-          identity,
+          identity: sameDocument,
           requestText,
         })
       : undefined;
@@ -181,11 +185,15 @@ export function wordReplayedApply(
   callId: string,
 ):
   | { done: ClientToolExecutionResult }
-  | { writing: boolean; unreadable: boolean } {
+  | { writing: boolean; unreadable: boolean; identity?: string } {
   const marker = wordApplyCallMarker(callId);
   if (marker?.state === "done")
     return { done: wordApplyAnswer(marker.result as WordApplyCallResult) };
-  return { writing: marker?.state === "writing", unreadable: marker === null };
+  return {
+    writing: marker?.state === "writing",
+    unreadable: marker === null,
+    identity: marker?.identity,
+  };
 }
 
 function mapPlanResult(
@@ -248,7 +256,9 @@ export function createWordApplyPlanExecutor({
     const snapshot = session.snapshotForSubmission(context);
     const capture = session.liveCapture(accepted?.snapshotToken);
     const expectedIdentity =
-      snapshot?.identity ?? host.messageContext(context.messageId).identity;
+      snapshot?.identity ??
+      host.messageContext(context.messageId).identity ??
+      replay.identity;
     if (
       replay.writing ||
       !accepted ||

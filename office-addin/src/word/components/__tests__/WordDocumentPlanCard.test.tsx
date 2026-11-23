@@ -3175,7 +3175,7 @@ describe("whole-document imports of documents with comments", () => {
 describe("a change the server applies", () => {
   const chainedTurn = (
     plan: WordDocumentPlan,
-    apply?: Record<string, unknown>,
+    apply?: { status: string; output: Record<string, unknown> },
   ) => {
     mock.artifact = {
       ...mock.artifact,
@@ -3207,9 +3207,8 @@ describe("a change the server applies", () => {
               content_type: "tool_use",
               tool_call_id: "submit-A.apply",
               tool_name: "apply_document_plan",
-              status: "success",
               input: {},
-              output: { status: "success", result: apply },
+              ...apply,
             },
           ]
         : []),
@@ -3229,10 +3228,25 @@ describe("a change the server applies", () => {
 
   it("shows the server's result after a reload, without the pane's review", () => {
     const state = setup();
-    chainedTurn(state.plan, { status: "unavailable", reason: "pane_gone" });
+    chainedTurn(state.plan, {
+      status: "error",
+      output: { status: "cancelled", reason: "pane_gone", changes_left: 1 },
+    });
     state.mount();
     expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
       "Not changed: the Erato pane was closed.",
+    );
+  });
+
+  it("never says nothing changed when the pane did not answer in time", () => {
+    const state = setup();
+    chainedTurn(state.plan, {
+      status: "error",
+      output: { status: "cancelled", reason: "timeout", changes_left: 0 },
+    });
+    state.mount();
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "The change may already be in the document.",
     );
   });
 
@@ -3268,5 +3282,32 @@ describe("a change the server applies", () => {
     expect(execute).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onDecide).toHaveBeenLastCalledWith("reject");
+  });
+
+  it("can still be declined from the decision place when the pane cannot make the change", () => {
+    const state = setup();
+    const onDecide = vi.fn();
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map()}
+      >
+        <WordDocumentPlanCard
+          entry={WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!}
+          content={JSON.stringify(state.plan)}
+          decision={{
+            allowAlways: true,
+            decideOnScreen: false,
+            status: "pending",
+            resolvedLabel: undefined,
+            isBusy: false,
+            onDecide,
+          }}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDecide).toHaveBeenCalledWith("reject");
   });
 });

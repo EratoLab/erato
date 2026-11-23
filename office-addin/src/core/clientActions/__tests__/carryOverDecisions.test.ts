@@ -99,13 +99,16 @@ describe("the one-time carry-over", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.restoreAllMocks());
 
-  const run = (save = vi.fn(async () => [])) => ({
+  const run = (
+    save = vi.fn(async () => []),
+    offered: ReadonlySet<string> = new Set([PLAN, COMMENTS]),
+  ) => ({
     save,
     done: carryOverClientDecisions({
       host: "word",
       storageKey: STORE,
       mappings: WORD_CARRY_OVER,
-      offered: new Set([PLAN, COMMENTS]),
+      offered,
       sessionOnly: deviceWide,
       save,
     }),
@@ -123,11 +126,33 @@ describe("the one-time carry-over", () => {
     expect(first.save).toHaveBeenCalledWith({ [PLAN]: "always_allow" });
     expect(
       JSON.parse(localStorage.getItem(CLIENT_DECISIONS_CARRIED_OVER_KEY)!),
-    ).toEqual({ word: true });
+    ).toEqual({ word: [PLAN, COMMENTS] });
     expect(localStorage.getItem(STORE)).not.toBeNull();
     const again = run();
     expect(await again.done).toBe(false);
     expect(again.save).not.toHaveBeenCalled();
+  });
+
+  it("carries a tool's choices over once a later load lists it", async () => {
+    localStorage.setItem(
+      STORE,
+      JSON.stringify({
+        "word_document_review/word.add_comments": "never",
+        "word_document_review/word.respond_to_comments": "never",
+        "word_document_review/word.modify_comments": "never",
+      }),
+    );
+    const planOnly = run(undefined, new Set([PLAN]));
+    expect(await planOnly.done).toBe(true);
+    expect(planOnly.save).not.toHaveBeenCalled();
+    const withComments = run();
+    expect(await withComments.done).toBe(true);
+    expect(withComments.save).toHaveBeenCalledWith({
+      [COMMENTS]: "never_allow",
+    });
+    expect(
+      JSON.parse(localStorage.getItem(CLIENT_DECISIONS_CARRIED_OVER_KEY)!),
+    ).toEqual({ word: [PLAN, COMMENTS] });
   });
 
   it("tries again on the next load when saving fails", async () => {

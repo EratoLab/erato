@@ -261,7 +261,8 @@ export class WordDocumentReadSession {
     this.activate(
       snapshot,
       { chatId: successor.chatId, messageId: successor.messageId },
-      budgetFor?.(snapshot),
+      // After a pane reload no Send of this pane knows the answer's model: only scoped reads.
+      budgetFor?.(snapshot) ?? (async () => "budget-unavailable"),
       {
         access: successor.access,
         capture,

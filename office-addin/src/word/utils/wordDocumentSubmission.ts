@@ -11,6 +11,7 @@ import {
   WORD_SUBMIT_PLAN_TOOL,
   wordReadScope,
   WORD_MORE_CHANGES_ARGUMENT,
+  wordPlanContentJson,
 } from "@erato/frontend/word-review";
 
 import { rememberWordAcceptedPlan } from "./wordAcceptedSubmissions";
@@ -180,9 +181,7 @@ function accepted(
   if (!snapshot || !object(complete) || complete.snapshot !== snapshot.token)
     return result;
   const { [WORD_MORE_CHANGES_ARGUMENT]: _more, ...plan } = complete;
-  // The stored answer holds the plan as the server wrote it back, keys sorted; the card of that
-  // answer and this apply share one review only when their texts match.
-  const content = JSON.stringify(sortedKeys(plan));
+  const content = wordPlanContentJson(plan);
   const parsed = parseWordDocumentPlan(content);
   const normalized = parsed && normalizeWordDocumentPlan(parsed, snapshot);
   if (!normalized || !context.chatId) return result;
@@ -210,16 +209,6 @@ function accepted(
       ),
     },
   };
-}
-
-function sortedKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortedKeys);
-  if (!object(value)) return value;
-  return Object.fromEntries(
-    Object.keys(value)
-      .sort()
-      .map((key) => [key, sortedKeys(value[key])]),
-  );
 }
 
 /** A scoped_edit or finish whose snapshot or token is not this request's active read; never parsed

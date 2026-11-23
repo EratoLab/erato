@@ -583,6 +583,7 @@ export const DEFAULT_STUBS = {
   approvalToolRows: () => [],
   ClientToolDecisionList: () => null,
   addUnsetClientToolDecisions: async () => [],
+  alwaysAllowLockedLine: () => "",
   HostArtifactProvider: ({ children }: { children?: ReactNode }) => children,
   submittedCardsOf: (
     artifact:

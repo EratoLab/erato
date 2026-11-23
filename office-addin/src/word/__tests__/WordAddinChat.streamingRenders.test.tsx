@@ -12,6 +12,7 @@ import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SHARED_ADDIN_FEATURE_CONFIG } from "../../core/SharedAddinShell";
+import { examplePlan } from "../../test/mocks/word/authoringFixtures";
 import {
   installMockWordDocument,
   uninstallMockWordDocument,
@@ -40,6 +41,12 @@ const FACETS = {
         id: "word_document_review",
         display_name: "Review this document",
         client_actions: ["word.apply_edits"],
+        presentation: "auto_prompt",
+      },
+      {
+        id: "word_document_authoring",
+        display_name: "Edit this document",
+        client_actions: ["word.apply_document_plan"],
         presentation: "auto_prompt",
       },
     ],
@@ -222,6 +229,61 @@ describe("the Word pane while a reply streams", () => {
     uninstallMockWordDocument();
     wordContextStore.resetForTests();
     vi.unstubAllGlobals();
+  });
+
+  it("leaves an earlier answer whose change the server applied alone", () => {
+    const plan = { ...examplePlan("snap-0"), readToken: "read-0" };
+    harness.messages.u0 = {
+      ...userMessage(0),
+      action_facet_id: "word_document_authoring",
+    };
+    harness.messages.a0 = {
+      ...harness.messages.a0,
+      content: [
+        {
+          content_type: "tool_use",
+          tool_call_id: "submit-0",
+          tool_name: "submit_document_plan",
+          status: "success",
+          input: plan,
+          output: {
+            status: "success",
+            submission: { status: "accepted" },
+            result: {
+              draft_id: "submit-0",
+              snapshot: "snap-0",
+              action: "word.apply_document_plan",
+            },
+            apply: { call_id: "submit-0.apply" },
+          },
+        },
+        {
+          content_type: "tool_use",
+          tool_call_id: "submit-0.apply",
+          tool_name: "apply_document_plan",
+          status: "success",
+          input: {},
+          output: { status: "success", result: { status: "applied" } },
+        },
+        { content_type: "text", text: "Done." },
+      ],
+    };
+    harness.messages = { ...harness.messages, [LIVE_ID]: liveMessage(0) };
+    const { rerender } = render(pane());
+    expect(harness.stamped.current.a0.hostArtifact).toMatchObject({
+      submittedCards: [expect.objectContaining({ toolCallId: "submit-0" })],
+    });
+
+    harness.rows.length = 0;
+    for (let chunk = 1; chunk <= 5; chunk++) {
+      harness.messages = {
+        ...harness.messages,
+        [LIVE_ID]: liveMessage(chunk),
+      };
+      rerender(pane());
+    }
+
+    expect(harness.rows.filter((id) => id !== LIVE_ID)).toEqual([]);
   });
 
   it("renders only the streaming reply's row", () => {

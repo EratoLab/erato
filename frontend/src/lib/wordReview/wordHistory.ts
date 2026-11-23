@@ -637,6 +637,25 @@ export interface WordHistoryPlan {
   notInProposal: string[];
 }
 
+/**
+ * An accepted plan as one text whatever order its keys came in: the server keeps the model's
+ * order and a refetch returns JSONB's, while the card in the answer, the decision place and the
+ * apply share one review and one routing by this text.
+ */
+export function wordPlanContentJson(plan: object): string {
+  return JSON.stringify(sortedKeys(plan));
+}
+
+function sortedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedKeys);
+  if (!object(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, sortedKeys(value[key])]),
+  );
+}
+
 /** How many left-out parts the card and the model's note name before "and other parts". */
 export const MAX_NOT_IN_PROPOSAL_NAMES = 5;
 
@@ -701,7 +720,7 @@ function historyPlanOf(
   )
     return undefined;
   const { [WORD_MORE_CHANGES_ARGUMENT]: _more, ...complete } = plan;
-  const contentJson = JSON.stringify(complete);
+  const contentJson = wordPlanContentJson(complete);
   const parsed = parseWordDocumentPlan(contentJson);
   if (!parsed) return undefined;
   return {

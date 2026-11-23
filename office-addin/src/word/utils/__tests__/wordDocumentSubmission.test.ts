@@ -1,6 +1,8 @@
 import {
   acceptedWordPlanFromHistory,
+  acceptedWordPlansFromHistory,
   parseWordDocumentPlan,
+  wordPlanContentJson,
 } from "@erato/frontend/word-review";
 import { describe, expect, it, vi, afterEach } from "vitest";
 
@@ -21,6 +23,7 @@ import {
   statusRewritePlan,
 } from "../../../test/mocks/word/realisticWordFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
+import { wordAcceptedPlan } from "../wordAcceptedSubmissions";
 import { WordDocumentReadSession } from "../wordDocumentReadTool";
 import {
   createWordDocumentSubmissionExecutor,
@@ -60,7 +63,45 @@ async function setup() {
 
 afterEach(() => vi.unstubAllGlobals());
 
+const reversedKeys = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(reversedKeys)
+    : typeof value === "object" && value !== null
+      ? Object.fromEntries(
+          Object.entries(value)
+            .reverse()
+            .map(([key, entry]) => [key, reversedKeys(entry)]),
+        )
+      : value;
+
 describe("structured Word submissions", () => {
+  it("keeps the plan the server applies under the text the answer's card reviews it by", async () => {
+    const { submit, plan } = await setup();
+    const sent = reversedKeys(plan);
+    const result = await submit(sent, context);
+    expect(result.ok).toBe(true);
+    // The stored answer: the model's order live, JSONB's after a refetch.
+    const stored = (input: unknown) =>
+      acceptedWordPlansFromHistory([
+        {
+          content_type: "tool_use",
+          tool_call_id: "submit-A",
+          tool_name: WORD_SUBMIT_PLAN_TOOL,
+          status: "success",
+          input,
+          output: {
+            status: "success",
+            submission: { status: "accepted" },
+            result: result.ok && result.result,
+          },
+        } as unknown as ContentPart,
+      ])[0]?.content;
+    const content = wordAcceptedPlan("submit-A")?.content;
+    expect(content).toBeDefined();
+    expect(stored(sent)).toBe(content);
+    expect(stored(plan)).toBe(content);
+  });
+
   it("classifies oversized full plans for scoped-read recovery", async () => {
     const { snapshot, submit, plan } = await setup();
     snapshot.completeReadIssue = "too-large";
@@ -381,7 +422,7 @@ describe("structured Word submissions", () => {
     expect(artifact?.submittedCard).toMatchObject({
       toolCallId: "submit-A",
       language: "erato-word-document-plan",
-      content: JSON.stringify(plan),
+      content: wordPlanContentJson(plan),
     });
     expect(artifact?.proposedClientAction).toBe("word.apply_document_plan");
     expect(artifact?.isFreshCompletion).toBeUndefined();
@@ -504,7 +545,7 @@ describe("Word draft repairs", () => {
     session.clear();
     expect(acceptedWordPlanFromHistory(content)).toMatchObject({
       toolCallId: "repair",
-      content: JSON.stringify(plan),
+      content: wordPlanContentJson(plan),
     });
     const artifact = buildWordArtifact({
       facetId: "word_document_authoring",
@@ -517,7 +558,7 @@ describe("Word draft repairs", () => {
       messageId: context.messageId,
       capture: undefined,
     });
-    expect(artifact?.submittedCard?.content).toBe(JSON.stringify(plan));
+    expect(artifact?.submittedCard?.content).toBe(wordPlanContentJson(plan));
     const output = (
       content[0] as Extract<ContentPart, { content_type: "tool_use" }>
     ).output as unknown as { result: { plan?: unknown } };

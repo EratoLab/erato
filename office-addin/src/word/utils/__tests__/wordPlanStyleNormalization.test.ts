@@ -3,6 +3,7 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
   validateWordDocumentPlan,
+  wordPlanContentJson,
 } from "@erato/frontend/word-review";
 import { describe, expect, it } from "vitest";
 
@@ -266,7 +267,7 @@ describe("structured submission of restated styles", () => {
       },
     } as unknown as ContentPart;
     const restored = acceptedWordPlanFromHistory([part]);
-    expect(restored?.content).toBe(JSON.stringify(plan));
+    expect(restored?.content).toBe(wordPlanContentJson(plan));
     const reparsed = parseWordDocumentPlan(restored!.content)!;
     expect(
       validateWordDocumentPlan(

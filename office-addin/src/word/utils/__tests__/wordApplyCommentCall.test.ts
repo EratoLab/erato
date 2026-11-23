@@ -45,6 +45,7 @@ const bridge: WordWriteBridge = {
   updateReview: vi.fn(),
   beginOperation: () => true,
   endOperation: vi.fn(),
+  holdOperationUntil: vi.fn(),
   setRevertSlot: vi.fn(),
   invalidateLocations: vi.fn(),
   messageContext: () => ({}),
@@ -70,6 +71,7 @@ const executor = () =>
 
 beforeEach(() => {
   localStorage.clear();
+  vi.clearAllMocks();
   vi.mocked(wordCommentDraft).mockReturnValue(draft as never);
   vi.mocked(wordCommentAlwaysBlock).mockReturnValue(null);
 });
@@ -105,6 +107,61 @@ describe("the server's apply of accepted comment changes", () => {
         comments: expect.objectContaining({ selected: new Set([0, 1]) }),
       }),
     );
+  });
+
+  it("keeps the rows the user left out on the shared review, as the card does", async () => {
+    const entry = WORD_CLIENT_ACTIONS.get("word.respond_to_comments")!;
+    vi.spyOn(entry, "execute").mockResolvedValue({
+      ok: true,
+      outcomes: [],
+      snapshotOoxml: null,
+      commentResult: {
+        rows: [{ i: 0, op: "resolve", ref: "c1", status: "applied" }] as never,
+        settled: Promise.resolve(),
+        timedOut: false,
+      },
+    });
+    expect(await executor()(input({ selected: [0] }), context)).toEqual({
+      ok: true,
+      result: { status: "applied", verified: true, undo_steps: 1 },
+    });
+    expect(bridge.updateReview).toHaveBeenLastCalledWith(
+      "message-A:word.respond_to_comments:submit-C",
+      expect.objectContaining({
+        status: "done",
+        comments: expect.objectContaining({
+          rows: [
+            expect.objectContaining({ i: 0, status: "applied" }),
+            expect.objectContaining({
+              i: 1,
+              status: "refused",
+              code: "DESELECTED",
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("keeps Word busy for every card while a timed-out write may still run", async () => {
+    const entry = WORD_CLIENT_ACTIONS.get("word.respond_to_comments")!;
+    const settled = new Promise<void>(() => {});
+    vi.spyOn(entry, "execute").mockResolvedValue({
+      ok: false,
+      outcomes: [],
+      snapshotOoxml: null,
+      commentResult: {
+        rows: [{ i: 0, op: "resolve", ref: "c1", status: "failed" }] as never,
+        settled,
+        timedOut: true,
+      },
+    });
+    await executor()(input({ selected: [0] }), context);
+    expect(bridge.holdOperationUntil).toHaveBeenCalledWith(
+      settled,
+      "message-A:word.respond_to_comments:submit-C",
+    );
+    expect(bridge.endOperation).not.toHaveBeenCalled();
   });
 
   it("asks on screen where the card would not run on its own", async () => {

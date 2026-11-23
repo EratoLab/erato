@@ -49,8 +49,32 @@ export function wordChainedApplyState(
   if (part.status === "success" && object(result))
     return { kind: "done", result: result as unknown as WordApplyCallResult };
   if (part.status === "error")
-    return { kind: "done", result: { status: "failed" } };
+    return {
+      kind: "done",
+      result:
+        output?.status === "cancelled"
+          ? cancelledResult(output.reason)
+          : { status: "failed", reason: "host_error" },
+    };
   return { kind: "applying" };
+}
+
+// Reasons the server ends a call with before the pane could have written anything.
+const NEVER_WRITTEN = new Set([
+  "context_unavailable",
+  "withdrawn",
+  "expired",
+  "scope_changed",
+]);
+
+/** The server's own end of the call, as it reports it: a pane that did not answer in time may
+ * still have written. */
+function cancelledResult(reason: unknown): WordApplyCallResult {
+  const why = typeof reason === "string" ? reason : undefined;
+  if (why === "pane_gone") return { status: "unavailable", reason: why };
+  if (why === "aborted") return { status: "failed", reason: "stopped" };
+  if (why && NEVER_WRITTEN.has(why)) return { status: "failed", reason: why };
+  return { status: "unconfirmed", reason: why };
 }
 
 /** One line for a chained change in the answer, where the pane holds no review of it. */

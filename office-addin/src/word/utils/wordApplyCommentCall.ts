@@ -10,12 +10,11 @@ import {
   markWordApplyWriting,
 } from "./wordApplyCallMarkers";
 import { WORD_CLIENT_ACTIONS } from "./wordClientActions";
+import { runWordCommentApply, wordDraftCapture } from "./wordCommentApply";
 import {
-  recordWordCommentOutcome,
   wordCommentAlwaysBlock,
   wordCommentAuthorPlan,
   wordCommentCardMode,
-  wordCommentOutcomeRecord,
 } from "./wordCommentCard";
 import { wordCommentDeploymentSettings } from "./wordCommentPolicy";
 import { wordCommentTaintedMessage } from "./wordCommentReadTool";
@@ -32,15 +31,11 @@ import type { WordCommentRowResult } from "./wordCommentWrites";
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type { WordWriteBridge } from "./wordWriteBridge";
 import type { ClientToolExecutor } from "@erato/frontend/library";
-import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 /** The rows the user kept on the decision-place card; all of them when absent. */
 export interface WordCommentConfirmation {
   selected?: number[];
 }
-
-/** A run that outlived its timeout keeps every Word card waiting this long at most. */
-const SETTLE_CEILING_MS = 60_000;
 
 const applied = (row: WordCommentRowResult) =>
   row.status === "applied" || row.status === "applied_as_user";
@@ -73,7 +68,9 @@ export function createWordApplyCommentsExecutor({
         bridge: host,
         readEnabled,
         expectedIdentity:
-          draft?.identity ?? host.messageContext(context.messageId).identity,
+          draft?.identity ??
+          host.messageContext(context.messageId).identity ??
+          replay.identity,
         started: replay.writing || replay.unreadable,
       });
     if (!identity || draft.identity !== identity)
@@ -111,74 +108,45 @@ export function createWordApplyCommentsExecutor({
     }
     const entry = WORD_CLIENT_ACTIONS.get(draft.action)!;
     const key = `${context.messageId}:${draft.action}:${submissionCallId}`;
+    if (context.signal?.aborted) {
+      host.endOperation();
+      return wordApplyAnswer({ status: "failed", reason: "stopped" });
+    }
+    const outcome = await runWordCommentApply({
+      key,
+      draft,
+      entry,
+      fenceContent: submissionCallId,
+      capture: wordDraftCapture(identity),
+      rows: selected,
+      assistantAuthor: plan.authorName,
+      userModeRows: new Set(plan.userModeRows.keys()),
+      previous: { selected, rows: [] },
+      consentKind: "click",
+      host,
+      onBeforeWrite: () => markWordApplyWriting(context.toolCallId, identity),
+    });
     let result: WordApplyCallResult;
-    try {
-      if (context.signal?.aborted)
-        return wordApplyAnswer({ status: "failed", reason: "stopped" });
-      markWordApplyWriting(context.toolCallId, identity);
-      host.updateReview(key, { status: "applying" });
-      const capture: WordDocumentCapture = {
-        identity,
-        ordinalMap: new Map(),
-        paragraphsSent: 0,
-        renderedOrdinals: new Set(),
-        partialOrdinal: null,
-      };
-      const run = await entry.execute({
-        fenceContent: submissionCallId,
-        capture,
-        comments: {
-          selected: new Set(selected),
-          assistantAuthor: plan.authorName,
-          userModeRows: new Set(plan.userModeRows.keys()),
-        },
-      });
-      const rows = run.commentResult?.rows ?? [];
-      if (run.commentResult?.timedOut)
-        await Promise.race([
-          run.commentResult.settled,
-          new Promise((resolve) => setTimeout(resolve, SETTLE_CEILING_MS)),
-        ]);
-      const kept = rows.filter((row) => selected.includes(row.i));
-      const done = kept.filter(applied).length;
-      const state = {
-        selected,
-        rows,
-        consent: "approved" as const,
-        consentKind: "click" as const,
-      };
-      host.updateReview(key, {
-        status: run.commentResult ? "done" : "write-failed",
-        comments: state,
-      });
-      recordWordCommentOutcome(
-        wordCommentOutcomeRecord({
-          draft,
-          ...state,
-          authorModeRequested:
-            draft.action === "word.add_comments" ? draft.authorMode : null,
-        }),
-      );
+    if (outcome.kind === "ran") {
       wordCommentProposalApplied(submissionCallId);
-      result = !run.commentResult
-        ? { status: "unconfirmed", reason: "host_error" }
-        : done === kept.length && done > 0
+      const done = outcome.rows.filter(applied).length;
+      result =
+        done === outcome.rows.length && done > 0
           ? { status: "applied", verified: true, undo_steps: 1 }
           : done > 0
             ? {
                 status: "partial",
                 verified: true,
                 undo_steps: 1,
-                left_out: kept
+                left_out: outcome.rows
                   .filter((row) => !applied(row))
                   .map((row) => `#${row.i + 1}`),
               }
             : { status: "failed", reason: "not_applied" };
-    } catch {
-      host.updateReview(key, { status: "write-failed" });
+    } else {
+      if (outcome.kind === "no-result")
+        host.updateReview(key, { status: "write-failed" });
       result = { status: "unconfirmed", reason: "host_error" };
-    } finally {
-      host.endOperation();
     }
     markWordApplyDone(context.toolCallId, identity, result);
     return wordApplyAnswer(result);
