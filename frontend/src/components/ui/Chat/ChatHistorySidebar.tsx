@@ -796,9 +796,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             ref={ref}
             className={clsx(
               "flex h-full flex-col border-r",
-              "fixed inset-y-0 left-0 z-40",
-              // Fixed, so the app's safe-area padding does not reach it.
-              "pb-[env(safe-area-inset-bottom,0px)] pl-[env(safe-area-inset-left,0px)] pt-[env(safe-area-inset-top,0px)]",
+              // Fixed, so the app's safe-area padding does not reach it. It
+              // starts beside the left inset, where the page's margin for it
+              // starts too.
+              "viewport-layer fixed inset-y-0 left-[var(--safe-area-left)] z-40",
+              "pb-[var(--safe-area-bottom)] pt-[var(--safe-area-top)]",
               "transition-[width,transform,opacity] duration-300 ease-in-out motion-reduce:transition-none",
               // Hidden mode: slide completely off-screen
               isHiddenMode && "pointer-events-none -translate-x-full opacity-0",

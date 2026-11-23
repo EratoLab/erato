@@ -4,7 +4,10 @@ import { useEffect } from "react";
 const MIN_KEYBOARD_HEIGHT = 100;
 
 export interface VisibleBox {
-  top: number;
+  /** From the top of the layout viewport: where a fixed layer starts. */
+  offsetTop: number;
+  /** From the top of the page: where a box in the page's flow starts. */
+  pageTop: number;
   height: number;
 }
 
@@ -15,7 +18,7 @@ export interface VisibleBox {
  */
 export function visibleBoxAboveKeyboard(
   layoutHeight: number,
-  viewport: Pick<VisualViewport, "height" | "offsetTop" | "scale">,
+  viewport: Pick<VisualViewport, "height" | "offsetTop" | "pageTop" | "scale">,
 ): VisibleBox | null {
   if (Math.abs(viewport.scale - 1) > 0.01) {
     return null;
@@ -23,18 +26,20 @@ export function visibleBoxAboveKeyboard(
   if (layoutHeight - viewport.height < MIN_KEYBOARD_HEIGHT) {
     return null;
   }
-  return { top: viewport.offsetTop, height: viewport.height };
+  return {
+    offsetTop: viewport.offsetTop,
+    pageTop: viewport.pageTop,
+    height: viewport.height,
+  };
 }
 
 /**
- * Keeps the app inside what an on-screen keyboard leaves visible.
+ * Reports the box an on-screen keyboard leaves visible to the stylesheet
+ * (`data-virtual-keyboard` in globals.css).
  *
  * A phone browser does not resize the page for its keyboard. It slides the
  * page up, which pushes the top of the app off screen and can leave the
- * composer behind the keyboard. While a keyboard is open, <html> carries
- * `data-virtual-keyboard="open"` and the visible box in
- * `--visual-viewport-top` and `--visual-viewport-height`; `.app-viewport`
- * takes that box.
+ * composer behind the keyboard.
  */
 export function useVirtualKeyboardViewport(): void {
   useEffect(() => {
@@ -46,7 +51,8 @@ export function useVirtualKeyboardViewport(): void {
 
     const clear = () => {
       delete root.dataset.virtualKeyboard;
-      root.style.removeProperty("--visual-viewport-top");
+      root.style.removeProperty("--visual-viewport-offset-top");
+      root.style.removeProperty("--visual-viewport-page-top");
       root.style.removeProperty("--visual-viewport-height");
     };
     const update = () => {
@@ -56,7 +62,11 @@ export function useVirtualKeyboardViewport(): void {
         return;
       }
       root.dataset.virtualKeyboard = "open";
-      root.style.setProperty("--visual-viewport-top", `${box.top}px`);
+      root.style.setProperty(
+        "--visual-viewport-offset-top",
+        `${box.offsetTop}px`,
+      );
+      root.style.setProperty("--visual-viewport-page-top", `${box.pageTop}px`);
       root.style.setProperty("--visual-viewport-height", `${box.height}px`);
     };
 

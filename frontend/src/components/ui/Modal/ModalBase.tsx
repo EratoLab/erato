@@ -158,9 +158,10 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       className={clsx(
         // Alignment lives here, not in `className`: Tailwind emits
         // items-center after items-end, so a caller could not override it.
-        // The skin's viewport gutter is unlayered, hence the important inset.
+        // The skin's viewport gutter is unlayered, so a padding utility would
+        // lose to it; the sheet narrows the gutter through the skin's variable.
         placement === "bottom"
-          ? "modal-overlay-skin fixed inset-0 z-50 flex items-end justify-center !p-2 !pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] !pt-[max(0.5rem,env(safe-area-inset-top,0px))]"
+          ? "modal-overlay-skin fixed inset-0 z-50 flex items-end justify-center [--modal-viewport-margin:0.5rem]"
           : "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
         className,
       )}
