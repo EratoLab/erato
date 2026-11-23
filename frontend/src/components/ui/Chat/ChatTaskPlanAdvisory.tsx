@@ -89,7 +89,7 @@ export function ChatTaskPlanAdvisory() {
 
   return (
     <div
-      className="relative mx-auto w-full shrink-0 pt-1"
+      className="relative mx-auto w-full shrink-0 px-2 pt-1 sm:px-4"
       style={advisoryStyle}
       data-ui="chat-task-plan-advisory"
     >

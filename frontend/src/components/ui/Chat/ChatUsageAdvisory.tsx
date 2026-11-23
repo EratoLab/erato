@@ -33,7 +33,7 @@ export function ChatUsageAdvisory() {
       style={advisoryStyle}
       data-ui="chat-usage-advisory"
     >
-      <div className="absolute inset-0 flex items-center justify-center text-center text-xs text-theme-fg-muted">
+      <div className="absolute inset-0 flex items-center justify-center px-2 text-center text-xs text-theme-fg-muted sm:px-4">
         <div>
           <ReadOnlyMarkdown compact>{aiUsageAdvisory}</ReadOnlyMarkdown>
         </div>

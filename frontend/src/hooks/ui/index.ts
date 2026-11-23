@@ -14,3 +14,4 @@ export * from "./useThemedIcon";
 export * from "./usePageAlignment";
 export * from "./useRovingMenuFocus";
 export * from "./useOpenMcpServersSettings";
+export * from "./useVirtualKeyboardViewport";

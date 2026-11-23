@@ -228,7 +228,7 @@ export const CloudFilePicker = memo<CloudFilePickerProps>(
     return createPortal(
       // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-labelledby="cloud-picker-title"
