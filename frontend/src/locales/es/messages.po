@@ -1744,6 +1744,16 @@ msgid "builtinToolApproval.title"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.elsewhere"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Está interactuando con un chatbot de IA. Las respuestas generadas pueden contener errores fácticos y deben verificarse antes de usarse."
@@ -6501,7 +6511,7 @@ msgid "preferences.dialog.desktopSidecar.tools.heading"
 msgstr "Herramientas disponibles"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/SidecarToolDecisions.tsx
+#: src/components/ui/Settings/ClientToolDecisionList.tsx
 msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr ""
 
@@ -7042,6 +7052,26 @@ msgstr "Elija cuándo puede el asistente usar estas herramientas."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Permisos de herramientas"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.caption"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.intro"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.name"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.tools.heading"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx

@@ -391,6 +391,39 @@ describe("spoken approval card", () => {
     );
   });
 
+  it("says a change an app prepared from its own title and summary", () => {
+    const label = {
+      action: "update",
+      object_kind: "document",
+      source: "own_mapping",
+    } as ToolCallLabel;
+    const changeOf = (decideOnScreen: boolean) =>
+      spokenApprovalFor("client_tool", {
+        tool_name: "apply_document_plan",
+        input: { submission_call_id: "call-plan", draft_id: "d-1" },
+        display: {
+          title: "Change “Vertrag.docx”",
+          description: "Updates 2 of 9 sections: § 3, § 5",
+          label,
+        },
+        chained: { decide_on_screen: decideOnScreen },
+      });
+    const change = changeOf(false);
+    expect(
+      spokenApprovalPieces(change, { language: "en", now: NOW }).map(
+        (piece) => [piece.role, piece.text, piece.mustSay],
+      ),
+    ).toEqual([
+      ["what", "Change “Vertrag.docx”.", false],
+      ["detail", "Updates 2 of 9 sections: § 3, § 5.", true],
+      ["request", "Please confirm on screen.", false],
+    ]);
+    expect(voiceApprovalOffered(change)).toBe(true);
+    // A card that needs a tick on screen is never approved by voice.
+    expect(voiceApprovalOffered(changeOf(true))).toBe(false);
+    expect(sameSpokenKind(change, change)).toBe(false);
+  });
+
   it("points to the screen for other cards and other languages", () => {
     expect(
       spokenApprovalPieces(

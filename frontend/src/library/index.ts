@@ -75,7 +75,12 @@ export {
   useOutlookArtifact,
   type HostFenceRules,
 } from "@/components/ui/Message/MessageContent";
-export type { HostArtifact, OutlookArtifact } from "@/types/chat";
+export type {
+  HostArtifact,
+  HostSubmittedCard,
+  OutlookArtifact,
+} from "@/types/chat";
+export { submittedCardsOf } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
@@ -111,6 +116,14 @@ export {
   type EntityRowStatus,
 } from "@/components/ui/Settings/EntityRow";
 export { McpToolApprovalSettings } from "@/components/ui/Settings/McpToolApprovalSettings";
+export {
+  ClientToolDecisionList,
+  type ClientToolDecisionListTool,
+} from "@/components/ui/Settings/ClientToolDecisionList";
+export {
+  approvalToolRows,
+  useApprovalTools,
+} from "@/components/ui/Settings/OfficeAppsToolDecisions";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,
@@ -663,6 +676,8 @@ export {
   type EratoEmailCodeBlockProps,
   type EratoAppointmentCodeBlockProps,
   type HostCardCodeBlockProps,
+  type ApprovalItemCardProps,
+  type ApprovalItemDecisionExtras,
   type ChatAddMenuExtraContentProps,
   type AddinStartViewProps,
   type AddinChatAccess,
@@ -762,6 +777,8 @@ export type { DelegationRunMode } from "@/lib/generated/v1betaApi/v1betaApiSchem
 export type {
   ActionFacetInfo,
   ActionFacetRequest,
+  ApprovalToolInfo,
+  ChainedApprovalRef,
   ChatModel,
   ContentPart,
   FacetsResponse,

@@ -13,6 +13,7 @@ import {
 } from "./ApprovalDecisionActions";
 import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
+import { OwnClientToolApprovalItem } from "./OwnClientToolApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
 import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import { WaitingTaskItem } from "./WaitingTaskItem";
@@ -27,6 +28,7 @@ import type {
   ApprovalScopeOffer,
   StagedDecisions,
 } from "./approvalItems";
+import type { ApprovalItemDecisionExtras } from "@/config/componentRegistry";
 import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ContentPartToolApprovalRequest,
@@ -54,6 +56,8 @@ import type {
  * item held when the item goes.
  */
 export const ApprovalQueueCard = ({
+  messageId,
+  chatId = null,
   request,
   items,
   waiting = [],
@@ -66,6 +70,9 @@ export const ApprovalQueueCard = ({
   scopeOffer,
   onDecideScope,
 }: {
+  /** The parked message, for a host's own card of a client tool call. */
+  messageId?: string;
+  chatId?: string | null;
   request: Pick<
     ContentPartToolApprovalRequest,
     "kind" | "requested_at" | "allow_always" | "mcp_server_id" | "annotations"
@@ -82,7 +89,11 @@ export const ApprovalQueueCard = ({
   staged: StagedDecisions;
   isArchived: boolean;
   isBusy: boolean;
-  onDecideItem: (approvalId: string, decision: ToolApprovalDecision) => void;
+  onDecideItem: (
+    approvalId: string,
+    decision: ToolApprovalDecision,
+    extras?: ApprovalItemDecisionExtras,
+  ) => void;
   onDecideAll: (decision: ToolApprovalDecision) => void;
   /** How an item's document or response scope is offered, if it has one. */
   scopeOffer?: (item: ApprovalItemPart) => ApprovalScopeOffer | undefined;
@@ -299,7 +310,22 @@ export const ApprovalQueueCard = ({
             data-tool-name={current.tool_name}
             className="rounded-md border border-theme-border p-2"
           >
-            {kind === "builtin_tool" ? (
+            {kind === "client_tool" && messageId !== undefined ? (
+              <OwnClientToolApprovalItem
+                item={current}
+                serverId={request.mcp_server_id}
+                messageId={messageId}
+                chatId={chatId}
+                allowAlways={itemAllowsAlways(current, request)}
+                {...stagedItemPresentation(
+                  staged[current.approval_id],
+                  isArchived,
+                )}
+                isBusy={isBusy}
+                scrollIntoViewOnMount
+                onDecide={onDecideItem}
+              />
+            ) : kind === "builtin_tool" ? (
               <BuiltinToolApprovalItem
                 toolName={current.tool_name}
                 display={current.display}

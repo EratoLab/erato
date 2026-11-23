@@ -41,8 +41,11 @@ import type { AlertProps } from "@/components/ui/Feedback/Alert";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
+import type { ActionConfirmationStatus } from "@/components/ui/Message/ActionConfirmationCard";
+import type { ApprovalItemPart } from "@/components/ui/Message/approvalItems";
 import type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 import type { WelcomeScreenProps } from "@/components/ui/WelcomeScreen";
+import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ComponentKitVersionStance } from "@/shared/surfaceVersion";
 import type { MessageControlsProps } from "@/types/message-controls";
 import type { ComponentType, ReactNode } from "react";
@@ -73,6 +76,52 @@ export interface HostCardCodeBlockProps {
   language: string;
   /** The raw text inside the fence (may be incomplete while streaming). */
   content: string;
+}
+
+/** What a host card sends with its decision, beside the decision itself. */
+export interface ApprovalItemDecisionExtras {
+  /**
+   * The user's choices on the host's own card, such as a tick, sent as the
+   * decision's `client_confirmation`. Sent only with an approval of an item
+   * the server chained (`item.chained`); opaque to the server, at most 4 KiB
+   * of JSON.
+   */
+  clientConfirmation?: unknown;
+  /** For `request_change`: what the user wants different, in their words. */
+  changeRequest?: string;
+}
+
+/**
+ * Props for a host's own card for one approval item of the turn's own client
+ * tool call, shown where the chat asks for decisions. The host dispatches on
+ * `${serverId}/${item.tool_name}` and calls `renderDefault()` for any tool it
+ * does not draw.
+ */
+export interface ApprovalItemCardProps {
+  /** The item: `approval_id`, `tool_name`, `input`, `display`, `chained`. */
+  item: ApprovalItemPart;
+  /** The request's `mcp_server_id`: a client tool's namespace. */
+  serverId: string;
+  messageId: string;
+  chatId: string | null;
+  /** Whether Always allow may be offered for this item. */
+  allowAlways: boolean;
+  status: ActionConfirmationStatus;
+  /** Text for a card shown resolved, such as an archived chat's. */
+  resolvedLabel: string | undefined;
+  /** A decision is on its way, or the chat is still settling. */
+  isBusy: boolean;
+  onDecide: (
+    decision: ToolApprovalDecision,
+    extras?: ApprovalItemDecisionExtras,
+  ) => void;
+  /**
+   * The generic card, for tools the host does not draw. A host whose own
+   * review of the item is gone (its pane reloaded) can show it with a line of
+   * its own as `note`; for a chained item it shows the server's title and
+   * summary with the same decisions.
+   */
+  renderDefault: (options?: { note?: ReactNode }) => ReactNode;
 }
 
 /**
@@ -319,6 +368,18 @@ export interface ComponentRegistry {
   HostCardCodeBlock: ComponentType<HostCardCodeBlockProps> | null;
 
   /**
+   * A host's own card for an approval item of the turn's own client tool
+   * call, such as a document change the server applies once the user
+   * decides. Rendered where the chat asks for decisions, in place of the
+   * generic card; the host calls `renderDefault()` for tools it does not
+   * draw. A chained item whose tool cannot run on this device always gets
+   * the generic card, which offers no approval there.
+   *
+   * When null, every item gets the generic card.
+   */
+  ApprovalItemCard: ComponentType<ApprovalItemCardProps> | null;
+
+  /**
    * Start view hosted by the Office add-in shell (Outlook task pane). When a
    * kit registers it, the task pane opens on this view first and the shell
    * shows a toggle to switch to the regular chat and back. When null, the
@@ -430,6 +491,7 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   EratoEmailCodeBlock: null,
   EratoAppointmentCodeBlock: null,
   HostCardCodeBlock: null,
+  ApprovalItemCard: null,
   AddinStartView: null,
   AddinChatAccessProvider: null,
   DesktopReviewItemRow: null,

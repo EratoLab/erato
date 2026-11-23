@@ -25,8 +25,11 @@ interface ActionConfirmationCardProps {
    * nodes render as-is.
    */
   description?: ReactNode;
-  /** Allow the action this one time; the card will ask again next time. */
-  onAllowOnce: () => void;
+  /**
+   * Allow the action this one time; the card will ask again next time. Omit
+   * to hide the button, where the action cannot run from this device.
+   */
+  onAllowOnce?: () => void;
   /**
    * Allow this action and the like ones on the same scope, such as every read
    * of one document, until the scope changes. Omit to hide the button.
@@ -244,7 +247,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   }, [announcementText]);
 
   const statesLoss = allowOnceEmphasis === "loss";
-  const allowOnceButton = (
+  const allowOnceButton = onAllowOnce && (
     <Button
       variant={allowOnceEmphasis === "filled" ? "primary" : "secondary"}
       size="sm"

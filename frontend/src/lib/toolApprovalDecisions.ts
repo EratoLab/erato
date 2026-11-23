@@ -16,7 +16,16 @@ export interface DecidedApproval {
   changeRequest?: string;
   /** For `approve` or `reject` said by voice: the endpoint's receipt. */
   voiceReceipt?: string;
+  /**
+   * For `approve` or `approve_always` of an item the server chained: what the
+   * user chose on the host's own card, sent as `client_confirmation`.
+   */
+  clientConfirmation?: unknown;
 }
+
+/** The decisions that may carry a host card's `client_confirmation`. */
+const takesClientConfirmation = (decision: ToolApprovalDecision): boolean =>
+  decision === "approve" || decision === "approve_always";
 
 /**
  * Whether a decision lets the gated call run.
@@ -56,7 +65,7 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  *
  * A change request is always enumerated: it names its approval and carries
  * the user's words. So is a decision said by voice, which carries its
- * receipt.
+ * receipt, and an approval with a host card's choices.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -85,7 +94,9 @@ export const buildContinueStreamBody = ({
       (item) =>
         item.decision === "approve_context" ||
         item.decision === "request_change" ||
-        item.voiceReceipt !== undefined,
+        item.voiceReceipt !== undefined ||
+        (item.clientConfirmation !== undefined &&
+          takesClientConfirmation(item.decision)),
     )
   ) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
@@ -102,6 +113,14 @@ export const buildContinueStreamBody = ({
         ? { change_request: item.changeRequest }
         : {}),
       ...(item.voiceReceipt ? { voice_receipt: item.voiceReceipt } : {}),
+      ...(item.clientConfirmation !== undefined &&
+      takesClientConfirmation(item.decision)
+        ? {
+            client_confirmation: item.clientConfirmation as NonNullable<
+              ApprovalDecisionItem["client_confirmation"]
+            >,
+          }
+        : {}),
     }));
     return {
       message_id: messageId,

@@ -149,6 +149,13 @@ export type ApprovalDecisionItem = {
    * Refused on any other decision.
    */
   change_request?: string;
+  /**
+   * What the user chose on a host's own card, such as a tick, for
+   * `approve` or `approve_always` of an item with `chained` set. Opaque to
+   * the server, at most 4 KiB of JSON; the apply call carries it to the
+   * client as `confirmation`.
+   */
+  client_confirmation?: Record<string, any>;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -199,6 +206,7 @@ export type ApprovalItem = {
    * is stored and replayed under it.
    */
   called_as?: string;
+  chained?: ChainedApprovalRef;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
   input: Value;
@@ -316,6 +324,25 @@ export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
  * How a spoken card is worded.
  */
 export type ApprovalSpeechWording = "precise" | "natural";
+
+/**
+ * A server-called tool whose calls the user decides on.
+ */
+export type ApprovalToolInfo = {
+  /**
+   * `user_decision` (Ask, Always or Never) or `every_call`, which asks
+   * every time and offers no Always.
+   */
+  approval: string;
+  /**
+   * `namespace/name`, the key of its stored decision.
+   */
+  qualified_name: string;
+  /**
+   * What the tool does, for the settings list.
+   */
+  title: string;
+};
 
 export type ApprovalVoiceCommand = {
   decision?: ApprovalVoiceDecision;
@@ -1063,6 +1090,24 @@ export type CardChangedError = {
    * Always `card_changed`.
    */
   code: string;
+};
+
+/**
+ * The accepted submission a server-chained apply call applies.
+ */
+export type ChainedApprovalRef = {
+  /**
+   * The user decides on screen: the card needs a tick or a row choice, so
+   * it offers no Always and takes no decision by voice.
+   */
+  decide_on_screen: boolean;
+  /**
+   * The host's short code for why it asks again after it found, while
+   * writing, that the user must confirm something, such as
+   * `whole_document`.
+   */
+  reason?: string;
+  submission_call_id: string;
 };
 
 /**
@@ -2509,6 +2554,12 @@ export type FacetInfo = {
 
 export type FacetsResponse = {
   action_facets?: ActionFacetInfo[];
+  /**
+   * The tools the server calls to apply a change the user approves, which
+   * the listed facets can reach. Clients list them in the user's tool
+   * settings, and offer the server's decision flow where one is listed.
+   */
+  approval_tools?: ApprovalToolInfo[];
   facets: FacetInfo[];
   global_facet_settings: GlobalFacetSettings;
 };

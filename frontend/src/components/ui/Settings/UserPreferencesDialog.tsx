@@ -31,6 +31,10 @@ import {
 } from "@/providers/FeatureConfigProvider";
 
 import { DisclaimersPane } from "./DisclaimersPane";
+import {
+  OfficeAppsToolDecisions,
+  useApprovalTools,
+} from "./OfficeAppsToolDecisions";
 import { ServersToolsPane } from "./ServersToolsPane";
 import {
   StartingAssistantSetting,
@@ -208,13 +212,17 @@ export function UserPreferencesDialog({
     },
   );
 
+  // Decisions for changes in Office apps follow the user to this app too.
+  const approvalTools = useApprovalTools(isOpen);
+  const hasApprovalTools = approvalTools.length > 0;
+
   const visibleTabs = useMemo(
     () =>
       [
         ...(personalizationEnabled ? (["personalization"] as const) : []),
         "appearance",
         ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-        ...(desktopSidecarTabEnabled || mcpServersTabEnabled
+        ...(desktopSidecarTabEnabled || mcpServersTabEnabled || hasApprovalTools
           ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
             (["serversTools"] as const)
           : []),
@@ -226,6 +234,7 @@ export function UserPreferencesDialog({
       dataTabEnabled,
       desktopSidecarTabEnabled,
       disclaimersTabEnabled,
+      hasApprovalTools,
       mcpServersTabEnabled,
       personalizationEnabled,
     ],
@@ -812,7 +821,9 @@ export function UserPreferencesDialog({
                       : null
                   }
                   showDesktopSidecar={desktopSidecarTabEnabled}
-                />
+                >
+                  <OfficeAppsToolDecisions tools={approvalTools} />
+                </ServersToolsPane>
               ) : null}
             </section>
 

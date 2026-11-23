@@ -1684,6 +1684,62 @@ describe("MessageContent", () => {
       }
     });
 
+    it("renders each submitted card after the step that made its call", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        const call = (id: string) =>
+          ({ ...toolUseContent({}), tool_call_id: id }) as ContentPart;
+        renderWithTheme(
+          <MessageContent
+            content={[
+              call("call-1"),
+              ...textContent("First step applied, now the second."),
+              call("call-2"),
+              ...textContent("Both steps are done."),
+            ]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCards: [
+                {
+                  toolCallId: "call-2",
+                  language: "editor-draft",
+                  content: "Second change",
+                },
+                {
+                  toolCallId: "call-1",
+                  language: "editor-draft",
+                  content: "First change",
+                },
+              ],
+            }}
+          />,
+        );
+        const cards = screen.getAllByTestId("submitted-card");
+        expect(cards.map((card) => card.textContent)).toEqual([
+          "First change",
+          "Second change",
+        ]);
+        const between = screen.getByText("First step applied, now the second.");
+        const last = screen.getByText("Both steps are done.");
+
+        const follows = (a: Node, b: Node) =>
+          (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0;
+        expect(follows(cards[0], between)).toBe(true);
+        expect(follows(between, cards[1])).toBe(true);
+        expect(follows(cards[1], last)).toBe(true);
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
     it("renders one submitted card when a model also echoes the legacy fence", () => {
       const original = componentRegistry.HostCardCodeBlock;
       componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
