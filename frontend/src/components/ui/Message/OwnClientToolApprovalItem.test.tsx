@@ -333,6 +333,36 @@ describe("a host's own card in the decision place", () => {
   });
 });
 
+/** The chained change on one stop with a task's question, asked at `taskAskedAt`. */
+const withTask = (
+  base: McpToolApprovalRequestPart,
+  taskAskedAt = "2026-11-23T10:00:05Z",
+) =>
+  ({
+    ...base,
+    approvals: [
+      ...(base.approvals ?? []),
+      {
+        approval_id: "task-a",
+        tool_call_id: "task-a",
+        tool_name: "delegate_task",
+        input: { task: "Summarize the release notes" },
+        child: {
+          child_chat_id: "11111111-1111-1111-1111-111111111111",
+          child_message_id: "22222222-2222-2222-2222-222222222222",
+          child_tool_call_id: "child-call-1",
+          tool_name: "publish_approval_probe",
+          mcp_server_id: "mock_mcp_approval",
+          input: { channel: "release" },
+          annotations: base.annotations,
+          preset: "permissive",
+          requested_at: taskAskedAt,
+          allow_always: false,
+        },
+      },
+    ],
+  }) as unknown as McpToolApprovalRequestPart;
+
 describe("a host's own card in a queue", () => {
   it("holds the host card's choices until the stop is fully decided", async () => {
     registerApplyExecutor();
@@ -346,33 +376,8 @@ describe("a host's own card in a queue", () => {
         Apply
       </button>
     );
-    const base = chainedRequest();
-    const request = {
-      ...base,
-      approvals: [
-        ...(base.approvals ?? []),
-        {
-          approval_id: "task-a",
-          tool_call_id: "task-a",
-          tool_name: "delegate_task",
-          input: { task: "Summarize the release notes" },
-          child: {
-            child_chat_id: "11111111-1111-1111-1111-111111111111",
-            child_message_id: "22222222-2222-2222-2222-222222222222",
-            child_tool_call_id: "child-call-1",
-            tool_name: "publish_approval_probe",
-            mcp_server_id: "mock_mcp_approval",
-            input: { channel: "release" },
-            annotations: base.annotations,
-            preset: "permissive",
-            requested_at: "2026-11-23T10:00:05Z",
-            allow_always: false,
-          },
-        },
-      ],
-    } as unknown as McpToolApprovalRequestPart;
     const continueToolApproval = vi.fn().mockResolvedValue(undefined);
-    renderCard(request, continueToolApproval);
+    renderCard(withTask(chainedRequest()), continueToolApproval);
 
     expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -388,6 +393,99 @@ describe("a host's own card in a queue", () => {
               decision: "approve",
               clientConfirmation: { rows: [1] },
             },
+            { approvalId: "task-a", decision: "approve" },
+          ],
+        }),
+      ),
+    );
+  });
+});
+
+describe("Allow all on a stop with a chained change", () => {
+  it("leaves a change that cannot be made here open, and allows the rest", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withTask(chainedRequest(), "2026-11-23T09:59:00Z"),
+      continueToolApproval,
+    );
+
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+
+    expect(continueToolApproval).not.toHaveBeenCalled();
+    expect(
+      screen.getByTestId("chained-approval-elsewhere"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("tool-approval-allow-all"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Deny"));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          itemDecisions: [
+            { approvalId: APPLY_ID, decision: "reject" },
+            { approvalId: "task-a", decision: "approve" },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("leaves a change that needs a choice on screen to its card", async () => {
+    registerApplyExecutor();
+    hostCard = (props) => (
+      <button
+        type="button"
+        onClick={() =>
+          props.onDecide("approve", {
+            clientConfirmation: { replace_whole_document: true },
+          })
+        }
+      >
+        Apply
+      </button>
+    );
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withTask(
+        chainedRequest({ decide_on_screen: true, reason: "whole_document" }),
+        "2026-11-23T09:59:00Z",
+      ),
+      continueToolApproval,
+    );
+
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+    expect(continueToolApproval).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          itemDecisions: [
+            {
+              approvalId: APPLY_ID,
+              decision: "approve",
+              clientConfirmation: { replace_whole_document: true },
+            },
+            { approvalId: "task-a", decision: "approve" },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it("allows a change this device can make with the rest", async () => {
+    registerApplyExecutor();
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(withTask(chainedRequest()), continueToolApproval);
+
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          itemDecisions: [
+            { approvalId: APPLY_ID, decision: "approve" },
             { approvalId: "task-a", decision: "approve" },
           ],
         }),

@@ -22,6 +22,15 @@ export const approvableHere = (
   item.chained == null || getClientToolExecutor(item.tool_name) !== undefined;
 
 /**
+ * Whether only the item's own card can approve it: a change that needs a tick
+ * or a choice on screen, or one only another device can make. No voice and no
+ * "Allow all" approve such an item.
+ */
+export const onlyItsCardApproves = (
+  item: Pick<ApprovalItemPart, "chained" | "tool_name">,
+): boolean => item.chained?.decide_on_screen === true || !approvableHere(item);
+
+/**
  * The turn's own client tool call in the decision place: the host's own card
  * where one is registered, else the generic one. A chained item whose tool
  * cannot run here always gets the generic card, which offers no approval.

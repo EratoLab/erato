@@ -52,7 +52,7 @@ import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import {
-  approvableHere,
+  onlyItsCardApproves,
   OwnClientToolApprovalItem,
 } from "./OwnClientToolApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
@@ -641,6 +641,26 @@ export const McpToolApprovalCard = ({
   const decideAll = (decision: ToolApprovalDecision) => {
     const approves = isApprovalDecision(decision);
     const held = approves ? staged : {};
+    // An item only its own card can approve stays open, and the queue moves
+    // on to it with every other item allowed.
+    const leftOpen = approves
+      ? approvalItems.filter(
+          (item) =>
+            held[item.approval_id] === undefined && onlyItsCardApproves(item),
+        )
+      : [];
+    if (leftOpen.length > 0) {
+      stopApprovalSpeech();
+      setStaged({
+        ...Object.fromEntries(
+          approvalItems
+            .filter((item) => !leftOpen.includes(item))
+            .map((item) => [item.approval_id, decision]),
+        ),
+        ...held,
+      });
+      return;
+    }
     setStaged({});
     setStagedPositions({});
     setStagedExtras({});
@@ -889,10 +909,7 @@ export const McpToolApprovalCard = ({
   // A card that needs a choice on screen, or a change only another device can
   // make, is never decided by voice.
   const screenOnlyKey = approvalItems
-    .map(
-      (item) =>
-        `${item.approval_id}:${item.chained?.decide_on_screen === true || !approvableHere(item)}`,
-    )
+    .map((item) => `${item.approval_id}:${onlyItsCardApproves(item)}`)
     .join("\n");
   const decideByVoice = useCallback(
     (approvalId: string): Omit<VoiceDecision, "approves"> | undefined => {
@@ -901,8 +918,7 @@ export const McpToolApprovalCard = ({
         !voiceDecisionsOn ||
         approvalItems.length !== 1 ||
         !item ||
-        item.chained?.decide_on_screen === true ||
-        !approvableHere(item)
+        onlyItsCardApproves(item)
       )
         return undefined;
       return {
