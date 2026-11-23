@@ -2671,6 +2671,7 @@ impl AppConfig {
                 }
             }
         }
+        validate_server_called_tools(&config.client_tools.tools);
 
         config
             .validate_decision_providers()
@@ -8141,8 +8142,10 @@ pub struct ClientToolsConfig {
 /// user-confirmed mutations.
 ///
 /// Returning client tools MUST be read-only / idempotent: a backend restart
-/// drops the parked turn, so a client may re-execute on recovery. Mutations
-/// must use the terminal `client_actions` (`propose_client_action`) path.
+/// drops the parked turn, so a client may re-execute on recovery. The one
+/// exception are writes the user approves through the server: a
+/// `called_by = "server"` apply tool, or a tool with `approval = "every_call"`
+/// or `"none"`. Their executors must run a call at most once per call id.
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolConfig {
     /// Tool name exposed to the model (e.g. "fetch_availability", selected in
@@ -8192,8 +8195,9 @@ pub struct ClientToolConfig {
 
     /// Opt into a validated draft submission. Validate arguments against
     /// `parameters` before dispatch; a successful client result ends generation
-    /// without another inference call. The executor must only validate/stage a
-    /// draft; applying it remains a separate user-confirmed client action.
+    /// without another inference call, unless `submission.apply` names the
+    /// tool the server then calls to apply it. The executor must only
+    /// validate/stage a draft.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub submission: Option<ClientToolSubmissionConfig>,
@@ -8284,6 +8288,72 @@ pub struct ClientToolConfig {
     #[serde(default, skip_serializing_if = "ClientToolApprovalScope::is_call")]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub approval_scope: ClientToolApprovalScope,
+
+    /// Who calls the tool. `server`: never offered to a model; the server
+    /// calls it after a submission that names it in `submission.apply` was
+    /// accepted, so the change the client checked is the change it applies.
+    /// Requires `requires_client_registration`. Default: `model`.
+    #[serde(default, skip_serializing_if = "ClientToolCalledBy::is_model")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub called_by: ClientToolCalledBy,
+
+    /// When the user is asked before a call runs. `user_decision` follows the
+    /// user's stored Ask / Always / Never (a server-called tool asks while
+    /// none is stored); `every_call` asks on every call and never offers
+    /// Always; `none` runs without asking and is left out of the user's
+    /// settings. Default: `user_decision`.
+    #[serde(default, skip_serializing_if = "ClientToolApproval::is_user_decision")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub approval: ClientToolApproval,
+
+    /// Action facet action ids this tool carries out, such as
+    /// `word.apply_document_plan`. An action facet's
+    /// `client_actions_always_ask` that lists one of them makes a call that
+    /// uses it ask every time in that facet. An id belongs to at most one
+    /// server-called tool.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub client_actions: Vec<String>,
+}
+
+/// `client_tools.tools.<id>.called_by`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolCalledBy {
+    /// Offered to the model, which calls it.
+    #[default]
+    Model,
+    /// Called by the server after an accepted submission; never offered.
+    Server,
+}
+
+impl ClientToolCalledBy {
+    pub fn is_model(&self) -> bool {
+        *self == Self::Model
+    }
+}
+
+/// `client_tools.tools.<id>.approval`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolApproval {
+    /// The user's stored decision for the tool.
+    #[default]
+    UserDecision,
+    /// Asks on every call; a stored Always does not skip it.
+    EveryCall,
+    /// Runs without asking.
+    None,
+}
+
+impl ClientToolApproval {
+    pub fn is_user_decision(&self) -> bool {
+        *self == Self::UserDecision
+    }
 }
 
 /// `client_tools.tools.<id>.approval_scope`.
@@ -8724,6 +8794,53 @@ pub struct ClientToolSubmissionConfig {
     )]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub part_key: String,
+    /// The server-called tool that applies an accepted submission. Without
+    /// the table, acceptance ends generation as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub apply: Option<ClientToolSubmissionApplyConfig>,
+}
+
+/// `[client_tools.tools.<id>.submission.apply]`: once the client accepted a
+/// submission, the server calls `tool` with it, through the tool's approval.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ClientToolSubmissionApplyConfig {
+    /// Qualified name of a `called_by = "server"` client tool.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub tool: String,
+    /// JSON Pointer to a top-level boolean argument of the submission that
+    /// says another change follows this one, such as `/more_changes`. The
+    /// server reads it and removes it before the client sees the call.
+    /// Without it, the answer ends after a change that applied cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub more_steps: Option<String>,
+    /// Applies the server calls in one answer, whatever their outcome. Must
+    /// be 1–20. Default: 5.
+    #[serde(default = "default_submission_apply_max_changes")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_changes: u32,
+    /// Qualified names of read tools whose results describe the state an
+    /// applied change replaced. When the answer goes on after an apply,
+    /// their earlier results in it reach the model shortened to their
+    /// replay receipt. Default: the submission's `recovery_read_tools`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub consumed_reads: Option<Vec<String>>,
+}
+
+fn default_submission_apply_max_changes() -> u32 {
+    5
+}
+
+impl ClientToolSubmissionConfig {
+    /// The read tools an applied change makes stale.
+    pub fn consumed_reads(&self) -> &[String] {
+        self.apply
+            .as_ref()
+            .and_then(|apply| apply.consumed_reads.as_deref())
+            .unwrap_or(&self.recovery_read_tools)
+    }
 }
 
 fn default_submission_max_attempts() -> u32 {
@@ -8769,6 +8886,7 @@ impl Default for ClientToolSubmissionConfig {
             max_part_calls: default_submission_max_part_calls(),
             max_row_tries: default_submission_max_row_tries(),
             part_key: default_submission_part_key(),
+            apply: None,
         }
     }
 }
@@ -8876,6 +8994,122 @@ fn validate_submission_parts(
                 "Client tool '{name}' is a part tool of both '{qualified}' and '{}'.",
                 other.qualified_name()
             );
+        }
+    }
+}
+
+/// Panics unless every server-called tool is applied by exactly one
+/// submission and can be dispatched like one, every `submission.apply` names
+/// such a tool with usable settings, and each facet action id belongs to at
+/// most one server-called tool.
+fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
+    for tool in tools.values() {
+        let Some(submission) = &tool.submission else {
+            continue;
+        };
+        let Some(apply) = &submission.apply else {
+            continue;
+        };
+        let qualified = tool.qualified_name();
+        if !tools.values().any(|applier| {
+            applier.qualified_name() == apply.tool
+                && applier.called_by == ClientToolCalledBy::Server
+        }) {
+            panic!(
+                "Client tool '{qualified}' submission.apply.tool '{}' must name a configured called_by = \"server\" client tool.",
+                apply.tool
+            );
+        };
+        if let Some(pointer) = &apply.more_steps {
+            let top_level = pointer
+                .strip_prefix('/')
+                .is_some_and(|key| !key.is_empty() && !key.contains('/') && key.len() <= 64);
+            if !top_level {
+                panic!(
+                    "Client tool '{qualified}' submission.apply.more_steps must point to a top-level argument, such as \"/more_changes\"."
+                );
+            }
+        }
+        if !(1..=20).contains(&apply.max_changes) {
+            panic!("Client tool '{qualified}' submission.apply.max_changes must be 1–20.");
+        }
+        for name in apply.consumed_reads.iter().flatten() {
+            let read = configured_non_submission_tool(tools, name);
+            if read.is_none_or(|read| {
+                read.namespace_or_default() != tool.namespace_or_default()
+                    || read.called_by == ClientToolCalledBy::Server
+            }) {
+                panic!(
+                    "Client tool '{qualified}' submission.apply.consumed_reads entry '{name}' must name a configured model-called client tool of the namespace '{}'.",
+                    tool.namespace_or_default()
+                );
+            }
+        }
+    }
+    let mut action_owners: HashMap<&str, String> = HashMap::new();
+    for tool in tools.values() {
+        let qualified = tool.qualified_name();
+        for action in &tool.client_actions {
+            if action.is_empty() || action != action.trim() {
+                panic!("Client tool '{qualified}' has an empty or untrimmed client_actions entry.");
+            }
+        }
+        if tool.approval != ClientToolApproval::UserDecision
+            && tool.child_access == ClientToolChildAccess::Read
+        {
+            panic!(
+                "Client tool '{qualified}' cannot combine approval = \"every_call\" or \"none\" with child_access = \"read\"."
+            );
+        }
+        if tool.called_by != ClientToolCalledBy::Server {
+            continue;
+        }
+        let refusal = if !tool.requires_client_registration {
+            Some("requires requires_client_registration = true")
+        } else if tool.submission.is_some() {
+            Some("cannot be a submission")
+        } else if tool.durable.is_some() {
+            Some("cannot be durable")
+        } else if tool.child_access == ClientToolChildAccess::Read {
+            Some("cannot set child_access = \"read\"")
+        } else if tool.approval_scope == ClientToolApprovalScope::Context {
+            Some("cannot set approval_scope = \"context\"")
+        } else if tool.approval == ClientToolApproval::None {
+            Some("cannot set approval = \"none\"")
+        } else if tools.values().any(|owner| {
+            owner
+                .submission
+                .as_ref()
+                .is_some_and(|submission| submission.part_tools.contains(&qualified))
+        }) {
+            Some("cannot be a part tool")
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
+            panic!("Client tool '{qualified}' sets called_by = \"server\" and {refusal}.");
+        }
+        let appliers = tools
+            .values()
+            .filter(|owner| {
+                owner
+                    .submission
+                    .as_ref()
+                    .and_then(|submission| submission.apply.as_ref())
+                    .is_some_and(|apply| apply.tool == qualified)
+            })
+            .count();
+        if appliers != 1 {
+            panic!(
+                "Client tool '{qualified}' sets called_by = \"server\" and must be named by exactly one submission.apply.tool, not {appliers}."
+            );
+        }
+        for action in &tool.client_actions {
+            if let Some(previous) = action_owners.insert(action, qualified.clone()) {
+                panic!(
+                    "Client action '{action}' is listed by the server-called tools '{previous}' and '{qualified}'."
+                );
+            }
         }
     }
 }

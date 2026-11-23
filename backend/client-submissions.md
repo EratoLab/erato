@@ -1,8 +1,8 @@
 # Validated client submissions
 
-A submission is an opt-in client tool that validates and stages a structured draft for review. A successful result ends generation immediately. Ordinary client tools still return their results to the model and continue generation.
+A submission is an opt-in client tool that validates and stages a structured draft for review. A successful result ends generation immediately, unless the submission names a tool the server then calls to apply it (see "Applying an accepted submission"). Ordinary client tools still return their results to the model and continue generation.
 
-This is infrastructure for hosts that need a typed artifact. It does not implement an editor, an artifact schema, a review UI, or permission to apply changes. Domain schemas and model instructions remain deployment configuration; the host owns semantic validation and user confirmation.
+This is infrastructure for hosts that need a typed artifact. It does not implement an editor, an artifact schema or a review UI. Domain schemas and model instructions remain deployment configuration; the host owns semantic validation and user confirmation.
 
 ## Contract
 
@@ -10,8 +10,8 @@ This is infrastructure for hosts that need a typed artifact. It does not impleme
 2. The backend validates those arguments against the configured JSON Schema before dispatching to the client. Schemas compile offline; local `$defs`/`$ref` references are supported, external retrieval is disabled. Two parts of the schema that a check applies to the same value must not lead back to the same subschema through the same property (or both through array items, or one through `additionalProperties`/`patternProperties`): two alternatives of an `anyOf` or `oneOf`, an alternative and a keyword next to the choice such as shared `properties`, or two `allOf` members. A failed check collects the errors of every alternative and every keyword, so it would repeat at every nesting level of the value, and a small input could take minutes. Keep the recursive property in one place, for example next to the `anyOf`, and set it to `true` in the alternatives. The backend refuses such a submission or part tool schema at startup. Some models send a large array or object argument as a JSON string. Where no schema alternative admits a string and one admits the decoded value, the backend decodes it first; the decoded arguments are what the model's replayed call, the stored message and the client see. The string's first JSON value is decoded when only whitespace and at most two closing brackets or braces follow it (some models end such a string with an extra `}]`); anything else after it, including a longer run of closers, leaves the string as sent. The same applies to the whole arguments object when the provider delivers it as one JSON string.
 3. The host validates domain rules using its authoritative parser: references, current state, supported operations, permissions, and so on. The executor may stage a draft but must not apply it.
 4. On failure, the tool result contains compact `validation_errors` and the remaining attempt count. Only a failed submission resumes inference. The default allows three attempts total (the initial attempt plus two corrections), configurable from one to ten. Submission attempts are reserved before ordinary tool-budget admission and do not consume that budget. Prose-only and unrelated-tool replies while correction is pending consume an unsuccessful attempt.
-5. On success, the host returns a small receipt such as `{ "draft_id": "draft-1" }`. The backend records the call and result, emits the normal tool update and message completion, and makes no further model request. It does not generate a confirmation or echo the artifact in the result.
-6. The host displays its review UI from the accepted call's arguments and receipt. Applying the draft is a separate user-confirmed action with the host's normal undo/recovery behavior.
+5. On success, the host returns a small receipt such as `{ "draft_id": "draft-1" }`. The backend records the call and result and emits the normal tool update. Without `submission.apply` it emits the message completion and makes no further model request. With it, the server calls the apply tool next, and the rules below decide whether the model is asked again. It does not generate a confirmation or echo the artifact in the result.
+6. The host displays its review UI from the accepted call's arguments and receipt. Without `submission.apply`, applying the draft is a separate user-confirmed action with the host's normal undo/recovery behavior; with it, the apply is the server's call and the user decides on it as on any client tool call.
 
 Executors remain idempotent by tool-call ID. A result POST may be retried after a transport failure. Cancellation and a client timeout terminate a submission without an automatic retry, because the host may still have staged it. Existing result ownership/message checks and cross-instance delivery are unchanged; structured diagnostics are preserved on both delivery paths.
 
@@ -76,6 +76,39 @@ part_key = "/row"     # JSON Pointer to the argument that names the part
 - Until the first submission call, the message carries no `submission_outcome` while the step is open, so staged parts show no correction notice, also at an approval or budget prompt. Once the step ends, the outcome is stored as for a submission.
 - A part call of a submission other than the open one is charged and routed as an ordinary client call. Without `part_tools`, nothing changes.
 
+## Applying an accepted submission
+
+A submission may name the tool that applies it:
+
+```toml
+[client_tools.tools.apply_draft]
+name = "apply_draft"
+namespace = "editor"
+description = "Change the open document"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+timeout_ms = 120000
+
+[client_tools.tools.submit_draft.submission.apply]
+tool = "editor/apply_draft"
+more_steps = "/more_changes"
+max_changes = 5
+```
+
+- **Offer.** The apply tool is never in the model's tool list. It is offered (allowed for dispatch) only to a request whose client registered it and whose user did not set it to Never. Never also hides the submission and its part tools. A client without the apply executor gets today's flow.
+- **Chain.** When the submission is accepted and the apply tool is offered, the server calls it with `{submission_call_id, draft_id, confirmation: null}` under the call id `<submission call id>.apply`, which no model call id can take. The call goes only to the client transport that owns the turn, like a live submission. It is reserved like a submission attempt: it costs no ordinary tool budget, and the per-message tool-call count is never reset. The editing step ends at acceptance, so the next change opens a fresh one. A delegated run never chains.
+- **`more_steps`.** The pointer names a top-level boolean argument of the submission. The backend keeps the value with the call's charge and removes the argument from the dispatched and stored input of every call of the submission, chained or not, because host parsers refuse unknown fields. The schema check still sees it. The model's own assistant message keeps it.
+- **Gate.** The user's decision for the apply tool: Always runs, Never refuses, Ask or none stored asks. The receipt's `approval_preview {title, summary, actions, decide_on_screen}` titles the card. `decide_on_screen` asks even under Always, without Always on the card and without a decision by voice. The active action facet's `client_actions_always_ask`, matched against the receipt's `actions` (within the tool's `client_actions`; empty means all of them), asks every time without Always. A change request on the card makes the next chained apply ask even under Always. `approval = "every_call"` asks on every call; neither can be skipped by a device review, a covering scope or a registered operation kind.
+- **Result.** The host returns `{status, verified, changed, left_out, undo_steps, snapshot, needs_follow_up, reason}`, where `status` is `applied`, `partial`, `unconfirmed`, `needs_decision`, `failed`, `stale` or `unavailable`. The backend reads only `status`, `reason` and `needs_follow_up`, and adds `changes_left`.
+- **What follows.** In order: a first `needs_decision` parks the same call again as an on-screen question without a model request (a second one is recorded as `failed`, reason `needs_decision_again`); a client that went away (`unavailable`, reason `pane_gone`, set by the backend after the reconnect grace) ends the answer; any status other than `applied`, `needs_follow_up` or a true `more_steps` asks the model again; otherwise the answer ends without a model request. On the card, Cancel ends without a model request unless more steps were planned, and Stop ends.
+- **Stop.** A Stop never interrupts a running apply: its result is awaited, recorded, and the answer ends.
+- **Cap.** After `max_changes` chained applies of any outcome, the next submission is refused before dispatch with an ordinary error that asks the model to say what is left.
+- **Prompt.** The accepted submission's result reaches the model shortened to its `replay` receipt, without the preview. When the answer goes on after an apply, the earlier results in it of the `consumed_reads` tools (default: the recovery reads) reach the model as their receipts, once; the stored results stay complete. The chained call and its result are their own assistant and tool messages.
+- **Continuation.** `ApprovalItem.chained {submission_call_id, decide_on_screen, reason}` marks the card. `ApprovalDecisionItem.client_confirmation`, at most 4 KiB of JSON on `approve` or `approve_always` of such an item, reaches the re-run call as `confirmation`. `GET /me/facets` lists the apply tools the facets reach in `approval_tools`.
+
+The apply tool writes, so its executor must run a call at most once per call id: a backend restart drops the parked turn, and the client may see the call again.
+
 ## Native schema enforcement
 
 Server validation and host validation work with every existing tool-capable provider. Native constrained generation is an additional optimization. Enable it only for a model and endpoint verified to support strict tool arguments:
@@ -124,7 +157,7 @@ The shared frontend sends those issues as `validation_errors` to the existing re
 { "submission": { "status": "accepted", "attempts_remaining": 0 } }
 ```
 
-The other statuses are `retry` and `failed`. Rejection feedback may include `submission_feedback.recovery`: `repair_arguments` (default), `read_current_context`, or `cannot_continue`. Hosts classify recovery from their parser and current request authority; the backend never interprets diagnostic prose or domain error codes. Only `read_current_context` admits declared recovery reads against the separate allowance. A missing, consumed or revoked capture must produce `cannot_continue`, not permission to recapture.
+The other statuses are `retry` and `failed`. Rejection feedback may include `submission_feedback.recovery`: `repair_arguments` (default), `read_current_context`, or `cannot_continue`. Hosts classify recovery from their parser and current request authority; the backend never interprets diagnostic prose or domain error codes. Only `read_current_context` admits declared recovery reads against the separate allowance. A missing, consumed or revoked capture must produce `cannot_continue`, not permission to recapture. The one exception is the host's own apply call (below): after it applies, or finds its capture lost, it may hand back a successor read token, because the next write still needs a new checked submission and its own decision.
 
 Tool updates also carry a typed `submission_outcome`; the final outcome is persisted in generation metadata and exposed on `ChatMessage`. Its status is `correcting`, `accepted`, or `unresolved`, with bounded attempt counts and a stable reason such as `attempts_exhausted`, `recovery_reads_exhausted`, `part_calls_exhausted`, `context_unavailable`, `timeout`, or `cancelled`. The shared message alert shows progress and terminal notices even with verbose errors disabled. Acceptance removes correction notices. “Generate answer now” and “Stop” on a budget prompt end a pending correction with `user_requested_answer` and `user_stopped` respectively, without another model request. Generate answer now first settles any task questions asked on the same prompt, and ends once none is left open (see delegated-client-tools.md). A failed or timed-out submission is retained as a failed tool result, never converted into a draft or an apply request. Hosts can restore review state from persisted accepted tool inputs/results after a reload; keeping the draft only in transient component state is insufficient.
 

@@ -3838,6 +3838,164 @@ recovery_read_tools = ["client/write_part"]
     ));
 }
 
+const CHAINED_APPLY: &str = r#"
+[client_tools.tools.read]
+name = "read_document_blocks"
+namespace = "word"
+description = "Read"
+parameters = '{"type":"object"}'
+
+[client_tools.tools.apply]
+name = "apply_document_plan"
+namespace = "word"
+description = "Change the open Word document"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["word.apply_document_plan"]
+
+[client_tools.tools.submit]
+name = "submit_document_plan"
+namespace = "word"
+description = "Check a plan"
+parameters = '{"type":"object"}'
+[client_tools.tools.submit.submission]
+recovery_read_tools = ["word/read_document_blocks"]
+[client_tools.tools.submit.submission.apply]
+tool = "word/apply_document_plan"
+more_steps = "/more_changes"
+"#;
+
+#[test]
+fn a_submission_names_the_tool_the_server_applies_it_with() {
+    let config = migrate_config_with_action_facets(CHAINED_APPLY);
+    let apply = config.client_tools.tools["submit"]
+        .submission
+        .as_ref()
+        .unwrap()
+        .apply
+        .as_ref()
+        .unwrap();
+    assert_eq!(apply.tool, "word/apply_document_plan");
+    assert_eq!(apply.max_changes, 5);
+    assert_eq!(
+        config.client_tools.tools["submit"]
+            .submission
+            .as_ref()
+            .unwrap()
+            .consumed_reads(),
+        ["word/read_document_blocks"]
+    );
+    let tool = &config.client_tools.tools["apply"];
+    assert_eq!(tool.called_by, erato::config::ClientToolCalledBy::Server);
+    assert_eq!(
+        tool.approval,
+        erato::config::ClientToolApproval::UserDecision
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "sets called_by = \"server\" and requires requires_client_registration = true"
+)]
+fn a_server_called_tool_needs_a_registered_executor() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("requires_client_registration = true\n", ""),
+    );
+}
+
+#[test]
+#[should_panic(expected = "sets called_by = \"server\" and cannot set approval = \"none\"")]
+fn a_server_called_tool_always_has_a_decision() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "called_by = \"server\"",
+        "called_by = \"server\"\napproval = \"none\"",
+    ));
+}
+
+#[test]
+#[should_panic(expected = "must be named by exactly one submission.apply.tool, not 0")]
+fn a_server_called_tool_belongs_to_a_submission() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "[client_tools.tools.submit.submission.apply]\ntool = \"word/apply_document_plan\"\nmore_steps = \"/more_changes\"\n",
+        "",
+    ));
+}
+
+#[test]
+#[should_panic(expected = "must name a configured called_by = \"server\" client tool")]
+fn the_apply_tool_must_be_server_called() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "tool = \"word/apply_document_plan\"",
+        "tool = \"word/read_document_blocks\"",
+    ));
+}
+
+#[test]
+#[should_panic(expected = "submission.apply.more_steps must point to a top-level argument")]
+fn more_steps_points_to_a_top_level_argument() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("\"/more_changes\"", "\"/plan/more_changes\""),
+    );
+}
+
+#[test]
+#[should_panic(expected = "submission.apply.max_changes must be 1–20")]
+fn max_changes_is_bounded() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "more_steps = \"/more_changes\"",
+        "more_steps = \"/more_changes\"\nmax_changes = 21",
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "consumed_reads entry 'outlook/read' must name a configured model-called client tool"
+)]
+fn consumed_reads_are_reads_of_the_same_namespace() {
+    migrate_config_with_action_facets(&format!(
+        "{}consumed_reads = [\"outlook/read\"]\n",
+        CHAINED_APPLY
+    ));
+}
+
+#[test]
+#[should_panic(expected = "is listed by the server-called tools")]
+fn a_client_action_belongs_to_one_server_called_tool() {
+    migrate_config_with_action_facets(&format!(
+        r#"{CHAINED_APPLY}
+[client_tools.tools.apply_comments]
+name = "apply_comment_changes"
+namespace = "word"
+description = "Change comments"
+parameters = '{{"type":"object"}}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["word.apply_document_plan"]
+
+[client_tools.tools.submit_comments]
+name = "submit_comment_changes"
+namespace = "word"
+description = "Check comment changes"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.submit_comments.submission]
+[client_tools.tools.submit_comments.submission.apply]
+tool = "word/apply_comment_changes"
+"#
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "cannot combine approval = \"every_call\" or \"none\" with child_access = \"read\""
+)]
+fn a_task_read_never_asks_every_time() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "description = \"Read\"",
+        "description = \"Read\"\napproval = \"every_call\"\nchild_access = \"read\"\nhost_context = \"word_document\"",
+    ));
+}
+
 fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"

@@ -1431,6 +1431,7 @@ mod deciding_by_voice {
             input: json!({"id": 7, "status": "done"}),
             child: None,
             replaces_approval_id: None,
+            chained: None,
         }
     }
 
@@ -1467,6 +1468,26 @@ mod deciding_by_voice {
         assert!(stop_is_screen_only(
             ToolApprovalKind::McpTool,
             &two,
+            Some("a1")
+        ));
+        let chained = |decide_on_screen| {
+            [ApprovalItem {
+                chained: Some(crate::models::message::ChainedApprovalRef {
+                    submission_call_id: "call_plan".into(),
+                    decide_on_screen,
+                    reason: None,
+                }),
+                ..one[0].clone()
+            }]
+        };
+        assert!(!stop_is_screen_only(
+            ToolApprovalKind::ClientTool,
+            &chained(false),
+            Some("a1")
+        ));
+        assert!(stop_is_screen_only(
+            ToolApprovalKind::ClientTool,
+            &chained(true),
             Some("a1")
         ));
     }

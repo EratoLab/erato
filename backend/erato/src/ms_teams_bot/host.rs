@@ -1803,6 +1803,7 @@ mod tests {
                     approval_scope: None,
                 }),
                 replaces_approval_id: None,
+                chained: None,
             });
         ContentPart::ToolApprovalRequest(request)
     }

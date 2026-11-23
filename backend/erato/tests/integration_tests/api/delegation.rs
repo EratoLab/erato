@@ -1514,6 +1514,9 @@ async fn test_delegation_happy_path_runs_child_and_returns_envelope(pool: Pool<P
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -8501,6 +8504,9 @@ async fn a_task_planned_on_a_word_turn_gets_no_word_client_tools(pool: Pool<Post
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
         let mut word_tools = config.facets.facets["files"].clone();
@@ -13507,6 +13513,9 @@ async fn react_offers_optional_client_tools_only_when_registered(pool: Pool<Post
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
     }

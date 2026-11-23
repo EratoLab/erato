@@ -677,6 +677,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         FacetInfo,
         GlobalFacetSettings,
         ActionFacetInfo,
+        ApprovalToolInfo,
         FacetsResponse,
         StarterPromptInfo,
         StarterPromptsResponse,
@@ -1478,6 +1479,23 @@ pub struct FacetsResponse {
     facets: Vec<FacetInfo>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     action_facets: Vec<ActionFacetInfo>,
+    /// The tools the server calls to apply a change the user approves, which
+    /// the listed facets can reach. Clients list them in the user's tool
+    /// settings, and offer the server's decision flow where one is listed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    approval_tools: Vec<ApprovalToolInfo>,
+}
+
+/// A server-called tool whose calls the user decides on.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ApprovalToolInfo {
+    /// `namespace/name`, the key of its stored decision.
+    qualified_name: String,
+    /// What the tool does, for the settings list.
+    title: String,
+    /// `user_decision` (Ask, Always or Never) or `every_call`, which asks
+    /// every time and offers no Always.
+    approval: String,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1594,6 +1612,7 @@ pub async fn facets(
         })
         .collect();
     action_facets.sort_by(|a, b| a.id.cmp(&b.id));
+    let approval_tools = approval_tools(&app_state.config, &authorized_facet_ids);
 
     Ok(Json(FacetsResponse {
         global_facet_settings: GlobalFacetSettings {
@@ -1602,7 +1621,76 @@ pub async fn facets(
         },
         facets,
         action_facets,
+        approval_tools,
     }))
+}
+
+/// The server-called tools a facet the user may use reaches: through a
+/// submission one of its allowlists selects, or through an action it lists.
+fn approval_tools(
+    config: &crate::config::AppConfig,
+    authorized_facet_ids: &HashSet<String>,
+) -> Vec<ApprovalToolInfo> {
+    use crate::config::{ClientToolApproval, ClientToolCalledBy};
+    let mut allowlists: Vec<&[String]> = vec![&config.facets.tool_call_allowlist];
+    allowlists.extend(
+        config
+            .facets
+            .facets
+            .iter()
+            .filter(|(id, _)| authorized_facet_ids.contains(*id))
+            .map(|(_, facet)| facet.tool_call_allowlist.as_slice()),
+    );
+    allowlists.extend(
+        config
+            .action_facets
+            .facets
+            .values()
+            .map(|facet| facet.tool_call_allowlist.as_slice()),
+    );
+    let tools = &config.client_tools.tools;
+    let mut listed: Vec<ApprovalToolInfo> = tools
+        .values()
+        .filter(|tool| {
+            tool.called_by == ClientToolCalledBy::Server
+                && tool.approval != ClientToolApproval::None
+        })
+        .filter(|tool| {
+            let qualified = tool.qualified_name();
+            let by_submission = tools.values().any(|submission| {
+                submission
+                    .submission
+                    .as_ref()
+                    .and_then(|config| config.apply.as_ref())
+                    .is_some_and(|apply| apply.tool == qualified)
+                    && allowlists.iter().any(|allowlist| {
+                        message_streaming::is_qualified_tool_allowed(
+                            submission.namespace_or_default(),
+                            &submission.name,
+                            allowlist,
+                        )
+                    })
+            });
+            let by_action = config.action_facets.facets.values().any(|facet| {
+                facet
+                    .client_actions
+                    .iter()
+                    .any(|action| tool.client_actions.contains(action))
+            });
+            by_submission || by_action
+        })
+        .map(|tool| ApprovalToolInfo {
+            qualified_name: tool.qualified_name(),
+            title: tool.description.clone(),
+            approval: match tool.approval {
+                ClientToolApproval::EveryCall => "every_call",
+                _ => "user_decision",
+            }
+            .to_string(),
+        })
+        .collect();
+    listed.sort_by(|a, b| a.qualified_name.cmp(&b.qualified_name));
+    listed
 }
 
 #[utoipa::path(

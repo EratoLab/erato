@@ -1971,9 +1971,21 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.approval": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.approval_scope": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.called_by": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2004,6 +2016,12 @@
   "client_tools.tools.<key>.child_host_inputs.[]": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.client_actions.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2106,6 +2124,30 @@
   "client_tools.tools.<key>.requires_client_registration": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.apply.consumed_reads.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.apply.max_changes": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.apply.more_steps": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.apply.tool": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

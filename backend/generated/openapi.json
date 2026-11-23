@@ -5991,6 +5991,10 @@
             "type": "string",
             "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
           },
+          "client_confirmation": {
+            "type": "object",
+            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `chained` set. Opaque to\nthe server, at most 4 KiB of JSON; the apply call carries it to the\nclient as `confirmation`."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },
@@ -6049,6 +6053,10 @@
           "called_as": {
             "type": "string",
             "description": "The name the model called the tool by, set only where it is not\n`tool_name`: a name qualified with the MCP server. The continued call\nis stored and replayed under it."
+          },
+          "chained": {
+            "$ref": "#/components/schemas/ChainedApprovalRef",
+            "description": "Set when the server itself made this call to apply a change the client\nchecked and accepted: the card is the host's own."
           },
           "child": {
             "oneOf": [
@@ -6236,6 +6244,29 @@
           "precise",
           "natural"
         ]
+      },
+      "ApprovalToolInfo": {
+        "type": "object",
+        "description": "A server-called tool whose calls the user decides on.",
+        "required": [
+          "qualified_name",
+          "title",
+          "approval"
+        ],
+        "properties": {
+          "approval": {
+            "type": "string",
+            "description": "`user_decision` (Ask, Always or Never) or `every_call`, which asks\nevery time and offers no Always."
+          },
+          "qualified_name": {
+            "type": "string",
+            "description": "`namespace/name`, the key of its stored decision."
+          },
+          "title": {
+            "type": "string",
+            "description": "What the tool does, for the settings list."
+          }
+        }
       },
       "ApprovalVoiceCommand": {
         "type": "object",
@@ -7573,6 +7604,27 @@
           "code": {
             "type": "string",
             "description": "Always `card_changed`."
+          }
+        }
+      },
+      "ChainedApprovalRef": {
+        "type": "object",
+        "description": "The accepted submission a server-chained apply call applies.",
+        "required": [
+          "submission_call_id",
+          "decide_on_screen"
+        ],
+        "properties": {
+          "decide_on_screen": {
+            "type": "boolean",
+            "description": "The user decides on screen: the card needs a tick or a row choice, so\nit offers no Always and takes no decision by voice."
+          },
+          "reason": {
+            "type": "string",
+            "description": "The host's short code for why it asks again after it found, while\nwriting, that the user must confirm something, such as\n`whole_document`."
+          },
+          "submission_call_id": {
+            "type": "string"
           }
         }
       },
@@ -10421,6 +10473,13 @@
             "items": {
               "$ref": "#/components/schemas/ActionFacetInfo"
             }
+          },
+          "approval_tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalToolInfo"
+            },
+            "description": "The tools the server calls to apply a change the user approves, which\nthe listed facets can reach. Clients list them in the user's tool\nsettings, and offer the server's decision flow where one is listed."
           },
           "facets": {
             "type": "array",

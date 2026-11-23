@@ -426,6 +426,21 @@ pub struct TurnConsumption {
     /// Charges belong to logical call IDs, not executions of the recovery loop.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub tool_charges: HashMap<String, ToolCallCharge>,
+    /// The server-chained applies of the answer, by chained call id.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub chained_applies:
+        std::collections::BTreeMap<String, crate::services::chained_apply::ChainedApplyState>,
+    /// Chained applies dispatched in the answer, whatever their outcome.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub chained_applies_run: u32,
+    /// The user asked for a change on a chained apply's card: the next one
+    /// asks even under a standing Always.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ask_next_chained_apply: bool,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -443,6 +458,10 @@ pub struct ToolCallCharge {
     pub part_call: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_try: Option<u32>,
+    /// The value of a submission's `more_steps` argument, which the server
+    /// took out of the call before anything else saw it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub more_steps: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
