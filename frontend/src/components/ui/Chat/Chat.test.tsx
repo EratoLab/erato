@@ -798,8 +798,10 @@ describe("Chat empty-state shell", () => {
     dropzoneCalls.length = 0;
     useGenerationStatusStore.getState().reset();
     mockRuns([]);
-    i18n.load("en", enMessages as unknown as Messages);
-    i18n.activate("en");
+    i18n.loadAndActivate({
+      locale: "en",
+      messages: { ...(enMessages as unknown as Messages) },
+    });
   });
 
   const shell = (container: HTMLElement, hook: string) =>
@@ -875,17 +877,26 @@ describe("Chat empty-state shell", () => {
     },
   );
 
-  it.each(layoutModes)(
-    "renders the usage advisory once, in the row below the composer (%s)",
+  it.each([...layoutModes, "conversation"] as const)(
+    "renders the linked usage advisory once, in the row below the composer (%s)",
     (mode) => {
-      testState.emptyStateLayout = mode;
-      const { container } = renderChat({ emptyStateComponent: welcome });
+      if (mode !== "conversation") testState.emptyStateLayout = mode;
+      i18n.load("en", {
+        "chat.ai_usage_advisory":
+          "Read our [AI usage policy](https://example.com/ai-policy).",
+      });
+      const { container } = renderChat({
+        emptyStateComponent: welcome,
+        ...(mode === "conversation" ? firstMessage : {}),
+      });
 
       const advisories = container.querySelectorAll(
         '[data-ui="chat-usage-advisory"]',
       );
       expect(advisories).toHaveLength(1);
       expect(advisories[0].closest('[data-ui="welcome-below"]')).not.toBeNull();
+      const policyLink = screen.getByRole("link", { name: "AI usage policy" });
+      expect(advisories[0]).toContainElement(policyLink);
       const composerStub = screen.getByTestId("chat-input-stub");
       expect(
         composerStub.closest('[data-ui="composer-cluster"]'),
@@ -896,6 +907,15 @@ describe("Chat empty-state shell", () => {
 
   it("omits the advisory when the feature is off", () => {
     testState.showUsageAdvisory = false;
+    const { container } = renderChat({ emptyStateComponent: welcome });
+
+    expect(
+      container.querySelector('[data-ui="chat-usage-advisory"]'),
+    ).toBeNull();
+  });
+
+  it("omits the advisory when the translation is blank", () => {
+    i18n.load("en", { "chat.ai_usage_advisory": "   " });
     const { container } = renderChat({ emptyStateComponent: welcome });
 
     expect(

@@ -589,6 +589,16 @@ msgstr "Sie"
 >
 > For technical details on how the translation override system works, see [Internationalization (i18n)](./internationalization_i18n#how-theme-translation-overrides-work).
 
+To customize the AI usage notice below the chat input, override
+`chat.ai_usage_advisory` in your theme's `locales/<locale>/messages.po`. The
+notice supports Markdown links and emphasis. Keep the copy short so it fits the
+existing space below the input.
+
+```po
+msgid "chat.ai_usage_advisory"
+msgstr "AI-generated answers may contain errors. Read our [AI usage policy](https://example.com/ai-policy)."
+```
+
 ### User Display Name Priority
 
 When displaying user messages, the system follows this priority:
