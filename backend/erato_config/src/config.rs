@@ -3743,6 +3743,7 @@ mod audio_config_tests {
             load_conversational("[reply_speech]\nwording = \"natural\"\nuser_choice = false\n")
                 .reply_speech,
             ReplySpeechConfig {
+                spoken: true,
                 wording: ReplySpeechWording::Natural,
                 user_choice: false,
                 show_in_chat: false,

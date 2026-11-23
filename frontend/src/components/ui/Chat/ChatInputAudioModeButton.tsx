@@ -10,7 +10,7 @@ import { Button } from "../Controls/Button";
 export const AUDIO_MODE_STATIC_BAR_PATTERN: readonly number[] = [3, 5, 7, 5, 3];
 
 type ChatInputAudioModeButtonCommonProps = {
-  /** Toggle handler - starts listening when idle, stops when active. */
+  /** Starts audio mode when idle; ends it in every other state. */
   onToggle: () => void;
   disabled?: boolean;
 };
@@ -34,7 +34,23 @@ type ChatInputAudioModeButtonRecordingProps =
      * audio. Clicking still stops/cancels audio mode.
      */
     isStarting?: boolean;
+    /**
+     * Audio mode is on with the microphone closed: the voice speaks, a card
+     * waits, or the answer is still coming. Shows the resting pattern; a
+     * click still ends audio mode.
+     */
+    isQuiet?: boolean;
+    /** Announced while it listens; defaults to "Listening". */
+    listeningLabel?: string;
+    /** Test ids of the button, its waveform and its stop icon. */
+    testIds?: { root: string; waveform: string; stopIcon: string };
   };
+
+const SEND_SLOT_TEST_IDS = {
+  root: "chat-input-audio-mode-stop",
+  waveform: "chat-input-audio-mode-recording-waveform",
+  stopIcon: "chat-input-audio-mode-stop-icon",
+};
 
 type ChatInputAudioModeButtonProps =
   | ChatInputAudioModeButtonIdleProps
@@ -47,6 +63,7 @@ type ChatInputAudioModeButtonProps =
  */
 export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
   if (props.isRecording) {
+    const testIds = props.testIds ?? SEND_SLOT_TEST_IDS;
     if (props.isStarting) {
       return (
         <Button
@@ -57,7 +74,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
           disabled={props.disabled}
           aria-label={t`Stop audio mode`}
           title={t`Stop audio mode`}
-          data-testid="chat-input-audio-mode-stop"
+          data-testid={testIds.root}
           busy
           iconClassName="text-[var(--theme-fg-primary)]"
         />
@@ -67,15 +84,21 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
     return (
       <WaveformButton
         onClick={props.onToggle}
-        bars={props.recordingBars}
+        bars={
+          props.isQuiet ? AUDIO_MODE_STATIC_BAR_PATTERN : props.recordingBars
+        }
         disabled={props.disabled}
         ariaLabel={t`Stop audio mode`}
-        statusLabel={t`Listening`}
-        testIds={{
-          root: "chat-input-audio-mode-stop",
-          waveform: "chat-input-audio-mode-recording-waveform",
-          stopIcon: "chat-input-audio-mode-stop-icon",
-        }}
+        statusLabel={
+          props.isQuiet
+            ? t`Audio mode is on`
+            : (props.listeningLabel ?? t`Listening`)
+        }
+        testIds={
+          props.isQuiet
+            ? { ...testIds, waveform: "chat-input-audio-mode-quiet-waveform" }
+            : testIds
+        }
       />
     );
   }

@@ -68,6 +68,26 @@ export const Starting: Story = {
   },
 };
 
+export const Quiet: Story = {
+  name: "On, microphone closed",
+  render: () => (
+    <ChatInputAudioModeButton
+      isRecording
+      isQuiet
+      recordingBars={[]}
+      onToggle={action("toggle")}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Audio mode is on while the voice speaks, a card waits or the answer is still coming: the resting pattern, with the stop icon on hover and focus. A click ends audio mode.",
+      },
+    },
+  },
+};
+
 export const RecordingStaticBars: Story = {
   name: "Recording (frozen bars)",
   render: () => (

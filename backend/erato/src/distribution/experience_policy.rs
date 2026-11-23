@@ -259,6 +259,9 @@ pub struct ExperienceAudience {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct AudienceReplySpeech {
+    /// Whether replies are spoken in conversation; absent keeps the
+    /// deployment's `reply_speech.spoken`.
+    pub spoken: Option<bool>,
     pub wording: Option<erato_config::reply_speech::ReplySpeechWording>,
     /// Whether the audience's users may choose their own; absent keeps the
     /// deployment's `reply_speech.user_choice`.
@@ -276,6 +279,9 @@ fn lenient_reply_speech<'de, D: serde::Deserializer<'de>>(
         REPLY_SPEECH_SETTING,
         |speech: &mut AudienceReplySpeech, key, value| {
             Some(match key {
+                "spoken" => {
+                    serde_json::from_value(value).map(|spoken| speech.spoken = Some(spoken))
+                }
                 "wording" => {
                     serde_json::from_value(value).map(|wording| speech.wording = Some(wording))
                 }
@@ -358,6 +364,9 @@ fn lenient_block<'de, D: serde::Deserializer<'de>, T: Default>(
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct AudienceApprovalSpeech {
+    /// Whether waiting cards are read aloud; absent keeps the deployment's
+    /// `approval_speech.spoken`.
+    pub spoken: Option<bool>,
     pub amount: Option<crate::config::ApprovalSpeechAmount>,
     pub short_details: Option<u8>,
     pub wording: Option<crate::config::ApprovalSpeechWording>,
@@ -375,6 +384,9 @@ fn lenient_approval_speech<'de, D: serde::Deserializer<'de>>(
         APPROVAL_SPEECH_SETTING,
         |speech: &mut AudienceApprovalSpeech, key, value| {
             Some(match key {
+                "spoken" => {
+                    serde_json::from_value(value).map(|spoken| speech.spoken = Some(spoken))
+                }
                 "amount" => {
                     serde_json::from_value(value).map(|amount| speech.amount = Some(amount))
                 }
@@ -1176,16 +1188,22 @@ mod tests {
             document.audiences["engineering"].reply_speech.clone()
         };
         assert_eq!(
-            audience(r#"{"wording": "loud", "user_choice": false, "show_in_chat": "no"}"#),
+            audience(
+                r#"{"wording": "loud", "user_choice": false, "show_in_chat": "no", "spoken": "off"}"#
+            ),
             Some(AudienceReplySpeech {
+                spoken: None,
                 wording: None,
                 user_choice: Some(false),
                 show_in_chat: None,
             })
         );
         assert_eq!(
-            audience(r#"{"wording": "precise", "length": 3, "show_in_chat": true}"#),
+            audience(
+                r#"{"wording": "precise", "length": 3, "show_in_chat": true, "spoken": false}"#
+            ),
             Some(AudienceReplySpeech {
+                spoken: Some(false),
                 wording: Some(erato_config::reply_speech::ReplySpeechWording::Precise),
                 user_choice: None,
                 show_in_chat: Some(true),
@@ -1201,7 +1219,13 @@ mod tests {
             user_choice: Some(false),
             ..AudienceApprovalSpeech::default()
         });
+        let quiet = Some(AudienceApprovalSpeech {
+            spoken: Some(false),
+            ..AudienceApprovalSpeech::default()
+        });
         for (block, expected) in [
+            (r#"{"spoken": false, "amount": "medium"}"#, &quiet),
+            (r#"{"spoken": "no"}"#, &empty),
             (r#"{"wording": "Natural"}"#, &empty),
             (r#"{"amount": "medium", "user_choice": false}"#, &locked),
             (r#"{"short_details": 300, "user_choice": false}"#, &locked),

@@ -44,6 +44,10 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+vi.mock("./VoiceOutputSetting", () => ({
+  VoiceOutputSetting: () => <h2>Voice</h2>,
+}));
+
 vi.mock("../Feedback/Alert", () => ({
   Alert: ({ children }: { children: ReactNode }) => (
     <div role="alert">{children}</div>
@@ -106,6 +110,7 @@ function renderDialog({
   disclaimersTabEnabled = false,
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
+  conversationalVoice = false,
   assistantsEnabled = false,
   queryClient = new QueryClient({
     defaultOptions: {
@@ -130,6 +135,8 @@ function renderDialog({
   disclaimersTabEnabled?: boolean;
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
+  /** Conversation mode with a voice, and no other audio feature. */
+  conversationalVoice?: boolean;
   assistantsEnabled?: boolean;
   queryClient?: QueryClient;
   onClose?: () => void;
@@ -151,6 +158,11 @@ function renderDialog({
           },
           audioTranscription: {
             enabled: audioTranscriptionEnabled,
+            maxRecordingDurationSeconds: 1200,
+          },
+          audioConversational: {
+            enabled: conversationalVoice,
+            speechEnabled: conversationalVoice,
             maxRecordingDurationSeconds: 1200,
           },
           assistants: { enabled: assistantsEnabled },
@@ -541,6 +553,16 @@ describe("UserPreferencesDialog", () => {
     expect(
       within(audioPanel).queryByTestId("audio-input-not-connected"),
     ).toBeNull();
+  });
+
+  it("shows the Audio tab for conversation mode alone, the voice before the microphone", async () => {
+    renderDialog({ conversationalVoice: true, initialTab: "audio" });
+    const audioPanel = await screen.findByRole("tabpanel", { name: "Audio" });
+    expect(
+      within(audioPanel)
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Voice", "Microphone"]);
   });
 
   it("shows an Audio tab when audio transcription is enabled and persists the selected microphone", async () => {

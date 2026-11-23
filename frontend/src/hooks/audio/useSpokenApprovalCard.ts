@@ -13,7 +13,6 @@ import { takeWithdrawnCard } from "./approvalChanges";
 import {
   approvalSpoken,
   forgetApprovalCards,
-  offerApprovalCard,
   speakApprovalCard,
 } from "./approvalSpeech";
 import {
@@ -81,23 +80,23 @@ export function useSpokenApprovalCard({
   /** The user's messages before this card, the latest first, with what of them was dictated. */
   userTurns?: readonly UserTurn[];
 }): { key: string; approves: boolean } {
-  const spokenTurn = useSpeechPlayback(
+  const voicedTurn = useSpeechPlayback(
     (state) =>
       chatId !== null &&
       state.conversational &&
       state.enabled &&
       state.spokenTurn === chatId,
   );
-  const quiet = useSpeechPlayback(
-    (state) => chatId !== null && state.quietTurn === chatId,
-  );
+  const cardsSpoken = useSpeechPlayback((state) => state.cards);
+  const spokenTurn = voicedTurn && cardsSpoken;
   // A reply paused by the user talking over it may still go on.
   const modelSpeaking = useSpeechPlayback(
     (state) => state.playing || state.paused,
   );
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
-  const style = useSpokenStyle(spokenTurn);
+  // Asked even with cards off: the answer may turn them on again.
+  const style = useSpokenStyle(voicedTurn);
   const approvalId = items.at(index)?.approvalId;
   // Only a card said in full, in a language with a phrase of its own, names
   // the phrase; any other is approved on screen.
@@ -161,10 +160,7 @@ export function useSpokenApprovalCard({
       change: item ? change?.(item.approvalId) : undefined,
       decision: decision ? { ...decision, approves } : undefined,
     };
-    // A stop during the turn's own words means quiet: the card waits to be
-    // asked for.
-    if (quiet) offerApprovalCard(card);
-    else speakApprovalCard(card);
+    speakApprovalCard(card);
   }, [
     active,
     approval,
@@ -177,7 +173,6 @@ export function useSpokenApprovalCard({
     key,
     messageId,
     modelSpeaking,
-    quiet,
     responding,
     spokenTurn,
     style,

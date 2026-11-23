@@ -2608,9 +2608,11 @@ refetch and synchronize configuration; there is no policy-guide hot reload.
 
 Configure speech output separately from chat and transcription. The registry uses
 `[speech_providers.provider.<id>]`. Set `audio_conversational.speech_provider` to
-that ID, select conversational mode, and enable **Audio-back** to hear responses.
+that ID and select conversational mode to hear responses: replies are spoken
+by default (`audio_conversational.reply_speech.spoken`), and a user turns them
+off under Settings, Audio, Voice where the admin allows it.
 The `speech_provider` setting is available only in `audio_conversational`.
-Other input modes do not generate speech. Audio-back streams audio while text is generated, combining complete sentences
+Other input modes do not generate speech. Spoken replies stream audio while text is generated, combining complete sentences
 into passages of up to 2000 characters. Short passages wait up to 250 ms for
 more context; sentences queued during synthesis are combined for the next request.
 Single line breaks do not force a synthesis boundary. Completed audio is saved as a WAV file on the assistant
@@ -2753,7 +2755,7 @@ speech_provider = "voice"
 ```
 
 The text is prepared for listening and split into sentences the same way as for
-Audio-back (see above), in the language of the user who clicks. Audio starts with the first passage
+Spoken replies (see above), in the language of the user who clicks. Audio starts with the first passage
 of a long answer and is not stored: each click synthesises again and the message
 is not changed. Stopping playback, sending a message or leaving the chat ends
 the provider request. Usage is not metered. The button is not shown while an
@@ -3215,7 +3217,7 @@ talk_over_voice_min_speech_ms = 500
 
 {/* erato_toml_config_key: audio_conversational.wait_lines */}
 
-What the voice says while the user waits for an answer, when Audio-back is on. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working and that the wait is long, and then again that it is still working every `still_repeat_ms`, at most `still_repeat_max` times, so a turn that hangs goes quiet while the screen shows the wait. The wait counts from the end of the speech that became the turn; after a decision on a card it counts from the decision, with no opener. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, nothing is said into an open microphone, and no line is stored in the chat.
+What the voice says while the user waits for an answer, where replies are spoken. After a few seconds without an answer it says a short opener ("Einen Moment." / "One moment."); while a tool call that only reads runs for a moment, it says what the call looks at ("Ich sehe mir die Verkaufschancen an."); after a long wait it says that it is still working and that the wait is long, and then again that it is still working every `still_repeat_ms`, at most `still_repeat_max` times, so a turn that hangs goes quiet while the screen shows the wait. The wait counts from the end of the speech that became the turn; after a decision on a card it counts from the decision, with no opener. Nothing is said once the answer's text has started, a line that has started is finished before the answer plays, nothing is said into an open microphone, and no line is stored in the chat.
 
 The lines are synthesised once with the conversational voice and kept per voice. The browser asks at every turn whether its lines still hold, and gets new ones after a change of `speech_provider`, its model, voice or instructions, so lines and answers never come in two voices; a changed amount or timing applies from the next turn. A line the voice could not say is not asked for again for a minute; a browser whose lines came back incomplete asks for all of them again at its next turn. The opener is left out when the lines are confirmed more than 3 s after it was due.
 
@@ -3365,7 +3367,7 @@ server = "Ich sehe in {server} nach."
 
 {/* erato_toml_config_key: audio_conversational.reply_speech */}
 
-How a reply is spoken in conversation mode, when Audio-back is on. Approval cards have their own setting, `approval_speech`.
+Whether and how a reply is spoken in conversation mode. Approval cards have their own setting, `approval_speech`.
 
 With `natural`, one model call writes two parts: first a short spoken part for the ear, then the complete written answer, the same a typed question would get, with lists, tables and code. The voice says only the spoken part and starts as soon as it is written; the chat keeps the written answer, and shows what the voice said, folded, above it where `show_in_chat` is on. After a tool call the next model call starts again with a spoken part. The spoken part's style comes from `turn_instructions.spoken_reply`; without it, the built-in instruction asks for one to three short sentences. The instruction that asks for the two parts is built into Erato, in English, and the model answers in the user's language. A reply that does not keep the format is stored as written and read as written, and counted in `erato_reply_split_fallback_total`. For pure conversation ("Danke", "Hallo") the model may write no written part; the spoken text is then the message. Later turns see only the written answers of earlier replies.
 
@@ -3373,9 +3375,17 @@ With `precise`, the reply is read as written, as before this setting existed: `t
 
 The read-aloud button always reads the written text. A continuation after an approval keeps the form its turn started with, whatever the setting is by then.
 
-The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`wording`, `user_choice`, `show_in_chat`) and are listed under `setting_orders.reply_speech`; the user's own wording (`preference_reply_speech_wording`) where the deciding level allows it, and their own `preference_reply_speech_show_in_chat` always. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Replies in conversation"), next to the wording of approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
+The value a user hears is resolved like `approval_speech`: this deployment value; the audiences of the experience policy that set `reply_speech` (`spoken`, `wording`, `user_choice`, `show_in_chat`) and are listed under `setting_orders.reply_speech`; the user's own `preference_reply_speech_spoken` and wording (`preference_reply_speech_wording`) where the deciding level allows it, and their own `preference_reply_speech_show_in_chat` always. The server resolves it at the start of every spoken turn, so a change applies from the next turn. `GET /api/v1beta/me/reply-speech-style` returns the resolved value and where it came from. In the web app a user chooses it under Settings, Audio, Voice ("Speak replies" and "Replies in conversation"), next to the same choices for approval cards, and can go back to the organization's value; a row the user may not change shows that the organization set it. A value of the wrong kind keeps its default, and an unknown key is ignored, each with a warning at startup.
 
 **Type:** `object`
+
+#### `audio_conversational.reply_speech.spoken`
+
+{/* erato_toml_config_key: audio_conversational.reply_speech.spoken */}
+
+Whether replies are spoken when a user enters conversational audio mode, where `speech_provider` is set. There is no switch in the composer: what applies is this value, an audience's `spoken`, and the user's own choice under Settings, Audio, Voice ("Speak replies") where `user_choice` allows it. The server checks it again at the start of every new turn, so a turn is spoken only where it applies; a continuation after an approval keeps the form its turn started with. Off, replies are written only, wait lines are not said, and approval cards are not read aloud either.
+
+**Type:** `boolean` · **Default:** `true`
 
 #### `audio_conversational.reply_speech.wording`
 
@@ -3391,7 +3401,7 @@ Messages written in `natural` hold a `spoken` part that Erato versions before th
 
 {/* erato_toml_config_key: audio_conversational.reply_speech.user_choice */}
 
-Whether a user may choose the wording for themselves, unless an audience setting says otherwise. It does not limit `show_in_chat`.
+Whether a user may choose the wording and `spoken` for themselves, unless an audience setting says otherwise. It does not limit `show_in_chat`.
 
 **Type:** `boolean` · **Default:** `true`
 
@@ -3405,6 +3415,7 @@ Whether the chat shows what the voice said for a reply in conversation: a muted 
 
 ```toml
 [audio_conversational.reply_speech]
+spoken = true
 wording = "natural"
 user_choice = true
 show_in_chat = false
@@ -5970,14 +5981,14 @@ Syllables are groups of vowels, accented ones included (also „å“, „æ“,
 
 {/* erato_toml_config_key: approval_speech */}
 
-How much a waiting approval card says aloud in conversational audio mode, and how it is worded. No model is involved: both settings choose among sentences built by rule from the card's data.
+Whether a waiting approval card is read aloud in conversational audio mode (`spoken`), how much it says, and how it is worded. No model is involved: both settings choose among sentences built by rule from the card's data.
 
 - **How much is said** (`amount`): `full` says what the card says today (losses, up to three details, the rest counted). `short` says only the first `short_details` details in the card's own order, the one the screen uses, and holds back the rest: the voice says how many it held back ("Dazu kommen fünf weitere Felder, sie stehen auf dem Bildschirm."), and asking for the rest ("was noch?") says them. A cough over that sentence says it again; "nochmal" repeats it.
 - **How it is worded** (`wording`): `precise` names every spoken field with its old and new value. `natural` says a detail in a hand-written sentence variant with the values in fixed places ("Wahrscheinlichkeit ändert sich von 10 auf 60 Prozent."). The opening keeps its precise words: its verb is the card's action. Where the precise sentence already sounds natural, there is no built-in variant (`set`, `updated`), so the natural wording differs mainly where a deployment's `sentences` or a vocabulary's sentence for one field exists.
 
 In every combination the item is said, and the pieces that must be said (a loss such as an emptied field, the warning about recipients outside the organisation, what a delete removes, the consequence) and the request to decide keep their precise words and are never held back. A short reading never holds back what tells the user the card is not what they may expect either: a value or a read's condition that is a record never read in the chat or known only by its ID on screen, an addition to a list taken on the tool's word, and a dictated text the card does not take word for word. The card's pieces stay the same in every combination, so skipping, "the rest", repeating and the difference reading after a change request work alike; the difference reading is always precise. The card on screen does not change.
 
-The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. For `user_choice` the deployment value is a lock: when it is `false`, no audience reopens the user's choice; when it is `true`, the first matching audience that sets `user_choice` decides, so an audience can close it. Each field of an audience's block is read on its own, so a value that does not parse costs only that field. An audience setting without its own entry in `setting_orders` follows the starting assistant's order, with a warning at startup and reload; an audience missing from an existing entry has no effect, also with a warning. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
+The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`spoken`, `amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_spoken`, `preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. For `user_choice` the deployment value is a lock: when it is `false`, no audience reopens the user's choice; when it is `true`, the first matching audience that sets `user_choice` decides, so an audience can close it. Each field of an audience's block is read on its own, so a value that does not parse costs only that field. An audience setting without its own entry in `setting_orders` follows the starting assistant's order, with a warning at startup and reload; an audience missing from an existing entry has no effect, also with a warning. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them when the user signs in, on entering conversation mode and again for each card, so a changed style, or cards turned off, applies from the next card on.
 
 For now the supervisor level is edited by hand in the experience policy document: the audience needs a starting-assistant pin like every audience. List it under `setting_orders.approval_speech` to give the voice its own order; without that entry the starting assistant's order applies (`setting_orders.starting_assistant`, else `priority_order`). A field of the audience's `approval_speech` block that does not parse is ignored with a warning; its other fields and the rest of the policy, including the audience and its pin, stay in force.
 
@@ -5987,6 +5998,12 @@ amount = "short"
 short_details = 1
 wording = "natural"
 ```
+
+#### `approval_speech.spoken`
+
+{/* erato_toml_config_key: approval_speech.spoken */}
+
+Whether a waiting card is read aloud, where replies are spoken (`audio_conversational.reply_speech.spoken`). There is no button in the composer: a user turns it off under Settings, Audio, Voice ("Read approval cards aloud") where `user_choice` allows it. Off, the card waits on screen only and is not answered by voice. **Default:** `true`.
 
 #### `approval_speech.amount`
 
@@ -6010,7 +6027,7 @@ Details a short reading says before it holds back the rest, in the card's order.
 
 {/* erato_toml_config_key: approval_speech.user_choice */}
 
-Whether a user may choose their own amount and wording. `false` is a lock no audience reopens; with `true`, an audience's `user_choice = false` closes it for its members. **Default:** `true`.
+Whether a user may choose their own amount and wording and whether cards are read aloud. `false` is a lock no audience reopens; with `true`, an audience's `user_choice = false` closes it for its members. **Default:** `true`.
 
 #### `approval_speech.sentences`
 
@@ -8218,7 +8235,7 @@ that is newer than the backend does not stop it from starting.
 
 | Type           | Applies when                                                                                                                            |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `spoken_reply` | The reply is read back: a turn sent in conversational audio mode with **Audio-back** on and `audio_conversational.speech_provider` set. |
+| `spoken_reply` | The reply is read back: a turn sent in conversational audio mode where replies are spoken (`audio_conversational.reply_speech.spoken`) and `audio_conversational.speech_provider` is set. |
 
 #### `turn_instructions.<type>.prompt`
 
@@ -8244,7 +8261,7 @@ answer; `spoken_reply` then shapes the spoken part only, so write every rule as
 "the spoken part …" and the written answer keeps the normal chat style. In the
 `precise` style it shapes the whole reply, which the voice reads. A typed turn
 in the same chat gets neither, so the user can switch between speaking and
-typing, and neither does a spoken turn with Audio-back off.
+typing, and neither does a spoken turn where replies are not spoken.
 
 ### Validated client submissions
 

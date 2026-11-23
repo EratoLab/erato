@@ -34,11 +34,17 @@ pub enum ReplySpeechWording {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Facet, HeapSize)]
 #[serde(default)]
 pub struct ReplySpeechConfig {
+    /// Whether replies are spoken when a user enters conversational audio
+    /// mode. Covered by `user_choice` like the wording. Defaults to `true`:
+    /// with a voice configured, a conversation is spoken.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub spoken: bool,
     /// `natural` or `precise`. Defaults to `precise` until the `natural`
     /// spoken-reply wording is applied where it is used.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub wording: ReplySpeechWording,
-    /// Whether a user may choose their own wording, unless a supervisor's
+    /// Whether a user may choose their own wording and whether replies are
+    /// spoken, unless a supervisor's
     /// audience setting says otherwise. Defaults to `true`.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub user_choice: bool,
@@ -53,6 +59,7 @@ pub struct ReplySpeechConfig {
 impl Default for ReplySpeechConfig {
     fn default() -> Self {
         Self {
+            spoken: true,
             wording: ReplySpeechWording::Precise,
             user_choice: true,
             show_in_chat: false,
@@ -75,6 +82,10 @@ fn shaped_reply_speech(written: Written) -> (ReplySpeechConfig, Vec<String>) {
             }
             ("wording", _) => dropped.push(format!(
                 "{PLACE}.wording is not `natural` or `precise`; the default is used"
+            )),
+            ("spoken", Written::Flag(flag)) => config.spoken = flag,
+            ("spoken", _) => dropped.push(format!(
+                "{PLACE}.spoken is not `true` or `false`; the default is used"
             )),
             ("user_choice", Written::Flag(flag)) => config.user_choice = flag,
             ("user_choice", _) => dropped.push(format!(
@@ -144,5 +155,14 @@ mod tests {
         assert_eq!(dropped.len(), 1, "{dropped:?}");
         let (config, _) = shaped(serde_json::json!({"show_in_chat": true}));
         assert!(config.show_in_chat);
+    }
+
+    #[test]
+    fn replies_are_spoken_unless_turned_off() {
+        assert!(shaped(serde_json::json!({})).0.spoken);
+        assert!(!shaped(serde_json::json!({"spoken": false})).0.spoken);
+        let (config, dropped) = shaped(serde_json::json!({"spoken": "no"}));
+        assert!(config.spoken);
+        assert_eq!(dropped.len(), 1, "{dropped:?}");
     }
 }

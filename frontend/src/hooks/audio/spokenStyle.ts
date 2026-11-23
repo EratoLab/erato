@@ -7,6 +7,8 @@ import {
   byLanguageTag,
 } from "@/lib/toolCallGist/spokenLanguageData";
 
+import { applySpokenSettings } from "./speechPlayback";
+
 import type { ApprovalSpeechStyleResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenOptions } from "@/lib/toolCallGist/spokenCard";
 import type { SpokenCardLanguages } from "@/lib/toolCallGist/spokenLanguageData";
@@ -20,6 +22,9 @@ import type { SentenceSet } from "@/lib/toolCallGist/spokenSentences";
  * that may be spoken, so a changed style applies from the next card on; the
  * last answer stands in meanwhile. Until the first answer arrives, or if it
  * fails, cards are read as today (full, precise).
+ *
+ * Each answer also says whether cards are read aloud at all; that goes to
+ * the playback store (`applySpokenSettings`), asked first at sign-in.
  */
 export type SpokenStyle = Pick<
   SpokenOptions,
@@ -55,7 +60,10 @@ const statusOf = (error: unknown): number | undefined =>
 const ask = (): Promise<SpokenStyle> => {
   if (unsupported) return Promise.resolve(known ?? TODAY);
   asked ??= fetchApprovalSpeechStyle({})
-    .then((style) => (known = fromResponse(style)))
+    .then((style) => {
+      applySpokenSettings({ cards: style.spoken });
+      return (known = fromResponse(style));
+    })
     .catch((error: unknown) => {
       if (statusOf(error) === 404) unsupported = true;
       return known ?? TODAY;
@@ -71,6 +79,12 @@ export const forgetSpokenStyle = () => {
   asked = null;
   known = null;
   unsupported = false;
+};
+
+/** Asks again now, at sign-in or after the user changed a setting. */
+export const refreshSpokenStyle = (): Promise<void> => {
+  forgetSpokenStyle();
+  return ask().then(() => {});
 };
 
 export function useSpokenStyle(enabled: boolean): SpokenStyle {

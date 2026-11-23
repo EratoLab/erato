@@ -105,7 +105,7 @@ export const ToolChipsLongName: Story = {
   ),
 };
 
-/** Audio mode puts "Exit audio mode" beside Send; the tools keep their names. */
+/** Audio mode: the audio-mode button takes Send's corner; the tools keep their names. */
 export const ToolChipsAudioMode: Story = {
   render: () => <ToolComposer audioMode />,
 };

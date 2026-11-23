@@ -176,7 +176,7 @@ describe("speaking an approval card", () => {
   });
 
   it("skips the piece being said and goes on with the rest", async () => {
-    const { connection, states, skipApprovalPiece } = await speak();
+    const { connection, states, steerApprovalCard } = await speak();
     audio(connection, 0);
     audio(connection, 1);
     audio(connection, 2);
@@ -186,7 +186,7 @@ describe("speaking an approval card", () => {
 
     // The loss is cut short, the next piece plays, and before the request
     // the loss is said once more.
-    skipApprovalPiece();
+    steerApprovalCard("message-1:stop-1", { type: "skip" });
     expect(states()).toEqual(["heard", "cut", "playing", "pending"]);
     playOut();
     expect(states()).toEqual(["heard", "playing", "heard", "pending"]);
@@ -267,13 +267,8 @@ describe("speaking an approval card", () => {
     );
   });
 
-  it("1.6: a card that cannot be spoken falls back, then says so, and stays to be asked for", async () => {
-    const {
-      connection,
-      useApprovalSpeech,
-      approvalSpoken,
-      replayApprovalCard,
-    } = await speak();
+  it("1.6: a card that cannot be spoken falls back, then says so, and waits on screen", async () => {
+    const { connection, useApprovalSpeech, approvalSpoken } = await speak();
     const { useSpeechPlayback } = await import("./speechPlayback");
     // The endpoint refuses the card: the pointer sentence is asked for.
     connection.options.onError?.(new Error("413"));
@@ -289,12 +284,6 @@ describe("speaking an approval card", () => {
     expect(useApprovalSpeech.getState().available?.key).toBe(
       "message-1:stop-1",
     );
-    // The control that reads the card tries the whole card again.
-    replayApprovalCard();
-    await vi.waitFor(() => expect(connections).toHaveLength(3));
-    expect(
-      JSON.parse(connections[2].options.body as string).pieces,
-    ).toHaveLength(CARD.length);
   });
 
   it("4.1: forgetting one approval keeps another card of the same message speaking", async () => {
@@ -315,6 +304,13 @@ describe("speaking an approval card", () => {
     const { useApprovalSpeech } = await speak();
     const { useSpeechPlayback } = await import("./speechPlayback");
     useSpeechPlayback.setState({ enabled: false });
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("ends when the user turns card reading off while it speaks", async () => {
+    const { useApprovalSpeech } = await speak();
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ cards: false });
     expect(useApprovalSpeech.getState().speaking).toBe(false);
   });
 

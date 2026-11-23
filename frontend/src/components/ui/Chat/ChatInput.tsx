@@ -24,8 +24,6 @@ import {
   talkOverApprovalCard,
 } from "@/hooks/audio/approvalListening";
 import {
-  replayApprovalCard,
-  skipApprovalPiece,
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
@@ -45,9 +43,8 @@ import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
 import {
-  enableSpeechPlayback,
+  unlockSpeechPlayback,
   pauseSpeechPlayback,
-  quietSpokenTurn,
   resumeSpeechPlayback,
   stopSpeechPlayback,
   useSpeechPlayback,
@@ -60,6 +57,7 @@ import {
   useAudioDictationRecorder,
 } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
+import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
 import { prepareWaitLines } from "@/hooks/audio/waitLines";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import {
@@ -1051,7 +1049,6 @@ export const ChatInput = ({
   const [queueReplacePending, setQueueReplacePending] = useState<
     false | { runMode?: DelegationRunMode }
   >(false);
-  const cardAvailable = useApprovalSpeech((state) => state.available !== null);
 
   const openCardListening = useCallback(
     (key: string) => {
@@ -1102,7 +1099,8 @@ export const ChatInput = ({
       audioConversationalEnabled &&
       Boolean(voiceCommandsEnabled) &&
       Boolean(speechEnabled) &&
-      speech.enabled,
+      speech.enabled &&
+      speech.cards,
     recorderOpen: isDictating || isDictationStarting,
     recorderIdle:
       !isDictating && !isDictationStarting && !isDictationCompleting,
@@ -2737,9 +2735,12 @@ export const ChatInput = ({
       return;
     }
 
-    if (speechEnabled && useSpeechPlayback.getState().enabled) {
-      // Resume playback from the user gesture, before microphone startup.
-      void enableSpeechPlayback(true);
+    if (speechEnabled) {
+      // Resume playback from the user gesture, before microphone startup,
+      // also with replies off: the user may turn them on during the mode.
+      void unlockSpeechPlayback();
+      // The settings as they are now, also after an earlier failed answer.
+      void refreshVoiceTraces();
     }
 
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
@@ -2889,16 +2890,7 @@ export const ChatInput = ({
   // session and returns to the normal composer so the dictated text can be
   // reviewed or sent explicitly.
   const handleAudioModeButtonToggle = useCallback(() => {
-    if (isConversationalAudioActive) {
-      clearPendingAutoSendTimeout();
-      pendingAutoSendRef.current = false;
-      pendingConversationalStartRef.current = false;
-      toggleDictationForCurrentTarget();
-      setIsAudioMode(false);
-      return;
-    }
-
-    if (shouldShowAudioModeSelector && !isAudioMode) {
+    if (shouldShowAudioModeSelector) {
       showAudioModeChoiceToast();
       return;
     }
@@ -2911,17 +2903,16 @@ export const ChatInput = ({
     startTranscriptAudioMode();
   }, [
     audioConversationalEnabled,
-    clearPendingAutoSendTimeout,
-    isConversationalAudioActive,
-    isAudioMode,
-    setIsAudioMode,
     showAudioModeChoiceToast,
     shouldShowAudioModeSelector,
     startConversationalAudioMode,
     startTranscriptAudioMode,
-    toggleDictationForCurrentTarget,
   ]);
 
+  // Ends conversational audio mode from any state: the microphone closes,
+  // the voice and a card being read fall silent, and nothing listens again
+  // after the answer. Words dictated for a message stay in the composer to
+  // review; words said to a card are dropped.
   const exitAudioMode = useCallback(() => {
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
@@ -2929,14 +2920,19 @@ export const ChatInput = ({
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
+    interruptedReplyRef.current = false;
     if (isDictating || isDictationStarting) {
-      toggleDictationForCurrentTarget();
+      if (dictationTargetRef.current?.card) cancelDictation();
+      else toggleDictationForCurrentTarget();
     }
     if (isRecording) {
       toggleAudioRecording();
     }
+    stopSpeechPlayback();
+    stopApprovalSpeech();
     setIsAudioMode(false);
   }, [
+    cancelDictation,
     clearPendingAutoSendTimeout,
     isDictating,
     isDictationStarting,
@@ -3877,56 +3873,6 @@ export const ChatInput = ({
               )}
               {isAudioMode && speechEnabled && (
                 <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-pressed={speech.enabled}
-                    onClick={() => void enableSpeechPlayback(!speech.enabled)}
-                  >
-                    {t({ id: "chat.audio_back", message: "Audio-back" })}
-                  </Button>
-                  {(speech.playing || cardSpeaking) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        quietSpokenTurn();
-                        stopApprovalSpeech();
-                      }}
-                    >
-                      {t({ id: "chat.audio_stop", message: "Stop playback" })}
-                    </Button>
-                  )}
-                  {cardSpeaking && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={skipApprovalPiece}
-                      data-testid="chat-input-audio-skip"
-                    >
-                      {t({ id: "chat.audio_skip", message: "Skip" })}
-                    </Button>
-                  )}
-                  {speech.enabled &&
-                    decisionWaiting &&
-                    cardAvailable &&
-                    !cardSpeaking && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={replayApprovalCard}
-                        data-testid="chat-input-audio-read-card"
-                      >
-                        {t({
-                          id: "chat.audio_read_card",
-                          message: "Read the card aloud",
-                        })}
-                      </Button>
-                    )}
                   {speech.blocked && (
                     <span role="status">
                       {t({
@@ -3964,19 +3910,6 @@ export const ChatInput = ({
                   })}
                 </span>
               )}
-              {isAudioMode && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={exitAudioMode}
-                  disabled={disabled || isLoading || isPendingResponse}
-                  data-testid="chat-input-exit-audio-mode"
-                  aria-label={t`Exit audio mode`}
-                >
-                  {t`Exit audio mode`}
-                </Button>
-              )}
               {!useUnifiedMobileMenu && showModelSelector && (
                 <ModelSelector
                   availableModels={availableModels}
@@ -3985,41 +3918,25 @@ export const ChatInput = ({
                   disabled={!isSelectionReady}
                 />
               )}
-              {isAudioMode &&
-                isPendingResponse &&
-                isConversationalAudioActive &&
-                (showsListening ? (
-                  <WaveformButton
-                    onClick={handleAudioModeButtonToggle}
-                    bars={dictationBars}
-                    disabled={disabled || isLoading || isDictationCompleting}
-                    ariaLabel={t`Stop audio mode`}
-                    statusLabel={t`Listening for your next message`}
-                    testIds={{
-                      root: "chat-input-audio-mode-pending-recording",
-                      waveform:
-                        "chat-input-audio-mode-pending-recording-waveform",
-                      stopIcon:
-                        "chat-input-audio-mode-pending-recording-stop-icon",
-                    }}
-                  />
-                ) : (
-                  // Re-arming between turns: the mic is being re-acquired
-                  // and is not yet capturing — show the spinner, not a
-                  // live-looking waveform.
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    busy
-                    iconClassName="text-[var(--theme-fg-primary)]"
-                    onClick={handleAudioModeButtonToggle}
-                    disabled={disabled || isLoading || isDictationCompleting}
-                    data-testid="chat-input-audio-mode-pending-recording"
-                    aria-label={t`Stop audio mode`}
-                    title={t`Stop audio mode`}
-                  />
-                ))}
+              {isAudioMode && isPendingResponse && (
+                // Beside Stop while the answer comes: it ends audio mode,
+                // whether the microphone listens, starts up or is closed.
+                <ChatInputAudioModeButton
+                  isRecording
+                  recordingBars={dictationBars}
+                  isStarting={isConversationalAudioActive && !showsListening}
+                  isQuiet={!isConversationalAudioActive && !showsListening}
+                  onToggle={exitAudioMode}
+                  listeningLabel={t`Listening for your next message`}
+                  testIds={{
+                    root: "chat-input-audio-mode-pending-recording",
+                    waveform:
+                      "chat-input-audio-mode-pending-recording-waveform",
+                    stopIcon:
+                      "chat-input-audio-mode-pending-recording-stop-icon",
+                  }}
+                />
+              )}
               {audioTranscriptionEnabled &&
                 !isAudioMode &&
                 isRecording &&
@@ -4180,14 +4097,17 @@ export const ChatInput = ({
                   />
                 </>
               ) : showAudioModeButton ? (
-                isConversationalAudioActive ? (
+                isAudioMode ? (
+                  // In audio mode this button ends the mode in every state:
+                  // listening, starting up, the voice speaking, a card
+                  // waiting. Never disabled, so the way out is always there.
                   <ChatInputAudioModeButton
                     isRecording
                     recordingBars={dictationBars}
                     // Spinner until capture is live; waveform once real audio flows.
-                    isStarting={!showsListening}
-                    onToggle={handleAudioModeButtonToggle}
-                    disabled={isAudioModeButtonDisabled}
+                    isStarting={isConversationalAudioActive && !showsListening}
+                    isQuiet={!isConversationalAudioActive && !showsListening}
+                    onToggle={exitAudioMode}
                   />
                 ) : (
                   <ChatInputAudioModeButton
