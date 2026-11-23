@@ -139,6 +139,16 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_reply_speech_show_in_chat: Option<bool>,
+    /// Whether replies are spoken in conversation, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_reply_speech_spoken: Option<bool>,
+    /// Whether approval cards are read aloud in conversation, as the user
+    /// chose; absent follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_approval_speech_spoken: Option<bool>,
     /// The languages the user speaks, first = main, as ISO 639-1 codes;
     /// absent follows the app language.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,6 +185,8 @@ impl UserProfile {
             preference_wait_lines_amount: None,
             preference_reply_speech_wording: None,
             preference_reply_speech_show_in_chat: None,
+            preference_reply_speech_spoken: None,
+            preference_approval_speech_spoken: None,
             preference_spoken_languages: None,
         }
     }
@@ -259,6 +271,8 @@ impl UserProfile {
                 .as_deref()
                 .and_then(crate::models::user_preference::parse_style_name);
             self.preference_reply_speech_show_in_chat = prefs.reply_speech_show_in_chat;
+            self.preference_reply_speech_spoken = prefs.reply_speech_spoken;
+            self.preference_approval_speech_spoken = prefs.approval_speech_spoken;
             self.preference_spoken_languages =
                 crate::models::user_preference::stored_spoken_languages(prefs.spoken_languages);
             self.client_tool_decisions =

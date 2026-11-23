@@ -1807,11 +1807,6 @@ msgstr "Anhänge umschalten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_back"
-msgstr "Sprachausgabe"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_blocked"
 msgstr "Automatische Wiedergabe blockiert. Spielen Sie die fertige Antwort unten ab."
 
@@ -1819,11 +1814,6 @@ msgstr "Automatische Wiedergabe blockiert. Spielen Sie die fertige Antwort unten
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_failed"
 msgstr "Audio nicht verfügbar. Ihre Textantwort ist weiterhin verfügbar."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_read_card"
-msgstr "Karte vorlesen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SpokenReply.tsx
@@ -1849,16 +1839,6 @@ msgstr "Wiedergabe beenden"
 #: src/components/ui/Message/SpokenReply.tsx
 msgid "chat.audio_replay.unavailable"
 msgstr "Die Aufnahme ist nicht verfügbar."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_skip"
-msgstr "Weiter"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio_stop"
-msgstr "Wiedergabe stoppen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
@@ -6285,6 +6265,21 @@ msgstr "Freigabekarten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cardsSpoken.description"
+msgstr "Wenn der Assistent dich um eine Freigabe bittet, liest die Stimme die Karte vor. Die Karte steht immer auch auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cardsSpoken.label"
+msgstr "Freigabekarten vorlesen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.cardsSpoken.needsReplies"
+msgstr "Karten werden nur vorgelesen, solange Antworten gesprochen werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.description"
 msgstr "Wie die Stimme im Gesprächsmodus spricht. Die Schaltfläche „Vorlesen“ liest immer den Text im Chat."
 
@@ -6297,6 +6292,11 @@ msgstr "Einstellung der Organisation verwenden"
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.heading"
 msgstr "Sprachausgabe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.hear.heading"
+msgstr "Was du hörst"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SpokenLanguagesSetting.tsx
@@ -6326,6 +6326,16 @@ msgstr "Antworten im Gespräch"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.repliesSpoken.description"
+msgstr "Im Gesprächsmodus spricht die Stimme jede Antwort. Aus: Antworten stehen nur geschrieben im Chat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.repliesSpoken.label"
+msgstr "Antworten sprechen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.saveFailed"
 msgstr "Die Spracheinstellung konnte nicht gespeichert werden"
 
@@ -6338,6 +6348,16 @@ msgstr "Fügt über jeder Antwort im Gespräch eine eingeklappte Zeile „Gespro
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.showInChat.label"
 msgstr "Im Chat zeigen, was die Stimme gesagt hat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.shown.heading"
+msgstr "Was der Chat zeigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/VoiceOutputSetting.tsx
+msgid "preferences.dialog.audio.voice.sound.heading"
+msgstr "Wie es klingt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -6489,6 +6509,26 @@ msgstr "Diese Auswahl konnte nicht gespeichert werden. Bitte erneut versuchen."
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 msgid "preferences.dialog.desktopSidecar.unavailable.description"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.empty"
+msgstr "Es sind keine Hinweise konfiguriert."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loadError"
+msgstr "Die Hinweise konnten nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.loading"
+msgstr "Hinweise werden geladen…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/DisclaimersPane.tsx
+msgid "preferences.dialog.disclaimers.retry"
+msgstr "Erneut versuchen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -7113,6 +7153,11 @@ msgstr "Daten"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 #~ msgid "preferences.dialog.tabs.desktopSidecar"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.disclaimers"
+msgstr "Hinweise"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
@@ -12027,6 +12072,10 @@ msgstr "Die Auswahl des Audioeingabegeräts wird in diesem Browser nicht unterst
 #~ msgid "Audio input is not supported in this browser."
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInputAudioModeButton.tsx
+msgid "Audio mode is on"
+msgstr "Audiomodus ist an"
+
 #: src/components/ui/Chat/ChatInput.tsx
 #~ msgid "Audio recording - Status: {0}"
 #~ msgstr "Audioaufnahme - Status: {0}"
@@ -12532,10 +12581,6 @@ msgstr "Tokennutzung wird geschätzt..."
 #: src/components/ui/Settings/DesktopSidecarTabContent.tsx
 #~ msgid "Evidence sharing requires review in the desktop app for each package."
 #~ msgstr "Zum Teilen muss jedes Belegpaket in der Desktop-App geprüft werden."
-
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "Exit audio mode"
-msgstr "Audiomodus beenden"
 
 #: src/components/ui/Controls/ExpandMediaButton.tsx
 msgid "Expand"
@@ -13272,7 +13317,6 @@ msgstr "Audiodiktat wird gestartet"
 msgid "Stop"
 msgstr "Stopp"
 
-#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Stop audio mode"
 msgstr "Audiomodus beenden"

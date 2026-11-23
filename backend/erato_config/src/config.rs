@@ -1099,6 +1099,11 @@ pub struct AppConfig {
     #[serde(default)]
     pub user_preferences: UserPreferencesConfig,
 
+    /// Deployment-configured notices for the Settings dialog.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub disclaimers: DisclaimersConfig,
+
     // Starter prompts configuration.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
@@ -3740,6 +3745,7 @@ mod audio_config_tests {
             load_conversational("[reply_speech]\nwording = \"natural\"\nuser_choice = false\n")
                 .reply_speech,
             ReplySpeechConfig {
+                spoken: true,
                 wording: ReplySpeechWording::Natural,
                 user_choice: false,
                 show_in_chat: false,
@@ -7513,6 +7519,62 @@ fn default_user_preferences_enabled() -> bool {
 
 fn default_user_preferences_data_tab_enabled() -> bool {
     true
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct DisclaimersConfig {
+    /// Show the Disclaimers tab in Settings when at least one notice is configured.
+    #[serde(default)]
+    pub enable_settings_tab: bool,
+
+    /// Notices keyed by ID, displayed in ID order.
+    #[serde(default)]
+    pub disclaimers: HashMap<String, DisclaimerConfig>,
+}
+
+impl DisclaimersConfig {
+    pub fn settings_tab_visible(&self) -> bool {
+        self.enable_settings_tab && !self.disclaimers.is_empty()
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct DisclaimerConfig {
+    /// Heading shown above the notice.
+    pub title: String,
+    /// Notice body rendered as Markdown.
+    pub content: String,
+}
+
+#[cfg(test)]
+#[test]
+fn disclaimers_parse_keyed_multiline_toml() {
+    let source = r#"
+[disclaimers]
+enable_settings_tab = true
+
+[disclaimers.disclaimers.ai_policy]
+title = "Organization AI policy"
+content = """
+Verify **answers**.
+
+- Read the policy.
+"""
+"#;
+    let settings = Config::builder()
+        .add_source(File::from_str(source, FileFormat::Toml))
+        .build()
+        .unwrap();
+    let config: DisclaimersConfig = settings.get("disclaimers").unwrap();
+    assert!(config.settings_tab_visible());
+    assert_eq!(
+        config.disclaimers.get("ai_policy"),
+        Some(&DisclaimerConfig {
+            title: "Organization AI policy".into(),
+            content: "Verify **answers**.\n\n- Read the policy.\n".into(),
+        })
+    );
+    assert!(!AppConfig::default().disclaimers.settings_tab_visible());
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]

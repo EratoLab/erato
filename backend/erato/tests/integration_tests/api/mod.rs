@@ -7,6 +7,7 @@ pub mod chat_created_via;
 pub mod chat_history_compaction;
 pub mod chats;
 pub mod delegation;
+pub mod disclaimers;
 pub mod edit;
 pub mod embedded_images;
 pub mod entra_group_overage;

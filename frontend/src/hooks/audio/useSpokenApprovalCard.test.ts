@@ -9,7 +9,7 @@ import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { noteChangeSending, useApprovalChanges } from "./approvalChanges";
-import { quietSpokenTurn, useSpeechPlayback } from "./speechPlayback";
+import { useSpeechPlayback } from "./speechPlayback";
 import { resetSpokenLanguage, useSpokenLanguage } from "./spokenLanguage";
 import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
@@ -19,7 +19,6 @@ import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 import type { Messages } from "@lingui/core";
 
 const speakApprovalCard = vi.fn();
-const offerApprovalCard = vi.fn();
 const forgetApprovalCards = vi.fn();
 const started = new Set<string>();
 
@@ -28,10 +27,6 @@ vi.mock("./approvalSpeech", () => ({
   speakApprovalCard: (card: { key: string }) => {
     started.add(card.key);
     speakApprovalCard(card);
-  },
-  offerApprovalCard: (card: { key: string }) => {
-    started.add(card.key);
-    offerApprovalCard(card);
   },
   forgetApprovalCards: (keys: readonly string[]) => forgetApprovalCards(keys),
 }));
@@ -56,7 +51,6 @@ const spokenKeys = () =>
 
 beforeEach(() => {
   speakApprovalCard.mockClear();
-  offerApprovalCard.mockClear();
   forgetApprovalCards.mockClear();
   started.clear();
   resetSpokenLanguage();
@@ -64,9 +58,9 @@ beforeEach(() => {
   useSpeechPlayback.setState({
     conversational: true,
     enabled: true,
+    cards: true,
     playing: false,
     spokenTurn: "chat-1",
-    quietTurn: undefined,
   });
 });
 
@@ -177,6 +171,19 @@ describe("useSpokenApprovalCard", () => {
     expect(speakApprovalCard).not.toHaveBeenCalled();
   });
 
+  it("stays silent where the user turned card reading off", () => {
+    useSpeechPlayback.setState({ cards: false });
+    const card = props();
+    const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
+      initialProps: card,
+    });
+    expect(speakApprovalCard).not.toHaveBeenCalled();
+    // Turned on again while the card waits: it is read.
+    act(() => useSpeechPlayback.setState({ cards: true }));
+    rerender(card);
+    expect(speakApprovalCard).toHaveBeenCalledTimes(1);
+  });
+
   it("1.1: speaks the next stop of the same message, after a decision", () => {
     const messageId = "message-1";
     const first = props({ messageId, keys: ["10:00:approval-a"] });
@@ -212,15 +219,6 @@ describe("useSpokenApprovalCard", () => {
       `${queue.messageId}:t:b`,
       `${queue.messageId}:t:c`,
     ]);
-  });
-
-  it("1.9: after Stop during the turn's words the card waits to be asked for", () => {
-    useSpeechPlayback.setState({ playing: true });
-    act(() => quietSpokenTurn());
-    expect(useSpeechPlayback.getState().playing).toBe(false);
-    renderHook(() => useSpokenApprovalCard(props()));
-    expect(speakApprovalCard).not.toHaveBeenCalled();
-    expect(offerApprovalCard).toHaveBeenCalledTimes(1);
   });
 
   describe("a card that corrects one changed by voice", () => {

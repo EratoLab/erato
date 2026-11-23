@@ -114,7 +114,7 @@ export function SpokenLanguagesSetting() {
   return (
     <div className="space-y-2">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium text-theme-fg-primary">{heading}</h3>
+        <h4 className="text-sm text-theme-fg-primary">{heading}</h4>
         <p className="text-sm text-theme-fg-secondary">
           {data.follow_speaker
             ? t({

@@ -11344,6 +11344,8 @@ async fn me_profile(
             preference_wait_lines_amount: None,
             preference_reply_speech_wording: None,
             preference_reply_speech_show_in_chat: None,
+            preference_reply_speech_spoken: None,
+            preference_approval_speech_spoken: None,
             preference_spoken_languages: None,
         },
         oidc_token: TEST_JWT_TOKEN.to_string(),

@@ -428,7 +428,7 @@ export interface ToolComposerProps {
   contextItems?: ComposerContextItem[];
   initialFiles?: FileUploadItem[];
   maxFiles?: number;
-  /** Audio mode is on: the controls row carries "Exit audio mode". */
+  /** Audio mode is on: the audio-mode button ends the controls row. */
   audioMode?: boolean;
   /** Rendered instead of the plain composer, inside the seeded providers. */
   children?: ReactNode;

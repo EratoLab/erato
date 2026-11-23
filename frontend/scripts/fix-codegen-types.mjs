@@ -102,6 +102,14 @@ const schemaStringFieldFixes = [
     to: "preference_reply_speech_show_in_chat?: boolean | null | undefined;",
   },
   {
+    from: "preference_reply_speech_spoken?: null | undefined;",
+    to: "preference_reply_speech_spoken?: boolean | null | undefined;",
+  },
+  {
+    from: "preference_approval_speech_spoken?: null | undefined;",
+    to: "preference_approval_speech_spoken?: boolean | null | undefined;",
+  },
+  {
     from: "preference_spoken_languages?: null | undefined;",
     to: "preference_spoken_languages?: string[] | null | undefined;",
   },

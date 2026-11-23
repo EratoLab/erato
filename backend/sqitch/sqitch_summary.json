@@ -75,7 +75,8 @@
     "deploy/0073_add_voice_decision_receipts.sql",
     "deploy/0074_add_reply_speech_preference.sql",
     "deploy/0075_add_reply_speech_show_in_chat_preference.sql",
+    "deploy/0076_add_spoken_preferences.sql",
     "deploy/0077_add_spoken_languages_preference.sql"
   ],
-  "latest_change": "e184f47484a5c700fad9ef08a331a8fa1cb7b020"
+  "latest_change": "dee7164711243156ad63ca19f80a81263552ea67"
 }

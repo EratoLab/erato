@@ -44,6 +44,10 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+vi.mock("./VoiceOutputSetting", () => ({
+  VoiceOutputSetting: () => <h2>Voice</h2>,
+}));
+
 vi.mock("../Feedback/Alert", () => ({
   Alert: ({ children }: { children: ReactNode }) => (
     <div role="alert">{children}</div>
@@ -103,8 +107,10 @@ function renderDialog({
   initialTab,
   mcpServersTabEnabled = true,
   desktopSidecarTabEnabled = false,
+  disclaimersTabEnabled = false,
   dataTabEnabled = true,
   audioTranscriptionEnabled = false,
+  conversationalVoice = false,
   assistantsEnabled = false,
   queryClient = new QueryClient({
     defaultOptions: {
@@ -122,11 +128,15 @@ function renderDialog({
     | "appearance"
     | "audio"
     | "serversTools"
-    | "data";
+    | "data"
+    | "disclaimers";
   mcpServersTabEnabled?: boolean;
   desktopSidecarTabEnabled?: boolean;
+  disclaimersTabEnabled?: boolean;
   dataTabEnabled?: boolean;
   audioTranscriptionEnabled?: boolean;
+  /** Conversation mode with a voice, and no other audio feature. */
+  conversationalVoice?: boolean;
   assistantsEnabled?: boolean;
   queryClient?: QueryClient;
   onClose?: () => void;
@@ -144,9 +154,15 @@ function renderDialog({
             dataTabEnabled,
             mcpServersTabEnabled,
             desktopSidecarTabEnabled,
+            disclaimersTabEnabled,
           },
           audioTranscription: {
             enabled: audioTranscriptionEnabled,
+            maxRecordingDurationSeconds: 1200,
+          },
+          audioConversational: {
+            enabled: conversationalVoice,
+            speechEnabled: conversationalVoice,
             maxRecordingDurationSeconds: 1200,
           },
           assistants: { enabled: assistantsEnabled },
@@ -222,6 +238,74 @@ afterEach(() => {
 });
 
 describe("UserPreferencesDialog", () => {
+  it("opens the default tab when a link requests unavailable disclaimers", () => {
+    renderDialog({ initialTab: "disclaimers", disclaimersTabEnabled: false });
+
+    expect(screen.queryByRole("tab", { name: "Disclaimers" })).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "Personalization" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("loads Markdown on the final tab and retries a failed request", async () => {
+    const fetchDisclaimers = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(createJsonResponse({}, 500))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          disclaimers: [
+            {
+              id: "ai_policy",
+              title: "Organization AI policy",
+              content:
+                "Verify **answers**.\n\n- Read the [policy](https://example.com/policy).",
+            },
+            {
+              id: "privacy",
+              title: "Privacy",
+              content: "Read the privacy notice.",
+            },
+          ],
+        }),
+      );
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith("/me/disclaimers")
+        ? fetchDisclaimers()
+        : createJsonResponse([]),
+    );
+
+    renderDialog({ disclaimersTabEnabled: true });
+    const tablist = screen.getByRole("tablist", { name: "Preferences" });
+    const disclaimersTab = within(tablist).getByRole("tab", {
+      name: "Disclaimers",
+    });
+    expect(within(tablist).getAllByRole("tab").at(-1)).toBe(disclaimersTab);
+    expect(fetchDisclaimers).not.toHaveBeenCalled();
+
+    const firstTab = within(tablist).getByRole("tab", {
+      name: "Personalization",
+    });
+    firstTab.focus();
+    fireEvent.keyDown(firstTab, { key: "End" });
+    expect(disclaimersTab).toHaveFocus();
+    expect(disclaimersTab).toHaveAttribute("aria-selected", "true");
+    const panel = within(screen.getByRole("tabpanel", { name: "Disclaimers" }));
+    fireEvent.click(await panel.findByRole("button", { name: "Retry" }));
+
+    expect(
+      await panel.findByRole("heading", { name: "Organization AI policy" }),
+    ).toBeVisible();
+    expect(
+      panel.getAllByRole("heading").map((heading) => heading.textContent),
+    ).toEqual(["Organization AI policy", "Privacy"]);
+    expect(panel.getByText("answers").tagName).toBe("STRONG");
+    expect(panel.getByRole("link", { name: "policy" })).toHaveAttribute(
+      "href",
+      "https://example.com/policy",
+    );
+    expect(fetchDisclaimers).toHaveBeenCalledTimes(2);
+  });
+
   it("shows the servers & tools tab when either capability is enabled", () => {
     // Sidecar alone is enough for the merged tab.
     renderDialog({
@@ -469,6 +553,16 @@ describe("UserPreferencesDialog", () => {
     expect(
       within(audioPanel).queryByTestId("audio-input-not-connected"),
     ).toBeNull();
+  });
+
+  it("shows the Audio tab for conversation mode alone, the voice before the microphone", async () => {
+    renderDialog({ conversationalVoice: true, initialTab: "audio" });
+    const audioPanel = await screen.findByRole("tabpanel", { name: "Audio" });
+    expect(
+      within(audioPanel)
+        .getAllByRole("heading", { level: 2 })
+        .map((heading) => heading.textContent),
+    ).toEqual(["Voice", "Microphone"]);
   });
 
   it("shows an Audio tab when audio transcription is enabled and persists the selected microphone", async () => {

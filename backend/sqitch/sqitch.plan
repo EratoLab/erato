@@ -76,4 +76,5 @@
 0073_add_voice_decision_receipts [0072_add_wait_lines_preference] 2026-11-20T15:00:00Z bdart <dfiebig@bdart.de> # Add receipts for decisions by voice, shared by every replica
 0074_add_reply_speech_preference [0073_add_voice_decision_receipts] 2026-11-21T10:00:00Z bdart <dfiebig@bdart.de> # Add how the user wants replies spoken in conversation to user preferences
 0075_add_reply_speech_show_in_chat_preference [0074_add_reply_speech_preference] 2026-11-22T15:00:00Z bdart <dfiebig@bdart.de> # Add whether the chat shows what the voice said to user preferences
-0077_add_spoken_languages_preference [0075_add_reply_speech_show_in_chat_preference] 2026-11-23T10:00:00Z bdart <dfiebig@bdart.de> # Add the languages the user speaks to user preferences
+0076_add_spoken_preferences [0075_add_reply_speech_show_in_chat_preference] 2026-11-23T12:00:00Z bdart <dfiebig@bdart.de> # Add whether replies are spoken and approval cards read aloud to user preferences
+0077_add_spoken_languages_preference [0076_add_spoken_preferences] 2026-11-23T13:00:00Z bdart <dfiebig@bdart.de> # Add the languages the user speaks to user preferences

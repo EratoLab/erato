@@ -464,7 +464,7 @@ chat_provider_ids = ["test-token-limit"]
 # sections when you want classic dictation and conversational audio mode.
 # [audio_conversational]
 # enabled = false
-# speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
+# speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; replies are then spoken in conversation mode
 # end_of_turn_silence_ms = 1800 # Silence that ends a spoken turn (500 to 5000; other values fall back with a warning); shorter replies sooner but cuts off more pauses
 # card_end_of_turn_silence_ms = 1000 # The same while a spoken approval card listens for a short command (500 to 5000)
 # min_speech_ms = 250 # Speech the voice detector must count before a turn can end (32 to 2000); it counts mostly vowels
@@ -475,7 +475,7 @@ chat_provider_ids = ["test-token-limit"]
 # hesitation_words_replace_base = false # true: hesitation_words replaces the base; an empty list then holds nothing back
 # talk_over_voice = false # Let the user start speaking while the voice talks; the voice yields
 # talk_over_voice_min_speech_ms = 500 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner but stops on more coughs and "mhm"
-# reply_speech = { wording = "natural", user_choice = true, show_in_chat = false } # natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
+# reply_speech = { spoken = true, wording = "natural", user_choice = true, show_in_chat = false } # spoken: replies are spoken (users may turn it off where user_choice allows); natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
 # spoken_language = { follow_speaker = true, languages = [], user_choice = true } # The voice speaks the language the user speaks; languages: the allowed ones (empty: any), also sent to the recognizer
 # keep_reply_audio = false # Store each reply's voice so it can be played again; off streams it only
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
@@ -501,7 +501,7 @@ chat_provider_ids = ["test-token-limit"]
 
 # Turn instructions: one table per type, added right before the user's message
 # on a turn the type applies to, for that turn only. Unset or blank adds nothing.
-# spoken_reply applies when the reply is read back (conversational mode, Audio-back on).
+# spoken_reply applies when the reply is read back (conversational mode, replies spoken).
 # [turn_instructions.spoken_reply]
 # prompt = "Your reply is read aloud. Answer in a few short sentences, without lists or headings."
 
@@ -1155,7 +1155,7 @@ bounded_text_preview = true
 # Provider credentials remain on the backend. The sidecar decides what it trusts.
 
 # Speech output is independent of the chat/transcription provider.
-# Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI,
+# Select this ID with audio_conversational.speech_provider for spoken replies in conversation mode,
 # and/or with audio_read_aloud.speech_provider for the read aloud button.
 # [speech_providers.provider.assistant_voice]
 # provider_kind = "openai" # openai, openai_realtime, audio_cpp, gemini, gemini_live

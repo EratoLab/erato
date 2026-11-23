@@ -684,9 +684,16 @@ type ConversationDropzone = ReturnType<typeof useConversationDropzone>;
  */
 export function createNeutralAddinChatHost(
   Input: typeof AddinChatInputCore = AddinChatInputCore,
+  { supportsDisclaimers = false } = {},
 ): ComponentType<AddinChatHostProps> {
   return function NeutralHost({ controller }: AddinChatHostProps) {
-    return <NeutralAddinChatHostView controller={controller} Input={Input} />;
+    return (
+      <NeutralAddinChatHostView
+        controller={controller}
+        Input={Input}
+        supportsDisclaimers={supportsDisclaimers}
+      />
+    );
   };
 }
 
@@ -695,7 +702,11 @@ const NeutralAddinChatHost = createNeutralAddinChatHost();
 function NeutralAddinChatHostView({
   controller,
   Input,
-}: AddinChatHostProps & { Input: typeof AddinChatInputCore }) {
+  supportsDisclaimers,
+}: AddinChatHostProps & {
+  Input: typeof AddinChatInputCore;
+  supportsDisclaimers: boolean;
+}) {
   const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
   const dropzone = useConversationDropzone({
     uploadFiles: controller.uploadFiles,
@@ -742,7 +753,12 @@ function NeutralAddinChatHostView({
           }
         />
       )}
-      renderSettings={(props) => <AddinSettingsDialogCore {...props} />}
+      renderSettings={(props) => (
+        <AddinSettingsDialogCore
+          {...props}
+          supportsDisclaimers={supportsDisclaimers}
+        />
+      )}
     />
   );
 }

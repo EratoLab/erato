@@ -40,6 +40,8 @@ pub struct Model {
     #[sea_orm(column_type = "Text", nullable)]
     pub reply_speech_wording: Option<String>,
     pub reply_speech_show_in_chat: Option<bool>,
+    pub reply_speech_spoken: Option<bool>,
+    pub approval_speech_spoken: Option<bool>,
     pub spoken_languages: Option<Vec<String>>,
 }
 

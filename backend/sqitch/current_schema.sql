@@ -841,6 +841,8 @@ CREATE TABLE public.user_preferences (
     wait_lines_amount text,
     reply_speech_wording text,
     reply_speech_show_in_chat boolean,
+    reply_speech_spoken boolean,
+    approval_speech_spoken boolean,
     spoken_languages text[],
     CONSTRAINT user_preferences_approval_speech_amount_check CHECK ((approval_speech_amount = ANY (ARRAY['full'::text, 'short'::text]))),
     CONSTRAINT user_preferences_approval_speech_wording_check CHECK ((approval_speech_wording = ANY (ARRAY['precise'::text, 'natural'::text]))),

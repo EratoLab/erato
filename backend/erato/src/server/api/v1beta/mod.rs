@@ -11,6 +11,7 @@ pub mod chat_history_compaction;
 pub mod client_operations;
 pub mod delegated_run_retry;
 pub mod desktop_sidecar;
+mod disclaimers;
 pub mod entra_id;
 pub(crate) mod file_resolution;
 pub mod mcp_servers;
@@ -173,6 +174,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/profile/preferences", put(update_profile_preferences))
         .route("/facets", get(facets))
         .route("/starter-prompts", get(starter_prompts))
+        .route("/disclaimers", get(disclaimers::list_disclaimers))
         .route(
             "/starting-assistant",
             get(starting_assistant::starting_assistant),
@@ -530,6 +532,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         update_profile_preferences,
         facets,
         starter_prompts,
+        disclaimers::list_disclaimers,
         chat_messages,
         submit_message_feedback,
         delete_message_feedback,
@@ -1145,6 +1148,16 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preference_reply_speech_show_in_chat: Option<Option<bool>>,
+    /// Whether replies are spoken in conversation; `null` follows the
+    /// organisation again.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_reply_speech_spoken: Option<Option<bool>>,
+    /// Whether approval cards are read aloud in conversation; `null` follows
+    /// the organisation again.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_bool")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_approval_speech_spoken: Option<Option<bool>>,
     /// The languages the user speaks in conversation, up to three ISO 639-1
     /// codes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app
     /// language again. Any language code is taken, except one outside the
@@ -1327,6 +1340,8 @@ pub async fn update_profile_preferences(
             wait_lines_amount,
             reply_speech_wording,
             reply_speech_show_in_chat: request.preference_reply_speech_show_in_chat,
+            reply_speech_spoken: request.preference_reply_speech_spoken,
+            approval_speech_spoken: request.preference_approval_speech_spoken,
             spoken_languages,
         },
     )
@@ -1386,6 +1401,8 @@ pub async fn update_profile_preferences(
         .as_deref()
         .and_then(models::user_preference::parse_style_name);
     profile.preference_reply_speech_show_in_chat = updated_prefs.reply_speech_show_in_chat;
+    profile.preference_reply_speech_spoken = updated_prefs.reply_speech_spoken;
+    profile.preference_approval_speech_spoken = updated_prefs.approval_speech_spoken;
     profile.preference_spoken_languages =
         models::user_preference::stored_spoken_languages(updated_prefs.spoken_languages);
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(

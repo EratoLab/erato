@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
+import clsx from "clsx";
 import { useState } from "react";
 
-import { forgetSpokenStyle } from "@/hooks/audio/spokenStyle";
 import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
 import {
   approvalSpeechStyleQuery,
@@ -12,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { SpokenLanguagesSetting } from "./SpokenLanguagesSetting";
 import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
 import { toast } from "../Toast";
@@ -19,6 +20,52 @@ import { toast } from "../Toast";
 import type { UpdateProfilePreferencesRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 type Wording = "natural" | "precise";
+
+/**
+ * Under a row: the way back to the organization's value when the user set
+ * their own, or that the organization set it when the user may not choose.
+ */
+function OrganizationNote({
+  userChoice,
+  ownValue,
+  saving,
+  indent = false,
+  onFollowOrganization,
+}: {
+  userChoice?: boolean;
+  ownValue: boolean;
+  saving: boolean;
+  /** Lined up with a checkbox's label. */
+  indent?: boolean;
+  onFollowOrganization: () => void;
+}) {
+  if (userChoice === false)
+    return (
+      <p className={clsx("text-xs text-theme-fg-muted", indent && "pl-6")}>
+        {t({
+          id: "preferences.dialog.audio.voice.locked",
+          message: "Set by your organization",
+        })}
+      </p>
+    );
+  if (!ownValue) return null;
+  return (
+    <button
+      type="button"
+      className={clsx(
+        "text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50",
+        indent && "pl-6",
+      )}
+      onClick={onFollowOrganization}
+      disabled={saving}
+    >
+      {t({
+        id: "preferences.dialog.audio.voice.followOrganization",
+        message: "Use my organization's setting",
+      })}
+    </button>
+  );
+}
 
 interface WordingRowProps {
   heading: string;
@@ -61,7 +108,7 @@ function WordingRow({
   return (
     <div className="space-y-2">
       <div className="space-y-1">
-        <h3 className="text-sm font-medium text-theme-fg-primary">{heading}</h3>
+        <h4 className="text-sm text-theme-fg-primary">{heading}</h4>
         <p className="text-sm text-theme-fg-secondary">{description}</p>
       </div>
       {wording !== undefined && (
@@ -73,35 +120,89 @@ function WordingRow({
           disabled={saving || userChoice === false}
         />
       )}
-      {userChoice !== false && ownValue && (
-        <button
-          type="button"
-          className="text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50"
-          onClick={onFollowOrganization}
-          disabled={saving}
-        >
-          {t({
-            id: "preferences.dialog.audio.voice.followOrganization",
-            message: "Use my organization's setting",
-          })}
-        </button>
-      )}
-      {userChoice === false && (
-        <p className="text-xs text-theme-fg-muted">
-          {t({
-            id: "preferences.dialog.audio.voice.locked",
-            message: "Set by your organization",
-          })}
-        </p>
-      )}
+      <OrganizationNote
+        userChoice={userChoice}
+        ownValue={ownValue}
+        saving={saving}
+        onFollowOrganization={onFollowOrganization}
+      />
     </div>
   );
 }
 
+interface SpokenRowProps {
+  label: string;
+  description: string;
+  spoken?: boolean;
+  userChoice?: boolean;
+  ownValue: boolean;
+  saving: boolean;
+  /** Why the row cannot be changed now, other than the organization's lock. */
+  unavailable?: string;
+  onChange: (spoken: boolean) => void;
+  onFollowOrganization: () => void;
+}
+
+/** One thing the voice says or not, with the same lock as the wording. */
+function SpokenRow({
+  label,
+  description,
+  spoken,
+  userChoice,
+  ownValue,
+  saving,
+  unavailable,
+  onChange,
+  onFollowOrganization,
+}: SpokenRowProps) {
+  if (spoken === undefined) return null;
+  return (
+    <div className="space-y-1">
+      <Checkbox
+        checked={spoken}
+        onCheckedChange={onChange}
+        disabled={saving || userChoice === false || unavailable !== undefined}
+        label={label}
+      />
+      <p className="pl-6 text-sm text-theme-fg-secondary">{description}</p>
+      {unavailable !== undefined && (
+        <p className="pl-6 text-xs text-theme-fg-muted">{unavailable}</p>
+      )}
+      <OrganizationNote
+        indent
+        userChoice={userChoice}
+        ownValue={ownValue}
+        saving={saving}
+        onFollowOrganization={onFollowOrganization}
+      />
+    </div>
+  );
+}
+
+function GroupHeading({
+  heading,
+  first = false,
+}: {
+  heading: string;
+  first?: boolean;
+}) {
+  return (
+    <h3
+      className={clsx(
+        "text-sm font-medium text-theme-fg-primary",
+        !first && "border-t border-[var(--theme-border-subtle)] pt-4",
+      )}
+    >
+      {heading}
+    </h3>
+  );
+}
+
 /**
- * How the voice speaks in conversation mode: replies and approval cards,
- * each natural or word for word. A row is read-only where the organization
- * has not allowed a choice.
+ * The voice in conversation mode, in the order a person thinks of it: what
+ * they hear (replies, approval cards), how it sounds (natural or word for
+ * word), and what the chat shows of it. A row is read-only where the
+ * organization has not allowed a choice.
  */
 export function VoiceOutputSetting() {
   const queryClient = useQueryClient();
@@ -114,7 +215,6 @@ export function VoiceOutputSetting() {
     setSaving(true);
     try {
       await fetchUpdateProfilePreferences({ body });
-      forgetSpokenStyle();
       await Promise.all([
         refreshVoiceTraces(),
         queryClient.invalidateQueries({
@@ -141,6 +241,8 @@ export function VoiceOutputSetting() {
     message: "Voice",
   });
 
+  const repliesSpoken = replies.data?.spoken;
+
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -153,6 +255,71 @@ export function VoiceOutputSetting() {
           })}
         </p>
       </div>
+
+      <GroupHeading
+        first
+        heading={t({
+          id: "preferences.dialog.audio.voice.hear.heading",
+          message: "What you hear",
+        })}
+      />
+      <SpokenRow
+        label={t({
+          id: "preferences.dialog.audio.voice.repliesSpoken.label",
+          message: "Speak replies",
+        })}
+        description={t({
+          id: "preferences.dialog.audio.voice.repliesSpoken.description",
+          message:
+            "In conversation mode the voice says each reply. Off: replies are only written in the chat.",
+        })}
+        spoken={repliesSpoken}
+        userChoice={replies.data?.user_choice}
+        ownValue={replies.data?.spoken_source === "user"}
+        saving={saving}
+        onChange={(spoken) =>
+          void save({ preference_reply_speech_spoken: spoken })
+        }
+        onFollowOrganization={() =>
+          void save({ preference_reply_speech_spoken: null })
+        }
+      />
+      <SpokenRow
+        label={t({
+          id: "preferences.dialog.audio.voice.cardsSpoken.label",
+          message: "Read approval cards aloud",
+        })}
+        description={t({
+          id: "preferences.dialog.audio.voice.cardsSpoken.description",
+          message:
+            "When the assistant asks you to approve something, the voice reads the card. The card is always shown on screen.",
+        })}
+        spoken={cards.data?.spoken}
+        userChoice={cards.data?.user_choice}
+        ownValue={cards.data?.spoken_source === "user"}
+        saving={saving}
+        unavailable={
+          repliesSpoken === false
+            ? t({
+                id: "preferences.dialog.audio.voice.cardsSpoken.needsReplies",
+                message: "Cards are read aloud only while replies are spoken.",
+              })
+            : undefined
+        }
+        onChange={(spoken) =>
+          void save({ preference_approval_speech_spoken: spoken })
+        }
+        onFollowOrganization={() =>
+          void save({ preference_approval_speech_spoken: null })
+        }
+      />
+
+      <GroupHeading
+        heading={t({
+          id: "preferences.dialog.audio.voice.sound.heading",
+          message: "How it sounds",
+        })}
+      />
       <WordingRow
         heading={t({
           id: "preferences.dialog.audio.voice.replies.heading",
@@ -174,43 +341,6 @@ export function VoiceOutputSetting() {
           void save({ preference_reply_speech_wording: null })
         }
       />
-      {replies.data && (
-        <div className="space-y-1">
-          <Checkbox
-            checked={replies.data.show_in_chat}
-            onCheckedChange={(shown) =>
-              void save({ preference_reply_speech_show_in_chat: shown })
-            }
-            disabled={saving}
-            label={t({
-              id: "preferences.dialog.audio.voice.showInChat.label",
-              message: "Show what the voice said in the chat",
-            })}
-          />
-          <p className="pl-6 text-sm text-theme-fg-secondary">
-            {t({
-              id: "preferences.dialog.audio.voice.showInChat.description",
-              message:
-                "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording.",
-            })}
-          </p>
-          {replies.data.show_in_chat_source === "user" && (
-            <button
-              type="button"
-              className="pl-6 text-xs text-theme-fg-secondary underline hover:text-theme-fg-primary disabled:opacity-50"
-              onClick={() =>
-                void save({ preference_reply_speech_show_in_chat: null })
-              }
-              disabled={saving}
-            >
-              {t({
-                id: "preferences.dialog.audio.voice.followOrganization",
-                message: "Use my organization's setting",
-              })}
-            </button>
-          )}
-        </div>
-      )}
       <WordingRow
         heading={t({
           id: "preferences.dialog.audio.voice.cards.heading",
@@ -235,6 +365,46 @@ export function VoiceOutputSetting() {
           })
         }
       />
+      <SpokenLanguagesSetting />
+
+      {replies.data && (
+        <>
+          <GroupHeading
+            heading={t({
+              id: "preferences.dialog.audio.voice.shown.heading",
+              message: "What the chat shows",
+            })}
+          />
+          <div className="space-y-1">
+            <Checkbox
+              checked={replies.data.show_in_chat}
+              onCheckedChange={(shown) =>
+                void save({ preference_reply_speech_show_in_chat: shown })
+              }
+              disabled={saving}
+              label={t({
+                id: "preferences.dialog.audio.voice.showInChat.label",
+                message: "Show what the voice said in the chat",
+              })}
+            />
+            <p className="pl-6 text-sm text-theme-fg-secondary">
+              {t({
+                id: "preferences.dialog.audio.voice.showInChat.description",
+                message:
+                  "Adds a folded “Spoken” line above each answer in conversation, with a play button where your organization keeps the recording.",
+              })}
+            </p>
+            <OrganizationNote
+              indent
+              ownValue={replies.data.show_in_chat_source === "user"}
+              saving={saving}
+              onFollowOrganization={() =>
+                void save({ preference_reply_speech_show_in_chat: null })
+              }
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -503,6 +503,11 @@ fn shaped_approval_speech(written: Written) -> (ApprovalSpeechConfig, Vec<String
         Some(Written::Flag(flag)) => config.user_choice = flag,
         Some(_) => wrong(&mut dropped, "user_choice", "`true` or `false`"),
     }
+    match settings.remove("spoken") {
+        None => {}
+        Some(Written::Flag(flag)) => config.spoken = flag,
+        Some(_) => wrong(&mut dropped, "spoken", "`true` or `false`"),
+    }
     if let Some(languages) = settings.remove("sentences") {
         let place = "approval_speech.sentences";
         for (language, variants) in written_table(place, languages, &mut dropped) {
@@ -981,6 +986,11 @@ pub enum ApprovalSpeechWording {
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct ApprovalSpeechConfig {
+    /// Whether waiting cards are read aloud when a user is in conversational
+    /// audio mode with spoken replies. Covered by `user_choice` like the
+    /// amount and wording. Defaults to `true`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub spoken: bool,
     /// The deployment's amount: `full` or `short`.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub amount: ApprovalSpeechAmount,
@@ -990,7 +1000,8 @@ pub struct ApprovalSpeechConfig {
     /// The deployment's wording: `precise` or `natural`.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub wording: ApprovalSpeechWording,
-    /// Whether a user may choose their own amount and wording. `false` is a
+    /// Whether a user may choose their own amount and wording and whether
+    /// cards are read aloud. `false` is a
     /// lock no audience reopens; with `true`, a supervisor's audience may
     /// still close it.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
@@ -1016,6 +1027,7 @@ pub const MAX_SHORT_DETAILS: u8 = 3;
 impl Default for ApprovalSpeechConfig {
     fn default() -> Self {
         Self {
+            spoken: true,
             amount: ApprovalSpeechAmount::Full,
             short_details: 1,
             wording: ApprovalSpeechWording::Precise,
@@ -1064,6 +1076,7 @@ impl ApprovalSpeechConfig {
 }
 
 const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
+    "spoken",
     "amount",
     "short_details",
     "wording",
@@ -1352,6 +1365,16 @@ mod tests {
             .approval_speech;
         assert_eq!(plain.amount, ApprovalSpeechAmount::Short);
         assert_eq!(plain.short_details, 2);
+        assert!(plain.spoken);
+        let quiet = schema("[approval_speech]\nspoken = false")
+            .try_deserialize::<Holder>()
+            .unwrap()
+            .approval_speech;
+        assert!(!quiet.spoken);
+        assert_eq!(
+            misshaped_approval_speech(&schema("[approval_speech]\nspoken = 1")),
+            vec!["approval_speech.spoken is not `true` or `false`; the default is used"]
+        );
     }
 
     #[test]

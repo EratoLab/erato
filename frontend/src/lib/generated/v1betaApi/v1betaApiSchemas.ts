@@ -295,7 +295,13 @@ export type ApprovalSpeechStyleResponse = {
   short_details: number;
   source: ApprovalSpeechStyleSource;
   /**
-   * Whether the caller may choose their own amount and wording.
+   * Whether waiting cards are read aloud in conversational audio mode.
+   */
+  spoken: boolean;
+  spoken_source: ApprovalSpeechStyleSource;
+  /**
+   * Whether the caller may choose their own amount and wording and
+   * whether cards are read aloud.
    */
   user_choice: boolean;
   wording: ApprovalSpeechWording;
@@ -2242,6 +2248,16 @@ export type DesktopSidecarUiPackageTokenResponse = {
    * manifest. Resolve it against the origin this response came from.
    */
   url: string;
+};
+
+export type Disclaimer = {
+  content: string;
+  id: string;
+  title: string;
+};
+
+export type DisclaimersResponse = {
+  disclaimers: Disclaimer[];
 };
 
 export type DisconnectMcpServerOauthResponse = {
@@ -4205,7 +4221,13 @@ export type ReplySpeechStyleResponse = {
   show_in_chat_source: ReplySpeechStyleSource;
   source: ReplySpeechStyleSource;
   /**
-   * Whether the caller may choose their own wording.
+   * Whether replies are spoken in conversational audio mode.
+   */
+  spoken: boolean;
+  spoken_source: ReplySpeechStyleSource;
+  /**
+   * Whether the caller may choose their own wording and whether replies
+   * are spoken.
    */
   user_choice: boolean;
   wording: ReplySpeechWording;
@@ -6239,6 +6261,11 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_approval_speech_amount?: string | null | undefined;
   /**
+   * Whether approval cards are read aloud in conversation; `null` follows
+   * the organisation again.
+   */
+  preference_approval_speech_spoken?: boolean | null | undefined;
+  /**
    * How approval cards are worded aloud: `precise` or `natural`, like the
    * amount.
    */
@@ -6274,6 +6301,11 @@ export type UpdateProfilePreferencesRequest = {
    * follows the organisation again.
    */
   preference_reply_speech_show_in_chat?: boolean | null | undefined;
+  /**
+   * Whether replies are spoken in conversation; `null` follows the
+   * organisation again.
+   */
+  preference_reply_speech_spoken?: boolean | null | undefined;
   /**
    * How replies are spoken in conversation: `natural` or `precise`, like
    * the amount.
@@ -6378,6 +6410,11 @@ export type UserProfile = {
    */
   picture?: string;
   preference_approval_speech_amount?: ApprovalSpeechAmount;
+  /**
+   * Whether approval cards are read aloud in conversation, as the user
+   * chose; absent follows the organisation.
+   */
+  preference_approval_speech_spoken?: boolean;
   preference_approval_speech_wording?: ApprovalSpeechWording;
   /**
    * Additional contextual information about the user for the assistant.
@@ -6409,6 +6446,11 @@ export type UserProfile = {
    * follows the organisation.
    */
   preference_reply_speech_show_in_chat?: boolean;
+  /**
+   * Whether replies are spoken in conversation, as the user chose; absent
+   * follows the organisation.
+   */
+  preference_reply_speech_spoken?: boolean;
   preference_reply_speech_wording?: ReplySpeechWording;
   /**
    * The languages the user speaks, first = main, as ISO 639-1 codes;

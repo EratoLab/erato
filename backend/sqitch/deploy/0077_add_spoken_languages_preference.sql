@@ -1,5 +1,5 @@
 -- Deploy erato:0077_add_spoken_languages_preference to pg
--- requires: 0075_add_reply_speech_show_in_chat_preference
+-- requires: 0076_add_spoken_preferences
 
 BEGIN;
 
