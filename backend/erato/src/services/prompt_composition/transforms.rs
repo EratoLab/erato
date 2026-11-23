@@ -342,7 +342,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     tip_directives.extend(
         turn_instructions
             .iter()
-            .map(|&kind| AbstractChatSequencePart::TurnInstruction { kind }),
+            .map(|kind| AbstractChatSequencePart::TurnInstruction { kind: kind.clone() }),
     );
 
     // 9.7 Inject the delegated run's directive, derived from the chat row on
@@ -654,6 +654,7 @@ pub async fn resolve_sequence(
                     role: MessageRole::User,
                     content: ContentPart::TurnInstructionMarker(ContentPartTurnInstructionMarker {
                         kind: kind.stored(),
+                        language: kind.language().map(str::to_string),
                     }),
                 });
             }

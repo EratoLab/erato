@@ -51,6 +51,10 @@ import {
   writtenPartArrives,
 } from "@/hooks/audio/speechPlayback";
 import {
+  spokenTurnLanguage,
+  takeSpokenTurnLanguage,
+} from "@/hooks/audio/spokenLanguage";
+import {
   beginWaitTurn,
   endWaitTurn,
   moveWaitTurn,
@@ -2410,9 +2414,14 @@ export function useChatMessaging(
         const speech = useSpeechPlayback.getState();
         requestBody.conversational_audio_back =
           speech.conversational && speech.enabled;
+        // Only a turn spoken in audio mode has a language of its own.
+        const spokenLanguage = speech.conversational
+          ? takeSpokenTurnLanguage()
+          : undefined;
+        if (spokenLanguage) requestBody.spoken_language = spokenLanguage;
         beginSpeechResponse(streamKey);
         if (useSpeechPlayback.getState().spokenTurn === streamKey)
-          beginWaitTurn(streamKey);
+          beginWaitTurn(streamKey, { language: spokenTurnLanguage() });
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
           requestBody,
           effectiveChatIdForRequest,
@@ -3234,7 +3243,10 @@ export function useChatMessaging(
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) {
         beginSpeechResponse(streamKey);
-        beginWaitTurn(streamKey, { continuation: true });
+        beginWaitTurn(streamKey, {
+          continuation: true,
+          language: spokenTurnLanguage(),
+        });
       }
 
       return new Promise<void>((resolve, reject) => {

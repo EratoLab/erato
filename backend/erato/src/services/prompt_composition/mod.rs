@@ -117,11 +117,15 @@ pub use types::{
 pub fn turn_instructions_for_turn(
     config: &TurnInstructionsConfig,
     read_back: Option<ReplySpeechWording>,
+    spoken_language: Option<&str>,
 ) -> BTreeSet<TurnInstruction> {
-    let Some(wording) = read_back else {
-        return BTreeSet::new();
-    };
     let mut instructions = BTreeSet::new();
+    if let Some(code) = spoken_language {
+        instructions.insert(TurnInstruction::SpokenLanguage(code.to_string()));
+    }
+    let Some(wording) = read_back else {
+        return instructions;
+    };
     if config.prompt(TurnInstructionKind::SpokenReply).is_some() {
         instructions.insert(TurnInstruction::Configured(
             TurnInstructionKind::SpokenReply,

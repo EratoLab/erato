@@ -91,7 +91,7 @@ async fn compose_turn(
         action.as_ref(),
         &config.action_facets.facets,
         None,
-        &turn_instructions.iter().copied().collect(),
+        &turn_instructions.iter().cloned().collect(),
     )
     .await
     .unwrap();
@@ -824,16 +824,18 @@ fn a_spoken_reply_keeps_the_configured_style_and_natural_adds_the_protocol() {
     let protocol = TurnInstruction::Builtin(BuiltinTurnInstruction::SpokenAndWritten);
     let mut config = config().turn_instructions;
     assert_eq!(
-        turn_instructions_for_turn(&config, natural)
+        turn_instructions_for_turn(&config, natural, None)
             .into_iter()
             .collect::<Vec<_>>(),
-        [protocol]
+        [protocol.clone()]
     );
-    assert!(turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise)).is_empty());
+    assert!(
+        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise), None).is_empty()
+    );
     config.spoken_reply.prompt = Some("Answer as speech.".into());
-    assert!(turn_instructions_for_turn(&config, None).is_empty());
+    assert!(turn_instructions_for_turn(&config, None, None).is_empty());
     assert_eq!(
-        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise))
+        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise), None)
             .into_iter()
             .collect::<Vec<_>>(),
         [TurnInstruction::Configured(
@@ -841,12 +843,37 @@ fn a_spoken_reply_keeps_the_configured_style_and_natural_adds_the_protocol() {
         )]
     );
     assert_eq!(
-        turn_instructions_for_turn(&config, natural)
+        turn_instructions_for_turn(&config, natural, None)
             .into_iter()
             .collect::<Vec<_>>(),
         [
             TurnInstruction::Configured(TurnInstructionKind::SpokenReply),
-            protocol
+            protocol.clone()
         ]
+    );
+}
+
+#[test]
+fn a_spoken_turn_names_its_language_whether_or_not_it_is_read_back() {
+    let config = config().turn_instructions;
+    let spoken = TurnInstruction::SpokenLanguage("de".into());
+    assert_eq!(
+        turn_instructions_for_turn(&config, None, Some("de"))
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [spoken.clone()]
+    );
+    assert_eq!(
+        turn_instructions_for_turn(&config, Some(ReplySpeechWording::Natural), Some("de"))
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [
+            TurnInstruction::Builtin(BuiltinTurnInstruction::SpokenAndWritten),
+            spoken
+        ]
+    );
+    assert_eq!(
+        config.spoken_language_text("German"),
+        "The user spoke German in this turn."
     );
 }

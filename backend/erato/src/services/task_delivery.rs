@@ -992,6 +992,7 @@ pub async fn deliver_task_result(
                     action_facet_args: None,
                     mentioned_assistant_ids: None,
                     delegation_run_mode: None,
+                    spoken_language: None,
                     task_result: Some(crate::models::message::TaskResultInput {
                         delivery_id: delivery.delivery_id,
                         child_chat_id,
@@ -1801,6 +1802,7 @@ async fn deliver_one_child_db_only(
                 action_facet_args: None,
                 mentioned_assistant_ids: None,
                 delegation_run_mode: None,
+                spoken_language: None,
                 task_result: Some(crate::models::message::TaskResultInput {
                     delivery_id: delivery.delivery_id,
                     child_chat_id,

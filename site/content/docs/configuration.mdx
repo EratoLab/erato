@@ -8189,15 +8189,20 @@ Regenerating or editing a message adds none. A type or setting the backend does
 not know is ignored and logged as a warning at startup, so a content package
 that is newer than the backend does not stop it from starting.
 
-| Type           | Applies when                                                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `spoken_reply` | The reply is read back: a turn sent in conversational audio mode with **Audio-back** on and `audio_conversational.speech_provider` set. |
+| Type              | Applies when                                                                                                                            |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `spoken_reply`    | The reply is read back: a turn sent in conversational audio mode with **Audio-back** on and `audio_conversational.speech_provider` set. |
+| `spoken_language` | The user spoke the turn in conversational audio mode: the instruction names the language they spoke.                                    |
 
 #### `turn_instructions.<type>.prompt`
 
 {/* erato_toml_config_key: turn_instructions.spoken_reply.prompt */}
+{/* erato_toml_config_key: turn_instructions.spoken_language.prompt */}
 
-The instruction text. Unset or blank, the type adds nothing.
+The instruction text. Unset or blank, `spoken_reply` adds nothing.
+`spoken_language` then says "The user spoke {language} in this turn.";
+`{language}` is the English name of the language the user spoke, as Erato
+decided it from the transcription.
 
 **Type:** `string`
 

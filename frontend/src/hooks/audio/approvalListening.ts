@@ -1,4 +1,5 @@
 /* eslint-disable lingui/no-unlocalized-strings -- meanings, events and notice kinds of the card's logic; the spoken words are in spokenCardWords */
+import { i18n } from "@lingui/core";
 import { create } from "zustand";
 
 import { fetchInterpretApprovalVoiceCommand } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -486,6 +487,10 @@ export async function heardApprovalWords(
         body: {
           transcript: words,
           ...(card.language ? { language: card.language } : {}),
+          // The phrase shown on the on-screen card approves too.
+          ...(card.language && card.language !== i18n.locale
+            ? { screen_language: i18n.locale }
+            : {}),
           pieces: commandPieces(pieces, flow) as ApprovalCardPiece[],
           ...(current !== null ? { current_piece_id: pieces[current].id } : {}),
           ...(context.askedWhichText ? { question: "which_text" } : {}),

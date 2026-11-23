@@ -141,6 +141,30 @@ pub(super) fn speech_language(app_state: &AppState, me_user: &MeProfile) -> Spee
     )
 }
 
+/// Speech in `spoken`, the language of what is said (any language code),
+/// else in the user's language as [`speech_language`] has it.
+pub(super) fn voice_language(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    spoken: Option<&str>,
+) -> SpeechLanguage {
+    match spoken.and_then(crate::services::spoken_language::language_code) {
+        Some(code) => SpeechLanguage::with_readings(&code, &app_state.speech_readings),
+        None => speech_language(app_state, me_user),
+    }
+}
+
+/// A `language` a client sent with what the voice is to say: absent is the
+/// user's language, a value that is no language code is refused.
+pub(super) fn requested_language(language: Option<&str>) -> Result<Option<String>, StatusCode> {
+    match language {
+        None => Ok(None),
+        Some(tag) => crate::services::spoken_language::language_code(tag)
+            .map(Some)
+            .ok_or(StatusCode::BAD_REQUEST),
+    }
+}
+
 /// The prose of an assistant message: its text parts, without reasoning, tool calls or files.
 fn message_text(content: &[ContentPart]) -> String {
     content
@@ -219,7 +243,11 @@ pub async fn read_message_aloud(
     if text.len() > MAX_INPUT_BYTES {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = speech_language(&app_state, &me_user);
+    // A reply to a spoken question is read in the language it was asked in.
+    let spoken = crate::services::spoken_language::of_turn(&app_state.db, message_id)
+        .await
+        .map_err(|error| log_internal_server_error(error.into()))?;
+    let language = voice_language(&app_state, &me_user, spoken.as_deref());
     if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -240,6 +268,11 @@ pub struct ApprovalSpeechRequest {
     /// at most 16 of them, each at most 400 and all together at most 2000
     /// characters.
     pub pieces: Vec<String>,
+    /// The language the pieces are worded in, a code such as `de`; the
+    /// user's language when omitted.
+    #[serde(default)]
+    #[schema(nullable = false, example = "de")]
+    pub language: Option<String>,
 }
 
 /// Speak the approval a message of the user is waiting on.
@@ -255,7 +288,7 @@ pub struct ApprovalSpeechRequest {
     request_body = ApprovalSpeechRequest,
     responses(
         (status = OK, content_type = "text/event-stream", body = ReadAloudStreamEvent),
-        (status = BAD_REQUEST, description = "No pieces, or a piece with nothing to say"),
+        (status = BAD_REQUEST, description = "No pieces, a piece with nothing to say, or a language that is not a language code"),
         (status = NOT_FOUND, description = "Conversational speech is off, or the message does not exist or is not in a chat of the user"),
         (status = CONFLICT, description = "The message has no approval waiting for a decision"),
         (status = PAYLOAD_TOO_LARGE, description = "More than 16 pieces, a piece over 400 characters, or more than 2000 characters in all")
@@ -289,7 +322,8 @@ pub async fn speak_approval(
     {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = speech_language(&app_state, &me_user);
+    let requested = requested_language(request.language.as_deref())?;
+    let language = voice_language(&app_state, &me_user, requested.as_deref());
     // The pieces are what the card shows; markdown in a value is not meant.
     let pieces: Vec<String> = pieces
         .iter()

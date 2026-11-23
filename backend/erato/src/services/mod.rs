@@ -68,3 +68,4 @@ pub use sentry_stub as sentry;
 pub mod client_operations;
 
 pub mod speech;
+pub mod spoken_language;

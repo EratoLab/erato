@@ -1,4 +1,3 @@
-import { i18n } from "@lingui/core";
 import { useEffect } from "react";
 
 import {
@@ -21,6 +20,7 @@ import {
   deploymentConfirmationPhrases,
 } from "./confirmationPhrases";
 import { useSpeechPlayback } from "./speechPlayback";
+import { cardLanguage, useSpokenLanguage } from "./spokenLanguage";
 import {
   deploymentNumberWords,
   deploymentSentences,
@@ -99,14 +99,16 @@ export function useSpokenApprovalCard({
   const key = `${messageId}:${keys[index] ?? index}`;
   const style = useSpokenStyle(spokenTurn);
   const approvalId = items.at(index)?.approvalId;
+  // The language the user spoke, as far as the card has words for it.
+  const language = cardLanguage(useSpokenLanguage((state) => state.turn));
   // Only a card said in full, in a language with a phrase of its own, names
   // the phrase; any other is approved on screen.
   const approves =
-    deploymentConfirmationPhrase(i18n.locale) !== undefined &&
+    deploymentConfirmationPhrase(language) !== undefined &&
     approvalId !== undefined &&
     decide?.(approvalId) !== undefined &&
     approval !== undefined &&
-    spokenWordsFor(i18n.locale, {
+    spokenWordsFor(language, {
       now: new Date(),
       spokenCardLanguages: deploymentSpokenCardLanguages(),
     }).full &&
@@ -120,7 +122,7 @@ export function useSpokenApprovalCard({
     const item = items.at(index);
     const decision = item ? decide?.(item.approvalId) : undefined;
     const options = {
-      language: i18n.locale,
+      language,
       now: new Date(),
       position:
         total > 1
@@ -132,7 +134,7 @@ export function useSpokenApprovalCard({
             }
           : undefined,
       userTurns,
-      numberWords: deploymentNumberWords(i18n.locale),
+      numberWords: deploymentNumberWords(language),
       spokenCardLanguages: deploymentSpokenCardLanguages(),
       voiceApproval: approves,
       confirmationPhrases: deploymentConfirmationPhrases(),
@@ -175,6 +177,7 @@ export function useSpokenApprovalCard({
     index,
     items,
     key,
+    language,
     messageId,
     modelSpeaking,
     quiet,

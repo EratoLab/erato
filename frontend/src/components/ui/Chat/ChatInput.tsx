@@ -52,6 +52,11 @@ import {
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
+import {
+  mainLanguage,
+  noteSpokenTurnLanguage,
+  useSpokenLanguage,
+} from "@/hooks/audio/spokenLanguage";
 import { useApprovalCardListening } from "@/hooks/audio/useApprovalCardListening";
 import { useApprovalChangeOutcome } from "@/hooks/audio/useApprovalChangeOutcome";
 import {
@@ -228,6 +233,22 @@ export interface ComposerSizeLimit {
   formatted: string;
   kind: "size" | "count";
 }
+
+/**
+ * The languages the user is likely to speak: the last one spoken, their own
+ * and those of the browser. At most three.
+ */
+const likelySpokenLanguages = (): string[] => {
+  const browser = typeof navigator === "undefined" ? [] : navigator.languages;
+  const languages = [
+    useSpokenLanguage.getState().turn,
+    mainLanguage(),
+    ...browser,
+  ]
+    .filter((language): language is string => Boolean(language))
+    .map((language) => language.split(/[-_]/)[0].toLowerCase());
+  return [...new Set(languages)].slice(0, 3);
+};
 
 interface ChatInputProps {
   onSendMessage: (
@@ -601,17 +622,19 @@ export const ChatInput = ({
     talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
-  const interfaceLanguage = i18n.locale;
+  // Hesitations sound like the language the user spoke last.
+  const hesitationLanguage =
+    useSpokenLanguage((state) => state.turn) ?? i18n.locale;
   const isHesitationOnly = useMemo(
     () =>
       hesitationMatcher(
         hesitationWordsFor(
-          interfaceLanguage,
+          hesitationLanguage,
           hesitationWords,
           hesitationsByLanguage,
         ),
       ),
-    [interfaceLanguage, hesitationWords, hesitationsByLanguage],
+    [hesitationLanguage, hesitationWords, hesitationsByLanguage],
   );
   useEffect(() => {
     configureVoiceStart({
@@ -625,8 +648,11 @@ export const ChatInput = ({
     });
     if (!isAudioMode) stopSpeechPlayback();
     // Asked again each time audio mode starts, so a changed voice brings
-    // lines in that voice.
-    if (isAudioMode && speechEnabled) prepareWaitLines().catch(() => {});
+    // lines in that voice; in each language the user may speak, so the
+    // first turn in one already has its lines.
+    if (isAudioMode && speechEnabled)
+      for (const language of likelySpokenLanguages())
+        prepareWaitLines(language).catch(() => {});
   }, [isAudioMode, speechEnabled]);
   useEffect(
     () => () => {
@@ -832,6 +858,13 @@ export const ChatInput = ({
     audioModeRestartSawPendingResponseRef.current = true;
   }, []);
 
+  const handleTurnLanguage = useCallback((language: string) => {
+    // Words to a card are no turn of their own.
+    if (dictationTargetRef.current?.card) return;
+    noteSpokenTurnLanguage(language);
+    prepareWaitLines(language).catch(() => {});
+  }, []);
+
   const appendDictationTranscript = useCallback(
     ({ chunkIndex, transcript }: AudioDictationTranscriptChunk) => {
       const target = dictationTargetRef.current;
@@ -919,6 +952,8 @@ export const ChatInput = ({
     overVoiceMinSpeechMs: talkOverVoiceMinSpeechMs,
     onSpeechOverVoice: handleSpeechOverVoice,
     onVoiceLowered: lowerVoice,
+    chatId,
+    onTurnLanguage: handleTurnLanguage,
   });
 
   const ownsAudio =

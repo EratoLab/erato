@@ -17,6 +17,11 @@ path = "./src/record_chat_provider_reqwest.rs"
 erato_config = { path = "../erato_config" }
 erato_memory = { path = "../erato_memory" }
 
+# Checks which language a spoken turn's words are in. Each language adds its
+# models to the binary (about 4 MB a language with Latin script), so only
+# these are built in; any other language follows the recognizer alone.
+lingua = { version = "=1.8.0", default-features = false, features = ["english", "german", "french", "spanish", "italian", "portuguese", "dutch", "polish", "turkish", "russian", "ukrainian", "arabic", "hindi", "chinese", "japanese", "korean"] }
+
 # Dependencies: Server
 axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }

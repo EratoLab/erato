@@ -164,6 +164,11 @@ pub struct InputParameters {
     /// result still needs reacting to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_result: Option<TaskResultInput>,
+    /// The language the user spoke this message in, in conversational audio
+    /// mode: a code such as `de`. Never shown; the voice of later turns in
+    /// the chat keeps to it when a turn is unclear.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoken_language: Option<String>,
 }
 
 /// The marker on a delivered task result's user row.
@@ -2102,6 +2107,9 @@ pub struct ContentPartTurnInstructionMarker {
     /// The instruction type, e.g. `spoken_reply`.
     #[schema(value_type = String)]
     pub kind: StoredTurnInstructionKind,
+    /// For `spoken_language`: the code of the language the user spoke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 /// A type name stored in a snapshot. One the backend no longer knows still

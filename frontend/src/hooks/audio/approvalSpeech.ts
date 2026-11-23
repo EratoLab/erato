@@ -189,9 +189,13 @@ const feed = () => {
   settle();
 };
 
-/** One request to the voice for `sentences`, handing over their audio by index. */
+/**
+ * One request to the voice for `sentences`, worded in `language`, handing
+ * over their audio by index.
+ */
 const openSpeech = (
   messageId: string,
+  language: string | undefined,
   sentences: string[],
   handlers: {
     stale: () => boolean;
@@ -211,7 +215,9 @@ const openSpeech = (
     `/api/v1beta/me/messages/${encodeURIComponent(messageId)}/approval-speech`,
     {
       method: "POST",
-      body: JSON.stringify({ pieces: sentences }),
+      body: JSON.stringify(
+        language ? { pieces: sentences, language } : { pieces: sentences },
+      ),
       onMessage: (event) => {
         if (handlers.stale()) return;
         if (event.type === "audio_delta") {
@@ -285,7 +291,7 @@ const sayExtra = (sentences: string[]) => {
   const parts = sentences.map(emptyBuffer);
   const current = { parts, at: 0, close: () => {} };
   extra = current;
-  current.close = openSpeech(card.messageId, sentences, {
+  current.close = openSpeech(card.messageId, card.language, sentences, {
     stale: () => extra !== current || thisPlay !== playRun,
     audio: (index, chunk) => {
       pushChunk(parts[index], chunk);
@@ -317,6 +323,7 @@ const loadPieces = (indices: number[]) => {
   const pieceAt = (part: number) => indices.at(part);
   thisStream = openSpeech(
     card.messageId,
+    card.language,
     indices.map((index) => said[index].text),
     {
       stale: () => thisCard !== cardRun || closeStream !== thisStream,
@@ -502,7 +509,7 @@ export function announceApprovalNotice(
   fellBack = true;
   const key = noticeKey(messageId, notice);
   play_(
-    { key, messageId, pieces: [], notice: true },
+    { key, messageId, pieces: [], notice: true, language },
     [{ id: key, role: "pointer", text, mustSay: false }],
     false,
   );
@@ -528,6 +535,7 @@ export interface PreparedNotice {
 interface Prepared extends PreparedNotice {
   key: string;
   messageId: string;
+  language: string;
   text: string;
   buffer: Buffered;
   failed: boolean;
@@ -551,6 +559,7 @@ export function prepareApprovalNotice(
   const prepared: Prepared = {
     key: noticeKey(messageId, notice),
     messageId,
+    language,
     text: noticeText(notice, language),
     buffer,
     failed: false,
@@ -561,7 +570,7 @@ export function prepareApprovalNotice(
       prepared.stream();
     },
   };
-  prepared.stream = openSpeech(messageId, [prepared.text], {
+  prepared.stream = openSpeech(messageId, language, [prepared.text], {
     stale: () => prepared.closed,
     audio: (_, chunk) => {
       pushChunk(buffer, chunk);
@@ -594,6 +603,7 @@ export function sayPreparedNotice(notice: PreparedNotice) {
       messageId: prepared.messageId,
       pieces: [],
       notice: true,
+      language: prepared.language,
     },
     [
       {
