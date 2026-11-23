@@ -63,6 +63,27 @@ describe("wordMessageContext", () => {
     });
   });
 
+  it("names the answer's model and the files sent with the request", () => {
+    const answer: Message = {
+      id: "answer-1",
+      role: "assistant",
+      content: [],
+      createdAt: "2026-11-23T20:57:10Z",
+      previous_message_id: "user-1",
+      chatProviderId: "model-1",
+    };
+    expect(
+      wordMessageContext(
+        {
+          "user-1": { ...request, input_files_ids: ["img-1"] },
+          "answer-1": answer,
+        },
+        ["user-1", "answer-1"],
+        "answer-1",
+      ),
+    ).toMatchObject({ modelId: "model-1", fileIds: ["img-1"] });
+  });
+
   it("knows nothing about a message it does not have", () => {
     expect(wordMessageContext({ "user-1": request }, ["user-1"], "x")).toEqual(
       {},

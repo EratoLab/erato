@@ -118,3 +118,21 @@ export async function checkWordAuthoringBudget(
     args.signal?.removeEventListener("abort", abort);
   }
 }
+
+/** The complete-read check of a request, for its Send capture and the copies its changes leave. */
+export const wordCompleteReadBudgetFor =
+  (args: {
+    message: string;
+    chatId: string | null;
+    assistantId?: string;
+    modelId?: string;
+    fileIds?: string[];
+  }) =>
+  (snapshot: WordAuthoringSnapshot) =>
+  async (): Promise<string | undefined> => {
+    const budget = await checkWordAuthoringBudget(snapshot, {
+      ...args,
+      mode: "complete",
+    });
+    return budget.ok ? undefined : budget.issue;
+  };

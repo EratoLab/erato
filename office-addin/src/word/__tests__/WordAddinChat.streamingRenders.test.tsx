@@ -1,6 +1,8 @@
 import {
   ChatMessage,
+  componentRegistry,
   FeatureConfigProvider,
+  registerClientToolExecutor,
   MessageList,
   ThemeProvider,
 } from "@erato/frontend/library";
@@ -18,7 +20,9 @@ import {
   uninstallMockWordDocument,
 } from "../../test/mocks/word/document";
 import { WordAddinChat } from "../WordAddinChat";
+import { WordApprovalItemCard } from "../components/WordApprovalItemCard";
 import { wordContextStore } from "../hooks/wordContextStore";
+import { WORD_APPLY_PLAN_TOOL } from "../utils/wordApplyCall";
 
 import type { AddinChatController } from "../../core/AddinChatCore";
 import type { ChatMessageProps, ContentPart } from "@erato/frontend/library";
@@ -284,6 +288,104 @@ describe("the Word pane while a reply streams", () => {
     }
 
     expect(harness.rows.filter((id) => id !== LIVE_ID)).toEqual([]);
+  });
+
+  it("renders no more while a chained change waits in an earlier answer's decision place", () => {
+    let cardShown = false;
+    const rowsWhileStreaming = () => {
+      const { rerender, unmount, container } = render(pane());
+      cardShown = !!container.querySelector(
+        '[data-message-id="a0"] [data-testid="word-chained-read-again"], [data-message-id="a0"] [data-testid="word-decision-choices"]',
+      );
+      harness.rows.length = 0;
+      for (let chunk = 1; chunk <= 5; chunk++) {
+        harness.messages = {
+          ...harness.messages,
+          [LIVE_ID]: liveMessage(chunk),
+        };
+        rerender(pane());
+      }
+      const rows = [...harness.rows];
+      unmount();
+      return rows;
+    };
+    harness.messages = { ...harness.messages, [LIVE_ID]: liveMessage(0) };
+    const without = rowsWhileStreaming();
+
+    const plan = { ...examplePlan("snap-0"), readToken: "read-0" };
+    const display = {
+      title: "Change “Vertrag.docx”",
+      description: "Updates 1 of 3 sections: § 2",
+    };
+    const chained = { submission_call_id: "submit-0", decide_on_screen: false };
+    harness.messages.u0 = {
+      ...userMessage(0),
+      action_facet_id: "word_document_authoring",
+    };
+    harness.messages.a0 = {
+      ...harness.messages.a0,
+      content: [
+        {
+          content_type: "tool_use",
+          tool_call_id: "submit-0",
+          tool_name: "submit_document_plan",
+          status: "success",
+          input: plan,
+          output: {
+            status: "success",
+            submission: { status: "accepted" },
+            result: {
+              draft_id: "submit-0",
+              snapshot: "snap-0",
+              action: "word.apply_document_plan",
+            },
+            apply: { call_id: "submit-0.apply" },
+          },
+        },
+        {
+          content_type: "tool_approval_request",
+          tool_call_id: "submit-0.apply",
+          tool_name: "apply_document_plan",
+          mcp_server_id: "word",
+          input: { submission_call_id: "submit-0", draft_id: "submit-0" },
+          allow_always: true,
+          requested_at: "2026-01-01T00:01:30Z",
+          kind: "client_tool",
+          display,
+          approvals: [
+            {
+              approval_id: "submit-0.apply",
+              tool_call_id: "submit-0.apply",
+              tool_name: "apply_document_plan",
+              input: { submission_call_id: "submit-0", draft_id: "submit-0" },
+              display,
+              child: null,
+              chained,
+            },
+          ],
+        },
+      ],
+    };
+    harness.messages = { ...harness.messages, [LIVE_ID]: liveMessage(0) };
+    const previous = componentRegistry.ApprovalItemCard;
+    componentRegistry.ApprovalItemCard = WordApprovalItemCard;
+    // As the pane's input registers it: the change can be made here.
+    const unregister = registerClientToolExecutor(
+      WORD_APPLY_PLAN_TOOL,
+      async () => ({ ok: true, result: {} }),
+    );
+    // jsdom has no scrolling; the card scrolls itself into view when it mounts.
+    Element.prototype.scrollIntoView = () => {};
+    try {
+      const withCard = rowsWhileStreaming();
+      expect(cardShown).toBe(true);
+      expect(withCard.filter((id) => id !== LIVE_ID)).toEqual([]);
+      expect(withCard.length).toBeLessThanOrEqual(without.length);
+    } finally {
+      componentRegistry.ApprovalItemCard = previous;
+      unregister();
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
   });
 
   it("renders only the streaming reply's row", () => {

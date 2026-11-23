@@ -22,8 +22,9 @@ describe("the contract's wording for a server that applies changes", () => {
     setWordChainedApply(true);
     const contract = JSON.stringify(wordAuthoringContract());
     expect(contract).not.toContain("next turn");
+    // As the package's word_submit_document_plan description and facet prompt say it.
     expect(contract).toContain(
-      "submit what fits now with more_changes:true; after it is applied, read again and continue",
+      "when the document is too large for a complete read, submit what fits with more_changes:true and continue after its result.",
     );
     const refusal = wordChainedWording(WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN);
     expect(refusal).not.toContain("next turn");

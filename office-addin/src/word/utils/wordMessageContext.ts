@@ -32,9 +32,13 @@ export function wordMessageContext(
   const identity =
     message?.hostArtifact?.itemIdentity ??
     request?.action_facet_args?.document_identity;
+  const modelId = message?.chatProviderId ?? request?.chatProviderId;
+  const fileIds = request?.input_files_ids;
   return {
     ...(identity ? { identity } : {}),
     ...(requestText ? { requestText } : {}),
+    ...(modelId ? { modelId } : {}),
+    ...(fileIds?.length ? { fileIds } : {}),
     ...(message ? { content: message.content } : {}),
   };
 }

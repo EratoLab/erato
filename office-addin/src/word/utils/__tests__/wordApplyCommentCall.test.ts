@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { readySnapshot } from "../../../test/mocks/word/authoringFixtures";
 import { createWordApplyCommentsExecutor } from "../wordApplyCommentCall";
 import { WORD_CLIENT_ACTIONS } from "../wordClientActions";
 import { wordCommentAlwaysBlock } from "../wordCommentCard";
@@ -162,6 +163,42 @@ describe("the server's apply of accepted comment changes", () => {
       "message-A:word.respond_to_comments:submit-C",
     );
     expect(bridge.endOperation).not.toHaveBeenCalled();
+  });
+
+  it("leaves an answer sent with the document a new copy to read, and no plan on the old one", async () => {
+    const entry = WORD_CLIENT_ACTIONS.get("word.respond_to_comments")!;
+    vi.spyOn(entry, "execute").mockResolvedValue({
+      ok: true,
+      outcomes: [],
+      snapshotOoxml: null,
+      commentResult: {
+        rows: [{ i: 0, op: "resolve", ref: "c1", status: "applied" }] as never,
+        settled: Promise.resolve(),
+        timedOut: false,
+      },
+    });
+    const session = new WordDocumentReadSession();
+    const sent = readySnapshot();
+    session.activate(sent, context, undefined, { request: "Resolve them" });
+    const answer = await createWordApplyCommentsExecutor({
+      session,
+      readEnabled: () => true,
+      bridge: () => bridge,
+    })(input({ selected: [0] }), context);
+    expect(answer).toMatchObject({
+      ok: true,
+      result: { status: "applied", snapshot: expect.any(String) },
+    });
+    expect(sent.used).toBe(true);
+
+    // A request sent without the document has no copy to read again.
+    const commentsOnly = await executor()(input({ selected: [0] }), {
+      ...context,
+      toolCallId: "submit-D.apply",
+    });
+    expect(commentsOnly.ok && commentsOnly.result).not.toHaveProperty(
+      "snapshot",
+    );
   });
 
   it("asks on screen where the card would not run on its own", async () => {

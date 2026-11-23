@@ -60,7 +60,12 @@ const host = vi.hoisted(() => {
     retry: vi.fn(),
     budget: vi.fn(),
     images: vi.fn(),
-    session: { activate: vi.fn(), clear: vi.fn(), execute: vi.fn() },
+    session: {
+      activate: vi.fn(),
+      clear: vi.fn(),
+      execute: vi.fn(),
+      followCopies: () => () => {},
+    },
   };
 });
 

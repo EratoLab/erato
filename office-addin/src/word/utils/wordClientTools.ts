@@ -61,6 +61,9 @@ export function registerWordClientTools({
       : inclusionOff();
   };
   const unregister = [
+    wordDocumentReadSession.followCopies((owner, ordinalMap) =>
+      wordCommentReadSession.followDocument(owner, ordinalMap),
+    ),
     registerClientToolExecutor(
       WORD_READ_COMMENTS_TOOL,
       wordCommentReadSession.execute,

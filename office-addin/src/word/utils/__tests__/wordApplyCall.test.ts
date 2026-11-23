@@ -20,7 +20,7 @@ import { setWordWriteBridge } from "../wordWriteBridge";
 import type { WordDocumentApplyResult } from "../wordApplyDocumentPlan";
 import type { WordClientActionRun } from "../wordClientActions";
 import type * as WordPlanApplyModule from "../wordPlanApply";
-import type { WordWriteBridge } from "../wordWriteBridge";
+import type { WordMessageContext, WordWriteBridge } from "../wordWriteBridge";
 import type {
   ClientToolCallContext,
   ContentPart,
@@ -56,6 +56,17 @@ vi.mock("../wordCoauthoring", async (importOriginal) => ({
   readWordCoauthoring: () => Promise.resolve(coauthoring.state),
 }));
 
+const estimate = vi.hoisted(() => vi.fn());
+vi.mock("@erato/frontend/library", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  fetchTokenUsageEstimate: estimate,
+}));
+const images = vi.hoisted(() => vi.fn());
+vi.mock("../wordImageAssets", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  captureWordImageAssets: images,
+}));
+
 const submission: ClientToolCallContext = {
   toolCallId: "submit-A",
   messageId: "message-A",
@@ -77,7 +88,7 @@ const applyInput = (confirmation: Record<string, unknown> | null = null) => ({
 
 function bridgeFor(
   identity: string | null,
-  stored: { identity?: string; requestText?: string } = {},
+  stored: WordMessageContext = {},
 ): WordWriteBridge {
   let busy = false;
   return {
@@ -141,6 +152,8 @@ async function accepted(readEnabled = true) {
 }
 
 beforeEach(() => {
+  estimate.mockReset();
+  images.mockReset();
   routing.override = undefined;
   routing.coauthors = false;
   coauthoring.state = undefined;
@@ -312,18 +325,32 @@ describe("the server's apply of an accepted plan", () => {
     ).toMatchObject({ result: { status: "failed", reason: "stopped" } });
     expect(execute).not.toHaveBeenCalled();
 
+    forgetWordAcceptedPlansForTests();
+    const again = await accepted();
     const later = new AbortController();
-    execute.mockImplementation(async ({ onBeforeDocumentWrite }) => {
+    again.execute.mockImplementation(async ({ onBeforeDocumentWrite }) => {
       onBeforeDocumentWrite?.("<before/>");
       later.abort();
       return applied();
     });
     expect(
-      await apply(
+      await again.apply(
         applyInput(),
         applyContext({ toolCallId: "submit-A.apply-2", signal: later.signal }),
       ),
     ).toMatchObject({ result: { status: "applied" } });
+  });
+
+  it("leaves no copy a stopped change could still be planned on", async () => {
+    const { apply, snapshot } = await accepted();
+    const stop = new AbortController();
+    stop.abort();
+    const answer = await apply(
+      applyInput(),
+      applyContext({ signal: stop.signal }),
+    );
+    expect(answer).toMatchObject({ result: { snapshot: expect.any(String) } });
+    expect(snapshot.used).toBe(true);
   });
 
   it("marks the write as started before it begins", async () => {
@@ -392,11 +419,12 @@ describe("a change declined in the decision place", () => {
 });
 
 describe("an apply without its copy", () => {
-  const reloadedPane = (
-    stored: { identity?: string; requestText?: string },
-    readEnabled = true,
-  ) => {
-    const session = new WordDocumentReadSession();
+  const reloadedPane = (stored: WordMessageContext, readEnabled = true) => {
+    const session = new WordDocumentReadSession(async () => ({
+      snapshot: readySnapshot(),
+      capture: {},
+      reusedVerifiedBody: false,
+    }));
     return {
       session,
       apply: createWordApplyPlanExecutor({
@@ -422,6 +450,54 @@ describe("an apply without its copy", () => {
       },
     });
     expect(session.liveCapture(undefined)).toBeUndefined();
+  });
+
+  it("after a reload takes the request's images and checks the answer's model budget on the next read", async () => {
+    const asset = { fileId: "img-1", name: "chart.png" };
+    images.mockResolvedValue({ assets: [asset], unavailable: [] });
+    estimate.mockResolvedValue({
+      stats: { total_tokens: 500_000, max_tokens: 128_000 },
+    });
+    const { apply, session } = reloadedPane({
+      identity: "doc-A",
+      requestText: "Shorten chapter 3",
+      modelId: "model-1",
+      fileIds: ["img-1"],
+    });
+    const answer = await apply(applyInput(), applyContext());
+    const token = answer.ok
+      ? (answer.result as { snapshot: string }).snapshot
+      : "";
+    expect(images).not.toHaveBeenCalled();
+    await session.execute(
+      { snapshot: token },
+      applyContext({ toolCallId: "read-B" }),
+    );
+    expect(images).toHaveBeenCalledWith(["img-1"]);
+    expect(session.liveCapture(token)?.authoring?.assets).toEqual([asset]);
+    expect(await session.completeReadIssue()).toBe("model-budget");
+    expect(estimate.mock.calls.at(-1)?.[0].body).toMatchObject({
+      existing_chat_id: "chat-A",
+      chat_provider_id: "model-1",
+      input_files_ids: ["img-1"],
+    });
+  });
+
+  it("after a reload allows only scoped reads when the answer names no model", async () => {
+    const { apply, session } = reloadedPane({
+      identity: "doc-A",
+      requestText: "Shorten chapter 3",
+    });
+    const answer = await apply(applyInput(), applyContext());
+    const token = answer.ok
+      ? (answer.result as { snapshot: string }).snapshot
+      : "";
+    await session.execute(
+      { snapshot: token },
+      applyContext({ toolCallId: "read-B" }),
+    );
+    expect(await session.completeReadIssue()).toBe("budget-unavailable");
+    expect(estimate).not.toHaveBeenCalled();
   });
 
   it("after a reload finds the request while the approved answer streams again", async () => {

@@ -8,6 +8,10 @@ export interface WordMessageContext {
   identity?: string;
   /** The user's request this message answers. */
   requestText?: string;
+  /** The model the message was generated with. */
+  modelId?: string;
+  /** The files sent with the request. */
+  fileIds?: string[];
   /** The message's parts as the pane has them now. */
   content?: readonly ContentPart[];
 }

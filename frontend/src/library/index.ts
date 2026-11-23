@@ -132,6 +132,11 @@ export {
   saveClientToolDecision,
 } from "@/lib/clientToolDecisions";
 export { alwaysAllowLockedLine } from "@/lib/toolCallGist/decisionLabels";
+export {
+  spokenApprovalFor,
+  spokenApprovalPieces,
+  voiceApprovalOffered,
+} from "@/lib/toolCallGist/spokenCard";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,

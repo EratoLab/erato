@@ -13,8 +13,10 @@ import {
   wordListedNames,
   wordPlanChangedSections,
 } from "./wordApprovalPreview";
+import { wordCompleteReadBudgetFor } from "./wordAuthoringBudget";
 import { WORD_CLIENT_ACTIONS } from "./wordClientActions";
 import { wordDocumentReadSession } from "./wordDocumentReadTool";
+import { captureWordImageAssets } from "./wordImageAssets";
 import {
   runWordPlanApply,
   wordPlanChecksCoauthors,
@@ -164,13 +166,29 @@ export function wordLostCaptureAnswer({
       ? session.request
       : undefined;
   const requestText = ownSession ?? stored.requestText;
+  const { chatId } = context;
+  const { modelId, fileIds } = stored;
   const snapshot =
-    sameDocument && readEnabled() && requestText && context.chatId
+    sameDocument && readEnabled() && requestText && chatId
       ? session.reserveSuccessor({
-          chatId: context.chatId,
+          chatId,
           messageId: context.messageId,
           identity: sameDocument,
           requestText,
+          ...(fileIds
+            ? { captureImages: () => captureWordImageAssets(fileIds) }
+            : {}),
+          // The chat's assistant comes with the chat; the model must be the answer's own.
+          ...(modelId
+            ? {
+                budgetFor: wordCompleteReadBudgetFor({
+                  message: requestText,
+                  chatId,
+                  modelId,
+                  fileIds,
+                }),
+              }
+            : {}),
         })
       : undefined;
   return wordApplyAnswer({

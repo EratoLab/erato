@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { readySnapshot } from "../../../test/mocks/word/authoringFixtures";
+import { registerWordClientTools } from "../wordClientTools";
+import {
+  WordCommentReadSession,
+  wordCommentReadSession,
+} from "../wordCommentReadTool";
 import {
   WORD_SNAPSHOT_REPLACED,
   WordDocumentReadSession,
+  wordDocumentReadSession,
 } from "../wordDocumentReadTool";
 
+import type { WordCommentSendCapture } from "../wordCommentReadTool";
 import type { WordRequestCapture } from "../wordRequestCapture";
 import type { ClientToolCallContext } from "@erato/frontend/library";
 
@@ -157,5 +164,134 @@ describe("the copy an applied change leaves for its answer", () => {
       ok: false,
       submissionFeedback: { terminal: true, recovery: "cannot_continue" },
     });
+  });
+
+  it("never takes another request's images or budget for this answer's copy", async () => {
+    const session = new WordDocumentReadSession(async () => ({
+      snapshot: readySnapshot(),
+      capture: {},
+      reusedVerifiedBody: false,
+    }));
+    const newer = readySnapshot();
+    newer.assets = [{ fileId: "img-B" } as never];
+    session.activate(
+      newer,
+      { chatId: "chat-A", messageId: "message-B" },
+      undefined,
+      { request: "Other request", budgetFor: () => async () => undefined },
+    );
+    const token = session.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+      requestText: "Shorten it",
+    });
+    expect(newer.used).toBeFalsy();
+    await session.execute(
+      { snapshot: token },
+      { ...context, toolCallId: "read-2" },
+    );
+    expect(session.liveCapture(token)?.authoring?.assets).toBeUndefined();
+    expect(await session.completeReadIssue()).toBe("budget-unavailable");
+  });
+
+  it("keeps the images of the answer's earlier copy without fetching them again", async () => {
+    const { session, first } = answerWithAppliedChange();
+    first.assets = [{ fileId: "img-A" } as never];
+    const captureImages = vi.fn(async () => null);
+    const token = session.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+      captureImages,
+    });
+    await session.execute(
+      { snapshot: token },
+      { ...context, toolCallId: "read-2" },
+    );
+    expect(captureImages).not.toHaveBeenCalled();
+    expect(session.liveCapture(token)?.authoring?.assets).toEqual(first.assets);
+  });
+});
+
+describe("comment reads after a change of the same answer", () => {
+  const ordinalMap = (texts: string[]) =>
+    new Map(
+      texts.map((text, i) => [
+        i + 1,
+        { uniqueLocalId: `p${i + 1}`, text } as never,
+      ]),
+    );
+  const commentSession = (map: ReturnType<typeof ordinalMap>) => {
+    const comments = new WordCommentReadSession();
+    comments.activate(
+      {
+        identity: "doc-A",
+        gestures: { document: true },
+        inventory: { source: "capture", paragraphs: [] },
+        capture: { ordinalMap: map } as unknown as WordCommentSendCapture,
+      },
+      { chatId: "chat-A", messageId: "message-A" },
+    );
+    return comments;
+  };
+
+  it("number paragraphs as the new copy does, and none until it is read", async () => {
+    const session = new WordDocumentReadSession(async () => ({
+      snapshot: readySnapshot(),
+      capture: { ordinalMap: ordinalMap(["New first.", "Old first."]) },
+      reusedVerifiedBody: false,
+    }));
+    const comments = commentSession(ordinalMap(["Old first."]));
+    session.followCopies((owner, map) => comments.followDocument(owner, map));
+    session.activate(readySnapshot(), context, undefined, { request: "x" });
+    const token = session.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+    });
+    expect(comments.submissionScope(context)?.capture?.ordinalMap.size).toBe(0);
+    await session.execute(
+      { snapshot: token },
+      { ...context, toolCallId: "read-2" },
+    );
+    expect(
+      comments.submissionScope(context)?.capture?.ordinalMap.get(1),
+    ).toMatchObject({ text: "New first." });
+  });
+
+  it("leave another request's comment session alone", () => {
+    const comments = commentSession(ordinalMap(["Kept."]));
+    comments.followDocument({ chatId: "chat-A", messageId: "message-B" }, null);
+    expect(comments.submissionScope(context)?.capture?.ordinalMap.size).toBe(1);
+  });
+
+  it("follow the pane's document session while its tools are registered", () => {
+    const unregister = registerWordClientTools({
+      readEnabled: () => true,
+      bindingIdentity: () => undefined,
+    });
+    wordCommentReadSession.activate(
+      {
+        identity: "doc-A",
+        gestures: { document: true },
+        capture: {
+          ordinalMap: ordinalMap(["Old first."]),
+        } as unknown as WordCommentSendCapture,
+      },
+      { chatId: "chat-A", messageId: "message-A" },
+    );
+    wordDocumentReadSession.activate(readySnapshot(), context);
+    wordDocumentReadSession.reserveSuccessor({
+      chatId: "chat-A",
+      messageId: "message-A",
+      identity: "doc-A",
+    });
+    expect(
+      wordCommentReadSession.submissionScope(context)?.capture?.ordinalMap.size,
+    ).toBe(0);
+    unregister();
+    wordDocumentReadSession.clear();
+    wordCommentReadSession.clear();
   });
 });

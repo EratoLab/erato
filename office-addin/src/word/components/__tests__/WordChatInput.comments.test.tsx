@@ -188,7 +188,11 @@ vi.mock("../../utils/wordAuthoringBudget", () => ({
 
 vi.mock("../../utils/wordDocumentReadTool", () => ({
   WORD_READ_TOOL: "read_document_blocks",
-  wordDocumentReadSession: { activate: vi.fn(), clear: vi.fn() },
+  wordDocumentReadSession: {
+    activate: vi.fn(),
+    clear: vi.fn(),
+    followCopies: () => () => {},
+  },
 }));
 
 vi.mock("../../utils/wordDocumentReadRequest", () => ({

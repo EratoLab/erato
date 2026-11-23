@@ -148,6 +148,19 @@ export function createWordApplyCommentsExecutor({
         host.updateReview(key, { status: "write-failed" });
       result = { status: "unconfirmed", reason: "host_error" };
     }
+    if (
+      readEnabled() &&
+      context.chatId &&
+      session.holdsCopyFor({
+        chatId: context.chatId,
+        messageId: context.messageId,
+      })
+    )
+      result.snapshot = session.reserveSuccessor({
+        chatId: context.chatId,
+        messageId: context.messageId,
+        identity,
+      });
     markWordApplyDone(context.toolCallId, identity, result);
     return wordApplyAnswer(result);
   });

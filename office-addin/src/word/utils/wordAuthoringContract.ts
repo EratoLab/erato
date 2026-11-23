@@ -152,14 +152,15 @@ export function setWordChainedApply(offered: boolean): void {
   chainedApply = offered;
 }
 
+/** The package's tool description and facet prompt carry the first replacement word for word. */
 const NEXT_TURN_WORDING: readonly [string, string][] = [
   [
     "submit what fits and continue in the next turn",
-    "submit what fits now with more_changes:true; after it is applied, read again and continue",
+    "submit what fits with more_changes:true and continue after its result",
   ],
   [
     "now and tell the user the rest follows in the next turn",
-    "now with more_changes:true; after it is applied, read again and continue",
+    "now with more_changes:true and continue after its result",
   ],
 ];
 
