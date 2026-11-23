@@ -17,8 +17,15 @@ const api = vi.hoisted(() => ({
     source: "user",
     show_in_chat: false,
     show_in_chat_source: "deployment",
+    spoken: true,
+    spoken_source: "deployment",
   },
-  cards: { wording: "precise", user_choice: false },
+  cards: {
+    wording: "precise",
+    user_choice: false,
+    spoken: true,
+    spoken_source: "deployment",
+  },
   update: vi.fn(async () => ({})),
 }));
 
@@ -39,9 +46,11 @@ beforeAll(() => {
 });
 
 const REPLIES = { ...api.replies };
+const CARDS = { ...api.cards };
 beforeEach(() => {
   api.update.mockClear();
   api.replies = { ...REPLIES };
+  api.cards = { ...CARDS };
 });
 
 const renderSetting = () =>
@@ -73,7 +82,11 @@ describe("voice output setting", () => {
 
   it("shows a row the organization has set as read-only", () => {
     renderSetting();
-    expect(screen.getByText("Set by your organization")).toBeInTheDocument();
+    // The card wording and whether cards are read aloud share one lock.
+    expect(screen.getAllByText("Set by your organization")).toHaveLength(2);
+    expect(
+      screen.getByRole("checkbox", { name: "Read approval cards aloud" }),
+    ).toBeDisabled();
     const cards = screen.getByRole("tablist", { name: "Approval cards" });
     for (const tab of cards.querySelectorAll('[role="tab"]'))
       expect(tab).toBeDisabled();
@@ -130,5 +143,77 @@ describe("voice output setting", () => {
         body: { preference_reply_speech_show_in_chat: null },
       }),
     );
+  });
+
+  it("lists what you hear before how it sounds and what the chat shows", () => {
+    renderSetting();
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual(["What you hear", "How it sounds", "What the chat shows"]);
+  });
+
+  it("turns spoken replies off and on again with the organization", async () => {
+    renderSetting();
+    const box = screen.getByRole("checkbox", { name: "Speak replies" });
+    expect(box).toBeChecked();
+    expect(box).toBeEnabled();
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_spoken: false },
+      }),
+    );
+    expect(refreshVoiceTraces).toHaveBeenCalled();
+  });
+
+  it("offers the organization's value back for the user's own choice", async () => {
+    api.replies = {
+      ...api.replies,
+      source: "deployment",
+      spoken: false,
+      spoken_source: "user",
+    };
+    renderSetting();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use my organization's setting" }),
+    );
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_reply_speech_spoken: null },
+      }),
+    );
+  });
+
+  it("keeps cards from being read aloud while replies are not spoken", () => {
+    api.replies = { ...api.replies, spoken: false, spoken_source: "user" };
+    api.cards = { ...api.cards, user_choice: true };
+    renderSetting();
+    expect(
+      screen.getByRole("checkbox", { name: "Read approval cards aloud" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText("Cards are read aloud only while replies are spoken."),
+    ).toBeInTheDocument();
+  });
+
+  it("saves whether cards are read aloud where the organization allows it", async () => {
+    api.cards = { ...api.cards, user_choice: true };
+    renderSetting();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Read approval cards aloud" }),
+    );
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_approval_speech_spoken: false },
+      }),
+    );
+  });
+
+  it("shows spoken replies set by the organization as read-only", () => {
+    api.replies = { ...api.replies, user_choice: false };
+    renderSetting();
+    expect(
+      screen.getByRole("checkbox", { name: "Speak replies" }),
+    ).toBeDisabled();
   });
 });

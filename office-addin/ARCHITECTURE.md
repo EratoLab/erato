@@ -352,8 +352,8 @@ Selected tools show as chips next to "+" wherever the unified "+" menu is used
 the mode chips and before the model selector, as in the prototype. Under an
 assistant that sets the tools, each chip shows a lock in place of its x. In a
 narrow pane the chips wrap beside the controls before them and Send keeps its
-corner; when the right side is wide (Exit audio mode) it moves to a line of its
-own rather than cutting the chips' names. The "+" carries no count badge.
+corner; when the right side is wide it moves to a line of its own rather than
+cutting the chips' names. The "+" carries no count badge.
 
 A sent user message names the context its facet carried under its text, in a
 read-only "Sent with" row. Each host registers a descriptor per facet id

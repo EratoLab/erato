@@ -329,6 +329,7 @@ async fn the_users_choice_and_an_audience_lock_apply_at_turn_time(pool: Pool<Pos
                     wording: Some(ReplySpeechWording::Natural),
                     user_choice: Some(false),
                     show_in_chat: None,
+                    spoken: None,
                 }),
             },
         )]
@@ -593,4 +594,120 @@ async fn the_user_shows_and_hides_what_the_voice_said(pool: Pool<Postgres>) {
     let back = style().await;
     assert_eq!(back["show_in_chat"], false);
     assert_eq!(back["show_in_chat_source"], "deployment");
+}
+
+/// Replies off (here the deployment's default) keep a turn written even when
+/// the client asks for it to be spoken; the user's own "on" counts where the
+/// admin lets them choose.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_reply_is_spoken_only_where_replies_are_spoken(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let recorded = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post().path("/v1/chat/completions").matcher(recorded);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(&["Sure."]));
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    let (speech_url, speech) = mock_speech().await;
+    config.speech_providers.provider.insert(
+        "voice".into(),
+        serde_json::from_value(json!({
+            "provider_kind": "audio_cpp", "model_name": "local", "voice": "voice",
+            "base_url": speech_url
+        }))
+        .unwrap(),
+    );
+    config.audio_conversational.transcription.enabled = true;
+    config.audio_conversational.speech_provider = Some("voice".into());
+    config.audio_conversational.reply_speech.spoken = false;
+    config.turn_instructions.spoken_reply.prompt = Some(INSTRUCTION.into());
+    let server = create_test_server(test_app_state(config, pool).await);
+    let style = || async {
+        server
+            .get("/api/v1beta/me/reply-speech-style")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json::<Value>()
+    };
+
+    let off = style().await;
+    assert_eq!(off["spoken"], false);
+    assert_eq!(off["spoken_source"], "deployment");
+    let quiet = submit(
+        &server,
+        json!({ "user_message": "Quiet first", "conversational_audio_back": true }),
+    )
+    .await;
+
+    let profile = server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "preference_reply_speech_spoken": true }))
+        .await
+        .json::<Value>();
+    assert_eq!(profile["preference_reply_speech_spoken"], true);
+    let on = style().await;
+    assert_eq!(on["spoken"], true);
+    assert_eq!(on["spoken_source"], "user");
+    submit(
+        &server,
+        json!({
+            "user_message": "Spoken second",
+            "previous_message_id": quiet,
+            "conversational_audio_back": true,
+        }),
+    )
+    .await;
+
+    let bodies = recorder.bodies();
+    let quiet_turn: Vec<&String> = bodies
+        .iter()
+        .filter(|body| body.contains("Quiet first") && !body.contains("Spoken second"))
+        .collect();
+    let spoken_turn: Vec<&String> = bodies
+        .iter()
+        .filter(|body| body.contains("Spoken second"))
+        .collect();
+    assert!(!quiet_turn.is_empty() && !spoken_turn.is_empty());
+    for body in quiet_turn {
+        assert!(!body.contains(INSTRUCTION), "quiet turn got it: {body}");
+    }
+    for body in spoken_turn {
+        assert!(body.contains(INSTRUCTION), "spoken turn lacks it: {body}");
+    }
+    speech.abort();
+}
+
+/// The admin's lock keeps the user's own "off" out for replies and cards
+/// alike; the value stays saved and applies once the lock is lifted.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_lock_keeps_the_users_own_spoken_choice_out(pool: Pool<Postgres>) {
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(MockSet::new()).await;
+    config.audio_conversational.reply_speech.user_choice = false;
+    config.approval_speech.user_choice = false;
+    let server = create_test_server(test_app_state(config, pool).await);
+    let profile = server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "preference_reply_speech_spoken": false,
+            "preference_approval_speech_spoken": false,
+        }))
+        .await
+        .json::<Value>();
+    assert_eq!(profile["preference_reply_speech_spoken"], false);
+    assert_eq!(profile["preference_approval_speech_spoken"], false);
+    for path in ["reply-speech-style", "approval-speech-style"] {
+        let style = server
+            .get(&format!("/api/v1beta/me/{path}"))
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json::<Value>();
+        assert_eq!(style["spoken"], true, "{path}");
+        assert_eq!(style["spoken_source"], "deployment", "{path}");
+        assert_eq!(style["user_choice"], false, "{path}");
+    }
 }

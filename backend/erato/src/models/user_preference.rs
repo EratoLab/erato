@@ -83,6 +83,12 @@ pub struct UpdateUserPreferencesInput {
     /// Whether the chat shows what the voice said; `Some(None)` follows the
     /// organisation again.
     pub reply_speech_show_in_chat: Option<Option<bool>>,
+    /// Whether replies are spoken in conversation; `Some(None)` follows the
+    /// organisation again.
+    pub reply_speech_spoken: Option<Option<bool>>,
+    /// Whether approval cards are read aloud in conversation; `Some(None)`
+    /// follows the organisation again.
+    pub approval_speech_spoken: Option<Option<bool>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
@@ -380,6 +386,12 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.reply_speech_show_in_chat {
             model.reply_speech_show_in_chat = ActiveValue::Set(value);
         }
+        if let Some(value) = input.reply_speech_spoken {
+            model.reply_speech_spoken = ActiveValue::Set(value);
+        }
+        if let Some(value) = input.approval_speech_spoken {
+            model.approval_speech_spoken = ActiveValue::Set(value);
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -428,6 +440,8 @@ async fn upsert_user_preferences_row(
                 input.reply_speech_wording.flatten().map(style_name),
             ),
             reply_speech_show_in_chat: ActiveValue::Set(input.reply_speech_show_in_chat.flatten()),
+            reply_speech_spoken: ActiveValue::Set(input.reply_speech_spoken.flatten()),
+            approval_speech_spoken: ActiveValue::Set(input.approval_speech_spoken.flatten()),
             ..Default::default()
         };
 

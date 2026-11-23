@@ -189,8 +189,12 @@ test.describe("Tool chips next to +", () => {
     page,
   }) => {
     await openTools(page, "tool-chips-audio-mode");
-    const exitAudio = page.getByTestId("chat-input-exit-audio-mode");
-    await expect(exitAudio).toBeVisible();
+    // In audio mode the audio-mode button is the way out; nothing beside it.
+    const stopAudio = page.getByTestId("chat-input-audio-mode-stop");
+    await expect(stopAudio).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Exit audio mode" }),
+    ).toHaveCount(0);
     const chips = page.locator(TOOL_CHIP);
     await expect(chips).toHaveCount(2);
     for (const label of await page
@@ -207,17 +211,17 @@ test.describe("Tool chips next to +", () => {
     ).toBeLessThanOrEqual(2);
     // Send ends the controls: right of every chip's row, at the bottom.
     const controls = await boxOf(page.locator(CONTROLS));
-    const exitBox = await boxOf(exitAudio);
+    const stopBox = await boxOf(stopAudio);
     for (const chip of await chips.all()) {
       const box = await boxOf(chip);
       expect(box.x + box.width).toBeLessThanOrEqual(
         controls.x + controls.width,
       );
     }
-    expect(exitBox.x + exitBox.width).toBeLessThanOrEqual(
+    expect(stopBox.x + stopBox.width).toBeLessThanOrEqual(
       controls.x + controls.width + 0.5,
     );
-    expect(exitBox.y + exitBox.height).toBeGreaterThan(
+    expect(stopBox.y + stopBox.height).toBeGreaterThan(
       controls.y + controls.height - 40,
     );
     await noPageOverflow(page, 340);

@@ -30,6 +30,7 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
+import { DisclaimersPane } from "./DisclaimersPane";
 import { ServersToolsPane } from "./ServersToolsPane";
 import {
   StartingAssistantSetting,
@@ -45,6 +46,7 @@ import { FormField, Input, Textarea } from "../Input";
 import { ModalBase } from "../Modal/ModalBase";
 import { toast } from "../Toast";
 import {
+  DocumentIcon,
   LockIcon,
   MediaImageIcon,
   MenuScaleIcon,
@@ -72,7 +74,8 @@ type PreferencesTab =
   | "appearance"
   | "audio"
   | "serversTools"
-  | "data";
+  | "data"
+  | "disclaimers";
 
 interface UserPreferencesDialogProps {
   isOpen: boolean;
@@ -95,6 +98,7 @@ export function UserPreferencesDialog({
   const {
     enabled: personalizationEnabled,
     dataTabEnabled,
+    disclaimersTabEnabled,
     desktopSidecarTabEnabled,
     mcpServersTabEnabled,
   } = useUserPreferencesFeature();
@@ -104,8 +108,12 @@ export function UserPreferencesDialog({
     useAudioConversationalFeature();
   const voiceOutputSettingsEnabled =
     audioConversationalEnabled && Boolean(speechEnabled);
+  const showVoiceOutputSettings = voiceOutputSettingsEnabled && isOpen;
+  // Conversation mode records too, and its voice settings live in this tab.
   const audioInputSettingsEnabled =
-    audioTranscriptionEnabled || audioDictationEnabled;
+    audioTranscriptionEnabled ||
+    audioDictationEnabled ||
+    audioConversationalEnabled;
   const defaultTab: PreferencesTab = personalizationEnabled
     ? "personalization"
     : "appearance";
@@ -202,30 +210,22 @@ export function UserPreferencesDialog({
 
   const visibleTabs = useMemo(
     () =>
-      (personalizationEnabled
-        ? [
-            "personalization",
-            "appearance",
-            ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-            ...(desktopSidecarTabEnabled || mcpServersTabEnabled
-              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["serversTools"] as const)
-              : []),
-            ...(dataTabEnabled ? (["data"] as const) : []),
-          ]
-        : [
-            "appearance",
-            ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
-            ...(desktopSidecarTabEnabled || mcpServersTabEnabled
-              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
-                (["serversTools"] as const)
-              : []),
-            ...(dataTabEnabled ? (["data"] as const) : []),
-          ]) satisfies PreferencesTab[],
+      [
+        ...(personalizationEnabled ? (["personalization"] as const) : []),
+        "appearance",
+        ...(audioInputSettingsEnabled ? (["audio"] as const) : []),
+        ...(desktopSidecarTabEnabled || mcpServersTabEnabled
+          ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
+            (["serversTools"] as const)
+          : []),
+        ...(dataTabEnabled ? (["data"] as const) : []),
+        ...(disclaimersTabEnabled ? (["disclaimers"] as const) : []),
+      ] satisfies PreferencesTab[],
     [
       audioInputSettingsEnabled,
       dataTabEnabled,
       desktopSidecarTabEnabled,
+      disclaimersTabEnabled,
       mcpServersTabEnabled,
       personalizationEnabled,
     ],
@@ -380,6 +380,10 @@ export function UserPreferencesDialog({
       message: "MCP & Apps",
     }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
+    disclaimers: t({
+      id: "preferences.dialog.tabs.disclaimers",
+      message: "Disclaimers",
+    }),
   } satisfies Record<PreferencesTab, string>;
 
   const tabIcons = {
@@ -388,6 +392,7 @@ export function UserPreferencesDialog({
     audio: <VoiceIcon className="size-4" />,
     serversTools: <ResolvedIcon iconId="tools" className="size-4" />,
     data: <LockIcon className="size-4" />,
+    disclaimers: <DocumentIcon className="size-4" />,
   } satisfies Record<PreferencesTab, ReactNode>;
 
   /* eslint-disable lingui/no-unlocalized-strings -- Internal DOM ids, not user-facing copy */
@@ -397,6 +402,7 @@ export function UserPreferencesDialog({
     audio: `${tabGroupId}-tab-audio`,
     serversTools: `${tabGroupId}-tab-servers-tools`,
     data: `${tabGroupId}-tab-data`,
+    disclaimers: `${tabGroupId}-tab-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
 
   const panelIds = {
@@ -405,6 +411,7 @@ export function UserPreferencesDialog({
     audio: `${tabGroupId}-panel-audio`,
     serversTools: `${tabGroupId}-panel-servers-tools`,
     data: `${tabGroupId}-panel-data`,
+    disclaimers: `${tabGroupId}-panel-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
   /* eslint-enable lingui/no-unlocalized-strings */
 
@@ -734,7 +741,16 @@ export function UserPreferencesDialog({
                 hidden={activeTab !== "audio"}
                 className="space-y-4"
               >
-                <div className="space-y-1">
+                {/* What a person hears comes first: it is what they come to
+                    change most; the microphone follows. */}
+                {showVoiceOutputSettings ? <VoiceOutputSetting /> : null}
+                <div
+                  className={
+                    showVoiceOutputSettings
+                      ? "space-y-1 border-t border-[var(--theme-border-subtle)] pt-4"
+                      : "space-y-1"
+                  }
+                >
                   <h2 className="text-sm font-medium text-theme-fg-primary">
                     {t({
                       id: "preferences.dialog.audio.input.heading",
@@ -752,9 +768,6 @@ export function UserPreferencesDialog({
                 <AudioInputTabContent
                   isActive={isOpen && activeTab === "audio"}
                 />
-                {voiceOutputSettingsEnabled && isOpen ? (
-                  <VoiceOutputSetting />
-                ) : null}
               </section>
             ) : null}
 
@@ -847,6 +860,19 @@ export function UserPreferencesDialog({
                 </Button>
               </div>
             </section>
+            {disclaimersTabEnabled ? (
+              <section
+                id={panelIds.disclaimers}
+                role="tabpanel"
+                aria-labelledby={tabIds.disclaimers}
+                hidden={activeTab !== "disclaimers"}
+                tabIndex={0}
+              >
+                {isOpen && activeTab === "disclaimers" ? (
+                  <DisclaimersPane />
+                ) : null}
+              </section>
+            ) : null}
           </div>
 
           {personalizationEnabled && activeTab === "personalization" ? (

@@ -1085,72 +1085,6 @@ describe("listening against the endpoint", () => {
     expect(connections).toHaveLength(1);
   });
 
-  it.each([
-    ["unclear", null],
-    ["stop", null],
-    ["skip", null],
-    ["repeat", "request"],
-  ] as const)(
-    "review 3: a late %s does not steer a reading restarted by tap",
-    async (meaning, piece) => {
-      const {
-        heardApprovalWords,
-        replayApprovalCard,
-        useApprovalListening,
-        useApprovalSpeech,
-      } = await heardCard();
-      let answer: (value: unknown) => void = () => {};
-      fetchCommand.mockReturnValue(
-        new Promise((resolve) => {
-          answer = resolve;
-        }),
-      );
-      const heard = heardApprovalWords(KEY, "hm, wie bitte");
-      replayApprovalCard();
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
-      audio(connections[1], 0);
-      answer({
-        meaning,
-        piece_id: piece === null ? null : CARD.at(-1)?.id,
-        source: "model",
-      });
-      await heard;
-      // The new reading goes on from its first piece, nothing else is said.
-      expect(connections).toHaveLength(2);
-      expect(useApprovalSpeech.getState().current).toBe(0);
-      expect(useApprovalSpeech.getState().speaking).toBe(true);
-      expect(useApprovalListening.getState().quiet).toBeNull();
-    },
-  );
-
-  it("review 3: a timeout after a restarted reading says nothing and keeps listening on", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const {
-      heardApprovalWords,
-      replayApprovalCard,
-      useApprovalListening,
-      VOICE_COMMAND_TIMEOUT_MS,
-    } = await heardCard();
-    fetchCommand.mockImplementation(
-      (_variables: unknown, signal: AbortSignal) =>
-        new Promise((_resolve, reject) => {
-          signal.addEventListener("abort", () =>
-            reject(new Error("Network error (aborted)")),
-          );
-        }),
-    );
-    const heard = heardApprovalWords(KEY, "was noch?");
-    replayApprovalCard();
-    await vi.waitFor(() => expect(connections).toHaveLength(2));
-    await vi.advanceTimersByTimeAsync(VOICE_COMMAND_TIMEOUT_MS);
-    await heard;
-    expect(connections).toHaveLength(2);
-    expect(useApprovalListening.getState()).toMatchObject({
-      pending: null,
-      quiet: null,
-    });
-  });
-
   it("review 4: 'again' right after a read-out text reads the text again", async () => {
     const { heardApprovalWords, useApprovalSpeech } = await heardCard();
     const text = CARD.findIndex(namesLongText);
@@ -1793,33 +1727,6 @@ describe("listening against the endpoint", () => {
       });
       expect(useSpeechPlayback.getState().failed).toBe(false);
       expect(connections).toHaveLength(1);
-    });
-
-    it("review 3: a late answer does not steer a reading restarted by tap", async () => {
-      const { heardApprovalWords, replayApprovalCard, useApprovalSpeech } =
-        await talkedOverAt(CARD, TEXT);
-      let reply: (value: unknown) => void = () => {};
-      fetchCommand.mockReturnValue(
-        new Promise((resolve) => {
-          reply = resolve;
-        }),
-      );
-      const heard = heardApprovalWords(KEY, "mhm");
-      replayApprovalCard();
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
-      reply({ meaning: "noise", piece_id: null, source: "model" });
-      await heard;
-      expect(useApprovalSpeech.getState().current).toBe(0);
-      expect(connections).toHaveLength(2);
-    });
-
-    it("a reading restarted by tap is not resumed at the old cut", async () => {
-      const { replayApprovalCard, resumeTalkedOverCard, useApprovalSpeech } =
-        await talkedOverAt(CARD, TEXT);
-      replayApprovalCard();
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
-      resumeTalkedOverCard(KEY);
-      expect(useApprovalSpeech.getState().current).toBe(0);
     });
 
     it("talking over a card that has since closed does nothing", async () => {

@@ -73,6 +73,7 @@ export type Env = {
   chatHistoryCompactionThresholdPercentage?: number;
   userPreferencesEnabled: boolean;
   userPreferencesDataTabEnabled: boolean;
+  disclaimersTabEnabled?: boolean;
   mcpServersTabEnabled: boolean;
   mcpServersInChatInputEnabled?: boolean;
   mcpServersInAssistantEditorEnabled?: boolean;
@@ -202,6 +203,7 @@ declare global {
     CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE?: number;
     USER_PREFERENCES_ENABLED?: boolean;
     USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
+    DISCLAIMERS_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
     MCP_SERVERS_IN_CHAT_INPUT_ENABLED?: boolean;
     MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED?: boolean;
@@ -733,6 +735,7 @@ export const env = (): Env => {
       window.CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE ?? 80,
     userPreferencesEnabled,
     userPreferencesDataTabEnabled,
+    disclaimersTabEnabled: window.DISCLAIMERS_TAB_ENABLED ?? false,
     mcpServersTabEnabled,
     mcpServersInChatInputEnabled,
     mcpServersInAssistantEditorEnabled,

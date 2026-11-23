@@ -24,6 +24,12 @@ Typical "Notable changes" categories to copy & paste:
 
 ## [Unreleased]
 
+### Notable changes
+
+#### Features and enhancements
+
+**Conversational audio: no extra buttons in the composer; spoken replies and spoken cards are settings.** Entering conversation mode speaks replies and reads approval cards aloud where a voice is configured, without pressing anything. The composer shows what it showed before spoken replies: the audio-mode button, which now ends the mode in every state (listening, the voice speaking, a card waiting, the answer still coming). "Audio-back", "Stop playback", "Skip", "Read the card aloud" and "Exit audio mode" are gone; where voice commands are on, a card is still stopped, skipped and repeated by voice. Whether replies are spoken and cards read aloud are stored user preferences under Settings, Audio, Voice, with deployment defaults (`audio_conversational.reply_speech.spoken`, `approval_speech.spoken`, both `true`), audience values and the existing `user_choice` lock; the server keeps a turn written where replies are not spoken. A choice made with the old browser toggle is not carried over. Migration 0076 adds the two preferences.
+
 ## [0.9.0] - 2026-11-23
 
 ### Notable changes

@@ -38,8 +38,16 @@ export default function HomePage() {
     // eslint-disable-next-line lingui/no-unlocalized-strings -- route paths, not user-facing copy
     const target = assistantId ? `/a/${assistantId}` : "/chat/new";
     hasNavigated.current = true;
-    navigate(`${target}${location.search}`, { replace: true });
-  }, [data, error, isLoading, timedOut, location.search, navigate]);
+    navigate(`${target}${location.search}${location.hash}`, { replace: true });
+  }, [
+    data,
+    error,
+    isLoading,
+    timedOut,
+    location.search,
+    location.hash,
+    navigate,
+  ]);
 
   useEffect(() => {
     document.title = t({
