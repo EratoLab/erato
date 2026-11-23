@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import expectedPieces from "@/lib/toolCallGist/fixtures/spokenCards/expected.json";
-import { spokenPieceField } from "@/lib/toolCallGist/spokenCard";
+import visitReportCalls from "@/lib/toolCallGist/fixtures/spokenCards/visitReport.json";
+import {
+  spokenApprovalFor,
+  spokenApprovalPieces,
+  spokenPieceField,
+} from "@/lib/toolCallGist/spokenCard";
 import {
   currentPiece,
   longTexts,
@@ -1747,5 +1752,146 @@ describe("listening against the endpoint", () => {
       talkOverApprovalCard("message-1:other");
       expect(speech.useApprovalSpeech.getState().speaking).toBe(false);
     });
+  });
+});
+
+describe("asking the card for one field", () => {
+  let locale = "en";
+  beforeEach(() => {
+    locale = i18n.locale;
+    i18n.load("de", deMessages as unknown as Messages);
+    i18n.activate("de");
+    vi.resetModules();
+    connections.length = 0;
+    sources.length = 0;
+    sequence = 0;
+    fetchCommand.mockReset();
+    vi.stubGlobal("AudioContext", MockAudioContext);
+  });
+  afterEach(() => {
+    i18n.activate(locale);
+    vi.unstubAllGlobals();
+  });
+
+  // The visit report create from MS staging: three details said, six
+  // fields behind "more", each said only on request.
+  const visitReport = () =>
+    spokenApprovalPieces(spokenApprovalFor("mcp_tool", visitReportCalls[1]), {
+      language: "de",
+      now: new Date("2026-11-23T17:00:00Z"),
+      timeZone: "Europe/Berlin",
+      voiceApproval: true,
+    });
+
+  /** The card read to its end; what is said only on request is not loaded. */
+  const heardVisitReport = async () => {
+    const pieces = visitReport();
+    const speech = await import("./approvalSpeech");
+    const listening = await import("./approvalListening");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: true, enabled: true });
+    speech.speakApprovalCard({
+      key: KEY,
+      messageId: "message-1",
+      pieces,
+      language: "de",
+      approval: { type: "pointer" },
+    });
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    const card = pieces.filter((piece) => !piece.onRequest);
+    expect(sentences(connections[0])).toEqual(card.map((piece) => piece.text));
+    card.forEach((_, index) => {
+      audio(connections[0], index);
+      playOut();
+    });
+    expect(speech.useApprovalSpeech.getState().speaking).toBe(false);
+    return { pieces, ...speech, ...listening };
+  };
+  const answer = (
+    meaning: ApprovalVoiceMeaning,
+    pieceId: string | null = null,
+    candidates?: string[],
+  ) =>
+    fetchCommand.mockResolvedValueOnce({
+      meaning,
+      piece_id: pieceId,
+      source: "rules",
+      ...(candidates ? { candidates } : {}),
+    });
+  const bodyOf = (call: number) =>
+    (
+      fetchCommand.mock.calls[call] as [
+        { body: { pieces: Record<string, unknown>[]; question?: string } },
+      ]
+    )[0].body;
+
+  it("tells the endpoint which fields are said only on request", async () => {
+    const { heardApprovalWords } = await heardVisitReport();
+    answer("repeat", "detail:Summary");
+    await heardApprovalWords(KEY, "what was the summary again?");
+    const summary = bodyOf(0).pieces.find(
+      (piece) => piece.id === "detail:Summary",
+    );
+    expect(summary).toMatchObject({
+      role: "detail",
+      field: "Summary",
+      state: "not_said",
+      on_request: true,
+    });
+  });
+
+  it("says the field asked for, loaded on its own, then is quiet", async () => {
+    const { heardApprovalWords, useApprovalSpeech, pieces } =
+      await heardVisitReport();
+    answer("repeat", "detail:Summary");
+    await heardApprovalWords(KEY, "what was the summary again?");
+    expect(connections).toHaveLength(2);
+    expect(sentences(connections[1])).toEqual([
+      "Summary: Budget in Höhe von 1.200.000 EUR bestätigt. Kundenentscheidung ist für den 14.12.2026 vorgesehen.",
+    ]);
+    expect(useApprovalSpeech.getState().current).toBe(
+      pieces.findIndex((piece) => piece.id === "detail:Summary"),
+    );
+    audio(connections[1], 0);
+    playOut();
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().closed).toBe(false);
+  });
+
+  it("asks which field when the words fit several, and the answer is said", async () => {
+    const { heardApprovalWords } = await heardVisitReport();
+    answer("repeat", null, ["detail:Visitedon", "detail:Followupdate"]);
+    await heardApprovalWords(KEY, "das Datum nochmal");
+    expect(sentences(connections[1])).toEqual([
+      "Welches Feld: Visitedon oder Followupdate?",
+    ]);
+    audio(connections[1], 0);
+    playOut();
+    answer("repeat", "detail:Followupdate");
+    await heardApprovalWords(KEY, "Followupdate");
+    expect(bodyOf(1).question).toBe("which_field");
+    expect(sentences(connections[2])).toEqual([
+      "Followupdate: 25. September 2026.",
+    ]);
+  });
+
+  it("a long text asked for by name is read, not only named", () => {
+    const step = stepForMeaning(
+      "repeat",
+      CARD[CARD.findIndex(namesLongText)].id,
+      CARD,
+      {
+        current: null,
+      },
+    );
+    expect(step.event).toEqual({
+      type: "read",
+      index: CARD.findIndex(namesLongText),
+    });
+    // While the voice says it, "again" is that piece again.
+    const at = CARD.findIndex(namesLongText);
+    expect(
+      stepForMeaning("repeat", CARD[at].id, CARD, { current: at }).event,
+    ).toEqual({ type: "repeat", index: at });
   });
 });

@@ -5943,6 +5943,17 @@
             "type": "boolean",
             "description": "The card must say this piece before a decision counts: a loss, a\nconsequence, recipients outside."
           },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other names of the field: as the card shows it, and as the vocabulary\nsays it in each language. Words naming any of them name the piece."
+          },
+          "on_request": {
+            "type": "boolean",
+            "description": "A field the card counts as \"more\" and says only when asked for by\nname. Hearing it never stands in for any piece of the card."
+          },
           "role": {
             "$ref": "#/components/schemas/ApprovalCardPieceRole"
           },
@@ -6244,6 +6255,13 @@
           "source"
         ],
         "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For `repeat` without a piece: the fields the words fit equally, for\nasking which one is meant instead of guessing."
+          },
           "decision": {
             "$ref": "#/components/schemas/ApprovalVoiceDecision",
             "description": "For `approve` and `reject` while deciding by voice is on: whether the\nwords decide the card."
@@ -6361,7 +6379,8 @@
         "type": "string",
         "description": "What the voice just asked about the card, when the user's words may\nanswer it.",
         "enum": [
-          "which_text"
+          "which_text",
+          "which_field"
         ]
       },
       "ApprovalVoiceSignals": {

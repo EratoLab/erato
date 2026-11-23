@@ -9341,6 +9341,11 @@ msgstr "{commands, select, withText {I didn't catch that. You can say: go on, wh
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichField"
+msgstr "{shape, select, named {Which field: {fields}?} other {Which field? Please say its name.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.whichText"
 msgstr "{shape, select, named {Which text: {texts}?} other {Which text? The texts are on screen.}}"
 

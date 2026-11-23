@@ -76,6 +76,8 @@ export type SpokenNotice =
   | { kind: "no_text" }
   /** The card has several long texts and the words named none: which one. */
   | { kind: "which_text"; fields: string[] }
+  /** The words fit several fields equally: which one. */
+  | { kind: "which_field"; fields: string[] }
   | { kind: "unavailable" };
 
 export type SpokenCardEvent =
@@ -200,6 +202,7 @@ export const piecesAhead = (
   const pending = pieces.flatMap((piece, index) =>
     states[index] === "pending" &&
     index !== request &&
+    piece.onRequest === undefined &&
     (released || piece.held === undefined)
       ? [index]
       : [],

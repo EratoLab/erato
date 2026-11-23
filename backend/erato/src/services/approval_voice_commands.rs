@@ -25,9 +25,12 @@ pub use phrase::PhraseMatchKind;
 pub use words::{CommandWords, CommandWordsByLanguage};
 
 pub const MAX_TRANSCRIPT_CHARS: usize = 300;
-pub const MAX_PIECES: usize = 16;
+/// The card's pieces and the fields it says only when asked for by name.
+pub const MAX_PIECES: usize = 32;
 pub const MAX_PIECE_ID_CHARS: usize = 64;
 pub const MAX_FIELD_CHARS: usize = 100;
+/// Other names one field may carry: the card's own and a few languages'.
+pub const MAX_FIELD_NAMES: usize = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -135,6 +138,14 @@ pub struct CardPiece {
     /// consequence, recipients outside.
     #[serde(default)]
     pub must_say: bool,
+    /// Other names of the field: as the card shows it, and as the vocabulary
+    /// says it in each language. Words naming any of them name the piece.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
+    /// A field the card counts as "more" and says only when asked for by
+    /// name. Hearing it never stands in for any piece of the card.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub on_request: bool,
 }
 
 /// What the voice just asked about the card, when the user's words may
@@ -146,6 +157,8 @@ pub enum VoiceQuestion {
     /// Which of the card's long texts to read: a text's field named alone
     /// ("die Zusammenfassung") means reading that text.
     WhichText,
+    /// Which of several fields to say: a field named alone means saying it.
+    WhichField,
 }
 
 /// Where the meaning came from.
@@ -175,6 +188,10 @@ pub struct VoiceCommand {
     /// For `repeat` and `read_text`: the piece meant. Null when the words do
     /// not say which and the card has no single candidate.
     pub piece_id: Option<String>,
+    /// For `repeat` without a piece: the fields the words fit equally, for
+    /// asking which one is meant instead of guessing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<String>,
     pub source: VoiceCommandSource,
     /// For `approve` and `reject` while deciding by voice is on: whether the
     /// words decide the card.
@@ -229,6 +246,11 @@ pub fn check_input(input: &VoiceCommandInput<'_>) -> Result<(), InputProblem> {
                     .field
                     .as_ref()
                     .is_some_and(|field| field.chars().count() > MAX_FIELD_CHARS)
+                || piece.names.len() > MAX_FIELD_NAMES
+                || piece
+                    .names
+                    .iter()
+                    .any(|name| name.chars().count() > MAX_FIELD_CHARS)
         })
     {
         return Err(InputProblem::TooLarge);
@@ -284,14 +306,18 @@ pub fn classify_by_rules(
     words: &CommandWords,
 ) -> Option<Classified> {
     let found = rules::match_rules(input, words)?;
+    let mut command = guarded(
+        input,
+        words,
+        found.meaning,
+        found.piece_id,
+        VoiceCommandSource::Rules,
+    );
+    if command.meaning == VoiceMeaning::Repeat && command.piece_id.is_none() {
+        command.candidates = found.candidates;
+    }
     Some(Classified {
-        command: guarded(
-            input,
-            words,
-            found.meaning,
-            found.piece_id,
-            VoiceCommandSource::Rules,
-        ),
+        command,
         outcome: "rules",
     })
 }
@@ -321,15 +347,20 @@ fn from_answer(
     words: &CommandWords,
     answer: &model::Answer,
 ) -> Classified {
-    match resolve_piece(input, answer.meaning, answer.piece_id.as_deref()) {
+    // "Read me the summary" for a field that is no long text is saying it.
+    let meaning = match (answer.meaning, answer.piece_id.as_deref()) {
+        (VoiceMeaning::ReadText, Some(id))
+            if input.pieces.iter().any(|piece| {
+                piece.id == id && piece.role == CardPieceRole::Detail && piece.field.is_some()
+            }) =>
+        {
+            VoiceMeaning::Repeat
+        }
+        (meaning, _) => meaning,
+    };
+    match resolve_piece(input, meaning, answer.piece_id.as_deref()) {
         Some(piece_id) => {
-            let command = guarded(
-                input,
-                words,
-                answer.meaning,
-                piece_id,
-                VoiceCommandSource::Model,
-            );
+            let command = guarded(input, words, meaning, piece_id, VoiceCommandSource::Model);
             let outcome = if command.meaning == answer.meaning {
                 "model"
             } else {
@@ -348,6 +379,7 @@ fn unclear() -> VoiceCommand {
     VoiceCommand {
         meaning: VoiceMeaning::Unclear,
         piece_id: None,
+        candidates: Vec::new(),
         source: VoiceCommandSource::None,
         decision: None,
     }
@@ -432,6 +464,7 @@ fn guarded(
         return VoiceCommand {
             meaning: VoiceMeaning::Noise,
             piece_id: None,
+            candidates: Vec::new(),
             source,
             decision: None,
         };
@@ -451,6 +484,7 @@ fn guarded(
     VoiceCommand {
         meaning,
         piece_id,
+        candidates: Vec::new(),
         source,
         decision: None,
     }
@@ -458,6 +492,8 @@ fn guarded(
 
 #[cfg(test)]
 mod eval;
+#[cfg(test)]
+mod field_question_tests;
 #[cfg(test)]
 mod phrase_tests;
 #[cfg(test)]

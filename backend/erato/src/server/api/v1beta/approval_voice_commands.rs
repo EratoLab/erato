@@ -153,6 +153,7 @@ pub async fn interpret_approval_voice_command(
             command: VoiceCommand {
                 meaning: VoiceMeaning::Noise,
                 piece_id: None,
+                candidates: Vec::new(),
                 source: VoiceCommandSource::Rules,
                 decision: None,
             },
@@ -162,6 +163,7 @@ pub async fn interpret_approval_voice_command(
             command: VoiceCommand {
                 meaning: VoiceMeaning::Approve,
                 piece_id: None,
+                candidates: Vec::new(),
                 source: VoiceCommandSource::Rules,
                 decision: None,
             },

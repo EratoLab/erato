@@ -13,6 +13,8 @@ use std::collections::HashSet;
 pub(super) struct RuleMatch {
     pub meaning: VoiceMeaning,
     pub piece_id: Option<String>,
+    /// For a repeat whose words fit several fields equally.
+    pub candidates: Vec<String>,
 }
 
 /// Hesitation sounds, dropped wherever they stand.
@@ -806,7 +808,10 @@ pub(super) const REPEAT_CUES: &[&[&str]] = &[
     &["wiederholen"],
     &["repeat"],
     &["again"],
+    &["once", "more"],
     &["what", "was"],
+    &["what", "were"],
+    &["what", "are"],
     &["whats", "the"],
     &["what", "is", "the"],
     &["nicht", "verstanden"],
@@ -815,6 +820,14 @@ pub(super) const REPEAT_CUES: &[&[&str]] = &[
     &["didnt", "catch"],
     &["didnt", "get"],
     &["didnt", "hear"],
+];
+/// A question about what a field says: it names the field ("was steht bei
+/// den nächsten Schritten?"), and a long text named so is read.
+pub(super) const CONTENT_CUES: &[&[&str]] = &[
+    &["was", "steht"],
+    &["was", "stand"],
+    &["what", "did"],
+    &["what", "does"],
 ];
 pub(super) const READ_CUES: &[&[&str]] = &[
     &["vorlesen"],
@@ -1000,6 +1013,13 @@ pub(super) const GENERIC: &[&str] = &[
     "okay",
     "hab",
     "habe",
+    "steht",
+    "stand",
+    "bei",
+    "beim",
+    "did",
+    "does",
+    "says",
 ];
 
 /// "lieber", "rather": a wish for something else, unless "not" follows.
@@ -1538,54 +1558,110 @@ fn field_tokens(field: &str) -> Vec<String> {
         .collect()
 }
 
-/// Whether a word the user said names this piece's field: the same word,
-/// the head of a compound ("Datum" for "Abschlussdatum"), or an inflected
-/// form ("Teilnehmern").
+/// Whether a word the user said names this piece's field, by any of its
+/// names: the same word, the head of a compound ("Datum" for
+/// "Abschlussdatum"), or an inflected form ("Teilnehmern").
 fn field_matches(piece: &CardPiece, word: &str, lists: &CommandWords) -> bool {
-    let Some(field) = piece.field.as_deref() else {
-        return false;
-    };
     if word.chars().count() < 3 || lists.generic.contains(word) {
         return false;
     }
-    field_tokens(field).iter().any(|token| {
-        token == word
-            || (word.len() >= 4 && token.ends_with(word))
-            || (token.len() >= 5 && word.starts_with(token.as_str()))
-            || (word.len() >= 6 && token.starts_with(word))
-    })
+    piece
+        .field
+        .iter()
+        .chain(piece.names.iter())
+        .flat_map(|name| field_tokens(name))
+        .any(|token| {
+            token == word
+                || (word.len() >= 4 && token.ends_with(word))
+                || (token.len() >= 5 && word.starts_with(token.as_str()))
+                || (word.len() >= 6 && token.starts_with(word))
+        })
 }
 
 enum Reference {
     /// No word says which piece.
     None,
     Piece(String),
-    /// Words that name no single piece.
+    /// Every word fits each of these fields: which one is meant is asked.
+    Several(Vec<String>),
+    /// Words that name no field of the card.
     Unknown,
 }
 
+/// Whether `joined`, words said apart, is a field written as one word
+/// ("next steps" for "Nextsteps"), or its end ("decision date" for
+/// "customerdecisiondate").
+fn glued_matches(piece: &CardPiece, joined: &str) -> bool {
+    piece
+        .field
+        .iter()
+        .chain(piece.names.iter())
+        .flat_map(|name| field_tokens(name))
+        .any(|token| token == joined || token.ends_with(joined))
+}
+
+/// The segment's words, with two or three in a row joined where together
+/// they name a field the card writes as one word.
+fn joined_words(segment: &[String], pieces: &[CardPiece], lists: &CommandWords) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut index = 0;
+    while index < segment.len() {
+        let joined = (2..=3).rev().find_map(|length| {
+            let part = segment.get(index..index + length)?;
+            if part
+                .iter()
+                .any(|word| lists.generic.contains(word.as_str()))
+            {
+                return None;
+            }
+            let joined = part.concat();
+            (joined.chars().count() >= 6
+                && pieces.iter().any(|piece| glued_matches(piece, &joined)))
+            .then_some((joined, length))
+        });
+        match joined {
+            Some((word, length)) => {
+                words.push(word);
+                index += length;
+            }
+            None => {
+                words.push(segment[index].clone());
+                index += 1;
+            }
+        }
+    }
+    words
+}
+
+/// The piece the segment's words name. Each word that is not generic must
+/// fit a field; the piece is the one every such word fits.
 fn reference(segment: &[String], pieces: &[CardPiece], lists: &CommandWords) -> Reference {
-    let mut found: Option<&str> = None;
-    let mut any = false;
-    for word in segment {
+    let mut fitting: Option<Vec<&str>> = None;
+    for word in &joined_words(segment, pieces, lists) {
         if lists.generic.contains(word.as_str()) || word.chars().count() < 3 {
             continue;
         }
-        any = true;
-        let matches: Vec<&CardPiece> = pieces
+        let matches: Vec<&str> = pieces
             .iter()
             .filter(|piece| field_matches(piece, word, lists))
+            .map(|piece| piece.id.as_str())
             .collect();
-        match (matches.as_slice(), found) {
-            ([only], None) => found = Some(only.id.as_str()),
-            ([only], Some(id)) if only.id == id => {}
-            _ => return Reference::Unknown,
+        let kept: Vec<&str> = match fitting {
+            None => matches,
+            Some(before) => before
+                .into_iter()
+                .filter(|id| matches.contains(id))
+                .collect(),
+        };
+        if kept.is_empty() {
+            return Reference::Unknown;
         }
+        fitting = Some(kept);
     }
-    match found {
-        Some(id) => Reference::Piece(id.to_string()),
-        None if any => Reference::Unknown,
+    match fitting.as_deref() {
         None => Reference::None,
+        Some([only]) => Reference::Piece((*only).to_string()),
+        Some(several) => Reference::Several(several.iter().map(|id| id.to_string()).collect()),
     }
 }
 
@@ -1593,6 +1669,8 @@ fn reference(segment: &[String], pieces: &[CardPiece], lists: &CommandWords) -> 
 enum Segment {
     Noise,
     Nav(VoiceMeaning, Option<String>),
+    /// Again, one of these fields: which one is asked.
+    Which(Vec<String>),
     Decision(VoiceMeaning),
     Unknown,
 }
@@ -1636,6 +1714,7 @@ fn classify_segment(
         Some(Segment::Decision(VoiceMeaning::Approve)) if no => Segment::Unknown,
         Some(Segment::Decision(VoiceMeaning::Reject)) if yes => Segment::Unknown,
         Some(Segment::Nav(meaning, _)) if no && meaning != VoiceMeaning::Stop => Segment::Unknown,
+        Some(Segment::Which(_)) if no => Segment::Unknown,
         Some(found) => found,
         None => Segment::Unknown,
     }
@@ -1691,6 +1770,13 @@ fn pattern(
     {
         return Some(Segment::Nav(VoiceMeaning::ReadText, Some(id)));
     }
+    // The voice asked which field to say: naming one answers it.
+    if input.question == Some(VoiceQuestion::WhichField)
+        && !negated
+        && let Reference::Piece(id) = reference(segment, input.pieces, lists)
+    {
+        return Some(Segment::Nav(VoiceMeaning::Repeat, Some(id)));
+    }
     if has_cue(segment, &lists.read_cues)
         && !negated
         && !segment
@@ -1714,8 +1800,23 @@ fn pattern(
                     Segment::Nav(VoiceMeaning::Repeat, Some(id))
                 })
             }
+            Reference::Several(ids) => Some(Segment::Which(ids)),
             Reference::Unknown => None,
         };
+    }
+    if has_cue(segment, &lists.content_cues) && !negated {
+        match reference(segment, input.pieces, lists) {
+            Reference::Piece(id) => {
+                let role = input.pieces.iter().find(|piece| piece.id == id)?.role;
+                return Some(if role == CardPieceRole::Text {
+                    Segment::Nav(VoiceMeaning::ReadText, Some(id))
+                } else {
+                    Segment::Nav(VoiceMeaning::Repeat, Some(id))
+                });
+            }
+            Reference::Several(ids) => return Some(Segment::Which(ids)),
+            Reference::None | Reference::Unknown => {}
+        }
     }
     if has_cue(segment, &lists.repeat_cues) {
         return match reference(segment, input.pieces, lists) {
@@ -1724,6 +1825,7 @@ fn pattern(
                 input.current_piece_id.map(str::to_string),
             )),
             Reference::Piece(id) => Some(Segment::Nav(VoiceMeaning::Repeat, Some(id))),
+            Reference::Several(ids) => Some(Segment::Which(ids)),
             Reference::Unknown => None,
         };
     }
@@ -1783,12 +1885,14 @@ pub(super) fn match_rules(
         return Some(RuleMatch {
             meaning: VoiceMeaning::Noise,
             piece_id: None,
+            candidates: Vec::new(),
         });
     }
     if words.is_plain_change() {
         return Some(RuleMatch {
             meaning: VoiceMeaning::Change,
             piece_id: None,
+            candidates: Vec::new(),
         });
     }
     let mut navigation = None;
@@ -1796,7 +1900,8 @@ pub(super) fn match_rules(
     for segment in &words.segments {
         match classify_segment(segment, input, lists) {
             Segment::Noise => {}
-            Segment::Nav(meaning, piece_id) => navigation = Some((meaning, piece_id)),
+            Segment::Nav(meaning, piece_id) => navigation = Some((meaning, piece_id, Vec::new())),
+            Segment::Which(ids) => navigation = Some((VoiceMeaning::Repeat, None, ids)),
             Segment::Decision(meaning) => {
                 decisions.insert(meaning);
             }
@@ -1810,15 +1915,20 @@ pub(super) fn match_rules(
     if decisions.len() > 1 || words.takes_back && !decisions.is_empty() {
         return None;
     }
-    if let Some((meaning, piece_id)) = navigation
+    if let Some((meaning, piece_id, candidates)) = navigation
         && (meaning == VoiceMeaning::Stop || !decisions.contains(&VoiceMeaning::Reject))
     {
-        return Some(RuleMatch { meaning, piece_id });
+        return Some(RuleMatch {
+            meaning,
+            piece_id,
+            candidates,
+        });
     }
     match decisions.len() {
         0 => Some(RuleMatch {
             meaning: VoiceMeaning::Noise,
             piece_id: None,
+            candidates: Vec::new(),
         }),
         _ => decisions
             .into_iter()
@@ -1827,6 +1937,7 @@ pub(super) fn match_rules(
             .map(|meaning| RuleMatch {
                 meaning,
                 piece_id: None,
+                candidates: Vec::new(),
             }),
     }
 }

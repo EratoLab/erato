@@ -120,6 +120,8 @@ let fellBack = false;
 /** The prepared notice being said, whose own request still loads it. */
 let playingPrepared: Prepared | null = null;
 let closeStream: (() => void) | undefined;
+/** Streams of pieces said only on request, each loaded when asked for. */
+const askedStreams = new Map<number, () => void>();
 let buffers: Buffered[] = [];
 let said: SpokenPiece[] = [];
 let flow: SpokenCardFlow = spokenCardFlow([]);
@@ -170,6 +172,8 @@ const finish = () => {
   const close = closeStream;
   closeStream = undefined;
   close?.();
+  for (const closeAsked of askedStreams.values()) closeAsked();
+  askedStreams.clear();
   silence();
 };
 
@@ -356,6 +360,38 @@ const loadPieces = (indices: number[]) => {
   closeStream = thisStream;
 };
 
+/**
+ * Asks for a piece said only on request, in a request of its own: the card's
+ * stream may still be loading, and nothing is spoken for it in advance.
+ */
+const loadAsked = (index: number) => {
+  const card = speaking;
+  if (!card) return;
+  const thisCard = cardRun;
+  const buffer = emptyBuffer();
+  buffers[index] = buffer;
+  const close = openSpeech(card.messageId, card.language, [said[index].text], {
+    stale: () => thisCard !== cardRun || buffers[index] !== buffer,
+    audio: (_, chunk) => {
+      pushChunk(buffer, chunk);
+      if (currentPiece() === index) feed();
+    },
+    done: () => {
+      buffer.done = true;
+      if (currentPiece() === index) feed();
+    },
+    ended: () => {
+      askedStreams.delete(index);
+    },
+    failed: () => {
+      askedStreams.get(index)?.();
+      askedStreams.delete(index);
+      if (currentPiece() === index && !buffer.done) fail();
+    },
+  });
+  askedStreams.set(index, close);
+};
+
 /** Plays what the card's logic says is being said now. */
 const startPlaying = () => {
   const { playing } = flow;
@@ -373,11 +409,17 @@ const startPlaying = () => {
     return;
   }
   const current = playing.index;
-  // The card's audio broke off while the voice was quiet: ask again.
-  if (!buffers[current].done && closeStream === undefined)
+  if (said[current].onRequest) {
+    if (!buffers[current].done && !askedStreams.has(current))
+      loadAsked(current);
+  } else if (!buffers[current].done && closeStream === undefined) {
+    // The card's audio broke off while the voice was quiet: ask again.
     loadPieces(
-      buffers.flatMap((buffer, index) => (buffer.done ? [] : [index])),
+      buffers.flatMap((buffer, index) =>
+        buffer.done || said[index].onRequest ? [] : [index],
+      ),
     );
+  }
   buffers[current].queued = 0;
   const pause = said[current].pauseBeforeMs ?? 0;
   if (pause > 0) {
@@ -666,7 +708,10 @@ function play_(
       return;
     }
     context = resumed;
-    if (!prepared) loadPieces(pieces.map((_, index) => index));
+    if (!prepared)
+      loadPieces(
+        pieces.flatMap((piece, index) => (piece.onRequest ? [] : [index])),
+      );
     apply({ type: "start" });
   };
   void resumePlaybackContext().then(
