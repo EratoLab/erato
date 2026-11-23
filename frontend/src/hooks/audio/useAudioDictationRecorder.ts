@@ -217,6 +217,10 @@ type UseAudioDictationRecorderOptions = {
    * turn does not end: nothing is sent, and the recording listens on.
    */
   isHesitationOnly?: (words: string) => boolean;
+  /** The chat a conversational turn is spoken in, once it exists. */
+  chatId?: string | null;
+  /** A conversational turn ended: the language it was spoken in. */
+  onTurnLanguage?: (language: string) => void;
 };
 
 /**
@@ -280,6 +284,8 @@ export function useAudioDictationRecorder({
   onSpeechOverVoice,
   onVoiceLowered,
   isHesitationOnly,
+  chatId,
+  onTurnLanguage,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -407,6 +413,8 @@ export function useAudioDictationRecorder({
   const onsetControllerRef = useRef<SpeechOnsetController | null>(null);
   const recordingDurationTimerRef = useRef<number | null>(null);
   const onTranscriptChunkRef = useRef(onTranscriptChunk);
+  const chatIdRef = useRef(chatId);
+  const onTurnLanguageRef = useRef(onTurnLanguage);
   const vadEngineRef = useRef<VoiceVadEngine | null>(null);
   /**
    * VAD engine instance kept warm ACROSS dictation sessions. The first
@@ -474,6 +482,10 @@ export function useAudioDictationRecorder({
   useEffect(() => {
     onTranscriptChunkRef.current = onTranscriptChunk;
   }, [onTranscriptChunk]);
+  useEffect(() => {
+    chatIdRef.current = chatId;
+    onTurnLanguageRef.current = onTurnLanguage;
+  }, [chatId, onTurnLanguage]);
 
   useEffect(() => {
     onVadAutoStopRef.current = onVadAutoStop;
@@ -909,9 +921,13 @@ export function useAudioDictationRecorder({
           { signal },
         );
 
+        const chatIdForTurn = chatIdRef.current;
         sendAudioDictationControlFrame(socket, {
           type: "start",
           mode,
+          ...(mode === "conversational" && chatIdForTurn
+            ? { chat_id: chatIdForTurn }
+            : {}),
         });
 
         const sessionFrame = await sessionStatePromise;
@@ -1042,7 +1058,9 @@ export function useAudioDictationRecorder({
       sendAudioDictationControlFrame(session.socket, {
         type: "finish",
       });
-      await completedFramePromise;
+      const completed = await completedFramePromise;
+      if (completed.type === "completed" && completed.spoken_language)
+        onTurnLanguageRef.current?.(completed.spoken_language);
     } catch (error) {
       // A recording cancelled meanwhile reports nothing.
       if (session && !quietSocketsRef.current.has(session.socket)) {

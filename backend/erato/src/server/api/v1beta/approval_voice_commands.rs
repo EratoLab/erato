@@ -4,7 +4,7 @@
 //! receipt, which the decision then carries.
 
 use super::approval_access::check_waiting_approval_of_user;
-use super::me_profile_middleware::{MeProfile, normalize_supported_language};
+use super::me_profile_middleware::MeProfile;
 use super::message_streaming::ParkedApprovalState;
 use crate::models::message::VoiceDecisionOutcome;
 use crate::policy::engine::PolicyEngine;
@@ -36,11 +36,17 @@ use uuid::Uuid;
 pub struct ApprovalVoiceCommandRequest {
     /// What the user said, as transcribed. At most 300 characters.
     pub transcript: String,
-    /// The language of the words as a tag such as `de`; the user's language
-    /// when omitted.
+    /// The language of the words as a tag such as `de`: the language the
+    /// card was spoken in. The user's language when omitted.
     #[serde(default)]
     #[schema(nullable = false)]
     pub language: Option<String>,
+    /// The language the card on screen is shown in, when it differs from
+    /// `language`: its confirmation phrase approves too, as read from the
+    /// screen.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub screen_language: Option<String>,
     /// The spoken card's pieces in the order they are said, at most 16.
     pub pieces: Vec<CardPiece>,
     /// The piece being spoken, or the last one spoken.
@@ -104,10 +110,10 @@ pub async fn interpret_approval_voice_command(
     if !switches.voice_commands {
         return Err(StatusCode::NOT_FOUND);
     }
-    let language = normalize_supported_language(request.language.as_deref())
-        .or_else(|| normalize_supported_language(me_user.preference_language.as_deref()))
-        .unwrap_or(&me_user.preferred_language)
-        .to_string();
+    let language =
+        super::read_aloud::voice_language(&app_state, &me_user, request.language.as_deref())
+            .code()
+            .to_string();
     let input = VoiceCommandInput {
         transcript: &request.transcript,
         language: &language,
@@ -126,8 +132,20 @@ pub async fn interpret_approval_voice_command(
     let start = Instant::now();
     let words = app_state.voice_command_words.for_language(&language);
     let deciding = switches.voice_decisions;
+    let screen_language = request
+        .screen_language
+        .as_deref()
+        .and_then(crate::services::spoken_language::language_code)
+        .filter(|screen| *screen != language);
     let phrase = deciding
-        .then(|| match_phrase(&request.transcript, words))
+        .then(|| {
+            match_phrase(&request.transcript, words).or_else(|| {
+                let screen = screen_language.as_deref()?;
+                let screen_words = app_state.voice_command_words.for_language(screen);
+                match_phrase(&request.transcript, screen_words)
+                    .filter(|matched| matched.phrase.language == screen)
+            })
+        })
         .flatten();
     let mut classified = match &phrase {
         // As any yes said before the card asked: listening.

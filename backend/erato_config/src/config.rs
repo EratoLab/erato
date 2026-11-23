@@ -9808,13 +9808,30 @@ pub struct TurnInstructionsConfig {
     /// On a turn whose reply is read back in conversational audio mode.
     #[serde(default)]
     pub spoken_reply: TurnInstructionConfig,
+    /// On a turn the user spoke in conversational audio mode: names the
+    /// language they spoke. `{language}` is its English name. Unset, a
+    /// built-in sentence is used.
+    #[serde(default)]
+    pub spoken_language: TurnInstructionConfig,
 }
+
+/// What `turn_instructions.spoken_language` says when it is not set.
+pub const BUILT_IN_SPOKEN_LANGUAGE_INSTRUCTION: &str = "The user spoke {language} in this turn.";
 
 impl TurnInstructionsConfig {
     pub fn get(&self, kind: TurnInstructionKind) -> &TurnInstructionConfig {
         match kind {
             TurnInstructionKind::SpokenReply => &self.spoken_reply,
+            TurnInstructionKind::SpokenLanguage => &self.spoken_language,
         }
+    }
+
+    /// The sentence naming the language the user spoke, `language` being its
+    /// English name.
+    pub fn spoken_language_text(&self, language: &str) -> String {
+        self.prompt(TurnInstructionKind::SpokenLanguage)
+            .unwrap_or(BUILT_IN_SPOKEN_LANGUAGE_INSTRUCTION)
+            .replace("{language}", language)
     }
 
     /// The instruction text of `kind`, when it is set and not blank.
@@ -9843,6 +9860,7 @@ pub struct TurnInstructionConfig {
 #[serde(rename_all = "snake_case")]
 pub enum TurnInstructionKind {
     SpokenReply,
+    SpokenLanguage,
 }
 
 const TURN_INSTRUCTION_SETTINGS: &[&str] = &["prompt"];

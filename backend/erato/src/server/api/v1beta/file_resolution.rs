@@ -628,6 +628,14 @@ pub(crate) fn resolve_directive_markers_with_config(
                     )
                 }
                 ContentPart::TurnInstructionMarker(marker) => match &marker.kind {
+                    StoredTurnInstructionKind::Known(
+                        crate::config::TurnInstructionKind::SpokenLanguage,
+                    ) => {
+                        let code = marker.language.as_deref()?;
+                        config.turn_instructions.spoken_language_text(
+                            &crate::services::spoken_language::english_name(code),
+                        )
+                    }
                     StoredTurnInstructionKind::Known(kind) => config
                         .turn_instructions
                         .prompt(*kind)

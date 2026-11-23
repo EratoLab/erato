@@ -1,6 +1,6 @@
-import { i18n } from "@lingui/core";
 import { useEffect } from "react";
 
+import { inLocale } from "@/lib/i18n";
 import {
   sameSpokenKind,
   spokenApprovalPieces,
@@ -20,6 +20,7 @@ import {
   deploymentConfirmationPhrases,
 } from "./confirmationPhrases";
 import { useSpeechPlayback } from "./speechPlayback";
+import { cardLanguage, useSpokenLanguage } from "./spokenLanguage";
 import {
   deploymentNumberWords,
   deploymentSentences,
@@ -98,14 +99,16 @@ export function useSpokenApprovalCard({
   // Asked even with cards off: the answer may turn them on again.
   const style = useSpokenStyle(voicedTurn);
   const approvalId = items.at(index)?.approvalId;
+  // The language the user spoke, as far as the card has words for it.
+  const language = cardLanguage(useSpokenLanguage((state) => state.turn));
   // Only a card said in full, in a language with a phrase of its own, names
   // the phrase; any other is approved on screen.
   const approves =
-    deploymentConfirmationPhrase(i18n.locale) !== undefined &&
+    deploymentConfirmationPhrase(language) !== undefined &&
     approvalId !== undefined &&
     decide?.(approvalId) !== undefined &&
     approval !== undefined &&
-    spokenWordsFor(i18n.locale, {
+    spokenWordsFor(language, {
       now: new Date(),
       spokenCardLanguages: deploymentSpokenCardLanguages(),
     }).full &&
@@ -119,7 +122,7 @@ export function useSpokenApprovalCard({
     const item = items.at(index);
     const decision = item ? decide?.(item.approvalId) : undefined;
     const options = {
-      language: i18n.locale,
+      language,
       now: new Date(),
       position:
         total > 1
@@ -131,7 +134,7 @@ export function useSpokenApprovalCard({
             }
           : undefined,
       userTurns,
-      numberWords: deploymentNumberWords(i18n.locale),
+      numberWords: deploymentNumberWords(language),
       spokenCardLanguages: deploymentSpokenCardLanguages(),
       voiceApproval: approves,
       confirmationPhrases: deploymentConfirmationPhrases(),
@@ -148,14 +151,19 @@ export function useSpokenApprovalCard({
       ...style,
       sentences: deploymentSentences(options.language),
     };
-    const card = {
-      key,
-      messageId,
-      language: options.language,
+    // Said in the card's language, whatever the screen shows.
+    const { pieces, fallback } = inLocale(language, () => ({
       pieces: withdrawn
         ? spokenDifference(withdrawn, approval, options).pieces
         : spokenApprovalPieces(approval, styled),
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
+    }));
+    const card = {
+      key,
+      messageId,
+      language,
+      pieces,
+      fallback,
       approval,
       change: item ? change?.(item.approvalId) : undefined,
       decision: decision ? { ...decision, approves } : undefined,
@@ -171,6 +179,7 @@ export function useSpokenApprovalCard({
     index,
     items,
     key,
+    language,
     messageId,
     modelSpeaking,
     responding,

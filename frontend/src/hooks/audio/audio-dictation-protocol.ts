@@ -48,6 +48,8 @@ export type AudioDictationSocketFrame =
     }
   | {
       type: "completed";
+      /** A conversational turn's spoken language, a code such as `de`. */
+      spoken_language?: string | null;
     }
   | {
       type: "error";

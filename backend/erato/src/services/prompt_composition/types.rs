@@ -11,17 +11,30 @@ use std::collections::{BTreeSet, HashMap};
 /// A turn instruction placed right before the user's words: one configured
 /// under `turn_instructions.<type>`, or one whose text is built in. The
 /// configured ones come first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TurnInstruction {
     Configured(TurnInstructionKind),
     Builtin(BuiltinTurnInstruction),
+    /// The language the user spoke this turn in, as a code such as `de`.
+    SpokenLanguage(String),
 }
 
 impl TurnInstruction {
-    pub fn stored(self) -> StoredTurnInstructionKind {
+    pub fn stored(&self) -> StoredTurnInstructionKind {
         match self {
-            Self::Configured(kind) => StoredTurnInstructionKind::Known(kind),
-            Self::Builtin(kind) => StoredTurnInstructionKind::Builtin(kind),
+            Self::Configured(kind) => StoredTurnInstructionKind::Known(*kind),
+            Self::Builtin(kind) => StoredTurnInstructionKind::Builtin(*kind),
+            Self::SpokenLanguage(_) => {
+                StoredTurnInstructionKind::Known(TurnInstructionKind::SpokenLanguage)
+            }
+        }
+    }
+
+    /// The language a [`TurnInstruction::SpokenLanguage`] names.
+    pub fn language(&self) -> Option<&str> {
+        match self {
+            Self::SpokenLanguage(code) => Some(code),
+            _ => None,
         }
     }
 }

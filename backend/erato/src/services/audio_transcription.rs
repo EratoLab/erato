@@ -28,9 +28,18 @@ pub(crate) struct AudioTranscriptionRequest {
     pub(crate) max_output_tokens: u32,
 }
 
+/// What a transcriber heard: the words, and the language it says they are in
+/// when it says.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Transcription {
+    pub(crate) text: String,
+    pub(crate) language: Option<String>,
+}
+
 #[async_trait]
 pub(crate) trait AudioTranscriber: Send + Sync {
-    async fn transcribe(&self, request: AudioTranscriptionRequest) -> Result<String, Report>;
+    async fn transcribe(&self, request: AudioTranscriptionRequest)
+    -> Result<Transcription, Report>;
 }
 
 /// Selects the transport at construction and delegates calls through one interface.
@@ -64,7 +73,10 @@ impl AudioTranscriptionClient {
 
 #[async_trait]
 impl AudioTranscriber for AudioTranscriptionClient {
-    async fn transcribe(&self, request: AudioTranscriptionRequest) -> Result<String, Report> {
+    async fn transcribe(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<Transcription, Report> {
         match self {
             Self::OpenAi(client) => client.transcribe(request).await,
             Self::GenAi(client) => client.transcribe(request).await,
@@ -91,7 +103,10 @@ impl GenAiAudioTranscriptionClient {
 
 #[async_trait]
 impl AudioTranscriber for GenAiAudioTranscriptionClient {
-    async fn transcribe(&self, request: AudioTranscriptionRequest) -> Result<String, Report> {
+    async fn transcribe(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<Transcription, Report> {
         let b64_audio = STANDARD.encode(request.audio_bytes);
         let user_content = MessageContent::from_parts(vec![
             GenAiContentPart::Text(TRANSCRIPTION_PROMPT.to_string()),
@@ -146,8 +161,11 @@ impl AudioTranscriber for GenAiAudioTranscriptionClient {
                 }));
             }
         };
-        let transcript = response.first_text().unwrap_or_default().trim().to_string();
-        Ok(transcript)
+        let text = response.first_text().unwrap_or_default().trim().to_string();
+        Ok(Transcription {
+            text,
+            language: None,
+        })
     }
 }
 
@@ -243,6 +261,31 @@ pub(crate) struct OpenAiAudioTranscriptionClient {
 #[derive(Deserialize)]
 struct TranscriptionResponse {
     text: String,
+    /// `gpt-transcribe`: the languages heard, the main one first; empty when
+    /// it is unsure. Older models leave it out.
+    #[serde(default)]
+    languages: Option<Vec<TranscribedLanguage>>,
+}
+
+#[derive(Deserialize)]
+struct TranscribedLanguage {
+    #[serde(default)]
+    code: Option<String>,
+}
+
+impl TranscriptionResponse {
+    fn into_transcription(self) -> Transcription {
+        let language = self
+            .languages
+            .into_iter()
+            .flatten()
+            .find_map(|language| language.code)
+            .filter(|code| !code.trim().is_empty());
+        Transcription {
+            text: self.text,
+            language,
+        }
+    }
 }
 
 impl OpenAiAudioTranscriptionClient {
@@ -298,7 +341,7 @@ impl OpenAiAudioTranscriptionClient {
         &self,
         audio_bytes: Vec<u8>,
         filename: String,
-    ) -> Result<String, Report> {
+    ) -> Result<Transcription, Report> {
         let file = Part::bytes(audio_bytes)
             .file_name(filename)
             .mime_str("audio/wav")?;
@@ -327,13 +370,16 @@ impl OpenAiAudioTranscriptionClient {
             .wrap_err("Reading audio transcription response failed")?;
         let response: TranscriptionResponse =
             serde_json::from_slice(&body).wrap_err("Invalid audio transcription JSON response")?;
-        Ok(response.text)
+        Ok(response.into_transcription())
     }
 }
 
 #[async_trait]
 impl AudioTranscriber for OpenAiAudioTranscriptionClient {
-    async fn transcribe(&self, request: AudioTranscriptionRequest) -> Result<String, Report> {
+    async fn transcribe(
+        &self,
+        request: AudioTranscriptionRequest,
+    ) -> Result<Transcription, Report> {
         self.send_transcription(request.audio_bytes, request.filename)
             .await
             .map_err(|error| {
@@ -418,7 +464,8 @@ mod tests {
             client
                 .transcribe(request(audio.clone(), "chunk.wav"))
                 .await
-                .unwrap(),
+                .unwrap()
+                .text,
             "recognized speech"
         );
         let (request, options) = recording.request.lock().unwrap().take().unwrap();
@@ -641,7 +688,8 @@ mod tests {
             client
                 .transcribe(request(audio.clone(), "audio-chunk-2.wav"))
                 .await
-                .unwrap(),
+                .unwrap()
+                .text,
             "Hello world"
         );
         let request = requests.recv().await.unwrap();
@@ -681,6 +729,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reads_the_language_gpt_transcribe_heard_and_none_from_older_models() {
+        for (body, language) in [
+            (
+                r#"{"text":"Hallo","languages":[{"code":"de"}]}"#,
+                Some("de"),
+            ),
+            (
+                r#"{"text":"Hallo","languages":[{"code":"de"},{"code":"en"}]}"#,
+                Some("de"),
+            ),
+            (r#"{"text":"Hallo","languages":[]}"#, None),
+            (r#"{"text":"Hallo","languages":null}"#, None),
+            (r#"{"text":"Hallo","languages":[{}]}"#, None),
+            (r#"{"text":"Hallo"}"#, None),
+        ] {
+            let (base_url, _requests, server) = mock_server(StatusCode::OK, body).await;
+            let client = OpenAiAudioTranscriptionClient::new(&config(base_url), None).unwrap();
+            let transcription = client
+                .send_transcription(vec![0], "audio.wav".into())
+                .await
+                .unwrap();
+            assert_eq!(transcription.text, "Hallo", "{body}");
+            assert_eq!(transcription.language.as_deref(), language, "{body}");
+            server.abort();
+        }
+    }
+
+    #[tokio::test]
     async fn custom_authorization_overrides_api_key() {
         let (base_url, mut requests, server) = mock_server(StatusCode::OK, r#"{"text":""}"#).await;
         let mut config = config(base_url);
@@ -693,7 +769,8 @@ mod tests {
             client
                 .transcribe(request(vec![0], "silence.wav"))
                 .await
-                .unwrap(),
+                .unwrap()
+                .text,
             ""
         );
         assert_eq!(

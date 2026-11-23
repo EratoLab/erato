@@ -1,4 +1,5 @@
 import { fetchWaitLines } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { nextWaitStep } from "@/lib/waitLines/plan";
 import { toolWaitLine } from "@/lib/waitLines/toolLine";
 import { createSSEConnection } from "@/utils/sse/sseClient";
@@ -62,6 +63,8 @@ interface ToolLine {
 
 interface Turn {
   streamKey: string;
+  /** The language the turn was spoken in; the user's own when unknown. */
+  language?: string;
   state: WaitTurnState;
   toolLines: Map<string, ToolLine>;
   /** Calls already looked at: one request per call at most. */
@@ -82,8 +85,9 @@ const SPEECH_END_FRESH_MS = 30_000;
 /** Between the end of a line and the answer it held back. */
 const AFTER_LINE_MS = 150;
 
-let loaded: Loaded | null = null;
-let loading: Promise<Loaded | null> | null = null;
+/** Lines by the language they are said in; `""` for the user's own. */
+const loadedLines = new Map<string, Loaded>();
+const loadingLines = new Map<string, Promise<Loaded | null>>();
 let unsupported = false;
 let openersSaid = 0;
 const lastSaid = new Map<string, string>();
@@ -158,21 +162,29 @@ const WAIT_LINES_READ_TIMEOUT_MS = 120_000;
  * deployment that changed its voice is never heard with lines in the old
  * one, and a changed amount or timing applies from the next turn.
  */
-export function prepareWaitLines(): Promise<Loaded | null> {
+export function prepareWaitLines(language?: string): Promise<Loaded | null> {
   if (unsupported) return Promise.resolve(null);
-  loading ??= fetchWaitLines({
+  const key = language ? primaryLanguage(language) : "";
+  const pending = loadingLines.get(key);
+  if (pending) return pending;
+  const known = loadedLines.get(key);
+  const loading = fetchWaitLines({
     readTimeoutMs: WAIT_LINES_READ_TIMEOUT_MS,
     // Lines that came back incomplete are asked for in full again, so a
     // line the voice failed on once is not missing for the whole session.
-    queryParams: loaded && !loaded.incomplete ? { known: loaded.version } : {},
+    queryParams: {
+      ...(known && !known.incomplete ? { known: known.version } : {}),
+      ...(language ? { language } : {}),
+    },
   })
     .then((response) => {
-      if (response.unchanged && loaded?.version === response.version) {
-        return loaded;
+      if (response.unchanged && known?.version === response.version) {
+        return known;
       }
       lastSaid.clear();
-      loaded = fromResponse(response);
-      return loaded;
+      const fresh = fromResponse(response);
+      loadedLines.set(key, fresh);
+      return fresh;
     })
     .catch((error: unknown) => {
       // No voice, or a backend without wait lines: nothing is said. Lines
@@ -181,16 +193,25 @@ export function prepareWaitLines(): Promise<Loaded | null> {
       throw error;
     })
     .finally(() => {
-      loading = null;
+      loadingLines.delete(key);
     });
+  loadingLines.set(key, loading);
   return loading;
 }
+
+/** The lines of the turn's language: none for a language without lines. */
+const linesOf = (current: Turn | null): Loaded | null =>
+  current
+    ? (loadedLines.get(
+        current.language ? primaryLanguage(current.language) : "",
+      ) ?? null)
+    : null;
 
 /** For tests: forget everything. */
 export function resetWaitLines() {
   stopWaitLines();
-  loaded = null;
-  loading = null;
+  loadedLines.clear();
+  loadingLines.clear();
   unsupported = false;
   takeSpeechEnd();
   openersSaid = 0;
@@ -206,7 +227,7 @@ export function resetWaitLines() {
  */
 export function beginWaitTurn(
   streamKey: string,
-  options: { continuation?: boolean } = {},
+  options: { continuation?: boolean; language?: string } = {},
 ) {
   stopWaitLines();
   const sent = now();
@@ -219,6 +240,7 @@ export function beginWaitTurn(
       : sent;
   turn = {
     streamKey,
+    language: options.language,
     state: {
       speechEndedAt,
       transcriptAt: sent,
@@ -235,7 +257,7 @@ export function beginWaitTurn(
     parts: [],
   };
   const current = turn;
-  prepareWaitLines().then(
+  prepareWaitLines(options.language).then(
     (lines) => {
       if (turn !== current || !lines) return;
       current.checked = true;
@@ -342,6 +364,7 @@ export function waitTurnTool(
   current.toolsSeen.add(toolCallId);
   tool = { id: toolCallId, startedAt: now(), ready: false };
   state.tools.push(tool);
+  const loaded = linesOf(current);
   const text =
     !loaded || state.answerStarted || state.ended || loaded.amount === "off"
       ? null
@@ -371,7 +394,9 @@ export function waitTurnTool(
     `/api/v1beta/me/messages/${encodeURIComponent(messageId)}/progress-speech`,
     {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(
+        loaded ? { text, language: loaded.language } : { text },
+      ),
       onMessage: (event) => {
         if (turn !== current || settled) return;
         if (event.type === "audio_delta") {
@@ -451,8 +476,11 @@ const settleIdle = () => {
   for (const resolve of waiters) resolve();
 };
 
-const pick = (slot: keyof Loaded["clips"]): Clip | undefined => {
-  const clips = loaded?.clips[slot] ?? [];
+const pick = (
+  loaded: Loaded,
+  slot: keyof Loaded["clips"],
+): Clip | undefined => {
+  const clips = loaded.clips[slot];
   if (clips.length === 0) return undefined;
   const last = lastSaid.get(slot);
   const fresh = clips.filter((clip) => clip.text !== last);
@@ -460,11 +488,11 @@ const pick = (slot: keyof Loaded["clips"]): Clip | undefined => {
   return choices[Math.floor(Math.random() * choices.length)];
 };
 
-const openerSlot = (): "opener" | "opener_short" => {
-  const taper = loaded?.taperAfterTurns ?? 0;
+const openerSlot = (loaded: Loaded): "opener" | "opener_short" => {
+  const taper = loaded.taperAfterTurns;
   return taper > 0 &&
     openersSaid >= taper &&
-    (loaded?.clips.opener_short.length ?? 0) > 0
+    loaded.clips.opener_short.length > 0
     ? // eslint-disable-next-line lingui/no-unlocalized-strings -- a slot name
       "opener_short"
     : "opener";
@@ -474,10 +502,11 @@ function plan() {
   clearTimeout(timer);
   timer = undefined;
   const current = turn;
+  const loaded = linesOf(current);
   if (!current || !loaded || !current.checked) return;
   const { state } = current;
   const unavailable: WaitLineKind[] = [];
-  if (!current.opener || loaded.clips[openerSlot()].length === 0)
+  if (!current.opener || loaded.clips[openerSlot(loaded)].length === 0)
     unavailable.push("opener");
   if (loaded.clips.still.length === 0) unavailable.push("still");
   if (loaded.clips.long.length === 0) unavailable.push("long");
@@ -496,10 +525,10 @@ function plan() {
     step.line === "tool"
       ? undefined
       : step.line === "opener"
-        ? openerSlot()
+        ? openerSlot(loaded)
         : step.line;
   if (slot) {
-    const clip = pick(slot);
+    const clip = pick(loaded, slot);
     if (clip) clips.push(clip);
   }
   const context = playbackContext();

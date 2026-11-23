@@ -1551,6 +1551,22 @@ pub struct MessageSubmitRequest {
     #[serde(default)]
     #[schema(nullable = false)]
     delegation_run_mode: Option<DelegationRunMode>,
+    /// The language the user spoke this message in, in conversational audio
+    /// mode, as the transcription decided it: a code such as `de`. Stored on
+    /// the message and never shown; the voice of the reply follows it. A
+    /// value that is not a language code is ignored.
+    #[serde(default)]
+    #[schema(nullable = false, example = "de")]
+    spoken_language: Option<String>,
+}
+
+impl MessageSubmitRequest {
+    /// The spoken language, if the request carries a valid one.
+    fn spoken_language(&self) -> Option<String> {
+        self.spoken_language
+            .as_deref()
+            .and_then(crate::services::spoken_language::language_code)
+    }
 }
 
 #[derive(Serialize, ToSchema)]
@@ -4169,6 +4185,7 @@ impl MessageSubmitRequest {
             action_facet: None,
             mentioned_assistant_ids: None,
             delegation_run_mode: None,
+            spoken_language: None,
         }
     }
 
@@ -4204,6 +4221,7 @@ impl MessageSubmitRequest {
             action_facet: None,
             mentioned_assistant_ids: None,
             delegation_run_mode: None,
+            spoken_language: None,
         }
     }
 
@@ -4229,6 +4247,7 @@ impl MessageSubmitRequest {
             action_facet: None,
             mentioned_assistant_ids: None,
             delegation_run_mode: None,
+            spoken_language: None,
         }
     }
 }
@@ -5883,6 +5902,7 @@ mod spoken_part_tests {
                     kind: StoredTurnInstructionKind::Builtin(
                         BuiltinTurnInstruction::SpokenAndWritten,
                     ),
+                    language: None,
                 }),
             )],
         };
@@ -18754,9 +18774,11 @@ pub(crate) async fn save_user_message_for_submit(
     let delegation_run_mode_for_persistence = request
         .delegation_run_mode
         .filter(|mode| *mode == DelegationRunMode::Background);
+    let spoken_language = request.spoken_language();
     let user_input_parameters = if request.action_facet.is_some()
         || mentioned_assistant_ids_for_persistence.is_some()
         || delegation_run_mode_for_persistence.is_some()
+        || spoken_language.is_some()
     {
         Some(crate::models::message::InputParameters {
             action_facet_id: request.action_facet.as_ref().map(|af| af.id.clone()),
@@ -18764,6 +18786,7 @@ pub(crate) async fn save_user_message_for_submit(
             mentioned_assistant_ids: mentioned_assistant_ids_for_persistence,
             delegation_run_mode: delegation_run_mode_for_persistence,
             task_result: None,
+            spoken_language,
         })
     } else {
         None
@@ -18877,14 +18900,15 @@ pub(crate) async fn run_generation_after_user_message(
 }
 
 /// Turns on speech for the reply `task` generates when the client asked for it
-/// and conversational audio can speak, in the user's language. Returns whether
-/// the reply is read back.
+/// and conversational audio can speak, in the language the turn was spoken in,
+/// else the user's. Returns whether the reply is read back.
 fn enable_reply_speech(
     task: &StreamingTask,
     app_state: &AppState,
     switches: crate::config::VoiceSwitches,
     me_user: &MeProfile,
     requested: bool,
+    spoken_language: Option<&str>,
 ) -> bool {
     let read_back = requested
         && switches
@@ -18892,15 +18916,11 @@ fn enable_reply_speech(
             .is_some();
     task.speech_enabled
         .store(read_back, std::sync::atomic::Ordering::Relaxed);
-    let _ = task.speech_language.set(
-        crate::services::speech::spoken::SpeechLanguage::with_readings(
-            super::me_profile_middleware::normalize_supported_language(
-                me_user.preference_language.as_deref(),
-            )
-            .unwrap_or(&me_user.preferred_language),
-            &app_state.speech_readings,
-        ),
-    );
+    let _ = task.speech_language.set(super::read_aloud::voice_language(
+        app_state,
+        me_user,
+        spoken_language,
+    ));
     read_back
 }
 
@@ -18914,6 +18934,7 @@ async fn read_back_reply(
     switches: crate::config::VoiceSwitches,
     me_user: &MeProfile,
     requested: bool,
+    spoken_language: Option<&str>,
 ) -> Option<erato_config::reply_speech::ReplySpeechWording> {
     let style = if requested {
         Some(super::reply_speech_style::resolve_for(app_state, me_user).await)
@@ -18921,7 +18942,7 @@ async fn read_back_reply(
         None
     };
     let spoken = style.as_ref().is_some_and(|style| style.spoken);
-    if !enable_reply_speech(task, app_state, switches, me_user, spoken) {
+    if !enable_reply_speech(task, app_state, switches, me_user, spoken, spoken_language) {
         return None;
     }
     style.map(|style| style.wording)
@@ -18941,12 +18962,14 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
+    let spoken_language = request.spoken_language();
     let reply_speech = read_back_reply(
         task,
         app_state,
         app_state.voice_switches().await,
         me_user,
         request.conversational_audio_back,
+        spoken_language.as_deref(),
     )
     .await;
     // Prepare chat request
@@ -18972,6 +18995,7 @@ async fn run_generation_after_user_message_memory_inner(
         turn_instructions: crate::services::prompt_composition::turn_instructions_for_turn(
             &app_state.config.turn_instructions,
             reply_speech,
+            spoken_language.as_deref(),
         ),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
@@ -20292,6 +20316,7 @@ pub(crate) async fn start_edit(
                 .map(|ids| ids.iter().map(|id| id.to_string()).collect()),
             delegation_run_mode: resolved_delegation_run_mode,
             task_result: None,
+            spoken_language: None,
         })
     } else {
         None
@@ -22735,12 +22760,23 @@ pub(crate) async fn start_continuation(
     let client_stream_guard = task.client_stream_guard();
     // The turn instruction for a spoken reply is in the stored prompt the
     // continuation reuses, so only the speech itself is decided here.
+    let spoken_language = if request.conversational_audio_back {
+        crate::services::spoken_language::of_turn(&app_state.db, request.message_id)
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "Cannot read the spoken language of the turn");
+                None
+            })
+    } else {
+        None
+    };
     enable_reply_speech(
         &task,
         app_state,
         app_state.voice_switches().await,
         me_user,
         request.conversational_audio_back,
+        spoken_language.as_deref(),
     );
 
     tokio::spawn(async move {

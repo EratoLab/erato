@@ -98,6 +98,101 @@ export async function dynamicActivate(locale: string) {
   }
 }
 
+/**
+ * Loads `locale`'s catalog beside the active one without switching the
+ * interface, for text said in another language than the one shown. Resolves
+ * whether the catalog is there.
+ */
+export async function loadCatalog(locale: string): Promise<boolean> {
+  const supported = getSupportedLocale(locale);
+  if (!supported) return false;
+  if (catalogLoaded(supported)) return true;
+  const { commonPublicBasePath, frontendPlatform, frontendPublicBasePath } =
+    env();
+  try {
+    const messages = await loadMergedMessages({
+      commonPublicBasePath,
+      frontendPlatform,
+      frontendPublicBasePath,
+      locale: supported,
+    });
+    if (Object.keys(messages).length === 0) return false;
+    addCatalog(supported, messages);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Catalogs loaded for text said in their language, beside the active one. */
+const loadedCatalogs = new Set<string>();
+
+/** For tests: no catalog counts as loaded beside the active one. */
+export function forgetLoadedCatalogs() {
+  loadedCatalogs.clear();
+}
+
+/** Loads `messages` as `locale`'s catalog for said text, without activating it. */
+export function addCatalog(locale: string, messages: Messages) {
+  i18n.load(locale, messages);
+  loadedCatalogs.add(locale);
+}
+
+/**
+ * Whether `locale`'s catalog can be used for said text: the active one's
+ * always, another once `loadCatalog` loaded it and `inLocale` can use it.
+ */
+export function catalogLoaded(locale: string): boolean {
+  const supported = getSupportedLocale(locale);
+  if (!supported) return false;
+  if (supported === getSupportedLocale(i18n.locale)) return true;
+  return loadedCatalogs.has(supported) && canSwapLocale();
+}
+
+type SwappableI18n = {
+  _locale: string;
+  _locales: string | string[] | undefined;
+};
+
+/**
+ * Lingui keeps the active locale in `_locale`. Checked once: where a Lingui
+ * version keeps it elsewhere, no other catalog is used and spoken text falls
+ * back to the interface language as a whole.
+ */
+let swapWorks: boolean | undefined;
+const canSwapLocale = (): boolean => {
+  if (swapWorks !== undefined) return swapWorks;
+  const target = i18n as unknown as SwappableI18n;
+  const previous = target._locale;
+  if (typeof previous !== "string" || previous === "") return false;
+  const probe = previous === "en" ? "de" : "en";
+  target._locale = probe;
+  swapWorks = i18n.locale === probe;
+  target._locale = previous;
+  return swapWorks;
+};
+
+/**
+ * Runs `compose` with `locale`'s catalog, for text that is said, never shown:
+ * the interface keeps its language, and nothing re-renders. `compose` must
+ * be synchronous.
+ */
+export function inLocale<T>(locale: string, compose: () => T): T {
+  const supported = getSupportedLocale(locale);
+  const target = i18n as unknown as SwappableI18n;
+  if (!supported || target._locale === supported || !catalogLoaded(supported))
+    return compose();
+  const previous = { locale: target._locale, locales: target._locales };
+  target._locale = supported;
+  target._locales = undefined;
+  try {
+    return compose();
+  } finally {
+    target._locale = previous.locale;
+    target._locales = previous.locales;
+  }
+}
+
 // Initialize with detected locale
 export function initializeI18n() {
   const detectedLocale = detectLocale();

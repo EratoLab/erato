@@ -7,8 +7,9 @@ use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::services::audio_transcription::{
     AudioTranscriber, AudioTranscriptionClient, AudioTranscriptionErrorCode,
-    AudioTranscriptionProviderError, AudioTranscriptionRequest,
+    AudioTranscriptionProviderError, AudioTranscriptionRequest, Transcription,
 };
+use crate::services::spoken_language::{self, Candidates, SpokenLanguageInput};
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::Extension;
@@ -20,7 +21,7 @@ use futures::{SinkExt, StreamExt};
 use opendal::Writer;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -151,6 +152,10 @@ enum DictationClientControlFrame {
         chunk_duration_ms: Option<u64>,
         #[serde(default)]
         mode: DictationMode,
+        /// The chat a conversational turn is spoken in, if it exists yet:
+        /// its language is kept when the turn's is unclear.
+        #[serde(default)]
+        chat_id: Option<String>,
     },
     ChunkMetadata {
         chunk_index: usize,
@@ -180,10 +185,89 @@ enum DictationServerControlFrame {
         error: String,
         error_code: AudioTranscriptionErrorCode,
     },
-    Completed,
+    Completed {
+        /// A conversational turn's spoken language, a code such as `de`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spoken_language: Option<String>,
+    },
     Error {
         error: String,
     },
+}
+
+/// What a conversational turn heard, piece by piece, to decide its language
+/// when it ends.
+#[derive(Default)]
+struct ConversationalTurn {
+    conversational: bool,
+    chat_id: Option<Uuid>,
+    /// Each piece's words and the language the recognizer heard in it.
+    pieces: BTreeMap<usize, (String, Option<String>)>,
+}
+
+impl ConversationalTurn {
+    fn text(&self) -> String {
+        self.pieces
+            .values()
+            .map(|(text, _)| text.trim())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// The language the recognizer heard in most of the turn's words; none
+    /// when the pieces tie or none says.
+    fn recognizer_language(&self) -> Option<String> {
+        let mut weights: BTreeMap<String, usize> = BTreeMap::new();
+        for (text, language) in self.pieces.values() {
+            if let Some(code) = language.as_deref().and_then(spoken_language::language_code) {
+                *weights.entry(code).or_default() += text.chars().count().max(1);
+            }
+        }
+        let mut ranked: Vec<(String, usize)> = weights.into_iter().collect();
+        ranked.sort_by_key(|(_, weight)| std::cmp::Reverse(*weight));
+        match ranked.as_slice() {
+            [] => None,
+            [(only, _)] => Some(only.clone()),
+            [(first, a), (_, b), ..] => (a > b).then(|| first.clone()),
+        }
+    }
+}
+
+/// The turn's spoken language, from what it heard, the chat's language and
+/// the user's own; none for a turn without words, which is not sent.
+async fn decide_spoken_language(
+    app_state: &AppState,
+    me_user: &MeProfile,
+    turn: &ConversationalTurn,
+) -> Option<String> {
+    let text = turn.text();
+    if text.is_empty() {
+        return None;
+    }
+    let chat_language = match turn.chat_id {
+        Some(chat_id) => spoken_language::of_chat(&app_state.db, chat_id, &me_user.id)
+            .await
+            .unwrap_or_else(|error| {
+                warn!(%error, "Cannot read the chat's spoken language");
+                None
+            }),
+        None => None,
+    };
+    let main_language = super::read_aloud::speech_language(app_state, me_user)
+        .code()
+        .to_string();
+    let recognizer_language = turn.recognizer_language();
+    let decision = spoken_language::decide(SpokenLanguageInput {
+        text: &text,
+        recognizer_language: recognizer_language.as_deref(),
+        candidates: Candidates::Any,
+        chat_language: chat_language.as_deref(),
+        main_language: &main_language,
+        follow_speaker: true,
+    });
+    decision.log();
+    Some(decision.language)
 }
 
 /// Maps any transcription failure to a protocol code and a short message.
@@ -221,6 +305,8 @@ struct ValidatedAudioChunk {
 
 struct TranscribedChunk {
     transcript: String,
+    /// The language the recognizer heard, when it says.
+    language: Option<String>,
     attempts: usize,
 }
 
@@ -333,6 +419,7 @@ async fn handle_dictation_socket(app_state: AppState, me_user: MeProfile, socket
     let mut audio_feature: Option<AudioFeature> = None;
     let mut next_chunk_index = 0usize;
     let mut pending_chunk: Option<PendingChunk> = None;
+    let mut turn = ConversationalTurn::default();
     let chat_provider_headers_context =
         ChatProviderHeadersContext::new(&me_user.id, &me_user.id_token_claims);
 
@@ -350,6 +437,8 @@ async fn handle_dictation_socket(app_state: AppState, me_user: MeProfile, socket
             {
                 Ok(control_frame) => handle_dictation_control_frame(
                     &app_state,
+                    &me_user,
+                    &mut turn,
                     &mut audio_feature,
                     &mut chunk_duration_ms,
                     &mut next_chunk_index,
@@ -367,6 +456,7 @@ async fn handle_dictation_socket(app_state: AppState, me_user: MeProfile, socket
                 handle_dictation_audio_bytes(
                     &app_state,
                     &chat_provider_headers_context,
+                    &mut turn,
                     audio_feature,
                     chunk_duration_ms,
                     &mut next_chunk_index,
@@ -401,8 +491,11 @@ async fn handle_dictation_socket(app_state: AppState, me_user: MeProfile, socket
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_dictation_control_frame(
     app_state: &AppState,
+    me_user: &MeProfile,
+    turn: &mut ConversationalTurn,
     audio_feature: &mut Option<AudioFeature>,
     chunk_duration_ms: &mut Option<u64>,
     next_chunk_index: &mut usize,
@@ -413,6 +506,7 @@ async fn handle_dictation_control_frame(
         DictationClientControlFrame::Start {
             chunk_duration_ms: requested_chunk_duration_ms,
             mode,
+            chat_id,
         } => {
             let selected_audio_feature = mode.audio_feature();
             ensure_audio_feature_enabled(app_state, selected_audio_feature).await?;
@@ -423,6 +517,11 @@ async fn handle_dictation_control_frame(
                     * 1000
             });
             *audio_feature = Some(selected_audio_feature);
+            *turn = ConversationalTurn {
+                conversational: matches!(mode, DictationMode::Conversational),
+                chat_id: chat_id.as_deref().and_then(|id| Uuid::parse_str(id).ok()),
+                pieces: BTreeMap::new(),
+            };
             *chunk_duration_ms = Some(resolved_chunk_duration_ms);
             *next_chunk_index = 0;
             *pending_chunk = None;
@@ -461,14 +560,23 @@ async fn handle_dictation_control_frame(
         }
         DictationClientControlFrame::Finish => {
             (*chunk_duration_ms).ok_or_eyre("Start audio dictation before finishing")?;
-            Ok(Some(DictationServerControlFrame::Completed))
+            let spoken_language = if turn.conversational {
+                decide_spoken_language(app_state, me_user, turn).await
+            } else {
+                None
+            };
+            Ok(Some(DictationServerControlFrame::Completed {
+                spoken_language,
+            }))
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_dictation_audio_bytes(
     app_state: &AppState,
     chat_provider_headers_context: &ChatProviderHeadersContext<'_>,
+    turn: &mut ConversationalTurn,
     audio_feature: Option<AudioFeature>,
     chunk_duration_ms: Option<u64>,
     next_chunk_index: &mut usize,
@@ -532,6 +640,15 @@ async fn handle_dictation_audio_bytes(
         }
     };
     *next_chunk_index += 1;
+    if turn.conversational {
+        turn.pieces.insert(
+            pending.chunk_index,
+            (
+                transcribed_chunk.transcript.clone(),
+                transcribed_chunk.language.clone(),
+            ),
+        );
+    }
 
     Ok(vec![
         ack,
@@ -1410,7 +1527,10 @@ async fn transcribe_audio_chunk_with_retry(
         )
         .await
         {
-            Ok(transcript) => {
+            Ok(Transcription {
+                text: transcript,
+                language,
+            }) => {
                 if looks_like_hallucination_loop(config, &transcript) {
                     warn!(
                         chunk_index = pending.chunk_index,
@@ -1429,6 +1549,7 @@ async fn transcribe_audio_chunk_with_retry(
                     );
                     return Ok(TranscribedChunk {
                         transcript,
+                        language,
                         attempts: attempt,
                     });
                 }
@@ -1467,7 +1588,7 @@ async fn transcribe_audio_chunk(
     chat_provider_headers_context: Option<&ChatProviderHeadersContext<'_>>,
     pending: &PendingChunk,
     audio_bytes: Vec<u8>,
-) -> Result<String, Report> {
+) -> Result<Transcription, Report> {
     let provider = audio_provider(app_state, audio_feature)?;
     debug!(
         chunk_index = pending.chunk_index,
@@ -1482,18 +1603,21 @@ async fn transcribe_audio_chunk(
         &provider.chat_provider_config,
         chat_provider_headers_context,
     )?;
-    let transcript = client
+    let transcription = client
         .transcribe(AudioTranscriptionRequest {
             audio_bytes,
             filename: format!("audio-chunk-{}.wav", pending.chunk_index),
             max_output_tokens: max_output_tokens_for_chunk(app_state, audio_feature, pending),
         })
         .await?;
-    let transcript = transcript.trim().to_string();
-    if is_punctuation_only_transcript(&transcript) {
-        Ok(String::new())
+    let text = transcription.text.trim().to_string();
+    if is_punctuation_only_transcript(&text) {
+        Ok(Transcription::default())
     } else {
-        Ok(transcript)
+        Ok(Transcription {
+            text,
+            language: transcription.language,
+        })
     }
 }
 
@@ -1903,9 +2027,11 @@ mod tests {
             DictationClientControlFrame::Start {
                 chunk_duration_ms,
                 mode,
+                chat_id,
             } => {
                 assert_eq!(chunk_duration_ms, Some(5000));
                 assert!(matches!(mode, DictationMode::Dictation));
+                assert_eq!(chat_id, None);
             }
             _ => panic!("expected dictation start frame"),
         }
@@ -1914,7 +2040,7 @@ mod tests {
     #[test]
     fn parses_audio_dictation_start_with_conversational_mode() {
         let frame: DictationClientControlFrame = serde_json::from_str(
-            r#"{"type":"start","chunk_duration_ms":5000,"mode":"conversational"}"#,
+            r#"{"type":"start","chunk_duration_ms":5000,"mode":"conversational","chat_id":"c"}"#,
         )
         .expect("dictation start should parse");
 
@@ -1922,12 +2048,58 @@ mod tests {
             DictationClientControlFrame::Start {
                 chunk_duration_ms,
                 mode,
+                chat_id,
             } => {
                 assert_eq!(chunk_duration_ms, Some(5000));
                 assert!(matches!(mode, DictationMode::Conversational));
+                assert_eq!(chat_id.as_deref(), Some("c"));
             }
             _ => panic!("expected dictation start frame"),
         }
+    }
+
+    #[test]
+    fn a_turn_takes_the_recognizer_language_of_most_of_its_words() {
+        let turn = |pieces: &[(&str, Option<&str>)]| ConversationalTurn {
+            conversational: true,
+            chat_id: None,
+            pieces: pieces
+                .iter()
+                .enumerate()
+                .map(|(index, (text, language))| {
+                    (index, (text.to_string(), language.map(str::to_string)))
+                })
+                .collect(),
+        };
+        let mixed = turn(&[
+            ("Zeig mir bitte die Angebote", Some("de")),
+            ("okay", Some("en")),
+            ("", None),
+        ]);
+        assert_eq!(mixed.recognizer_language().as_deref(), Some("de"));
+        assert_eq!(mixed.text(), "Zeig mir bitte die Angebote okay");
+        assert_eq!(turn(&[("ja", None)]).recognizer_language(), None);
+        assert_eq!(
+            turn(&[("abc", Some("de")), ("xyz", Some("en"))]).recognizer_language(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_completed_conversational_turn_carries_its_language() {
+        let value = serde_json::to_value(DictationServerControlFrame::Completed {
+            spoken_language: Some("de".into()),
+        })
+        .unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"type": "completed", "spoken_language": "de"})
+        );
+        let dictation = serde_json::to_value(DictationServerControlFrame::Completed {
+            spoken_language: None,
+        })
+        .unwrap();
+        assert_eq!(dictation, serde_json::json!({"type": "completed"}));
     }
 
     #[test]

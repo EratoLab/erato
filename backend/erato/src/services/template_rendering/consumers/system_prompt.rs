@@ -114,41 +114,47 @@ fn now_in(ctx: &SystemPromptContext, now: DateTime<Utc>) -> DateTime<Tz> {
 }
 
 pub(crate) fn language_code_to_english_name(ctx: &SystemPromptContext) -> String {
-    let code = ctx.preferred_language.unwrap_or("en");
-    match code {
-        "en" => "English".to_string(),
-        "de" => "German".to_string(),
-        "es" => "Spanish".to_string(),
-        "fr" => "French".to_string(),
-        "it" => "Italian".to_string(),
-        "pt" => "Portuguese".to_string(),
-        "nl" => "Dutch".to_string(),
-        "pl" => "Polish".to_string(),
-        "ru" => "Russian".to_string(),
-        "zh" => "Chinese".to_string(),
-        "ja" => "Japanese".to_string(),
-        "ko" => "Korean".to_string(),
-        "sv" => "Swedish".to_string(),
-        "no" => "Norwegian".to_string(),
-        "da" => "Danish".to_string(),
-        "fi" => "Finnish".to_string(),
-        "tr" => "Turkish".to_string(),
-        "vi" => "Vietnamese".to_string(),
-        "th" => "Thai".to_string(),
-        "ar" => "Arabic".to_string(),
-        "hi" => "Hindi".to_string(),
-        "bn" => "Bengali".to_string(),
-        "fa" => "Persian".to_string(),
-        "id" => "Indonesian".to_string(),
-        "ms" => "Malay".to_string(),
-        "uk" => "Ukrainian".to_string(),
-        "cs" => "Czech".to_string(),
-        "el" => "Greek".to_string(),
-        "he" => "Hebrew".to_string(),
-        "ro" => "Romanian".to_string(),
-        "hu" => "Hungarian".to_string(),
-        _ => "English".to_string(),
-    }
+    english_language_name(ctx.preferred_language.unwrap_or("en"))
+        .unwrap_or("English")
+        .to_string()
+}
+
+/// The English name of a language code, for the languages prompts name.
+pub(crate) fn english_language_name(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "en" => "English",
+        "de" => "German",
+        "es" => "Spanish",
+        "fr" => "French",
+        "it" => "Italian",
+        "pt" => "Portuguese",
+        "nl" => "Dutch",
+        "pl" => "Polish",
+        "ru" => "Russian",
+        "zh" => "Chinese",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        "sv" => "Swedish",
+        "no" => "Norwegian",
+        "da" => "Danish",
+        "fi" => "Finnish",
+        "tr" => "Turkish",
+        "vi" => "Vietnamese",
+        "th" => "Thai",
+        "ar" => "Arabic",
+        "hi" => "Hindi",
+        "bn" => "Bengali",
+        "fa" => "Persian",
+        "id" => "Indonesian",
+        "ms" => "Malay",
+        "uk" => "Ukrainian",
+        "cs" => "Czech",
+        "el" => "Greek",
+        "he" => "Hebrew",
+        "ro" => "Romanian",
+        "hu" => "Hungarian",
+        _ => return None,
+    })
 }
 
 pub(crate) fn render_preferred_language_code(ctx: &SystemPromptContext) -> String {

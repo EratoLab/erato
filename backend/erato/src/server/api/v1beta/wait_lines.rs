@@ -8,7 +8,7 @@
 //! own answer is still being generated.
 
 use super::me_profile_middleware::MeProfile;
-use super::read_aloud::{speech_language, speech_response};
+use super::read_aloud::{requested_language, speech_response, voice_language};
 use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::config::SpeechProviderConfig;
 use crate::distribution::experience_policy::{
@@ -294,6 +294,12 @@ pub struct WaitLinesQuery {
     #[serde(default)]
     #[param(required = false)]
     pub known: String,
+    /// The language to say the lines in, any language code such as `de`:
+    /// the one the user spoke. The user's language when omitted. A language
+    /// without lines gets none.
+    #[serde(default)]
+    #[param(required = false)]
+    pub language: String,
 }
 
 /// What the voice says while the caller waits, and the audio of its fixed
@@ -304,6 +310,7 @@ pub struct WaitLinesQuery {
     params(WaitLinesQuery),
     responses(
         (status = OK, body = WaitLinesResponse),
+        (status = BAD_REQUEST, description = "A language that is not a language code"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = NOT_FOUND, description = "Conversational audio mode has no voice")
     ),
@@ -331,7 +338,11 @@ pub async fn wait_lines(
     let (amount, source, audience, user_choice) =
         resolve(config, &audiences, me_user.preference_wait_lines_amount);
 
-    let language = speech_language(&app_state, &me_user).code().to_string();
+    let requested =
+        requested_language(Some(query.language.as_str()).filter(|tag| !tag.is_empty()))?;
+    let language = voice_language(&app_state, &me_user, requested.as_deref())
+        .code()
+        .to_string();
     let voice = voice_fingerprint(provider_id, provider_config);
     let set = config.set_for(&language);
     let timing = WaitLinesTiming {
@@ -407,6 +418,11 @@ pub const MAX_PROGRESS_CHARS: usize = 160;
 pub struct ProgressSpeechRequest {
     /// The line, composed by the client from the tool call's label.
     pub text: String,
+    /// The language the line is worded in, a code such as `de`; the user's
+    /// language when omitted.
+    #[serde(default)]
+    #[schema(nullable = false, example = "de")]
+    pub language: Option<String>,
 }
 
 /// Says one line about a running tool call of the caller's own answer.
@@ -420,7 +436,7 @@ pub struct ProgressSpeechRequest {
     request_body = ProgressSpeechRequest,
     responses(
         (status = OK, content_type = "text/event-stream", body = super::read_aloud::ReadAloudStreamEvent),
-        (status = BAD_REQUEST, description = "The line is empty, too long or holds control characters"),
+        (status = BAD_REQUEST, description = "The line is empty, too long or holds control characters, or the language is not a language code"),
         (status = NOT_FOUND, description = "No voice, or the message is not in the caller's own chat"),
         (status = CONFLICT, description = "The answer is no longer being generated")
     ),
@@ -440,6 +456,7 @@ pub async fn progress_speech(
     else {
         return Err(StatusCode::NOT_FOUND);
     };
+    let requested = requested_language(request.language.as_deref())?;
     let text = request.text.trim();
     if text.is_empty()
         || text.chars().count() > MAX_PROGRESS_CHARS
@@ -474,7 +491,7 @@ pub async fn progress_speech(
     if !generating {
         return Err(StatusCode::CONFLICT);
     }
-    let language = speech_language(&app_state, &me_user);
+    let language = voice_language(&app_state, &me_user, requested.as_deref());
     speech_response(
         provider_config,
         &[text.to_string()],

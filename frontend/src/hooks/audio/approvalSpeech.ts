@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { inLocale } from "@/lib/i18n";
 import { spokenUtteranceSentences } from "@/lib/toolCallGist/spokenCard";
 import {
   spokenCardFlow,
@@ -189,9 +190,13 @@ const feed = () => {
   settle();
 };
 
-/** One request to the voice for `sentences`, handing over their audio by index. */
+/**
+ * One request to the voice for `sentences`, worded in `language`, handing
+ * over their audio by index.
+ */
 const openSpeech = (
   messageId: string,
+  language: string | undefined,
   sentences: string[],
   handlers: {
     stale: () => boolean;
@@ -211,7 +216,9 @@ const openSpeech = (
     `/api/v1beta/me/messages/${encodeURIComponent(messageId)}/approval-speech`,
     {
       method: "POST",
-      body: JSON.stringify({ pieces: sentences }),
+      body: JSON.stringify(
+        language ? { pieces: sentences, language } : { pieces: sentences },
+      ),
       onMessage: (event) => {
         if (handlers.stale()) return;
         if (event.type === "audio_delta") {
@@ -285,7 +292,7 @@ const sayExtra = (sentences: string[]) => {
   const parts = sentences.map(emptyBuffer);
   const current = { parts, at: 0, close: () => {} };
   extra = current;
-  current.close = openSpeech(card.messageId, sentences, {
+  current.close = openSpeech(card.messageId, card.language, sentences, {
     stale: () => extra !== current || thisPlay !== playRun,
     audio: (index, chunk) => {
       pushChunk(parts[index], chunk);
@@ -317,6 +324,7 @@ const loadPieces = (indices: number[]) => {
   const pieceAt = (part: number) => indices.at(part);
   thisStream = openSpeech(
     card.messageId,
+    card.language,
     indices.map((index) => said[index].text),
     {
       stale: () => thisCard !== cardRun || closeStream !== thisStream,
@@ -353,10 +361,13 @@ const startPlaying = () => {
   const { playing } = flow;
   if (playing === null) return;
   if (playing.type !== "piece") {
-    const sentences = spokenUtteranceSentences(playing, said, {
-      language: speaking?.language ?? "en",
-      now: new Date(),
-    });
+    const language = speaking?.language ?? "en";
+    const sentences = inLocale(language, () =>
+      spokenUtteranceSentences(playing, said, {
+        language,
+        now: new Date(),
+      }),
+    );
     if (sentences.length === 0) apply({ type: "finished" });
     else sayExtra(sentences);
     return;
@@ -497,18 +508,20 @@ export function announceApprovalNotice(
   fellBack = true;
   const key = noticeKey(messageId, notice);
   play_(
-    { key, messageId, pieces: [], notice: true },
+    { key, messageId, pieces: [], notice: true, language },
     [{ id: key, role: "pointer", text, mustSay: false }],
     false,
   );
 }
 
 const noticeText = (notice: SpokenNotice, language: string) =>
-  spokenUtteranceSentences({ type: "notice", notice }, [], {
-    language,
-    now: new Date(),
-    confirmationPhrases: deploymentConfirmationPhrases(),
-  }).join(" ");
+  inLocale(language, () =>
+    spokenUtteranceSentences({ type: "notice", notice }, [], {
+      language,
+      now: new Date(),
+      confirmationPhrases: deploymentConfirmationPhrases(),
+    }),
+  ).join(" ");
 
 const noticeKey = (messageId: string, notice: SpokenNotice) =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- a key and a piece id, not copy
@@ -523,6 +536,7 @@ export interface PreparedNotice {
 interface Prepared extends PreparedNotice {
   key: string;
   messageId: string;
+  language: string;
   text: string;
   buffer: Buffered;
   failed: boolean;
@@ -546,6 +560,7 @@ export function prepareApprovalNotice(
   const prepared: Prepared = {
     key: noticeKey(messageId, notice),
     messageId,
+    language,
     text: noticeText(notice, language),
     buffer,
     failed: false,
@@ -556,7 +571,7 @@ export function prepareApprovalNotice(
       prepared.stream();
     },
   };
-  prepared.stream = openSpeech(messageId, [prepared.text], {
+  prepared.stream = openSpeech(messageId, language, [prepared.text], {
     stale: () => prepared.closed,
     audio: (_, chunk) => {
       pushChunk(buffer, chunk);
@@ -589,6 +604,7 @@ export function sayPreparedNotice(notice: PreparedNotice) {
       messageId: prepared.messageId,
       pieces: [],
       notice: true,
+      language: prepared.language,
     },
     [
       {

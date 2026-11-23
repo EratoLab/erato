@@ -2,8 +2,11 @@ import { detect, fromNavigator } from "@lingui/detect-locale";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
+  addCatalog,
+  catalogLoaded,
   detectLocale,
   dynamicActivate,
+  inLocale,
   getSupportedLocale,
   getValidLocale,
   i18n,
@@ -401,5 +404,37 @@ describe("i18n Module Exports", () => {
 
   it("should export detection function", () => {
     expect(typeof detectLocale).toBe("function");
+  });
+});
+
+// An id in a variable: the catalog extractor reads only literal ids.
+const PROBE_ID = ["test", "inLocale"].join(".");
+
+describe("inLocale", () => {
+  it("takes the messages of another loaded catalog without switching the interface", () => {
+    const previous = i18n.locale;
+    addCatalog("de", { "test.inLocale": "Hallo" });
+    i18n.load("en", { "test.inLocale": "Hello" });
+    i18n.activate("en");
+    const changes = vi.fn();
+    const unsubscribe = i18n.on("change", changes);
+    try {
+      expect(catalogLoaded("de")).toBe(true);
+      expect(inLocale("de", () => i18n._(PROBE_ID))).toBe("Hallo");
+      expect(i18n.locale).toBe("en");
+      expect(i18n._(PROBE_ID)).toBe("Hello");
+      expect(changes).not.toHaveBeenCalled();
+      expect(catalogLoaded("pl")).toBe(false);
+      expect(inLocale("pl", () => i18n._(PROBE_ID))).toBe("Hello");
+      expect(() =>
+        inLocale("de", () => {
+          throw new Error("boom");
+        }),
+      ).toThrow("boom");
+      expect(i18n.locale).toBe("en");
+    } finally {
+      unsubscribe();
+      i18n.activate(previous);
+    }
   });
 });
