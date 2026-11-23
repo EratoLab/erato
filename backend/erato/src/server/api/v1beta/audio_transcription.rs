@@ -225,7 +225,7 @@ impl ConversationalTurn {
             }
         }
         let mut ranked: Vec<(String, usize)> = weights.into_iter().collect();
-        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        ranked.sort_by_key(|(_, weight)| std::cmp::Reverse(*weight));
         match ranked.as_slice() {
             [] => None,
             [(only, _)] => Some(only.clone()),

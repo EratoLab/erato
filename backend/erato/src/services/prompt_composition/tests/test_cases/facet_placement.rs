@@ -827,7 +827,7 @@ fn a_spoken_reply_keeps_the_configured_style_and_natural_adds_the_protocol() {
         turn_instructions_for_turn(&config, natural, None)
             .into_iter()
             .collect::<Vec<_>>(),
-        [protocol.clone()]
+        std::slice::from_ref(&protocol)
     );
     assert!(
         turn_instructions_for_turn(&config, Some(ReplySpeechWording::Precise), None).is_empty()
@@ -861,7 +861,7 @@ fn a_spoken_turn_names_its_language_whether_or_not_it_is_read_back() {
         turn_instructions_for_turn(&config, None, Some("de"))
             .into_iter()
             .collect::<Vec<_>>(),
-        [spoken.clone()]
+        std::slice::from_ref(&spoken)
     );
     assert_eq!(
         turn_instructions_for_turn(&config, Some(ReplySpeechWording::Natural), Some("de"))
