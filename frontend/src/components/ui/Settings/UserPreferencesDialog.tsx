@@ -104,8 +104,12 @@ export function UserPreferencesDialog({
     useAudioConversationalFeature();
   const voiceOutputSettingsEnabled =
     audioConversationalEnabled && Boolean(speechEnabled);
+  const showVoiceOutputSettings = voiceOutputSettingsEnabled && isOpen;
+  // Conversation mode records too, and its voice settings live in this tab.
   const audioInputSettingsEnabled =
-    audioTranscriptionEnabled || audioDictationEnabled;
+    audioTranscriptionEnabled ||
+    audioDictationEnabled ||
+    audioConversationalEnabled;
   const defaultTab: PreferencesTab = personalizationEnabled
     ? "personalization"
     : "appearance";
@@ -734,7 +738,16 @@ export function UserPreferencesDialog({
                 hidden={activeTab !== "audio"}
                 className="space-y-4"
               >
-                <div className="space-y-1">
+                {/* What a person hears comes first: it is what they come to
+                    change most; the microphone follows. */}
+                {showVoiceOutputSettings ? <VoiceOutputSetting /> : null}
+                <div
+                  className={
+                    showVoiceOutputSettings
+                      ? "space-y-1 border-t border-[var(--theme-border-subtle)] pt-4"
+                      : "space-y-1"
+                  }
+                >
                   <h2 className="text-sm font-medium text-theme-fg-primary">
                     {t({
                       id: "preferences.dialog.audio.input.heading",
@@ -752,9 +765,6 @@ export function UserPreferencesDialog({
                 <AudioInputTabContent
                   isActive={isOpen && activeTab === "audio"}
                 />
-                {voiceOutputSettingsEnabled && isOpen ? (
-                  <VoiceOutputSetting />
-                ) : null}
               </section>
             ) : null}
 

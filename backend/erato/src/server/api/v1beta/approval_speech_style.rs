@@ -25,6 +25,11 @@ pub enum ApprovalSpeechStyleSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct ApprovalSpeechStyleResponse {
+    /// Whether waiting cards are read aloud in conversational audio mode.
+    pub spoken: bool,
+    /// Where `spoken` comes from. The caller's own value counts only where
+    /// `user_choice` allows it.
+    pub spoken_source: ApprovalSpeechStyleSource,
     pub amount: ApprovalSpeechAmount,
     /// Details a short reading says before it holds back the rest.
     pub short_details: u8,
@@ -35,7 +40,8 @@ pub struct ApprovalSpeechStyleResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub audience: Option<String>,
-    /// Whether the caller may choose their own amount and wording.
+    /// Whether the caller may choose their own amount and wording and
+    /// whether cards are read aloud.
     pub user_choice: bool,
 }
 
@@ -65,6 +71,7 @@ pub fn resolve(
     audiences: &[(&str, &AudienceApprovalSpeech)],
     own_amount: Option<ApprovalSpeechAmount>,
     own_wording: Option<ApprovalSpeechWording>,
+    own_spoken: Option<bool>,
 ) -> ApprovalSpeechStyleResponse {
     fn first<T: Copy>(
         audiences: &[(&str, &AudienceApprovalSpeech)],
@@ -73,6 +80,8 @@ pub fn resolve(
         audiences.iter().find_map(|(_, set)| part(set))
     }
     let mut style = ApprovalSpeechStyleResponse {
+        spoken: config.spoken,
+        spoken_source: ApprovalSpeechStyleSource::Deployment,
         amount: first(audiences, |set| set.amount).unwrap_or(config.amount),
         short_details: first(audiences, |set| set.short_details)
             .unwrap_or(config.short_details)
@@ -85,6 +94,16 @@ pub fn resolve(
             audiences.iter().map(|(_, set)| set.user_choice),
         ),
     };
+    if let Some(spoken) = first(audiences, |set| set.spoken) {
+        style.spoken = spoken;
+        style.spoken_source = ApprovalSpeechStyleSource::Audience;
+    }
+    if style.user_choice
+        && let Some(spoken) = own_spoken
+    {
+        style.spoken = spoken;
+        style.spoken_source = ApprovalSpeechStyleSource::User;
+    }
     if let Some((name, _)) = audiences.first() {
         style.source = ApprovalSpeechStyleSource::Audience;
         style.audience = Some((*name).to_string());
@@ -127,6 +146,7 @@ pub async fn resolve_for(app_state: &AppState, me_user: &MeProfile) -> ApprovalS
         &audiences,
         me_user.preference_approval_speech_amount,
         me_user.preference_approval_speech_wording,
+        me_user.preference_approval_speech_spoken,
     )
 }
 
@@ -136,6 +156,7 @@ mod tests {
 
     fn audience(user_choice: Option<bool>) -> AudienceApprovalSpeech {
         AudienceApprovalSpeech {
+            spoken: None,
             amount: Some(ApprovalSpeechAmount::Short),
             short_details: Some(2),
             wording: None,
@@ -156,6 +177,7 @@ mod tests {
             &[("Pilot", &wording_only), ("Vertrieb", &amount_only)],
             None,
             None,
+            None,
         );
         assert_eq!(style.wording, ApprovalSpeechWording::Natural);
         assert_eq!(style.amount, ApprovalSpeechAmount::Short);
@@ -166,13 +188,13 @@ mod tests {
     #[test]
     fn the_deployment_then_the_audience_then_the_user_where_allowed() {
         let config = ApprovalSpeechConfig::default();
-        let plain = resolve(&config, &[], None, None);
+        let plain = resolve(&config, &[], None, None, None);
         assert_eq!(plain.amount, ApprovalSpeechAmount::Full);
         assert_eq!(plain.wording, ApprovalSpeechWording::Precise);
         assert_eq!(plain.source, ApprovalSpeechStyleSource::Deployment);
 
         let set = audience(None);
-        let by_audience = resolve(&config, &[("Vertrieb", &set)], None, None);
+        let by_audience = resolve(&config, &[("Vertrieb", &set)], None, None, None);
         assert_eq!(by_audience.amount, ApprovalSpeechAmount::Short);
         assert_eq!(by_audience.short_details, 2);
         assert_eq!(by_audience.wording, ApprovalSpeechWording::Precise);
@@ -183,6 +205,7 @@ mod tests {
             &[("Vertrieb", &set)],
             None,
             Some(ApprovalSpeechWording::Natural),
+            None,
         );
         assert_eq!(own.source, ApprovalSpeechStyleSource::User);
         assert_eq!(own.amount, ApprovalSpeechAmount::Short);
@@ -195,6 +218,7 @@ mod tests {
             &[("Vertrieb", &locked)],
             Some(ApprovalSpeechAmount::Full),
             Some(ApprovalSpeechWording::Natural),
+            None,
         );
         assert_eq!(kept.source, ApprovalSpeechStyleSource::Audience);
         assert_eq!(kept.amount, ApprovalSpeechAmount::Short);
@@ -206,7 +230,14 @@ mod tests {
             ..ApprovalSpeechConfig::default()
         };
         assert_eq!(
-            resolve(&closed, &[], None, Some(ApprovalSpeechWording::Natural)).wording,
+            resolve(
+                &closed,
+                &[],
+                None,
+                Some(ApprovalSpeechWording::Natural),
+                None
+            )
+            .wording,
             ApprovalSpeechWording::Precise
         );
         let opened = audience(Some(true));
@@ -215,8 +246,43 @@ mod tests {
             &[("Pilot", &opened)],
             None,
             Some(ApprovalSpeechWording::Natural),
+            None,
         );
         assert_eq!(still_closed.wording, ApprovalSpeechWording::Precise);
         assert!(!still_closed.user_choice);
+    }
+
+    #[test]
+    fn cards_are_read_aloud_unless_turned_off_where_allowed() {
+        let config = ApprovalSpeechConfig::default();
+        let on = resolve(&config, &[], None, None, None);
+        assert!(on.spoken);
+        assert_eq!(on.spoken_source, ApprovalSpeechStyleSource::Deployment);
+
+        let mine = resolve(&config, &[], None, None, Some(false));
+        assert!(!mine.spoken);
+        assert_eq!(mine.spoken_source, ApprovalSpeechStyleSource::User);
+        // Turning cards off is not a reading style of its own.
+        assert_eq!(mine.source, ApprovalSpeechStyleSource::Deployment);
+
+        let quiet = AudienceApprovalSpeech {
+            spoken: Some(false),
+            ..AudienceApprovalSpeech::default()
+        };
+        let by_audience = resolve(&config, &[("Vertrieb", &quiet)], None, None, None);
+        assert!(!by_audience.spoken);
+        assert_eq!(
+            by_audience.spoken_source,
+            ApprovalSpeechStyleSource::Audience
+        );
+
+        let forced = AudienceApprovalSpeech {
+            spoken: Some(true),
+            user_choice: Some(false),
+            ..AudienceApprovalSpeech::default()
+        };
+        let kept = resolve(&config, &[("Vertrieb", &forced)], None, None, Some(false));
+        assert!(kept.spoken);
+        assert_eq!(kept.spoken_source, ApprovalSpeechStyleSource::Audience);
     }
 }

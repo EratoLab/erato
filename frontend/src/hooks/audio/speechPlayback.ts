@@ -8,19 +8,18 @@ import {
 
 import type { PcmChunk } from "./pcmPlayback";
 
-const SPEECH_ENABLED_STORAGE_KEY = "erato.audioConversational.audioBackEnabled";
-
-function readSpeechEnabledPreference(): boolean {
-  try {
-    return localStorage.getItem(SPEECH_ENABLED_STORAGE_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
 interface SpeechState {
   conversational: boolean;
+  /**
+   * Replies are spoken in conversational mode: the user's setting as the
+   * backend resolves it, on until it is known.
+   */
   enabled: boolean;
+  /**
+   * Waiting approval cards are read aloud, where replies are spoken: the
+   * user's setting as the backend resolves it, on until it is known.
+   */
+  cards: boolean;
   playing: boolean;
   /**
    * The user talked over the voice: it is silent, and keeps what it has not
@@ -48,7 +47,8 @@ interface SpeechState {
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
-  enabled: readSpeechEnabledPreference(),
+  enabled: true,
+  cards: true,
   playing: false,
   paused: false,
   blocked: false,
@@ -189,17 +189,33 @@ export function releaseReplyAudio() {
   useSpeechPlayback.setState({ playing: true });
 }
 
-export async function enableSpeechPlayback(enabled: boolean) {
-  try {
-    localStorage.setItem(SPEECH_ENABLED_STORAGE_KEY, String(enabled));
-  } catch {
-    // Playback remains available when storage is unavailable.
-  }
-  useSpeechPlayback.setState({ enabled, blocked: false, failed: false });
-  if (!enabled) {
-    stopSpeechPlayback();
-    return;
-  }
+/**
+ * The user's settings for a spoken conversation, as the backend resolves
+ * them. Turning replies off silences what is said now.
+ */
+export function applySpokenSettings(settings: {
+  replies?: boolean;
+  cards?: boolean;
+}) {
+  const { enabled, cards } = useSpeechPlayback.getState();
+  const next = {
+    enabled: settings.replies ?? enabled,
+    cards: settings.cards ?? cards,
+  };
+  if (next.enabled === enabled && next.cards === cards) return;
+  // A notice about a voice that is now off would stay for good.
+  useSpeechPlayback.setState(
+    next.enabled ? next : { ...next, blocked: false, failed: false },
+  );
+  if (!next.enabled) stopSpeechPlayback();
+}
+
+/**
+ * Lets the browser play the voice: called from a user gesture, since
+ * autoplay may be blocked until then.
+ */
+export async function unlockSpeechPlayback() {
+  useSpeechPlayback.setState({ blocked: false, failed: false });
   try {
     const context = await resumePlaybackContext();
     useSpeechPlayback.setState({ blocked: context.state !== "running" });

@@ -318,6 +318,13 @@ describe("speaking an approval card", () => {
     expect(useApprovalSpeech.getState().speaking).toBe(false);
   });
 
+  it("ends when the user turns card reading off while it speaks", async () => {
+    const { useApprovalSpeech } = await speak();
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ cards: false });
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
   it("waits before the request of a delete", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

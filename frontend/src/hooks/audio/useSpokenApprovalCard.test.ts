@@ -57,6 +57,7 @@ beforeEach(() => {
   useSpeechPlayback.setState({
     conversational: true,
     enabled: true,
+    cards: true,
     playing: false,
     spokenTurn: "chat-1",
     quietTurn: undefined,
@@ -105,6 +106,20 @@ describe("useSpokenApprovalCard", () => {
     useSpeechPlayback.setState({ conversational: true, spokenTurn: "chat-2" });
     renderHook(() => useSpokenApprovalCard(props()));
     expect(speakApprovalCard).not.toHaveBeenCalled();
+  });
+
+  it("stays silent where the user turned card reading off", () => {
+    useSpeechPlayback.setState({ cards: false });
+    const card = props();
+    const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
+      initialProps: card,
+    });
+    expect(speakApprovalCard).not.toHaveBeenCalled();
+    expect(offerApprovalCard).not.toHaveBeenCalled();
+    // Turned on again while the card waits: it is read.
+    act(() => useSpeechPlayback.setState({ cards: true }));
+    rerender(card);
+    expect(speakApprovalCard).toHaveBeenCalledTimes(1);
   });
 
   it("1.1: speaks the next stop of the same message, after a decision", () => {

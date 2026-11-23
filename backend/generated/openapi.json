@@ -6102,6 +6102,8 @@
       "ApprovalSpeechStyleResponse": {
         "type": "object",
         "required": [
+          "spoken",
+          "spoken_source",
           "amount",
           "short_details",
           "wording",
@@ -6126,9 +6128,17 @@
             "$ref": "#/components/schemas/ApprovalSpeechStyleSource",
             "description": "Where the last value that applied came from."
           },
+          "spoken": {
+            "type": "boolean",
+            "description": "Whether waiting cards are read aloud in conversational audio mode."
+          },
+          "spoken_source": {
+            "$ref": "#/components/schemas/ApprovalSpeechStyleSource",
+            "description": "Where `spoken` comes from. The caller's own value counts only where\n`user_choice` allows it."
+          },
           "user_choice": {
             "type": "boolean",
-            "description": "Whether the caller may choose their own amount and wording."
+            "description": "Whether the caller may choose their own amount and wording and\nwhether cards are read aloud."
           },
           "wording": {
             "$ref": "#/components/schemas/ApprovalSpeechWording"
@@ -13516,6 +13526,8 @@
       "ReplySpeechStyleResponse": {
         "type": "object",
         "required": [
+          "spoken",
+          "spoken_source",
           "wording",
           "source",
           "user_choice",
@@ -13539,9 +13551,17 @@
             "$ref": "#/components/schemas/ReplySpeechStyleSource",
             "description": "Where the last value that applied came from."
           },
+          "spoken": {
+            "type": "boolean",
+            "description": "Whether replies are spoken in conversational audio mode."
+          },
+          "spoken_source": {
+            "$ref": "#/components/schemas/ReplySpeechStyleSource",
+            "description": "Where `spoken` comes from. The caller's own value counts only where\n`user_choice` allows it."
+          },
           "user_choice": {
             "type": "boolean",
-            "description": "Whether the caller may choose their own wording."
+            "description": "Whether the caller may choose their own wording and whether replies\nare spoken."
           },
           "wording": {
             "$ref": "#/components/schemas/ReplySpeechWording"
@@ -16523,6 +16543,13 @@
             ],
             "description": "How much approval cards say aloud: `full` or `short`. Explicit\n`null` follows the organisation again. Kept even where the user may\nnot choose, and then not used."
           },
+          "preference_approval_speech_spoken": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether approval cards are read aloud in conversation; `null` follows\nthe organisation again."
+          },
           "preference_approval_speech_wording": {
             "type": [
               "string",
@@ -16576,6 +16603,13 @@
               "null"
             ],
             "description": "Whether the chat shows what the voice said in conversation; `null`\nfollows the organisation again."
+          },
+          "preference_reply_speech_spoken": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether replies are spoken in conversation; `null` follows the\norganisation again."
           },
           "preference_reply_speech_wording": {
             "type": [
@@ -16698,6 +16732,10 @@
             "$ref": "#/components/schemas/ApprovalSpeechAmount",
             "description": "How much approval cards say aloud, as the user chose; absent follows\nthe organisation."
           },
+          "preference_approval_speech_spoken": {
+            "type": "boolean",
+            "description": "Whether approval cards are read aloud in conversation, as the user\nchose; absent follows the organisation."
+          },
           "preference_approval_speech_wording": {
             "$ref": "#/components/schemas/ApprovalSpeechWording",
             "description": "How approval cards are worded aloud, as the user chose; absent\nfollows the organisation."
@@ -16729,6 +16767,10 @@
           "preference_reply_speech_show_in_chat": {
             "type": "boolean",
             "description": "Whether the chat shows what the voice said, as the user chose; absent\nfollows the organisation."
+          },
+          "preference_reply_speech_spoken": {
+            "type": "boolean",
+            "description": "Whether replies are spoken in conversation, as the user chose; absent\nfollows the organisation."
           },
           "preference_reply_speech_wording": {
             "$ref": "#/components/schemas/ReplySpeechWording",

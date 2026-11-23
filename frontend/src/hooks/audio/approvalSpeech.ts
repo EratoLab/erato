@@ -682,11 +682,13 @@ function play_(
   );
 }
 
-// Leaving conversational mode, or turning read-back off, ends the card's voice.
+// Leaving conversational mode, or turning spoken replies or cards off, ends
+// the card's voice.
 useSpeechPlayback.subscribe((state, previous) => {
   if (
     (previous.conversational && !state.conversational) ||
-    (previous.enabled && !state.enabled)
+    (previous.enabled && !state.enabled) ||
+    (previous.cards && !state.cards)
   )
     stopApprovalSpeech();
 });

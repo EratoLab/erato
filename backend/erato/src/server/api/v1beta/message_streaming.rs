@@ -18906,7 +18906,8 @@ fn enable_reply_speech(
 
 /// Turns on speech like [`enable_reply_speech`] and returns how the reply is
 /// spoken, resolved for the caller at turn time, or `None` when it is not
-/// read back.
+/// read back. A client that asks while the caller's replies are not spoken
+/// (the admin's or their own setting) gets the written reply only.
 async fn read_back_reply(
     task: &StreamingTask,
     app_state: &AppState,
@@ -18914,14 +18915,16 @@ async fn read_back_reply(
     me_user: &MeProfile,
     requested: bool,
 ) -> Option<erato_config::reply_speech::ReplySpeechWording> {
-    if !enable_reply_speech(task, app_state, switches, me_user, requested) {
+    let style = if requested {
+        Some(super::reply_speech_style::resolve_for(app_state, me_user).await)
+    } else {
+        None
+    };
+    let spoken = style.as_ref().is_some_and(|style| style.spoken);
+    if !enable_reply_speech(task, app_state, switches, me_user, spoken) {
         return None;
     }
-    Some(
-        super::reply_speech_style::resolve_for(app_state, me_user)
-            .await
-            .wording,
-    )
+    style.map(|style| style.wording)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -22732,13 +22735,14 @@ pub(crate) async fn start_continuation(
     let client_stream_guard = task.client_stream_guard();
     // The turn instruction for a spoken reply is in the stored prompt the
     // continuation reuses, so only the speech itself is decided here.
-    enable_reply_speech(
+    read_back_reply(
         &task,
         app_state,
         app_state.voice_switches().await,
         me_user,
         request.conversational_audio_back,
-    );
+    )
+    .await;
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(

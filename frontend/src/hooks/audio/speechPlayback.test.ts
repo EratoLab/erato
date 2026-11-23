@@ -56,16 +56,43 @@ describe("speech playback", () => {
     expect(starts).toHaveLength(0);
   });
 
-  it.each([false, true])(
-    "remembers the preference %s after reload",
-    async (enabled) => {
-      const p = await import("./speechPlayback");
-      await p.enableSpeechPlayback(enabled);
-      vi.resetModules();
-      const reloaded = await import("./speechPlayback");
-      expect(reloaded.useSpeechPlayback.getState().enabled).toBe(enabled);
-    },
-  );
+  it("follows the user's settings and keeps nothing in the browser", async () => {
+    const p = await import("./speechPlayback");
+    expect(p.useSpeechPlayback.getState().cards).toBe(true);
+    p.applySpokenSettings({ replies: false, cards: false });
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      enabled: false,
+      cards: false,
+    });
+    expect(localStorage.setItem).not.toHaveBeenCalled();
+    p.applySpokenSettings({ replies: true });
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      enabled: true,
+      cards: false,
+    });
+  });
+
+  it("drops a playback notice when replies are turned off", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ blocked: true, failed: true });
+    p.applySpokenSettings({ replies: false });
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      blocked: false,
+      failed: false,
+    });
+  });
+
+  it("silences the voice when replies are turned off", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.unlockSpeechPlayback();
+    p.beginSpeechResponse();
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
+    expect(p.useSpeechPlayback.getState().playing).toBe(true);
+    p.applySpokenSettings({ replies: false });
+    expect(p.useSpeechPlayback.getState().playing).toBe(false);
+    expect(stops).toHaveBeenCalled();
+  });
 
   it("supports playback when localStorage is unavailable", async () => {
     vi.stubGlobal("localStorage", {
@@ -79,7 +106,7 @@ describe("speech playback", () => {
     const p = await import("./speechPlayback");
     expect(p.useSpeechPlayback.getState().enabled).toBe(true);
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse();
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
     expect(starts).toHaveLength(1);
@@ -88,7 +115,7 @@ describe("speech playback", () => {
   it("queues PCM in order and deduplicates replayed events", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse();
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
@@ -100,7 +127,7 @@ describe("speech playback", () => {
   it("plays a continuation of the same message in full, though it numbers from 0", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse("chat-1");
     for (let sequence = 0; sequence < 3; sequence++)
       p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
@@ -115,7 +142,7 @@ describe("speech playback", () => {
   it("a resumed continuation does not say again what it already said", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse("chat-1");
     for (let sequence = 0; sequence < 4; sequence++)
       p.playSpeechChunk("m1", sequence, "AQIDBA==", 24000, "chat-1");
@@ -131,11 +158,11 @@ describe("speech playback", () => {
   it("ignores other responses and stops immediately when disabled", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse();
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
     p.playSpeechChunk("other", 0, "AQIDBA==", 24000);
-    await p.enableSpeechPlayback(false);
+    p.applySpokenSettings({ replies: false });
     p.playSpeechChunk("m1", 1, "AQIDBA==", 24000);
     expect(starts).toHaveLength(1);
     expect(stops).toHaveBeenCalledOnce();
@@ -144,7 +171,7 @@ describe("speech playback", () => {
   it("never autoplays history without an explicitly started response", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.playSpeechChunk("historical", 0, "AQIDBA==", 24000);
     expect(starts).toHaveLength(0);
   });
@@ -153,7 +180,7 @@ describe("speech playback", () => {
 it("keeps a new chat's stream active when its permanent ID arrives", async () => {
   const p = await import("./speechPlayback");
   p.useSpeechPlayback.setState({ conversational: true });
-  await p.enableSpeechPlayback(true);
+  await p.unlockSpeechPlayback();
   p.beginSpeechResponse("new-chat");
   p.playSpeechChunk("other", 0, "AQIDBA==", 24000, "old-chat");
   p.moveSpeechStream("new-chat", "created-chat");
@@ -181,7 +208,7 @@ it("lowers every voice while the user may be talking over it, and restores it", 
   const p = await import("./speechPlayback");
   const playback = await import("./pcmPlayback");
   p.useSpeechPlayback.setState({ conversational: true });
-  await p.enableSpeechPlayback(true);
+  await p.unlockSpeechPlayback();
   const context = playback.playbackContext() as unknown as MockAudioContext;
   const createGain = vi.spyOn(context, "createGain");
   p.beginSpeechResponse("chat-1");
@@ -202,7 +229,7 @@ describe("talking over a reply", () => {
   const speaking = async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse("chat-1");
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
     p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
@@ -261,7 +288,7 @@ describe("one reply, one utterance", () => {
   const replying = async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
-    await p.enableSpeechPlayback(true);
+    await p.unlockSpeechPlayback();
     p.beginSpeechResponse("chat-1");
     p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
     return p;
@@ -436,7 +463,7 @@ describe("one reply, one utterance", () => {
     try {
       const p = await import("./speechPlayback");
       p.useSpeechPlayback.setState({ conversational: true });
-      await p.enableSpeechPlayback(true);
+      await p.unlockSpeechPlayback();
       p.beginSpeechResponse("chat-1");
       p.holdReplyAudio();
       p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");

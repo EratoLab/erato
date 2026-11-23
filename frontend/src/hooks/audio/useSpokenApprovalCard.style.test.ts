@@ -52,6 +52,7 @@ beforeEach(() => {
   useSpeechPlayback.setState({
     conversational: true,
     enabled: true,
+    cards: true,
     playing: false,
     paused: false,
     spokenTurn: "chat-1",

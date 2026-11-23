@@ -29,7 +29,7 @@ import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
   beginSpeechResponse,
-  enableSpeechPlayback,
+  unlockSpeechPlayback,
   playSpeechChunk,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
@@ -161,6 +161,9 @@ vi.mock("@/hooks/audio/useAudioDictationRecorder", async (importOriginal) => ({
   },
 }));
 
+const mockFetchReplySpeechStyle = vi.fn((..._args: unknown[]) =>
+  Promise.reject(new Error("no reply speech style in tests")),
+);
 const mockHeardApprovalWords = vi.fn();
 const mockTalkOverApprovalCard = vi.fn();
 vi.mock("@/hooks/audio/approvalListening", async (importOriginal) => ({
@@ -181,6 +184,10 @@ vi.mock("@/hooks/chat/useChatCompaction", () => ({
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchWaitLines: () => Promise.reject(new Error("no wait lines in tests")),
+  fetchReplySpeechStyle: (...args: unknown[]) =>
+    mockFetchReplySpeechStyle(...args),
+  fetchApprovalSpeechStyle: () =>
+    Promise.reject(new Error("no approval speech style in tests")),
   fetchGetFile: (...args: unknown[]) => mockFetchGetFile(...args),
   useCreateChat: (...args: unknown[]) => mockUseCreateChat(...args),
   useFacets: (...args: unknown[]) => mockUseFacets(...args),
@@ -2415,14 +2422,16 @@ describe("ChatInput", () => {
       { speechEnabled: true, preference: false },
       { speechEnabled: false, preference: true },
     ])(
-      "initializes audio-back with speech enabled=$speechEnabled and preference=$preference",
+      "speaks replies on entering audio mode without a button (voice configured=$speechEnabled, replies setting=$preference)",
       async ({ speechEnabled, preference }) => {
         const resume = vi.fn(async () => {});
+        mockFetchReplySpeechStyle.mockClear();
         const AudioContextMock = vi.fn(function () {
           return { resume, state: "running" };
         });
         vi.stubGlobal("AudioContext", AudioContextMock);
-        useSpeechPlayback.setState({ enabled: preference });
+        // A notice left from an earlier session.
+        useSpeechPlayback.setState({ enabled: preference, blocked: true });
         mockUseAudioConversationalFeature.mockReturnValue({
           enabled: true,
           speechEnabled,
@@ -2442,17 +2451,17 @@ describe("ChatInput", () => {
 
         fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
 
-        if (speechEnabled) {
-          expect(
-            screen.getByRole("button", { name: "Audio-back" }),
-          ).toHaveAttribute("aria-pressed", String(preference));
-        } else {
-          expect(
-            screen.queryByRole("button", { name: "Audio-back" }),
-          ).toBeNull();
-        }
-        expect(resume).toHaveBeenCalledTimes(
-          speechEnabled && preference ? 1 : 0,
+        // The setting decides; the composer has no switch of its own.
+        expect(screen.queryByRole("button", { name: "Audio-back" })).toBeNull();
+        expect(useSpeechPlayback.getState().enabled).toBe(preference);
+        // Unlocked from the click wherever a voice is configured, so turning
+        // replies on during the mode still plays them; the settings are
+        // asked again.
+        await waitFor(() =>
+          expect(useSpeechPlayback.getState().blocked).toBe(!speechEnabled),
+        );
+        expect(mockFetchReplySpeechStyle).toHaveBeenCalledTimes(
+          speechEnabled ? 1 : 0,
         );
       },
     );
@@ -3141,9 +3150,13 @@ describe("ChatInput", () => {
       expect(
         screen.queryByPlaceholderText("Type a message..."),
       ).not.toBeInTheDocument();
+      // The audio-mode button is the one way out; no second exit button.
       expect(
-        screen.getByTestId("chat-input-exit-audio-mode"),
+        screen.getByRole("button", { name: "Stop audio mode" }),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Exit audio mode" }),
+      ).toBeNull();
     });
 
     it("hides the dictation button while in audio mode", async () => {
@@ -3180,7 +3193,7 @@ describe("ChatInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("exits audio mode and stops active conversational dictation when the exit button is clicked", async () => {
+    it("exits audio mode and stops active conversational dictation when the audio-mode button is clicked", async () => {
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -3220,11 +3233,7 @@ describe("ChatInput", () => {
         </QueryClientProvider>,
       );
 
-      expect(
-        screen.getByTestId("chat-input-exit-audio-mode"),
-      ).toBeInTheDocument();
-
-      fireEvent.click(screen.getByTestId("chat-input-exit-audio-mode"));
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-stop"));
       expect(toggleDictation).toHaveBeenCalled();
 
       mockUseAudioDictationRecorder.mockReturnValue({
@@ -3250,7 +3259,7 @@ describe("ChatInput", () => {
       );
 
       expect(
-        screen.queryByTestId("chat-input-exit-audio-mode"),
+        screen.queryByTestId("chat-input-audio-mode-stop"),
       ).not.toBeInTheDocument();
       expect(
         screen.getByPlaceholderText("Type a message..."),
@@ -3812,7 +3821,7 @@ describe("ChatInput", () => {
       expect(onSendMessage).not.toHaveBeenCalled();
       expect(screen.getByTestId("chat-input-send-message")).toBeInTheDocument();
       expect(
-        screen.queryByTestId("chat-input-exit-audio-mode"),
+        screen.queryByTestId("chat-input-audio-mode-stop"),
       ).not.toBeInTheDocument();
       requestSubmitSpy.mockRestore();
     });
@@ -4200,7 +4209,7 @@ describe("ChatInput", () => {
       );
 
       expect(
-        screen.queryByTestId("chat-input-exit-audio-mode"),
+        screen.queryByTestId("chat-input-audio-mode-stop"),
       ).not.toBeInTheDocument();
 
       // Transcription then completes — manual transcript attachments still
@@ -8745,6 +8754,112 @@ describe("ChatInput", () => {
       });
     });
 
+    describe("leaving audio mode with the audio-mode button", () => {
+      const inAudioMode = async () => {
+        const onAudioModeChange = vi.fn();
+        const { i18n } = await import("@lingui/core");
+        const queryClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        render(
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput
+                onSendMessage={vi.fn()}
+                chatId={CARD_CHAT}
+                controlledIsAudioMode
+                onControlledIsAudioModeChange={onAudioModeChange}
+              />
+            </I18nProvider>
+          </QueryClientProvider>,
+        );
+        return onAudioModeChange;
+      };
+      const removedControls = [
+        "Audio-back",
+        "Stop playback",
+        "Skip",
+        "Read the card aloud",
+        "Exit audio mode",
+      ];
+
+      beforeEach(() => {
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        useSpeechPlayback.setState({
+          enabled: true,
+          cards: true,
+          playing: false,
+        });
+        useApprovalSpeech.setState({ speaking: false });
+      });
+
+      it.each([
+        ["the voice speaks a reply", "voice"],
+        ["a card waits for a decision", "card"],
+        ["a card is read aloud", "card-voice"],
+      ] as const)(
+        "ends it in one click while %s, with the microphone closed",
+        async (_, state) => {
+          const toggleDictation = vi.fn();
+          conversational(toggleDictation, false);
+          mockUseAudioConversationalFeature.mockReturnValue({
+            enabled: true,
+            speechEnabled: true,
+            maxRecordingDurationSeconds: 1200,
+          });
+          if (state === "voice") useSpeechPlayback.setState({ playing: true });
+          if (state !== "voice") showCard();
+          if (state === "card-voice")
+            useApprovalSpeech.setState({ speaking: true });
+          const onAudioModeChange = await inAudioMode();
+
+          for (const name of removedControls)
+            expect(screen.queryByRole("button", { name })).toBeNull();
+          const stop = screen.getByTestId("chat-input-audio-mode-stop");
+          expect(stop).toHaveAccessibleName("Stop audio mode");
+          expect(stop).toHaveAttribute("title", "Stop audio mode");
+          expect(stop).toBeEnabled();
+
+          fireEvent.click(stop);
+          expect(onAudioModeChange).toHaveBeenCalledWith(false);
+          expect(useSpeechPlayback.getState().playing).toBe(false);
+          expect(useApprovalSpeech.getState().speaking).toBe(false);
+          expect(toggleDictation).not.toHaveBeenCalled();
+        },
+      );
+
+      it("ends it while the answer is still coming, next to Stop", async () => {
+        const toggleDictation = vi.fn();
+        conversational(toggleDictation, false);
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseChatContext.mockReturnValue({
+          isPendingResponse: true,
+          isMessagingLoading: false,
+          isUploading: false,
+          cancelMessage: vi.fn(),
+        });
+        const onAudioModeChange = await inAudioMode();
+
+        expect(
+          screen.getByTestId("chat-input-stop-generation"),
+        ).toBeInTheDocument();
+        const stop = screen.getByTestId(
+          "chat-input-audio-mode-pending-recording",
+        );
+        expect(stop).toHaveAccessibleName("Stop audio mode");
+        fireEvent.click(stop);
+        expect(onAudioModeChange).toHaveBeenCalledWith(false);
+      });
+    });
+
     it("keeps the microphone closed until the card is decided", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation);
@@ -9032,7 +9147,11 @@ describe("ChatInput", () => {
 
       beforeEach(() => {
         mockHeardApprovalWords.mockReset();
-        useSpeechPlayback.setState({ enabled: true, playing: false });
+        useSpeechPlayback.setState({
+          enabled: true,
+          cards: true,
+          playing: false,
+        });
         useApprovalListening.setState({
           pending: null,
           quiet: null,
@@ -9236,6 +9355,64 @@ describe("ChatInput", () => {
           await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(4));
         },
       );
+
+      it("keeps the microphone closed over the card when cards are not read aloud", async () => {
+        const toggleDictation = vi.fn();
+        withVoice(toggleDictation, false);
+        useSpeechPlayback.setState({ cards: false });
+        showCard();
+        const ui = await composer();
+        render(ui(true));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(toggleDictation).not.toHaveBeenCalled();
+      });
+
+      it("the audio-mode button drops what was said to the card and ends audio mode", async () => {
+        const toggleDictation = vi.fn();
+        const cancelDictation = vi.fn();
+        const onAudioModeChange = vi.fn();
+        withVoice(toggleDictation, false);
+        showCard();
+        const { i18n } = await import("@lingui/core");
+        const queryClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const ui = () => (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput
+                onSendMessage={vi.fn()}
+                chatId={CARD_CHAT}
+                controlledIsAudioMode
+                onControlledIsAudioModeChange={onAudioModeChange}
+              />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+        const { rerender } = render(ui());
+        // The card's own listening opens.
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+        withVoice(toggleDictation, true);
+        mockUseAudioDictationRecorder.mockReturnValue({
+          isDictating: true,
+          isDictationStarting: false,
+          isDictationCompleting: false,
+          isCapturingAudio: true,
+          dictationError: null,
+          setDictationError: vi.fn(),
+          dictationBars: [2, 2, 2, 2, 2],
+          toggleDictation,
+          cancelDictation,
+        });
+        rerender(ui());
+
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-stop"));
+        expect(cancelDictation).toHaveBeenCalled();
+        expect(toggleDictation).toHaveBeenCalledTimes(1);
+        expect(onAudioModeChange).toHaveBeenCalledWith(false);
+      });
 
       it("keeps the microphone closed over the card with voice commands off", async () => {
         const toggleDictation = vi.fn();
@@ -9474,7 +9651,7 @@ describe("ChatInput", () => {
         view.rerender(ui(true));
         await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
         await act(async () => {
-          await enableSpeechPlayback(true);
+          await unlockSpeechPlayback();
         });
         // The voice keeps one context for the whole file; make it play.
         const playable = new PlayingAudioContext();
