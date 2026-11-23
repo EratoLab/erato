@@ -280,10 +280,14 @@ function renderDictationHook(
     mode?: "dictation" | "conversational";
     endOfTurnSilenceMs?: number;
     isHesitationOnly?: (words: string) => boolean;
+    chatId?: string;
+    onTurnLanguage?: (language: string) => void;
   },
 ) {
   return renderHook(() =>
     useAudioDictationRecorder({
+      chatId: options?.chatId,
+      onTurnLanguage: options?.onTurnLanguage,
       isHesitationOnly: options?.isHesitationOnly,
       enabled: true,
       mode: options?.mode,
@@ -746,6 +750,62 @@ describe("useAudioDictationRecorder", () => {
 
     unmount();
     expect(vadMock.engines[0].destroy).toHaveBeenCalled();
+  });
+
+  it("ERMAIN-1326: names the chat at start and hands back the turn's spoken language", async () => {
+    const onTurnLanguage = vi.fn();
+    const { result } = renderDictationHook(vi.fn(), {
+      mode: "conversational",
+      vadAutoStopEnabled: true,
+      chatId: "chat-1",
+      onTurnLanguage,
+    });
+
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+    await waitFor(() => expect(result.current.isDictating).toBe(true));
+    act(() => {
+      emitAudioSamples(new Float32Array(1600).fill(0.1));
+      hearSpeech();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    act(() => {
+      MockWebSocket.instances[0].emit("open");
+    });
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        mode: "conversational",
+        type: "start",
+        chat_id: "chat-1",
+      }),
+    );
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 100,
+      });
+    });
+    await waitFor(() =>
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
+    );
+    await act(async () => {
+      result.current.toggleDictation();
+    });
+    act(() => {
+      MockWebSocket.instances[0].emitJson({
+        type: "completed",
+        spoken_language: "de",
+      });
+    });
+    await waitFor(() =>
+      expect(result.current.isDictationCompleting).toBe(false),
+    );
+    expect(onTurnLanguage).toHaveBeenCalledExactlyOnceWith("de");
   });
 
   it.each([

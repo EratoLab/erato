@@ -2109,6 +2109,7 @@ pub struct ContentPartTurnInstructionMarker {
     pub kind: StoredTurnInstructionKind,
     /// For `spoken_language`: the code of the language the user spoke.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
     pub language: Option<String>,
 }
 

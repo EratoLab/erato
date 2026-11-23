@@ -239,7 +239,7 @@ impl ConversationalTurn {
             }
         }
         let mut ranked: Vec<(String, usize)> = weights.into_iter().collect();
-        ranked.sort_by(|a, b| b.1.cmp(&a.1));
+        ranked.sort_by_key(|(_, weight)| std::cmp::Reverse(*weight));
         match ranked.as_slice() {
             [] => None,
             [(only, _)] => Some(only.clone()),
@@ -249,12 +249,16 @@ impl ConversationalTurn {
 }
 
 /// The turn's spoken language, from what it heard, the chat's language and
-/// the user's own.
+/// the user's own; none for a turn without words, which is not sent.
 async fn decide_spoken_language(
     app_state: &AppState,
     me_user: &MeProfile,
     turn: &ConversationalTurn,
-) -> String {
+) -> Option<String> {
+    let text = turn.text();
+    if text.is_empty() {
+        return None;
+    }
     let chat_language = match turn.chat_id {
         Some(chat_id) => spoken_language::of_chat(&app_state.db, chat_id, &me_user.id)
             .await
@@ -275,7 +279,6 @@ async fn decide_spoken_language(
     // A chat begun in a language that is no longer allowed does not keep it.
     let chat_language = chat_language
         .filter(|code| languages.candidates.is_empty() || languages.candidates.contains(code));
-    let text = turn.text();
     let recognizer_language = turn.recognizer_language();
     let decision = spoken_language::decide(SpokenLanguageInput {
         text: &text,
@@ -286,7 +289,7 @@ async fn decide_spoken_language(
         follow_speaker: languages.follow_speaker,
     });
     decision.log();
-    decision.language
+    Some(decision.language)
 }
 
 /// Maps any transcription failure to a protocol code and a short message.
@@ -587,7 +590,7 @@ async fn handle_dictation_control_frame(
         DictationClientControlFrame::Finish => {
             (*chunk_duration_ms).ok_or_eyre("Start audio dictation before finishing")?;
             let spoken_language = if turn.conversational {
-                Some(decide_spoken_language(app_state, me_user, turn).await)
+                decide_spoken_language(app_state, me_user, turn).await
             } else {
                 None
             };

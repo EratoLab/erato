@@ -631,9 +631,7 @@ pub(crate) fn resolve_directive_markers_with_config(
                     StoredTurnInstructionKind::Known(
                         crate::config::TurnInstructionKind::SpokenLanguage,
                     ) => {
-                        let Some(code) = marker.language.as_deref() else {
-                            return None;
-                        };
+                        let code = marker.language.as_deref()?;
                         config.turn_instructions.spoken_language_text(
                             &crate::services::spoken_language::english_name(code),
                         )

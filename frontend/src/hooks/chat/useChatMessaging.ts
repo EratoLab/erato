@@ -51,8 +51,8 @@ import {
   writtenPartArrives,
 } from "@/hooks/audio/speechPlayback";
 import {
-  spokenTurnLanguage,
   takeSpokenTurnLanguage,
+  voiceTurnLanguage,
 } from "@/hooks/audio/spokenLanguage";
 import {
   beginWaitTurn,
@@ -2421,7 +2421,7 @@ export function useChatMessaging(
         if (spokenLanguage) requestBody.spoken_language = spokenLanguage;
         beginSpeechResponse(streamKey);
         if (useSpeechPlayback.getState().spokenTurn === streamKey)
-          beginWaitTurn(streamKey, { language: spokenTurnLanguage() });
+          beginWaitTurn(streamKey, { language: voiceTurnLanguage() });
         logger.log("[DEBUG_STREAMING] sendMessage: Sending requestBody:", {
           requestBody,
           effectiveChatIdForRequest,
@@ -3245,7 +3245,7 @@ export function useChatMessaging(
         beginSpeechResponse(streamKey);
         beginWaitTurn(streamKey, {
           continuation: true,
-          language: spokenTurnLanguage(),
+          language: voiceTurnLanguage(),
         });
       }
 

@@ -425,6 +425,128 @@ async fn spoken_reply_reaches_the_model_only_on_a_turn_that_is_read_back(pool: P
     speech.abort();
 }
 
+/// ERMAIN-1326: the language a turn was spoken in is stored on the user
+/// message, named to the model on that turn only, and is the chat's language
+/// from then on. A value that is no language code is dropped.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_spoken_turn_keeps_its_language_and_names_it_to_the_model(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let recorded = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post().path("/v1/chat/completions").matcher(recorded);
+        then.status(StatusCode::OK)
+            .headers([("Content-Type", "text/event-stream")])
+            .bytes_stream_with_delays(build_openai_text_streaming_response(&["Gern."]));
+    });
+    let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    let (speech_url, speech) = mock_speech().await;
+    speaking_config(&mut config, speech_url);
+    let state = test_app_state(config, pool).await;
+    let server = create_test_server(state.clone());
+
+    let spoken = submit(
+        &server,
+        json!({
+            "user_message": "Zeig mir die Angebote",
+            "conversational_audio_back": true,
+            "spoken_language": "de-DE",
+        }),
+    )
+    .await;
+    let typed = submit(
+        &server,
+        json!({
+            "user_message": "Typed afterwards",
+            "previous_message_id": spoken,
+            "spoken_language": "<script>",
+        }),
+    )
+    .await;
+
+    let user_message_of = |answer: String| {
+        let state = state.clone();
+        async move {
+            let answer = Messages::find_by_id(answer.parse::<Uuid>().unwrap())
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            Messages::find_by_id(answer.previous_message_id.unwrap())
+                .one(&state.db)
+                .await
+                .unwrap()
+                .unwrap()
+        }
+    };
+    let spoken_user = user_message_of(spoken.clone()).await;
+    assert_eq!(
+        erato::services::spoken_language::of_input_parameters(
+            spoken_user.input_parameters.as_ref()
+        )
+        .as_deref(),
+        Some("de")
+    );
+    let typed_user = user_message_of(typed).await;
+    assert_eq!(
+        erato::services::spoken_language::of_input_parameters(typed_user.input_parameters.as_ref()),
+        None
+    );
+    assert_eq!(
+        erato::services::spoken_language::of_chat(
+            &state.db,
+            spoken_user.chat_id,
+            &typed_user_owner(&state, spoken_user.chat_id).await
+        )
+        .await
+        .unwrap()
+        .as_deref(),
+        Some("de")
+    );
+    assert_eq!(
+        erato::services::spoken_language::of_turn(&state.db, spoken.parse().unwrap())
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("de")
+    );
+
+    let sentence = "The user spoke German in this turn.";
+    let bodies = recorder.bodies();
+    let spoken_bodies: Vec<_> = bodies
+        .iter()
+        .filter(|body| body.contains("Zeig mir die Angebote") && !body.contains("Typed afterwards"))
+        .collect();
+    // The chat title is asked for with the same words, without instructions.
+    let named: Vec<_> = spoken_bodies
+        .iter()
+        .filter(|body| body.contains(sentence))
+        .collect();
+    assert!(
+        !named.is_empty(),
+        "no request names the language: {spoken_bodies:?}"
+    );
+    for body in named {
+        assert!(body.find(sentence).unwrap() < body.find("Zeig mir die Angebote").unwrap());
+    }
+    for body in bodies
+        .iter()
+        .filter(|body| body.contains("Typed afterwards"))
+    {
+        assert!(!body.contains(sentence), "a later turn replays it: {body}");
+    }
+    speech.abort();
+}
+
+async fn typed_user_owner(state: &erato::state::AppState, chat_id: Uuid) -> String {
+    erato::db::entity::chats::Entity::find_by_id(chat_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .owner_user_id
+}
+
 /// Showing what the voice said is the user's own choice, saved through the
 /// preferences and read back resolved; `null` follows the organisation again.
 #[sqlx::test(migrator = "crate::MIGRATOR")]

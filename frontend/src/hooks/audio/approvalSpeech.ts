@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { inLocale } from "@/lib/i18n";
 import { spokenUtteranceSentences } from "@/lib/toolCallGist/spokenCard";
 import {
   spokenCardFlow,
@@ -360,10 +361,13 @@ const startPlaying = () => {
   const { playing } = flow;
   if (playing === null) return;
   if (playing.type !== "piece") {
-    const sentences = spokenUtteranceSentences(playing, said, {
-      language: speaking?.language ?? "en",
-      now: new Date(),
-    });
+    const language = speaking?.language ?? "en";
+    const sentences = inLocale(language, () =>
+      spokenUtteranceSentences(playing, said, {
+        language,
+        now: new Date(),
+      }),
+    );
     if (sentences.length === 0) apply({ type: "finished" });
     else sayExtra(sentences);
     return;
@@ -516,11 +520,13 @@ export function announceApprovalNotice(
 }
 
 const noticeText = (notice: SpokenNotice, language: string) =>
-  spokenUtteranceSentences({ type: "notice", notice }, [], {
-    language,
-    now: new Date(),
-    confirmationPhrases: deploymentConfirmationPhrases(),
-  }).join(" ");
+  inLocale(language, () =>
+    spokenUtteranceSentences({ type: "notice", notice }, [], {
+      language,
+      now: new Date(),
+      confirmationPhrases: deploymentConfirmationPhrases(),
+    }),
+  ).join(" ");
 
 const noticeKey = (messageId: string, notice: SpokenNotice) =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- a key and a piece id, not copy

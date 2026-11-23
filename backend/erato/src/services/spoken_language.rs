@@ -5,6 +5,10 @@
 //! The rule prefers to keep the chat's language: a recognizer often takes
 //! accented English for the speaker's mother tongue, and short turns ("ja",
 //! "okay") carry too little to tell.
+//!
+//! The word check knows only the languages built into the binary (the lingua
+//! features in `Cargo.toml`); any other language is held to its script, and
+//! `Candidates::Only` limits the check to those it knows.
 
 use crate::db::entity::{chats, messages};
 use crate::models::message::InputParameters;
@@ -23,6 +27,12 @@ const LONG_TURN_WORDS: usize = 4;
 /// answers at all. Lower answers more often on short text; higher is unsure
 /// more often.
 const MINIMUM_RELATIVE_DISTANCE: f64 = 0.1;
+
+/// How likely the best language must be before the words decide on their own
+/// or overrule the recognizer. Text in a language the check does not know
+/// still leads clearly, but stays below this (Vietnamese reads as French
+/// at about 0.5); text in one it knows reaches 0.85 and more.
+const CONFIDENT_WORDS: f64 = 0.7;
 
 /// The recognizer's language stays possible while the word check gives it at
 /// least this share of its best language's confidence.
@@ -128,7 +138,7 @@ pub fn decide(input: SpokenLanguageInput<'_>) -> SpokenLanguageDecision {
         (Some(heard), _) if long && check.plausible(heard, input.text) => {
             return decision(heard.clone(), DecisionReason::RecognizerOnLongTurn);
         }
-        (None, Some(read)) if long => {
+        (_, Some(read)) if long && check.confident() => {
             return decision(read.clone(), DecisionReason::WordsOnLongTurn);
         }
         _ => {}
@@ -251,10 +261,12 @@ enum Script {
     Bengali,
 }
 
-/// The script a language is usually written in. Languages written in more
-/// than one, or not listed, count as Latin.
-fn script_of(code: &str) -> Script {
-    match code {
+/// The script a language is written in, where it is one and listed here.
+fn script_of(code: &str) -> Option<Script> {
+    Some(match code {
+        "en" | "de" | "fr" | "es" | "it" | "pt" | "nl" | "pl" | "tr" | "cs" | "sk" | "sl"
+        | "hr" | "hu" | "ro" | "sv" | "da" | "nb" | "nn" | "no" | "fi" | "et" | "lv" | "lt"
+        | "ga" | "mt" | "vi" | "id" | "ms" => Script::Latin,
         "hi" | "mr" | "ne" => Script::Devanagari,
         "ar" | "fa" | "ur" | "ps" => Script::Arabic,
         "ru" | "uk" | "bg" | "be" | "mk" | "kk" | "mn" => Script::Cyrillic,
@@ -267,8 +279,8 @@ fn script_of(code: &str) -> Script {
         "ka" => Script::Georgian,
         "hy" => Script::Armenian,
         "bn" => Script::Bengali,
-        _ => Script::Latin,
-    }
+        _ => return None,
+    })
 }
 
 fn char_script(c: char) -> Option<Script> {
@@ -291,9 +303,12 @@ fn char_script(c: char) -> Option<Script> {
 }
 
 /// Whether the text has letters in the script `code` is written in.
-/// Japanese is written with Han characters too.
+/// Japanese is written with Han characters too. A language whose script is
+/// not listed is never ruled out.
 fn written_in_script_of(code: &str, text: &str) -> bool {
-    let wanted = script_of(code);
+    let Some(wanted) = script_of(code) else {
+        return true;
+    };
     text.chars()
         .filter_map(char_script)
         .any(|script| script == wanted || (wanted == Script::Kana && script == Script::Han))
@@ -360,10 +375,20 @@ impl WordCheck {
             .then(|| best.clone())
     }
 
+    /// Sure, and likely enough to stand without the recognizer.
+    fn confident(&self) -> bool {
+        self.sure().is_some()
+            && self
+                .confidences
+                .first()
+                .is_some_and(|(_, confidence)| *confidence >= CONFIDENT_WORDS)
+    }
+
     /// Whether the words leave `code` possible: a mixed sentence ("Zeig mir
     /// das Forecast-Dashboard") reads as English to the check, but German stays
     /// likely; English words heard as Hindi do not. A language the check does
-    /// not know is held to its script alone.
+    /// not know is held to its script, and one written like the languages
+    /// it knows also to the check not being confident of another.
     fn plausible(&self, code: &str, text: &str) -> bool {
         let best = self.confidences.first().map_or(0.0, |(_, value)| *value);
         match self
@@ -372,7 +397,13 @@ impl WordCheck {
             .find(|(language, _)| language == code)
         {
             Some((_, confidence)) => *confidence >= PLAUSIBLE_SHARE_OF_BEST * best,
-            None => written_in_script_of(code, text),
+            // Unknown to the check: its own script vouches for it, a shared
+            // one only while the check is sure of no other language.
+            None => {
+                written_in_script_of(code, text)
+                    && (matches!(script_of(code), Some(script) if script != Script::Latin)
+                        || !self.confident())
+            }
         }
     }
 }
@@ -466,6 +497,12 @@ mod tests {
     }
 
     #[test]
+    fn a_mixed_sentence_without_a_recognizer_guess_keeps_the_chats_language() {
+        let decided = turn("Zeig mir das Forecast-Dashboard", None, Some("de"), "en");
+        assert_eq!(decided.language, "de");
+    }
+
+    #[test]
     fn a_short_unsure_first_turn_is_in_the_main_language() {
         assert_eq!(turn("Hallo", None, None, "en").language, "en");
     }
@@ -510,8 +547,6 @@ mod tests {
             "en",
         );
         assert_eq!(decided.language, "en");
-        assert_eq!(decided.reason, DecisionReason::KeptChat);
-        // In a new chat it is the main language, not the recognizer's guess.
         let fresh = turn(
             "Please send the updated report to the whole team today",
             Some("hi"),
@@ -530,7 +565,6 @@ mod tests {
             "en",
         );
         assert_eq!(decided.language, "vi");
-        // English words heard as Greek are not Greek.
         let decided = turn(
             "Please send the updated report to the whole team today",
             Some("el"),
@@ -538,6 +572,31 @@ mod tests {
             "en",
         );
         assert_eq!(decided.language, "en");
+        let welsh = turn(
+            "Dw i eisiau gweld y cyfarfodydd yfory os gwelwch yn dda",
+            Some("cy"),
+            Some("en"),
+            "en",
+        );
+        assert_eq!(welsh.language, "cy");
+        let tamil = turn(
+            "நாளைய கூட்டங்களின் பட்டியலைக் காட்டு தயவுசெய்து",
+            Some("ta"),
+            Some("en"),
+            "en",
+        );
+        assert_eq!(tamil.language, "ta");
+    }
+
+    #[test]
+    fn a_guess_the_word_check_does_not_know_loses_to_words_it_is_sure_of() {
+        let english = "Please send the updated report to the whole team today";
+        let decided = turn(english, Some("cy"), Some("de"), "de");
+        assert_eq!(decided.language, "en");
+        assert_eq!(decided.reason, DecisionReason::WordsOnLongTurn);
+        let german = "Kannst du mir bitte die offenen Angebote von dieser Woche zeigen?";
+        let decided = turn(german, Some("nl"), Some("en"), "en");
+        assert_eq!(decided.language, "de");
     }
 
     #[test]

@@ -2,16 +2,21 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import languageBase from "@/lib/generated/languageBase.json";
+import { addCatalog, forgetLoadedCatalogs } from "@/lib/i18n";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
+import { messages as deMessages } from "@/locales/de/messages.json";
+import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { noteChangeSending, useApprovalChanges } from "./approvalChanges";
 import { quietSpokenTurn, useSpeechPlayback } from "./speechPlayback";
+import { resetSpokenLanguage, useSpokenLanguage } from "./spokenLanguage";
 import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
+import type { Messages } from "@lingui/core";
 
 const speakApprovalCard = vi.fn();
 const offerApprovalCard = vi.fn();
@@ -54,6 +59,8 @@ beforeEach(() => {
   offerApprovalCard.mockClear();
   forgetApprovalCards.mockClear();
   started.clear();
+  resetSpokenLanguage();
+  forgetLoadedCatalogs();
   useSpeechPlayback.setState({
     conversational: true,
     enabled: true,
@@ -93,6 +100,69 @@ describe("useSpokenApprovalCard", () => {
     rerender({ ...first, responding: false });
     renderHook(() => useSpokenApprovalCard({ ...first, responding: false }));
     expect(speakApprovalCard).toHaveBeenCalledTimes(1);
+  });
+
+  describe("ERMAIN-1326: the language the user spoke", () => {
+    const spokenCard = (turn: string | undefined) => {
+      useSpokenLanguage.setState({ turn });
+      renderHook(() => useSpokenApprovalCard(props()));
+      return speakApprovalCard.mock.calls.at(-1)?.[0] as {
+        language: string;
+        pieces: { text: string }[];
+      };
+    };
+
+    const GERMAN_POINTER = "Auf dem Bildschirm wartet eine Entscheidung.";
+
+    it("says the card in German to German speech under an English interface", async () => {
+      const { i18n } = await import("@lingui/core");
+      expect(i18n.locale).toBe("en");
+      expect(spokenCard("de").language).toBe("en");
+      addCatalog("de", deMessages as unknown as Messages);
+      const card = spokenCard("de");
+      expect(card.language).toBe("de");
+      expect(card.pieces[0].text).toBe(GERMAN_POINTER);
+      expect(i18n.locale).toBe("en");
+    });
+
+    it("says the card in English to English speech under a German interface", async () => {
+      const { i18n } = await import("@lingui/core");
+      const previous = i18n.locale;
+      i18n.load("de", deMessages as unknown as Messages);
+      i18n.activate("de");
+      addCatalog("en", enMessages as unknown as Messages);
+      try {
+        expect(spokenCard(undefined).pieces[0].text).toBe(GERMAN_POINTER);
+        const card = spokenCard("en");
+        expect(card.language).toBe("en");
+        expect(card.pieces[0].text).toBe("A decision is waiting on screen.");
+        expect(i18n.locale).toBe("de");
+      } finally {
+        i18n.activate(previous);
+      }
+    });
+
+    it("says only the pointer in a Polish interface without an English catalog", async () => {
+      const { i18n } = await import("@lingui/core");
+      const previous = i18n.locale;
+      i18n.load("pl", { "spokenCard.pointer": "Na ekranie czeka decyzja." });
+      i18n.activate("pl");
+      try {
+        const card = spokenCard("pl");
+        expect(card.language).toBe("pl");
+        expect(card.pieces.map((piece) => piece.text)).toEqual([
+          "Na ekranie czeka decyzja.",
+        ]);
+      } finally {
+        i18n.activate(previous);
+      }
+    });
+
+    it("says a card whole in the user's own language when the spoken one has no card words", () => {
+      const card = spokenCard("hi");
+      expect(card.language).toBe("en");
+      expect(card.pieces[0].text).toBe("A decision is waiting on screen.");
+    });
   });
 
   it("stays silent in a typed chat, without read-back, and for an old card", () => {

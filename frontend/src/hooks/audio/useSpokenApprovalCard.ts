@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { inLocale } from "@/lib/i18n";
 import {
   sameSpokenKind,
   spokenApprovalPieces,
@@ -151,14 +152,19 @@ export function useSpokenApprovalCard({
       ...style,
       sentences: deploymentSentences(options.language),
     };
-    const card = {
-      key,
-      messageId,
-      language: options.language,
+    // Said in the card's language, whatever the screen shows.
+    const { pieces, fallback } = inLocale(language, () => ({
       pieces: withdrawn
         ? spokenDifference(withdrawn, approval, options).pieces
         : spokenApprovalPieces(approval, styled),
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
+    }));
+    const card = {
+      key,
+      messageId,
+      language,
+      pieces,
+      fallback,
       approval,
       change: item ? change?.(item.approvalId) : undefined,
       decision: decision ? { ...decision, approves } : undefined,
