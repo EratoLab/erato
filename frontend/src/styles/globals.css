@@ -1128,7 +1128,6 @@ body {
    viewport-fit=cover the page reaches the screen edges, so the box keeps
    its content clear of the notch and the home bar. */
 .app-viewport {
-  height: 100vh;
   height: 100dvh;
   padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
     env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
