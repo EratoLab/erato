@@ -421,21 +421,21 @@
   },
   "assistant_hub.action_permissions.make_current.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.0",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "assistant_hub.action_permissions.publish.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.0",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "assistant_hub.action_permissions.unpublish.[]": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.0",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "assistant_hub.categories.<key>.display_name": {
     "default_value_security": "unreviewed",
@@ -469,9 +469,9 @@
   },
   "assistant_hub.force_whole_organization_audience": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.0",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "assistant_hub.rating_mode": {
     "default_value_security": "unreviewed",
@@ -601,9 +601,9 @@
   },
   "assistants.enable_direct_organization_sharing": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.0",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "assistants.enable_edit_sharing": {
     "default_value_security": "unreviewed",
@@ -1053,13 +1053,13 @@
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "alpha"
   },
   "audio_read_aloud.speech_provider": {
     "default_value_security": "unreviewed",
     "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "alpha"
   },
   "audio_transcription.chat_provider_id": {
     "default_value_security": "unreviewed",
@@ -4176,19 +4176,19 @@
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "integrations.ms_office.addin.presentation.manifest.description": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "integrations.ms_office.addin.presentation.manifest.display_name": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
-    "stability": "unreviewed"
+    "stability": "stable"
   },
   "integrations.ms_office.addin.serve_bundle_legacy_path": {
     "default_value_security": "unreviewed",
@@ -4588,7 +4588,7 @@
   },
   "mcp_servers.<server-id>.approval_argument": {
     "default_value_security": "unreviewed",
-    "introduced_in": "0.8.1",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

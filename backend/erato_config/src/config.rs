@@ -1176,6 +1176,7 @@ pub struct AppConfig {
     // Read aloud button on finished assistant messages. Independent of the
     // audio modes above: it works with `audio_conversational` disabled.
     #[serde(default)]
+    #[facet(erato_config::stability(level = "alpha"))]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub audio_read_aloud: AudioReadAloudConfig,
 
@@ -5110,7 +5111,7 @@ pub struct McpServerConfig {
     /// before each call while the approval gate is on, and sets it from that
     /// decision when the call is dispatched.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "0.8.1"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub approval_argument: Option<String>,
     /// How this server's machine names read on approval cards: names for its
     /// fields and the meaning of its choice values. Display only: it never
@@ -6235,7 +6236,8 @@ pub struct AssistantsConfig {
     /// Whether the direct assistant Share dialog offers the organization target.
     /// Defaults to `true`.
     #[serde(default = "default_assistants_enable_direct_organization_sharing")]
-    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    #[facet(erato_config::stability(level = "stable"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub enable_direct_organization_sharing: bool,
 
     // Whether to show recent assistants in the chat sidebar.
@@ -7213,7 +7215,8 @@ pub struct AssistantHubConfig {
     // Use the whole organization as the fixed audience for new Assistant Hub
     // submissions and hide the audience field. Defaults to `false`.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    #[facet(erato_config::stability(level = "stable"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub force_whole_organization_audience: bool,
 
     // Configured reviewer rules.
@@ -7223,7 +7226,8 @@ pub struct AssistantHubConfig {
 
     // Roles allowed to publish, unpublish, and choose the current version.
     #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    #[facet(erato_config::stability(level = "stable"))]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub action_permissions: AssistantHubActionPermissionsConfig,
 
     // Categories available for assistant hub submissions.
@@ -11571,6 +11575,7 @@ pub struct MsOfficeAddinConfig {
 
     // Its own catalog entry, so it can be rolled out without updating a deployed Word add-in.
     #[serde(default)]
+    #[facet(erato_config::stability(level = "stable"))]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub presentation: MsOfficeAddinPresentationConfig,
 
