@@ -3231,6 +3231,16 @@ msgid "officeAddin.teams.signInToLoad.title"
 msgstr "Anmelden, um Teams-Chats zu laden"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitle"
+msgstr "„{name}“ ändern"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitleUnnamed"
+msgstr "Das Dokument ändern"
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.apply.stage.backup"
 msgstr "Sicherung wird erstellt…"
@@ -3876,6 +3886,71 @@ msgstr "In das Dokument eingefügt."
 #: src/word/components/WordHostCardRenderer.tsx
 #~ msgid "officeAddin.word.card.writeFailed"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applied"
+msgstr "Angewendet."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applying"
+msgstr "Die Änderung wird angewendet…"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.cancelled"
+msgstr "Abgebrochen. Es wurde nichts geändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.notChanged"
+msgstr "Nicht geändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.onScreen"
+msgstr "Wartet auf deine Entscheidung auf dem Bildschirm"
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.otherDocument"
+msgstr "Nicht geändert: In Word ist ein anderes Dokument geöffnet als das, für das diese Änderung gemacht wurde."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.paneGone"
+msgstr "Nicht geändert: Der Erato-Bereich wurde geschlossen."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.partial"
+msgstr "Teilweise angewendet. Erato prüft das Dokument noch einmal."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.readAgain"
+msgstr "Das Dokument muss neu gelesen werden, bevor diese Änderung gemacht werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stale"
+msgstr "Nicht geändert: Das Dokument muss neu gelesen werden, bevor diese Änderung gemacht werden kann."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stopped"
+msgstr "Gestoppt. Es wurde nichts geändert."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.unconfirmed"
+msgstr "Die Änderung ist vielleicht schon im Dokument. Erato liest es neu, bevor es weitergeht."
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.waiting"
+msgstr "Wartet auf deine Entscheidung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -4635,17 +4710,17 @@ msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Gewählter Kommentar"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.add"
 msgstr "{n, plural, one {Einen Kommentar hinzufügen} other {# Kommentare hinzufügen}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.modify"
 msgstr "Kommentare bearbeiten oder löschen"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.respond"
 msgstr "Auf Kommentare antworten, sie auflösen oder erneut öffnen"
 
@@ -6022,6 +6097,7 @@ msgstr "Jede vorgeschlagene Änderung wird angewendet, auch in durch Filter ausg
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
+#: src/word/components/WordDecisionChoices.tsx
 #: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordPlanCommentRemovals.tsx
 #: src/word/components/WordReviewCardParts.tsx
@@ -7149,6 +7225,11 @@ msgstr "Geöffnetes Dokument in neue Chats einschließen"
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.includeDocument.helper"
 msgstr "Erato liest das Dokument, wenn Sie eine Nachricht senden. Sie können es aus jedem Chat entfernen."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.serverChanges"
+msgstr "Änderungen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

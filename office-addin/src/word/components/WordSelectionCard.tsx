@@ -30,7 +30,11 @@ import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisi
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
-import { useWordWrite } from "../providers/WordWriteProvider";
+import {
+  useWordReview,
+  useWordReviews,
+  useWordWrite,
+} from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
 import {
@@ -38,7 +42,6 @@ import {
   revertWordSelection,
   WORD_WEB_REVERT_MAX_PARAGRAPHS,
 } from "../utils/wordReplaceSelection";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import {
   emptySelectionCapture,
   isSameWordPassage,
@@ -591,7 +594,6 @@ export function WordSelectionCard({
     capturesByAssistantMessageId,
     revertSlot,
     setRevertSlot,
-    reviews,
     updateReview,
     operationInProgress,
     beginOperation,
@@ -611,7 +613,8 @@ export function WordSelectionCard({
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
+  const review = useWordReview(batchKey);
+  const reviews = useWordReviews();
   const result = review.selection;
   const messageCapture = messageId
     ? capturesByAssistantMessageId.get(messageId)

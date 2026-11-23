@@ -1,12 +1,20 @@
-import { DocumentIcon, EntityRow, RadioCard } from "@erato/frontend/library";
+import {
+  approvalToolRows,
+  ClientToolDecisionList,
+  DocumentIcon,
+  EntityRow,
+  RadioCard,
+  useApprovalTools,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useId, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 
 import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import { WORD_CARRY_OVER } from "../../core/clientActions/carryOverDecisions";
 import {
   useActionFacetClientActions,
   useAvailableActionFacetArgs,
@@ -32,8 +40,41 @@ import {
 import type { WordCommentPrecedence } from "../utils/wordCommentSend";
 import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
+/** The pane actions the server decides once the facets list the tool that carries them out. */
+function serverDecidedActions(offered: ReadonlySet<string>): Set<string> {
+  return new Set(
+    WORD_CARRY_OVER.filter((mapping) => offered.has(mapping.serverKey)).flatMap(
+      (mapping) => mapping.actions,
+    ),
+  );
+}
+
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
+  const approvalTools = useApprovalTools();
+  const wordTools = useMemo(
+    () =>
+      approvalTools.filter((tool) =>
+        WORD_CARRY_OVER.some(
+          (mapping) => mapping.serverKey === tool.qualified_name,
+        ),
+      ),
+    [approvalTools],
+  );
+  const serverDecided = useMemo(
+    () =>
+      serverDecidedActions(
+        new Set(wordTools.map((tool) => tool.qualified_name)),
+      ),
+    [wordTools],
+  );
+  const paneActions = useCallback(
+    (allowed: readonly string[]) =>
+      offerableWordClientActions(allowed).filter(
+        (action) => !serverDecided.has(action),
+      ),
+    [serverDecided],
+  );
   return (
     <AddinSettingsDialogCore
       {...props}
@@ -76,9 +117,19 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
             })}
             data-testid="servers-tools-word-actions-row"
           >
+            {/* Document and comment changes ask on the server, so every device has the same choice. */}
+            <ClientToolDecisionList
+              tools={approvalToolRows(wordTools)}
+              defaultDecision="ask"
+              heading={t({
+                id: "officeAddin.word.settings.serverChanges",
+                message: "Changes",
+              })}
+              data-testid="word-server-tool-decisions"
+            />
             <ClientActionsSettings
               store={wordClientActionDecisionStore}
-              offerableActions={offerableWordClientActions}
+              offerableActions={paneActions}
               displayLabel={clientActionDisplayLabel}
               copy={{
                 intro: t({

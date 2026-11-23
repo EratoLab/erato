@@ -579,6 +579,19 @@ export const DEFAULT_STUBS = {
   usePersistedState: <T,>(_key: string, initialValue: T) =>
     useState(initialValue),
   useProfile: () => ({ profile: undefined }),
+  useApprovalTools: () => [],
+  approvalToolRows: () => [],
+  ClientToolDecisionList: () => null,
+  addUnsetClientToolDecisions: async () => [],
+  HostArtifactProvider: ({ children }: { children?: ReactNode }) => children,
+  submittedCardsOf: (
+    artifact:
+      | { submittedCard?: unknown; submittedCards?: readonly unknown[] }
+      | null
+      | undefined,
+  ) =>
+    artifact?.submittedCards ??
+    (artifact?.submittedCard ? [artifact.submittedCard] : []),
   useStandardMessageActions: () => noop,
   useUnarchiveChat: () => async () => undefined,
   useChatInputControls: () => ({

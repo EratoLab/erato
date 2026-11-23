@@ -10,10 +10,16 @@ import {
   WORD_SUBMIT_PLAN_ACTION,
   WORD_SUBMIT_PLAN_TOOL,
   wordReadScope,
+  WORD_MORE_CHANGES_ARGUMENT,
 } from "@erato/frontend/word-review";
 
+import { rememberWordAcceptedPlan } from "./wordAcceptedSubmissions";
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
-import { WORD_SCOPED_EXPANDED_TOO_LARGE } from "./wordAuthoringContract";
+import { wordPlanApprovalPreview } from "./wordApprovalPreview";
+import {
+  WORD_SCOPED_EXPANDED_TOO_LARGE,
+  wordChainedWording,
+} from "./wordAuthoringContract";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
 import { wordBlockIndex } from "./wordDocumentOutline";
 import {
@@ -114,7 +120,8 @@ export function createWordDocumentSubmissionExecutor(
   const execute = createSubmissionExecutor(session);
   return async (input, context) => {
     const result = await execute(input, context);
-    if (result.ok) return result;
+    if (result.ok)
+      return context ? accepted(session, result, input, context) : result;
     const snapshot = context && session.snapshotForSubmission(context);
     // A refused finish changed nothing the section plan did not announce, which acceptance names.
     if (
@@ -152,6 +159,67 @@ export function createWordDocumentSubmissionExecutor(
       },
     };
   };
+}
+
+/**
+ * An accepted plan, kept for the server's apply call, with what the decision place shows for it.
+ * The plan kept is the complete one the card shows, as history resolves it.
+ */
+function accepted(
+  session: WordDocumentReadSession,
+  result: ClientToolExecutionResult,
+  input: unknown,
+  context: ClientToolCallContext,
+): ClientToolExecutionResult {
+  if (!result.ok || !object(result.result) || !object(input)) return result;
+  const receipt = result.result;
+  const snapshot = session.snapshotForSubmission(context);
+  const expanded =
+    "draft_id" in input || "table_cell" in input || "scoped_edit" in input;
+  const complete = expanded ? receipt.plan : input;
+  if (!snapshot || !object(complete) || complete.snapshot !== snapshot.token)
+    return result;
+  const { [WORD_MORE_CHANGES_ARGUMENT]: _more, ...plan } = complete;
+  // The stored answer holds the plan as the server wrote it back, keys sorted; the card of that
+  // answer and this apply share one review only when their texts match.
+  const content = JSON.stringify(sortedKeys(plan));
+  const parsed = parseWordDocumentPlan(content);
+  const normalized = parsed && normalizeWordDocumentPlan(parsed, snapshot);
+  if (!normalized || !context.chatId) return result;
+  rememberWordAcceptedPlan({
+    callId: context.toolCallId,
+    chatId: context.chatId,
+    messageId: context.messageId,
+    content,
+    snapshotToken: snapshot.token,
+    leftOut: Array.isArray(receipt.notInProposal)
+      ? receipt.notInProposal.filter(
+          (name): name is string => typeof name === "string",
+        )
+      : [],
+  });
+  return {
+    ...result,
+    result: {
+      ...receipt,
+      approval_preview: wordPlanApprovalPreview(
+        normalized,
+        snapshot,
+        content,
+        WORD_SUBMIT_PLAN_ACTION,
+      ),
+    },
+  };
+}
+
+function sortedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedKeys);
+  if (!object(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, sortedKeys(value[key])]),
+  );
 }
 
 /** A scoped_edit or finish whose snapshot or token is not this request's active read; never parsed
@@ -243,7 +311,7 @@ function createSubmissionExecutor(
               {
                 path: "/scoped_edit",
                 code: "scoped-shape",
-                message: WORD_SCOPED_EXPANDED_TOO_LARGE,
+                message: wordChainedWording(WORD_SCOPED_EXPANDED_TOO_LARGE),
               },
             ],
           })

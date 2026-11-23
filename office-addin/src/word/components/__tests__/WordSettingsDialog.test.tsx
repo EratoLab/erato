@@ -51,6 +51,9 @@ const mockCommentAuthor = { value: "user", enforced: false };
 const mockSetCommentAuthor = vi.fn();
 
 const mockUseActionFacetClientActions = vi.fn();
+const mockApprovalTools: {
+  tools: { qualified_name: string; title: string; approval: string }[];
+} = { tools: [] };
 const mockFacets = {
   ids: new Set<string>(),
   args: new Map<string, Set<string>>(),
@@ -107,6 +110,24 @@ vi.mock("@erato/frontend/library", () => ({
     </label>
   ),
   usePersistedState: () => [{}, vi.fn()],
+  useApprovalTools: () => mockApprovalTools.tools,
+  approvalToolRows: (tools: { qualified_name: string; title: string }[]) =>
+    tools.map((tool) => ({
+      qualifiedName: tool.qualified_name,
+      label: tool.title,
+    })),
+  ClientToolDecisionList: ({
+    tools,
+  }: {
+    tools: { qualifiedName: string; label: string }[];
+  }) =>
+    tools.length ? (
+      <ul data-testid="word-server-tool-decisions">
+        {tools.map((tool) => (
+          <li key={tool.qualifiedName}>{tool.label}</li>
+        ))}
+      </ul>
+    ) : null,
 }));
 
 describe("WordSettingsDialog", () => {
@@ -120,6 +141,7 @@ describe("WordSettingsDialog", () => {
     mockSetCommentPrecedence.mockReset();
     mockFacets.ids = new Set();
     mockFacets.args = new Map();
+    mockApprovalTools.tools = [];
     mockUseActionFacetClientActions.mockReturnValue(
       new Map([
         [
@@ -250,6 +272,39 @@ describe("WordSettingsDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Review this document")).toBeInTheDocument();
     expect(screen.getByText("Draft in this document")).toBeInTheDocument();
+  });
+
+  it("lists document changes with the server's decisions once the server applies them", () => {
+    mockUseActionFacetClientActions.mockReturnValue(
+      new Map([
+        [
+          "word_document_authoring",
+          {
+            displayName: "Rewrite this document",
+            clientActions: ["word.apply_edits", "word.apply_document_plan"],
+            presentation: "auto_prompt",
+            alwaysAskActions: [],
+            grantScope: {},
+          },
+        ],
+      ]),
+    );
+    mockApprovalTools.tools = [
+      {
+        qualified_name: "word/apply_document_plan",
+        title: "Change the document",
+        approval: "user_decision",
+      },
+    ];
+    render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
+
+    expect(screen.getByTestId("word-server-tool-decisions")).toHaveTextContent(
+      "Change the document",
+    );
+    expect(screen.queryByText("Apply document rewrite")).toBeNull();
+    expect(
+      screen.getByText("Apply the changes to the document"),
+    ).toBeInTheDocument();
   });
 
   it("uses Word copy that never claims a later send-time gate", () => {

@@ -70,6 +70,7 @@ export {
   type MessageEditorTokenContext,
 } from "@/components/ui/MessageList/MessageEditor";
 export {
+  HostArtifactProvider,
   MessageContent,
   useHostArtifact,
   useOutlookArtifact,
@@ -124,6 +125,12 @@ export {
   approvalToolRows,
   useApprovalTools,
 } from "@/components/ui/Settings/OfficeAppsToolDecisions";
+export {
+  addUnsetClientToolDecisions,
+  controlDecisionOf,
+  clientToolDecisionOf,
+  saveClientToolDecision,
+} from "@/lib/clientToolDecisions";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,

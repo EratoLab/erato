@@ -1,4 +1,7 @@
-import { MAX_PLAN_BYTES } from "@erato/frontend/word-review";
+import {
+  MAX_PLAN_BYTES,
+  WORD_MORE_CHANGES_ARGUMENT,
+} from "@erato/frontend/word-review";
 
 import { WordPartsDraftStore } from "./wordDocumentParts";
 
@@ -201,6 +204,7 @@ export class WordDocumentDraftStore {
             "draft_id",
             "revision",
             "patches",
+            WORD_MORE_CHANGES_ARGUMENT,
           ].includes(key),
       )
     )

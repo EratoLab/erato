@@ -3,7 +3,11 @@ import {
   normalizeWordDocumentPlan,
   parseWordDocumentPlan,
 } from "./wordDocumentPlan";
-import { WORD_READ_TOOL, WORD_SUBMIT_PLAN_TOOL } from "./wordHistoryNames";
+import {
+  WORD_MORE_CHANGES_ARGUMENT,
+  WORD_READ_TOOL,
+  WORD_SUBMIT_PLAN_TOOL,
+} from "./wordHistoryNames";
 import { isAcceptedWordSubmission } from "./wordHistoryParts";
 import {
   parseWordOutline,
@@ -28,6 +32,7 @@ export {
   WORD_ACTION_FACET_IDS,
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
+  WORD_MORE_CHANGES_ARGUMENT,
   WORD_PARTS_FENCE,
   WORD_PLAN_FENCE,
   WORD_PLAN_SECTIONS_TOOL,
@@ -655,9 +660,33 @@ export function acceptedWordPlanFromHistory(
   content: readonly ContentPart[] | undefined,
 ): WordHistoryPlan | undefined {
   const accepted = acceptedSubmission(content);
-  const toolCallId = accepted?.part.tool_call_id;
-  if (!accepted || !toolCallId) return undefined;
-  const { part, result } = accepted;
+  return accepted && historyPlanOf(accepted.part, accepted.result, content);
+}
+
+/**
+ * Every accepted `submit_document_plan` call of a message, in call order: an
+ * answer that applied a change and went on makes one per change.
+ */
+export function acceptedWordPlansFromHistory(
+  content: readonly ContentPart[] | undefined,
+): WordHistoryPlan[] {
+  return (content ?? []).filter(isAcceptedWordSubmission).flatMap((part) => {
+    if (part.content_type !== "tool_use" || !object(part.output)) return [];
+    const result = part.output.result;
+    if (!object(result)) return [];
+    const plan = historyPlanOf(part, result, content, false);
+    return plan ? [plan] : [];
+  });
+}
+
+function historyPlanOf(
+  part: Extract<ContentPart, { content_type: "tool_use" }>,
+  result: Record<string, unknown>,
+  content: readonly ContentPart[] | undefined,
+  oneOfMessage = true,
+): WordHistoryPlan | undefined {
+  const toolCallId = part.tool_call_id;
+  if (!toolCallId) return undefined;
   const plan =
     object(part.input) &&
     ("draft_id" in part.input ||
@@ -671,14 +700,17 @@ export function acceptedWordPlanFromHistory(
     (object(part.input) && plan.readToken !== part.input.readToken)
   )
     return undefined;
-  const contentJson = JSON.stringify(plan);
+  const { [WORD_MORE_CHANGES_ARGUMENT]: _more, ...complete } = plan;
+  const contentJson = JSON.stringify(complete);
   const parsed = parseWordDocumentPlan(contentJson);
   if (!parsed) return undefined;
   return {
     toolCallId,
     content: contentJson,
     plan: parsed,
-    notInProposal: wordPlanNotInProposal(content),
+    notInProposal: oneOfMessage
+      ? wordPlanNotInProposal(content)
+      : notInProposalOf(result),
   };
 }
 
@@ -687,7 +719,12 @@ export function acceptedWordPlanFromHistory(
 export function wordPlanNotInProposal(
   content: readonly ContentPart[] | undefined,
 ): string[] {
-  const names = acceptedSubmission(content)?.result.notInProposal;
+  const result = acceptedSubmission(content)?.result;
+  return result ? notInProposalOf(result) : [];
+}
+
+function notInProposalOf(result: Record<string, unknown>): string[] {
+  const names = result.notInProposal;
   return Array.isArray(names)
     ? names.filter(
         (name): name is string =>

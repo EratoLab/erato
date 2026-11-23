@@ -5,7 +5,7 @@ import {
   MAX_WORD_SCOPE_BYTES,
 } from "@erato/frontend/word-review";
 
-import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
+import { wordAuthoringContract } from "./wordAuthoringContract";
 import { wordReadableSourceBlock } from "./wordAuthoringReadData";
 
 import type { TokenUsageRequest } from "@erato/frontend/library";
@@ -43,7 +43,7 @@ export async function checkWordAuthoringBudget(
   const source =
     complete && snapshot
       ? JSON.stringify({
-          contract: WORD_AUTHORING_CONTRACT,
+          contract: wordAuthoringContract(),
           styles: snapshot.styles,
           blocks: snapshot.blocks.map(wordReadableSourceBlock),
           stories: snapshot.fullDocument
@@ -62,7 +62,7 @@ export async function checkWordAuthoringBudget(
             ({ fileId: _fileId, ...issue }) => issue,
           ),
         })
-      : JSON.stringify({ contract: WORD_AUTHORING_CONTRACT });
+      : JSON.stringify({ contract: wordAuthoringContract() });
   const controller = new AbortController();
   const abort = () => controller.abort();
   args.signal?.addEventListener("abort", abort, { once: true });

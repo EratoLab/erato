@@ -43,7 +43,7 @@ import { useClientActionConfirmFlow } from "../../core/clientActions/useClientAc
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
-import { useWordWrite } from "../providers/WordWriteProvider";
+import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
 import {
@@ -58,7 +58,6 @@ import {
   readWordTrackingMode,
   showWordReviewLocation,
 } from "../utils/wordReviewLocation";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
 import type {
@@ -144,7 +143,6 @@ function WordActionCard({
     capturesByAssistantMessageId,
     revertSlot,
     setRevertSlot,
-    reviews,
     updateReview,
     operationInProgress,
     beginOperation,
@@ -163,7 +161,7 @@ function WordActionCard({
     Object.is,
   );
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
+  const review = useWordReview(batchKey);
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );

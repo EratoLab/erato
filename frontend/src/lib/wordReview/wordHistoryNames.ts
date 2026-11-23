@@ -7,6 +7,12 @@ export const WORD_SUBMIT_PLAN_TOOL = "submit_document_plan";
 export const WORD_PLAN_SECTIONS_TOOL = "plan_document_sections";
 export const WORD_WRITE_SECTION_TOOL = "write_document_section";
 export const WORD_SUBMIT_PLAN_ACTION = "word.apply_document_plan";
+/**
+ * The one top-level argument a submission may carry that the host never
+ * reads: whether more changes follow in this answer. The server takes it out
+ * before dispatch; a server that does not is still parsed past.
+ */
+export const WORD_MORE_CHANGES_ARGUMENT = "more_changes";
 export const WORD_EDITS_FENCE = "erato-word-edits";
 export const WORD_INSERT_FENCE = "erato-word-insert";
 export const WORD_PLAN_FENCE = "erato-word-document-plan";

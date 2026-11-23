@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
+import { examplePlan } from "../../../test/mocks/word/authoringFixtures";
 import { buildWordArtifact } from "../buildWordArtifact";
 
 import type { ContentPart } from "@erato/frontend/library";
@@ -346,5 +347,63 @@ describe("buildWordArtifact", () => {
       expect(artifact?.submittedCard).toBeUndefined();
       expect(artifact?.proposedClientAction).toBeUndefined();
     });
+  });
+});
+
+describe("an answer whose changes the server applied", () => {
+  const plan = (id: string, _text: string) => ({
+    ...examplePlan(`snap-${id}`),
+    readToken: `read-${id}`,
+  });
+  const accepted = (id: string, text: string, chained: boolean) =>
+    ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "submit_document_plan",
+      status: "success",
+      input: plan(id, text),
+      output: {
+        status: "success",
+        submission: { status: "accepted" },
+        result: {
+          draft_id: id,
+          snapshot: `snap-${id}`,
+          action: "word.apply_document_plan",
+        },
+        ...(chained ? { apply: { call_id: `${id}.apply` } } : {}),
+      },
+    }) as unknown as ContentPart;
+  const build = (content: ContentPart[]) =>
+    buildWordArtifact({
+      facetId: "word_document_authoring",
+      clientActionInfo: {
+        clientActions: ["word.apply_document_plan"],
+        alwaysAskActions: [],
+      },
+      content,
+      messageId: "m1",
+      capture,
+    });
+
+  it("gives every applied change its own card, in call order", () => {
+    const artifact = build([
+      accepted("call-1", "First step.", true),
+      accepted("call-2", "Second step.", true),
+    ]);
+    expect(artifact?.submittedCards?.map((card) => card.toolCallId)).toEqual([
+      "call-1",
+      "call-2",
+    ]);
+    expect(artifact?.submittedCards?.[1]).toMatchObject({
+      language: "erato-word-document-plan",
+      content: JSON.stringify(plan("call-2", "Second step.")),
+    });
+    expect(artifact?.submittedCard).toBeUndefined();
+  });
+
+  it("keeps today's one card when the server applied none", () => {
+    const artifact = build([accepted("call-1", "Only step.", false)]);
+    expect(artifact?.submittedCards).toBeUndefined();
+    expect(artifact?.submittedCard).toMatchObject({ toolCallId: "call-1" });
   });
 });

@@ -323,6 +323,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: build.changes, ordinalMap: build.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
@@ -864,6 +865,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: earlier.changes, ordinalMap: earlier.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(staged.at(-1)?.identity).toBe(IDENTITY);
@@ -1129,6 +1131,7 @@ describe("WordChatInput prepared send", () => {
       {
         capture: { changes: build.changes, ordinalMap: build.ordinalMap },
         request: "hi",
+        budgetFor: expect.any(Function),
       },
     );
     expect(build.authoring?.assets).toEqual([{ id: "asset-1" }]);

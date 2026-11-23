@@ -104,6 +104,9 @@ describe("structured Word submissions", () => {
         draft_id: "submit-A",
         snapshot: snapshot.token,
         action: "word.apply_document_plan",
+        approval_preview: expect.objectContaining({
+          actions: ["word.apply_document_plan"],
+        }),
       },
     });
     expect(await submit(plan, context)).toEqual(result);
@@ -148,6 +151,9 @@ describe("structured Word submissions", () => {
         draft_id: "submit-A",
         snapshot: snapshot.token,
         action: "word.apply_document_plan",
+        approval_preview: expect.objectContaining({
+          actions: ["word.apply_document_plan"],
+        }),
       },
     });
 

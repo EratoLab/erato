@@ -52,3 +52,25 @@ export async function saveClientToolDecision(
     },
   });
 }
+
+/**
+ * Adds decisions for tools that have none stored yet, in one save: a choice
+ * already on the server wins. Returns the keys it added.
+ */
+export async function addUnsetClientToolDecisions(
+  decisions: Readonly<Record<string, ClientToolDecision>>,
+): Promise<string[]> {
+  const profile = await fetchProfile({});
+  const stored = profile.client_tool_decisions ?? {};
+  const added = Object.keys(decisions).filter((key) => !(key in stored));
+  if (added.length === 0) return added;
+  await fetchUpdateProfilePreferences({
+    body: {
+      client_tool_decisions: {
+        ...stored,
+        ...Object.fromEntries(added.map((key) => [key, decisions[key]])),
+      },
+    },
+  });
+  return added;
+}

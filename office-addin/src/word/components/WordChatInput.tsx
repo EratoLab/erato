@@ -101,6 +101,7 @@ import { currentWordSelectionSupport } from "../utils/wordSelectionSupport";
 import { wordSendEstimateFacet } from "../utils/wordSendEstimate";
 import { previewWordSend } from "../utils/wordSendPreview";
 import { markWordSend } from "../utils/wordSendTiming";
+import { setWordPrincipalName } from "../utils/wordWriteBridge";
 import {
   useWordCommentPrecedence,
   useWordIncludeDocumentByDefault,
@@ -133,7 +134,10 @@ import type {
 import type { WordCaptureNotice } from "../utils/wordComposerNotice";
 import type { WordSendCarrier } from "../utils/wordSendPreview";
 import type { ChatInputControlsHandle } from "@erato/frontend/library";
-import type { WordDocumentCapture } from "@erato/frontend/word-review";
+import type {
+  WordAuthoringSnapshot,
+  WordDocumentCapture,
+} from "@erato/frontend/word-review";
 
 export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;
@@ -578,6 +582,8 @@ export function WordChatInput({
   readEnabledRef.current = chipEnabled;
   const { profile } = useProfile();
   const principalEmail = profile?.email ?? null;
+  const principalName = profile?.name ?? undefined;
+  useEffect(() => setWordPrincipalName(principalName), [principalName]);
   const commentPeople = useMemo(() => {
     const { label, assistantAuthor } = wordCommentDeploymentSettings();
     return { principalEmail, label, assistantAuthor };
@@ -989,25 +995,22 @@ export function WordChatInput({
           build = prepared.build;
           // Finalize paging limits before exposing whole-document availability.
           const authoringSnapshot = build?.authoring;
+          // A copy an applied change leaves for this answer is checked like this one.
+          const budgetFor = (snapshot: WordAuthoringSnapshot) => async () => {
+            const budget = await checkWordAuthoringBudget(snapshot, {
+              message,
+              chatId,
+              assistantId: chatInputProps.assistantId,
+              modelId: resolvedModelId,
+              fileIds: inputFileIds,
+              mode: "complete",
+            });
+            return budget.ok ? undefined : budget.issue;
+          };
           wordDocumentReadSession.activate(
             authoringSnapshot,
             undefined,
-            authoringSnapshot
-              ? async () => {
-                  const budget = await checkWordAuthoringBudget(
-                    authoringSnapshot,
-                    {
-                      message,
-                      chatId,
-                      assistantId: chatInputProps.assistantId,
-                      modelId: resolvedModelId,
-                      fileIds: inputFileIds,
-                      mode: "complete",
-                    },
-                  );
-                  return budget.ok ? undefined : budget.issue;
-                }
-              : undefined,
+            authoringSnapshot ? budgetFor(authoringSnapshot) : undefined,
             build && authoringSnapshot
               ? {
                   capture: {
@@ -1015,6 +1018,7 @@ export function WordChatInput({
                     ordinalMap: build.ordinalMap,
                   },
                   request: message,
+                  budgetFor,
                 }
               : undefined,
           );

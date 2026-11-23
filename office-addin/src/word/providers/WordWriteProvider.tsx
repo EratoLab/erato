@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,10 +10,17 @@ import {
 
 import { markWordDocumentChanged } from "../utils/wordDocumentChangeSignal";
 import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
+import {
+  createWordApplyProgressStore,
+  useWordApplyStageFrom,
+} from "../utils/wordReviewStore";
+import { setWordWriteBridge } from "../utils/wordWriteBridge";
 
 import type { WordSelectionBackup } from "../utils/wordReplaceSelection";
 import type { WordReviewState } from "../utils/wordReviewState";
+import type { WordApplyProgressStore } from "../utils/wordReviewStore";
 import type { WordSelectionWritten } from "../utils/wordSelectionTarget";
+import type { WordMessageContext } from "../utils/wordWriteBridge";
 import type { WordDocumentCapture } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
 
@@ -39,8 +47,11 @@ export interface WordWriteContextValue {
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
   revertSlot: WordRevertSlot | null;
   setRevertSlot: (slot: WordRevertSlot | null) => void;
+  /** Without `applyStage`: read a card's review through useWordReview. */
   reviews: ReadonlyMap<string, WordReviewState>;
+  /** A patch's `applyStage` goes to the progress store, so progress redraws only its own card. */
   updateReview: (key: string, patch: Partial<WordReviewState>) => void;
+  applyProgress: WordApplyProgressStore;
   /** One host operation at a time across every card, including navigation. */
   operationInProgress: boolean;
   beginOperation: () => boolean;
@@ -64,6 +75,8 @@ export interface WordWriteContextValue {
 
 const EMPTY_CAPTURES: ReadonlyMap<string, WordDocumentCapture> = new Map();
 
+const NO_MESSAGE_CONTEXT = (): WordMessageContext => ({});
+
 const WordWriteContext = createContext<WordWriteContextValue>({
   documentIdentity: null,
   capturesByAssistantMessageId: EMPTY_CAPTURES,
@@ -71,6 +84,7 @@ const WordWriteContext = createContext<WordWriteContextValue>({
   setRevertSlot: () => {},
   reviews: new Map(),
   updateReview: () => {},
+  applyProgress: createWordApplyProgressStore(),
   operationInProgress: false,
   beginOperation: () => false,
   endOperation: () => {},
@@ -86,30 +100,37 @@ export function WordWriteProvider({
   documentIdentity,
   capturesByAssistantMessageId,
   restoreRequest = () => {},
+  messageContext = NO_MESSAGE_CONTEXT,
   children,
 }: {
   documentIdentity: string | null;
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
   restoreRequest?: (message: string) => void;
+  /** The stored turn of an assistant message, for a change applied after the pane reloaded. */
+  messageContext?: (messageId: string) => WordMessageContext;
   children: ReactNode;
 }) {
   const [revertSlot, setRevertSlot] = useState<WordRevertSlot | null>(null);
   const [reviews, setReviews] = useState<ReadonlyMap<string, WordReviewState>>(
     () => new Map(),
   );
+  const [applyProgress] = useState(createWordApplyProgressStore);
   const [operationInProgress, setOperationInProgress] = useState(false);
   const operationRef = useRef(false);
   const [locationGeneration, setLocationGeneration] = useState(0);
   const updateReview = useCallback(
     (key: string, patch: Partial<WordReviewState>) => {
+      const { applyStage, ...rest } = patch;
+      if ("applyStage" in patch) applyProgress.set(key, applyStage);
+      if (Object.keys(rest).length === 0) return;
       setReviews((current) =>
         new Map(current).set(key, {
           ...(current.get(key) ?? EMPTY_WORD_REVIEW),
-          ...patch,
+          ...rest,
         }),
       );
     },
-    [],
+    [applyProgress],
   );
   const beginOperation = useCallback(() => {
     if (operationRef.current) return false;
@@ -154,6 +175,22 @@ export function WordWriteProvider({
     () => setLocationGeneration((value) => value + 1),
     [],
   );
+  const identityRef = useRef(documentIdentity);
+  identityRef.current = documentIdentity;
+  const messageContextRef = useRef(messageContext);
+  messageContextRef.current = messageContext;
+  useEffect(() => {
+    setWordWriteBridge({
+      documentIdentity: () => identityRef.current,
+      updateReview,
+      beginOperation,
+      endOperation,
+      setRevertSlot,
+      invalidateLocations,
+      messageContext: (messageId) => messageContextRef.current(messageId),
+    });
+    return () => setWordWriteBridge(null);
+  }, [updateReview, beginOperation, endOperation, invalidateLocations]);
   const value = useMemo<WordWriteContextValue>(
     () => ({
       documentIdentity,
@@ -162,6 +199,7 @@ export function WordWriteProvider({
       setRevertSlot,
       reviews,
       updateReview,
+      applyProgress,
       operationInProgress,
       beginOperation,
       endOperation,
@@ -177,6 +215,7 @@ export function WordWriteProvider({
       revertSlot,
       reviews,
       updateReview,
+      applyProgress,
       operationInProgress,
       beginOperation,
       endOperation,
@@ -196,4 +235,20 @@ export function WordWriteProvider({
 
 export function useWordWrite(): WordWriteContextValue {
   return useContext(WordWriteContext);
+}
+
+/** One card's review, with its apply's progress. */
+export function useWordReview(key: string): WordReviewState {
+  const { reviews, applyProgress } = useContext(WordWriteContext);
+  const review = reviews.get(key) ?? EMPTY_WORD_REVIEW;
+  const applyStage = useWordApplyStageFrom(applyProgress, key);
+  return useMemo(
+    () => (applyStage === undefined ? review : { ...review, applyStage }),
+    [review, applyStage],
+  );
+}
+
+/** Every review, for a card that compares itself with its siblings. */
+export function useWordReviews(): ReadonlyMap<string, WordReviewState> {
+  return useContext(WordWriteContext).reviews;
 }

@@ -322,6 +322,16 @@ export const answersScopeChanged = (
 ): boolean =>
   (issues ?? []).some((issue) => issue.code === CLIENT_TOOL_SCOPE_CHANGED);
 
+/**
+ * Whether a result asks the user to decide on screen before the call can run:
+ * the server parks the same call again and sends it once they decide, which
+ * must not be skipped as already answered.
+ */
+export const answersNeedsDecision = (result: unknown): boolean =>
+  typeof result === "object" &&
+  result !== null &&
+  (result as { status?: unknown }).status === "needs_decision";
+
 // tool_call_ids handled this session, so a resumestream replay never re-runs a
 // tool. Capped — idempotent executors make evicting the oldest safe.
 const MAX_ANSWERED_TOOL_CALLS = 500;
