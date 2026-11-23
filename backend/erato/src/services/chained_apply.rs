@@ -61,7 +61,7 @@ const MAX_DRAFT_ID_CHARS: usize = 128;
 
 const SUBMISSION_NOTE: &str = "The checked change was accepted. Its result is shortened here; the result of applying it follows.";
 pub const DECLINED_REMAINING_CHANGES_NOTE: &str = "The user cancelled this change and the remaining changes of this answer. Do not make or plan any more changes. Tell the user briefly which changes were made in this answer and which were not. No tools are available.";
-const CONSUMED_READ_NOTE: &str = "This result describes the state before a change was applied in this answer, so its content is left out. Read again for the current state.";
+const CONSUMED_READ_NOTE: &str = "This result is from before a change attempt in this answer, so its content is left out. Read again for the current state.";
 
 /// One chained apply of the answer, kept with the turn's consumption.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
