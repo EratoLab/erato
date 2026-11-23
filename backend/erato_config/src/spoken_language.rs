@@ -8,7 +8,8 @@ use facet::Facet;
 use serde::{Deserialize, Deserializer};
 
 use crate::config_facet_attrs as erato_config;
-use crate::spoken::{Written, written_table};
+use crate::language_words::primary_subtag;
+use crate::spoken::{Written, written_table, written_words};
 use config::Config;
 
 const PLACE: &str = "audio_conversational.spoken_language";
@@ -16,44 +17,40 @@ const PLACE: &str = "audio_conversational.spoken_language";
 /// How many languages a user may list as the languages they speak.
 pub const MAX_USER_SPOKEN_LANGUAGES: usize = 3;
 
-/// The languages the word check can tell apart, as ISO 639-1 codes. A spoken
-/// language outside this list cannot be confirmed from the words, so it is
-/// not offered.
+/// The languages the word check can tell apart, as ISO 639-1 codes: the
+/// languages its detector is built with. These are offered to a person
+/// wherever an admin allows any language. Another language still works where
+/// an admin lists it; the recognizer's guess alone then decides.
 pub const SPEAKABLE_LANGUAGES: &[&str] = &[
-    "af", "ar", "az", "be", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "eo", "es",
-    "et", "eu", "fa", "fi", "fr", "ga", "gu", "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja",
-    "ka", "kk", "ko", "la", "lg", "lt", "lv", "mi", "mk", "mn", "mr", "ms", "nb", "nl", "nn", "pa",
-    "pl", "pt", "ro", "ru", "sk", "sl", "sn", "so", "sq", "sr", "st", "sv", "sw", "ta", "te", "th",
-    "tl", "tn", "tr", "ts", "uk", "ur", "vi", "xh", "yo", "zh", "zu",
+    "ar", "de", "en", "es", "fr", "hi", "it", "ja", "ko", "nl", "pl", "pt", "ru", "tr", "uk", "zh",
 ];
 
-/// The speakable language a tag names (`hi`, `hi-IN`, `de_DE` → `de`), or
-/// `None` for a tag whose language the word check does not know.
-pub fn speakable_language(tag: &str) -> Option<&'static str> {
-    let primary = tag.trim().split(['-', '_']).next()?.to_ascii_lowercase();
-    SPEAKABLE_LANGUAGES
-        .iter()
-        .find(|code| **code == primary)
-        .copied()
+/// Whether the word check knows a language code.
+pub fn is_speakable(code: &str) -> bool {
+    SPEAKABLE_LANGUAGES.contains(&code)
 }
 
-/// `tags` as speakable languages in their order, without repeats; the tags
-/// that are not speakable are returned apart.
-pub fn speakable_languages<'a>(
-    tags: impl IntoIterator<Item = &'a str>,
-) -> (Vec<String>, Vec<&'a str>) {
-    let mut languages: Vec<String> = Vec::new();
-    let mut unknown = Vec::new();
+/// The ISO 639 code a tag names (`hi`, `hi-IN`, `de_DE` → `de`), or `None`
+/// for a tag that is not a language tag.
+pub fn language_code(tag: &str) -> Option<String> {
+    let primary = primary_subtag(tag);
+    ((2..=3).contains(&primary.len()) && primary.bytes().all(|b| b.is_ascii_lowercase()))
+        .then_some(primary)
+}
+
+/// `tags` as language codes in their order, without repeats; the tags that
+/// are not language tags are returned apart.
+pub fn language_codes<'a>(tags: impl IntoIterator<Item = &'a str>) -> (Vec<String>, Vec<&'a str>) {
+    let mut codes: Vec<String> = Vec::new();
+    let mut malformed = Vec::new();
     for tag in tags {
-        match speakable_language(tag) {
-            Some(code) if !languages.iter().any(|known| known == code) => {
-                languages.push(code.to_string());
-            }
+        match language_code(tag) {
+            Some(code) if !codes.contains(&code) => codes.push(code),
             Some(_) => {}
-            None => unknown.push(tag),
+            None => malformed.push(tag),
         }
     }
-    (languages, unknown)
+    (codes, malformed)
 }
 
 /// `[audio_conversational.spoken_language]`.
@@ -69,7 +66,7 @@ pub struct SpokenLanguageConfig {
     /// `hi`), first = the main language for a user none of whose languages
     /// is listed. Also sent to the speech recognizer as the expected
     /// languages where it takes them. A user's own languages are limited to
-    /// this list. Codes the word check does not know are dropped with a
+    /// this list. Entries that are not language codes are dropped with a
     /// warning. Defaults to empty: any language.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub languages: Vec<String>,
@@ -94,6 +91,7 @@ impl Default for SpokenLanguageConfig {
 fn shaped_spoken_language(written: Written) -> (SpokenLanguageConfig, Vec<String>) {
     let mut dropped = Vec::new();
     let mut config = SpokenLanguageConfig::default();
+    let mut no_usable_language = false;
     for (key, value) in written_table(PLACE, written, &mut dropped) {
         match (key.as_str(), value) {
             ("follow_speaker", Written::Flag(flag)) => config.follow_speaker = flag,
@@ -104,29 +102,30 @@ fn shaped_spoken_language(written: Written) -> (SpokenLanguageConfig, Vec<String
             ("user_choice", _) => dropped.push(format!(
                 "{PLACE}.user_choice is not `true` or `false`; the default is used"
             )),
-            ("languages", Written::List(entries)) => {
-                let mut tags = Vec::new();
-                for entry in entries {
-                    match entry {
-                        Written::Text(tag) => tags.push(tag),
-                        _ => {
-                            dropped.push(format!("{PLACE}.languages has an entry that is not text"))
-                        }
-                    }
+            ("languages", written) => {
+                let place = format!("{PLACE}.languages");
+                let tags = written_words(&place, written, &mut dropped);
+                let (languages, malformed) = language_codes(tags.iter().map(String::as_str));
+                for tag in &malformed {
+                    dropped.push(format!("{place} has `{tag}`, which is not a language code"));
                 }
-                let (languages, unknown) = speakable_languages(tags.iter().map(String::as_str));
-                for tag in unknown {
+                if languages.is_empty() && !malformed.is_empty() {
                     dropped.push(format!(
-                        "{PLACE}.languages has `{tag}`, a language the word check does not know"
+                        "{place} has no language code; the voice keeps to each user's main language"
                     ));
+                    no_usable_language = true;
+                } else {
+                    config.languages = languages;
                 }
-                config.languages = languages;
             }
-            ("languages", _) => dropped.push(format!(
-                "{PLACE}.languages is not a list of language codes; any language is allowed"
-            )),
             (other, _) => dropped.push(format!("{PLACE}.{other} is not known and is ignored")),
         }
+    }
+    // A list with none of its languages left must not open the voice to any
+    // language; with no level below the deployment, the voice keeps to the
+    // main language instead.
+    if no_usable_language {
+        config.follow_speaker = false;
     }
     dropped.sort();
     (config, dropped)
@@ -166,11 +165,22 @@ mod tests {
     }
 
     #[test]
-    fn languages_are_normalized_and_unknown_ones_dropped() {
+    fn languages_are_normalized_and_non_codes_dropped() {
         let (config, dropped) = shaped(serde_json::json!({
-            "languages": ["DE", "hi-IN", "de_AT", "klingon", 3]
+            "languages": ["DE", "hi-IN", "de_AT", "sv", "Swedish!", 3]
         }));
-        assert_eq!(config.languages, ["de", "hi"]);
+        assert_eq!(config.languages, ["de", "hi", "sv"]);
+        assert_eq!(dropped.len(), 2, "{dropped:?}");
+    }
+
+    #[test]
+    fn a_list_without_a_language_code_never_opens_the_voice() {
+        let (config, dropped) = shaped(serde_json::json!({
+            "languages": ["Swahili!"],
+            "follow_speaker": true
+        }));
+        assert!(config.languages.is_empty());
+        assert!(!config.follow_speaker);
         assert_eq!(dropped.len(), 2, "{dropped:?}");
     }
 
@@ -189,11 +199,13 @@ mod tests {
     }
 
     #[test]
-    fn speakable_tags() {
-        assert_eq!(speakable_language("hi"), Some("hi"));
-        assert_eq!(speakable_language("pt-BR"), Some("pt"));
-        assert_eq!(speakable_language("xx"), None);
-        assert_eq!(speakable_language(""), None);
-        assert_eq!(SPEAKABLE_LANGUAGES.len(), 75);
+    fn language_tags() {
+        assert_eq!(language_code("hi").as_deref(), Some("hi"));
+        assert_eq!(language_code("pt-BR").as_deref(), Some("pt"));
+        assert_eq!(language_code("fil").as_deref(), Some("fil"));
+        assert_eq!(language_code("German"), None);
+        assert_eq!(language_code(""), None);
+        assert!(is_speakable("hi"));
+        assert!(!is_speakable("sv"));
     }
 }

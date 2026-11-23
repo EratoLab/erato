@@ -620,7 +620,11 @@ fn written_numbers(
 /// Unlike [`crate::language_words::word_list`], keeps an empty entry: an
 /// empty ordinal ending lets a stem stand alone. `drop_unusable` checks the
 /// entries.
-fn written_words(place: &str, written: Written, dropped: &mut Vec<String>) -> Vec<String> {
+pub(crate) fn written_words(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> Vec<String> {
     let Written::List(entries) = written else {
         dropped.push(format!("{place} is not a list and is ignored"));
         return Vec::new();

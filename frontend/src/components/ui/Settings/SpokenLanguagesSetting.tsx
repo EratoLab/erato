@@ -45,7 +45,9 @@ export function SpokenLanguagesSetting() {
 
   const locked = !data.user_choice;
   const ownListed = data.own.length > 0;
-  const shown = ownListed && !locked ? data.own : [data.app_language];
+  // Without a list of their own the person sees the language the voice
+  // falls back to, as the server resolved it, and adding starts from it.
+  const shown = ownListed && !locked ? data.own : [data.main];
   const offered = data.offered
     .filter((code) => !shown.includes(code))
     .map((code) => ({ code, name: nameOf(code) }))
@@ -55,6 +57,7 @@ export function SpokenLanguagesSetting() {
     ? shown.filter((code) => !data.allowed.includes(code))
     : [];
   const mainCode = shown.find((code) => !notAllowed.includes(code));
+  const mainName = nameOf(data.main);
 
   // `null` clears the list: the app language applies again.
   const save = async (languages: string[] | null) => {
@@ -181,11 +184,19 @@ export function SpokenLanguagesSetting() {
           );
         })}
       </ol>
-      {!ownListed && !locked && (
+      {!ownListed && !locked && data.main === data.app_language && (
         <p className="text-xs text-theme-fg-muted">
           {t({
             id: "preferences.dialog.audio.spokenLanguages.fromApp",
             message: "Your app language, until you add another.",
+          })}
+        </p>
+      )}
+      {mainCode === undefined && (
+        <p className="text-xs text-theme-fg-muted">
+          {t({
+            id: "preferences.dialog.audio.spokenLanguages.fallback",
+            message: `None of these is used here, so the voice speaks ${mainName}.`,
           })}
         </p>
       )}
@@ -219,19 +230,6 @@ export function SpokenLanguagesSetting() {
             message: `Your organization allows: ${allowedNames}.`,
           })}
         </p>
-      )}
-      {!locked && ownListed && (
-        <button
-          type="button"
-          className={linkButton}
-          onClick={() => void save(null)}
-          disabled={saving}
-        >
-          {t({
-            id: "preferences.dialog.audio.spokenLanguages.useAppLanguage",
-            message: "Use my app language",
-          })}
-        </button>
       )}
       {locked && (
         <p className="text-xs text-theme-fg-muted">

@@ -270,10 +270,9 @@ pub struct ExperienceAudience {
 #[serde(default)]
 pub struct AudienceSpokenLanguage {
     pub follow_speaker: Option<bool>,
-    /// The allowed languages as speakable codes; empty allows any. Codes the
-    /// word check does not know are dropped with a warning, and a list left
-    /// with none of its codes is ignored, so a typo never opens it to any
-    /// language.
+    /// The allowed languages as ISO 639 codes; empty allows any. Entries that
+    /// are not language codes are dropped with a warning, and a list left
+    /// with none is ignored, so a typo never turns into "any language".
     pub languages: Option<Vec<String>>,
     /// `false` keeps the audience's users from listing their own languages;
     /// `true` cannot reopen a choice the deployment closed.
@@ -288,24 +287,24 @@ fn lenient_spoken_language<'de, D: serde::Deserializer<'de>>(
         SPOKEN_LANGUAGE_SETTING,
         |spoken: &mut AudienceSpokenLanguage, key, value| {
             Some(match key {
-                "follow_speaker" => serde_json::from_value(value)
-                    .map(|follow| spoken.follow_speaker = Some(follow)),
+                "follow_speaker" => {
+                    serde_json::from_value(value).map(|follow| spoken.follow_speaker = Some(follow))
+                }
                 "user_choice" => {
                     serde_json::from_value(value).map(|choice| spoken.user_choice = Some(choice))
                 }
                 "languages" => serde_json::from_value::<Vec<String>>(value).map(|tags| {
-                    let (languages, unknown) =
-                        erato_config::spoken_language::speakable_languages(
-                            tags.iter().map(String::as_str),
-                        );
-                    for tag in &unknown {
+                    let (languages, malformed) = erato_config::spoken_language::language_codes(
+                        tags.iter().map(String::as_str),
+                    );
+                    for tag in &malformed {
                         tracing::warn!(
                             block = SPOKEN_LANGUAGE_SETTING,
                             %tag,
-                            "An audience's spoken language is not one the word check knows and is ignored"
+                            "An audience's spoken language is not a language code and is ignored"
                         );
                     }
-                    if languages.is_empty() && !unknown.is_empty() {
+                    if languages.is_empty() && !malformed.is_empty() {
                         return;
                     }
                     spoken.languages = Some(languages);
@@ -1201,16 +1200,16 @@ mod tests {
             document.audiences["engineering"].spoken_language.clone()
         };
         assert_eq!(
-            audience(r#"{"languages": ["DE", "hi-IN", "xx"], "user_choice": false}"#),
+            audience(r#"{"languages": ["DE", "hi-IN", "sv", "Swedish!"], "user_choice": false}"#),
             Some(AudienceSpokenLanguage {
                 follow_speaker: None,
-                languages: Some(vec!["de".into(), "hi".into()]),
+                languages: Some(vec!["de".into(), "hi".into(), "sv".into()]),
                 user_choice: Some(false),
             })
         );
         // A list of only unknown codes must not open the voice to any language.
         assert_eq!(
-            audience(r#"{"languages": ["xx"], "follow_speaker": "no"}"#),
+            audience(r#"{"languages": ["Swedish!"], "follow_speaker": "no"}"#),
             Some(AudienceSpokenLanguage::default())
         );
         assert_eq!(

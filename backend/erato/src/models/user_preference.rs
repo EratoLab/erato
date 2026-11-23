@@ -93,25 +93,27 @@ pub struct UpdateUserPreferencesInput {
     pub language: Option<String>,
 }
 
-/// The languages a user says they speak, as speakable codes in their order
-/// without repeats, or `None` when one is not speakable or there are more
-/// than [`MAX_USER_SPOKEN_LANGUAGES`]. An empty list is valid: it clears the
+/// The languages a user says they speak, as codes in their order without
+/// repeats, or `None` when one is not `offered` or there are more than
+/// [`MAX_USER_SPOKEN_LANGUAGES`]. An empty list is valid: it clears the
 /// choice.
 ///
 /// [`MAX_USER_SPOKEN_LANGUAGES`]: erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES
-pub fn normalize_spoken_languages(tags: &[String]) -> Option<Vec<String>> {
-    let (languages, unknown) =
-        erato_config::spoken_language::speakable_languages(tags.iter().map(String::as_str));
-    (unknown.is_empty()
+pub fn normalize_spoken_languages(tags: &[String], offered: &[String]) -> Option<Vec<String>> {
+    let (languages, malformed) =
+        erato_config::spoken_language::language_codes(tags.iter().map(String::as_str));
+    (malformed.is_empty()
+        && languages.iter().all(|code| offered.contains(code))
         && languages.len() <= erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES)
         .then_some(languages)
 }
 
-/// The stored languages as they apply today: a code the word check no
-/// longer knows is left out, so an older row never stops the voice.
+/// The stored languages as they apply: a row is kept as it was saved, even
+/// where the languages offered have changed since; the allowed list limits
+/// it when it is resolved.
 pub fn stored_spoken_languages(stored: Option<Vec<String>>) -> Option<Vec<String>> {
     let (mut languages, _) =
-        erato_config::spoken_language::speakable_languages(stored?.iter().map(String::as_str));
+        erato_config::spoken_language::language_codes(stored?.iter().map(String::as_str));
     languages.truncate(erato_config::spoken_language::MAX_USER_SPOKEN_LANGUAGES);
     (!languages.is_empty()).then_some(languages)
 }

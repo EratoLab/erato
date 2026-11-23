@@ -89,27 +89,41 @@ async fn a_person_lists_the_languages_they_speak(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn the_deployment_limits_and_locks_the_languages(pool: Pool<Postgres>) {
+async fn the_deployment_limits_the_languages(pool: Pool<Postgres>) {
     let (mut app_config, _llm) = setup_mock_llm_server(None).await;
-    app_config.audio_conversational.spoken_language.languages = vec!["de".into(), "fr".into()];
+    // Swedish is outside the word check; an admin can still allow it.
+    app_config.audio_conversational.spoken_language.languages = vec!["de".into(), "sv".into()];
     app_config
         .audio_conversational
         .spoken_language
         .follow_speaker = false;
     let server = create_test_server(test_app_state(app_config, pool).await);
-    server
-        .put("/api/v1beta/me/profile/preferences")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({ "preference_spoken_languages": ["hi", "fr"] }))
+    let save = |languages: Value| {
+        server
+            .put("/api/v1beta/me/profile/preferences")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "preference_spoken_languages": languages }))
+    };
+    let spoken = || async {
+        server
+            .get("/api/v1beta/me/spoken-language")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await
+            .json::<Value>()
+    };
+
+    // The app language is not allowed: the first allowed one is the main one.
+    let unset = spoken().await;
+    assert_eq!(unset["main"], "de");
+    assert_eq!(unset["offered"], json!(["de", "sv"]));
+    assert_eq!(unset["follow_speaker"], false);
+
+    save(json!(["hi", "sv"]))
         .await
-        .assert_status_ok();
-    let spoken: Value = server
-        .get("/api/v1beta/me/spoken-language")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .await
-        .json();
-    assert_eq!(spoken["main"], "fr");
-    assert_eq!(spoken["candidates"], json!(["fr"]));
-    assert_eq!(spoken["offered"], json!(["de", "fr"]));
-    assert_eq!(spoken["follow_speaker"], false);
+        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    save(json!(["sv", "de"])).await.assert_status_ok();
+    let listed = spoken().await;
+    assert_eq!(listed["main"], "sv");
+    // Following off changes what the voice speaks, not what may be said.
+    assert_eq!(listed["candidates"], json!(["sv", "de"]));
 }

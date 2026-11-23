@@ -6195,6 +6195,11 @@ msgstr "In conversation mode the voice always speaks your first language here."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.fallback"
+msgstr "None of these is used here, so the voice speaks {mainName}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 msgid "preferences.dialog.audio.spokenLanguages.fromApp"
 msgstr "Your app language, until you add another."
 
@@ -6237,11 +6242,6 @@ msgstr "Remove {language}"
 #: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 msgid "preferences.dialog.audio.spokenLanguages.saveFailed"
 msgstr "Your languages could not be saved"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
-msgid "preferences.dialog.audio.spokenLanguages.useAppLanguage"
-msgstr "Use my app language"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/AudioInputTabContent.tsx

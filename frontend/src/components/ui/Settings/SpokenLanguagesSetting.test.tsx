@@ -98,16 +98,6 @@ describe("languages I speak", () => {
         body: { preference_spoken_languages: null },
       }),
     );
-
-    api.update.mockClear();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Use my app language" }),
-    );
-    await waitFor(() =>
-      expect(api.update).toHaveBeenCalledWith({
-        body: { preference_spoken_languages: null },
-      }),
-    );
   });
 
   it("offers no more than three languages", () => {
@@ -118,9 +108,53 @@ describe("languages I speak", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("starts from the language the voice falls back to", async () => {
+    api.spoken = {
+      ...BASE,
+      main: "de",
+      candidates: ["de", "fr"],
+      allowed: ["fr", "de"],
+      offered: ["fr", "de"],
+    };
+    renderSetting();
+    expect(listed()).toHaveLength(1);
+    expect(listed()[0]).toHaveTextContent("German");
+    expect(listed()[0]).toHaveTextContent("Main language");
+    expect(
+      screen.queryByText("Your app language, until you add another."),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Add a language" }), {
+      target: { value: "fr" },
+    });
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith({
+        body: { preference_spoken_languages: ["de", "fr"] },
+      }),
+    );
+  });
+
+  it("says which language the voice uses when none of the person's is allowed", () => {
+    api.spoken = {
+      ...BASE,
+      own: ["hi"],
+      main: "de",
+      allowed: ["de", "fr"],
+      offered: ["de", "fr"],
+      source: "user",
+    };
+    renderSetting();
+    expect(listed()[0]).toHaveTextContent("Not used here");
+    expect(
+      screen.getByText(
+        "None of these is used here, so the voice speaks German.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("is read-only where the organization decides", () => {
     api.spoken = {
       ...BASE,
+      main: "en",
       own: ["hi"],
       user_choice: false,
       allowed: ["de", "en"],
@@ -151,5 +185,8 @@ describe("languages I speak", () => {
     expect(listed()[0]).not.toHaveTextContent("Main language");
     expect(listed()[1]).not.toHaveTextContent("Not used here");
     expect(listed()[1]).toHaveTextContent("Main language");
+    expect(
+      screen.queryByText(/None of these is used here/),
+    ).not.toBeInTheDocument();
   });
 });

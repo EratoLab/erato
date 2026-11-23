@@ -1147,7 +1147,8 @@ pub struct UpdateProfilePreferencesRequest {
     pub preference_reply_speech_show_in_chat: Option<Option<bool>>,
     /// The languages the user speaks in conversation, up to three ISO 639-1
     /// codes (`hi`, `en-GB`), first = main; `null` or `[]` follows the app
-    /// language again. A code the word check does not know is rejected.
+    /// language again. A language that is not offered to the user (see
+    /// `GET /me/spoken-language`) is rejected.
     #[serde(default, deserialize_with = "deserialize_patch_optional_list")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Vec<String>>)]
@@ -1273,12 +1274,29 @@ pub async fn update_profile_preferences(
     let approval_speech_wording = style_patch(request.preference_approval_speech_wording)?;
     let wait_lines_amount = style_patch(request.preference_wait_lines_amount)?;
     let reply_speech_wording = style_patch(request.preference_reply_speech_wording)?;
+    let offered = match &request.preference_spoken_languages {
+        Some(Some(_)) => {
+            let mut offered = spoken_language_settings::resolve_for(&app_state, &me_user)
+                .await
+                .offered;
+            // A list saved while more was offered can still be reordered.
+            offered.extend(
+                me_user
+                    .preference_spoken_languages
+                    .iter()
+                    .flatten()
+                    .cloned(),
+            );
+            offered
+        }
+        _ => Vec::new(),
+    };
     let spoken_languages = request
         .preference_spoken_languages
         .map(|patch| {
             patch
                 .map(|tags| {
-                    models::user_preference::normalize_spoken_languages(&tags)
+                    models::user_preference::normalize_spoken_languages(&tags, &offered)
                         .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
                 })
                 .transpose()

@@ -4,7 +4,7 @@
 //! this order. The turn's language is then chosen among these from what the
 //! caller says.
 
-use super::me_profile_middleware::{MeProfile, normalize_supported_language};
+use super::me_profile_middleware::MeProfile;
 use super::starting_assistant::{AudienceIdentity, matching_blocks, user_choice_open};
 use crate::distribution::experience_policy::{
     AudienceSpokenLanguage, ExperiencePolicyDocument, SPOKEN_LANGUAGE_SETTING,
@@ -12,9 +12,7 @@ use crate::distribution::experience_policy::{
 use crate::state::AppState;
 use axum::{Extension, Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
-use erato_config::spoken_language::{
-    SPEAKABLE_LANGUAGES, SpokenLanguageConfig, speakable_language,
-};
+use erato_config::spoken_language::{SPEAKABLE_LANGUAGES, SpokenLanguageConfig, language_code};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -30,7 +28,8 @@ pub enum SpokenLanguageSource {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 pub struct SpokenLanguageResponse {
     /// Whether the voice follows the language the caller speaks. Off, it
-    /// always speaks `main`.
+    /// always speaks `main`; the candidates still tell the recognizer what
+    /// the caller may say.
     pub follow_speaker: bool,
     /// The languages the voice chooses among, `main` first, as ISO 639-1
     /// codes. Empty means any language. Also the recognizer's expected
@@ -79,17 +78,11 @@ pub fn matching_audiences<'a>(
     )
 }
 
-/// The app language the caller reads Erato in, which ERMAIN-1264 resolves:
-/// their setting, then the sign-in token, the browser and the default.
-pub fn app_language(me_user: &MeProfile) -> &str {
-    normalize_supported_language(me_user.preference_language.as_deref())
-        .unwrap_or(&me_user.preferred_language)
-}
-
 /// Each field comes from the first audience in the order that sets it, else
 /// from the deployment. The caller's own languages count only where allowed,
 /// and only those on the allowed list; with none of them left, the first
-/// allowed language is the main one.
+/// allowed language is the main one. `follow_speaker` changes only what
+/// the voice speaks, not which languages the caller may use.
 pub fn resolve(
     config: &SpokenLanguageConfig,
     audiences: &[(&str, &AudienceSpokenLanguage)],
@@ -113,7 +106,7 @@ pub fn resolve(
         None => (SpokenLanguageSource::Deployment, None),
     };
     let is_allowed = |code: &str| allowed.is_empty() || allowed.iter().any(|known| known == code);
-    let app_language = speakable_language(app_language).unwrap_or("en").to_string();
+    let app_language = language_code(app_language).unwrap_or_else(|| "en".to_string());
 
     let stored = own.unwrap_or_default().to_vec();
     let kept: Vec<String> = own
@@ -134,12 +127,8 @@ pub fn resolve(
         };
         (main, allowed.clone())
     };
-    if follow_speaker {
-        if let Some(at) = candidates.iter().position(|code| *code == main) {
-            candidates[..=at].rotate_right(1);
-        }
-    } else {
-        candidates = vec![main.clone()];
+    if let Some(at) = candidates.iter().position(|code| *code == main) {
+        candidates[..=at].rotate_right(1);
     }
     let offered = if allowed.is_empty() {
         SPEAKABLE_LANGUAGES
@@ -176,8 +165,31 @@ pub async fn resolve_for(app_state: &AppState, me_user: &MeProfile) -> SpokenLan
         &app_state.config.audio_conversational.spoken_language,
         &audiences,
         me_user.preference_spoken_languages.as_deref(),
-        app_language(me_user),
+        super::read_aloud::speech_language(app_state, me_user).code(),
     )
+}
+
+/// [`resolve_for`] with the caller's preferences read again. A socket keeps
+/// the profile it was opened with, so a person who changes their languages
+/// mid-conversation would otherwise keep the old ones until they reconnect.
+pub async fn resolve_for_turn(app_state: &AppState, me_user: &MeProfile) -> SpokenLanguageResponse {
+    let stored = match uuid::Uuid::parse_str(&me_user.id) {
+        Ok(user_id) => {
+            crate::models::user_preference::get_user_preferences(&app_state.db, &user_id)
+                .await
+                .inspect_err(
+                    |error| tracing::warn!(%error, "Cannot read the user's languages again"),
+                )
+                .ok()
+        }
+        Err(_) => None,
+    };
+    let Some(stored) = stored else {
+        return resolve_for(app_state, me_user).await;
+    };
+    let mut current = me_user.clone();
+    current.profile.apply_user_preferences(stored);
+    resolve_for(app_state, &current).await
 }
 
 /// Which languages the voice may speak to the caller in conversational audio
@@ -228,6 +240,16 @@ mod tests {
             languages: languages.map(codes),
             user_choice,
         }
+    }
+
+    #[test]
+    fn the_speakable_languages_are_the_word_checks() {
+        let mut built: Vec<String> = lingua::Language::all()
+            .iter()
+            .map(|language| language.iso_code_639_1().to_string())
+            .collect();
+        built.sort();
+        assert_eq!(built, SPEAKABLE_LANGUAGES);
     }
 
     #[test]
@@ -326,7 +348,7 @@ mod tests {
         let resolved = resolve(&deployment(false, &[], true), &[], Some(&own), "en");
         assert!(!resolved.follow_speaker);
         assert_eq!(resolved.main, "hi");
-        assert_eq!(resolved.candidates, ["hi"]);
+        assert_eq!(resolved.candidates, ["hi", "en"]);
 
         let off = audience(Some(false), None, None);
         let resolved = resolve(
@@ -335,7 +357,8 @@ mod tests {
             None,
             "de",
         );
-        assert_eq!(resolved.candidates, ["de"]);
+        assert!(!resolved.follow_speaker);
+        assert_eq!(resolved.main, "de");
     }
 
     #[test]

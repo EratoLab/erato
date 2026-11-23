@@ -6195,6 +6195,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SpokenLanguagesSetting.tsx
+msgid "preferences.dialog.audio.spokenLanguages.fallback"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 msgid "preferences.dialog.audio.spokenLanguages.fromApp"
 msgstr ""
 
@@ -6236,11 +6241,6 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/SpokenLanguagesSetting.tsx
 msgid "preferences.dialog.audio.spokenLanguages.saveFailed"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/components/ui/Settings/SpokenLanguagesSetting.tsx
-msgid "preferences.dialog.audio.spokenLanguages.useAppLanguage"
 msgstr ""
 
 #. js-lingui-explicit-id

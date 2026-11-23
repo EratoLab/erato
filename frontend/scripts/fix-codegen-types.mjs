@@ -101,6 +101,12 @@ const schemaStringFieldFixes = [
     from: "preference_reply_speech_show_in_chat?: null | undefined;",
     to: "preference_reply_speech_show_in_chat?: boolean | null | undefined;",
   },
+  // Two-space indent: the spoken-language code on a turn-instruction marker,
+  // not `screen_language` or `spoken_language`.
+  {
+    from: "  language?: null | undefined;",
+    to: "  language?: string | null | undefined;",
+  },
   {
     from: "preference_spoken_languages?: null | undefined;",
     to: "preference_spoken_languages?: string[] | null | undefined;",
@@ -413,6 +419,27 @@ async function fixFetcherErrorHandling(filePath) {
   return false; // Indicate no change
 }
 
+// Optional query parameters the generator narrows to `null | undefined`.
+const componentFieldFixes = [
+  {
+    from: "  language?: null | undefined;",
+    to: "  language?: string | null | undefined;",
+  },
+];
+
+async function fixComponentFields(filePath) {
+  let content = await fs.readFile(filePath, "utf8");
+  let changed = false;
+  for (const { from, to } of componentFieldFixes) {
+    if (content.includes(from)) {
+      content = content.replaceAll(from, to);
+      changed = true;
+    }
+  }
+  if (changed) await fs.writeFile(filePath, content, "utf8");
+  return changed;
+}
+
 // The generator preserves an existing fetcher, but recreates the stock template
 // when it is missing. Keep optional query parameters safe in both cases.
 async function fixFetcherQueryParams(filePath) {
@@ -590,6 +617,10 @@ async function run() {
     }
 
     if (await fixSchemaFields(schemaFile)) {
+      changesMade = true;
+    }
+
+    if (await fixComponentFields(componentsFile)) {
       changesMade = true;
     }
 
