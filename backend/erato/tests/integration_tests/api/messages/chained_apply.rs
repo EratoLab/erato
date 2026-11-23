@@ -589,9 +589,17 @@ async fn more_changes_continues_with_the_apply_as_a_pair_of_its_own(pool: Pool<P
     assert!(!submission.contains("approval_preview"), "{submission}");
     assert!(submission.contains("draft-1"));
     assert_eq!(messages[at + 1]["role"], "assistant");
-    assert_eq!(messages[at + 1]["tool_calls"][0]["id"], "call_one.apply");
+    let provider_id = messages[at + 1]["tool_calls"][0]["id"].as_str().unwrap();
+    assert_eq!(
+        Some(provider_id.to_string()),
+        erato::services::chained_apply::provider_call_id("call_one.apply")
+    );
+    assert!(
+        provider_id.len() == 9 && provider_id.chars().all(|c| c.is_ascii_alphanumeric()),
+        "every provider takes the made-up id: {provider_id}"
+    );
     assert_eq!(messages[at + 1]["tool_calls"][0]["function"]["name"], APPLY);
-    assert_eq!(messages[at + 2]["tool_call_id"], "call_one.apply");
+    assert_eq!(messages[at + 2]["tool_call_id"], provider_id);
     let result: Value =
         serde_json::from_str(messages[at + 2]["content"].as_str().unwrap()).unwrap();
     assert_eq!(result["result"]["status"], "applied");
@@ -718,6 +726,15 @@ async fn cancel_ends_without_a_request(pool: Pool<Postgres>) {
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn cancel_of_one_step_of_several_asks_the_model_once(pool: Pool<Postgres>) {
+    one_step_of_several_declined(pool, "reject").await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn never_on_one_step_of_several_asks_the_model_once(pool: Pool<Postgres>) {
+    one_step_of_several_declined(pool, "reject_always").await;
+}
+
+async fn one_step_of_several_declined(pool: Pool<Postgres>, decision: &str) {
     let mut chat = Chat::new(
         pool,
         vec![
@@ -732,7 +749,7 @@ async fn cancel_of_one_step_of_several_asks_the_model_once(pool: Pool<Postgres>)
     )
     .await;
     chat.submit().await;
-    chat.decide(json!({"decision":"reject"}))
+    chat.decide(json!({"decision":decision}))
         .await
         .assert_status_ok();
     assert_eq!(chat.requests().len(), 2);
@@ -898,6 +915,10 @@ async fn a_tick_found_while_writing_asks_again_once_without_a_request(pool: Pool
     let apply = tool_use(&parts, "call_one.apply");
     assert_eq!(apply["output"]["result"]["status"], "failed");
     assert_eq!(apply["output"]["result"]["reason"], "needs_decision_again");
+    assert_eq!(
+        apply["output"]["changes_left"], 4,
+        "the tick's second run is the same change"
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -940,6 +961,11 @@ async fn never_saved_while_the_answer_runs_refuses_the_apply(pool: Pool<Postgres
     assert_eq!(
         tool_use(&parts, "call_one.apply")["output"]["status"],
         "rejected"
+    );
+    assert_eq!(
+        chat.message().await.generation_parameters.unwrap()["turn_consumption"]["chained_applies_run"],
+        1,
+        "a refused apply counts toward max_changes"
     );
 }
 
@@ -1139,6 +1165,31 @@ async fn the_tool_call_limit_counts_the_whole_answer(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn submissions_past_the_cap_count_toward_the_tool_call_limit(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![
+            submit("call_one", Some(true)),
+            submit("call_two", Some(true)),
+            submit("call_three", Some(true)),
+            submit("call_four", Some(true)),
+        ],
+        vec![receipt(), applied()],
+        Options {
+            max_changes: 1,
+            budget: 2,
+            ..Default::default()
+        },
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names(), [SUBMIT, APPLY]);
+    assert_eq!(chat.requests().len(), 4);
+    let stop = chat.stop().await.expect("the limit card");
+    assert_eq!(stop["kind"], "tool_call_limit");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn the_chain_survives_an_approval_park(pool: Pool<Postgres>) {
     let mut chat = Chat::new(
         pool,
@@ -1166,6 +1217,50 @@ async fn the_chain_survives_an_approval_park(pool: Pool<Postgres>) {
     assert_eq!(consumption["chained_applies"].as_object().unwrap().len(), 1);
     assert_eq!(chat.requests().len(), 3);
     assert!(chat.requests()[2].to_string().contains("the most allowed"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_continuation_replays_the_submission_as_the_model_sent_it(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![
+            Step::Tools(vec![(
+                "call_one",
+                SUBMIT,
+                json!({"more_changes":true,"snapshot":"s1"}),
+            )]),
+            Step::Text("SECOND_STEP"),
+        ],
+        vec![receipt(), applied()],
+        Options {
+            decision: Some("ask"),
+            ..Default::default()
+        },
+    )
+    .await;
+    chat.submit().await;
+    chat.decide(json!({"decision":"approve"}))
+        .await
+        .assert_status_ok();
+    assert_eq!(chat.dispatched()[0].2, json!({"snapshot":"s1"}));
+    let requests = chat.requests();
+    assert_eq!(requests.len(), 2);
+    let call = requests[1]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|message| {
+            message["tool_calls"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .find(|call| call["id"] == "call_one")
+        .expect("the submission call");
+    assert_eq!(
+        call["function"]["arguments"],
+        json!({"more_changes":true,"snapshot":"s1"}).to_string()
+    );
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
@@ -1286,9 +1381,18 @@ async fn the_facets_list_the_apply_tools_they_reach(pool: Pool<Postgres>) {
         .with_bearer_token(TEST_JWT_TOKEN)
         .await;
     response.assert_status_ok();
+    let listed = response.json::<Value>()["approval_tools"].clone();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["qualified_name"], "word/apply_document_plan");
+    assert_eq!(listed[0]["title"], "Change the open Word document");
+    assert_eq!(listed[0]["approval"], "user_decision");
     assert_eq!(
-        response.json::<Value>()["approval_tools"],
-        json!([{"qualified_name":"word/apply_document_plan","title":"Change the open Word document","approval":"user_decision"}])
+        (
+            &listed[0]["label"]["action"],
+            &listed[0]["label"]["object_kind"]
+        ),
+        (&json!("update"), &json!("document")),
+        "a client names the change in the user's language from the label"
     );
 }
 

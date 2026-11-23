@@ -162,6 +162,11 @@ fn generation_tool_call_id(assistant_message_id: Uuid, turn: usize, call_id: &st
 }
 
 fn provider_tool_call_id(tool_call_id: &str) -> String {
+    let provider_call_id = stored_provider_tool_call_id(tool_call_id);
+    crate::services::chained_apply::provider_call_id(&provider_call_id).unwrap_or(provider_call_id)
+}
+
+fn stored_provider_tool_call_id(tool_call_id: &str) -> String {
     let mut parts = tool_call_id.splitn(3, ':');
     let Some(message_id) = parts.next() else {
         return tool_call_id.to_string();
@@ -5476,6 +5481,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 .as_ref()
                 .and_then(|facet| app_state.config.action_facets.facets.get(&facet.id))
                 .map_or(&[][..], |facet| facet.client_actions_always_ask.as_slice()),
+            |name| mcp_claimed_names.contains(name),
             |tool| generation_request_context.executor_for_tool(tool).cloned(),
         );
     } else if is_delegated_run {
@@ -8010,24 +8016,23 @@ async fn stream_generate_chat_completion<'a>(
                     .as_ref()
                     .and_then(|submission| submission.apply.as_ref())
                     .and_then(|apply| apply.more_steps.as_deref())
-                    && let Some(value) = crate::services::chained_apply::take_more_steps(
+                    && let Some((value, position)) = crate::services::chained_apply::take_more_steps(
                         &mut call.fn_arguments,
                         pointer,
                     )
                 {
-                    tool_charges
-                        .entry(call.call_id.clone())
-                        .or_default()
-                        .more_steps
-                        .get_or_insert(value);
+                    let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                    if charge.more_steps.is_none() {
+                        charge.more_steps = Some(value);
+                        charge.more_steps_at = u32::try_from(position).ok();
+                    }
                 }
                 if !is_delegated_run
                     && crate::services::chained_apply::offered_apply(tool, &offered_client_tools)
                         .is_some_and(|(apply, _)| chained_applies_run >= apply.max_changes)
                 {
                     // Refused before dispatch, as an ordinary call that opens
-                    // no editing step.
-                    tool_charges.entry(call.call_id.clone()).or_default();
+                    // no editing step and counts toward the tool-call limit.
                     continue;
                 }
                 let correction = submission_correction.get_or_insert_with(|| {
@@ -8069,8 +8074,9 @@ async fn stream_generate_chat_completion<'a>(
         // Chained applies the model never emitted, each answered as its own
         // call and response after the batch's responses.
         let mut chained_pairs: Vec<(genai::chat::ToolCall, genai::chat::ToolResponse)> = vec![];
-        // A chained apply ran in this batch and the answer goes on.
-        let mut chained_continues = false;
+        // The apply tools whose chained applies ran in this batch with the
+        // answer going on.
+        let mut chained_continues: HashSet<String> = HashSet::new();
         let mut retrieved_images = Vec::new();
         let mut retrieved_files = Vec::new();
         let mut pending_waits = Vec::new();
@@ -8303,7 +8309,9 @@ async fn stream_generate_chat_completion<'a>(
                     .recovery_read = true;
             }
             let reserved = is_submission || is_recovery_read;
-            let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
+            let already_charged = tool_charges
+                .get(&unfinished_tool_call.call_id)
+                .filter(|charge| charge.is_charged());
             let budget_refusal = if let Some(charge) = already_charged {
                 charge.budget_refusal.clone()
             } else {
@@ -8418,13 +8426,11 @@ async fn stream_generate_chat_completion<'a>(
             }
             if already_charged.is_none() {
                 current_tool_call_count += 1;
-                tool_charges.insert(
-                    unfinished_tool_call.call_id.clone(),
-                    crate::services::client_operations::ToolCallCharge {
-                        budget_refusal: budget_refusal.clone(),
-                        ..Default::default()
-                    },
-                );
+                let charge = tool_charges
+                    .entry(unfinished_tool_call.call_id.clone())
+                    .or_default();
+                charge.budget_refusal = budget_refusal.clone();
+                charge.charged = true;
             }
             persist_operation_turn!(Some(&unfinished_tool_call));
             let tool_index =
@@ -9584,7 +9590,15 @@ async fn stream_generate_chat_completion<'a>(
                     )),
                     _ => None,
                 };
+                // Every chained apply counts toward `max_changes` whatever its
+                // outcome, so a refusal cannot loop; the run after a tick is the
+                // same change.
+                let counts_as_change = chained_state.as_ref().is_some_and(|state| !state.reparked);
                 let (Some(task), None) = (streaming_task, &refusal) else {
+                    if counts_as_change {
+                        chained_applies_run += 1;
+                        save_chain!();
+                    }
                     let (status, response_text) = refusal.unwrap_or_else(|| {
                         (
                             "error",
@@ -9718,7 +9732,7 @@ async fn stream_generate_chat_completion<'a>(
                             .and_then(|apply| apply.more_steps.as_deref());
                         match (pointer, tool_charges.get(&call_id).and_then(|charge| charge.more_steps.as_ref())) {
                             (Some(pointer), Some(value)) => submission.validate(
-                                &crate::services::chained_apply::with_more_steps(&tool_input, pointer, value),
+                                &crate::services::chained_apply::with_more_steps(&tool_input, pointer, value, None),
                             ),
                             _ => submission.validate(&tool_input),
                         }
@@ -9904,7 +9918,7 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 }
                 let server_refused = validation_failure.is_some();
-                if chained_state.is_some() && !server_refused {
+                if counts_as_change {
                     chained_applies_run += 1;
                 }
                 let outcome = if let Some(failure) = validation_failure {
@@ -10501,7 +10515,13 @@ async fn stream_generate_chat_completion<'a>(
                         },
                     );
                     // Reserved like a submission attempt: never an ordinary charge.
-                    tool_charges.insert(chained_id.clone(), Default::default());
+                    tool_charges.insert(
+                        chained_id.clone(),
+                        crate::services::client_operations::ToolCallCharge {
+                            charged: true,
+                            ..Default::default()
+                        },
+                    );
                     output_value["apply"] = json!({ "call_id": chained_id });
                     response_text = crate::services::chained_apply::submission_model_output(
                         &output_value,
@@ -10638,7 +10658,9 @@ async fn stream_generate_chat_completion<'a>(
                             non_empty_vec(&captured_reasoning_item_encrypted_content),
                         );
                     }
-                    Some(_) => chained_continues = true,
+                    Some(_) => {
+                        chained_continues.insert(tool_name.clone());
+                    }
                     None => {}
                 }
                 if chained_state.is_some() {
@@ -11881,11 +11903,11 @@ async fn stream_generate_chat_completion<'a>(
                 options: None,
             });
         }
-        if chained_continues {
+        if !chained_continues.is_empty() {
             // The copy the earlier reads described was replaced by the apply.
             replace_tool_responses(
                 &mut current_turn_chat_request,
-                &answer_cuts.consumed_reads_in(&current_message_content),
+                &answer_cuts.consumed_reads_in(&current_message_content, &chained_continues),
             );
         }
 
@@ -25527,15 +25549,17 @@ pub(crate) async fn run_continuation(
         && approved_calls.is_empty()
         && change_requests.is_empty()
         && !plan_decisions.iter().any(|(approval_id, decision)| {
-            *decision == ToolApprovalDecision::Reject
-                && chained_items.iter().any(|item| {
-                    &item.approval_id == approval_id
-                        && generation_parameters
-                            .turn_consumption
-                            .chained_applies
-                            .get(&item.tool_call_id)
-                            .is_some_and(|state| state.more_steps)
-                })
+            matches!(
+                decision,
+                ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
+            ) && chained_items.iter().any(|item| {
+                &item.approval_id == approval_id
+                    && generation_parameters
+                        .turn_consumption
+                        .chained_applies
+                        .get(&item.tool_call_id)
+                        .is_some_and(|state| state.more_steps)
+            })
         })
     {
         let mut metadata = message
@@ -25891,7 +25915,10 @@ async fn resume_parked_generation(
     );
     // The model read these shortened before the answer stopped.
     crate::services::chained_apply::AnswerCuts::from_config(&app_state.config.client_tools)
-        .apply_to_replay(&mut replayed);
+        .apply_to_replay(
+            &mut replayed,
+            &generation_parameters.turn_consumption.tool_charges,
+        );
     retrieval_source.messages.extend(replayed);
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
@@ -26066,6 +26093,7 @@ async fn resume_parked_generation(
                 .as_deref()
                 .and_then(|id| app_state.config.action_facets.facets.get(id))
                 .map_or(&[][..], |facet| facet.client_actions_always_ask.as_slice()),
+            |name| mcp_claimed_names.contains(name),
             |tool| {
                 generation_parameters
                     .request_context
