@@ -32,7 +32,7 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Bug fixes
 
-- Voice after a phone lock (WebKit on iOS): after the phone was locked in conversation mode, "Read aloud" and spoken answers stayed silent until the page was reloaded (their audio clock stood still), and listening stopped with "The microphone stopped sending audio…". Now spoken output plays again after unlocking, and the turn that was listening ends quietly; conversation mode listens again once the page is shown, as it does after the home screen; a dictation keeps what was said. A microphone that stops while the page is shown is still reported.
+- Voice after a phone lock (WebKit on iOS): after the phone was locked in conversation mode, "Read aloud" and spoken answers stayed silent until the page was reloaded (their audio clock stood still), and listening stopped with "The microphone stopped sending audio…". Now spoken output plays again after unlocking, and the turn that was listening ends quietly; conversation mode listens again once the page is shown, as it does after the home screen; a dictation keeps what was said. A microphone that stops while the page is shown is still reported. [#1670](https://github.com/EratoLab/erato/pull/1670)
 
 #### Deprecations and upgrade notes
 
