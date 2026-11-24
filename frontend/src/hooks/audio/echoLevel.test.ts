@@ -69,6 +69,24 @@ describe("noteEchoFrame", () => {
     expect(run(20, () => 0.01, coupling).confirmed).toBe(true);
   });
 
+  it("lets the user through over room sound while the voice has quiet passages", () => {
+    const room = (frame: number) =>
+      0.0008 + 0.0004 * (((frame * 7919) % 101) / 100);
+    const quietVoice = (frame: number) =>
+      frame % 7 < 2 ? 0.002 : voiceAt(frame);
+    let coupling = echoCoupling();
+    for (let frame = 0; frame < 200; frame += 1)
+      coupling = noteEchoFrame(coupling, {
+        heard: room(frame),
+        played: quietVoice(frame),
+        frameMs: FRAME_MS,
+        learn: true,
+      }).coupling;
+    expect(run(20, (frame) => room(frame) + 0.02, coupling).confirmed).toBe(
+      true,
+    );
+  });
+
   it("counts nothing before it has measured the echo", () => {
     expect(run(9, () => 0.5).counted).toBe(0);
   });
@@ -96,6 +114,6 @@ describe("noteEchoFrame", () => {
         frameMs: FRAME_MS,
         learn: false,
       }).coupling;
-    expect(state.ratios).toEqual(coupling.ratios);
+    expect(state.learned).toEqual(coupling.learned);
   });
 });

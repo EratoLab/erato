@@ -611,8 +611,13 @@ export function useAudioDictationRecorder({
 
   useEffect(() => {
     voiceSpeakingRef.current = voiceSpeaking;
-    if (!voiceSpeaking) releaseHold("voice_ended");
-    else rearmHold();
+    if (voiceSpeaking) {
+      rearmHold();
+      return;
+    }
+    // The voice's last words can still come back from the speakers.
+    const echoEnds = setTimeout(() => releaseHold("voice_ended"), ECHO_LAG_MS);
+    return () => clearTimeout(echoEnds);
   }, [rearmHold, releaseHold, voiceSpeaking]);
 
   const clearRecordingDurationTimer = useCallback(() => {

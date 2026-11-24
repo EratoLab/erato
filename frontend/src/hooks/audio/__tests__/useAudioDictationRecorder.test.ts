@@ -1135,6 +1135,19 @@ describe("useAudioDictationRecorder over the voice", () => {
     }
   });
 
+  it("keeps waiting over the voice while its last words can still come back (ERMAIN-1344)", async () => {
+    const hook = renderOverVoice(true, 300);
+    await startHeld(hook);
+    hook.rerender({ speaking: false });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(hook.result.current.isListeningOverVoice).toBe(true);
+    await waitFor(() =>
+      expect(hook.result.current.isListeningOverVoice).toBe(false),
+    );
+  });
+
   it("waits over a voice that starts while it listens, before anything was said (ERMAIN-1344)", async () => {
     const hook = renderOverVoice(false, 300);
     await act(async () => {
