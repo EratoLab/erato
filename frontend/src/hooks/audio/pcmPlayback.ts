@@ -5,6 +5,17 @@ let context: AudioContext | undefined;
 let revival: Promise<void> | undefined;
 /** A suspend or resume that never settles must not hold every voice back. */
 const REVIVAL_MAX_MS = 2000;
+/**
+ * The last revival left the clock standing, at this time. A revival right
+ * after unlocking does not always take; the next voices try again, a few
+ * times per return to the page.
+ */
+let standingSince: number | undefined;
+const REVIVAL_RETRY_MS = 2000;
+const REVIVAL_RETRIES = 5;
+let retriesLeft = REVIVAL_RETRIES;
+/** Until it settles, past the cap too: two revivals must not overlap. */
+let reviving = false;
 
 /**
  * The one AudioContext all speech playback shares. Browsers keep a context
@@ -16,9 +27,29 @@ export async function resumePlaybackContext(): Promise<AudioContext> {
     context = new AudioContext();
     reviveOnReturn(context);
   }
+  if (standingSince !== undefined) revive(context);
   if (revival) await revival;
   await context.resume();
   return context;
+}
+
+function revive(playback: AudioContext) {
+  if (reviving) return;
+  reviving = true;
+  const settled = reviveStandingClock(playback)
+    .then((stands) => {
+      standingSince = stands ? Date.now() : undefined;
+    })
+    .finally(() => {
+      reviving = false;
+    });
+  const capped = Promise.race([
+    settled,
+    new Promise<void>((resolve) => setTimeout(resolve, REVIVAL_MAX_MS)),
+  ]).finally(() => {
+    if (revival === capped) revival = undefined;
+  });
+  revival = capped;
 }
 
 /**
@@ -29,12 +60,8 @@ function reviveOnReturn(playback: AudioContext) {
   if (typeof document === "undefined") return;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    revival ??= Promise.race([
-      reviveStandingClock(playback),
-      new Promise<void>((resolve) => setTimeout(resolve, REVIVAL_MAX_MS)),
-    ]).finally(() => {
-      revival = undefined;
-    });
+    retriesLeft = REVIVAL_RETRIES;
+    revive(playback);
   });
 }
 
@@ -44,16 +71,27 @@ export function playbackContext(): AudioContext | undefined {
 
 /**
  * Whether audio queued on the context will be heard: it runs, or it is
- * suspended only for a moment while its clock is started again.
+ * suspended only for a moment while its clock is started again. Asked before
+ * a voice plays, so a clock still standing is tried again here.
  */
 export function playbackPlays(
   playback: AudioContext | undefined,
 ): playback is AudioContext {
-  return (
-    playback !== undefined &&
-    (playback.state === "running" ||
-      (revival !== undefined && playback === context))
-  );
+  if (playback === undefined) return false;
+  const plays =
+    playback.state === "running" ||
+    (revival !== undefined && playback === context);
+  if (
+    playback === context &&
+    playback.state === "running" &&
+    standingSince !== undefined &&
+    Date.now() - standingSince >= REVIVAL_RETRY_MS &&
+    retriesLeft > 0
+  ) {
+    retriesLeft -= 1;
+    revive(playback);
+  }
+  return plays;
 }
 
 /** About 10 dB down: still audible, clearly giving way. */
