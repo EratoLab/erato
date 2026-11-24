@@ -537,14 +537,12 @@ function plan() {
     if (clip) clips.push(clip);
   }
   const context = playbackContext();
-  // The voice must be the one reading this turn back, able to play, and not
-  // stopped by the user: the microphone listens openly once it is.
+  // The voice must be the one reading this turn back, and able to play.
   if (
     clips.length === 0 ||
     !playbackPlays(context) ||
     useSpeechPlayback.getState().spokenTurn !== current.streamKey ||
-    !useSpeechPlayback.getState().enabled ||
-    useSpeechPlayback.getState().silenced
+    !useSpeechPlayback.getState().enabled
   ) {
     state.answerStarted = true;
     return;
@@ -632,8 +630,7 @@ export function sayAsideLine(
     busy ||
     !playbackPlays(context) ||
     !speech.enabled ||
-    !speech.conversational ||
-    speech.silenced
+    !speech.conversational
   )
     return false;
   const { state } = current;

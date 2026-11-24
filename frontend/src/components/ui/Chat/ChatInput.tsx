@@ -43,7 +43,6 @@ import {
   unlockSpeechPlayback,
   pauseSpeechPlayback,
   resumeSpeechPlayback,
-  silenceSpokenTurn,
   stopSpeechPlayback,
   useSpeechPlayback,
   voiceTextAtPause,
@@ -651,7 +650,6 @@ export const ChatInput = ({
     hesitationsByLanguage,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
-    stopWords,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
@@ -872,10 +870,7 @@ export const ChatInput = ({
     overVoiceAllowed &&
     (speech.playing ||
       cardSpeaking ||
-      (isPendingResponse &&
-        !decisionWaiting &&
-        !speech.spokenPartDone &&
-        !speech.silenced));
+      (isPendingResponse && !decisionWaiting && !speech.spokenPartDone));
   // A reply the user talked over: whether that was a turn or only a sound
   // is known once the recording has ended.
   const interruptedReplyRef = useRef(false);
@@ -1174,7 +1169,6 @@ export const ChatInput = ({
   // A card listens only once its voice is quiet, as without talking over:
   // nothing said over a card's voice can reach it.
   useApprovalCardListening({
-    recorderLive: isDictating,
     enabled:
       isAudioMode &&
       decisionWaiting &&
@@ -3101,12 +3095,11 @@ export const ChatInput = ({
   }, [clearPendingAutoSendTimeout]);
 
   // The recording over a reply has ended. Before the auto-send looks at it:
-  // - a stop word ("Stopp", "hör auf") silences the voice for the rest of the
-  //   reply, and the conversation listens on;
+  // - words are the user's next message, sent at once, whatever they are;
   // - words that only repeat the voice are its echo: dropped, and the voice
   //   goes on where it was cut;
-  // - no words (a cough, a colleague): the voice goes on;
-  // - any other words are the user's next message, sent at once.
+  // - no words (a cough, a noise): the voice goes on.
+  // A hesitation alone ("äh") ends no turn: the voice waits for what follows.
   // Words over a reply that has since stopped on a card are left to the
   // auto-send, which shows them as not sent.
   useEffect(() => {
@@ -3127,18 +3120,12 @@ export const ChatInput = ({
     const turn = classifyOverVoiceTurn(message, {
       voiceText: voiceTextAtPause(),
       spokeOn: spokeOnAfterVoice(),
-      stopWords,
     });
     if (turn === "message") {
       stopSpeechPlayback();
       // Only a turn the auto-send will send: one cut off by the time limit
       // waits in the composer, and must not stop a later reply.
       sendsNowRef.current = pendingAutoSendRef.current;
-      return;
-    }
-    if (turn === "stop") {
-      silenceSpokenTurn();
-      dropTurnAndListenAgain();
       return;
     }
     if (turn === "echo") dropTurnAndListenAgain();
@@ -3153,7 +3140,6 @@ export const ChatInput = ({
     isDictationStarting,
     message,
     spokeOnAfterVoice,
-    stopWords,
   ]);
 
   // Auto-send latch: VAD marks the spoken turn complete, then dictation
@@ -3181,7 +3167,7 @@ export const ChatInput = ({
       // reply stops where it is, and the words go out once it has.
       if (
         overVoiceAllowed &&
-        (sendsNowRef.current || speech.silenced) &&
+        sendsNowRef.current &&
         !decisionWaiting &&
         message.trim() &&
         !stoppingReplyRef.current
@@ -3266,7 +3252,6 @@ export const ChatInput = ({
     conversationAutoSendSignal,
     clearPendingAutoSendTimeout,
     overVoiceAllowed,
-    speech.silenced,
     cancelMessage,
   ]);
 

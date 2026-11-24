@@ -40,11 +40,6 @@ interface SpeechState {
    * the user says waits until the answer is complete.
    */
   spokenPartDone: boolean;
-  /**
-   * The user stopped the voice by voice ("Stopp"): it says nothing more for
-   * this response, which then counts as quiet for the microphone.
-   */
-  silenced: boolean;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -55,7 +50,6 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   blocked: false,
   failed: false,
   spokenPartDone: false,
-  silenced: false,
 }));
 /**
  * What the voice says, passage by passage (its wait lines included), with
@@ -115,11 +109,6 @@ export function voiceTextAt(log: readonly Said[], at: number): string {
   )}`.trim();
 }
 
-/** The user stopped the voice by voice: quiet for the rest of the response. */
-export function silenceSpokenTurn() {
-  stopSpeechPlayback();
-  useSpeechPlayback.setState({ silenced: true });
-}
 /**
  * The last audio chunk played for the current response, so that a resumed
  * stream's replay is not said twice. Every stream numbers its audio from 0,
@@ -295,12 +284,7 @@ export function stopSpeechPlayback(streamKey?: string) {
   gate = null;
   clearUnderrun();
   queue.stop();
-  // A stop by voice is set again right after; any other stop ends it.
-  useSpeechPlayback.setState({
-    playing: false,
-    paused: false,
-    silenced: false,
-  });
+  useSpeechPlayback.setState({ playing: false, paused: false });
   settleQuiet();
   interrupted();
 }
@@ -363,7 +347,6 @@ export function beginSpeechResponse(streamKey?: string) {
   said = [];
   pausedAt = null;
   useSpeechPlayback.setState({
-    silenced: false,
     spokenPartDone: false,
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,

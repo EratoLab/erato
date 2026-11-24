@@ -174,12 +174,9 @@ const mockFetchReplySpeechStyle = vi.fn((..._args: unknown[]) =>
   Promise.reject(new Error("no reply speech style in tests")),
 );
 const mockHeardApprovalWords = vi.fn();
-const mockTalkOverApprovalCard = vi.fn();
 vi.mock("@/hooks/audio/approvalListening", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/audio/approvalListening")>()),
   heardApprovalWords: (...args: unknown[]) => mockHeardApprovalWords(...args),
-  talkOverApprovalCard: (...args: unknown[]) =>
-    mockTalkOverApprovalCard(...args),
 }));
 
 vi.mock("@/hooks/audio/useAudioTranscriptionRecorder", () => ({
@@ -9779,7 +9776,6 @@ describe("ChatInput", () => {
 
       beforeEach(() => {
         mockHeardApprovalWords.mockReset();
-        mockTalkOverApprovalCard.mockReset();
         useSpeechPlayback.setState({
           enabled: true,
           playing: false,
@@ -10142,48 +10138,6 @@ describe("ChatInput", () => {
         }
       });
 
-      it("a stop word silences the voice, sends nothing and listens on; the next words go out at once", async () => {
-        sendingHandlers();
-        const onSendMessage = vi.fn();
-        const toggleDictation = vi.fn();
-        const cancel = vi.fn();
-        const { ui, rerender } = await talkedOverReply(
-          toggleDictation,
-          onSendMessage,
-        );
-        try {
-          pendingWithStop(true, cancel);
-          await endTurn("Stopp, bitte!", toggleDictation, rerender, ui, {
-            spokeOn: false,
-          });
-          expect(useSpeechPlayback.getState()).toMatchObject({
-            playing: false,
-            paused: false,
-            silenced: true,
-          });
-          // Listening again, openly: nothing speaks for this reply any more.
-          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
-          expect(recorderOptions().voiceSpeaking).toBe(false);
-          await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-          });
-          expect(cancel).not.toHaveBeenCalled();
-          expect(onSendMessage).not.toHaveBeenCalled();
-
-          // What is said next is the next message, while the reply still runs.
-          withTalkOver(toggleDictation, { live: true });
-          rerender(ui(true));
-          await endTurn("Was ist mit Schmidt?", toggleDictation, rerender, ui);
-          await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
-          pendingWithStop(false, cancel);
-          rerender(ui(true));
-          await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
-          expect(onSendMessage.mock.calls[0][0]).toBe("Was ist mit Schmidt?");
-        } finally {
-          vi.unstubAllGlobals();
-        }
-      });
-
       it("words that only repeat the voice are its echo: dropped, and the voice goes on", async () => {
         sendingHandlers();
         const onSendMessage = vi.fn();
@@ -10201,7 +10155,6 @@ describe("ChatInput", () => {
           expect(useSpeechPlayback.getState()).toMatchObject({
             playing: true,
             paused: false,
-            silenced: false,
           });
           await act(async () => {
             await new Promise((resolve) => setTimeout(resolve, 20));
@@ -10240,7 +10193,6 @@ describe("ChatInput", () => {
           await new Promise((resolve) => setTimeout(resolve, 20));
         });
         expect(toggleDictation).not.toHaveBeenCalled();
-        expect(mockTalkOverApprovalCard).not.toHaveBeenCalled();
 
         cardSpeaking(false);
         rerender(ui(true));

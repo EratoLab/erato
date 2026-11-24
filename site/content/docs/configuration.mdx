@@ -3185,12 +3185,9 @@ The same entries are dropped with a warning as for `hesitation_words`, and so is
 
 {/* erato_toml_config_key: audio_conversational.talk_over_voice */}
 
-Whether the user can start speaking while the voice still reads a reply, a wait line or the acknowledgement of an approval. The voice is lowered as soon as speech is heard and pauses once the speech has lasted `talk_over_voice_min_speech_ms`. What was said then decides, read the way approval cards read voice commands (split at punctuation, the [voice-command words](#approval_voice_commandswords)' `fillers` ignored):
+Whether the user can start speaking while the voice still reads a reply, a wait line or the acknowledgement of an approval. The voice is lowered as soon as speech is heard and pauses once the speech has lasted `talk_over_voice_min_speech_ms`. What was said is the user's next message, whatever its words, and is sent at once: the reply stops where it is, as with the Stop button, and the text it has written so far stays in the chat.
 
-- Words are the user's next message, sent at once: the reply stops where it is, as with the Stop button, and the text it has written so far stays in the chat.
-- Only a stop phrase from the `stop` list ("Stopp", "Nein, hör auf", "wait"), with listening noise around it: the voice falls silent until the next answer begins (the answer after an approval card speaks again), nothing is sent, and the conversation listens on. What the user says next is sent at once.
-- Only listening noise ("Okay.", "Mhm", "genau") or a cough: the voice goes on from the start of the passage it was cut in.
-- Words that only repeat what the voice was saying at that moment, even slightly misheard, are its own echo: dropped, and the voice goes on. Speech that goes on once the voice has paused always counts as the user's, since an echo stops with the voice.
+Two cases let the voice go on, from the start of the passage it was cut in: a sound that yields no words (a cough, a noise), and words that only repeat what the voice was saying at that moment, even slightly misheard, which are its own echo. Speech that goes on once the voice has paused always counts as the user's, since an echo stops with the voice. A hesitation alone ("äh", see `hesitation_words`) ends no turn: the voice stays paused and the microphone waits for what follows.
 
 Shorter sounds only lower the voice for a moment. An approval card is not talked over: while it is read the microphone stays closed, and the card listens for its voice commands once its voice is quiet.
 
@@ -3204,7 +3201,7 @@ A recording that starts while the voice plays asks the browser for echo cancella
 
 {/* erato_toml_config_key: audio_conversational.talk_over_voice_min_speech_ms */}
 
-How long, in milliseconds, speech over the voice must last before the voice stops. A shorter value reacts sooner, but stops the voice for more coughs, short "mhm"s and the voice's own echo; a longer one may miss a short "stop".
+How long, in milliseconds, speech over the voice must last before the voice pauses. A shorter value reacts sooner, but also pauses it for coughs (the voice then goes on) and turns a listener's short "mhm" into a message; a longer one misses short words said over the voice.
 
 **Type:** `integer`, from `200` to `2000`; other values are replaced by the default, with a warning at startup.
 

@@ -17,7 +17,6 @@ import {
 } from "@/utils/fileUploadLimits";
 
 import type { AssistantToolsMenuDescriptionDisplay } from "@/app/env";
-import type { StopWords } from "@/hooks/audio/overVoiceTurn";
 import type { ReactNode } from "react";
 
 /**
@@ -103,8 +102,6 @@ interface AudioConversationalFeatureConfig {
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 300 when omitted. */
   talkOverVoiceMinSpeechMs?: number;
-  /** Said alone over a reply, these only silence the voice; a base when omitted. */
-  stopWords?: StopWords;
 }
 
 /**
@@ -507,7 +504,6 @@ function createFeatureConfig(
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,
-      stopWords: environment.audioConversationalStopWords,
     },
     auth: {
       showLogout: !environment.disableLogout,
