@@ -4,7 +4,7 @@ import { nextWaitStep } from "@/lib/waitLines/plan";
 import { toolWaitLine } from "@/lib/waitLines/toolLine";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
-import { createPcmQueue, playbackContext } from "./pcmPlayback";
+import { createPcmQueue, playbackContext, playbackPlays } from "./pcmPlayback";
 import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
   afterReplyAudio,
@@ -539,7 +539,7 @@ function plan() {
   // The voice must be the one reading this turn back, and able to play.
   if (
     clips.length === 0 ||
-    context?.state !== "running" ||
+    !playbackPlays(context) ||
     useSpeechPlayback.getState().spokenTurn !== current.streamKey ||
     !useSpeechPlayback.getState().enabled
   ) {
@@ -617,7 +617,7 @@ export function sayAsideLine(
     current !== of ||
     clips.length === 0 ||
     busy ||
-    context?.state !== "running" ||
+    !playbackPlays(context) ||
     !speech.enabled ||
     !speech.conversational
   )

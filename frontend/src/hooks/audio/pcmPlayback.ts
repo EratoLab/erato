@@ -1,4 +1,10 @@
+import { reviveStandingClock } from "./useAudioContextInterruptionRecovery";
+
 let context: AudioContext | undefined;
+/** Resuming waits for it, or a voice right after unlocking stays silent. */
+let revival: Promise<void> | undefined;
+/** A suspend or resume that never settles must not hold every voice back. */
+const REVIVAL_MAX_MS = 2000;
 
 /**
  * The one AudioContext all speech playback shares. Browsers keep a context
@@ -6,13 +12,48 @@ let context: AudioContext | undefined;
  * come from a click.
  */
 export async function resumePlaybackContext(): Promise<AudioContext> {
-  context ??= new AudioContext();
+  if (!context) {
+    context = new AudioContext();
+    reviveOnReturn(context);
+  }
+  if (revival) await revival;
   await context.resume();
   return context;
 }
 
+/**
+ * After a phone lock the context can stay silent for good while it says
+ * "running"; every voice, wait line and card plays on this one context.
+ */
+function reviveOnReturn(playback: AudioContext) {
+  if (typeof document === "undefined") return;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    revival ??= Promise.race([
+      reviveStandingClock(playback),
+      new Promise<void>((resolve) => setTimeout(resolve, REVIVAL_MAX_MS)),
+    ]).finally(() => {
+      revival = undefined;
+    });
+  });
+}
+
 export function playbackContext(): AudioContext | undefined {
   return context;
+}
+
+/**
+ * Whether audio queued on the context will be heard: it runs, or it is
+ * suspended only for a moment while its clock is started again.
+ */
+export function playbackPlays(
+  playback: AudioContext | undefined,
+): playback is AudioContext {
+  return (
+    playback !== undefined &&
+    (playback.state === "running" ||
+      (revival !== undefined && playback === context))
+  );
 }
 
 /** About 10 dB down: still audible, clearly giving way. */

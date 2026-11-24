@@ -3,6 +3,7 @@ import { create } from "zustand";
 import {
   createPcmQueue,
   playbackContext,
+  playbackPlays,
   resumePlaybackContext,
 } from "./pcmPlayback";
 
@@ -169,7 +170,7 @@ export function releaseReplyAudio() {
   if (chunks === null) return;
   gate = null;
   const context = playbackContext();
-  if (chunks.length === 0 || !accepting || context?.state !== "running") {
+  if (chunks.length === 0 || !accepting || !playbackPlays(context)) {
     if (!queue.active) useSpeechPlayback.setState({ playing: false });
     settleQuiet();
     return;
@@ -255,7 +256,7 @@ export function resumeSpeechPlayback() {
   held = null;
   useSpeechPlayback.setState({ paused: false });
   const context = playbackContext();
-  if (context?.state !== "running") return;
+  if (!playbackPlays(context)) return;
   for (const chunk of chunks) {
     if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
       speechFailed();
@@ -396,7 +397,7 @@ export function playSpeechChunk(
     return;
   }
   const context = playbackContext();
-  if (context?.state !== "running") {
+  if (!playbackPlays(context)) {
     useSpeechPlayback.setState({ blocked: true });
     return; // The completed response remains available for explicit replay.
   }

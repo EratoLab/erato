@@ -61,6 +61,23 @@ export type AudioEnvironment = {
    * reliably auto-resumes after interruption.
    */
   needsGestureResume: boolean;
+
+  /**
+   * After the phone locks, a context can report `"running"` while its clock
+   * stands still: `resume()` does nothing, `suspend()` followed by
+   * `resume()` starts the clock again. Until then everything scheduled on
+   * it stays silent. A visit to the home screen instead turns the context
+   * `"interrupted"` and it recovers by itself.
+   *
+   * Evidence: WebKit in an embedded iOS 27.2 web view on a device, three
+   * lock runs 2026-11-23: every context's clock stood still from the lock
+   * on, the shared playback context still after unlocking; a suspend and
+   * resume after unlocking started it again within 0.3 s (2026-11-24). Not
+   * checked in Safari itself. Remove once a context's clock moves on after
+   * unlocking without help (re-check on a real device: the simulator does
+   * not lock like a phone).
+   */
+  clockMayStandStillWhileRunning: boolean;
 };
 
 /**
@@ -107,6 +124,7 @@ export function audioEnvironmentForEngine(
     warmUpEmitsNoiseFloor: isWebKit,
     mayReturnStereoWithoutEchoCancellation: isWebKit,
     needsGestureResume: isWebKit,
+    clockMayStandStillWhileRunning: isWebKit,
   };
 }
 

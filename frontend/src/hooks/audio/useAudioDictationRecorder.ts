@@ -221,6 +221,12 @@ type UseAudioDictationRecorderOptions = {
   chatId?: string | null;
   /** A conversational turn ended: the language it was spoken in. */
   onTurnLanguage?: (language: string) => void;
+  /**
+   * Hiding the page muted the microphone, as a phone lock does: the
+   * recording ended without an error. Dictated words stay and are finished;
+   * a conversational turn's words are dropped.
+   */
+  onStoppedByHiddenPage?: () => void;
 };
 
 /**
@@ -286,6 +292,7 @@ export function useAudioDictationRecorder({
   isHesitationOnly,
   chatId,
   onTurnLanguage,
+  onStoppedByHiddenPage,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -469,6 +476,13 @@ export function useAudioDictationRecorder({
   const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
     useMediaStreamTrackWatchdog({
       onTrackLost: (reason) => {
+        if (reason === "hidden") {
+          if (mode === "dictation") stopDictation();
+          else cancelDictation();
+          closeMicrophone();
+          onStoppedByHiddenPage?.();
+          return;
+        }
         setDictationError(
           reason === "ended"
             ? t`The microphone was disconnected. Please check your microphone and start dictation again.`

@@ -1,5 +1,30 @@
 import type { Config } from "tailwindcss";
 import defaultTheme from "tailwindcss/defaultTheme";
+import plugin from "tailwindcss/plugin";
+
+/** A mouse or trackpad, which can rest over a control without pressing it. */
+const HOVERING_POINTER = "(hover: hover) and (pointer: fine)";
+const NO_HOVERING_POINTER = `not all and ${HOVERING_POINTER}`;
+
+/**
+ * What a tap acts on. Plain surfaces stay out: a finger that scrolls over a
+ * message presses it too. A label only counts around a check or radio box;
+ * around a text field it would light the field on every tap into it.
+ */
+const PRESSABLE = [
+  "a[href]",
+  "button",
+  'label:has(input[type="checkbox"], input[type="radio"])',
+  "summary",
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="menuitemradio"]',
+  '[role="option"]',
+  '[role="tab"]',
+  '[role="switch"]',
+].join(", ");
 
 export default {
   content: [
@@ -175,5 +200,45 @@ export default {
       },
     },
   },
-  plugins: [],
+  // `group-hover:` and `peer-hover:` apply only under a hovering pointer. A
+  // touch screen keeps :hover on whatever was tapped last, and a tap that
+  // reveals hover content is taken by the browser as the hover alone, so the
+  // control under the finger gets no click.
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
+  plugins: [
+    plugin(({ addBase, addVariant }) => {
+      // Without a hovering pointer, `hover:` styles show while a control (or
+      // what sits inside one) is pressed: the feedback a tap otherwise lacks,
+      // and nothing left behind once the finger lifts. On the control itself
+      // :where() keeps the specificity of `&:hover`; inside a pressed control
+      // it is one class lower, so a state rule such as `aria-pressed:` wins
+      // there. `before` keeps the variant where the built-in one sorts, so the
+      // cascade with `focus:`/`active:` holds. It is not in Tailwind's public
+      // types; touchPointer.test.ts fails if an upgrade stops honouring it
+      // (Tailwind 4 replaces all of this with `@custom-variant`).
+      addVariant(
+        "hover",
+        [
+          `@media ${HOVERING_POINTER} { &:hover }`,
+          `@media ${NO_HOVERING_POINTER} { &:where(${PRESSABLE}):active }`,
+          `@media ${NO_HOVERING_POINTER} { :where(:is(${PRESSABLE}):active) & }`,
+        ],
+        // @ts-expect-error -- `before` is honoured but not in the public type.
+        { before: ["focus"] },
+      );
+      // For what a hovering pointer would reveal and a touch screen shows.
+      addVariant("no-hover", `@media ${NO_HOVERING_POINTER}`);
+      // The pressed look shows at once, as a phone's own controls do; letting
+      // go still fades it out.
+      addBase({
+        [`@media ${NO_HOVERING_POINTER}`]: {
+          [`:is(${PRESSABLE}):active, :is(${PRESSABLE}):active *`]: {
+            transitionDuration: "0s",
+          },
+        },
+      });
+    }),
+  ],
 } satisfies Config;

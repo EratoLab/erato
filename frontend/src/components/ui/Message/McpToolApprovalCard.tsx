@@ -878,6 +878,7 @@ export const McpToolApprovalCard = ({
       <div
         className={APPROVAL_CARD_SHELL_CLASS}
         data-testid="tool-call-limit-approval"
+        data-waiting-card=""
       >
         <ToolCallLimitItem
           status={isArchived ? "dismissed" : "pending"}
@@ -932,6 +933,7 @@ export const McpToolApprovalCard = ({
     return (
       <div
         data-testid="builtin-tool-approval"
+        data-waiting-card=""
         data-tool-name={request.tool_name}
         data-approval-kind={kind}
         className={APPROVAL_CARD_SHELL_CLASS}
@@ -958,6 +960,7 @@ export const McpToolApprovalCard = ({
     return (
       <div
         data-testid="tool-approval-generic"
+        data-waiting-card=""
         data-approval-kind={kind}
         className={APPROVAL_CARD_SHELL_CLASS}
       >
@@ -990,6 +993,7 @@ export const McpToolApprovalCard = ({
   return (
     <div
       data-testid="mcp-tool-approval"
+      data-waiting-card=""
       data-tool-name={request.tool_name}
       data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}

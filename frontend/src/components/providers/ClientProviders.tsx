@@ -5,6 +5,7 @@ import { GenerationStatusPoller } from "./GenerationStatusPoller";
 import { McpOauthCallbackBoundary } from "./McpOauthCallbackBoundary";
 import { TabChatIndicator } from "./TabChatIndicator";
 import { ThemeProvider } from "./ThemeProvider";
+import { useVirtualKeyboardViewport } from "../../hooks/ui/useVirtualKeyboardViewport";
 import { ClientOperationPoller } from "../../providers/ClientOperationPoller";
 import { DesktopSidecarClientTools } from "../../providers/DesktopSidecarClientTools";
 import {
@@ -23,6 +24,8 @@ import type { PropsWithChildren } from "react";
  * with all necessary providers in the correct order
  */
 export function ClientProviders({ children }: PropsWithChildren) {
+  useVirtualKeyboardViewport();
+
   return (
     <ApiProvider>
       <GenerationStatusPoller />
@@ -35,10 +38,7 @@ export function ClientProviders({ children }: PropsWithChildren) {
             <I18nProvider>
               <ClientOperationPoller />
               <>
-                <div
-                  className="flex h-screen min-h-screen bg-theme-bg-primary"
-                  data-ui="app-shell"
-                >
+                <div className="app-viewport flex" data-ui="app-shell">
                   <McpOauthCallbackBoundary>
                     {children}
                   </McpOauthCallbackBoundary>
