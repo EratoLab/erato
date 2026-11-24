@@ -40,6 +40,7 @@ import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { setPageVisibility } from "@/test/pageVisibility";
 import {
   teamsIndex,
   teamsMessage,
@@ -2700,6 +2701,66 @@ describe("ChatInput", () => {
       ).toMatchObject({
         vadAutoStopEnabled: true,
       });
+    });
+
+    it("listens again only once the page is shown after a phone lock ended the turn", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      let listening = false;
+      const toggleDictation = vi.fn();
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockImplementation(() => ({
+        isDictating: listening,
+        isDictationStarting: false,
+        isDictationCompleting: false,
+        isCapturingAudio: listening,
+        dictationError: null,
+        setDictationError: vi.fn(),
+        dictationBars: [2, 2, 2, 2, 2],
+        toggleDictation,
+      }));
+
+      const { i18n } = await import("@lingui/core");
+      const composer = (audioMode: boolean) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledIsAudioMode={audioMode}
+              onControlledIsAudioModeChange={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(composer(false));
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(composer(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      listening = true;
+      rerender(composer(true));
+
+      const options = mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0] as {
+        onStoppedByHiddenPage?: () => void;
+      };
+      act(() => {
+        setPageVisibility("hidden");
+        listening = false;
+        options.onStoppedByHiddenPage?.();
+      });
+      rerender(composer(true));
+      expect(toggleDictation).toHaveBeenCalledTimes(1);
+
+      act(() => setPageVisibility("visible"));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      vi.restoreAllMocks();
     });
 
     it("asks which audio mode to start when transcript and conversational modes are available", async () => {
