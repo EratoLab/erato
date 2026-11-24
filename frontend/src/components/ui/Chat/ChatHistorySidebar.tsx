@@ -44,6 +44,7 @@ import {
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
 import { getAssistantUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
+import { isImeComposing } from "@/utils/isImeComposing";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -77,7 +78,7 @@ import {
 import type { SidebarToggleSurface } from "./SidebarToggle";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
@@ -99,11 +100,13 @@ const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
  * it is aria-hidden.
  */
 const SidebarExpandToggle = ({
+  ref,
   surface,
   onToggle,
   className,
   children,
 }: {
+  ref?: Ref<HTMLButtonElement>;
   surface: SidebarToggleSurface;
   onToggle?: () => void;
   className?: string;
@@ -113,6 +116,7 @@ const SidebarExpandToggle = ({
 
   return (
     <SidebarToggle
+      ref={ref}
       surface={surface}
       expanded={false}
       onClick={onToggle}
@@ -516,11 +520,57 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     // On a narrow screen the open sidebar is a drawer over the page; after a
     // pick in it the person wants to see where they went.
     const isNarrowScreen = useIsNarrowScreen();
+    const isDrawerOpen = isNarrowScreen && !collapsed;
     const closeDrawerAfterPick = useCallback(() => {
-      if (isNarrowScreen && !collapsed) {
+      if (isDrawerOpen) {
         onToggleCollapse?.();
       }
-    }, [isNarrowScreen, collapsed, onToggleCollapse]);
+    }, [isDrawerOpen, onToggleCollapse]);
+
+    // Closing from beside the drawer or by Escape: focus inside the drawer
+    // would stay on a control that has slid out of view, so it goes to the
+    // control that opens the drawer again.
+    const expandToggleRef = useRef<HTMLButtonElement>(null);
+    const returnFocusOnHideRef = useRef(false);
+    const dismissDrawer = useCallback(() => {
+      returnFocusOnHideRef.current = Boolean(
+        ref.current?.contains(document.activeElement),
+      );
+      onToggleCollapse?.();
+    }, [onToggleCollapse]);
+    useEffect(() => {
+      if (isHiddenMode && returnFocusOnHideRef.current) {
+        returnFocusOnHideRef.current = false;
+        expandToggleRef.current?.focus();
+      }
+    }, [isHiddenMode]);
+    useEffect(() => {
+      if (!isDrawerOpen) {
+        return;
+      }
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          isImeComposing(event)
+        ) {
+          return;
+        }
+        // A menu or dialog over the drawer takes its Escape first; its own
+        // document listener may run after this one.
+        if (
+          event.target instanceof Element &&
+          event.target.closest(
+            '[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]',
+          )
+        ) {
+          return;
+        }
+        dismissDrawer();
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isDrawerOpen, dismissDrawer]);
     const handleNewChatPick = useCallback(() => {
       onNewChat?.();
       closeDrawerAfterPick();
@@ -822,9 +872,31 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               about the z-index. */}
           {isHiddenMode && (
             <SidebarExpandToggle
+              ref={expandToggleRef}
               surface="floating"
               onToggle={onToggleCollapse}
               className="absolute left-2 top-2 z-30"
+            />
+          )}
+
+          {/* On a narrow screen the open sidebar lies over the page. A tap
+              beside it lands here and only closes it; the control underneath
+              never gets that tap. */}
+          {isNarrowScreen && (
+            <div
+              role="presentation"
+              // A press here would otherwise blur the focused control before
+              // the click, and dismissDrawer could no longer see that focus
+              // was in the drawer.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={dismissDrawer}
+              className={clsx(
+                "drawer-overlay-skin viewport-layer fixed inset-0 z-40",
+                "transition-opacity duration-300 ease-in-out motion-reduce:transition-none",
+                isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+              data-ui="sidebar-scrim"
+              data-testid="sidebar-scrim"
             />
           )}
 
