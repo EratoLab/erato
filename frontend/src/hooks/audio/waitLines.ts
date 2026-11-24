@@ -9,7 +9,7 @@ import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
   afterReplyAudio,
   holdReplyAudio,
-  noteVoiceSays,
+  noteVoiceChunk,
   onSpeechInterrupted,
   releaseReplyAudio,
   useSpeechPlayback,
@@ -101,7 +101,7 @@ let aside: SaidLine | null = null;
 let busy = false;
 let idleWaiters: (() => void)[] = [];
 
-const queue = createPcmQueue(() => lineEnded(), noteVoiceSays);
+const queue = createPcmQueue(() => lineEnded(), noteVoiceChunk);
 
 const now = () => Date.now();
 

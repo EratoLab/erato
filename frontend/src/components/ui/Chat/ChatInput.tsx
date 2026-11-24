@@ -42,6 +42,7 @@ import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
 import {
   unlockSpeechPlayback,
   pauseSpeechPlayback,
+  replySoundedAtPause,
   resumeSpeechPlayback,
   stopSpeechPlayback,
   useSpeechPlayback,
@@ -53,6 +54,7 @@ import {
   noteSpokenTurnLanguage,
   useSpokenLanguage,
 } from "@/hooks/audio/spokenLanguage";
+import { deploymentNumberWords } from "@/hooks/audio/spokenStyle";
 import { useApprovalCardListening } from "@/hooks/audio/useApprovalCardListening";
 import { useApprovalChangeOutcome } from "@/hooks/audio/useApprovalChangeOutcome";
 import {
@@ -3120,12 +3122,14 @@ export const ChatInput = ({
     const turn = classifyOverVoiceTurn(message, {
       voiceText: voiceTextAtPause(),
       spokeOn: spokeOnAfterVoice(),
+      numberWords: deploymentNumberWords(hesitationLanguage),
     });
     if (turn === "message") {
       stopSpeechPlayback();
-      // Only a turn the auto-send will send: one cut off by the time limit
-      // waits in the composer, and must not stop a later reply.
-      sendsNowRef.current = pendingAutoSendRef.current;
+      // Only words said over the reply's own voice stop the reply, and only
+      // a turn the auto-send will send: words over a wait line wait for the
+      // answer, and one cut off by the time limit stays in the composer.
+      sendsNowRef.current = pendingAutoSendRef.current && replySoundedAtPause();
       return;
     }
     if (turn === "echo") dropTurnAndListenAgain();
@@ -3135,6 +3139,7 @@ export const ChatInput = ({
     decisionWaiting,
     dropTurnAndListenAgain,
     hasIncompleteAudioTranscription,
+    hesitationLanguage,
     isDictating,
     isDictationCompleting,
     isDictationStarting,
@@ -3165,9 +3170,12 @@ export const ChatInput = ({
     if (isPendingResponse) {
       // Said over the reply, or after the voice was stopped by voice: the
       // reply stops where it is, and the words go out once it has.
+      // Never while an action runs: it would be shown as stopped though it
+      // may have run. The words go out once it has reported back.
       if (
         overVoiceAllowed &&
         sendsNowRef.current &&
+        !speech.actionRunning &&
         !decisionWaiting &&
         message.trim() &&
         !stoppingReplyRef.current
@@ -3253,6 +3261,7 @@ export const ChatInput = ({
     clearPendingAutoSendTimeout,
     overVoiceAllowed,
     cancelMessage,
+    speech.actionRunning,
   ]);
 
   useEffect(() => {

@@ -1610,8 +1610,11 @@ export function useAudioDictationRecorder({
                 void checkTurn();
                 return;
               }
-              // The person went on, or only hesitated: the turn goes on.
-              if (nothingSaid || now.heard) return;
+              // The person went on, or only hesitated: the turn goes on;
+              // but a sound that paused the voice ends with its silence, so
+              // the voice can go on.
+              if (now.heard) return;
+              if (nothingSaid && spokeOnRef.current === null) return;
               // The turn ends with the words checked. What came after them
               // is not sent: speech there would have reopened the gate, and
               // a piece of room sound alone can come back as a word.

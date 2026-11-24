@@ -192,12 +192,16 @@ export interface PcmChunk {
 }
 
 /**
- * `onSays` hears each chunk's text with the context time it starts playing
- * at: what the voice says, and when.
+ * `onScheduled` hears each chunk as it is scheduled: its text, on a
+ * passage's first chunk, and the context times it plays from and to.
  */
 export function createPcmQueue(
   onDrained: () => void,
-  onSays?: (text: string, startsAt: number) => void,
+  onScheduled?: (
+    text: string | undefined,
+    startsAt: number,
+    endsAt: number,
+  ) => void,
 ): PcmQueue {
   let nextTime = 0;
   const sources = new Map<
@@ -232,7 +236,7 @@ export function createPcmQueue(
       text: chunk.text,
       endsAt: nextTime,
     });
-    if (chunk.text) onSays?.(chunk.text, start);
+    onScheduled?.(chunk.text, start, nextTime);
     source.onended = () => {
       sources.delete(source);
       source.disconnect();

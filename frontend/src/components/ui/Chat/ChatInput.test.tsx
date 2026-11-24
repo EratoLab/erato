@@ -29,6 +29,8 @@ import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
   beginSpeechResponse,
+  noteApprovedAction,
+  noteToolCall,
   unlockSpeechPlayback,
   playSpeechChunk,
   useSpeechPlayback,
@@ -10133,6 +10135,78 @@ describe("ChatInput", () => {
           rerender(ui(true));
           expect(onSendMessage).toHaveBeenCalledTimes(1);
           expect(cancel).toHaveBeenCalledTimes(1);
+        } finally {
+          vi.unstubAllGlobals();
+        }
+      });
+
+      it.each([
+        [
+          "one of its tool calls runs",
+          () => noteToolCall("stream-1", "call-1", "in_progress"),
+        ],
+        [
+          "an approved action has not reported back",
+          () => noteApprovedAction("stream-1"),
+        ],
+      ])(
+        "words over a reply while %s stop its voice but not the reply; they go out once it is complete (review 3)",
+        async (_, running) => {
+          sendingHandlers();
+          const onSendMessage = vi.fn();
+          const toggleDictation = vi.fn();
+          const cancel = vi.fn();
+          const { ui, rerender } = await talkedOverReply(
+            toggleDictation,
+            onSendMessage,
+          );
+          try {
+            act(running);
+            pendingWithStop(true, cancel);
+            await endTurn("Danke", toggleDictation, rerender, ui);
+            expect(useSpeechPlayback.getState()).toMatchObject({
+              playing: false,
+              paused: false,
+            });
+            await act(async () => {
+              await new Promise((resolve) => setTimeout(resolve, 20));
+            });
+            expect(cancel).not.toHaveBeenCalled();
+            expect(onSendMessage).not.toHaveBeenCalled();
+
+            pendingWithStop(false, cancel);
+            rerender(ui(true));
+            await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+            expect(onSendMessage.mock.calls[0][0]).toBe("Danke");
+            expect(cancel).not.toHaveBeenCalled();
+          } finally {
+            vi.unstubAllGlobals();
+          }
+        },
+      );
+
+      it("words once the action has reported back stop the reply and go out (review 3)", async () => {
+        sendingHandlers();
+        const onSendMessage = vi.fn();
+        const toggleDictation = vi.fn();
+        const cancel = vi.fn();
+        const { ui, rerender } = await talkedOverReply(
+          toggleDictation,
+          onSendMessage,
+        );
+        try {
+          act(() => {
+            noteToolCall("stream-1", "call-1", "in_progress");
+            noteToolCall("stream-1", "call-1", "success");
+          });
+          pendingWithStop(true, cancel);
+          await endTurn(
+            "Zeig mir lieber die Kosten",
+            toggleDictation,
+            rerender,
+            ui,
+          );
+          await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
         } finally {
           vi.unstubAllGlobals();
         }

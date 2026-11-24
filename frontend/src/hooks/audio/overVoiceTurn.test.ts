@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import words from "@/lib/toolCallGist/fixtures/spokenNumberWords.json";
+
 import { classifyOverVoiceTurn, echoCoverage } from "./overVoiceTurn";
 import { foldSpokenWords } from "./spokenWords";
+
+import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
+
+const GERMAN = (words as unknown as Record<"de", NumberWords>).de;
 
 /** What the voice was saying around the spot it was talked over at. */
 const VOICE =
@@ -32,8 +38,7 @@ describe("a turn said over a reply's voice", () => {
   it("is the voice's echo when it only repeats what the voice was saying", () => {
     expect(turn("drei offene Angebote gefunden")).toBe("echo");
     expect(turn("das größte ist das Angebot")).toBe("echo");
-    expect(turn("Einen Moment.")).toBe("echo");
-    expect(turn("Fertigungsstraße")).toBe("echo");
+    expect(turn("Einen Moment, das größte")).toBe("echo");
   });
 
   it("is the voice's echo when the recognizer misheard it slightly", () => {
@@ -54,18 +59,58 @@ describe("a turn said over a reply's voice", () => {
   });
 });
 
+describe("the voice's echo with numbers spelled another way (review 1)", () => {
+  const AMOUNT =
+    "Das Angebot liegt bei 48.500 Euro, freigegeben am 12. März 2025 von Frau Schneider.";
+  const TIME = "Der Termin mit der Kessler GmbH ist am Dienstag um 14:30 Uhr.";
+  const echo = (text: string, voiceText: string) =>
+    classifyOverVoiceTurn(text, {
+      voiceText,
+      spokeOn: false,
+      numberWords: GERMAN,
+    });
+
+  it("leaves numbers out on both sides", () => {
+    expect(echo("Das Angebot liegt bei 48500 Euro", AMOUNT)).toBe("echo");
+    expect(
+      echo("Angebot liegt bei achtundvierzigtausendfünfhundert Euro", AMOUNT),
+    ).toBe("echo");
+    expect(
+      echo(
+        "am zwölften März zweitausendfünfundzwanzig von Frau Schneider",
+        AMOUNT,
+      ),
+    ).toBe("echo");
+    expect(
+      echo("der Kessler GmbH ist am Dienstag um vierzehn Uhr dreißig", TIME),
+    ).toBe("echo");
+  });
+});
+
+describe("short real questions over the voice (review 2)", () => {
+  const VOICE_SAID =
+    "Freigegeben von Frau Schneider, Termin am Dienstag, das Budget liegt bei Peter.";
+
+  it("are the person's, though they repeat a word the voice said", () => {
+    for (const said of [
+      "Schneider?",
+      "Dienstag?",
+      "Ja, das Budget",
+      "Peter",
+      "Frau Schneider?",
+    ])
+      expect(turn(said, false, VOICE_SAID)).toBe("message");
+  });
+});
+
 describe("how much of a turn repeats the voice", () => {
   const coverage = (said: string, voice: string) =>
     echoCoverage(foldSpokenWords(said), foldSpokenWords(voice));
 
-  it("counts stretches of two words or more", () => {
-    expect(coverage("aaaa bbbb xxxx", "aaaa bbbb cccc")).toBeCloseTo(2 / 3);
-    expect(coverage("aaaa xxxx bbbb", "aaaa bbbb cccc")).toBe(0);
-  });
-
-  it("counts a one-word turn by that word", () => {
-    expect(coverage("bbbb", "aaaa bbbb cccc")).toBe(1);
-    expect(coverage("dddd", "aaaa bbbb cccc")).toBe(0);
+  it("counts stretches of three words or more", () => {
+    expect(coverage("aaaa bbbb cccc xxxx", "aaaa bbbb cccc dddd")).toBe(3 / 4);
+    expect(coverage("aaaa bbbb xxxx", "aaaa bbbb cccc")).toBe(0);
+    expect(coverage("bbbb", "aaaa bbbb cccc")).toBe(0);
   });
 
   it("does not take short words for each other", () => {
