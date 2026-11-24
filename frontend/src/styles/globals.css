@@ -1235,8 +1235,11 @@ body:has(.app-viewport) {
   );
 }
 
-/* One text line (1.5rem) as tall as the buttons beside it. */
-[data-ui="chat-input-shell"]:where([data-layout="one-line"]) textarea {
+/* One text line (1.5rem) as tall as the buttons beside it. Audio mode's state
+   stands where the field was, at the same height. */
+[data-ui="chat-input-shell"]:where([data-layout="one-line"]) textarea,
+[data-ui="chat-input-shell"]:where([data-layout="one-line"])
+  :where([data-ui="chat-input-audio-mode-status"]) {
   min-height: var(--chat-input-line-height);
   padding-block: calc((var(--chat-input-line-height) - 1.5rem) / 2);
 }

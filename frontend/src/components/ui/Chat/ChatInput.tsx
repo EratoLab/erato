@@ -3439,7 +3439,8 @@ export const ChatInput = ({
   const audioModeStatusField = isAudioMode && oneLineComposer && (
     <span
       aria-hidden="true"
-      className="min-w-0 flex-1 self-center truncate text-theme-fg-secondary"
+      className="chat-input-textarea-geometry min-w-0 flex-1 truncate text-base text-theme-fg-secondary"
+      data-ui="chat-input-audio-mode-status"
       data-testid="chat-input-audio-mode-status"
     >
       {speech.playing || cardSpeaking
