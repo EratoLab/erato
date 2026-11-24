@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { echoCoupling, noteEchoFrame, type EchoCoupling } from "./echoLevel";
+import {
+  echoCoupling,
+  forgetLeadIn,
+  noteEchoFrame,
+  type EchoCoupling,
+} from "./echoLevel";
 import { overVoiceGate, overVoiceStep } from "./talkOverVoice";
 
 const FRAME_MS = 32;
@@ -14,23 +19,28 @@ function run(
   frames: number,
   heardAt: (frame: number, played: number) => number,
   start: EchoCoupling = echoCoupling(),
+  playedAt: (frame: number) => number = voiceAt,
 ) {
   let coupling = start;
   let gate = overVoiceGate();
   let counted = 0;
   let confirmed = false;
   for (let frame = 0; frame < frames; frame += 1) {
-    const played = voiceAt(frame);
+    const played = playedAt(frame);
+    const heard = heardAt(frame, played);
     const echo = noteEchoFrame(coupling, {
-      heard: heardAt(frame, played),
+      heard,
       played,
       frameMs: FRAME_MS,
-      learn: gate.speechMs === 0,
+      inStretch: gate.speechMs > 0,
     });
     coupling = echo.coupling;
     if (echo.overEcho) counted += 1;
-    const step = overVoiceStep(gate, echo.overEcho ? 0.95 : 0, FRAME_MS, 300);
+    // The detector hears speech in anything above the room's own sound.
+    const speech = heard > 0.002 ? 0.95 : 0.05;
+    const step = overVoiceStep(gate, echo.overEcho ? speech : 0, FRAME_MS, 300);
     gate = step.gate;
+    if (step.confirmed) coupling = forgetLeadIn(coupling);
     confirmed ||= step.confirmed;
   }
   return { coupling, counted, confirmed };
@@ -80,7 +90,7 @@ describe("noteEchoFrame", () => {
         heard: room(frame),
         played: quietVoice(frame),
         frameMs: FRAME_MS,
-        learn: true,
+        inStretch: false,
       }).coupling;
     expect(run(20, (frame) => room(frame) + 0.02, coupling).confirmed).toBe(
       true,
@@ -96,7 +106,7 @@ describe("noteEchoFrame", () => {
       heard: 0.01,
       played: 0,
       frameMs: FRAME_MS,
-      learn: true,
+      inStretch: false,
     });
     expect(echo.overEcho).toBe(true);
   });
@@ -112,9 +122,31 @@ describe("noteEchoFrame", () => {
         heard: 0.2,
         played: voiceAt(frame),
         frameMs: FRAME_MS,
-        learn: false,
+        inStretch: true,
       }).coupling;
+    state = forgetLeadIn(state);
     expect(state.learned).toEqual(coupling.learned);
     expect(state.pending).toEqual([]);
+  });
+
+  it("does not take an echo that comes back late (Bluetooth) for the user when the voice starts", () => {
+    // The loudest of the last 600 ms, as the recorder asks for it.
+    const windowMax = (frame: number) =>
+      frame < 0
+        ? 0
+        : Math.max(
+            ...Array.from({ length: 20 }, (_, back) =>
+              frame - back >= 0 ? voiceAt(frame - back) : 0,
+            ),
+          );
+    // Silence, then the voice; its echo arrives 200 ms (6 frames) later.
+    const result = run(
+      400,
+      (frame) =>
+        0.0008 + (frame >= 30 ? 0.25 * voiceAt(frame - 6) * wobble(frame) : 0),
+      echoCoupling(),
+      (frame) => (frame < 24 ? 0 : windowMax(frame - 24)),
+    );
+    expect(result.confirmed).toBe(false);
   });
 });

@@ -55,6 +55,7 @@ import {
   ECHO_LAG_MS,
   ECHO_LEAD_MS,
   echoCoupling,
+  forgetLeadIn,
   frameLevel,
   noteEchoFrame,
   type EchoCoupling,
@@ -1745,7 +1746,7 @@ export function useAudioDictationRecorder({
                     frameEnd + ECHO_LEAD_MS,
                   ),
                   frameMs,
-                  learn: !(holdRef.current?.gate.speechMs ?? 0),
+                  inStretch: (holdRef.current?.gate.speechMs ?? 0) > 0,
                 });
                 echoRef.current = echo.coupling;
                 const overVoiceSpeech =
@@ -1777,6 +1778,7 @@ export function useAudioDictationRecorder({
                           1000
                       : 0,
                   );
+                  echoRef.current = forgetLeadIn(echoRef.current);
                   onSpeechOverVoiceRef.current?.();
                   // Kept from shortly before the words that stopped the
                   // voice, as when the recording began waiting over it.

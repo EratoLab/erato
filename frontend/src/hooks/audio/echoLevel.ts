@@ -49,8 +49,10 @@ const VOICE_SILENT = 0.001;
 export interface EchoCoupling {
   /** Heard and played levels of recent frames that held echo and room only. */
   learned: { heard: number; played: number }[];
-  /** Frames not learned yet: they may turn out to be a stretch's lead-in. */
+  /** Frames not learned yet: they may turn out to lead into the user's words. */
   pending: { heard: number; played: number }[];
+  /** How long the voice has sounded without a break, in ms. */
+  sounding: number;
   /** Recent levels heard, for the room's own sound. */
   heard: number[];
 }
@@ -59,6 +61,13 @@ export const echoCoupling = (): EchoCoupling => ({
   learned: [],
   pending: [],
   heard: [],
+  sounding: 0,
+});
+
+/** The user's words were confirmed: what led into them was theirs, not echo. */
+export const forgetLeadIn = (coupling: EchoCoupling): EchoCoupling => ({
+  ...coupling,
+  pending: [],
 });
 
 const percentile = (values: readonly number[], share: number): number => {
@@ -91,10 +100,10 @@ function expectation(learned: EchoCoupling["learned"], room: number) {
 
 /**
  * One microphone frame: `heard` its level, `played` the loudest the voice
- * played in the time its echo can come from. `learn`: the frame is not part
- * of a stretch that may be the user's: once it has not led into one either,
- * it shows echo and room alone.
- * `overEcho`: the frame holds more than they explain, and at least as much
+ * played in the time its echo can come from. `inStretch`: a stretch that
+ * may be the user's runs; its frames and what led into it are learned only
+ * once it ended without being confirmed (see `forgetLeadIn`). `overEcho`:
+ * the frame holds more than echo and room explain, and at least as much
  * again as the echo itself; with the voice silent, always.
  */
 export function noteEchoFrame(
@@ -103,18 +112,21 @@ export function noteEchoFrame(
     heard,
     played,
     frameMs,
-    learn,
+    inStretch,
   }: {
     heard: number;
     played: number;
     frameMs: number;
-    learn: boolean;
+    inStretch: boolean;
   },
 ): { coupling: EchoCoupling; overEcho: boolean } {
   const kept = Math.max(MIN_FRAMES, Math.ceil(WINDOW_MS / frameMs));
   const heardLevels = [...coupling.heard.slice(-(kept - 1)), heard];
   if (!(played > VOICE_SILENT))
-    return { coupling: { ...coupling, heard: heardLevels }, overEcho: true };
+    return {
+      coupling: { ...coupling, heard: heardLevels, sounding: 0 },
+      overEcho: true,
+    };
   let overEcho = false;
   if (coupling.learned.length >= MIN_FRAMES) {
     const room = percentile(heardLevels, ROOM_PERCENTILE);
@@ -122,21 +134,24 @@ export function noteEchoFrame(
     const echo = strength * played;
     overEcho = heard - room - echo > Math.max(spread, echo);
   }
-  // A stretch that may be the user's: what led into it is theirs too.
-  if (!learn)
-    return {
-      coupling: { ...coupling, pending: [], heard: heardLevels },
-      overEcho,
-    };
-  const pending = [...coupling.pending, { heard, played }];
-  const due = pending.splice(
-    0,
-    Math.max(0, pending.length - Math.ceil(LEAD_IN_MS / frameMs)),
-  );
+  const sounding = coupling.sounding + frameMs;
+  // Until the voice has sounded as long as its echo can take to come back,
+  // a quiet microphone says nothing about the echo.
+  const pending =
+    sounding > ECHO_LAG_MS
+      ? [...coupling.pending, { heard, played }].slice(-kept)
+      : coupling.pending;
+  const due = inStretch
+    ? []
+    : pending.splice(
+        0,
+        Math.max(0, pending.length - Math.ceil(LEAD_IN_MS / frameMs)),
+      );
   return {
     coupling: {
       heard: heardLevels,
       pending,
+      sounding,
       learned: [...coupling.learned, ...due].slice(-kept),
     },
     overEcho,
