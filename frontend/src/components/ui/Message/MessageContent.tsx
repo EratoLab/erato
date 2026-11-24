@@ -557,7 +557,7 @@ function MarkdownPre({
             ? t({ id: "chat.message.code.copied", message: "Copied" })
             : t({ id: "chat.message.code.copy", message: "Copy code" })
         }
-        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100"
+        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100 no-hover:opacity-100"
       >
         {copied ? (
           <CheckIcon className="size-3.5 text-theme-success-fg" />

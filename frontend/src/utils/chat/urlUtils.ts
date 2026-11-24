@@ -30,3 +30,8 @@ export function getChatUrl(
   }
   return `/chat/${chatId}`;
 }
+
+/** The path that starts a new chat with an assistant. */
+export function getAssistantUrl(assistantId: string): string {
+  return `/a/${assistantId}`;
+}
