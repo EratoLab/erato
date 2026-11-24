@@ -94,6 +94,8 @@ const lastSaid = new Map<string, string>();
 let turn: Turn | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let lineDone: (() => void) | null = null;
+/** The line playing when it is said outside the plan (`sayAsideLine`). */
+let aside: SaidLine | null = null;
 /** A line plays, or its answer audio has not been let go yet. */
 let busy = false;
 let idleWaiters: (() => void)[] = [];
@@ -222,12 +224,13 @@ export function resetWaitLines() {
  * A turn whose answer is read back was sent on `streamKey`: the wait starts.
  * It counts from the end of the speech that became this turn, or from now
  * for a continuation after a decision, never from an earlier utterance such
- * as a command said to a card. A continuation has no opener: the decision
- * was already acknowledged, by the card or by the voice.
+ * as a command said to a card. A continuation has no opener unless `opener`:
+ * after a decision by voice the voice already answered it; after a tap only
+ * the screen did, and someone listening would hear nothing while it runs.
  */
 export function beginWaitTurn(
   streamKey: string,
-  options: { continuation?: boolean; language?: string } = {},
+  options: { continuation?: boolean; opener?: boolean; language?: string } = {},
 ) {
   stopWaitLines();
   const sent = now();
@@ -253,7 +256,7 @@ export function beginWaitTurn(
     toolLines: new Map(),
     toolsSeen: new Set(),
     checked: false,
-    opener: !options.continuation,
+    opener: !options.continuation || options.opener === true,
     parts: [],
   };
   const current = turn;
@@ -445,6 +448,7 @@ export function stopWaitLines() {
   timer = undefined;
   if (turn) closeToolLines(turn);
   turn = null;
+  aside = null;
   queue.stop();
   if (lineDone) {
     lineDone = null;
@@ -551,18 +555,29 @@ function plan() {
   state.said.push(said);
   if (step.line === "opener") openersSaid += 1;
   if (slot) lastSaid.set(slot, clips[0].text);
+  playLine(context, clips, said, current);
+}
+
+/** Plays `clips` as the line `said` of `current`, holding the answer back. */
+function playLine(
+  context: AudioContext,
+  clips: readonly Clip[],
+  said: SaidLine,
+  current: Turn | null,
+) {
   busy = true;
   holdReplyAudio();
   lineDone = () => {
     // Not the last entry: a spoken part may have begun while the line played.
     said.endedAt ??= now();
+    if (aside === said) aside = null;
     // The answer goes on the reply queue before anything waiting for the
     // line (a card) is let go, so it is never overtaken.
     setTimeout(() => {
       releaseReplyAudio();
       settleIdle();
     }, AFTER_LINE_MS);
-    if (turn === current) plan();
+    if (current && turn === current) plan();
   };
   for (const clip of clips) {
     if (!queue.enqueue(context, clip.audio, clip.sampleRate)) {
@@ -572,6 +587,63 @@ function plan() {
     }
   }
   queue.flush();
+}
+
+/** The turn being waited for, to tell later whether it is still the same. */
+export function waitTurnNow(): object | null {
+  return turn;
+}
+
+/**
+ * Says `clips` at once on the lines' queue, outside the plan: the word that
+ * an approval by voice was taken. It belongs to the turn `of` (from
+ * `waitTurnNow`) and is said only while that turn is still waited for: not
+ * after the voice was stopped, talked over, or a microphone opened without
+ * the echo-cancelling hold. In the turn it counts as a line said (nothing
+ * over it or right after it, and toward the turn's cap), and the answer and
+ * the next card wait for it as for any line. Returns whether it is said: not
+ * while a line plays, nor once the turn's answer or spoken part has begun,
+ * nor where the voice cannot play.
+ */
+export function sayAsideLine(
+  clips: readonly { text: string; audio: string; sampleRate: number }[],
+  of: object | null,
+): boolean {
+  const context = playbackContext();
+  const speech = useSpeechPlayback.getState();
+  const current = turn;
+  if (
+    current === null ||
+    current !== of ||
+    clips.length === 0 ||
+    busy ||
+    context?.state !== "running" ||
+    !speech.enabled ||
+    !speech.conversational
+  )
+    return false;
+  const { state } = current;
+  if (
+    state.answerStarted ||
+    state.ended ||
+    current.parts.length > 0 ||
+    state.said.some((line) => line.kind === "reply") ||
+    speech.spokenTurn !== current.streamKey
+  )
+    return false;
+  const said: SaidLine = { kind: "ack", startedAt: now() };
+  state.said.push(said);
+  aside = said;
+  playLine(context, clips, said, current);
+  return aside === said;
+}
+
+/** Stops the line said by `sayAsideLine`, if it still plays. */
+export function stopAsideLine() {
+  if (aside === null) return;
+  aside = null;
+  queue.stop();
+  lineEnded();
 }
 
 function lineEnded() {

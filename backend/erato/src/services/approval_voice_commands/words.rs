@@ -1011,6 +1011,39 @@ mod tests {
         assert_eq!(dropped.len(), 4, "{dropped:#?}");
     }
 
+    /// The sentence the voice says while an approval by voice goes out, as
+    /// the web app's catalogs have it (`spokenCard.notice.approved`; its test
+    /// pins the same text): never a confirmation phrase, and nothing the
+    /// rules of either language take for any command, on any example card.
+    #[test]
+    fn approval_acknowledgement_sentences_are_never_commands() {
+        let by_language = CommandWordsByLanguage::default();
+        for sentence in [
+            "Gut, ich führe das jetzt aus.",
+            "All right, I'm running it now.",
+        ] {
+            for language in SHARED_LANGUAGES {
+                let words = by_language.for_language(language);
+                assert!(
+                    super::super::phrase::match_phrase(sentence, words).is_none(),
+                    "{sentence:?} is a phrase in {language}"
+                );
+                for card in &super::super::corpus::CORPUS.cards {
+                    let input = super::super::VoiceCommandInput {
+                        transcript: sentence,
+                        language,
+                        pieces: &card.pieces,
+                        current_piece_id: Some(&card.current_piece_id),
+                        question: None,
+                    };
+                    let heard = super::super::classify_by_rules(&input, words)
+                        .map(|classified| classified.command.meaning.wire_name());
+                    assert_eq!(heard, None, "{sentence:?} with the {language} rules");
+                }
+            }
+        }
+    }
+
     /// The lines of the `erato-wait-lines` configuration package.
     #[test]
     fn the_wait_lines_package_keeps_every_line() {

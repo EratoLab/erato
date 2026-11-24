@@ -29,10 +29,16 @@ export interface SettledApproval {
   decision: ToolApprovalDecision;
   /** The user's words for a `request_change`. */
   changeRequest?: string;
+  /** Said by voice: the decision carries a receipt. */
+  byVoice?: boolean;
 }
 
+// The server keeps the whole record of a decision by voice; until the row is
+// read again, the seed only says that there is one.
+const SEEDED_VOICE_RECORD = {};
+
 const decisionPart = (
-  { item, decision, changeRequest }: SettledApproval,
+  { item, decision, changeRequest, byVoice }: SettledApproval,
   now: string,
 ): ContentPart =>
   // The generated schema collapses both `serde_json::Value` and
@@ -48,6 +54,7 @@ const decisionPart = (
         approved_at: now,
         approval_id: item.approval_id,
         child_chat_id: item.child?.child_chat_id ?? null,
+        ...(byVoice ? { voice: SEEDED_VOICE_RECORD } : {}),
       }
     : {
         // eslint-disable-next-line lingui/no-unlocalized-strings -- API wire value
@@ -57,6 +64,7 @@ const decisionPart = (
         rejected_at: now,
         approval_id: item.approval_id,
         child_chat_id: item.child?.child_chat_id ?? null,
+        ...(byVoice ? { voice: SEEDED_VOICE_RECORD } : {}),
         reason:
           decision === "withdraw"
             ? "withdrawn"

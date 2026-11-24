@@ -40,8 +40,8 @@ export type SpokenUtterance =
 
 /**
  * What the voice says instead of acting: a decision asked for by voice that
- * is made on screen; the words that approve by voice, after a near miss; a
- * refusal by voice; a change it is making, or cannot make; what came of a
+ * is made on screen; the words that approve by voice, after a near miss; an
+ * approval or a refusal by voice; a change it is making, or cannot make; what came of a
  * change; words it did not understand; a long text asked for on a card
  * without one; listening that is not available.
  */
@@ -61,6 +61,11 @@ export type SpokenNotice =
   | { kind: "phrase_on_screen" }
   /** Refused by voice; said before the refusal goes out. */
   | { kind: "declined" }
+  /**
+   * Approved by voice; said while the approval goes out, never that the
+   * action is done.
+   */
+  | { kind: "approved" }
   /** A decision by voice did not go through; the card waits on screen. */
   | { kind: "decision_failed" }
   /** `others`: other approvals of the stop are still open on screen. */

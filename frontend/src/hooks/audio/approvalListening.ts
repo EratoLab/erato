@@ -14,6 +14,12 @@ import {
 import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 
 import {
+  cancelApprovalAcknowledgement,
+  dropApprovalAcknowledgement,
+  prepareApprovalAcknowledgement,
+  sayApprovalAcknowledgement,
+} from "./approvalAcknowledgement";
+import {
   dropChange,
   nextChangeRound,
   noteChangeSending,
@@ -519,6 +525,9 @@ export async function heardApprovalWords(
     misses: listening.misses[key] ?? 0,
   };
   const signals = card.decision ? voiceSignals(key, recording) : undefined;
+  // Words that may approve: the voice's answer to an approval is loaded now,
+  // while the card still waits and the voice may speak about it.
+  prepareApprovalAcknowledgement(card);
   // A question is answered by the next words only.
   useApprovalListening.setState({
     pending: key,
@@ -632,8 +641,9 @@ const voiceSignals = (
 /**
  * Sends the decision the user said to the card under `key`, once the card
  * still waits and has asked with nothing owed. A refusal is confirmed first,
- * then sent; an approval goes out at once, and the answer is read back as
- * after a tap. A failure is said once, and the card waits on screen.
+ * then sent; an approval goes out at once, and the voice says meanwhile that
+ * it was taken, never that it is done; the answer is read back as after a
+ * tap. A failure is said once, and the card waits on screen.
  */
 async function decideByVoice(
   key: string,
@@ -654,17 +664,30 @@ async function decideByVoice(
   }
   useApprovalListening.setState({ quiet: key });
   if (decision === "reject") {
+    dropApprovalAcknowledgement();
     notice({ kind: "declined" });
     await untilSilent(key, CONFIRMATION_WAIT_MS);
     if (!stillOpen(key)) return;
   }
   let outcome: Awaited<ReturnType<typeof voice.send>>;
   try {
-    outcome = await voice.send(decision, receipt);
+    // Sending stops the card's voice at once and starts the turn the
+    // sentence belongs to; it is said once the server took the approval.
+    const sending = voice.send(decision, receipt);
+    if (decision === "approve")
+      void sayApprovalAcknowledgement(
+        key,
+        sending.then(
+          (sent) => sent === "sent",
+          () => false,
+        ),
+      );
+    outcome = await sending;
   } catch {
     outcome = "failed";
   }
   if (outcome === "sent") return;
+  cancelApprovalAcknowledgement();
   notice({ kind: "decision_failed" });
   useApprovalListening.setState({ quiet: key });
 }
@@ -717,6 +740,7 @@ const untilSilent = (key: string, ms: number): Promise<void> =>
 async function changeByVoice(key: string, transcript: string): Promise<void> {
   const now = spokenApprovalCardNow();
   if (now?.card.key !== key) return;
+  dropApprovalAcknowledgement();
   const { card, pieces, flow } = now;
   const notice = cardNotice(key, card);
   if (!card.change) {
