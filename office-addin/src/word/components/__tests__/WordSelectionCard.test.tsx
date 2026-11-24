@@ -90,6 +90,8 @@ function renderCard(options: {
   content?: string;
   /** Several versions in one answer, each its own fence and card. */
   versions?: string[];
+  /** Parts stored after the answer's text, such as the server's calls. */
+  calls?: unknown[];
 }) {
   const versions = options.versions ?? [options.content ?? PROPOSAL];
   nextMessageId += 1;
@@ -125,6 +127,7 @@ function renderCard(options: {
               )
               .join("\n\n"),
           },
+          ...(options.calls ?? []),
         ],
       },
     },
@@ -223,6 +226,28 @@ describe("WordSelectionCard", () => {
     expect(host.selectionText()).toBe("xray");
     expect(wordSelectionStore.requestRefresh).toHaveBeenCalled();
     expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
+  });
+
+  it("offers no Replace of its own while the server's call waits for the user's decision", async () => {
+    const capture = await captureOf(host, { p: "PL1" });
+    renderCard({
+      capture,
+      calls: [
+        {
+          content_type: "tool_use",
+          tool_call_id: "proposal-1",
+          tool_name: "propose_client_action",
+          status: "success",
+          input: { action: REPLACE },
+          output: { apply: { call_id: "call-1" } },
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(replaceButton()).not.toBeInTheDocument();
   });
 
   it("says the passage changed and puts the request back for the current selection", async () => {

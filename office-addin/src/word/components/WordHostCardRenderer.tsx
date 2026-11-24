@@ -34,10 +34,12 @@ import { WordReviewPanel } from "./WordReviewPanel";
 import { wordInsertedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSelectionCard } from "./WordSelectionCard";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import { useWordChainedProposal } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { revertWordEdits } from "../utils/wordApplyEdits";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
 import {
   offerableWordClientActionsForFacet,
   wordActionForFence,
@@ -156,6 +158,7 @@ function WordActionCard({
     content,
   );
   const review = useWordReview(batchKey);
+  const chainedState = useWordChainedProposal(messageId, entry.action);
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );
@@ -375,6 +378,13 @@ function WordActionCard({
     batchKey,
     endOperation,
   ]);
+  // The user decides on the server's call in the decision place, not with a button here.
+  if (chainedState && idle)
+    return (
+      <p className="word-review__hint" data-testid="word-chained-status">
+        {wordChainedApplyText(chainedState)}
+      </p>
+    );
   if (isGenerating)
     return (
       <WordReviewGenerating

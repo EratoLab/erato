@@ -108,12 +108,20 @@ function renderCard(options: {
   captures?: Map<string, WordDocumentCapture>;
   /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
+  /** The stored answer's parts. */
+  messageContent?: unknown[];
 }) {
   const artifact = options.artifact;
   mockUseHostArtifact.mockReturnValue(artifact);
   const messageId = artifact?.messageId ?? "unrelated";
   mockUseChatContext.mockReturnValue({
-    messages: { [messageId]: { id: messageId, role: "assistant" } },
+    messages: {
+      [messageId]: {
+        id: messageId,
+        role: "assistant",
+        content: options.messageContent,
+      },
+    },
     messageOrder: [messageId],
     currentChatId: "chat-1",
   });
@@ -789,6 +797,96 @@ describe("WordHostCardRenderer", () => {
       ).toBeInTheDocument();
       release();
       await flush();
+    });
+  });
+
+  describe("a change the server carries out", () => {
+    const insertFence = (text: string) => ({
+      content_type: "text",
+      text: `\`\`\`erato-word-insert\n${text}\n\`\`\``,
+    });
+    const proposal = {
+      content_type: "tool_use",
+      tool_call_id: "proposal-1",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: INSERT },
+      output: { apply: { call_id: "call-1" } },
+    };
+    const renderChained = (messageContent: unknown[]) =>
+      renderCard({
+        artifact: makeArtifact({
+          facetId: COMPOSE_FACET,
+          allowedClientActions: [INSERT],
+        }),
+        language: "erato-word-insert",
+        content: "A drafted paragraph.",
+        messageContent,
+      });
+
+    it("offers no button of its own while the decision waits", () => {
+      renderChained([insertFence("A drafted paragraph."), proposal]);
+
+      expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+        "Waiting for your decision",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Insert the text at the cursor" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("says nothing was changed after the user cancelled", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        {
+          content_type: "tool_use",
+          tool_call_id: "call-1",
+          tool_name: "insert_at_cursor",
+          status: "error",
+          output: { status: "rejected" },
+        },
+      ]);
+
+      expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+        "Cancelled. Nothing was changed.",
+      );
+      expect(
+        screen.queryByRole("button", { name: "Insert the text at the cursor" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("keeps each version's button when the answer offers several", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        insertFence("Another draft."),
+        proposal,
+      ]);
+
+      expect(
+        screen.queryByTestId("word-chained-status"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Insert the text at the cursor" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the button for the user's pick after the server left it to them", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        {
+          content_type: "tool_use",
+          tool_call_id: "call-1",
+          tool_name: "insert_at_cursor",
+          status: "success",
+          output: { result: { status: "unavailable", reason: "user_picks" } },
+        },
+      ]);
+
+      expect(
+        screen.getByRole("button", { name: "Insert the text at the cursor" }),
+      ).toBeInTheDocument();
     });
   });
 

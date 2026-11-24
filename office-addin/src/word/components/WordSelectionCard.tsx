@@ -20,6 +20,7 @@ import { WordApplyButton, WordStatusAlert } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import { useWordChainedProposal } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
@@ -28,6 +29,7 @@ import {
   useWordReviews,
   useWordWrite,
 } from "../providers/WordWriteProvider";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
 import {
   wordProposalReviewKey,
   wordSelectionReviewStatus,
@@ -594,6 +596,7 @@ export function WordSelectionCard({
     content,
   );
   const review = useWordReview(batchKey);
+  const chainedState = useWordChainedProposal(messageId, entry.action);
   const reviews = useWordReviews();
   const result = review.selection;
   const messageCapture = messageId
@@ -994,6 +997,18 @@ export function WordSelectionCard({
     }
   };
 
+  // The user decides on the server's call in the decision place; after an Undo the card is theirs.
+  if (
+    chainedState &&
+    (review.status === "idle" ||
+      review.status === "no-capture" ||
+      review.status === "identity-mismatch")
+  )
+    return (
+      <p className="word-review__hint" data-testid="word-chained-status">
+        {wordChainedApplyText(chainedState)}
+      </p>
+    );
   if (isGenerating)
     return (
       <WordReviewGenerating
