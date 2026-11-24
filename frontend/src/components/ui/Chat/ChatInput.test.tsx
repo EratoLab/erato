@@ -51,7 +51,11 @@ import {
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
-import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
+import type {
+  AddMenuActionItem,
+  AddMenuSection,
+  AddMenuToolItem,
+} from "./ChatInputAddMenu";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextChipFaceProps,
@@ -101,6 +105,7 @@ const mockFileUploadControl = vi.fn();
 const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
 const mockUseIsMobile = vi.fn();
+const mockUseIsNarrowTouchScreen = vi.fn();
 const mockChatInputAddControls = vi.fn();
 
 vi.mock("@/providers/ChatProvider", async () =>
@@ -292,6 +297,7 @@ vi.mock("./ChatInputTokenUsage", () => ({
 
 vi.mock("@/hooks/useResponsive", () => ({
   useIsMobile: () => mockUseIsMobile(),
+  useIsNarrowTouchScreen: () => mockUseIsNarrowTouchScreen(),
 }));
 
 // The "+" menu's own rendering of the section is covered against the real
@@ -320,6 +326,11 @@ vi.mock("./ModelSelector", () => ({
     mockModelSelector(props);
     return <div data-testid="model-selector" />;
   },
+  ModelSelectorOptionContent: ({
+    model,
+  }: {
+    model: { model_display_name: string };
+  }) => <span>{model.model_display_name}</span>,
 }));
 
 vi.mock("../Controls/Button", () => ({
@@ -470,6 +481,7 @@ describe("ChatInput", () => {
     });
 
     mockUseIsMobile.mockReturnValue(false);
+    mockUseIsNarrowTouchScreen.mockReturnValue(false);
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAssistantsFeature.mockReturnValue({
       enabled: false,
@@ -1239,6 +1251,127 @@ describe("ChatInput", () => {
     expect(onControlledSelectedModelChange).toHaveBeenCalledWith(
       controlledModel,
     );
+  });
+
+  describe("on a narrow touch screen", () => {
+    const models = [
+      { chat_provider_id: "model-a", model_display_name: "Model A" },
+      { chat_provider_id: "model-b", model_display_name: "Model B" },
+    ];
+
+    const renderPhoneComposer = async ({
+      touch,
+      enforceTools = false,
+      availableModels = models,
+    }: {
+      touch: boolean;
+      enforceTools?: boolean;
+      availableModels?: typeof models;
+    }) => {
+      mockUseIsMobile.mockReturnValue(true);
+      mockUseIsNarrowTouchScreen.mockReturnValue(touch);
+      mockUseFacets.mockReturnValue({
+        data: {
+          facets: [
+            { id: "search", display_name: "Search", default_enabled: true },
+            { id: "files", display_name: "Files", default_enabled: false },
+          ],
+          global_facet_settings: undefined,
+        },
+        error: null,
+      });
+      const onModelChange = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const view = render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledAvailableModels={availableModels as never}
+              controlledSelectedModel={availableModels[0] as never}
+              onControlledSelectedModelChange={onModelChange as never}
+              controlledIsModelSelectionReady
+              enforceSelectedFacetIds={enforceTools}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      return { ...view, onModelChange };
+    };
+
+    const addControlsProps = () =>
+      mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+        modelSection?: AddMenuSection;
+        selectedToolCount?: number;
+        toolsDisabledReason?: string;
+      };
+
+    it("marks the shell one-line, drops the tool chips and model picker, and hands the model and tool count to the + menu", async () => {
+      const { container, onModelChange } = await renderPhoneComposer({
+        touch: true,
+      });
+
+      expect(
+        container.querySelector('[data-ui="chat-input-shell"]'),
+      ).toHaveAttribute("data-layout", "one-line");
+      expect(screen.queryByTestId("model-selector")).toBeNull();
+      expect(
+        container.querySelector('[data-ui="composer-tool-chips"]'),
+      ).toBeNull();
+
+      const { modelSection, selectedToolCount } = addControlsProps();
+      expect(selectedToolCount).toBe(1);
+      const items = modelSection?.items as AddMenuToolItem[];
+      expect(items.map((item) => [item.checked, item.exclusive])).toEqual([
+        [true, true],
+        [false, true],
+      ]);
+      items[1].onToggle();
+      expect(onModelChange).toHaveBeenCalledWith(models[1]);
+    });
+
+    it("reads +, the field, then the buttons in the order they show", async () => {
+      const { container } = await renderPhoneComposer({ touch: true });
+
+      const controls = container.querySelector(
+        '[data-ui="chat-input-controls"]',
+      )!;
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      expect(controls).toContainElement(textarea);
+      expect(
+        screen
+          .getByTestId("chat-input-add-controls")
+          .compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("still names the one model there is, in the + menu", async () => {
+      await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
+
+      expect(addControlsProps().modelSection?.items).toHaveLength(1);
+    });
+
+    it("says in the + menu why an assistant's tools cannot be changed", async () => {
+      await renderPhoneComposer({ touch: true, enforceTools: true });
+
+      expect(addControlsProps().toolsDisabledReason).toBe(
+        "This assistant sets the tools for its chats.",
+      );
+    });
+
+    it("keeps the rows of a narrow window under a mouse", async () => {
+      const { container } = await renderPhoneComposer({ touch: false });
+
+      expect(
+        container.querySelector('[data-ui="chat-input-shell"]'),
+      ).not.toHaveAttribute("data-layout");
+      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+      expect(addControlsProps().modelSection).toBeUndefined();
+      expect(addControlsProps().selectedToolCount).toBeUndefined();
+    });
   });
 
   it("hides the inline model selector when a top-left accessory override is registered", async () => {
@@ -8012,9 +8145,10 @@ describe("ChatInput", () => {
       )!;
       const textarea = screen.getByPlaceholderText("Type a message...");
       expect(children.indexOf(notice)).toBeLessThan(children.indexOf(area));
-      expect(children.indexOf(area)).toBeLessThan(
-        children.indexOf(textarea.parentElement!),
-      );
+      expect(
+        area.compareDocumentPosition(textarea) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(area).toHaveClass("flex");
       const lane = within(area).getByRole("list", { name: "Message context" });
       const files = area.querySelector<HTMLElement>(

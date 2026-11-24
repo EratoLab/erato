@@ -40,6 +40,13 @@ export interface ChatInputAddControlsProps {
    * tools and the assistants exactly as the desktop dropdown orders them.
    */
   mcpToolsSection?: AddMenuSection;
+  /**
+   * The model choice, last in the menu, for a composer too narrow for the
+   * model picker of its own.
+   */
+  modelSection?: AddMenuSection;
+  /** Shown on the trigger where the selected tools have no chips. */
+  selectedToolCount?: number;
 
   /** Disable the whole control (general composer-disabled state). */
   disabled?: boolean;
@@ -47,6 +54,8 @@ export interface ChatInputAddControlsProps {
   uploadDisabled?: boolean;
   /** Extra gate for tool rows (e.g. facet selection is enforced/locked). */
   toolsDisabled?: boolean;
+  /** Said under each locked tool row, where no tool chip says it. */
+  toolsDisabledReason?: string;
 }
 
 /**
@@ -64,9 +73,12 @@ export function ChatInputAddControls({
   assistantSection,
   mcpToolsSection,
   compactionSection,
+  modelSection,
+  selectedToolCount,
   disabled = false,
   uploadDisabled = false,
   toolsDisabled = false,
+  toolsDisabledReason,
 }: ChatInputAddControlsProps) {
   const {
     isProcessing,
@@ -95,9 +107,10 @@ export function ChatInputAddControls({
       mcpToolsSection,
       assistantSection,
       compactionSection,
+      modelSection,
     ].filter((section): section is AddMenuSection => section !== undefined);
     return sections.length > 0 ? sections : undefined;
-  }, [assistantSection, mcpToolsSection, compactionSection]);
+  }, [assistantSection, mcpToolsSection, compactionSection, modelSection]);
 
   const tools: AddMenuToolItem[] = useMemo(
     () =>
@@ -108,8 +121,16 @@ export function ChatInputAddControls({
         checked: selectedFacetIdSet.has(facet.id),
         onToggle: () => onToggleFacet(facet.id),
         disabled: disabled || toolsDisabled,
+        description: toolsDisabled ? toolsDisabledReason : undefined,
       })),
-    [facets, selectedFacetIdSet, onToggleFacet, disabled, toolsDisabled],
+    [
+      facets,
+      selectedFacetIdSet,
+      onToggleFacet,
+      disabled,
+      toolsDisabled,
+      toolsDisabledReason,
+    ],
   );
 
   return (
@@ -144,6 +165,7 @@ export function ChatInputAddControls({
             : undefined
         }
         isProcessing={isProcessing}
+        selectedToolCount={selectedToolCount}
         disabled={disabled}
       />
 

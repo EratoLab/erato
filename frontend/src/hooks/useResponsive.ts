@@ -2,6 +2,8 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+import { HOVERING_POINTER } from "@/styles/pointerQueries";
+
 // Define breakpoints based on Tailwind's default breakpoints
 export const breakpoints = {
   sm: 640,
@@ -99,14 +101,7 @@ const belowQuery = (breakpoint: Breakpoint) =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS media query, not user-facing
   `(max-width: ${breakpoints[breakpoint] - 0.02}px)`;
 
-/**
- * Lean boolean selector for "is the viewport below this breakpoint". Prefer
- * it over `useResponsive().isBelow` in components that only need the flag: it
- * re-renders only when the boundary is crossed, not on every resize pixel,
- * and (like useResponsive) is first-paint-correct.
- */
-export function useIsBelow(breakpoint: Breakpoint): boolean {
-  const query = belowQuery(breakpoint);
+function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       if (typeof window === "undefined") {
@@ -123,6 +118,23 @@ export function useIsBelow(breakpoint: Breakpoint): boolean {
     () => typeof window !== "undefined" && window.matchMedia(query).matches,
     () => false,
   );
+}
+
+/**
+ * Lean boolean selector for "is the viewport below this breakpoint". Prefer
+ * it over `useResponsive().isBelow` in components that only need the flag: it
+ * re-renders only when the boundary is crossed, not on every resize pixel,
+ * and (like useResponsive) is first-paint-correct.
+ */
+export function useIsBelow(breakpoint: Breakpoint): boolean {
+  return useMediaQuery(belowQuery(breakpoint));
+}
+
+/** Below `sm` without a hovering pointer, as the `no-hover:` variant reads it. */
+export function useIsNarrowTouchScreen(): boolean {
+  const isNarrow = useIsBelow("sm");
+  const hasHoveringPointer = useMediaQuery(HOVERING_POINTER);
+  return isNarrow && !hasHoveringPointer;
 }
 
 /** Below the `md` breakpoint: the mobile (single-column) layout. */
