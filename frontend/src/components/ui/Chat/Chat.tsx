@@ -802,7 +802,7 @@ export const Chat = ({
       handleFileAttachments={handleFileAttachments}
       chatId={currentChatId}
       assistantId={assistantId}
-      className="p-[var(--chat-composer-gutter)]"
+      className="p-2 sm:p-4"
       isLoading={chatLoading}
       disabled={composerDisabled || isLastMessageBlockedByPromptInjection}
       showControls
