@@ -37,6 +37,7 @@ import {
 } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
+import { wordSelectionReviewStatus } from "../utils/wordProposalApply";
 import {
   isWordRevertOffered,
   revertWordSelection,
@@ -526,20 +527,6 @@ function resultText(
   }
 }
 
-function statusOf(
-  result: WordReplaceSelectionResult,
-): WordReviewState["status"] {
-  switch (result.status) {
-    case "applied":
-    case "unchanged":
-      return "done";
-    case "unverified":
-      return "write-failed";
-    default:
-      return "error";
-  }
-}
-
 /** A Replace whose text is, or may be, in the document. */
 const holdsPassage = (review: WordReviewState) =>
   (review.status === "done" && review.selection?.status === "applied") ||
@@ -792,7 +779,7 @@ export function WordSelectionCard({
           wordSelectionStore.requestRefresh();
         }
         updateReview(batchKey, {
-          status: statusOf(outcome),
+          status: wordSelectionReviewStatus(outcome),
           applyStage: undefined,
           detailsExpanded: false,
           selection: outcome,

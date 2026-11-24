@@ -12,14 +12,16 @@ import { useWordDocumentCaptures } from "./hooks/useWordDocumentCaptures";
 import { WordWriteProvider } from "./providers/WordWriteProvider";
 import { buildWordArtifact } from "./utils/buildWordArtifact";
 import { WORD_CLIENT_ACTION_DECISIONS_KEY } from "./utils/clientActionPolicy";
+import {
+  WORD_APPLY_COMMENTS_TOOL,
+  WORD_APPLY_PLAN_TOOL,
+} from "./utils/wordApplyCall";
 import { setWordChainedApply } from "./utils/wordAuthoringContract";
 import { getWordDocumentIdentity } from "./utils/wordDocumentIdentity";
 import { wordMessageContext } from "./utils/wordMessageContext";
 import { AddinChatCore, AddinChatCoreView } from "../core/AddinChatCore";
-import {
-  carryOverClientDecisions,
-  WORD_CARRY_OVER,
-} from "../core/clientActions/carryOverDecisions";
+import { carryOverClientDecisions } from "../core/clientActions/carryOverDecisions";
+import { carryOverMappingsFor } from "../core/clientActions/proposalApply";
 import { useActionFacetClientActions } from "../core/clientActions/useAvailableActionFacets";
 import { stampHostArtifact } from "../core/hostArtifactStamp";
 
@@ -30,6 +32,9 @@ import type {
 import type { HostArtifactStamp } from "../core/hostArtifactStamp";
 import type { WordMessageContext } from "./utils/wordWriteBridge";
 import type { HostArtifact, Message } from "@erato/frontend/library";
+
+/** The namespace of the Word tools the server calls. */
+const WORD_NAMESPACE = "word";
 
 type PaneMessage = AddinChatController["messages"][string];
 
@@ -124,28 +129,32 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
   ]);
 
   const approvalTools = useApprovalTools();
-  const offeredApplyTools = useMemo(
-    () => new Set(approvalTools.map((tool) => tool.qualified_name)),
+  const wordMappings = useMemo(
+    () => carryOverMappingsFor(approvalTools, WORD_NAMESPACE),
     [approvalTools],
   );
-  const chainedApply = WORD_CARRY_OVER.some((mapping) =>
-    offeredApplyTools.has(mapping.serverKey),
+  const offeredApplyTools = useMemo(
+    () => new Set(wordMappings.map((mapping) => mapping.serverKey)),
+    [wordMappings],
   );
+  const chainedApply =
+    offeredApplyTools.has(`${WORD_NAMESPACE}/${WORD_APPLY_PLAN_TOOL}`) ||
+    offeredApplyTools.has(`${WORD_NAMESPACE}/${WORD_APPLY_COMMENTS_TOOL}`);
   useEffect(() => setWordChainedApply(chainedApply), [chainedApply]);
-  // Once the server decides changes, the pane's own Ask, Always and Never move there once.
+  // Once the server decides an action, the pane's own Ask, Always and Never for it move there once.
   useEffect(() => {
-    if (!chainedApply) return;
+    if (wordMappings.length === 0) return;
     void carryOverClientDecisions({
       host: "word",
       storageKey: WORD_CLIENT_ACTION_DECISIONS_KEY,
-      mappings: WORD_CARRY_OVER,
+      mappings: wordMappings,
       offered: offeredApplyTools,
       sessionOnly: (facetId, action) =>
         clientActionsByFacetId.get(facetId)?.grantScope[action] ===
         "session_document",
       save: addUnsetClientToolDecisions,
     });
-  }, [chainedApply, offeredApplyTools, clientActionsByFacetId]);
+  }, [wordMappings, offeredApplyTools, clientActionsByFacetId]);
   // Read when an apply runs without its copy, as after a reload: the request and its document.
   const messagesRef = useRef({ messages: messagesWithArtifact, messageOrder });
   messagesRef.current = { messages: messagesWithArtifact, messageOrder };

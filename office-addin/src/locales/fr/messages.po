@@ -1376,6 +1376,11 @@ msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {À {first}} other {À {first} +#}}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.outlook.settings.serverActions"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Tant qu'il n'est pas épinglé, ce complément reste sur le message depuis lequel vous l'avez ouvert. Sélectionnez l'icône d'épingle pour le garder synchronisé pendant votre lecture."
@@ -1574,6 +1579,21 @@ msgstr "{total, plural, one {L’image de la diapositive n’a pas pu être envo
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
 msgstr "{missing} des {total} images de diapositives n’ont pas pu être envoyées. Les autres sont jointes."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.appointmentNotSent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyNotSent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyTo"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
@@ -3909,6 +3929,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordApprovalItemCard.tsx
+#: src/word/components/WordProposalApprovalCard.tsx
 msgid "officeAddin.word.chained.consent"
 msgstr ""
 
@@ -5307,6 +5328,11 @@ msgstr "Toute modification de commentaire, y compris les nouveaux commentaires :
 #: src/word/components/WordDecisionChoices.tsx
 msgid "officeAddin.word.decision.standing.plan"
 msgstr "Toute modification du document :"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordProposalApprovalCard.tsx
+msgid "officeAddin.word.decision.standing.proposal"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx

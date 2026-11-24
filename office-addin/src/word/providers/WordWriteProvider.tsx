@@ -179,6 +179,10 @@ export function WordWriteProvider({
   identityRef.current = documentIdentity;
   const messageContextRef = useRef(messageContext);
   messageContextRef.current = messageContext;
+  const capturesRef = useRef(capturesByAssistantMessageId);
+  capturesRef.current = capturesByAssistantMessageId;
+  const reviewsRef = useRef(reviews);
+  reviewsRef.current = reviews;
   useEffect(() => {
     setWordWriteBridge({
       documentIdentity: () => identityRef.current,
@@ -189,6 +193,8 @@ export function WordWriteProvider({
       setRevertSlot,
       invalidateLocations,
       messageContext: (messageId) => messageContextRef.current(messageId),
+      captureFor: (messageId) => capturesRef.current.get(messageId),
+      reviewFor: (key) => reviewsRef.current.get(key),
     });
     return () => setWordWriteBridge(null);
   }, [

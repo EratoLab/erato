@@ -102,6 +102,8 @@ function bridgeFor(
     setRevertSlot: vi.fn(),
     invalidateLocations: vi.fn(),
     messageContext: () => stored,
+    captureFor: () => undefined,
+    reviewFor: () => undefined,
   };
 }
 

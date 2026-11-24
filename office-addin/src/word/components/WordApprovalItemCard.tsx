@@ -11,6 +11,7 @@ import {
   wordPlanStandingLabel,
 } from "./WordDecisionChoices";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
+import { WordProposalApprovalCard } from "./WordProposalApprovalCard";
 import { useWordLiveCapture } from "../hooks/useWordChainedApply";
 import { wordAcceptedPlan } from "../utils/wordAcceptedSubmissions";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../utils/wordApplyCall";
 import { WORD_CLIENT_ACTIONS } from "../utils/wordClientActions";
 import { wordCommentDraft } from "../utils/wordCommentSubmission";
+import { wordProposalActionOf } from "../utils/wordProposalApply";
 
 import type { WordCardDecision } from "./WordDecisionChoices";
 import type { ApprovalItemCardProps } from "@erato/frontend/library";
@@ -40,6 +42,12 @@ export function wordReadAgainText(): string {
  */
 export function WordApprovalItemCard(props: ApprovalItemCardProps) {
   const { item, serverId } = props;
+  if (
+    serverId === WORD_NAMESPACE &&
+    item.chained &&
+    wordProposalActionOf(item.tool_name)
+  )
+    return <WordProposalApprovalCard {...props} />;
   if (
     serverId !== WORD_NAMESPACE ||
     !item.chained ||

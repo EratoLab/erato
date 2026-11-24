@@ -19,6 +19,7 @@ import {
   WORD_REPLACE_FENCE,
 } from "./wordClientActions";
 import { WORD_SUBMIT_PLAN_ACTION } from "./wordDocumentSubmission";
+import { isProposalChained } from "../../core/clientActions/proposalApply";
 
 import type {
   ContentPart,
@@ -173,7 +174,9 @@ export function buildWordArtifact(args: {
     Object.keys(args.clientActionInfo.grantScope).length > 0
       ? { clientActionGrantScopes: args.clientActionInfo.grantScope }
       : {}),
-    ...(args.clientActionInfo?.presentation
+    // The server carries out a chained proposal after the user's decision in the chat: the
+    // pane does not prompt for it as well.
+    ...(args.clientActionInfo?.presentation && !isProposalChained(args.content)
       ? { clientActionPresentation: args.clientActionInfo.presentation }
       : {}),
     ...(args.capture
