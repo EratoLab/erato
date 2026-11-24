@@ -11,20 +11,27 @@ const NO_HOVERING_POINTER = `not all and ${HOVERING_POINTER}`;
  * message presses it too. A label only counts around a check or radio box;
  * around a text field it would light the field on every tap into it.
  */
-const PRESSABLE = [
-  "a[href]",
+const LINK_SELECTORS = ["a[href]", '[role="link"]'];
+const CONTROL_SELECTORS = [
   "button",
   'label:has(input[type="checkbox"], input[type="radio"])',
   "summary",
   '[role="button"]',
-  '[role="link"]',
   '[role="menuitem"]',
   '[role="menuitemcheckbox"]',
   '[role="menuitemradio"]',
   '[role="option"]',
   '[role="tab"]',
   '[role="switch"]',
-].join(", ");
+];
+const PRESSABLE = [...LINK_SELECTORS, ...CONTROL_SELECTORS].join(", ");
+
+/**
+ * A held finger selects a control's label and offers Copy and Look Up, which
+ * a native control never does. Links stay selectable: they sit inside message
+ * text, where a selection has to run across them.
+ */
+const CONTROL = CONTROL_SELECTORS.join(", ");
 
 export default {
   content: [
@@ -236,6 +243,10 @@ export default {
         [`@media ${NO_HOVERING_POINTER}`]: {
           [`:is(${PRESSABLE}):active, :is(${PRESSABLE}):active *`]: {
             transitionDuration: "0s",
+          },
+          [`:is(${CONTROL})`]: {
+            WebkitUserSelect: "none",
+            userSelect: "none",
           },
         },
       });

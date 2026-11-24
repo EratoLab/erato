@@ -1202,6 +1202,55 @@ body:has(.app-viewport) {
   box-shadow: var(--theme-elevation-input);
 }
 
+/* The gap around the chat's composer, which the docked composer below takes
+   back as padding. */
+[data-ui="composer-cluster"] {
+  --chat-composer-gutter: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  [data-ui="composer-cluster"] {
+    --chat-composer-gutter: 1rem;
+  }
+}
+
+/* On a narrow touch screen the composer at the foot of the chat runs to the
+   screen's bottom and side edges. Held above the home indicator, its small
+   corners sat inside the screen's much larger rounded corner, two roundings
+   that never match; docked on a phone with rounded corners, the screen's own
+   corners are its lower ones. The theme's radius stays on the top corners and
+   the padding takes back the gutter, so the controls keep their place. After
+   the skin so it wins over it; :where() keeps it at the hook's own weight, so
+   a theme.css rule on the hook still wins over it. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    :where(
+        :not([data-ui="chat-empty-state-centered-shell"])
+          > [data-ui="composer-cluster"]
+      )
+      [data-ui="chat-input-shell"] {
+      width: auto;
+      margin-inline: calc(-1 * var(--chat-composer-gutter));
+      margin-bottom: calc(
+        -1 * (var(--chat-composer-gutter) + var(--safe-area-bottom))
+      );
+      border-inline-width: 0;
+      border-bottom-width: 0;
+      border-end-start-radius: 0;
+      border-end-end-radius: 0;
+      /* .chat-input-shell-geometry's narrow-screen padding plus the gutter. */
+      padding-inline: calc(
+        var(--theme-spacing-input-compact-padding-x) +
+          var(--chat-composer-gutter)
+      );
+      padding-bottom: calc(
+        var(--theme-spacing-input-compact-padding-y) +
+          var(--chat-composer-gutter) + var(--safe-area-bottom)
+      );
+    }
+  }
+}
+
 .chat-message-skin {
   border-radius: var(--theme-radius-message);
   padding: var(--theme-spacing-message-padding-y)
