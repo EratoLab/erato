@@ -9482,6 +9482,7 @@ describe("ChatInput", () => {
             endOfTurnSilenceMs: 1000,
             minSpeechMs: 64,
             keepHesitations: true,
+            overVoice: false,
           }),
         );
         expect(toggleDictation).toHaveBeenCalledTimes(1);
@@ -9543,6 +9544,7 @@ describe("ChatInput", () => {
           endOfTurnSilenceMs: 1000,
           minSpeechMs: 64,
           keepHesitations: true,
+          overVoice: false,
         });
 
         withVoice(toggleDictation, true);

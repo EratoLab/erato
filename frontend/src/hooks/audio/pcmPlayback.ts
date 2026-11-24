@@ -102,13 +102,73 @@ export function playbackPlays(
 const LOWERED_VOICE_GAIN = 0.3;
 let output: GainNode | undefined;
 
+/** What the voice sends to the speakers, read as the microphone hears. */
+let outputMeter: AnalyserNode | undefined;
+
 /** Where every voice plays, so that talking over it can lower it. */
 function voiceOutput(context: AudioContext): GainNode {
   if (output?.context !== context) {
     output = context.createGain();
     output.connect(context.destination);
+    outputMeter = undefined;
+    if (typeof context.createAnalyser === "function") {
+      outputMeter = context.createAnalyser();
+      // Twice as long as the microphone's audio arrives in at once.
+      outputMeter.fftSize = 8192;
+      output.connect(outputMeter);
+    }
   }
   return output;
+}
+
+/** The voice's level as it reached the speakers, in 10 ms steps. */
+let outputLevels: { at: number; level: number }[] = [];
+const LEVEL_STEP_S = 0.01;
+/** Older sound can no longer come back as echo. */
+const LEVELS_KEPT_MS = 3000;
+
+/**
+ * Notes what the voice sent to the speakers just now, every voice and its
+ * lowering included; called with the microphone's audio as it arrives.
+ */
+export function noteVoiceOutput() {
+  const meter = outputMeter;
+  if (!meter) return;
+  const samples = new Float32Array(meter.fftSize);
+  meter.getFloatTimeDomainData(samples);
+  const rate = meter.context.sampleRate;
+  const step = Math.round(rate * LEVEL_STEP_S);
+  // The speakers play it this much later.
+  const playedAt =
+    globalThis.performance.now() +
+    ((Number((meter.context as AudioContext).outputLatency) || 0) +
+      (Number((meter.context as AudioContext).baseLatency) || 0)) *
+      1000;
+  const last = outputLevels.at(-1)?.at ?? -Infinity;
+  const fresh: { at: number; level: number }[] = [];
+  for (let end = samples.length; end >= step; end -= step) {
+    const at = playedAt - ((samples.length - end) / rate) * 1000;
+    if (at <= last) break;
+    let sum = 0;
+    for (let i = end - step; i < end; i += 1) sum += samples[i] * samples[i];
+    fresh.push({ at, level: Math.sqrt(sum / step) });
+  }
+  outputLevels = [
+    ...outputLevels.filter((entry) => entry.at > playedAt - LEVELS_KEPT_MS),
+    ...fresh.reverse(),
+  ];
+}
+
+/**
+ * The loudest the voice was at the speakers between two moments of the page
+ * clock (`performance.now()`); 0 when it was silent or nothing was noted.
+ */
+export function playedVoiceLevel(fromMs: number, toMs: number): number {
+  let loudest = 0;
+  for (const entry of outputLevels)
+    if (entry.at >= fromMs && entry.at <= toMs)
+      loudest = Math.max(loudest, entry.level);
+  return loudest;
 }
 
 /** Lowers the voice while the user may be starting to talk over it. */

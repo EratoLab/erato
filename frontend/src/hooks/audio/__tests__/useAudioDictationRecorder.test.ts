@@ -13,6 +13,12 @@ import {
   useAudioDictationRecorder,
 } from "../useAudioDictationRecorder";
 
+const playback = vi.hoisted(() => ({ level: 0 }));
+vi.mock("../pcmPlayback", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pcmPlayback")>()),
+  playedVoiceLevel: () => playback.level,
+}));
+
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
   default: "blob:mock-audio-dictation-worklet",
 }));
@@ -1094,6 +1100,85 @@ describe("useAudioDictationRecorder over the voice", () => {
     },
     10000,
   );
+
+  /** Like `emitFrames`, the frames heard at sample level `level`. */
+  function emitFramesAt(probability: number, ms: number, level: number) {
+    for (let at = 0; at < ms; at += 32) {
+      vadMock.engines[0].emit({
+        type: "frame",
+        frame: {
+          samples: new Float32Array(512).fill(level),
+          sampleRate: 16000,
+        },
+        probabilities: { isSpeech: probability, notSpeech: 1 - probability },
+      });
+    }
+  }
+
+  it("does not take the voice's own echo for the user, however sure the detector is (ERMAIN-1344)", async () => {
+    playback.level = 0.2;
+    try {
+      const hook = renderOverVoice(true, 300);
+      await startHeld(hook);
+      act(() => {
+        // The voice comes back a tenth as loud, rising and falling with it.
+        for (let round = 0; round < 6; round += 1) {
+          emitFramesAt(0.95, 320, 0.02);
+          emitFramesAt(0.95, 160, 0.03);
+        }
+      });
+      expect(hook.onSpeechOverVoice).not.toHaveBeenCalled();
+      act(() => emitFramesAt(0.95, 352, 0.2));
+      expect(hook.onSpeechOverVoice).toHaveBeenCalledTimes(1);
+    } finally {
+      playback.level = 0;
+    }
+  });
+
+  it("waits over a voice that starts while it listens, before anything was said (ERMAIN-1344)", async () => {
+    const hook = renderOverVoice(false, 300);
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+    expect(hook.result.current.isListeningOverVoice).toBe(false);
+
+    hook.rerender({ speaking: true });
+    await waitFor(() =>
+      expect(hook.result.current.isListeningOverVoice).toBe(true),
+    );
+    act(() => {
+      emitAudioSamples(new Float32Array(SAMPLES_PER_SECOND).fill(0.2));
+      // The voice's own sound opens no turn while it waits.
+      hearSpeech();
+    });
+    expect(MockWebSocket.instances).toHaveLength(0);
+    act(() => emitFrames(0.95, 352));
+    expect(hook.onSpeechOverVoice).toHaveBeenCalledTimes(1);
+    await openSession();
+  });
+
+  it("leaves a recording that has heard the user, and a card's turn, as they are when a voice starts (ERMAIN-1344)", async () => {
+    const heard = renderOverVoice(false, 300);
+    await act(async () => {
+      heard.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(heard.result.current.isDictating).toBe(true));
+    act(() => hearSpeech());
+    heard.rerender({ speaking: true });
+    expect(heard.result.current.isListeningOverVoice).toBe(false);
+    heard.unmount();
+
+    const card = renderOverVoice(false, 300);
+    await act(async () => {
+      card.result.current.toggleDictation({ overVoice: false });
+    });
+    await waitFor(() => expect(card.result.current.isDictating).toBe(true));
+    card.rerender({ speaking: true });
+    act(() => emitFrames(0.95, 352));
+    expect(card.result.current.isListeningOverVoice).toBe(false);
+    expect(card.onSpeechOverVoice).not.toHaveBeenCalled();
+  });
 
   it("drops what was heard over the voice when the voice ends on its own with nobody speaking, and starts fresh", async () => {
     const hook = renderOverVoice();

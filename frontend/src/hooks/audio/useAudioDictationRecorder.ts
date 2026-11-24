@@ -52,10 +52,22 @@ import {
   SILENT_FRAME_PROBABILITY,
 } from "./audioTuning";
 import {
+  ECHO_LAG_MS,
+  ECHO_LEAD_MS,
+  echoCoupling,
+  frameLevel,
+  noteEchoFrame,
+  type EchoCoupling,
+} from "./echoLevel";
+import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
-import { playbackContext } from "./pcmPlayback";
+import {
+  noteVoiceOutput,
+  playbackContext,
+  playedVoiceLevel,
+} from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
@@ -160,6 +172,11 @@ export type DictationTurn = {
    * own rules answer "mhm" as listening.
    */
   keepHesitations?: boolean;
+  /**
+   * Whether the turn waits over a voice that starts while it listens. A
+   * card's turn does not: its listening stays as it is.
+   */
+  overVoice?: boolean;
 };
 
 type LiveAudioDictationSession = {
@@ -460,6 +477,21 @@ export function useAudioDictationRecorder({
   const holdRef = useRef<OverVoiceHold | null>(null);
   /** Speech after the voice paused for the current recording, once it has. */
   const spokeOnRef = useRef<SpokeOn | null>(null);
+  /** How the voice comes back into this microphone, across recordings. */
+  const echoRef = useRef<EchoCoupling>(echoCoupling());
+  /** The current recording may wait over a voice that starts while it listens. */
+  const rearmsRef = useRef(false);
+  // Headphones plugged in or a speaker connected: the echo is another one.
+  useEffect(() => {
+    const devices =
+      typeof navigator === "undefined" ? undefined : navigator.mediaDevices;
+    if (!devices?.addEventListener) return;
+    const forget = () => {
+      echoRef.current = echoCoupling();
+    };
+    devices.addEventListener("devicechange", forget);
+    return () => devices.removeEventListener("devicechange", forget);
+  }, []);
   const recordingSignalsRef = useRef<RecordingSignals | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
@@ -534,10 +566,54 @@ export function useAudioDictationRecorder({
     hold.waiter?.(reason);
   }, []);
 
+  /**
+   * A voice starts while the recording listens as if the room were quiet,
+   * before the user has said anything: it waits over the voice again, or the
+   * voice's own sound would open the turn.
+   */
+  const rearmHold = useCallback(() => {
+    const gate = gateRef.current;
+    const hold = holdRef.current;
+    if (
+      !rearmsRef.current ||
+      !gate ||
+      gate.heard ||
+      gate.speaking ||
+      gate.catchingUp ||
+      (hold !== null && hold.released !== "voice_ended")
+    )
+      return;
+    const next: OverVoiceHold = {
+      released: null,
+      gate: overVoiceGate(),
+      lowered: false,
+    };
+    next.waiter = (reason) => {
+      next.waiter = undefined;
+      if (isMounted()) setIsListeningOverVoice(false);
+      if (reason === "speech") {
+        openSpeechGate(gate);
+        return;
+      }
+      // Nothing was said over it: what was heard is the voice's.
+      preSessionSamplesRef.current = [];
+      preDroppedRef.current = 0;
+      vadEngineRef.current?.reset?.();
+      gate.speaking = false;
+      gate.realStarted = false;
+      recordingSignalsRef.current = recordingSignals(Date.now(), false);
+    };
+    holdRef.current = next;
+    spokeOnRef.current = null;
+    recordingSignalsRef.current = recordingSignals(Date.now(), true);
+    setIsListeningOverVoice(true);
+  }, [isMounted]);
+
   useEffect(() => {
     voiceSpeakingRef.current = voiceSpeaking;
     if (!voiceSpeaking) releaseHold("voice_ended");
-  }, [releaseHold, voiceSpeaking]);
+    else rearmHold();
+  }, [rearmHold, releaseHold, voiceSpeaking]);
 
   const clearRecordingDurationTimer = useCallback(() => {
     if (recordingDurationTimerRef.current !== null) {
@@ -1221,6 +1297,7 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      rearmsRef.current = vadAutoStopEnabled && turn?.overVoice !== false;
       spokeOnRef.current = null;
       // Frames are timed from the microphone's first sample once it comes.
       recordingSignalsRef.current = recordingSignals(Date.now(), hold !== null);
@@ -1646,17 +1723,41 @@ export function useAudioDictationRecorder({
                     event.probabilities.isSpeech,
                   );
                 if (gate.heard) cutAtPause(gate);
+                // The frame against what the voice played when its echo could
+                // have left the speakers; frames still being caught up on are
+                // not timed well enough to tell.
+                const frameEnd =
+                  globalThis.performance.now() -
+                  (Math.max(0, gate.fed - gate.judged) /
+                    audioContext.sampleRate) *
+                    1000 -
+                  inputLatencyMs(trackSettings);
+                noteVoiceOutput();
+                const echo = noteEchoFrame(echoRef.current, {
+                  heard: frameLevel(event.frame.samples),
+                  played: playedVoiceLevel(
+                    frameEnd - frameMs - ECHO_LAG_MS,
+                    frameEnd + ECHO_LEAD_MS,
+                  ),
+                  frameMs,
+                  learn: !(holdRef.current?.gate.speechMs ?? 0),
+                });
+                echoRef.current = echo.coupling;
+                const overVoiceSpeech =
+                  echo.overEcho && !gate.catchingUp
+                    ? event.probabilities.isSpeech
+                    : 0;
                 if (spokeOnRef.current)
                   spokeOnRef.current = spokeOnStep(
                     spokeOnRef.current,
-                    event.probabilities.isSpeech,
+                    overVoiceSpeech,
                     frameMs,
                   );
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
                   current.gate,
-                  event.probabilities.isSpeech,
+                  overVoiceSpeech,
                   frameMs,
                   overVoiceMinSpeechMsRef.current,
                 );
@@ -1672,6 +1773,11 @@ export function useAudioDictationRecorder({
                       : 0,
                   );
                   onSpeechOverVoiceRef.current?.();
+                  // Kept from shortly before the words that stopped the
+                  // voice, as when the recording began waiting over it.
+                  const preBuffer = preSessionSamplesRef.current;
+                  if (preBuffer.length > heldSampleCount)
+                    preBuffer.splice(0, preBuffer.length - heldSampleCount);
                   releaseHold("speech");
                   return;
                 }

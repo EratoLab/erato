@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+
+import { echoCoupling, noteEchoFrame, type EchoCoupling } from "./echoLevel";
+import { overVoiceGate, overVoiceStep } from "./talkOverVoice";
+
+const FRAME_MS = 32;
+
+/** A voice's level that rises and falls like speech, frame by frame. */
+const voiceAt = (frame: number) =>
+  0.05 + 0.15 * Math.abs(Math.sin(frame / 3)) * (frame % 11 < 8 ? 1 : 0.2);
+
+/** Runs frames through the echo check and the gate, as the recorder does. */
+function run(
+  frames: number,
+  heardAt: (frame: number, played: number) => number,
+  start: EchoCoupling = echoCoupling(),
+) {
+  let coupling = start;
+  let gate = overVoiceGate();
+  let counted = 0;
+  let confirmed = false;
+  for (let frame = 0; frame < frames; frame += 1) {
+    const played = voiceAt(frame);
+    const echo = noteEchoFrame(coupling, {
+      heard: heardAt(frame, played),
+      played,
+      frameMs: FRAME_MS,
+      learn: gate.speechMs === 0,
+    });
+    coupling = echo.coupling;
+    if (echo.overEcho) counted += 1;
+    const step = overVoiceStep(gate, echo.overEcho ? 0.95 : 0, FRAME_MS, 300);
+    gate = step.gate;
+    confirmed ||= step.confirmed;
+  }
+  return { coupling, counted, confirmed };
+}
+
+/** A small, repeatable wobble: speakers and rooms colour the echo. */
+const wobble = (frame: number) => 0.6 + 0.8 * (((frame * 7919) % 101) / 100);
+
+describe("noteEchoFrame", () => {
+  it.each([0.003, 0.03, 0.3, 1])(
+    "never lets the voice's echo alone through the gate, at strength %s",
+    (strength) => {
+      const result = run(
+        400,
+        (frame, played) => strength * played * wobble(frame),
+      );
+      expect(result.confirmed).toBe(false);
+    },
+  );
+
+  it("lets the user through over a strong echo", () => {
+    const { coupling } = run(
+      200,
+      (frame, played) => 0.3 * played * wobble(frame),
+    );
+    const person = run(
+      20,
+      (frame, played) => 0.3 * played * wobble(frame) + 0.12,
+      coupling,
+    );
+    expect(person.confirmed).toBe(true);
+  });
+
+  it("lets a quiet user through when nothing comes back (headphones)", () => {
+    const { coupling } = run(200, () => 0.0005);
+    expect(run(20, () => 0.01, coupling).confirmed).toBe(true);
+  });
+
+  it("counts nothing before it has measured the echo", () => {
+    expect(run(9, () => 0.5).counted).toBe(0);
+  });
+
+  it("counts every frame while the voice is silent: nothing can come back", () => {
+    const echo = noteEchoFrame(echoCoupling(), {
+      heard: 0.01,
+      played: 0,
+      frameMs: FRAME_MS,
+      learn: true,
+    });
+    expect(echo.overEcho).toBe(true);
+  });
+
+  it("learns the echo from frames outside a stretch only: a user talking back does not raise the bar", () => {
+    const { coupling } = run(
+      200,
+      (frame, played) => 0.05 * played * wobble(frame),
+    );
+    let state = coupling;
+    for (let frame = 0; frame < 200; frame += 1)
+      state = noteEchoFrame(state, {
+        heard: 0.2,
+        played: voiceAt(frame),
+        frameMs: FRAME_MS,
+        learn: false,
+      }).coupling;
+    expect(state.ratios).toEqual(coupling.ratios);
+  });
+});

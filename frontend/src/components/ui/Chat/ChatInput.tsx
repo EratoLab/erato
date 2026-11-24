@@ -1148,6 +1148,8 @@ export const ChatInput = ({
         ),
         // The card's own rules answer a lone "äh" as listening.
         keepHesitations: true,
+        // Nothing said over a voice reaches a card.
+        overVoice: false,
       });
     },
     [
