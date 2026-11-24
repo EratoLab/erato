@@ -57,7 +57,7 @@ export default function HomePage() {
   }, []);
   return (
     <>
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex size-full items-center justify-center">
         <div className="animate-pulse text-lg">
           <Trans id="home.redirecting">Redirecting to chat...</Trans>
         </div>
