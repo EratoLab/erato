@@ -172,6 +172,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     <WordWriteProvider
       documentIdentity={documentIdentity}
       capturesByAssistantMessageId={capturesByAssistantMessageId}
+      captureFor={captures.captureFor}
       restoreRequest={restoreRequest}
       messageContext={messageContext}
     >
