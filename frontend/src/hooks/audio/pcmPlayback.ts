@@ -111,14 +111,20 @@ function voiceOutput(context: AudioContext): GainNode {
     output = context.createGain();
     output.connect(context.destination);
     outputMeter = undefined;
-    if (typeof context.createAnalyser === "function") {
-      outputMeter = context.createAnalyser();
-      // Twice as long as the microphone's audio arrives in at once.
-      outputMeter.fftSize = 8192;
-      output.connect(outputMeter);
-    }
   }
   return output;
+}
+
+/** The meter on the voice output, made the first time anyone reads it. */
+function voiceMeter(): AnalyserNode | undefined {
+  if (outputMeter?.context === output?.context) return outputMeter;
+  const context = output?.context;
+  if (!output || typeof context?.createAnalyser !== "function") return;
+  outputMeter = context.createAnalyser();
+  // Twice as long as the microphone's audio arrives in at once.
+  outputMeter.fftSize = 8192;
+  output.connect(outputMeter);
+  return outputMeter;
 }
 
 /** The voice's level as it reached the speakers, in 10 ms steps. */
@@ -132,7 +138,7 @@ const LEVELS_KEPT_MS = 3000;
  * lowering included; called with the microphone's audio as it arrives.
  */
 export function noteVoiceOutput() {
-  const meter = outputMeter;
+  const meter = voiceMeter();
   if (!meter) return;
   const samples = new Float32Array(meter.fftSize);
   meter.getFloatTimeDomainData(samples);

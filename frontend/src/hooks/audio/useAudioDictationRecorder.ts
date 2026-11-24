@@ -1729,33 +1729,36 @@ export function useAudioDictationRecorder({
                     event.probabilities.isSpeech,
                   );
                 if (gate.heard) cutAtPause(gate);
-                // The frame against what the voice played when its echo could
-                // have left the speakers; frames still being caught up on are
-                // not timed well enough to tell.
-                const frameEnd =
-                  globalThis.performance.now() -
-                  (Math.max(0, gate.fed - gate.judged) /
-                    audioContext.sampleRate) *
-                    1000 -
-                  inputLatencyMs(trackSettings);
-                noteVoiceOutput();
-                const echo = noteEchoFrame(echoRef.current, {
-                  heard: frameLevel(event.frame.samples),
-                  played: playedVoiceLevel(
-                    frameEnd - frameMs - ECHO_LAG_MS,
-                    frameEnd + ECHO_LEAD_MS,
-                  ),
-                  frameMs,
-                  // Only while waiting over the voice: once it paused for
-                  // the user, what follows in its echo's time is theirs.
-                  learns: holdRef.current?.released === null,
-                  inStretch: (holdRef.current?.gate.speechMs ?? 0) > 0,
-                });
-                echoRef.current = echo.coupling;
-                const overVoiceSpeech =
-                  echo.overEcho && !gate.catchingUp
-                    ? event.probabilities.isSpeech
-                    : 0;
+                // Only a recording that waits, or waited, over a voice needs
+                // the echo: with talking over off there is none.
+                let overVoiceSpeech = 0;
+                if (holdRef.current) {
+                  // The frame against what the voice played when its echo
+                  // could have left the speakers; frames still being caught
+                  // up on are not timed well enough to tell.
+                  const frameEnd =
+                    globalThis.performance.now() -
+                    (Math.max(0, gate.fed - gate.judged) /
+                      audioContext.sampleRate) *
+                      1000 -
+                    inputLatencyMs(trackSettings);
+                  noteVoiceOutput();
+                  const echo = noteEchoFrame(echoRef.current, {
+                    heard: frameLevel(event.frame.samples),
+                    played: playedVoiceLevel(
+                      frameEnd - frameMs - ECHO_LAG_MS,
+                      frameEnd + ECHO_LEAD_MS,
+                    ),
+                    frameMs,
+                    // Only while waiting over the voice: once it paused for
+                    // the user, what follows in its echo's time is theirs.
+                    learns: holdRef.current.released === null,
+                    inStretch: holdRef.current.gate.speechMs > 0,
+                  });
+                  echoRef.current = echo.coupling;
+                  if (echo.overEcho && !gate.catchingUp)
+                    overVoiceSpeech = event.probabilities.isSpeech;
+                }
                 if (spokeOnRef.current)
                   spokeOnRef.current = spokeOnStep(
                     spokeOnRef.current,

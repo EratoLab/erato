@@ -13,10 +13,16 @@ import {
   useAudioDictationRecorder,
 } from "../useAudioDictationRecorder";
 
-const playback = vi.hoisted(() => ({ level: 0 }));
+const playback = vi.hoisted(() => ({ level: 0, reads: 0, notes: 0 }));
 vi.mock("../pcmPlayback", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../pcmPlayback")>()),
-  playedVoiceLevel: () => playback.level,
+  playedVoiceLevel: () => {
+    playback.reads += 1;
+    return playback.level;
+  },
+  noteVoiceOutput: () => {
+    playback.notes += 1;
+  },
 }));
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
@@ -1133,6 +1139,19 @@ describe("useAudioDictationRecorder over the voice", () => {
     } finally {
       playback.level = 0;
     }
+  });
+
+  it("does no echo work in a recording that never waits over a voice, as with talking over off (ERMAIN-1344)", async () => {
+    const hook = renderOverVoice(false, 300);
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+    playback.reads = 0;
+    playback.notes = 0;
+    act(() => emitFrames(0.95, 640));
+    expect(playback.reads).toBe(0);
+    expect(playback.notes).toBe(0);
   });
 
   it("keeps waiting over the voice while its last words can still come back (ERMAIN-1344)", async () => {

@@ -101,11 +101,6 @@ export function noteVoiceChunk(
   ];
 }
 
-/**
- * What the voice was saying when the user talked over it: the stretch
- * around the spot reached in the passage then playing, at that passage's
- * own pace. Empty when nothing was sounding.
- */
 /** All of the reply's audio is scheduled: its last passage ends where it ends. */
 function completeLastPassage() {
   const last = said.at(-1);
@@ -113,6 +108,11 @@ function completeLastPassage() {
     last.complete = true;
 }
 
+/**
+ * What the voice was saying when the user talked over it: the stretch
+ * around the spot reached in the passage then playing, at that passage's
+ * own pace. Empty when nothing was sounding.
+ */
 export function voiceTextAtPause(): string {
   return pausedAt === null ? "" : voiceTextAt(said, pausedAt);
 }

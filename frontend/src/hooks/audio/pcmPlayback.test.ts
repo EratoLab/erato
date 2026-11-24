@@ -7,6 +7,7 @@ import {
   DEFAULT_START_WAIT_MS as START_WAIT_MS,
   configureVoiceStart,
   createPcmQueue,
+  noteVoiceOutput,
 } from "./pcmPlayback";
 
 const RATE = 24000;
@@ -22,6 +23,11 @@ class MockContext {
       getChannelData: () => new Float32Array(length),
     };
   }
+  createAnalyser = vi.fn(() => ({
+    context: this,
+    fftSize: 0,
+    getFloatTimeDomainData: vi.fn(),
+  }));
   createGain() {
     return {
       context: this,
@@ -456,5 +462,18 @@ describe("the shared playback context after a phone lock", () => {
     await vi.advanceTimersByTimeAsync(2000);
 
     expect(playback.suspend).not.toHaveBeenCalled();
+  });
+});
+
+describe("the meter on the voice output", () => {
+  it("is made only once the echo is read, never just because a voice plays (ERMAIN-1344)", () => {
+    const mock = new MockContext();
+    const queue = createPcmQueue(() => {});
+    configureVoiceStart({ bufferMs: 0, maxWaitMs: 0 });
+    queue.enqueue(mock as unknown as AudioContext, pcm(100), RATE);
+    expect(mock.started).toHaveLength(1);
+    expect(mock.createAnalyser).not.toHaveBeenCalled();
+    noteVoiceOutput();
+    expect(mock.createAnalyser).toHaveBeenCalledTimes(1);
   });
 });
