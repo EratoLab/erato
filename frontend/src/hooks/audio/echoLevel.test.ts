@@ -115,5 +115,6 @@ describe("noteEchoFrame", () => {
         learn: false,
       }).coupling;
     expect(state.learned).toEqual(coupling.learned);
+    expect(state.pending).toEqual([]);
   });
 });

@@ -32,6 +32,12 @@ const MIN_FRAMES = 10;
  * needs.
  */
 const SPREAD_PERCENTILE = 0.95;
+/**
+ * A frame is learned only this long after it was heard: the softer start of
+ * the user's words comes before the detector is sure of them, and must not
+ * count as echo (the same lead-in the recorder keeps before speech).
+ */
+const LEAD_IN_MS = 500;
 /** The room's own sound: what the microphone hears at its quietest. */
 const ROOM_PERCENTILE = 0.1;
 /**
@@ -43,11 +49,17 @@ const VOICE_SILENT = 0.001;
 export interface EchoCoupling {
   /** Heard and played levels of recent frames that held echo and room only. */
   learned: { heard: number; played: number }[];
+  /** Frames not learned yet: they may turn out to be a stretch's lead-in. */
+  pending: { heard: number; played: number }[];
   /** Recent levels heard, for the room's own sound. */
   heard: number[];
 }
 
-export const echoCoupling = (): EchoCoupling => ({ learned: [], heard: [] });
+export const echoCoupling = (): EchoCoupling => ({
+  learned: [],
+  pending: [],
+  heard: [],
+});
 
 const percentile = (values: readonly number[], share: number): number => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -80,7 +92,8 @@ function expectation(learned: EchoCoupling["learned"], room: number) {
 /**
  * One microphone frame: `heard` its level, `played` the loudest the voice
  * played in the time its echo can come from. `learn`: the frame is not part
- * of a stretch that may be the user's, so it shows echo and room alone.
+ * of a stretch that may be the user's: once it has not led into one either,
+ * it shows echo and room alone.
  * `overEcho`: the frame holds more than they explain, and at least as much
  * again as the echo itself; with the voice silent, always.
  */
@@ -109,12 +122,22 @@ export function noteEchoFrame(
     const echo = strength * played;
     overEcho = heard - room - echo > Math.max(spread, echo);
   }
+  // A stretch that may be the user's: what led into it is theirs too.
+  if (!learn)
+    return {
+      coupling: { ...coupling, pending: [], heard: heardLevels },
+      overEcho,
+    };
+  const pending = [...coupling.pending, { heard, played }];
+  const due = pending.splice(
+    0,
+    Math.max(0, pending.length - Math.ceil(LEAD_IN_MS / frameMs)),
+  );
   return {
     coupling: {
       heard: heardLevels,
-      learned: learn
-        ? [...coupling.learned.slice(-(kept - 1)), { heard, played }]
-        : coupling.learned,
+      pending,
+      learned: [...coupling.learned, ...due].slice(-kept),
     },
     overEcho,
   };
