@@ -1746,6 +1746,9 @@ export function useAudioDictationRecorder({
                     frameEnd + ECHO_LEAD_MS,
                   ),
                   frameMs,
+                  // Only while waiting over the voice: once it paused for
+                  // the user, what follows in its echo's time is theirs.
+                  learns: holdRef.current?.released === null,
                   inStretch: (holdRef.current?.gate.speechMs ?? 0) > 0,
                 });
                 echoRef.current = echo.coupling;

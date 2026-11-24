@@ -129,6 +129,23 @@ describe("noteEchoFrame", () => {
     expect(state.pending).toEqual([]);
   });
 
+  it("learns nothing from what is heard once the voice paused for the user", () => {
+    const { coupling } = run(
+      200,
+      (frame, played) => 0.05 * played * wobble(frame),
+    );
+    let state = coupling;
+    for (let frame = 0; frame < 100; frame += 1)
+      state = noteEchoFrame(state, {
+        heard: 0.2,
+        played: voiceAt(frame),
+        frameMs: FRAME_MS,
+        learns: false,
+        inStretch: false,
+      }).coupling;
+    expect(state.learned).toEqual(coupling.learned);
+  });
+
   it("does not take an echo that comes back late (Bluetooth) for the user when the voice starts", () => {
     // The loudest of the last 600 ms, as the recorder asks for it.
     const windowMax = (frame: number) =>

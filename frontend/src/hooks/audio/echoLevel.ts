@@ -100,7 +100,8 @@ function expectation(learned: EchoCoupling["learned"], room: number) {
 
 /**
  * One microphone frame: `heard` its level, `played` the loudest the voice
- * played in the time its echo can come from. `inStretch`: a stretch that
+ * played in the time its echo can come from. `learns`: the frame was heard
+ * while waiting over the voice; others teach nothing. `inStretch`: a stretch that
  * may be the user's runs; its frames and what led into it are learned only
  * once it ended without being confirmed (see `forgetLeadIn`). `overEcho`:
  * the frame holds more than echo and room explain, and at least as much
@@ -112,11 +113,13 @@ export function noteEchoFrame(
     heard,
     played,
     frameMs,
+    learns = true,
     inStretch,
   }: {
     heard: number;
     played: number;
     frameMs: number;
+    learns?: boolean;
     inStretch: boolean;
   },
 ): { coupling: EchoCoupling; overEcho: boolean } {
@@ -137,6 +140,11 @@ export function noteEchoFrame(
   const sounding = coupling.sounding + frameMs;
   // Until the voice has sounded as long as its echo can take to come back,
   // a quiet microphone says nothing about the echo.
+  if (!learns)
+    return {
+      coupling: { ...coupling, heard: heardLevels, pending: [], sounding },
+      overEcho,
+    };
   const pending =
     sounding > ECHO_LAG_MS
       ? [...coupling.pending, { heard, played }].slice(-kept)
