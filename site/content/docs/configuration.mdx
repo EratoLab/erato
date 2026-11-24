@@ -8441,8 +8441,13 @@ A proposed client action whose server-called tool the client registered is
 carried out the same way: the server calls the tool with
 `{proposal_call_id, action, item_identity}` through its approval, where
 `item_identity` is the request's `item_identity` or `document_identity` facet
-argument, else null. The answer ends after an action that applied cleanly. An
-action whose tool the user set to Never is not offered to the model. Actions
+argument, else null. The answer ends after an action that applied cleanly,
+once the rest of the model's batch has run, and without asking the model again;
+it also ends on `unavailable` with the reason `user_picks` (the answer offers
+several versions and the user picks one). A proposal of an action whose tool the
+user set to Never is refused, and the model is told the action is turned off. A
+change request on the action's card lets the model propose it once more. A
+proposed action does not count toward a submission's `max_changes`. Actions
 without such a tool, or on a client that did not register it, keep the client's
 own flow.
 

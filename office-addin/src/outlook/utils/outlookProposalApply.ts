@@ -8,6 +8,7 @@ import {
   answerFences,
   proposalOnceByCallId,
   sameItem,
+  USER_PICKS,
 } from "../../core/clientActions/proposalApply";
 
 import type {
@@ -126,6 +127,33 @@ export function outlookAppointmentDraft(
 const isEmailAction = (action: string): action is OutlookEmailClientAction =>
   action === "outlook.reply" || action === "outlook.reply_all";
 
+const openedForms = new Set<string>();
+
+/**
+ * Records that the card in an answer opened this action's form on the user's click, so the
+ * server's call for the same answer does not open a second one.
+ */
+export function markOutlookFormOpened(
+  messageId: string | undefined,
+  action: OutlookClientAction,
+): void {
+  if (messageId) openedForms.add(`${messageId}:${action}`);
+}
+
+const formOpened = (messageId: string, action: string) =>
+  openedForms.has(`${messageId}:${action}`);
+
+/** For tests: forgets the forms the cards opened. */
+export function resetOutlookOpenedForms(): void {
+  openedForms.clear();
+}
+
+/** Several drafts are versions the user picks from with their own buttons, not a failure. */
+const missing = (why: "not_found" | "ambiguous"): ProposalApplyResult =>
+  why === "ambiguous"
+    ? { status: "unavailable", reason: USER_PICKS }
+    : { status: "failed", reason: "not_found" };
+
 /**
  * The server's call for a proposed Outlook action: it opens the reply form or the new-appointment
  * form with the answer's draft, as the card's button does. Nothing is ever sent; the user sends
@@ -136,7 +164,7 @@ export function createOutlookProposalExecutor(
   bridge: () => OutlookProposalBridge | null,
 ): ClientToolExecutor {
   return proposalOnceByCallId(
-    async (input, context): Promise<ProposalApplyResult> => {
+    async (input, context, writeStarts): Promise<ProposalApplyResult> => {
       if (OUTLOOK_PROPOSAL_TOOLS[input.action as OutlookClientAction] !== tool)
         return { status: "failed", reason: "invalid_input" };
       const host = bridge();
@@ -145,6 +173,8 @@ export function createOutlookProposalExecutor(
       if (!message) return { status: "unavailable", reason: "no_message" };
       if (!message.latest)
         return { status: "unavailable", reason: "not_latest" };
+      if (formOpened(context.messageId, input.action))
+        return { status: "applied", reason: "already_applied" };
       if (isEmailAction(input.action)) {
         const expected =
           input.itemIdentity ??
@@ -153,10 +183,13 @@ export function createOutlookProposalExecutor(
         if (!sameItem(expected, host.itemIdentity()))
           return { status: "unavailable", reason: "other_item" };
         const draft = outlookEmailDraft(message.content, message.artifact);
-        if ("missing" in draft)
-          return { status: "failed", reason: draft.missing };
+        if ("missing" in draft) return missing(draft.missing);
+        if (context.signal?.aborted)
+          return { status: "failed", reason: "stopped" };
+        writeStarts();
         try {
           await openReplyForm(input.action, draft.content, draft.isHtml);
+          markOutlookFormOpened(context.messageId, input.action);
           return { status: "applied" };
         } catch (error) {
           return {
@@ -171,12 +204,15 @@ export function createOutlookProposalExecutor(
       // The appointment lives whole in the answer and its form opens on the mailbox, not on the
       // open item, so it cannot land on the wrong email.
       const draft = outlookAppointmentDraft(message.content);
-      if ("missing" in draft)
-        return { status: "failed", reason: draft.missing };
+      if ("missing" in draft) return missing(draft.missing);
       if (!isCreateAppointmentSupported())
         return { status: "unavailable", reason: "not_supported" };
+      if (context.signal?.aborted)
+        return { status: "failed", reason: "stopped" };
+      writeStarts();
       try {
         await openNewAppointmentForm(draft.details);
+        markOutlookFormOpened(context.messageId, "outlook.create_appointment");
         return { status: "applied" };
       } catch {
         return { status: "failed", reason: "host_error" };

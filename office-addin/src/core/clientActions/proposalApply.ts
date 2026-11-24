@@ -1,3 +1,4 @@
+import { createApplyCallMarkers } from "./applyCallMarkers";
 import { CLIENT_ACTION_TOOL_NAME } from "./proposedClientAction";
 
 import type { CarryOverMapping } from "./carryOverDecisions";
@@ -21,9 +22,16 @@ export interface ProposalApplyInput {
 
 export type ProposalApplyStatus =
   | "applied"
+  | "unconfirmed"
   | "needs_decision"
   | "failed"
   | "unavailable";
+
+/**
+ * The reason of an action whose answer offers several versions: the user picks one with its own
+ * button, so the server ends the answer without asking the model.
+ */
+export const USER_PICKS = "user_picks";
 
 /** What a proposed action's call tells the server and the model: no content. */
 export interface ProposalApplyResult {
@@ -98,14 +106,22 @@ export const sameItem = (
   current: string | null | undefined,
 ): boolean => !!expected && !!current && expected === current;
 
+export const PROPOSAL_CALLS_KEY = "erato.addin.proposalCalls";
+const proposalCalls = createApplyCallMarkers(PROPOSAL_CALLS_KEY);
+
+/** What an executor tells the guard: the write is about to start. */
+export type ProposalWriteStarts = () => void;
+
 /**
- * Runs a call at most once per call id: a call the server sends again after a reload or a
- * replayed stream gets the first run's answer instead of a second form or insert.
+ * Runs a call at most once per call id, also across a pane reload: a call the server sends again
+ * gets the first run's answer, and one whose write had started answers `unconfirmed` instead of
+ * opening a second form or inserting twice.
  */
 export function proposalOnceByCallId(
   execute: (
     input: ProposalApplyInput,
     context: ClientToolCallContext,
+    writeStarts: ProposalWriteStarts,
   ) => Promise<ProposalApplyResult>,
 ): ClientToolExecutor {
   const calls = new Map<string, Promise<ClientToolExecutionResult>>();
@@ -119,18 +135,43 @@ export function proposalOnceByCallId(
       return Promise.resolve(
         proposalAnswer({ status: "failed", reason: "invalid_input" }),
       );
-    const running = calls.get(context.toolCallId);
+    const { toolCallId, messageId } = context;
+    const running = calls.get(toolCallId);
     if (running) return running;
-    const call = execute(parsed, context).then(
+    const marker = proposalCalls.marker(toolCallId);
+    if (marker?.state === "done")
+      return Promise.resolve(
+        proposalAnswer(marker.result as ProposalApplyResult),
+      );
+    if (marker?.state === "writing")
+      return Promise.resolve(
+        proposalAnswer({
+          status: "unconfirmed",
+          reason: "reloaded_during_write",
+        }),
+      );
+    let started = false;
+    const call = execute(parsed, context, () => {
+      started = true;
+      proposalCalls.markWriting(toolCallId, messageId);
+    }).then(
       (result) => {
         // The server sends the same call again once the user decided on screen.
-        if (result.status === "needs_decision")
-          calls.delete(context.toolCallId);
+        if (result.status === "needs_decision") {
+          calls.delete(toolCallId);
+          proposalCalls.forget(toolCallId);
+        } else proposalCalls.markDone(toolCallId, messageId, result);
         return proposalAnswer(result);
       },
-      () => proposalAnswer({ status: "failed", reason: "host_error" }),
+      () => {
+        const result: ProposalApplyResult = started
+          ? { status: "unconfirmed", reason: "host_error" }
+          : { status: "failed", reason: "host_error" };
+        proposalCalls.markDone(toolCallId, messageId, result);
+        return proposalAnswer(result);
+      },
     );
-    calls.set(context.toolCallId, call);
+    calls.set(toolCallId, call);
     return call;
   };
 }
@@ -141,9 +182,12 @@ export interface AnswerFence {
   body: string;
 }
 
-const FENCE_OPENING = /^[ \t]*(`{3,}|~{3,})[ \t]*([^\s`]*)[^\n]*$/;
+const FENCE_OPENING = /^([ \t]*)(`{3,}|~{3,})[ \t]*([^\s`]*)[^\n]*$/;
 
-/** The fenced blocks of an answer's text, in order. An unterminated one is left out. */
+/**
+ * The fenced blocks of an answer's text, in order, read as the answer's markdown shows them: a
+ * body loses up to the opening fence's indentation, and an unterminated fence runs to the end.
+ */
 export function answerFences(
   content: readonly ContentPart[] | undefined,
 ): AnswerFence[] {
@@ -155,11 +199,20 @@ export function answerFences(
   for (let index = 0; index < lines.length; index += 1) {
     const opening = FENCE_OPENING.exec(lines[index]);
     if (!opening) continue;
-    const [, run, language] = opening;
-    const closing = new RegExp(`^[ \\t]*${run}[ \\t]*$`);
-    const end = lines.findIndex((line, at) => at > index && closing.test(line));
-    if (end < 0) break;
-    fences.push({ language, body: lines.slice(index + 1, end).join("\n") });
+    const [, indent, run, language] = opening;
+    const closing = new RegExp(`^[ \\t]*${run[0]}{${run.length},}[ \\t]*$`);
+    const found = lines.findIndex(
+      (line, at) => at > index && closing.test(line),
+    );
+    const end = found < 0 ? lines.length : found;
+    const strip = new RegExp(`^[ \\t]{0,${indent.length}}`);
+    fences.push({
+      language,
+      body: lines
+        .slice(index + 1, end)
+        .map((line) => line.replace(strip, ""))
+        .join("\n"),
+    });
     index = end;
   }
   return fences;

@@ -53,6 +53,10 @@ pub fn provider_call_id(call_id: &str) -> Option<String> {
 
 /// The reason of a chained call whose client went away before it answered.
 pub const PANE_GONE: &str = "pane_gone";
+/// The reason of a proposed action whose answer offers several versions: the
+/// user picks one with its own button, so there is nothing to carry out or
+/// explain.
+pub const USER_PICKS: &str = "user_picks";
 /// Largest `client_confirmation` a decision may carry, as JSON.
 pub const MAX_CLIENT_CONFIRMATION_BYTES: usize = 4096;
 const MAX_REASON_CHARS: usize = 64;
@@ -350,24 +354,6 @@ pub fn proposal_tool<'a>(
     })
 }
 
-/// The facet's client actions without those whose tool the user set to
-/// Never: an action the user turned off is not proposed.
-pub fn proposable_actions(
-    tools: &HashMap<String, ClientToolConfig>,
-    actions: &[String],
-    decisions: &BTreeMap<String, ClientToolDecision>,
-) -> Vec<String> {
-    actions
-        .iter()
-        .filter(|action| {
-            proposal_tool(tools, action).is_none_or(|tool| {
-                decisions.get(&tool.qualified_name()) != Some(&ClientToolDecision::NeverAllow)
-            })
-        })
-        .cloned()
-        .collect()
-}
-
 /// The request's facet argument that names the open item, which a chained
 /// proposal carries so the client acts only on the item the answer was made
 /// for.
@@ -452,10 +438,17 @@ pub fn proposal_input(proposal_call_id: &str, action: &str, item_identity: Optio
     })
 }
 
+/// The model reads this for a proposed action the user turned off.
+pub fn turned_off_proposal_text(action: &str) -> String {
+    format!(
+        "The user turned off the client action '{action}' in the settings, so it was not proposed. Tell the user in one short sentence that this action is turned off; what you wrote stays in the answer for them to use. Do not propose another action."
+    )
+}
+
 /// The model reads this for a proposal the server carries out next.
 pub fn chained_proposal_text(action: &str) -> String {
     format!(
-        "Proposed client action '{action}'. The user decides in the chat; the result of carrying it out follows. Do not call this tool again for this request and do not claim the action has been carried out before its result says so."
+        "Proposed client action '{action}'. The user decides in the chat; the result of carrying it out follows. Do not call this tool again for this request unless that result says the user asked for a change, and do not claim the action has been carried out before its result says so."
     )
 }
 
@@ -607,13 +600,19 @@ pub fn after_apply(report: &ApplyReport, state: &ChainedApplyState) -> AfterAppl
             }
         };
     }
-    if report.status == "unavailable" && report.reason.as_deref() == Some(PANE_GONE) {
+    if is_pane_gone(report)
+        || (report.status == "unavailable" && report.reason.as_deref() == Some(USER_PICKS))
+    {
         return AfterApply::End;
     }
     if report.status != "applied" || report.needs_follow_up || state.more_steps {
         return AfterApply::Continue;
     }
     AfterApply::End
+}
+
+pub fn is_pane_gone(report: &ApplyReport) -> bool {
+    report.status == "unavailable" && report.reason.as_deref() == Some(PANE_GONE)
 }
 
 /// A second `needs_decision` for the same call is recorded as a failure.
@@ -993,6 +992,13 @@ mod tests {
             reason: PANE_GONE.into(),
         });
         assert_eq!(after_apply(&gone, &more), AfterApply::End);
+        assert_eq!(
+            after_apply(
+                &result(json!({"status":"unavailable","reason":USER_PICKS})),
+                &state
+            ),
+            AfterApply::End
+        );
         let timed_out = report(&ClientToolOutcome::Cancelled {
             reason: "timeout".into(),
         });

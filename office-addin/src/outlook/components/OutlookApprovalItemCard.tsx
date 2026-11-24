@@ -6,6 +6,10 @@ import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
 import {
+  appointmentAttendeesText,
+  appointmentWhenText,
+} from "../utils/outlookCreateAppointment";
+import {
   OUTLOOK_PROPOSAL_TOOLS,
   outlookAppointmentDraft,
   outlookEmailDraft,
@@ -119,21 +123,8 @@ function ReplyPreview({
   );
 }
 
-const formatTime = (iso: string) => {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime())
-    ? iso
-    : date.toLocaleString(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      });
-};
-
 function AppointmentPreview({ details }: { details: AppointmentDetails }) {
-  const attendees = [
-    ...details.attendees,
-    ...(details.optionalAttendees ?? []),
-  ];
+  const attendees = appointmentAttendeesText(details);
   return (
     <div
       className="space-y-1 text-sm"
@@ -142,17 +133,15 @@ function AppointmentPreview({ details }: { details: AppointmentDetails }) {
       <p className="font-medium text-theme-fg-primary [overflow-wrap:anywhere]">
         {details.subject}
       </p>
-      <p className="text-theme-fg-secondary">
-        {formatTime(details.start)} – {formatTime(details.end)}
-      </p>
+      <p className="text-theme-fg-secondary">{appointmentWhenText(details)}</p>
       {details.location ? (
         <p className="text-theme-fg-secondary [overflow-wrap:anywhere]">
           {details.location}
         </p>
       ) : null}
-      {attendees.length > 0 && (
+      {attendees && (
         <p className="break-words text-xs text-theme-fg-secondary">
-          {attendees.join(", ")}
+          {attendees}
         </p>
       )}
       <p className="text-xs text-theme-fg-secondary">

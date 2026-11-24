@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createOutlookProposalExecutor,
+  markOutlookFormOpened,
   outlookEmailDraft,
+  resetOutlookOpenedForms,
 } from "../outlookProposalApply";
 
 import type { OutlookHostArtifact } from "../outlookClientActions";
@@ -72,6 +74,8 @@ beforeEach(() => {
   office.openReplyForm.mockReset().mockResolvedValue(undefined);
   office.openNewAppointmentForm.mockReset().mockResolvedValue(undefined);
   office.appointmentSupported = true;
+  localStorage.clear();
+  resetOutlookOpenedForms();
 });
 
 describe("open_reply", () => {
@@ -154,6 +158,55 @@ describe("open_reply", () => {
     await execute(input("outlook.reply"), context);
     await execute(input("outlook.reply"), context);
     expect(office.openReplyForm).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not open a second form after the user opened it from the answer", async () => {
+    markOutlookFormOpened("m1", "outlook.reply");
+    const execute = createOutlookProposalExecutor("open_reply", bridge({}));
+    expect(result(await execute(input("outlook.reply"), context))).toEqual({
+      status: "applied",
+      reason: "already_applied",
+    });
+    expect(office.openReplyForm).not.toHaveBeenCalled();
+  });
+
+  it("does not open the form again after a pane reload", async () => {
+    await createOutlookProposalExecutor("open_reply", bridge({}))(
+      input("outlook.reply"),
+      context,
+    );
+    const afterReload = createOutlookProposalExecutor("open_reply", bridge({}));
+    expect(result(await afterReload(input("outlook.reply"), context))).toEqual({
+      status: "applied",
+    });
+    expect(office.openReplyForm).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves several drafts to the user's pick", async () => {
+    const execute = createOutlookProposalExecutor(
+      "open_reply",
+      bridge({ answer: "```erato-email\nA\n```\n```erato-email\nB\n```" }),
+    );
+    expect(result(await execute(input("outlook.reply"), context))).toEqual({
+      status: "unavailable",
+      reason: "user_picks",
+    });
+    expect(office.openReplyForm).not.toHaveBeenCalled();
+  });
+
+  it("opens nothing after Stop", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const execute = createOutlookProposalExecutor("open_reply", bridge({}));
+    expect(
+      result(
+        await execute(input("outlook.reply"), {
+          ...context,
+          signal: controller.signal,
+        }),
+      ),
+    ).toEqual({ status: "failed", reason: "stopped" });
+    expect(office.openReplyForm).not.toHaveBeenCalled();
   });
 
   it("refuses an action that is not its own", async () => {

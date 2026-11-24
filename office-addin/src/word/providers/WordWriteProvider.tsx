@@ -183,6 +183,8 @@ export function WordWriteProvider({
   capturesRef.current = capturesByAssistantMessageId;
   const reviewsRef = useRef(reviews);
   reviewsRef.current = reviews;
+  const locationGenerationRef = useRef(locationGeneration);
+  locationGenerationRef.current = locationGeneration;
   useEffect(() => {
     setWordWriteBridge({
       documentIdentity: () => identityRef.current,
@@ -195,6 +197,7 @@ export function WordWriteProvider({
       messageContext: (messageId) => messageContextRef.current(messageId),
       captureFor: (messageId) => capturesRef.current.get(messageId),
       reviewFor: (key) => reviewsRef.current.get(key),
+      locationGeneration: () => locationGenerationRef.current,
     });
     return () => setWordWriteBridge(null);
   }, [

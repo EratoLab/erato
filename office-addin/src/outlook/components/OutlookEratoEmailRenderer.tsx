@@ -31,6 +31,7 @@ import {
   replaceComposeSelection,
   replaceComposeSubjectText,
 } from "../utils/outlookComposeWrite";
+import { markOutlookFormOpened } from "../utils/outlookProposalApply";
 import {
   ReplyBodyTooLargeError,
   getReadModeRecipientSummary,
@@ -247,6 +248,7 @@ export function OutlookEratoEmailRenderer({
       setStatus("inserting");
       try {
         await openReplyForm(action, content, !!isHtml);
+        markOutlookFormOpened(artifact?.messageId, action);
         setOpenedAction(action);
         setStatus("done");
         scheduleStatusReset(2000);
@@ -263,6 +265,7 @@ export function OutlookEratoEmailRenderer({
       }
     },
     [
+      artifact?.messageId,
       content,
       isHtml,
       isStaleForCurrentItem,

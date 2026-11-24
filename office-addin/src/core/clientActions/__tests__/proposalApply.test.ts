@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   answerFences,
@@ -27,6 +27,10 @@ const proposal = (output: unknown): ContentPart =>
     output,
   }) as unknown as ContentPart;
 const context = { toolCallId: "call-1.apply", messageId: "m1", chatId: "c1" };
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 describe("proposal apply input", () => {
   it("reads the proposal, the action, the item and the confirmation", () => {
@@ -95,7 +99,7 @@ describe("the item check", () => {
 });
 
 describe("answer fences", () => {
-  it("reads each closed fence with its tag", () => {
+  it("reads each fence with its tag, an unterminated one to the end", () => {
     expect(
       answerFences([
         text(
@@ -105,6 +109,19 @@ describe("answer fences", () => {
     ).toEqual([
       { language: "erato-email", body: "Hello\n\nBye" },
       { language: "", body: "plain" },
+      { language: "erato-appointment", body: "{" },
+    ]);
+  });
+
+  it("drops the fence's own indentation from its body, as the answer shows it", () => {
+    expect(
+      answerFences([
+        text(
+          "1. Insert this:\n\n   ```erato-word-insert\n   A new line.\n     Kept indent.\n   ```",
+        ),
+      ]),
+    ).toEqual([
+      { language: "erato-word-insert", body: "A new line.\n  Kept indent." },
     ]);
   });
 });
@@ -133,6 +150,33 @@ describe("one run per call", () => {
     await expect(execute(input, context)).resolves.toMatchObject({
       result: { status: "applied" },
     });
+  });
+
+  it("answers a call sent again after a reload from the stored marker", async () => {
+    const input = { proposal_call_id: "call-1", action: "outlook.reply" };
+    const first = vi.fn(() => Promise.resolve({ status: "applied" as const }));
+    await proposalOnceByCallId(first)(input, context);
+    const afterReload = vi.fn();
+    await expect(
+      proposalOnceByCallId(afterReload)(input, context),
+    ).resolves.toEqual({ ok: true, result: { status: "applied" } });
+    expect(afterReload).not.toHaveBeenCalled();
+  });
+
+  it("never writes again when a reload came during the write", async () => {
+    const input = { proposal_call_id: "call-1", action: "outlook.reply" };
+    void proposalOnceByCallId((_input, _context, writeStarts) => {
+      writeStarts();
+      return new Promise(() => {});
+    })(input, context);
+    const afterReload = vi.fn();
+    await expect(
+      proposalOnceByCallId(afterReload)(input, context),
+    ).resolves.toEqual({
+      ok: true,
+      result: { status: "unconfirmed", reason: "reloaded_during_write" },
+    });
+    expect(afterReload).not.toHaveBeenCalled();
   });
 
   it("refuses a call without its proposal", async () => {

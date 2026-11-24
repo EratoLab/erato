@@ -37,6 +37,8 @@ export interface WordWriteBridge {
   captureFor: (messageId: string) => WordDocumentCapture | undefined;
   /** Where a card's review stands. */
   reviewFor: (key: string) => WordReviewState | undefined;
+  /** The generation a card's result anchors must carry to be shown in the document. */
+  locationGeneration: () => number;
 }
 
 let current: WordWriteBridge | null = null;

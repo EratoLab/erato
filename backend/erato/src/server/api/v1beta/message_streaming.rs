@@ -5323,17 +5323,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
             );
         } else {
-            let actions = crate::services::chained_apply::proposable_actions(
-                &app_state.config.client_tools.tools,
+            chat_request_tools.push(crate::services::client_actions::build_client_action_tool(
                 &facet_config.client_actions,
-                me_profile_input.client_tool_decisions,
-            );
-            if !actions.is_empty() {
-                chat_request_tools.push(crate::services::client_actions::build_client_action_tool(
-                    &actions,
-                    effective_model_settings.compat_omit_strict,
-                ));
-            }
+                effective_model_settings.compat_omit_strict,
+            ));
         }
     }
     // Offer top-level `client_tools` (returning round-trip tools) selected by
@@ -8119,6 +8112,9 @@ async fn stream_generate_chat_completion<'a>(
         // — leaving children in flight with their slots reading "working" is
         // worse than the exit it was trying to make.
         let mut exit_after_join = false;
+        // Set by a chained apply that ended the answer while the model's
+        // batch still had calls to run.
+        let mut end_after_batch = false;
         let mut exit_metadata: Option<GenerationMetadata> = None;
         // An error that ends the turn still has to let the join settle the
         // children it already started, or they run on with their slots frozen
@@ -9085,8 +9081,40 @@ async fn stream_generate_chat_completion<'a>(
                         Ok(action)
                     }
                 });
+                // Read on every call like a tool decision: an action the user
+                // turned off is refused with a reason, never swapped for another.
+                let turned_off = match (&validated, Uuid::parse_str(&user_id)) {
+                    (Ok(action), Ok(user)) => {
+                        match crate::services::chained_apply::proposal_tool(
+                            &app_state.config.client_tools.tools,
+                            action,
+                        ) {
+                            Some(tool) => crate::models::user_preference::find_client_tool_decision(
+                                &app_state.db,
+                                &user,
+                                &tool.qualified_name(),
+                            )
+                            .await?
+                                == Some(
+                                    crate::models::user_preference::ClientToolDecision::NeverAllow,
+                                ),
+                            None => false,
+                        }
+                    }
+                    _ => false,
+                };
                 let (status, bg_status, message_status, output_value, response_text) =
                     match validated {
+                        Ok(action) if turned_off => {
+                            client_action_already_proposed = true;
+                            (
+                                ToolCallStatus::Error,
+                                BgToolCallStatus::Error,
+                                MessageToolCallStatus::Error,
+                                json!({ "status": "turned_off", "action": action }),
+                                crate::services::chained_apply::turned_off_proposal_text(&action),
+                            )
+                        }
                         Ok(action) => {
                             client_action_already_proposed = true;
                             // The action's tool is on this client: the server
@@ -9679,8 +9707,12 @@ async fn stream_generate_chat_completion<'a>(
                 };
                 // Every chained apply counts toward `max_changes` whatever its
                 // outcome, so a refusal cannot loop; the run after a tick is the
-                // same change.
-                let counts_as_change = chained_state.as_ref().is_some_and(|state| !state.reparked);
+                // same change. A proposed action is no change of a submission's run.
+                let counts_as_change = chained_state.as_ref().is_some_and(|state| {
+                    !state.reparked
+                        && state.submission_tool
+                            != crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                });
                 let (Some(task), None) = (streaming_task, &refusal) else {
                     if counts_as_change {
                         chained_applies_run += 1;
@@ -10422,6 +10454,9 @@ async fn stream_generate_chat_completion<'a>(
                 // What follows the apply. A Stop that came while it ran ends the
                 // answer once its result is in.
                 let mut after_apply = None;
+                // Only an end the user would read waits for the rest of the
+                // model's batch: a Stop or a lost pane ends at once.
+                let mut ends_now = true;
                 if let Some(state) = chained_state.as_ref() {
                     let report = crate::services::chained_apply::report(&outcome);
                     let next = if task.is_abort_requested() {
@@ -10429,6 +10464,8 @@ async fn stream_generate_chat_completion<'a>(
                     } else {
                         crate::services::chained_apply::after_apply(&report, state)
                     };
+                    ends_now = task.is_abort_requested()
+                        || crate::services::chained_apply::is_pane_gone(&report);
                     if let crate::services::chained_apply::AfterApply::Repark { reason } = &next
                         && let Some(policy) = tool_policy
                     {
@@ -10730,10 +10767,13 @@ async fn stream_generate_chat_completion<'a>(
                     current_turn_tool_responses.push((batch_position, response));
                 }
                 match after_apply {
-                    // The rest of the model's batch still runs and its results
-                    // go back to the model.
+                    // The rest of the model's batch still runs, then the answer
+                    // ends without another request.
                     Some(crate::services::chained_apply::AfterApply::End)
-                        if !unfinished_tool_calls.is_empty() => {}
+                        if !ends_now && !unfinished_tool_calls.is_empty() =>
+                    {
+                        end_after_batch = true;
+                    }
                     Some(crate::services::chained_apply::AfterApply::End) => {
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
@@ -11793,6 +11833,7 @@ async fn stream_generate_chat_completion<'a>(
                 non_empty_vec(&captured_reasoning_item_encrypted_content),
             );
         }
+        exit_after_join |= end_after_batch;
         if exit_after_join {
             let metadata = exit_metadata.or_else(|| {
                 build_generation_metadata(
@@ -25689,9 +25730,22 @@ pub(crate) async fn run_continuation(
         .iter()
         .any(|item| change_requests.contains_key(&item.approval_id));
     if change_on_chained {
-        generation_parameters
-            .turn_consumption
-            .ask_next_chained_apply = true;
+        let consumption = &mut generation_parameters.turn_consumption;
+        consumption.ask_next_chained_apply = true;
+        // The model proposes the changed action again, so its one proposal is
+        // free once more.
+        if chained_items.iter().any(|item| {
+            change_requests.contains_key(&item.approval_id)
+                && consumption
+                    .chained_applies
+                    .get(&item.tool_call_id)
+                    .is_some_and(|state| {
+                        state.submission_tool
+                            == crate::services::client_actions::CLIENT_ACTION_TOOL_NAME
+                    })
+        }) {
+            consumption.client_action_proposed = false;
+        }
     }
 
     // Generate answer now while a client submission still waits for its
@@ -26329,6 +26383,22 @@ async fn resume_parked_generation(
     }
     if let Some(tool) = retrieval_context.tool(compat_omit_strict) {
         continuation_tools.push(tool);
+    }
+    // The answer keeps the tool it was offered, so a proposal asked to change
+    // can be made again; the turn still takes only one proposal at a time.
+    if !is_delegated_run
+        && chat.mcp_write_tools_enabled
+        && !mcp_claimed_names.contains(crate::services::client_actions::CLIENT_ACTION_TOOL_NAME)
+        && let Some(facet) = generation_parameters
+            .action_facet_id
+            .as_deref()
+            .and_then(|id| app_state.config.action_facets.facets.get(id))
+        && !facet.client_actions.is_empty()
+    {
+        continuation_tools.push(crate::services::client_actions::build_client_action_tool(
+            &facet.client_actions,
+            compat_omit_strict,
+        ));
     }
     append_reminder_tools(
         app_state,
