@@ -215,7 +215,7 @@ describe("useSharedItemsIntoComposer", () => {
 
     await waitFor(() =>
       expect(useFileUploadStore.getState().error?.message).toBe(
-        "video.mov was too large to bring over from the other app. Add it with the + button instead.",
+        "video.mov could not be brought over from the other app. Add it with the + button instead.",
       ),
     );
     expect(uploadFiles).not.toHaveBeenCalled();
@@ -321,7 +321,7 @@ describe("useSharedItemsIntoComposer", () => {
       expect(useFileUploadStore.getState().error?.message).toBe(
         `${failed.message} ` +
           "File is too large: huge.mov. Maximum size: 20 MB. " +
-          "big.mov was too large to bring over from the other app. Add it with the + button instead.",
+          "big.mov could not be brought over from the other app. Add it with the + button instead.",
       ),
     );
     expect(addUploadedFiles).not.toHaveBeenCalled();
@@ -352,7 +352,7 @@ describe("useSharedItemsIntoComposer", () => {
     expect(uploadFiles).not.toHaveBeenCalled();
   });
 
-  it("hands items to the next chat when the chat is replaced mid-upload", async () => {
+  it("hands files to the chat now on screen when the chat is replaced mid-upload", async () => {
     installShell({
       pending: [
         batch("a", [
@@ -376,10 +376,12 @@ describe("useSharedItemsIntoComposer", () => {
     await waitFor(() => expect(uploadFiles).toHaveBeenCalledTimes(1));
 
     first.unmount();
+    const second = setup();
+    await act(async () => {});
+    expect(second.addUploadedFiles).not.toHaveBeenCalled();
+
     await act(async () => finishUpload([]));
     expect(first.addUploadedFiles).not.toHaveBeenCalled();
-
-    const second = setup();
     await waitFor(() =>
       expect(second.addUploadedFiles).toHaveBeenCalledWith([
         expect.objectContaining({ filename: "notes.txt" }),

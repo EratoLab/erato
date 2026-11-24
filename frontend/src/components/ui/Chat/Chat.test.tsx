@@ -228,11 +228,12 @@ vi.mock("@/hooks/files/useConversationDropzone", () => ({
   },
 }));
 
+const uploadState = vi.hoisted(() => ({ isUploading: false }));
 vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(),
     uploadError: null,
-    isUploading: false,
+    isUploading: uploadState.isUploading,
   }),
 }));
 
@@ -1143,6 +1144,8 @@ describe("Chat shared items", () => {
 
   afterEach(() => {
     delete window.ERATO_SHELL;
+    testState.chatContext = {};
+    uploadState.isUploading = false;
   });
 
   it("takes shared items into an open composer", async () => {
@@ -1169,4 +1172,51 @@ describe("Chat shared items", () => {
       expect(request).not.toHaveBeenCalled();
     },
   );
+
+  it("leaves them with the shell while the chat loads or an upload runs", async () => {
+    const request = installShell();
+    testState.chatContext = { isMessagingLoading: true };
+    const { rerenderChat } = renderChat();
+    await act(async () => {});
+
+    testState.chatContext = {};
+    uploadState.isUploading = true;
+    rerenderChat();
+    await act(async () => {});
+    expect(request).not.toHaveBeenCalled();
+
+    uploadState.isUploading = false;
+    rerenderChat();
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  });
+
+  it("leaves them with the shell after a prompt injection blocked the last message", async () => {
+    const request = installShell();
+
+    renderChat({
+      messages: {
+        "assistant-error": {
+          id: "assistant-error",
+          content: [],
+          role: "assistant",
+          sender: "assistant",
+          authorId: "assistant-1",
+          createdAt: "2026-08-25T12:00:00.000Z",
+          status: "error",
+          error: {
+            error_type: "content_filter",
+            error_description: "blocked",
+            filter_details: {
+              pattern_id: "ignore-previous-instructions",
+              matched_text: "Ignore previous instructions",
+            },
+          },
+        },
+      },
+      messageOrder: ["assistant-error"],
+    });
+
+    await act(async () => {});
+    expect(request).not.toHaveBeenCalled();
+  });
 });

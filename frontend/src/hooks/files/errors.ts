@@ -44,7 +44,7 @@ export class CloudLinkError extends Error {
   }
 }
 
-/** A file shared from another app that the host passed on without its content. */
+/** A file shared from another app that arrived without content this page can read. */
 export class SharedFileWithoutContentError extends Error {
   public readonly filenames: string[];
 

@@ -11731,7 +11731,7 @@ msgstr "Nie udało się połączyć pliku z chmury. Spróbuj ponownie."
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
 msgid "upload.error.sharedWithoutContent"
-msgstr "{count, plural, one {Plik {filenames} był za duży, aby przenieść go z innej aplikacji. Dodaj go za pomocą przycisku +.} few {Pliki {filenames} były za duże, aby przenieść je z innej aplikacji. Dodaj je za pomocą przycisku +.} many {Pliki {filenames} były za duże, aby przenieść je z innej aplikacji. Dodaj je za pomocą przycisku +.} other {Pliki {filenames} były za duże, aby przenieść je z innej aplikacji. Dodaj je za pomocą przycisku +.}}"
+msgstr "{count, plural, one {Nie udało się przenieść pliku {filenames} z innej aplikacji. Dodaj go za pomocą przycisku +.} few {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.} many {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.} other {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.}}"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

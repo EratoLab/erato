@@ -42,6 +42,14 @@ let handOver: { items: SharedComposerItems; uploaded: FileUploadItem[] } = {
   uploaded: [],
 };
 
+// Chats on screen, woken when a replaced chat leaves items here.
+const handOverWatchers = new Set<() => void>();
+
+const leaveForNextChat = (update: () => void) => {
+  update();
+  for (const wake of handOverWatchers) wake();
+};
+
 const hasHandOver = () =>
   handOver.uploaded.length > 0 ||
   Object.values(handOver.items).some((list) => list.length > 0);
@@ -60,6 +68,7 @@ export function useSharedItemsIntoComposer(
   // Items may already wait when the page starts; afterwards the shell says so.
   const [wanted, setWanted] = useState(shell !== null);
   const [busy, setBusy] = useState(false);
+  const [handOverCount, setHandOverCount] = useState(0);
 
   const latest = useRef(options);
   useEffect(() => {
@@ -68,8 +77,11 @@ export function useSharedItemsIntoComposer(
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
+    const wake = () => setHandOverCount((count) => count + 1);
+    handOverWatchers.add(wake);
     return () => {
       mounted.current = false;
+      handOverWatchers.delete(wake);
     };
   }, []);
 
@@ -90,7 +102,7 @@ export function useSharedItemsIntoComposer(
             await shell.request("share.takePending"),
           );
           const { items } = handOver;
-          handOver.items = {
+          const merged = {
             texts: [...items.texts, ...taken.texts],
             files: [...items.files, ...taken.files],
             filesWithoutContent: [
@@ -98,6 +110,11 @@ export function useSharedItemsIntoComposer(
               ...taken.filesWithoutContent,
             ],
           };
+          if (mounted.current) {
+            handOver.items = merged;
+          } else {
+            leaveForNextChat(() => (handOver.items = merged));
+          }
         }
         if (mounted.current) await placeHandOver(latest, mounted);
       } catch (error) {
@@ -106,7 +123,7 @@ export function useSharedItemsIntoComposer(
         if (mounted.current) setBusy(false);
       }
     })();
-  }, [shell, ready, wanted, busy]);
+  }, [shell, ready, wanted, busy, handOverCount]);
 }
 
 async function placeHandOver(
@@ -160,7 +177,7 @@ async function placeHandOver(
       if (mounted.current) {
         latest.current.addUploadedFiles(result);
       } else {
-        handOver.uploaded.push(...result);
+        leaveForNextChat(() => handOver.uploaded.push(...result));
       }
     }
   }
