@@ -10,6 +10,8 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 #### Stability improvements
+**Items shared from other apps wait in the composer.** Where the page runs inside an app that offers the `share` capability of `window.ERATO_SHELL`, a web page, text, a photo or a file shared into that app from another app appears in the composer of the chat on screen when the app opens: files and photos as attachments, as if added with "+", links and text after the draft in the message field. Nothing is sent until the person presses send, and a shared file the page cannot use (for example one the app passed on without its content because it is too large) is named in the composer instead of disappearing. In a browser nothing changes.
+
 #### Bug fixes
 #### Test coverage
 #### Documentation

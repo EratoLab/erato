@@ -11730,6 +11730,11 @@ msgstr "Failed to link cloud file. Please try again."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.sharedWithoutContent"
+msgstr "{count, plural, one {{filenames} could not be brought over from the other app. Add it with the + button instead.} other {{filenames} could not be brought over from the other app. Add them with the + button instead.}}"
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr "File is too large. Maximum size: {maxSize}."
 

@@ -11730,6 +11730,11 @@ msgstr "Nie udało się połączyć pliku z chmury. Spróbuj ponownie."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
+msgid "upload.error.sharedWithoutContent"
+msgstr "{count, plural, one {Nie udało się przenieść pliku {filenames} z innej aplikacji. Dodaj go za pomocą przycisku +.} few {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.} many {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.} other {Nie udało się przenieść plików {filenames} z innej aplikacji. Dodaj je za pomocą przycisku +.}}"
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
 msgid "upload.error.tooLarge"
 msgstr "Plik jest za duży. Maksymalny rozmiar: {maxSize}."
 
