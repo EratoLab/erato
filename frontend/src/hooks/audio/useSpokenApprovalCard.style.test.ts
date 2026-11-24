@@ -74,7 +74,9 @@ describe("the reading style reaches the spoken card", () => {
     const pieces = (
       speakApprovalCard.mock.calls[0][0] as { pieces: SpokenPiece[] }
     ).pieces;
-    const details = pieces.filter((piece) => piece.role === "detail");
+    const details = pieces.filter(
+      (piece) => piece.role === "detail" && !piece.onRequest,
+    );
     expect(details[0].held).toBeUndefined();
     expect(details.slice(1).every((piece) => piece.held === "field")).toBe(
       true,

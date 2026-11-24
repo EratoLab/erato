@@ -13,14 +13,6 @@ import type {
 } from "@/lib/toolCallGist/spokenLanguageData";
 import type { NumberWords } from "@/lib/toolCallGist/spokenNumbers";
 
-// The `[delegation.tasks.approval] mode` the backend is running, as its config
-// spelling.
-export type DelegationTasksApprovalMode =
-  | "never"
-  | "always"
-  | "plan"
-  | "async_only";
-
 export type AssistantToolsMenuDescriptionDisplay =
   | "none"
   | "truncated"
@@ -47,6 +39,7 @@ export type Env = {
   maxFilesPerMessage?: number;
   disableChatInputAutofocus: boolean;
   keepToolsDropdownOpen?: boolean;
+  showUsageAdvisory?: boolean;
   chatInputEmptyStateLayout: "bottom" | "centered";
   disableLogout: boolean;
   assistantsEnabled: boolean;
@@ -54,7 +47,6 @@ export type Env = {
   assistantsDelegationAllowBackground: boolean;
   delegationTasksEnabled: boolean;
   delegationTasksAllowAsync: boolean;
-  delegationTasksApprovalMode: DelegationTasksApprovalMode;
   assistantsEnableEditSharing?: boolean;
   assistantsEnableDirectOrganizationSharing?: boolean;
   assistantsUsageViewEnabled?: boolean;
@@ -177,6 +169,7 @@ declare global {
     MAX_FILES_PER_MESSAGE?: number;
     DISABLE_CHAT_INPUT_AUTOFOCUS?: boolean;
     KEEP_TOOLS_DROPDOWN_OPEN?: boolean;
+    SHOW_USAGE_ADVISORY?: boolean;
     CHAT_INPUT_EMPTY_STATE_LAYOUT?: string;
     DISABLE_LOGOUT?: boolean;
     ASSISTANTS_ENABLED?: boolean;
@@ -184,7 +177,6 @@ declare global {
     ASSISTANTS_DELEGATION_ALLOW_BACKGROUND?: boolean;
     DELEGATION_TASKS_ENABLED?: boolean;
     DELEGATION_TASKS_ALLOW_ASYNC?: boolean;
-    DELEGATION_TASKS_APPROVAL_MODE?: string;
     ASSISTANTS_ENABLE_EDIT_SHARING?: boolean;
     ASSISTANTS_ENABLE_DIRECT_ORGANIZATION_SHARING?: boolean;
     ASSISTANTS_USAGE_VIEW_ENABLED?: boolean;
@@ -302,24 +294,6 @@ function normalizeChatInputEmptyStateLayout(
   return value === "bottom" ? "bottom" : "centered";
 }
 
-// A config spelling the backend reports, not a user-facing string.
-// eslint-disable-next-line lingui/no-unlocalized-strings
-const DEFAULT_DELEGATION_TASKS_APPROVAL_MODE = "async_only";
-
-// Unknown spellings fall back to the shipped default rather than being carried
-// through: this value only decides what the composer says in advance, and the
-// backend's own gate is what actually asks.
-function asDelegationTasksApprovalMode(
-  value: string | null | undefined,
-): DelegationTasksApprovalMode {
-  return value === "never" ||
-    value === "always" ||
-    value === "plan" ||
-    value === "async_only"
-    ? value
-    : DEFAULT_DELEGATION_TASKS_APPROVAL_MODE;
-}
-
 export const env = (): Env => {
   const apiRootUrl = import.meta.env.VITE_API_ROOT_URL ?? window.API_ROOT_URL;
   if (!apiRootUrl) {
@@ -391,6 +365,10 @@ export const env = (): Env => {
     import.meta.env.VITE_KEEP_TOOLS_DROPDOWN_OPEN !== undefined
       ? import.meta.env.VITE_KEEP_TOOLS_DROPDOWN_OPEN === "true"
       : (window.KEEP_TOOLS_DROPDOWN_OPEN ?? false);
+  const showUsageAdvisory =
+    import.meta.env.VITE_SHOW_USAGE_ADVISORY !== undefined
+      ? import.meta.env.VITE_SHOW_USAGE_ADVISORY === "true"
+      : (window.SHOW_USAGE_ADVISORY ?? false);
   const disableLogout =
     import.meta.env.VITE_DISABLE_LOGOUT === "true"
       ? true
@@ -415,10 +393,6 @@ export const env = (): Env => {
     import.meta.env.VITE_DELEGATION_TASKS_ALLOW_ASYNC === "true"
       ? true
       : (window.DELEGATION_TASKS_ALLOW_ASYNC ?? false);
-  const delegationTasksApprovalMode = asDelegationTasksApprovalMode(
-    import.meta.env.VITE_DELEGATION_TASKS_APPROVAL_MODE ??
-      window.DELEGATION_TASKS_APPROVAL_MODE,
-  );
   const assistantsUsageViewEnabled =
     import.meta.env.VITE_ASSISTANTS_USAGE_VIEW_ENABLED === "true" ||
     (window.ASSISTANTS_USAGE_VIEW_ENABLED ?? false);
@@ -699,6 +673,7 @@ export const env = (): Env => {
     maxFilesPerMessage,
     disableChatInputAutofocus,
     keepToolsDropdownOpen,
+    showUsageAdvisory,
     chatInputEmptyStateLayout,
     disableLogout,
     assistantsEnabled,
@@ -706,7 +681,6 @@ export const env = (): Env => {
     assistantsDelegationAllowBackground,
     delegationTasksEnabled,
     delegationTasksAllowAsync,
-    delegationTasksApprovalMode,
     assistantsEnableEditSharing,
     assistantsEnableDirectOrganizationSharing,
     assistantsUsageViewEnabled,

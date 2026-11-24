@@ -3260,21 +3260,6 @@ msgid "chat.submission.word.readNoResponse"
 msgstr "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.always"
-msgstr "Any task run for you here needs your approval first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.asyncOnly"
-msgstr "If any of this runs as a background task, you will be asked to approve it first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.plan"
-msgstr "If this is split into separate tasks, you will be asked to approve the plan before any of it runs."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerToolChips.tsx
 msgid "chat.toolChips.announce.deselected"
 msgstr "{name} deselected."
@@ -9256,6 +9241,11 @@ msgstr "That was everything."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.approved"
+msgstr "All right, I'm running it now."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeConflict"
 msgstr "The card has changed in the meantime. Please check the screen."
 
@@ -9338,6 +9328,11 @@ msgstr "Voice commands aren't working right now. The card is waiting on screen."
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.unclear"
 msgstr "{commands, select, withText {I didn't catch that. You can say: go on, what else, again, read the text, or stop.} other {I didn't catch that. You can say: go on, what else, again, or stop.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichField"
+msgstr "{shape, select, named {Which field: {fields}?} other {Which field? Please say its name.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -11544,6 +11539,11 @@ msgstr "You allowed this"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.allowedByVoice"
+msgstr "You allowed this by voice"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "You allowed this for this document"
 
@@ -11571,6 +11571,11 @@ msgstr "Not run: you asked for a change"
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.denied"
 msgstr "You denied this"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.deniedByVoice"
+msgstr "You denied this by voice"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts

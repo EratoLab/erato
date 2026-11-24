@@ -1,10 +1,11 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
 import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import * as waitLines from "@/hooks/audio/waitLines";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
@@ -131,6 +132,7 @@ vi.mock("@/hooks/audio/waitLines", async (importOriginal) => {
     waitTurnSpeaks: vi.fn(actual.waitTurnSpeaks),
     waitTurnSpokenEnd: vi.fn(actual.waitTurnSpokenEnd),
     waitTurnTool: vi.fn(actual.waitTurnTool),
+    beginWaitTurn: vi.fn(),
   };
 });
 
@@ -4587,6 +4589,89 @@ describe("useChatMessaging", () => {
     beforeEach(() => {
       mockCreateSSEConnection.mockClear();
       sseCallbacks = {};
+    });
+
+    describe("read back in audio mode", () => {
+      const item = {
+        approval_id: "call_probe",
+        tool_call_id: "call_probe",
+        tool_name: "publish_approval_probe",
+        input: { channel: "release" },
+      };
+      const decideWith = (
+        decision: ToolApprovalDecision,
+        voiceReceipt?: string,
+      ) => {
+        useSpeechPlayback.setState({
+          conversational: true,
+          enabled: true,
+          spokenTurn: "chat1",
+        });
+        vi.mocked(waitLines.beginWaitTurn).mockClear();
+        const { result } = renderHook(() => useChatMessaging("chat1"), {
+          wrapper: TestWrapper,
+        });
+        seedParkedChat();
+        act(() => {
+          void result.current
+            .continueToolApproval({
+              messageId: parkedMessage.id,
+              decision,
+              toolCallId: "call_probe",
+              toolName: "publish_approval_probe",
+              toolInput: { channel: "release" },
+              mcpServerId: "mock_mcp_approval",
+              approvalIds: ["call_probe"],
+              items: [item] as never,
+              itemDecisions: [
+                {
+                  approvalId: "call_probe",
+                  decision,
+                  ...(voiceReceipt ? { voiceReceipt } : {}),
+                },
+              ],
+            })
+            .catch(() => {});
+        });
+        const [, options] = vi.mocked(waitLines.beginWaitTurn).mock
+          .calls[0] as [string, { continuation?: boolean; opener?: boolean }];
+        const seeded = useMessagingStore.getState().getStreaming("chat1")
+          .content as { content_type: string; voice?: unknown }[];
+        return {
+          options,
+          decision: seeded.find(
+            (part) =>
+              part.content_type === "tool_approval" ||
+              part.content_type === "tool_rejection",
+          ),
+        };
+      };
+
+      afterEach(() => {
+        useSpeechPlayback.setState({
+          conversational: false,
+          enabled: false,
+          spokenTurn: undefined,
+        });
+      });
+
+      it("a tap opens the wait like a turn's, with its opener", () => {
+        const { options, decision } = decideWith("approve");
+        expect(options).toMatchObject({ continuation: true, opener: true });
+        expect(decision?.voice).toBeUndefined();
+      });
+
+      it("an approval by voice keeps the opener, which its spoken answer then keeps out, and shows it was by voice", () => {
+        const { options, decision } = decideWith("approve", "receipt-1");
+        expect(options).toMatchObject({ continuation: true, opener: true });
+        expect(decision?.voice).toBeDefined();
+      });
+
+      it("a refusal by voice was answered aloud already: no opener", () => {
+        const { options, decision } = decideWith("reject", "receipt-2");
+        expect(options).toMatchObject({ continuation: true, opener: false });
+        expect(decision?.voice).toBeDefined();
+      });
     });
 
     it("tells the server which client tools this device runs, since an approved one runs here", () => {

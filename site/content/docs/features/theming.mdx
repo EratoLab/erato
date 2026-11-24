@@ -592,7 +592,9 @@ msgstr "Sie"
 To customize the AI usage notice below the chat input, override
 `chat.ai_usage_advisory` in your theme's `locales/<locale>/messages.po`. The
 notice supports Markdown links and emphasis. Keep the copy short so it fits the
-existing space below the input.
+existing space below the input. The notice only shows when
+[`frontend.show_usage_advisory`](../configuration#frontendshow_usage_advisory)
+is `true`, and never on screens narrower than 768 px.
 
 ```po
 msgid "chat.ai_usage_advisory"

@@ -32,7 +32,11 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Bug fixes
 
-**The app fits a phone screen.** On a phone the app was taller than what the browser shows, so the bottom of the composer and the notices under it were cut off; it now takes the visible height. The page declares `viewport-fit=cover` and keeps its own content clear of system bars and display cutouts, so no bands remain around it, and while an on-screen keyboard is open the app and its dialogs take the space above the keyboard instead of sliding out of view. Inside the app, the page background behind everything is now `colors.shell.page` (it was `colors.background.primary`); it shows only where a screen paints no surface of its own.
+**The app fits a phone screen.** On a phone the app was taller than what the browser shows, so the bottom of the composer was cut off; it now takes the visible height. The page declares `viewport-fit=cover` and keeps its own content clear of system bars and display cutouts, so no bands remain around it, and while an on-screen keyboard is open the app and its dialogs take the space above the keyboard instead of sliding out of view. Inside the app, the page background behind everything is now `colors.shell.page` (it was `colors.background.primary`); it shows only where a screen paints no surface of its own.
+
+#### Deprecations and upgrade notes
+
+- **The AI usage notice beneath the chat input is now off by default and never shows on screens narrower than 768 px; the task-approval pre-announcement beneath it is removed for every approval mode.** Set `frontend.show_usage_advisory = true` to restore the notice on wider screens.
 
 ## [0.9.0] - 2026-11-23
 

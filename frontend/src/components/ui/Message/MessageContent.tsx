@@ -954,6 +954,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       status: "approved",
       alwaysAllow: part.always_allow === true,
       ...(part.covers ? { covers: part.covers } : {}),
+      ...(part.voice ? { byVoice: true } : {}),
     };
   }
   if (part.content_type === "tool_rejection") {
@@ -963,6 +964,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       neverAllow: part.never_allow === true,
       withdrawn: reason === "withdrawn",
       changeRequested: reason === "change_requested",
+      ...(part.voice ? { byVoice: true } : {}),
     };
   }
   return undefined;
