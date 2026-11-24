@@ -44,6 +44,8 @@ const notify = (list: Element, box: boolean) => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 interface ListProps {
@@ -52,6 +54,7 @@ interface ListProps {
   replying?: boolean;
   isTransitioning?: boolean;
   restingTop?: () => number | null;
+  content?: unknown;
 }
 
 const List = (props: ListProps) => {
@@ -242,6 +245,67 @@ describe.each(SIZES)("useScrollToBottom ($name)", ({ clientHeight }) => {
     expect(list.scrollTop).toBe(bottom() - 210);
   });
 
+  it("moves only as far as the person scrolls down to something they opened after the reply", () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const { list, grow, scrollTo } = renderList(clientHeight);
+    vi.spyOn(Date, "now").mockReturnValue(now + 5_000);
+    grow(900);
+    const opened = list.scrollTop;
+
+    scrollTo(opened + 100);
+    expect(list.scrollTop).toBe(opened + 100);
+  });
+
+  it("keeps a wheel step up whose scroll event arrives after the next chunk (WebKit)", () => {
+    const { list, grow, bottom, update, scrolledUp } = renderList(clientHeight);
+
+    // The wheel has moved the list; its scroll event is still pending when
+    // the next chunk arrives.
+    fireEvent.wheel(list, { deltaY: -120 });
+    list.scrollTop = bottom() - 120;
+    update({ content: 2 });
+    grow(40);
+    fireEvent.scroll(list);
+    expect(scrolledUp()).toBe(true);
+    expect(list.scrollTop).toBe(bottom() - 160);
+  });
+
+  it("catches up with the end once the person's wheel step turned out to move nothing", () => {
+    vi.useFakeTimers();
+    const { list, grow, bottom, scrolledUp } = renderList(clientHeight);
+
+    fireEvent.wheel(list, { deltaY: 120 });
+    grow(300);
+    expect(list.scrollTop).toBe(bottom() - 300);
+    act(() => vi.advanceTimersByTime(120));
+    expect(list.scrollTop).toBe(bottom());
+    expect(scrolledUp()).toBe(false);
+  });
+
+  it("keeps following a late image once the next message arrives", () => {
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now);
+    const { list, grow, bottom, update, scrolledUp } = renderList(clientHeight);
+    vi.spyOn(Date, "now").mockReturnValue(now + 5_000);
+    grow(400);
+
+    update({ content: 2 });
+    expect(list.scrollTop).toBe(bottom());
+    expect(scrolledUp()).toBe(false);
+  });
+
+  it("does not hold the stream back for keys typed in the composer", () => {
+    const { list, grow, bottom } = renderList(clientHeight);
+    const composer = document.createElement("textarea");
+    document.body.appendChild(composer);
+
+    fireEvent.keyDown(composer, { key: " " });
+    grow(300);
+    expect(list.scrollTop).toBe(bottom());
+    composer.remove();
+  });
+
   it("brings the view to the person's new turn, also from where they scrolled to", () => {
     const { list, grow, scrollTo, bottom, update } = renderList(clientHeight);
 
@@ -304,6 +368,16 @@ describe.each(SIZES)("useScrollToBottom ($name)", ({ clientHeight }) => {
       scrollTo(bottom());
       grow(500);
       expect(list.scrollTop).toBe(bottom());
+    });
+
+    it("lets the browser keep the text in place for a person who scrolled away from the resting point", () => {
+      const { list, grow, scrollTo, update } = renderList(clientHeight);
+      update({ turn: 2, restingTop: resting(2_000) });
+      grow(10);
+      expect(list.style.overflowAnchor).toBe("none");
+
+      scrollTo(2_300);
+      expect(list.style.overflowAnchor).toBe("");
     });
 
     it("leaves the person where they scrolled down to from the resting point", () => {

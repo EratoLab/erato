@@ -17,6 +17,25 @@ const AT_BOTTOM_PX = 8;
  */
 const SETTLING_MS = 1500;
 
+/**
+ * How long after the person's wheel, swipe or scroll key the list leaves the
+ * view alone: WebKit can deliver that scroll's event after the next chunk,
+ * and a write meanwhile would undo it.
+ */
+const INPUT_MS = 100;
+
+/* eslint-disable lingui/no-unlocalized-strings -- KeyboardEvent.key constants, not user-facing text. */
+const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
+/* eslint-enable lingui/no-unlocalized-strings */
+
 /** How close to its top the list counts as near it, for loading history. */
 const NEAR_TOP_PX = 50;
 
@@ -89,6 +108,11 @@ export function useScrollToBottom({
   // next move.
   const lastTop = useRef(0);
   const changedAt = useRef(0);
+  const inputAt = useRef(Number.NEGATIVE_INFINITY);
+  // Content grew after it settled (something opened, an image loading) and
+  // the view was left above the end: a move down from there is the person's.
+  const strayed = useRef(false);
+  const retry = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const holds = useRef(isTransitioning);
   holds.current = isTransitioning;
@@ -102,11 +126,22 @@ export function useScrollToBottom({
   const setFollows = useCallback((value: boolean) => {
     follows.current = value;
     setIsScrolledUp(!value);
+    // A person reading elsewhere keeps the browser's anchoring, which holds
+    // their text still as content above changes.
+    if (!value && containerRef.current) {
+      containerRef.current.style.overflowAnchor = "";
+    }
   }, []);
 
   const pin = useCallback(() => {
     const container = containerRef.current;
     if (!container || !follows.current || holds.current) return;
+    const sinceInput = Date.now() - inputAt.current;
+    if (sinceInput < INPUT_MS) {
+      clearTimeout(retry.current);
+      retry.current = setTimeout(pin, INPUT_MS - sinceInput);
+      return;
+    }
     const bottom = container.scrollHeight - container.clientHeight;
     const resting = toEnd.current
       ? null
@@ -117,6 +152,7 @@ export function useScrollToBottom({
     // above it: a move down from there is the person's.
     container.style.overflowAnchor = restsAbove.current ? "none" : "";
     if (Math.abs(container.scrollTop - top) < 1) return;
+    strayed.current = false;
     container.scrollTop = top;
     ownTop.current = container.scrollTop;
     lastTop.current = container.scrollTop;
@@ -140,6 +176,7 @@ export function useScrollToBottom({
     const resizes = new ResizeObserver(() => {
       if (replyingRef.current || Date.now() - changedAt.current < SETTLING_MS)
         pin();
+      else strayed.current = true;
     });
     const observeChildren = () => {
       resizes.disconnect();
@@ -189,13 +226,34 @@ export function useScrollToBottom({
       const browser = movedUp
         ? clientHeight > before.clientHeight ||
           scrollHeight < before.scrollHeight
-        : !restsAbove.current;
+        : !restsAbove.current && !strayed.current;
       if (browser) pin();
       else setFollows(false);
     };
     container.addEventListener("scroll", onScroll, { passive: true });
+    const onInput = () => {
+      inputAt.current = Date.now();
+    };
+    // Not keys typed in a field or handled by the page (a menu).
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      const typing =
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA");
+      if (SCROLL_KEYS.has(event.key) && !typing && !event.defaultPrevented)
+        onInput();
+    };
+    container.addEventListener("wheel", onInput, { passive: true });
+    container.addEventListener("touchmove", onInput, { passive: true });
+    document.addEventListener("keydown", onKey);
 
     return () => {
+      clearTimeout(retry.current);
+      container.removeEventListener("wheel", onInput);
+      container.removeEventListener("touchmove", onInput);
+      document.removeEventListener("keydown", onKey);
       box.disconnect();
       resizes.disconnect();
       childrenChange.disconnect();
