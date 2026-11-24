@@ -130,10 +130,15 @@ export function useIsBelow(breakpoint: Breakpoint): boolean {
   return useMediaQuery(belowQuery(breakpoint));
 }
 
+/** A mouse or trackpad, as the `hover:` variant reads it. */
+export function useHasHoveringPointer(): boolean {
+  return useMediaQuery(HOVERING_POINTER);
+}
+
 /** Below `sm` without a hovering pointer, as the `no-hover:` variant reads it. */
 export function useIsNarrowTouchScreen(): boolean {
   const isNarrow = useIsBelow("sm");
-  const hasHoveringPointer = useMediaQuery(HOVERING_POINTER);
+  const hasHoveringPointer = useHasHoveringPointer();
   return isNarrow && !hasHoveringPointer;
 }
 

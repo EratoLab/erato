@@ -106,6 +106,7 @@ const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
 const mockUseIsMobile = vi.fn();
 const mockUseIsNarrowTouchScreen = vi.fn();
+const mockUseHasHoveringPointer = vi.fn();
 const mockChatInputAddControls = vi.fn();
 
 vi.mock("@/providers/ChatProvider", async () =>
@@ -298,6 +299,7 @@ vi.mock("./ChatInputTokenUsage", () => ({
 vi.mock("@/hooks/useResponsive", () => ({
   useIsMobile: () => mockUseIsMobile(),
   useIsNarrowTouchScreen: () => mockUseIsNarrowTouchScreen(),
+  useHasHoveringPointer: () => mockUseHasHoveringPointer(),
 }));
 
 // The "+" menu's own rendering of the section is covered against the real
@@ -482,6 +484,7 @@ describe("ChatInput", () => {
 
     mockUseIsMobile.mockReturnValue(false);
     mockUseIsNarrowTouchScreen.mockReturnValue(false);
+    mockUseHasHoveringPointer.mockReturnValue(true);
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAssistantsFeature.mockReturnValue({
       enabled: false,
@@ -990,7 +993,7 @@ describe("ChatInput", () => {
       expect(textarea.selectionEnd).toBe(expected.length);
     });
 
-    it("appends plain text with the caret right after it", async () => {
+    it("appends plain text with the caret on its line", async () => {
       const controls = createRef<ChatInputControlsHandle>();
       await renderChatInput(null, controls);
       const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
@@ -1000,7 +1003,7 @@ describe("ChatInput", () => {
           emptyLineAfter: false,
         });
       });
-      expect(textarea).toHaveValue("https://example.com/");
+      expect(textarea).toHaveValue("https://example.com/ ");
       expect(textarea.selectionStart).toBe(textarea.value.length);
     });
 
@@ -1385,7 +1388,7 @@ describe("ChatInput", () => {
     });
 
     describe("in audio mode", () => {
-      const microphone = (open: boolean) => {
+      const microphone = (open: boolean, completing = false) => {
         mockUseAudioDictationFeature.mockReturnValue({
           enabled: true,
           maxRecordingDurationSeconds: 1200,
@@ -1397,7 +1400,7 @@ describe("ChatInput", () => {
         mockUseAudioDictationRecorder.mockReturnValue({
           isDictating: open,
           isDictationStarting: false,
-          isDictationCompleting: false,
+          isDictationCompleting: completing,
           isCapturingAudio: open,
           dictationError: null,
           setDictationError: vi.fn(),
@@ -1413,13 +1416,19 @@ describe("ChatInput", () => {
       it.each([
         ["Listening", "the microphone is open"],
         ["Speaking", "the voice speaks"],
+        ["Speaking", "the voice speaks and the microphone listens over it"],
+        ["Thinking", "what was said is written down"],
         ["Thinking", "the answer is coming"],
         ["Audio mode is on", "nothing else happens"],
       ] as const)(
         "writes %s where the field was while %s",
         async (label, state) => {
-          microphone(state === "the microphone is open");
-          if (state === "the voice speaks")
+          microphone(
+            state === "the microphone is open" ||
+              state === "the voice speaks and the microphone listens over it",
+            state === "what was said is written down",
+          );
+          if (state.startsWith("the voice speaks"))
             useSpeechPlayback.setState({ playing: true });
           if (state === "the answer is coming")
             mockUseChatContext.mockReturnValue({
@@ -1450,23 +1459,42 @@ describe("ChatInput", () => {
         expect(screen.queryByTestId("chat-input-audio-mode-status")).toBeNull();
       });
 
-      it("leaves the keyboard closed when audio mode ends, but focuses the field under a mouse", async () => {
-        mockUseChatInputFeature.mockReturnValue({ autofocus: true });
-
-        for (const touch of [true, false]) {
+      it.each([
+        ["leaves the keyboard closed", "on a narrow touch screen", true, false],
+        ["leaves the keyboard closed", "on a wide touch screen", false, false],
+        ["focuses the field", "under a mouse", false, true],
+      ] as const)(
+        "%s when audio mode ends %s",
+        async (_, __, narrowTouch, hoveringPointer) => {
+          mockUseChatInputFeature.mockReturnValue({ autofocus: true });
+          mockUseHasHoveringPointer.mockReturnValue(hoveringPointer);
           microphone(true);
-          const { setAudioMode, unmount } = await renderPhoneComposer({
-            touch,
+          const { setAudioMode } = await renderPhoneComposer({
+            touch: narrowTouch,
             audioMode: true,
           });
           microphone(false);
           setAudioMode(false);
 
           const field = screen.getByPlaceholderText("Type a message...");
-          if (touch) expect(field).not.toHaveFocus();
-          else expect(field).toHaveFocus();
-          unmount();
-        }
+          if (hoveringPointer) expect(field).toHaveFocus();
+          else expect(field).not.toHaveFocus();
+        },
+      );
+
+      it("writes no second listening state beside a held hesitation", async () => {
+        microphone(true);
+        mockUseAudioDictationRecorder.mockReturnValue({
+          ...mockUseAudioDictationRecorder(),
+          heldHesitation: "äh",
+        });
+
+        await renderPhoneComposer({ touch: true, audioMode: true });
+
+        expect(
+          screen.getByTestId("chat-input-audio-hesitation"),
+        ).toBeInTheDocument();
+        expect(screen.queryByTestId("chat-input-audio-mode-status")).toBeNull();
       });
     });
 

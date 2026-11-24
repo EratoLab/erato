@@ -98,7 +98,11 @@ import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useDocumentHidden } from "@/hooks/useDocumentHidden";
-import { useIsMobile, useIsNarrowTouchScreen } from "@/hooks/useResponsive";
+import {
+  useHasHoveringPointer,
+  useIsMobile,
+  useIsNarrowTouchScreen,
+} from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -2474,6 +2478,7 @@ export const ChatInput = ({
       canBrowseMcpTools);
 
   const isNarrowTouchScreen = useIsNarrowTouchScreen();
+  const hasHoveringPointer = useHasHoveringPointer();
   const oneLineComposer =
     showControls && useUnifiedMobileMenu && isNarrowTouchScreen;
   // The layout changes the field's width and padding under a kept draft.
@@ -3434,24 +3439,27 @@ export const ChatInput = ({
   });
 
   // On one line the audio-mode button alone does not say what is happening,
-  // so the state is written where the text field was. The button's own
-  // status already tells a screen reader.
-  const audioModeStatusField = isAudioMode && oneLineComposer && (
-    <span
-      aria-hidden="true"
-      className="chat-input-textarea-geometry min-w-0 flex-1 truncate text-base text-theme-fg-secondary"
-      data-ui="chat-input-audio-mode-status"
-      data-testid="chat-input-audio-mode-status"
-    >
-      {speech.playing || cardSpeaking
-        ? t({ id: "chat.audio.status.speaking", message: "Speaking" })
-        : showsListening
-          ? t`Listening`
-          : isPendingResponse || isDictationCompleting
-            ? t`Thinking`
-            : t`Audio mode is on`}
-    </span>
-  );
+  // so the state is written where the text field was. Hidden from screen
+  // readers: the button announces whether it listens, and the voice itself
+  // is heard. A held hesitation already says it is still listening.
+  const audioModeStatusField = isAudioMode &&
+    oneLineComposer &&
+    !(isDictating && heldHesitation) && (
+      <span
+        aria-hidden="true"
+        className="chat-input-textarea-geometry min-w-0 flex-1 truncate text-base text-theme-fg-secondary"
+        data-ui="chat-input-audio-mode-status"
+        data-testid="chat-input-audio-mode-status"
+      >
+        {speech.playing || cardSpeaking
+          ? t({ id: "chat.audio.mode.speaking", message: "Speaking" })
+          : showsListening
+            ? t`Listening`
+            : isPendingResponse || isDictationCompleting
+              ? t`Thinking`
+              : t`Audio mode is on`}
+      </span>
+    );
 
   const textareaField = !isAudioMode && (
     // isolate keeps the backdrop's negative layer above the shell's own
@@ -3513,9 +3521,10 @@ export const ChatInput = ({
         rows={1}
         disabled={composeLocked}
         tabIndex={0}
-        // On a touch screen focus opens the keyboard, and the field mounts
-        // again when audio mode ends, inside the tap that ended it.
-        autoFocus={shouldAutofocus && !isNarrowTouchScreen} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+        // Without a mouse or trackpad focus opens the on-screen keyboard, and
+        // the field mounts again when audio mode ends, inside the tap that
+        // ended it.
+        autoFocus={shouldAutofocus && hasHoveringPointer} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
         className={clsx(
           "w-full resize-none overflow-y-auto",
           "chat-input-textarea-geometry",

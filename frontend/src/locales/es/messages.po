@@ -1931,6 +1931,11 @@ msgid "chat.audio.hesitation_held"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.mode.speaking"
+msgstr "Hablando"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Más"
@@ -1994,11 +1999,6 @@ msgstr "Grabando…"
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.status.recordingDuration"
 msgstr "Grabando · {duration}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio.status.speaking"
-msgstr "Hablando"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts

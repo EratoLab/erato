@@ -18,7 +18,8 @@ export function formatMarkdownQuote(
  * The draft with `block` added as its own paragraph: an empty line before it
  * when the draft holds text, and by default an empty line after it for the
  * caret, because a line typed directly under a markdown quote would continue
- * the quote.
+ * the quote. Without that line a space follows instead, so words typed next
+ * do not run into the block.
  */
 export function appendBlockToDraft(
   draft: string,
@@ -26,7 +27,7 @@ export function appendBlockToDraft(
   { emptyLineAfter = true }: { emptyLineAfter?: boolean } = {},
 ): string {
   const existing = draft.trimEnd();
-  return `${existing === "" ? "" : `${existing}\n\n`}${block}${emptyLineAfter ? "\n\n" : ""}`;
+  return `${existing === "" ? "" : `${existing}\n\n`}${block}${emptyLineAfter ? "\n\n" : " "}`;
 }
 
 function trimBlankEdges(lines: string[]): string[] {

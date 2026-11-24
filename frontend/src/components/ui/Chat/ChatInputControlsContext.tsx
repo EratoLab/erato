@@ -11,7 +11,7 @@ export type DraftMessageOptions = {
 export type AppendToDraftOptions = {
   /**
    * Leave an empty line after the block for the caret (the default). Off for
-   * plain text, so the caret stays at its end as if it had been typed.
+   * plain text: a space follows instead, so the caret stays on its line.
    */
   emptyLineAfter?: boolean;
 };

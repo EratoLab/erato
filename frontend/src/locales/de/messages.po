@@ -1931,6 +1931,11 @@ msgid "chat.audio.hesitation_held"
 msgstr "„{heldHesitation}“ · Ich höre weiter zu"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.mode.speaking"
+msgstr "Spricht"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Mehr"
@@ -1994,11 +1999,6 @@ msgstr "Aufnahme läuft…"
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.status.recordingDuration"
 msgstr "Aufnahme · {duration}"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
-msgid "chat.audio.status.speaking"
-msgstr "Spricht"
 
 #. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
