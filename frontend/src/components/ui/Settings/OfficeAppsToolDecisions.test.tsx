@@ -142,32 +142,47 @@ it("saves a choice into the stored decisions, for every device", async () => {
   });
 });
 
-it("names a change from its label in the user's language, else by its title", () => {
-  setup([labelled(tools[0], "update", "document"), tools[1]]);
-  open();
-  const [document, presentation] = screen.getAllByRole("radiogroup");
-  expect(document).toHaveAccessibleName("Update document");
-  expect(presentation).toHaveAccessibleName("Change the open presentation");
-
-  activate("de");
-  expect(
-    approvalToolRows([labelled(tools[0], "update", "document")])[0].label,
-  ).toBe("Dokument aktualisieren");
-});
-
-it("keeps the titles of changes whose labels would read the same", () => {
-  const rows = approvalToolRows([
+it("names each change by its title, whatever its label would read", () => {
+  setup([
     labelled(tools[0], "update", "document"),
-    labelled(tools[1], "update", "document"),
     labelled(
-      { ...tools[0], qualified_name: "word/tidy", title: "Tidy up" },
-      "other",
-      "other",
+      {
+        qualified_name: "word/apply_comment_changes",
+        title: "Change comments in the open Word document",
+        approval: "user_decision",
+      },
+      "comment",
+      "comment",
+    ),
+    labelled(
+      {
+        qualified_name: "outlook/open_appointment",
+        title: "Open a new appointment in Outlook",
+        approval: "user_decision",
+      },
+      "create",
+      "event",
     ),
   ]);
-  expect(rows.map((row) => row.label)).toEqual([
+  open();
+  expect(
+    screen
+      .getAllByRole("radiogroup")
+      .map((group) => group.getAttribute("aria-label")),
+  ).toEqual([
     "Change the open Word document",
-    "Change the open presentation",
-    "Tidy up",
+    "Change comments in the open Word document",
+    "Open a new appointment in Outlook",
   ]);
+});
+
+it("names a change without a title from its label in the user's language", () => {
+  const untitled = { ...tools[0], title: " " };
+  activate("de");
+  expect(
+    approvalToolRows([
+      labelled(untitled, "update", "document"),
+      labelled(untitled, "other", "other"),
+    ]).map((row) => row.label),
+  ).toEqual(["Dokument aktualisieren", "word/apply_document_plan"]);
 });
