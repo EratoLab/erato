@@ -38,6 +38,8 @@ Typical "Notable changes" categories to copy & paste:
 
 **On a narrow screen the sidebar closes after a pick, and notifications stay above the keyboard.** After picking a chat, New Chat, Search, Assistants, Scheduled or a recent assistant in the sidebar on a screen narrower than 640 px, the sidebar closes. Notifications stay above an open on-screen keyboard.
 
+**On a narrow screen a tap beside the open sidebar closes it.** Below 640 px the open sidebar lies over the page, and a tap on the part of the page still showing beside it went to the page (it could focus the composer and open the keyboard) while the sidebar stayed open. The page beside the open sidebar is now dimmed, and a tap there only closes the sidebar; Escape closes it too, and focus that was inside it moves to the control that opens it again. The dimmed layer is `data-ui="sidebar-scrim"` with the class `drawer-overlay-skin` (colour `colors.overlay.modal`), the skin the Office add-in's history drawer already uses, now part of the shared stylesheet. Wider screens are unchanged.
+
 **Voice after a phone lock (WebKit on iOS).** After the phone was locked in conversation mode, "Read aloud" and spoken answers stayed silent until the page was reloaded (their audio clock stood still), and listening stopped with "The microphone stopped sending audio…". Now spoken output plays again after unlocking, and the turn that was listening ends quietly; conversation mode listens again once the page is shown, as it does after the home screen; a dictation keeps what was said. A microphone that stops while the page is shown is still reported. [#1670](https://github.com/EratoLab/erato/pull/1670)
 
 #### Deprecations and upgrade notes
