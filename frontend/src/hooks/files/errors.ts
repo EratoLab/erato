@@ -44,6 +44,23 @@ export class CloudLinkError extends Error {
   }
 }
 
+/** A file shared from another app that the host passed on without its content. */
+export class SharedFileWithoutContentError extends Error {
+  public readonly filenames: string[];
+
+  constructor(filenames: string[]) {
+    super(
+      i18n._("upload.error.sharedWithoutContent", {
+        count: filenames.length,
+        filenames: filenames.join(", "),
+      }),
+    );
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "SharedFileWithoutContentError";
+    this.filenames = filenames;
+  }
+}
+
 /**
  * Error for unsupported file types (no operations available)
  */
@@ -124,4 +141,5 @@ export type UploadError =
   | UploadTooLargeError
   | UploadUnknownError
   | CloudLinkError
-  | UnsupportedFileTypeError;
+  | UnsupportedFileTypeError
+  | SharedFileWithoutContentError;

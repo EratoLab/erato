@@ -20,6 +20,7 @@ import { useApplyComposerPreset } from "@/hooks/chat/useComposerPreset";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
+import { useSharedItemsIntoComposer } from "@/hooks/files/useSharedItemsIntoComposer";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
@@ -751,6 +752,20 @@ export const Chat = ({
     isUploading,
     disabled: composerDisabled,
     maxSize: maxSizeBytes,
+    maxSizeFormatted,
+  });
+
+  useSharedItemsIntoComposer({
+    ready:
+      !readOnly &&
+      !composerDisabled &&
+      !isLastMessageBlockedByPromptInjection &&
+      !chatLoading &&
+      !isUploading,
+    uploadFiles,
+    addUploadedFiles: handleDropUploaded,
+    appendToDraft: chatInputControls.appendToDraft,
+    maxSizeBytes,
     maxSizeFormatted,
   });
 

@@ -1,7 +1,13 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import {
   afterEach,
@@ -1121,4 +1127,46 @@ describe("Chat top bar", () => {
     const strip = screen.getByTestId("top-content-stub").parentElement!;
     expect(strip.className).not.toContain("pr-28");
   });
+});
+
+describe("Chat shared items", () => {
+  const installShell = () => {
+    const request = vi.fn(() => Promise.resolve({ batches: [] }));
+    (window as { ERATO_SHELL?: unknown }).ERATO_SHELL = {
+      contract: 1,
+      capabilities: { share: 1 },
+      request,
+      on: () => () => {},
+    };
+    return request;
+  };
+
+  afterEach(() => {
+    delete (window as { ERATO_SHELL?: unknown }).ERATO_SHELL;
+  });
+
+  it("takes shared items into an open composer", async () => {
+    const request = installShell();
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith("share.takePending"),
+    );
+  });
+
+  it.each([
+    ["closed", { composerDisabled: true }],
+    ["read-only", { readOnly: true }],
+  ])(
+    "leaves them with the shell while the composer is %s",
+    async (_, props) => {
+      const request = installShell();
+
+      renderChat(props);
+
+      await act(async () => {});
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
 });
