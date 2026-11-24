@@ -2,8 +2,8 @@ import type { Config } from "tailwindcss";
 import defaultTheme from "tailwindcss/defaultTheme";
 import plugin from "tailwindcss/plugin";
 
-/** A mouse or trackpad, which can rest over a control without pressing it. */
-const HOVERING_POINTER = "(hover: hover) and (pointer: fine)";
+import { HOVERING_POINTER } from "./src/styles/pointerQueries";
+
 const NO_HOVERING_POINTER = `not all and ${HOVERING_POINTER}`;
 
 /**

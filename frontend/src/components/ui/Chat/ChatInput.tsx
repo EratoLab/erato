@@ -98,7 +98,7 @@ import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useDocumentHidden } from "@/hooks/useDocumentHidden";
-import { useIsMobile } from "@/hooks/useResponsive";
+import { useIsMobile, useIsNarrowTouchScreen } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -159,7 +159,7 @@ import { ComposerToolChips } from "./ComposerToolChips";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
-import { ModelSelector } from "./ModelSelector";
+import { ModelSelector, ModelSelectorOptionContent } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
 import { buildMcpToolsSection, describeAllowChanges } from "./mcpToolsSection";
@@ -172,6 +172,7 @@ import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
+import type { AddMenuSection } from "./ChatInputAddMenu";
 import type {
   ChatInputControlsHandle,
   DraftMessageOptions,
@@ -393,6 +394,11 @@ interface DictationTarget {
 
 function isScrolledToEnd(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 4;
+}
+
+function fitTextareaHeight(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
 }
 
 function appendDictationText(current: string, transcript: string): string {
@@ -2009,8 +2015,7 @@ export const ChatInput = ({
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      fitTextareaHeight(textarea);
       if (scrollTextareaToEndRef.current) {
         textarea.scrollTop = textarea.scrollHeight;
       }
@@ -2457,6 +2462,36 @@ export const ChatInput = ({
       hasAddMenuExtraContent ||
       canMentionAssistants ||
       canBrowseMcpTools);
+
+  const isNarrowTouchScreen = useIsNarrowTouchScreen();
+  const oneLineComposer =
+    showControls && useUnifiedMobileMenu && isNarrowTouchScreen;
+  // The layout changes the field's width and padding under a kept draft.
+  useLayoutEffect(() => {
+    if (textareaRef.current) {
+      fitTextareaHeight(textareaRef.current);
+    }
+  }, [oneLineComposer]);
+  const modelMenuSection = useMemo<AddMenuSection | undefined>(() => {
+    if (availableModels.length === 0) {
+      return undefined;
+    }
+    return {
+      id: "model",
+      header: t({ id: "chatInput.addMenu.modelHeader", message: "Model" }),
+      // Menu placement is an internal key.
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      placement: "belowTools",
+      items: availableModels.map((model) => ({
+        id: `model-${model.chat_provider_id}`,
+        label: <ModelSelectorOptionContent model={model} compact />,
+        checked: selectedModel?.chat_provider_id === model.chat_provider_id,
+        exclusive: true,
+        disabled: !isSelectionReady,
+        onToggle: () => setSelectedModel(model),
+      })),
+    };
+  }, [availableModels, selectedModel, isSelectionReady, setSelectedModel]);
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
@@ -3383,6 +3418,92 @@ export const ChatInput = ({
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
 
+  const toolsLockReason = t({
+    id: "chat.toolChips.lockReason",
+    message: "This assistant sets the tools for its chats.",
+  });
+
+  const textareaField = !isAudioMode && (
+    // isolate keeps the backdrop's negative layer above the shell's own
+    // background instead of behind it; flex keeps the textarea from
+    // gaining an inline-block descender now that it is wrapped.
+    <div
+      className={clsx(
+        "relative isolate flex",
+        oneLineComposer ? "min-w-[50%] flex-1" : "w-full",
+      )}
+    >
+      {/* Gated on the tracked list, not on the mention affordances: the
+                  list is restored from the draft and outlives the assistant
+                  query, and whatever it holds is what submit delegates to. */}
+      {mentionedAssistants.length > 0 && (
+        <AssistantMentionBackdrop
+          text={message}
+          tracked={mentionedAssistants}
+          textareaRef={textareaRef}
+          dimmed={composeLocked}
+        />
+      )}
+      <textarea
+        ref={textareaRef}
+        value={message}
+        onChange={(e) => {
+          setMessage(e.target.value);
+          syncMentionTrigger(e.target);
+        }}
+        onSelect={(e) => syncMentionTrigger(e.currentTarget)}
+        onClick={(e) => syncMentionTrigger(e.currentTarget)}
+        onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
+        onPaste={handleTextareaPaste}
+        onKeyDown={(e) => {
+          if (isImeComposing(e)) {
+            return;
+          }
+          // The open picker owns Enter, Tab and the arrows — it has to
+          // run before Enter reaches send/queue.
+          if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
+            return;
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            // While a turn is generating, Enter queues the draft to
+            // auto-send when the turn finishes (ERMAIN-470); otherwise it
+            // submits normally.
+            if (enqueueCurrentMessage()) {
+              return;
+            }
+            handleComposerSubmit(e);
+          }
+        }}
+        placeholder={
+          isAnyTokenLimitExceeded
+            ? t`Message exceeds token limit. Please reduce length or remove files.`
+            : (sizeLimitPlaceholder ?? placeholder)
+        }
+        rows={1}
+        disabled={composeLocked}
+        tabIndex={0}
+        autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+        className={clsx(
+          "w-full resize-none overflow-y-auto",
+          "chat-input-textarea-geometry",
+          "bg-transparent",
+          "text-[var(--theme-fg-primary)]",
+          "focus:outline-none",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "max-h-[200px]",
+          "text-base",
+          "scrollbar-auto-hide",
+          // One placeholder colour at a time: with both classes the
+          // stylesheet order, not the condition, picks the winner.
+          isComposerBlocked
+            ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
+            : "placeholder:text-[var(--theme-fg-muted)]",
+        )}
+      />
+    </div>
+  );
+
   return (
     <div className="mx-auto w-full" style={shellWrapperStyle}>
       <form
@@ -3598,6 +3719,7 @@ export const ChatInput = ({
             "chat-input-shell-skin",
           )}
           data-ui="chat-input-shell"
+          data-layout={oneLineComposer ? "one-line" : undefined}
         >
           {/* Out of flow on purpose: the shell is a gapped flex column, so an
               in-flow anchor would add a row of spacing to every composer. */}
@@ -3701,99 +3823,30 @@ export const ChatInput = ({
             );
           })()}
 
-          {!isAudioMode && (
-            // isolate keeps the backdrop's negative layer above the shell's own
-            // background instead of behind it; flex keeps the textarea from
-            // gaining an inline-block descender now that it is wrapped.
-            <div className="relative isolate flex w-full">
-              {/* Gated on the tracked list, not on the mention affordances: the
-                  list is restored from the draft and outlives the assistant
-                  query, and whatever it holds is what submit delegates to. */}
-              {mentionedAssistants.length > 0 && (
-                <AssistantMentionBackdrop
-                  text={message}
-                  tracked={mentionedAssistants}
-                  textareaRef={textareaRef}
-                  dimmed={composeLocked}
-                />
-              )}
-              <textarea
-                ref={textareaRef}
-                value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                  syncMentionTrigger(e.target);
-                }}
-                onSelect={(e) => syncMentionTrigger(e.currentTarget)}
-                onClick={(e) => syncMentionTrigger(e.currentTarget)}
-                onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
-                onPaste={handleTextareaPaste}
-                onKeyDown={(e) => {
-                  if (isImeComposing(e)) {
-                    return;
-                  }
-                  // The open picker owns Enter, Tab and the arrows — it has to
-                  // run before Enter reaches send/queue.
-                  if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
-                    return;
-                  }
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    // While a turn is generating, Enter queues the draft to
-                    // auto-send when the turn finishes (ERMAIN-470); otherwise it
-                    // submits normally.
-                    if (enqueueCurrentMessage()) {
-                      return;
-                    }
-                    handleComposerSubmit(e);
-                  }
-                }}
-                placeholder={
-                  isAnyTokenLimitExceeded
-                    ? t`Message exceeds token limit. Please reduce length or remove files.`
-                    : (sizeLimitPlaceholder ?? placeholder)
-                }
-                rows={1}
-                disabled={composeLocked}
-                tabIndex={0}
-                autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-                className={clsx(
-                  "w-full resize-none overflow-y-auto",
-                  "chat-input-textarea-geometry",
-                  "bg-transparent",
-                  "text-[var(--theme-fg-primary)]",
-                  "focus:outline-none",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                  "max-h-[200px]",
-                  "text-base",
-                  "scrollbar-auto-hide",
-                  // One placeholder colour at a time: with both classes the
-                  // stylesheet order, not the condition, picks the winner.
-                  isComposerBlocked
-                    ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
-                    : "placeholder:text-[var(--theme-fg-muted)]",
-                )}
-              />
-            </div>
-          )}
+          {!oneLineComposer && textareaField}
 
           <div
             className={clsx(
-              "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              oneLineComposer
+                ? "flex gap-[var(--theme-spacing-control-gap)]"
+                : "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
               useUnifiedMobileMenu ? "items-end" : "items-center",
             )}
             data-ui="chat-input-controls"
           >
             <div
               className={clsx(
-                "chat-input-controls-geometry flex flex-wrap",
+                "chat-input-controls-geometry flex",
                 // Never narrower than its widest control: a wide right side
                 // (Exit audio mode) wraps to a line of its own rather than
                 // cutting the tool names. Top-aligned so + stays on the first
-                // chip row.
-                useUnifiedMobileMenu
-                  ? "flex-1 items-start"
-                  : "min-w-0 items-center",
+                // chip row. On one line a mode chip shortens its label
+                // instead, so the field beside it keeps its share.
+                oneLineComposer
+                  ? "min-w-0 items-end"
+                  : useUnifiedMobileMenu
+                    ? "flex-1 flex-wrap items-start"
+                    : "min-w-0 flex-wrap items-center",
               )}
             >
               {showControls &&
@@ -3844,6 +3897,19 @@ export const ChatInput = ({
                     disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
                     toolsDisabled={enforceSelectedFacetIds}
+                    toolsDisabledReason={
+                      oneLineComposer && enforceSelectedFacetIds
+                        ? toolsLockReason
+                        : undefined
+                    }
+                    modelSection={
+                      oneLineComposer && showModelSelector
+                        ? modelMenuSection
+                        : undefined
+                    }
+                    selectedToolCount={
+                      oneLineComposer ? selectedFacets.length : undefined
+                    }
                   />
                 ) : (
                   <>
@@ -3921,40 +3987,40 @@ export const ChatInput = ({
               {/* The unified "+" hides the Tools dropdown and its selected
                   buttons, so the selection is drawn here instead. Mounted
                   while tools exist, so the last chip's announcement is read. */}
-              {showControls && useUnifiedMobileMenu && hasFacets && (
-                <ComposerToolChips
-                  facets={selectedFacets}
-                  showFacetIndicatorWithDisplayName={
-                    globalFacetSettings?.show_facet_indicator_with_display_name ??
-                    false
-                  }
-                  onDeselect={toggleFacetId}
-                  locked={enforceSelectedFacetIds || composeLocked}
-                  lockReason={
-                    enforceSelectedFacetIds
-                      ? t({
-                          id: "chat.toolChips.lockReason",
-                          message:
-                            "This assistant sets the tools for its chats.",
-                        })
-                      : undefined
-                  }
-                  onFocusAfterLast={focusAddMenuTrigger}
-                />
-              )}
-              {useUnifiedMobileMenu && showModelSelector && (
-                <ModelSelector
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  disabled={!isSelectionReady}
-                  align="left"
-                  // Beside wrapped tool rows it lines up with Send, not +.
-                  className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
-                />
-              )}
+              {showControls &&
+                useUnifiedMobileMenu &&
+                !oneLineComposer &&
+                hasFacets && (
+                  <ComposerToolChips
+                    facets={selectedFacets}
+                    showFacetIndicatorWithDisplayName={
+                      globalFacetSettings?.show_facet_indicator_with_display_name ??
+                      false
+                    }
+                    onDeselect={toggleFacetId}
+                    locked={enforceSelectedFacetIds || composeLocked}
+                    lockReason={
+                      enforceSelectedFacetIds ? toolsLockReason : undefined
+                    }
+                    onFocusAfterLast={focusAddMenuTrigger}
+                  />
+                )}
+              {useUnifiedMobileMenu &&
+                !oneLineComposer &&
+                showModelSelector && (
+                  <ModelSelector
+                    availableModels={availableModels}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    disabled={!isSelectionReady}
+                    align="left"
+                    // Beside wrapped tool rows it lines up with Send, not +.
+                    className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
+                  />
+                )}
             </div>
 
+            {oneLineComposer && textareaField}
             <div
               className={clsx(
                 "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",

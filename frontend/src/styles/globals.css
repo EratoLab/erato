@@ -1202,6 +1202,73 @@ body:has(.app-viewport) {
   box-shadow: var(--theme-elevation-input);
 }
 
+/* The gap around the chat's composer, which the one-line composer below
+   offsets its own position from. */
+[data-ui="composer-cluster"] {
+  --chat-composer-gutter: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  [data-ui="composer-cluster"] {
+    --chat-composer-gutter: 1rem;
+  }
+}
+
+/* The one-line composer (ChatInput sets data-layout on a narrow screen
+   without a hovering pointer). Weighted like the hook alone through :where()
+   and placed after the skin: it wins over the skin, and a later theme.css rule
+   on the hook wins over it. */
+[data-ui="chat-input-shell"]:where([data-layout="one-line"]) {
+  /* The small icon buttons' size (.btn-geometry-icon-sm). */
+  --chat-input-line-height: calc(
+    var(--theme-spacing-control-min-height) - 0.25rem
+  );
+  padding-block: var(--theme-spacing-input-compact-padding-x);
+  /* Up to a capsule: half the one-line height, its 1px border included. A
+     larger theme radius would make a taller composer a stadium. */
+  border-radius: min(
+    var(--theme-radius-input),
+    calc(
+      var(--chat-input-line-height) / 2 +
+        var(--theme-spacing-input-compact-padding-x) + 1px
+    )
+  );
+}
+
+/* One text line (1.5rem) as tall as the buttons beside it. */
+[data-ui="chat-input-shell"]:where([data-layout="one-line"]) textarea {
+  min-height: var(--chat-input-line-height);
+  padding-block: calc((var(--chat-input-line-height) - 1.5rem) / 2);
+}
+
+/* At the foot of a chat it floats as low as the system's own bottom bars and
+   as far from the sides as from the bottom, so its corners follow the
+   screen's. The side gap reads env() itself: an open keyboard zeroes
+   --safe-area-bottom, and the composer keeps its width. */
+:where(
+    :not([data-ui="chat-empty-state-centered-shell"])
+      > [data-ui="composer-cluster"]
+  )
+  [data-ui="chat-input-shell"]:where([data-layout="one-line"]) {
+  /* How far the system's own bottom bars reach into the bottom safe area. */
+  --bottom-bar-safe-area-overlap: 6px;
+  width: auto;
+  margin-inline: calc(
+    max(
+        var(--chat-composer-gutter),
+        env(safe-area-inset-bottom, 0px) - var(--bottom-bar-safe-area-overlap)
+      ) -
+      var(--chat-composer-gutter)
+  );
+  margin-bottom: calc(
+    max(
+        var(--chat-composer-gutter),
+        var(--safe-area-bottom) - var(--bottom-bar-safe-area-overlap)
+      ) -
+      var(--safe-area-bottom) - var(--chat-composer-gutter)
+  );
+}
+
 .chat-message-skin {
   border-radius: var(--theme-radius-message);
   padding: var(--theme-spacing-message-padding-y)
