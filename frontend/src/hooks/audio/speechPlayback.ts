@@ -312,6 +312,9 @@ export function stopSpeechPlayback(streamKey?: string) {
 export function pauseSpeechPlayback() {
   const context = playbackContext();
   pausedAt = context?.currentTime ?? null;
+  // Passages queued but not begun are said again later, if at all.
+  const at = pausedAt;
+  if (at !== null) said = said.filter((entry) => entry.startsAt <= at);
   if (!accepting || held !== null || !context) return;
   clearUnderrun();
   held = queue.pause(context);
@@ -332,6 +335,11 @@ export function resumeSpeechPlayback() {
   useSpeechPlayback.setState({ paused: false });
   const context = playbackContext();
   if (!playbackPlays(context)) return;
+  // The passage it was cut in goes on from about where it was: logged
+  // again as begun that long before now, so a later talk-over finds it.
+  const cut = pausedAt === null ? undefined : said.at(-1);
+  if (cut && pausedAt !== null && chunks.length > 0 && !chunks[0].text)
+    noteVoiceSays(cut.text, context.currentTime - (pausedAt - cut.startsAt));
   for (const chunk of chunks) {
     if (!queue.enqueue(context, chunk.audio, chunk.sampleRate, chunk.text)) {
       speechFailed();

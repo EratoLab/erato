@@ -515,4 +515,24 @@ describe("what the voice was saying when it was talked over", () => {
     p.beginSpeechResponse("t");
     expect(p.voiceTextAtPause()).toBe("");
   });
+
+  it("still knows the passage after the voice went on from a pause", async () => {
+    const p = await import("./speechPlayback");
+    const { playbackContext } = await import("./pcmPlayback");
+    p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+    await p.unlockSpeechPlayback();
+    const clock = playbackContext() as unknown as { currentTime: number };
+    p.beginSpeechResponse("s");
+    const passage = "Ein Satz. ".repeat(10);
+    p.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s", passage);
+    p.playSpeechChunk("m", 1, "AQIDBA==", 24000, "s");
+    clock.currentTime = 1.6;
+    // Talked over in the passage's second chunk: it goes on from there.
+    p.pauseSpeechPlayback();
+    clock.currentTime = 9;
+    p.resumeSpeechPlayback();
+    clock.currentTime = 15;
+    p.pauseSpeechPlayback();
+    expect(p.voiceTextAtPause()).toContain("Ein Satz.");
+  });
 });

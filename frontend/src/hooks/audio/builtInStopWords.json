@@ -116,5 +116,6 @@
     "thank you",
     "vielen dank"
   ],
-  "leading_no": ["nee", "nein", "no", "nope"]
+  "leading_no": ["nee", "nein", "no", "nope"],
+  "yes_particles": ["ja", "jo", "yeah", "yep", "yes"]
 }

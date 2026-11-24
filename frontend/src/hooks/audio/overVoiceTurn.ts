@@ -23,6 +23,7 @@ export interface StopWords {
   noise_words: readonly string[];
   noise_phrases: readonly string[];
   leading_no: readonly string[];
+  yes_particles: readonly string[];
 }
 
 export const BUILT_IN_STOP_WORDS: StopWords = BUILT_IN;
@@ -53,6 +54,7 @@ const segmentReader = (words: StopWords) => {
     words.noise_phrases.map((phrase) => foldSpokenWords(phrase).join(" ")),
   );
   const leadingNo = new Set(words.leading_no.flatMap(foldSpokenWords));
+  const yesParticles = new Set(words.yes_particles.flatMap(foldSpokenWords));
   return (segment: string): Segment => {
     const said = keep(foldSpokenWords(segment));
     if (said.length === 0) return { kind: "quiet" };
@@ -63,7 +65,11 @@ const segmentReader = (words: StopWords) => {
     if (first === said.length) return { kind: "no" };
     const rest = said.slice(first).join(" ");
     if (first > 0 && stops.has(rest)) return { kind: "stop", stop: rest };
-    if (said.every((word) => noiseWords.has(word)) || noisePhrases.has(joined))
+    // A listener's "ja" or "mhm" asks for nothing.
+    if (
+      said.every((word) => noiseWords.has(word) || yesParticles.has(word)) ||
+      noisePhrases.has(joined)
+    )
       return { kind: "quiet" };
     return { kind: "other" };
   };
@@ -84,11 +90,16 @@ const editDistance = (a: string, b: string): number => {
   return previous[b.length];
 };
 
-/** Two spellings of one spoken word, as a recognizer may hear it twice. */
-const sameWord = (a: string, b: string): boolean => {
+/**
+ * One spoken word heard by the recognizer twice. `strict`: only a letter
+ * apart, so that "momentan" said by the voice is not "Moment!" said by the
+ * user.
+ */
+const sameWord = (a: string, b: string, strict = false): boolean => {
   if (a === b) return true;
   const shorter = Math.min(a.length, b.length);
   if (shorter < 4) return false;
+  if (strict) return editDistance(a, b) <= 1;
   if (a.slice(0, 4) === b.slice(0, 4) && Math.abs(a.length - b.length) <= 2)
     return true;
   return editDistance(a, b) <= (shorter >= 6 ? 2 : 1);
@@ -99,7 +110,11 @@ const sameWord = (a: string, b: string): boolean => {
  * for word, a slightly misheard word still counting: two words or more, or
  * the one word of a one-word turn.
  */
-export function echoCoverage(said: string[], voice: string[]): number {
+export function echoCoverage(
+  said: string[],
+  voice: string[],
+  strict = false,
+): number {
   if (said.length === 0 || voice.length === 0) return 0;
   const minRun = said.length === 1 ? 1 : 2;
   const covered = new Array<boolean>(said.length).fill(false);
@@ -110,7 +125,7 @@ export function echoCoverage(said: string[], voice: string[]): number {
       while (
         from + length < said.length &&
         at + length < voice.length &&
-        sameWord(said[from + length], voice[at + length])
+        sameWord(said[from + length], voice[at + length], strict)
       )
         length += 1;
       longest = Math.max(longest, length);
@@ -149,7 +164,7 @@ export function classifyOverVoiceTurn(
   if (stops.length > 0 && segments.every((segment) => segment.kind !== "other"))
     // The voice saying "Einen Moment …" must not stop itself.
     return stops.every(
-      (stop) => echoCoverage(foldSpokenWords(stop), voice) === 1,
+      (stop) => echoCoverage(foldSpokenWords(stop), voice, true) === 1,
     )
       ? "echo"
       : "stop";

@@ -17,6 +17,9 @@ describe("a turn said over a reply's voice", () => {
     expect(turn("Okay.")).toBe("empty");
     expect(turn("Mhm, genau.")).toBe("empty");
     expect(turn("Alles klar.")).toBe("empty");
+    // A listener's "ja" over a long reading.
+    expect(turn("Ja.")).toBe("empty");
+    expect(turn("Ja, ja.")).toBe("empty");
   });
 
   it("is a stop when each segment is a stop, a leading no, noise or fillers", () => {
@@ -64,6 +67,9 @@ describe("a turn said over a reply's voice", () => {
     expect(turn("Einen Moment.", true)).toBe("stop");
     // Not what the voice was saying: theirs.
     expect(turn("Halt!")).toBe("stop");
+    // A word the stop only resembles is not the stop.
+    expect(turn("Moment!", false, "Das ist momentan der Stand.")).toBe("stop");
+    expect(turn("Warte!", false, "Wir warten noch.")).toBe("echo");
   });
 
   it("is the person's when their speech went on after the voice paused", () => {
@@ -86,6 +92,7 @@ describe("a turn said over a reply's voice", () => {
       noise_words: ["bon"],
       noise_phrases: [],
       leading_no: ["non"],
+      yes_particles: ["oui"],
     };
     const read = (text: string) =>
       classifyOverVoiceTurn(text, {
@@ -96,6 +103,7 @@ describe("a turn said over a reply's voice", () => {
     expect(read("Donc, arrête !")).toBe("stop");
     expect(read("Non, arrête.")).toBe("stop");
     expect(read("Bon.")).toBe("empty");
+    expect(read("Oui.")).toBe("empty");
     // A stop phrase holding a filler still matches.
     expect(read("sei mal leise")).toBe("stop");
   });

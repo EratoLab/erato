@@ -643,6 +643,7 @@ pub struct StopWordLists {
     pub noise_words: Vec<String>,
     pub noise_phrases: Vec<String>,
     pub leading_no: Vec<String>,
+    pub yes_particles: Vec<String>,
 }
 
 /// The lists by card language: German and English with what packages add
@@ -825,7 +826,8 @@ impl CommandWordsByLanguage {
     /// The words the web app needs to tell a stop said over a reply's voice
     /// from the user's next message, every language's, sorted. A turn is a
     /// stop when each of its segments is a stop phrase, a leading "no" or
-    /// listening noise, after fillers, as the rules here read a card's.
+    /// listening noise (a listener's "ja" included), after fillers, as the
+    /// rules here read a card's.
     pub fn stop_words(&self) -> StopWordLists {
         let lists = || std::iter::once(&self.shared).chain(self.by_language.values());
         let union = |pick: fn(&CommandWords) -> &HashSet<String>| -> Vec<String> {
@@ -840,6 +842,7 @@ impl CommandWordsByLanguage {
             noise_words: union(|words| &words.noise_words),
             noise_phrases: union(|words| &words.noise_phrases),
             leading_no: union(|words| &words.leading_no),
+            yes_particles: union(|words| &words.yes_particles),
         }
     }
 
