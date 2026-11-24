@@ -23,8 +23,7 @@ export const ECHO_LEAD_MS = 150;
  * hold its loud syllables, short enough to follow a change of volume.
  */
 const WINDOW_MS = 3000;
-/** The fewest frames whose spread says anything. */
-const MIN_FRAMES = 10;
+
 /**
  * A frame holds the user when it rises above what echo and room explain by
  * more than all but one in twenty of the frames that held only those: an
@@ -32,6 +31,8 @@ const MIN_FRAMES = 10;
  * needs.
  */
 const SPREAD_PERCENTILE = 0.95;
+/** The fewest frames in which one in twenty exists at all. */
+const MIN_FRAMES = Math.ceil(1 / (1 - SPREAD_PERCENTILE));
 /**
  * A frame is learned only this long after it was heard: the softer start of
  * the user's words comes before the detector is sure of them, and must not

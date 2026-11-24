@@ -98,7 +98,7 @@ describe("noteEchoFrame", () => {
   });
 
   it("counts nothing before it has measured the echo", () => {
-    expect(run(9, () => 0.5).counted).toBe(0);
+    expect(run(19, () => 0.5).counted).toBe(0);
   });
 
   it("counts every frame while the voice is silent: nothing can come back", () => {
