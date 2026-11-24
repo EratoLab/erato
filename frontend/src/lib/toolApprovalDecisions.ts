@@ -33,11 +33,14 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
 /**
  * Body for `POST /me/messages/continuestream`.
  *
- * The legacy single-`decision` body names no approval, so the server accepts
- * it only while exactly one is open; a stop covering more has to enumerate
- * them. `itemDecisions` is how a card that asks per item — a task plan, one
- * row per task — answers them differently; a card with one question for the
- * whole stop passes `approvalIds` and the one decision instead.
+ * Every decided item is named by its approval id, a single one included: the
+ * server takes a decision only for the card it names, so a tap that arrives
+ * late, from a tab still showing an earlier card of the turn, cannot answer
+ * the card that replaced it. The legacy single-`decision` body is left for a
+ * caller that knows no approval id. `itemDecisions` is how a card that asks
+ * per item — a task plan, one row per task — answers them differently; a card
+ * with one question for the whole stop passes `approvalIds` and the one
+ * decision instead.
  *
  * `shows_child_items` tells the server this client shows each parked child as
  * an item of its own; without it, a stop that carries children beside the
@@ -46,31 +49,20 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * predates those shows the limit's choice, or a generic card, alone, so the
  * server refuses such a stop with a child open without it.
  *
- * `enumerate` names even a single item: a stop with tasks still waiting can
- * gain a question while the card is open, and only an enumerated body comes
- * back as `decisions_mismatch` naming it. An `approve_context` answer is
- * always enumerated, since only an item carries its position.
- *
  * `readBack` asks for the continued answer to be spoken; the caller sets it
  * when the turn that stopped was spoken.
- *
- * A change request is always enumerated: it names its approval and carries
- * the user's words. So is a decision said by voice, which carries its
- * receipt.
  */
 export const buildContinueStreamBody = ({
   messageId,
   decision,
   approvalIds,
   itemDecisions,
-  enumerate = false,
   readBack = false,
 }: {
   messageId: string;
   decision: ToolApprovalDecision;
   approvalIds?: string[];
   itemDecisions?: DecidedApproval[];
-  enumerate?: boolean;
   readBack?: boolean;
 }): ContinueStreamRequest => {
   const spoken = readBack ? { conversational_audio_back: true } : {};
@@ -78,16 +70,7 @@ export const buildContinueStreamBody = ({
     itemDecisions && itemDecisions.length > 0
       ? itemDecisions
       : (approvalIds ?? []).map((approvalId) => ({ approvalId, decision }));
-  if (
-    decided.length > 1 ||
-    (enumerate && decided.length > 0) ||
-    decided.some(
-      (item) =>
-        item.decision === "approve_context" ||
-        item.decision === "request_change" ||
-        item.voiceReceipt !== undefined,
-    )
-  ) {
+  if (decided.length > 0) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
       approval_id: item.approvalId,
       decision: item.decision,
@@ -111,12 +94,9 @@ export const buildContinueStreamBody = ({
       ...spoken,
     };
   }
-  // A single open item needs no enumeration, but it still has to be answered
-  // with its own decision rather than the caller's default: a one-row plan is
-  // answered per row like any other.
   return {
     message_id: messageId,
-    decision: decided[0]?.decision ?? decision,
+    decision,
     shows_child_items: true,
     shows_limit_and_builtin_child_items: true,
     ...spoken,

@@ -21812,6 +21812,10 @@ pub(crate) struct ParkedApprovalState {
     /// a `text` part is no proof of an answer. That case is admitted by
     /// `GenerationMetadata::continuation_in_flight` instead.
     pub(crate) unanswered: bool,
+    /// The approvals the turn's earlier stops on this message asked for. Their
+    /// cards are settled; a decision that names one of them, or that names no
+    /// card while there are any, was not given on the card that waits now.
+    pub(crate) earlier_approval_ids: Vec<String>,
 }
 
 pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
@@ -21929,11 +21933,21 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
                 | ContentPart::AudioFilePointer(_)
         )
     });
+    let earlier_approval_ids = content[..request_index]
+        .iter()
+        .filter_map(|part| match part {
+            ContentPart::ToolApprovalRequest(earlier) => Some(earlier.approval_items()),
+            _ => None,
+        })
+        .flatten()
+        .map(|item| item.approval_id)
+        .collect();
     Some(ParkedApprovalState {
         request,
         request_index,
         open,
         unanswered,
+        earlier_approval_ids,
     })
 }
 
@@ -22050,6 +22064,52 @@ type SubmittedDecisions = Vec<(String, ToolApprovalDecision)>;
 ///
 /// Returned in the row's order, not the body's: the continuation settles the
 /// resolved slots, and those follow the order the model made the calls in.
+/// [`resolve_submitted_decisions`] against the stop the row waits on now.
+///
+/// A decision is taken only for the card it was given on. A tap that arrives
+/// late from a tab still showing an earlier card of the turn names that card,
+/// which is settled: it is answered `already_continued`, and the card reads
+/// the row again. A decision that names no card comes from a page loaded
+/// before cards were named, and can only be meant for the turn's first card;
+/// on a later one it is refused rather than run on a card that page may never
+/// have shown, with text that page shows, since it treats every coded `409`
+/// as an answer that already landed (ERMAIN-1342).
+fn resolve_decisions_on_stop(
+    request: &ContinueStreamRequest,
+    state: &ParkedApprovalState,
+    decidable: &[ApprovalItem],
+) -> Result<SubmittedDecisions, StreamRouteError> {
+    // A corrected card keeps its own refusal, `card_changed`, which the pages
+    // that name a corrected card already expect.
+    if request.decision.is_some()
+        && !state.earlier_approval_ids.is_empty()
+        && !decidable.is_empty()
+        && decidable
+            .iter()
+            .all(|item| item.replaces_approval_id.is_none())
+    {
+        return Err((
+            axum::http::StatusCode::CONFLICT,
+            "This page is out of date for this card. Reload the page to decide it.".to_string(),
+        )
+            .into());
+    }
+    // A task's question can come back on a later stop under the same id, and
+    // there it is open again: only an id asked earlier and open no longer is
+    // a settled card.
+    if !request.decisions.is_empty()
+        && request.decisions.iter().all(|decision| {
+            state.earlier_approval_ids.contains(&decision.approval_id)
+                && !decidable
+                    .iter()
+                    .any(|open| open.approval_id == decision.approval_id)
+        })
+    {
+        return Err(already_continued());
+    }
+    resolve_submitted_decisions(request, decidable)
+}
+
 fn resolve_submitted_decisions(
     request: &ContinueStreamRequest,
     open: &[ApprovalItem],
@@ -22735,7 +22795,7 @@ pub(crate) async fn start_continuation(
         } else {
             // Validated here as well as in the worker: a body that does not answer
             // the turn should be an HTTP status, not a stream that opens and dies.
-            let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
+            let submitted_decisions = resolve_decisions_on_stop(&request, &state, &decidable)?;
             if let Some(refusal) =
                 budget_decision_refused(&state.request, &decidable, &submitted_decisions)
             {
@@ -24012,7 +24072,7 @@ pub(crate) async fn run_continuation(
                 "Another continuation already settled this generation's approvals"
             ));
         }
-        ContinuationEntry::Decide => resolve_submitted_decisions(&request, &decidable).map_err(
+        ContinuationEntry::Decide => resolve_decisions_on_stop(&request, &state, &decidable).map_err(
             |error| match error {
                 StreamRouteError::PlainText(_, message) => eyre!(message),
                 StreamRouteError::DecisionsMismatch(body) => eyre!(

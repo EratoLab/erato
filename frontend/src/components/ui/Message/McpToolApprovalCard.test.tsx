@@ -588,7 +588,12 @@ describe("McpToolApprovalCard", () => {
           method: "POST",
           body: JSON.stringify({
             message_id: "message-1",
-            decision: "reject_always",
+            decisions: [
+              {
+                approval_id: approvalRequest.tool_call_id,
+                decision: "reject_always",
+              },
+            ],
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
           }),
@@ -937,7 +942,6 @@ describe("McpToolApprovalCard", () => {
         // item, keyed by the gated call.
         approvalIds: [approvalRequest.tool_call_id],
         itemDecisions: undefined,
-        enumerate: false,
         items: [
           {
             approval_id: approvalRequest.tool_call_id,
@@ -1054,7 +1058,7 @@ describe("McpToolApprovalCard", () => {
     });
   });
 
-  it("keeps the legacy body for a single approval", async () => {
+  it("names a single approval, so a late tap cannot answer a later card", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -1089,7 +1093,7 @@ describe("McpToolApprovalCard", () => {
         expect.objectContaining({
           body: JSON.stringify({
             message_id: "message-1",
-            decision: "approve",
+            decisions: [{ approval_id: "tool-call-1", decision: "approve" }],
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
           }),

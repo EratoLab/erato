@@ -1,5 +1,40 @@
 use super::*;
 
+/// `decision` on the budget stop the turn waits on, named by its approval id.
+async fn decide_budget(
+    server: &TestServer,
+    state: &erato::state::AppState,
+    message_id: Uuid,
+    decision: &str,
+) -> axum_test::TestResponse {
+    let parked = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let request = parked.raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|part| part["content_type"] == "tool_approval_request")
+        .unwrap()
+        .clone();
+    let approval_id = request["approvals"][0]["approval_id"]
+        .as_str()
+        .or(request["tool_call_id"].as_str())
+        .unwrap()
+        .to_string();
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": approval_id, "decision": decision}],
+        }))
+        .await
+}
+
 async fn budget_choice(pool: Pool<Postgres>, decision: &str, extensions: usize) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -72,10 +107,7 @@ async fn budget_choice(pool: Pool<Postgres>, decision: &str, extensions: usize) 
             Some("awaiting_approval")
         );
         if extension < extensions {
-            server
-                .post("/api/v1beta/me/messages/continuestream")
-                .with_bearer_token(TEST_JWT_TOKEN)
-                .json(&json!({"message_id":message_id,"decision":"approve"}))
+            decide_budget(&server, &state, message_id, "approve")
                 .await
                 .assert_status_ok();
             assert!(
@@ -86,18 +118,11 @@ async fn budget_choice(pool: Pool<Postgres>, decision: &str, extensions: usize) 
     }
 
     // Standing grants do not apply to this prompt, even when MCP allows them.
-    server
-        .post("/api/v1beta/me/messages/continuestream")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({"message_id":message_id,"decision":"reject_always"}))
+    decide_budget(&server, &state, message_id, "reject_always")
         .await
         .assert_status(axum::http::StatusCode::BAD_REQUEST);
 
-    let response = server
-        .post("/api/v1beta/me/messages/continuestream")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({"message_id":message_id,"decision":decision}))
-        .await;
+    let response = decide_budget(&server, &state, message_id, decision).await;
     response.assert_status_ok();
     let completed = Messages::find_by_id(message_id)
         .one(&state.db)
