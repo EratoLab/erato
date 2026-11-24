@@ -880,11 +880,15 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           )}
 
           {/* On a narrow screen the open sidebar lies over the page. A tap
-              beside it lands here and only closes it, the way a phone drawer
-              does; the control underneath never gets that tap. */}
+              beside it lands here and only closes it; the control underneath
+              never gets that tap. */}
           {isNarrowScreen && (
             <div
               role="presentation"
+              // A press here would otherwise blur the focused control before
+              // the click, and dismissDrawer could no longer see that focus
+              // was in the drawer.
+              onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
                 "drawer-overlay-skin viewport-layer fixed inset-0 z-40",

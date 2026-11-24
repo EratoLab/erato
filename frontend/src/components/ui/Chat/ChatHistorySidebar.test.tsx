@@ -1393,7 +1393,6 @@ describe("ChatHistorySidebar", () => {
       fireEvent.click(screen.getByTestId("sidebar-scrim"));
 
       expect(sidebarMode()).toBe("hidden");
-      expect(pageAction).not.toHaveBeenCalled();
     });
 
     it("lies over the whole page while open, so the tap stays off its controls", async () => {
@@ -1428,6 +1427,24 @@ describe("ChatHistorySidebar", () => {
       screen.getByRole("link", { name: "New Chat" }).focus();
 
       fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      expect(sidebarMode()).toBe("hidden");
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "expand sidebar" }),
+        ).toHaveFocus(),
+      );
+    });
+
+    it("hands focus that was in the drawer to the reopen control on a tap beside it", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+      screen.getByRole("link", { name: "New Chat" }).focus();
+      const scrim = screen.getByTestId("sidebar-scrim");
+
+      // A browser blurs on a press that is not prevented; jsdom does not.
+      expect(fireEvent.mouseDown(scrim)).toBe(false);
+      fireEvent.click(scrim);
 
       expect(sidebarMode()).toBe("hidden");
       await waitFor(() =>
