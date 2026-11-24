@@ -349,7 +349,11 @@ export const Chat = ({
     },
   );
 
-  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const {
+    enabled: uploadsEnabled,
+    maxSizeBytes,
+    maxSizeFormatted,
+  } = useUploadFeature();
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
@@ -763,8 +767,9 @@ export const Chat = ({
       !chatLoading &&
       !isUploading,
     uploadFiles,
-    addUploadedFiles: handleDropUploaded,
+    addUploadedFiles: chatInputControls.addUploadedFiles,
     appendToDraft: chatInputControls.appendToDraft,
+    uploadsEnabled,
     maxSizeBytes,
     maxSizeFormatted,
   });

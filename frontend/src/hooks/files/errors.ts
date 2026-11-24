@@ -61,6 +61,15 @@ export class SharedFileWithoutContentError extends Error {
   }
 }
 
+/** Several reports about one set of files, shown together in the one error slot. */
+export class CombinedUploadError extends Error {
+  constructor(errors: Error[]) {
+    super(errors.map((error) => error.message).join(" "));
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "CombinedUploadError";
+  }
+}
+
 /**
  * Error for unsupported file types (no operations available)
  */
@@ -142,4 +151,5 @@ export type UploadError =
   | UploadUnknownError
   | CloudLinkError
   | UnsupportedFileTypeError
-  | SharedFileWithoutContentError;
+  | SharedFileWithoutContentError
+  | CombinedUploadError;

@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { UploadUnknownError } from "../errors";
 import { useFileUploadStore } from "../useFileUploadStore";
 import { useSharedItemsIntoComposer } from "../useSharedItemsIntoComposer";
 
@@ -44,7 +45,7 @@ function installShell({
       return () => set.delete(listener);
     }),
   };
-  (window as { ERATO_SHELL?: unknown }).ERATO_SHELL = shell;
+  window.ERATO_SHELL = shell;
   return {
     shell,
     share(...batches: unknown[]) {
@@ -80,25 +81,35 @@ function uploadedItem(file: File): FileUploadItem {
 function setup(
   overrides: Partial<Parameters<typeof useSharedItemsIntoComposer>[0]> = {},
 ) {
-  const uploadFiles = vi.fn((files: File[]) =>
-    Promise.resolve(files.map(uploadedItem)),
+  const uploadFiles = vi.fn<
+    (files: File[]) => Promise<FileUploadItem[] | undefined>
+  >(
+    overrides.uploadFiles ??
+      ((files) => Promise.resolve(files.map(uploadedItem))),
   );
   const addUploadedFiles = vi.fn();
   const appendToDraft = vi.fn();
   const props = {
     ready: true,
-    uploadFiles,
     addUploadedFiles,
     appendToDraft,
+    uploadsEnabled: true,
     maxSizeBytes: 20 * 1024 * 1024,
     maxSizeFormatted: "20 MB",
     ...overrides,
+    uploadFiles,
   };
   const hook = renderHook(
     (current: typeof props) => useSharedItemsIntoComposer(current),
     { initialProps: props },
   );
-  return { ...hook, props, uploadFiles, addUploadedFiles, appendToDraft };
+  return {
+    ...hook,
+    props,
+    uploadFiles,
+    addUploadedFiles,
+    appendToDraft,
+  };
 }
 
 describe("useSharedItemsIntoComposer", () => {
@@ -107,7 +118,7 @@ describe("useSharedItemsIntoComposer", () => {
   });
 
   afterEach(() => {
-    delete (window as { ERATO_SHELL?: unknown }).ERATO_SHELL;
+    delete window.ERATO_SHELL;
   });
 
   it("puts every kind of item waiting at start into the composer", async () => {
@@ -281,5 +292,98 @@ describe("useSharedItemsIntoComposer", () => {
     unmount();
 
     expect(listenerCount()).toBe(0);
+  });
+
+  it("names every file it could not attach, after the upload's own report", async () => {
+    installShell({
+      pending: [
+        batch("a", [
+          { kind: "file", fileName: "huge.mov", size: 30 * 1024 * 1024 },
+          { kind: "file", fileName: "big.mov", size: 15 * 1024 * 1024 },
+          {
+            kind: "file",
+            fileName: "photo.jpeg",
+            contentType: "image/jpeg",
+            size: 5,
+            data: window.btoa("jpeg!"),
+          },
+        ]),
+      ],
+    });
+    const failed = new UploadUnknownError();
+    const uploadFiles = vi.fn(() => {
+      useFileUploadStore.getState().setError(failed);
+      return Promise.resolve(undefined);
+    });
+    const { addUploadedFiles } = setup({ uploadFiles });
+
+    await waitFor(() =>
+      expect(useFileUploadStore.getState().error?.message).toBe(
+        `${failed.message} ` +
+          "File is too large: huge.mov. Maximum size: 20 MB. " +
+          "big.mov was too large to bring over from the other app. Add it with the + button instead.",
+      ),
+    );
+    expect(addUploadedFiles).not.toHaveBeenCalled();
+  });
+
+  it("names shared files where uploads are turned off", async () => {
+    installShell({
+      pending: [
+        batch("a", [
+          { kind: "text", text: "Look at this" },
+          {
+            kind: "file",
+            fileName: "notes.txt",
+            size: 5,
+            data: window.btoa("hello"),
+          },
+        ]),
+      ],
+    });
+    const { uploadFiles, appendToDraft } = setup({ uploadsEnabled: false });
+
+    await waitFor(() =>
+      expect(useFileUploadStore.getState().error?.message).toBe(
+        "Unsupported file type(s): notes.txt",
+      ),
+    );
+    expect(appendToDraft).toHaveBeenCalledWith("Look at this");
+    expect(uploadFiles).not.toHaveBeenCalled();
+  });
+
+  it("hands items to the next chat when the chat is replaced mid-upload", async () => {
+    installShell({
+      pending: [
+        batch("a", [
+          {
+            kind: "file",
+            fileName: "notes.txt",
+            size: 5,
+            data: window.btoa("hello"),
+          },
+        ]),
+      ],
+    });
+    let finishUpload: (items: FileUploadItem[]) => void = () => {};
+    const uploadFiles = vi.fn(
+      (files: File[]) =>
+        new Promise<FileUploadItem[]>((resolve) => {
+          finishUpload = () => resolve(files.map(uploadedItem));
+        }),
+    );
+    const first = setup({ uploadFiles });
+    await waitFor(() => expect(uploadFiles).toHaveBeenCalledTimes(1));
+
+    first.unmount();
+    await act(async () => finishUpload([]));
+    expect(first.addUploadedFiles).not.toHaveBeenCalled();
+
+    const second = setup();
+    await waitFor(() =>
+      expect(second.addUploadedFiles).toHaveBeenCalledWith([
+        expect.objectContaining({ filename: "notes.txt" }),
+      ]),
+    );
   });
 });

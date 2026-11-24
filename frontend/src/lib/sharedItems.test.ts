@@ -42,7 +42,25 @@ describe("sortSharedItems", () => {
     ]);
   });
 
-  it("skips what it cannot read instead of failing", () => {
+  it("keeps a link that is only the start of an address in the text", () => {
+    const sorted = sortSharedItems({
+      batches: [
+        {
+          items: [
+            { kind: "url", url: "https://example.com/a" },
+            { kind: "text", text: "See https://example.com/abc" },
+          ],
+        },
+      ],
+    });
+
+    expect(sorted.texts).toEqual([
+      "https://example.com/a",
+      "See https://example.com/abc",
+    ]);
+  });
+
+  it("skips what it cannot read and names a file it cannot decode", () => {
     expect(sortSharedItems(null)).toEqual({
       texts: [],
       files: [],
@@ -53,10 +71,16 @@ describe("sortSharedItems", () => {
         "nonsense",
         { items: [null, { kind: "image" }, { kind: "text", text: "  " }] },
         {
-          items: [{ kind: "file", fileName: "broken.bin", data: "%%%" }],
+          items: [
+            { kind: "file", fileName: "broken.bin", size: 3, data: "%%%" },
+          ],
         },
       ],
     });
-    expect(sorted).toEqual({ texts: [], files: [], filesWithoutContent: [] });
+    expect(sorted).toEqual({
+      texts: [],
+      files: [],
+      filesWithoutContent: [{ name: "broken.bin", size: 3 }],
+    });
   });
 });

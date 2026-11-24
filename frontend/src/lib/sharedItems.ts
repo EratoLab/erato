@@ -1,3 +1,5 @@
+import { decodeBase64 } from "@/utils/file/decodeBase64";
+
 /**
  * Items people shared into the app from other apps, as the host shell's
  * `share.takePending` returns them, sorted into what the composer takes:
@@ -10,12 +12,14 @@ export interface SharedComposerItems {
   filesWithoutContent: { name: string; size: number }[];
 }
 
+export const noSharedItems = (): SharedComposerItems => ({
+  texts: [],
+  files: [],
+  filesWithoutContent: [],
+});
+
 export function sortSharedItems(result: unknown): SharedComposerItems {
-  const sorted: SharedComposerItems = {
-    texts: [],
-    files: [],
-    filesWithoutContent: [],
-  };
+  const sorted = noSharedItems();
   const texts: { text: string; isUrl: boolean }[] = [];
   for (const item of sharedItemsOf(result)) {
     if (item.kind === "url" && typeof item.url === "string") {
@@ -23,26 +27,29 @@ export function sortSharedItems(result: unknown): SharedComposerItems {
     } else if (item.kind === "text" && typeof item.text === "string") {
       texts.push({ text: item.text.trim(), isUrl: false });
     } else if (item.kind === "file" && typeof item.fileName === "string") {
-      if (typeof item.data === "string") {
-        const file = decodeFile(item.data, item.fileName, item.contentType);
-        if (file) sorted.files.push(file);
+      const size = typeof item.size === "number" ? item.size : 0;
+      const bytes =
+        typeof item.data === "string" ? decodeBase64(item.data) : undefined;
+      if (bytes) {
+        sorted.files.push(
+          new File([bytes], item.fileName, {
+            type: typeof item.contentType === "string" ? item.contentType : "",
+          }),
+        );
       } else {
-        const size = typeof item.size === "number" ? item.size : 0;
         sorted.filesWithoutContent.push({ name: item.fileName, size });
       }
     }
   }
   // A page shared from a browser can come as its address and as text that
   // already contains it; the message field shows it once.
-  const seen = new Set<string>();
+  const words = new Set(
+    texts.filter((t) => !t.isUrl).flatMap((t) => t.text.split(/\s+/)),
+  );
   for (const { text, isUrl } of texts) {
-    if (!text || seen.has(text)) continue;
-    if (
-      isUrl &&
-      texts.some((other) => !other.isUrl && other.text.includes(text))
-    )
+    if (!text || sorted.texts.includes(text) || (isUrl && words.has(text))) {
       continue;
-    seen.add(text);
+    }
     sorted.texts.push(text);
   }
   return sorted;
@@ -58,26 +65,6 @@ function sharedItemsOf(result: unknown): LooseItem[] {
       ? batch.items.filter(isRecord)
       : [],
   );
-}
-
-function decodeFile(
-  base64: string,
-  fileName: string,
-  contentType: unknown,
-): File | null {
-  let binary: string;
-  try {
-    binary = window.atob(base64);
-  } catch {
-    return null;
-  }
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new File([bytes], fileName, {
-    type: typeof contentType === "string" ? contentType : "",
-  });
 }
 
 function isRecord(value: unknown): value is LooseItem {

@@ -1132,7 +1132,7 @@ describe("Chat top bar", () => {
 describe("Chat shared items", () => {
   const installShell = () => {
     const request = vi.fn(() => Promise.resolve({ batches: [] }));
-    (window as { ERATO_SHELL?: unknown }).ERATO_SHELL = {
+    window.ERATO_SHELL = {
       contract: 1,
       capabilities: { share: 1 },
       request,
@@ -1142,7 +1142,7 @@ describe("Chat shared items", () => {
   };
 
   afterEach(() => {
-    delete (window as { ERATO_SHELL?: unknown }).ERATO_SHELL;
+    delete window.ERATO_SHELL;
   });
 
   it("takes shared items into an open composer", async () => {

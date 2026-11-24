@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { hostShellWithCapability } from "./hostShell";
 
 function setShell(value: unknown) {
-  (window as { ERATO_SHELL?: unknown }).ERATO_SHELL = value;
+  window.ERATO_SHELL = value;
 }
 
 const shellWith = (capabilities: Record<string, number>) => ({
@@ -15,7 +15,7 @@ const shellWith = (capabilities: Record<string, number>) => ({
 
 describe("hostShellWithCapability", () => {
   afterEach(() => {
-    delete (window as { ERATO_SHELL?: unknown }).ERATO_SHELL;
+    delete window.ERATO_SHELL;
   });
 
   it("is absent in a browser", () => {
