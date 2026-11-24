@@ -165,7 +165,13 @@ export interface PcmQueue {
    * after the chunks already queued. Returns false for a chunk that is not
    * valid PCM, without scheduling it.
    */
-  enqueue(context: AudioContext, audio: string, sampleRate: number): boolean;
+  enqueue(
+    context: AudioContext,
+    audio: string,
+    sampleRate: number,
+    /** What the voice says from this chunk on, on a passage's first chunk. */
+    text?: string,
+  ): boolean;
   /** Plays what waits for the start buffer now: nothing more is coming. */
   flush(): void;
   /** Silences and forgets everything queued; `onDrained` is not called. */
@@ -182,9 +188,17 @@ export interface PcmQueue {
 export interface PcmChunk {
   audio: string;
   sampleRate: number;
+  text?: string;
 }
 
-export function createPcmQueue(onDrained: () => void): PcmQueue {
+/**
+ * `onSays` hears each chunk's text with the context time it starts playing
+ * at: what the voice says, and when.
+ */
+export function createPcmQueue(
+  onDrained: () => void,
+  onSays?: (text: string, startsAt: number) => void,
+): PcmQueue {
   let nextTime = 0;
   const sources = new Map<
     AudioBufferSourceNode,
@@ -215,8 +229,10 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     sources.set(source, {
       audio: chunk.audio,
       sampleRate: chunk.sampleRate,
+      text: chunk.text,
       endsAt: nextTime,
     });
+    if (chunk.text) onSays?.(chunk.text, start);
     source.onended = () => {
       sources.delete(source);
       source.disconnect();
@@ -254,7 +270,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     get active() {
       return sources.size > 0 || waiting !== null;
     },
-    enqueue(context, audio, sampleRate) {
+    enqueue(context, audio, sampleRate, text) {
       const raw = globalThis.atob(audio);
       const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
       if (
@@ -269,7 +285,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
       const samples = buffer.getChannelData(0);
       for (let i = 0; i < samples.length; i++)
         samples[i] = view.getInt16(i * 2, true) / 32768;
-      const chunk = { audio, sampleRate, buffer };
+      const chunk = { audio, sampleRate, text, buffer };
       // Playing on, or running dry in the middle: the chunk plays at once.
       if (!waiting && (sources.size > 0 || !fresh)) {
         schedule(context, chunk);
@@ -294,11 +310,10 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
       const unplayed = [...sources.values()]
         .filter((chunk) => chunk.endsAt > context.currentTime)
         .sort((a, b) => a.endsAt - b.endsAt)
-        .map(({ audio, sampleRate }) => ({ audio, sampleRate }));
-      const held = (waiting?.chunks ?? []).map(({ audio, sampleRate }) => ({
-        audio,
-        sampleRate,
-      }));
+        .map(({ audio, sampleRate, text }) => ({ audio, sampleRate, text }));
+      const held = (waiting?.chunks ?? []).map(
+        ({ audio, sampleRate, text }) => ({ audio, sampleRate, text }),
+      );
       stop();
       return [...unplayed, ...held];
     },

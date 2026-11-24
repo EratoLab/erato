@@ -465,6 +465,22 @@ describe("wait lines", () => {
     expect(ctx.lines.waitLinePlaying()).toBe(true);
   });
 
+  it("says no tool line once the user stopped the voice by voice", async () => {
+    const ctx = await setup();
+    ctx.playback.beginSpeechResponse("s");
+    ctx.lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(1000);
+    await spokenPart(ctx);
+    ctx.playback.silenceSpokenTurn();
+    const asked = sse.mock.calls.length;
+    ctx.playback.replyCallsTool("s");
+    ctx.lines.waitTurnTool("s", "m", "read", "in_progress", READ_LABEL);
+    expect(sse.mock.calls.length).toBe(asked);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(sources).toHaveLength(0);
+    expect(ctx.lines.waitLinePlaying()).toBe(false);
+  });
+
   it("names each Dynamics and Business Central read of a turn as it runs", async () => {
     const ctx = await setup({
       language: "en",

@@ -22,7 +22,7 @@ use utoipa::ToSchema;
 
 pub use model::DEFAULT_PROMPT;
 pub use phrase::PhraseMatchKind;
-pub use words::{CommandWords, CommandWordsByLanguage};
+pub use words::{CommandWords, CommandWordsByLanguage, StopWordLists};
 
 pub const MAX_TRANSCRIPT_CHARS: usize = 300;
 /// The card's pieces and the fields it says only when asked for by name.

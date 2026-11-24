@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
+import type { StopWords } from "@/hooks/audio/overVoiceTurn";
 import type {
   ConfirmationPhrases,
   SpokenCardLanguage,
@@ -123,10 +124,16 @@ export type Env = {
    * user whose interface is in it; any other uses the list above.
    */
   audioConversationalHesitations?: Partial<Record<string, string[]>>;
-  /** The user can speak over the voice, and the voice yields. */
+  /** The user can speak over a reply's voice, and the voice yields. */
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
   audioConversationalTalkOverVoiceMinSpeechMs?: number;
+  /**
+   * The card voice commands' stop words, fillers and listening noise,
+   * every language's:
+   * said alone over a reply, they only silence the voice.
+   */
+  audioConversationalStopWords?: StopWords;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -241,6 +248,7 @@ declare global {
     AUDIO_CONVERSATIONAL_HESITATIONS?: Partial<Record<string, string[]>>;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
+    AUDIO_CONVERSATIONAL_STOP_WORDS?: StopWords;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -763,6 +771,7 @@ export const env = (): Env => {
     audioConversationalHesitations: window.AUDIO_CONVERSATIONAL_HESITATIONS,
     audioConversationalTalkOverVoice,
     audioConversationalTalkOverVoiceMinSpeechMs,
+    audioConversationalStopWords: window.AUDIO_CONVERSATIONAL_STOP_WORDS,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

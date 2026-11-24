@@ -1,5 +1,6 @@
 import { loadApprovalNotice } from "./approvalSpeech";
 import { deploymentConfirmationPhrases } from "./confirmationPhrases";
+import { foldSpokenWords as fold } from "./spokenWords";
 import { sayAsideLine, stopAsideLine, waitTurnNow } from "./waitLines";
 
 import type { LoadedNotice, SpeakableCard } from "./approvalSpeech";
@@ -19,18 +20,6 @@ export const ACKNOWLEDGEMENT_LATE_MS = 1500;
 
 let held: { key: string; notice: LoadedNotice } | null = null;
 let attempt: { cancelled: boolean; notice: LoadedNotice } | null = null;
-
-const fold = (text: string): string[] =>
-  text
-    .toLowerCase()
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length > 0);
 
 /** Whether `text` holds any language's confirmation phrase, word for word. */
 export const holdsConfirmationPhrase = (text: string): boolean => {

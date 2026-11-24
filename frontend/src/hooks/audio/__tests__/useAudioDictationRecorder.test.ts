@@ -1096,11 +1096,11 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.onVadAutoStop).toHaveBeenCalledTimes(1);
   });
 
-  it("stops the voice at the default 500 ms when the configured minimum is malformed", async () => {
+  it("stops the voice at the default 300 ms when the configured minimum is malformed", async () => {
     const hook = renderOverVoice(true, Number.NaN);
     await startHeld(hook);
     act(() => {
-      emitFrames(0.95, 448);
+      emitFrames(0.95, 256);
     });
     expect(hook.onSpeechOverVoice).not.toHaveBeenCalled();
     act(() => {

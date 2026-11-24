@@ -9,6 +9,7 @@ import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
   afterReplyAudio,
   holdReplyAudio,
+  noteVoiceSays,
   onSpeechInterrupted,
   releaseReplyAudio,
   useSpeechPlayback,
@@ -100,7 +101,7 @@ let aside: SaidLine | null = null;
 let busy = false;
 let idleWaiters: (() => void)[] = [];
 
-const queue = createPcmQueue(() => lineEnded());
+const queue = createPcmQueue(() => lineEnded(), noteVoiceSays);
 
 const now = () => Date.now();
 
@@ -536,12 +537,14 @@ function plan() {
     if (clip) clips.push(clip);
   }
   const context = playbackContext();
-  // The voice must be the one reading this turn back, and able to play.
+  // The voice must be the one reading this turn back, able to play, and not
+  // stopped by the user: the microphone listens openly once it is.
   if (
     clips.length === 0 ||
     !playbackPlays(context) ||
     useSpeechPlayback.getState().spokenTurn !== current.streamKey ||
-    !useSpeechPlayback.getState().enabled
+    !useSpeechPlayback.getState().enabled ||
+    useSpeechPlayback.getState().silenced
   ) {
     state.answerStarted = true;
     return;
@@ -579,8 +582,18 @@ function playLine(
     }, AFTER_LINE_MS);
     if (current && turn === current) plan();
   };
-  for (const clip of clips) {
-    if (!queue.enqueue(context, clip.audio, clip.sampleRate)) {
+  // A tool line's chunks all carry its text: it is said from the first.
+  for (let at = 0; at < clips.length; at += 1) {
+    const clip = clips[at];
+    const says = at === 0 || clip.text !== clips[at - 1].text;
+    if (
+      !queue.enqueue(
+        context,
+        clip.audio,
+        clip.sampleRate,
+        says ? clip.text : undefined,
+      )
+    ) {
       queue.stop();
       lineEnded();
       return;
@@ -619,7 +632,8 @@ export function sayAsideLine(
     busy ||
     !playbackPlays(context) ||
     !speech.enabled ||
-    !speech.conversational
+    !speech.conversational ||
+    speech.silenced
   )
     return false;
   const { state } = current;

@@ -14,7 +14,7 @@
 export const OVER_VOICE_SPEECH_PROBABILITY = 0.75;
 /** A dip this short between syllables keeps the stretch going. */
 export const OVER_VOICE_MAX_DIP_MS = 100;
-export const DEFAULT_OVER_VOICE_MIN_SPEECH_MS = 500;
+export const DEFAULT_OVER_VOICE_MIN_SPEECH_MS = 300;
 // Same range the backend accepts; anything else falls back to the default.
 const MIN_OVER_VOICE_SPEECH_MS = 200;
 const MAX_OVER_VOICE_SPEECH_MS = 2000;
@@ -68,3 +68,51 @@ export function overVoiceStep(
     confirmed: next.speechMs >= minSpeechMs,
   };
 }
+
+/**
+ * Whether the user's speech went on once the voice had paused for it. The
+ * voice's echo ends with the voice, after the output's own delay and the
+ * room's ring, which are skipped; a person who cut in keeps talking.
+ */
+export const SPOKE_ON_SKIP_MS = 300;
+export const SPOKE_ON_WINDOW_MS = 600;
+export const SPOKE_ON_SPEECH_MS = 200;
+
+export interface SpokeOn {
+  /** Skipped after the pause: the room's ring and the output's delay. */
+  skipMs: number;
+  /** Since the voice paused. */
+  sinceMs: number;
+  /** Speech in the window after the skipped start. */
+  speechMs: number;
+}
+
+/** `outputDelayMs`: how late the device plays what the page sends it. */
+export const spokeOnStart = (outputDelayMs = 0): SpokeOn => ({
+  skipMs:
+    SPOKE_ON_SKIP_MS +
+    (Number.isFinite(outputDelayMs) ? Math.max(0, outputDelayMs) : 0),
+  sinceMs: 0,
+  speechMs: 0,
+});
+
+export function spokeOnStep(
+  state: SpokeOn,
+  probability: number,
+  frameMs: number,
+): SpokeOn {
+  const sinceMs = state.sinceMs + frameMs;
+  const inWindow =
+    sinceMs > state.skipMs && sinceMs <= state.skipMs + SPOKE_ON_WINDOW_MS;
+  return {
+    ...state,
+    sinceMs,
+    speechMs:
+      inWindow && probability >= OVER_VOICE_SPEECH_PROBABILITY
+        ? state.speechMs + frameMs
+        : state.speechMs,
+  };
+}
+
+export const spokeOn = (state: SpokeOn | null): boolean =>
+  state !== null && state.speechMs >= SPOKE_ON_SPEECH_MS;

@@ -114,6 +114,7 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_STOP_WORDS: &str = "AUDIO_CONVERSATIONAL_STOP_WORDS";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
@@ -219,8 +220,9 @@ pub fn build_frontend_registry(
     voice_command_words: &crate::services::approval_voice_commands::CommandWordsByLanguage,
 ) -> FrontendRegistry {
     let phrases = approval_voice_phrases(config, voice_command_words);
+    let stop_words = stop_words(voice_command_words);
     let build_frontend_environment = |config: &AppConfig, kind: FrontendKind| {
-        build_frontend_environment_with(config, kind, phrases.as_ref())
+        build_frontend_environment_with(config, kind, phrases.as_ref(), &stop_words)
     };
     let component_kits = distribution.component_kits.kits().to_vec();
     let content_security_policy = build_content_security_policy(config);
@@ -388,6 +390,12 @@ fn approval_voice_phrases(
         .then(|| serde_json::to_value(words.shown_phrases()).unwrap_or(Value::Null))
 }
 
+/// The card voice commands' stop phrases, fillers and listening noise,
+/// every language's.
+fn stop_words(words: &crate::services::approval_voice_commands::CommandWordsByLanguage) -> Value {
+    serde_json::to_value(words.stop_words()).unwrap_or(Value::Null)
+}
+
 #[cfg(test)]
 fn build_frontend_environment(
     config: &AppConfig,
@@ -401,6 +409,7 @@ fn build_frontend_environment(
         config,
         frontend_kind,
         approval_voice_phrases(config, &words).as_ref(),
+        &stop_words(&words),
     )
 }
 
@@ -408,6 +417,7 @@ fn build_frontend_environment_with(
     config: &AppConfig,
     frontend_kind: FrontendKind,
     approval_voice_phrases: Option<&Value>,
+    stop_words: &Value,
 ) -> FrontedEnvironment {
     let mut env = FrontedEnvironment::default();
 
@@ -821,6 +831,10 @@ fn build_frontend_environment_with(
                 .talk_over_voice_min_speech_ms
                 .into(),
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_STOP_WORDS.to_string(),
+        stop_words.clone(),
     );
     if let Some(phrases) = approval_voice_phrases {
         env.additional_environment
@@ -1757,6 +1771,57 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn stop_words_reach_the_page_with_what_packages_add() {
+        let mut config = AppConfig::default();
+        config.approval_voice_commands.words.insert(
+            "fr".to_string(),
+            erato_config::voice_command_words::VoiceCommandWordLists {
+                stop: vec!["arrete".to_string()],
+                ..Default::default()
+            },
+        );
+        let environment = build_frontend_environment(&config, FrontendKind::Web);
+        let words = environment
+            .additional_environment
+            .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_STOP_WORDS)
+            .expect("stop words are sent");
+        let list = |name: &str| -> Vec<&str> {
+            words[name]
+                .as_array()
+                .expect("a list")
+                .iter()
+                .filter_map(Value::as_str)
+                .collect()
+        };
+        for word in ["stopp", "stop", "hoer auf", "arrete"] {
+            assert!(list("stop").contains(&word), "{word}");
+        }
+        for word in ["bitte", "please", "aeh", "um"] {
+            assert!(list("fillers").contains(&word), "{word}");
+        }
+        assert!(list("noise_words").contains(&"okay"));
+        assert!(list("leading_no").contains(&"nein"));
+    }
+
+    /// The web app's copy, used where no environment is injected (local
+    /// development), must be the built-in lists.
+    #[test]
+    fn the_web_apps_built_in_stop_words_match_the_backend() {
+        let shipped: crate::services::approval_voice_commands::StopWordLists =
+            serde_json::from_str(include_str!(
+                "../../../frontend/src/hooks/audio/builtInStopWords.json"
+            ))
+            .expect("the web app's stop words parse");
+        let built_in = crate::services::approval_voice_commands::CommandWordsByLanguage::default();
+        assert_eq!(
+            shipped,
+            built_in.stop_words(),
+            "update frontend/src/hooks/audio/builtInStopWords.json to:\n{}",
+            serde_json::to_string_pretty(&built_in.stop_words()).unwrap()
+        );
     }
 
     #[test]

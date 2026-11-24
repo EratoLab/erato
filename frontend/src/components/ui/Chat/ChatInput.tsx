@@ -18,10 +18,7 @@ import {
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
-import {
-  noteApprovalWordsEnded,
-  talkOverApprovalCard,
-} from "@/hooks/audio/approvalListening";
+import { noteApprovalWordsEnded } from "@/hooks/audio/approvalListening";
 import {
   stopApprovalSpeech,
   useApprovalSpeech,
@@ -38,6 +35,7 @@ import {
   hesitationMatcher,
   hesitationWordsFor,
 } from "@/hooks/audio/hesitations";
+import { classifyOverVoiceTurn } from "@/hooks/audio/overVoiceTurn";
 import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import { takeSpeechEnd } from "@/hooks/audio/speechEnd";
@@ -45,8 +43,10 @@ import {
   unlockSpeechPlayback,
   pauseSpeechPlayback,
   resumeSpeechPlayback,
+  silenceSpokenTurn,
   stopSpeechPlayback,
   useSpeechPlayback,
+  voiceTextAtPause,
 } from "@/hooks/audio/speechPlayback";
 import {
   dropUnsentSpokenLanguage,
@@ -651,6 +651,7 @@ export const ChatInput = ({
     hesitationsByLanguage,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
+    stopWords,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   // Hesitations sound like the language the user spoke last.
@@ -858,10 +859,10 @@ export const ChatInput = ({
   // take the turn away from the card.
   const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
   const cardSpeaking = useApprovalSpeech((state) => state.speaking);
-  // Talking over the voice: the microphone may open while the voice speaks
-  // (or a spoken reply is still coming) and waits there for confirmed speech.
-  // Over a waiting card only the voice itself counts, so the card's own
-  // listening transcribes again as soon as the voice is quiet.
+  // Talking over the voice: the microphone may open while a reply's voice
+  // speaks (or a spoken reply is still coming) and waits there for confirmed
+  // speech. A card's voice is not talked over: the microphone stays closed
+  // while a card waits, and its own listening opens once the card is quiet.
   const overVoiceAllowed =
     isAudioMode &&
     Boolean(talkOverVoice) &&
@@ -871,17 +872,26 @@ export const ChatInput = ({
     overVoiceAllowed &&
     (speech.playing ||
       cardSpeaking ||
-      (isPendingResponse && !decisionWaiting && !speech.spokenPartDone));
+      (isPendingResponse &&
+        !decisionWaiting &&
+        !speech.spokenPartDone &&
+        !speech.silenced));
   // A reply the user talked over: whether that was a turn or only a sound
   // is known once the recording has ended.
   const interruptedReplyRef = useRef(false);
+  // That turn held the user's words: they are the next message now, and the
+  // reply still coming stops where it is.
+  const sendsNowRef = useRef(false);
+  const stoppingReplyRef = useRef(false);
   const handleSpeechOverVoice = useCallback(() => {
+    // A card listens only while its voice is quiet; another voice sounding
+    // then falls silent, and the card's own reading is left as it is.
     if (dictationTargetRef.current?.card) {
       stopSpeechPlayback();
-      const { key } = useApprovalSpeech.getState();
-      if (key !== null) talkOverApprovalCard(key);
       return;
     }
+    sendsNowRef.current = false;
+    stoppingReplyRef.current = false;
     // The reply's voice pauses; a card the reply stops on is still said.
     pauseSpeechPlayback();
     stopApprovalSpeech();
@@ -970,6 +980,7 @@ export const ChatInput = ({
     toggleDictation,
     cancelDictation,
     readRecordingSignals,
+    spokeOnAfterVoice,
   } = useAudioDictationRecorder({
     enabled: audioDictationEnabled || audioConversationalEnabled,
     mode: isAudioMode ? "conversational" : "dictation",
@@ -1160,8 +1171,9 @@ export const ChatInput = ({
     const recording = readRecordingSignals();
     return recording ? { ...card, recording } : card;
   }, [readRecordingSignals]);
+  // A card listens only once its voice is quiet, as without talking over:
+  // nothing said over a card's voice can reach it.
   useApprovalCardListening({
-    overVoice: overVoiceAllowed,
     recorderLive: isDictating,
     enabled:
       isAudioMode &&
@@ -3042,6 +3054,8 @@ export const ChatInput = ({
     shouldRestartAudioModeAfterResponseRef.current = false;
     audioModeRestartSawPendingResponseRef.current = false;
     interruptedReplyRef.current = false;
+    sendsNowRef.current = false;
+    stoppingReplyRef.current = false;
     if (isDictating || isDictationStarting) {
       if (dictationTargetRef.current?.card) cancelDictation();
       else toggleDictationForCurrentTarget();
@@ -3086,6 +3100,62 @@ export const ChatInput = ({
     };
   }, [clearPendingAutoSendTimeout]);
 
+  // The recording over a reply has ended. Before the auto-send looks at it:
+  // - a stop word ("Stopp", "hör auf") silences the voice for the rest of the
+  //   reply, and the conversation listens on;
+  // - words that only repeat the voice are its echo: dropped, and the voice
+  //   goes on where it was cut;
+  // - no words (a cough, a colleague): the voice goes on;
+  // - any other words are the user's next message, sent at once.
+  // Words over a reply that has since stopped on a card are left to the
+  // auto-send, which shows them as not sent.
+  useEffect(() => {
+    if (
+      !interruptedReplyRef.current ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting ||
+      hasIncompleteAudioTranscription
+    ) {
+      return;
+    }
+    interruptedReplyRef.current = false;
+    if (decisionWaiting || cardSpeaking) {
+      stopSpeechPlayback();
+      return;
+    }
+    const turn = classifyOverVoiceTurn(message, {
+      voiceText: voiceTextAtPause(),
+      spokeOn: spokeOnAfterVoice(),
+      stopWords,
+    });
+    if (turn === "message") {
+      stopSpeechPlayback();
+      // Only a turn the auto-send will send: one cut off by the time limit
+      // waits in the composer, and must not stop a later reply.
+      sendsNowRef.current = pendingAutoSendRef.current;
+      return;
+    }
+    if (turn === "stop") {
+      silenceSpokenTurn();
+      dropTurnAndListenAgain();
+      return;
+    }
+    if (turn === "echo") dropTurnAndListenAgain();
+    resumeSpeechPlayback();
+  }, [
+    cardSpeaking,
+    decisionWaiting,
+    dropTurnAndListenAgain,
+    hasIncompleteAudioTranscription,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
+    message,
+    spokeOnAfterVoice,
+    stopWords,
+  ]);
+
   // Auto-send latch: VAD marks the spoken turn complete, then dictation
   // finishes its final chunk. Only then do we submit the text draft.
   useEffect(() => {
@@ -3095,6 +3165,7 @@ export const ChatInput = ({
     if (!isAudioMode) {
       clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      sendsNowRef.current = false;
       return;
     }
     if (
@@ -3106,6 +3177,18 @@ export const ChatInput = ({
       return;
     }
     if (isPendingResponse) {
+      // Said over the reply, or after the voice was stopped by voice: the
+      // reply stops where it is, and the words go out once it has.
+      if (
+        overVoiceAllowed &&
+        (sendsNowRef.current || speech.silenced) &&
+        !decisionWaiting &&
+        message.trim() &&
+        !stoppingReplyRef.current
+      ) {
+        stoppingReplyRef.current = true;
+        cancelMessage();
+      }
       return;
     }
     // Nothing is sent over a card that waits for a decision; the words stay
@@ -3113,6 +3196,8 @@ export const ChatInput = ({
     if (decisionWaiting) {
       clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      sendsNowRef.current = false;
+      stoppingReplyRef.current = false;
       // Said over the reply before its card came: not sent and not the
       // card's, but shown; the conversation listens again after the decision.
       const words = message.trim();
@@ -3144,6 +3229,7 @@ export const ChatInput = ({
     if (attachedFiles.length > 0) {
       clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      sendsNowRef.current = false;
       return;
     }
     if (!message.trim()) {
@@ -3157,6 +3243,8 @@ export const ChatInput = ({
     }
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
+    sendsNowRef.current = false;
+    stoppingReplyRef.current = false;
     shouldRestartAudioModeAfterResponseRef.current = true;
     audioModeRestartSawPendingResponseRef.current = false;
     formRef.current?.requestSubmit();
@@ -3178,6 +3266,8 @@ export const ChatInput = ({
     conversationAutoSendSignal,
     clearPendingAutoSendTimeout,
     overVoiceAllowed,
+    speech.silenced,
+    cancelMessage,
   ]);
 
   useEffect(() => {
@@ -3185,30 +3275,6 @@ export const ChatInput = ({
       audioModeRestartSawPendingResponseRef.current = true;
     }
   }, [isPendingResponse]);
-
-  // The recording over a reply has ended. Words are the user's turn: the rest
-  // of the reply is not said. No words (a cough, a colleague, the voice's
-  // own echo): the voice goes on where it was cut, unless a card now waits.
-  useEffect(() => {
-    if (
-      !interruptedReplyRef.current ||
-      isDictating ||
-      isDictationStarting ||
-      isDictationCompleting
-    ) {
-      return;
-    }
-    interruptedReplyRef.current = false;
-    if (message.trim() || decisionWaiting || cardSpeaking) stopSpeechPlayback();
-    else resumeSpeechPlayback();
-  }, [
-    cardSpeaking,
-    decisionWaiting,
-    isDictating,
-    isDictationCompleting,
-    isDictationStarting,
-    message,
-  ]);
 
   // A card that appears while the microphone listens closes it; it opens
   // again once the card is decided and the answer has played. What it heard

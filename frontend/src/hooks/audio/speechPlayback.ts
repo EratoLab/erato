@@ -40,6 +40,11 @@ interface SpeechState {
    * the user says waits until the answer is complete.
    */
   spokenPartDone: boolean;
+  /**
+   * The user stopped the voice by voice ("Stopp"): it says nothing more for
+   * this response, which then counts as quiet for the microphone.
+   */
+  silenced: boolean;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -50,7 +55,71 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   blocked: false,
   failed: false,
   spokenPartDone: false,
+  silenced: false,
 }));
+/**
+ * What the voice says, passage by passage (its wait lines included), with
+ * the playback time each passage starts at: words heard over the voice that
+ * only repeat what it was saying then are its echo.
+ */
+export interface Said {
+  text: string;
+  startsAt: number;
+}
+let said: Said[] = [];
+const MAX_SAID = 40;
+/** When the user last talked over the voice, in playback time. */
+let pausedAt: number | null = null;
+/** A voice's pace when the passage after it has not started yet. */
+const CHARS_PER_SECOND = 15;
+/** Around the estimated spot: what was just said, and a little after. */
+const HEARD_BEFORE_CHARS = 300;
+const HEARD_AFTER_CHARS = 80;
+/** A passage that ended longer ago than this was not sounding any more. */
+const STILL_SOUNDING_S = 1.5;
+
+export function noteVoiceSays(text: string, startsAt: number) {
+  if (!text.trim()) return;
+  said = [...said.slice(-(MAX_SAID - 1)), { text, startsAt }];
+}
+
+/**
+ * What the voice was saying when the user talked over it: the stretch
+ * around the spot reached in the passage then playing, estimated from the
+ * passage's pace. Empty when nothing was sounding.
+ */
+export function voiceTextAtPause(): string {
+  return pausedAt === null ? "" : voiceTextAt(said, pausedAt);
+}
+
+/** {@link voiceTextAtPause} for passages `log` at playback time `at`. */
+export function voiceTextAt(log: readonly Said[], at: number): string {
+  const started = log.filter((entry) => entry.startsAt <= at);
+  const current = started.at(-1);
+  if (!current) return "";
+  const next = log.find((entry) => entry.startsAt > current.startsAt);
+  const length = current.text.length;
+  const rate = next
+    ? length / Math.max(0.5, next.startsAt - current.startsAt)
+    : CHARS_PER_SECOND;
+  const elapsed = at - current.startsAt;
+  if (elapsed > length / rate + STILL_SOUNDING_S) return "";
+  const spot = Math.min(length, Math.round(elapsed * rate));
+  const earlier =
+    spot < HEARD_BEFORE_CHARS
+      ? (started.at(-2)?.text.slice(-(HEARD_BEFORE_CHARS - spot)) ?? "")
+      : "";
+  return `${earlier} ${current.text.slice(
+    Math.max(0, spot - HEARD_BEFORE_CHARS),
+    spot + HEARD_AFTER_CHARS,
+  )}`.trim();
+}
+
+/** The user stopped the voice by voice: quiet for the rest of the response. */
+export function silenceSpokenTurn() {
+  stopSpeechPlayback();
+  useSpeechPlayback.setState({ silenced: true });
+}
 /**
  * The last audio chunk played for the current response, so that a resumed
  * stream's replay is not said twice. Every stream numbers its audio from 0,
@@ -127,7 +196,7 @@ const queue = createPcmQueue(() => {
     underrunTimer = undefined;
     if (replyQuiet()) useSpeechPlayback.setState({ playing: false });
   }, UNDERRUN_HOLD_MS);
-});
+}, noteVoiceSays);
 const interruptListeners = new Set<() => void>();
 
 /**
@@ -176,7 +245,7 @@ export function releaseReplyAudio() {
     return;
   }
   for (const chunk of chunks) {
-    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate, chunk.text)) {
       speechFailed();
       return;
     }
@@ -226,7 +295,12 @@ export function stopSpeechPlayback(streamKey?: string) {
   gate = null;
   clearUnderrun();
   queue.stop();
-  useSpeechPlayback.setState({ playing: false, paused: false });
+  // A stop by voice is set again right after; any other stop ends it.
+  useSpeechPlayback.setState({
+    playing: false,
+    paused: false,
+    silenced: false,
+  });
   settleQuiet();
   interrupted();
 }
@@ -237,6 +311,7 @@ export function stopSpeechPlayback(streamKey?: string) {
  */
 export function pauseSpeechPlayback() {
   const context = playbackContext();
+  pausedAt = context?.currentTime ?? null;
   if (!accepting || held !== null || !context) return;
   clearUnderrun();
   held = queue.pause(context);
@@ -258,7 +333,7 @@ export function resumeSpeechPlayback() {
   const context = playbackContext();
   if (!playbackPlays(context)) return;
   for (const chunk of chunks) {
-    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate, chunk.text)) {
       speechFailed();
       return;
     }
@@ -277,7 +352,10 @@ export function beginSpeechResponse(streamKey?: string) {
     useSpeechPlayback.getState().conversational;
   audioEnded = !accepting;
   resetParts();
+  said = [];
+  pausedAt = null;
   useSpeechPlayback.setState({
+    silenced: false,
     spokenPartDone: false,
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
@@ -375,6 +453,8 @@ export function playSpeechChunk(
   audio: string,
   sampleRate: number,
   streamKey?: string,
+  /** On a passage's first chunk, what the voice says from here on. */
+  text?: string,
 ) {
   const state = useSpeechPlayback.getState();
   if (
@@ -389,11 +469,11 @@ export function playSpeechChunk(
   lastSequence = sequence;
   activeMessage = messageId;
   if (held !== null) {
-    held.push({ audio, sampleRate });
+    held.push({ audio, sampleRate, text });
     return;
   }
   if (gate !== null) {
-    gate.push({ audio, sampleRate });
+    gate.push({ audio, sampleRate, text });
     return;
   }
   const context = playbackContext();
@@ -401,7 +481,7 @@ export function playSpeechChunk(
     useSpeechPlayback.setState({ blocked: true });
     return; // The completed response remains available for explicit replay.
   }
-  if (!queue.enqueue(context, audio, sampleRate)) {
+  if (!queue.enqueue(context, audio, sampleRate, text)) {
     speechFailed();
     return;
   }

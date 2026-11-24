@@ -3319,6 +3319,11 @@ export type MessageSubmitStreamingResponseMessage =
        * @minimum 0
        */
       sequence: number;
+      /**
+       * On the first chunk of each passage the voice speaks, the passage's
+       * text: what the voice says from this chunk on.
+       */
+      text?: string;
     }
   | {
       /**

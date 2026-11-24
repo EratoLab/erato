@@ -476,3 +476,43 @@ describe("one reply, one utterance", () => {
     }
   });
 });
+
+describe("what the voice was saying when it was talked over", () => {
+  const PASSAGE = "a".repeat(150) + " der Spot " + "b".repeat(150);
+
+  it("is the stretch around the spot the passage had reached", async () => {
+    const { voiceTextAt } = await import("./speechPlayback");
+    // 310 characters over 20 s: the spot at 10 s is the middle.
+    const log = [
+      { text: PASSAGE, startsAt: 0 },
+      { text: "Nächster Absatz.", startsAt: 20 },
+    ];
+    const heard = voiceTextAt(log, 10);
+    expect(heard).toContain("der Spot");
+    expect(heard).not.toContain("Nächster");
+    expect(voiceTextAt(log, 20.5)).toContain("Nächster");
+  });
+
+  it("is nothing when the voice had stopped sounding", async () => {
+    const { voiceTextAt } = await import("./speechPlayback");
+    const log = [{ text: "Kurz.", startsAt: 0 }];
+    expect(voiceTextAt(log, 0.2)).toBe("Kurz.");
+    expect(voiceTextAt(log, 5)).toBe("");
+    expect(voiceTextAt([], 1)).toBe("");
+  });
+
+  it("logs each passage when it starts playing, and forgets them with the next response", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+    await p.unlockSpeechPlayback();
+    p.beginSpeechResponse("s");
+    p.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s", "Erster Satz.");
+    p.playSpeechChunk("m", 1, "AQIDBA==", 24000, "s");
+    const { playbackContext } = await import("./pcmPlayback");
+    Object.assign(playbackContext() as object, { currentTime: 1.3 });
+    p.pauseSpeechPlayback();
+    expect(p.voiceTextAtPause()).toBe("Erster Satz.");
+    p.beginSpeechResponse("t");
+    expect(p.voiceTextAtPause()).toBe("");
+  });
+});

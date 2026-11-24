@@ -11,7 +11,7 @@ use super::rules::{self, words_of};
 use erato_config::confirmation_phrases::{ConfirmationPhraseConfig, ConfirmationPhrasesByLanguage};
 use erato_config::language_words::{WordLists, added_summary, by_tag, merge_word_list};
 use erato_config::voice_command_words::{VoiceCommandWordLists, VoiceCommandWordsByLanguage};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, LazyLock};
 
 /// The languages whose words count on every card.
@@ -635,6 +635,16 @@ impl CommandWords {
     }
 }
 
+/// See [`CommandWordsByLanguage::stop_words`].
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StopWordLists {
+    pub stop: Vec<String>,
+    pub fillers: Vec<String>,
+    pub noise_words: Vec<String>,
+    pub noise_phrases: Vec<String>,
+    pub leading_no: Vec<String>,
+}
+
 /// The lists by card language: German and English with what packages add
 /// for them, and for each other configured language those plus its own.
 pub struct CommandWordsByLanguage {
@@ -810,6 +820,27 @@ impl CommandWordsByLanguage {
     /// The lists for a card in `language` ("fr", "fr-CA", …).
     pub fn for_language(&self, language: &str) -> &CommandWords {
         by_tag(language, |tag| self.by_language.get(tag)).unwrap_or(&self.shared)
+    }
+
+    /// The words the web app needs to tell a stop said over a reply's voice
+    /// from the user's next message, every language's, sorted. A turn is a
+    /// stop when each of its segments is a stop phrase, a leading "no" or
+    /// listening noise, after fillers, as the rules here read a card's.
+    pub fn stop_words(&self) -> StopWordLists {
+        let lists = || std::iter::once(&self.shared).chain(self.by_language.values());
+        let union = |pick: fn(&CommandWords) -> &HashSet<String>| -> Vec<String> {
+            let all: BTreeSet<String> = lists()
+                .flat_map(|words| pick(words).iter().cloned())
+                .collect();
+            all.into_iter().collect()
+        };
+        StopWordLists {
+            stop: union(|words| &words.stop),
+            fillers: union(|words| &words.fillers),
+            noise_words: union(|words| &words.noise_words),
+            noise_phrases: union(|words| &words.noise_phrases),
+            leading_no: union(|words| &words.leading_no),
+        }
     }
 
     /// The phrase each language approves with, as shown: German, English

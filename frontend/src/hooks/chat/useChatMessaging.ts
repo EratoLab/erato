@@ -1207,6 +1207,7 @@ export function useChatMessaging(
               responseData.audio,
               responseData.sample_rate,
               activeStreamKey,
+              responseData.text ?? undefined,
             );
             break;
           case "audio_error":
