@@ -584,31 +584,6 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
-  /* A fingertip needs about 44px. Smaller buttons keep their look and take
-     taps from a margin around them; `absolute` and `fixed` utilities still
-     outrank the positioning. */
-  @media (pointer: coarse) {
-    :is(
-      .btn-geometry-sm,
-      .btn-geometry-md,
-      .btn-geometry-icon-sm,
-      .btn-geometry-icon-md
-    ) {
-      position: relative;
-    }
-
-    :is(
-        .btn-geometry-sm,
-        .btn-geometry-md,
-        .btn-geometry-icon-sm,
-        .btn-geometry-icon-md
-      )::after {
-      content: "";
-      position: absolute;
-      inset: min(0px, calc((100% - 44px) / 2));
-    }
-  }
-
   /* The capsule/circle dialect. A capsule is a text label plus inline padding
      and reads the pill token; a circle is an intrinsic square with no label
      and declares 50%, so a theme softening the pill radius — which is what
@@ -1199,15 +1174,6 @@ body:has(.app-viewport) {
     100% - var(--visual-viewport-offset-top, 0px) -
       var(--visual-viewport-height, 100%)
   );
-}
-
-/* Without a pointer that hovers, hover looks show while a control is pressed
-   (the `hover` variant in tailwind.config.ts). They show at once, as a
-   phone's own controls do; letting go still fades them out. */
-@media not all and (hover: hover) and (pointer: fine) {
-  :active {
-    transition-duration: 0s;
-  }
 }
 
 /* Surfaces for the remaining documented data-ui hooks. Same reasoning and the

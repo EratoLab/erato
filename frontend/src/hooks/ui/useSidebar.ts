@@ -4,10 +4,10 @@
  * Provides a clean interface for components to interact with the sidebar state
  * without directly accessing the Zustand store implementation.
  */
-import { useSyncExternalStore } from "react";
 
 import { useSidebarFeature } from "../../providers/FeatureConfigProvider";
 import { useUIStore } from "../../state/uiStore";
+import { useIsBelow } from "../useResponsive";
 
 export function useSidebar() {
   const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
@@ -40,26 +40,12 @@ export function useSidebar() {
   };
 }
 
-// Tailwind's sm: breakpoint.
-// eslint-disable-next-line lingui/no-unlocalized-strings
-const SIDEBAR_BESIDE_PAGE_QUERY = "(min-width: 640px)";
-
-function subscribeToSidebarBreakpoint(onChange: () => void): () => void {
-  const mediaQuery = window.matchMedia(SIDEBAR_BESIDE_PAGE_QUERY);
-  mediaQuery.addEventListener("change", onChange);
-  return () => mediaQuery.removeEventListener("change", onChange);
-}
-
 /**
  * Whether the screen is narrower than Tailwind's sm: breakpoint, where the
  * open sidebar is a drawer over the page instead of a column beside it.
  */
 export function useIsNarrowScreen(): boolean {
-  return useSyncExternalStore(
-    subscribeToSidebarBreakpoint,
-    () => !window.matchMedia(SIDEBAR_BESIDE_PAGE_QUERY).matches,
-    () => false,
-  );
+  return useIsBelow("sm");
 }
 
 /**

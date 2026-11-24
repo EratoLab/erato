@@ -228,8 +228,6 @@ If `VITE_THEME_CONFIG_PATH` or `THEME_CONFIG_PATH` points to a specific `theme.j
 
 For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `data-role` hooks over DOM-depth selectors or Tailwind class names.
 
-The app's hover looks apply only under a mouse or trackpad (`@media (hover: hover) and (pointer: fine)`); on a touch screen the same look shows while a control is pressed. A `:hover` rule in `theme.css` applies on a touch screen too and stays on whatever was tapped last, so put it inside that media query.
-
 - `data-ui="app-shell"` (the outermost one is the app's viewport box; its height and padding follow the visible viewport, system bars and an open on-screen keyboard, and are the app's to set. `html[data-virtual-keyboard="open"]` marks the time a keyboard covers part of the page. Behind the box the body takes `colors.shell.page`)
 - `data-ui="page-shell"`
 - `data-ui="sidebar"`
@@ -276,6 +274,8 @@ The app's hover looks apply only under a mouse or trackpad (`@media (hover: hove
 - `data-ui="chat-top-bar"` (the web chat's top bar: the column the hidden-mode sidebar toggle floats in, a component kit's top-left accessory, and the share button. The column it reserves is `--chat-top-bar-toggle-column`, derived from `--theme-spacing-control-min-height` (`3rem` by default) so it follows a theme's control size; a theme that sizes `sidebar-icon` buttons outside that token sets the variable itself)
 - `data-ui="alert"` (the shared inline error, warning, info and success banners; `data-tone` on the same element says which one, taking `error`, `warning`, `info` or `success`, so a theme can restyle a single tone or the whole family. A few hand-rolled banners still sit outside this hook and carry only their tone colours)
 - `data-ui="spinner"` (every loading ring the app and the Office add-in draw, and those of a component kit that adopts the host spinner; declare `--spinner-track`, `--spinner-head`, `--spinner-thickness` and `--spinner-duration` on it to restyle all of them at once; the head defaults to `--theme-fg-secondary` and the track to a 25% dilution of it, which keeps the ink a full circle so the ring stays centred as it turns and cannot wash out to a lone arc on a faded control). A ring that carries a visible caption wraps two sub-parts, `data-ui="spinner-ring"` and `data-ui="spinner-label"`.
+
+The app's hover looks apply only under a mouse or trackpad, `@media (hover: hover) and (pointer: fine)`; on a touch screen the same look shows while a control is pressed. A `:hover` rule in `theme.css` applies on a touch screen too and stays on whatever was tapped last. Put it inside that media query, and give it a pressed twin for touch screens: the same declarations on `:active` inside `@media not all and (hover: hover) and (pointer: fine)`.
 
 Every popover panel (dropdown menus, the chat "+" menu, the history filter menu and its flyout, the mention and run-mode menus) also carries the class `anchored-popover-skin`, and every menu row the class `dropdown-item-geometry`. Both are stable hooks: one rule on the skin restyles the whole popover family, and one rule on the row class reshapes every menu row. Every one of those rows is drawn by the same component, `Row variant="menu"`, which is what emits that class alongside the `menu-item` hook, so the two always arrive together. The skin also declares `--dropdown-item-radius`, the derived row corner described above; the rows only read it, so a retune belongs on the skin and never on a row.
 

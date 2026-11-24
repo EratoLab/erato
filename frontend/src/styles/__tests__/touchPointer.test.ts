@@ -41,8 +41,8 @@ const selectorsOf = (rules: Rule[]) =>
   rules.map((rule) =>
     rule.selector
       .replace(/\\/g, "")
-      .replace(/:where\(a\[href\][^)]*\)/g, ":where(PRESSABLE)")
-      .replace(/:is\(a\[href\][^)]*\)/g, ":is(PRESSABLE)"),
+      .replace(/:where\(a\[href\].*?\[role="switch"\]\)/g, ":where(PRESSABLE)")
+      .replace(/:is\(a\[href\].*?\[role="switch"\]\)/g, ":is(PRESSABLE)"),
   );
 
 describe("hover styles on a touch screen", () => {
@@ -64,6 +64,9 @@ describe("hover styles on a touch screen", () => {
       expect(self.selector).toContain(control);
     }
     expect(self.selector).not.toMatch(/\bdiv\b/);
+    // A bare label would light a text field on every tap into it.
+    expect(self.selector).not.toMatch(/[(,]\s*label\s*[,)]/);
+    expect(self.selector).toContain('label:has(input[type="checkbox"]');
   });
 
   // Class names the app already uses, so this file adds nothing to the build.

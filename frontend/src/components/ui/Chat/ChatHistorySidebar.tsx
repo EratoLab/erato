@@ -42,6 +42,7 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
+import { getAssistantUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
@@ -778,7 +779,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     const handleRecentAssistantPick = useCallback(
       (assistantId: string) => {
-        navigate(`/a/${assistantId}`);
+        navigate(getAssistantUrl(assistantId));
         closeDrawerAfterPick();
       },
       [navigate, closeDrawerAfterPick],
