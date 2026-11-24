@@ -2,7 +2,7 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
-import { useFollowsConversation } from "@/utils/chat/conversationFollow";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
@@ -185,11 +185,10 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     ? (standingNote ?? alwaysAllowDisabledReason)
     : alwaysAllowDisabledReason;
 
-  // In audio mode the message list brings a waiting card into view, and
-  // leaves it where the person scrolled away to: no second scroll here.
-  const followsConversation = useFollowsConversation();
+  // In audio mode the message list places a waiting card itself.
+  const placedByList = useSpeechPlayback((state) => state.conversational);
   useEffect(() => {
-    if (scrollIntoViewOnMount && !followsConversation) {
+    if (scrollIntoViewOnMount && !placedByList) {
       cardRef.current?.scrollIntoView({ block: "nearest" });
     }
     if (isPending) {

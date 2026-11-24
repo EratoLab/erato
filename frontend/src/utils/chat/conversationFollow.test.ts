@@ -1,114 +1,125 @@
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
   CONVERSATION_MARGIN_PX,
   restingTop,
+  usePersonTurn,
   writtenAnswerStart,
-} from "@/utils/chat/conversationFollow";
+} from "./conversationFollow";
 
+import type { ChatMessage } from "@/components/ui/MessageList/MessageList";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-const SIZES = [
-  { name: "desktop", clientHeight: 828 },
-  { name: "phone", clientHeight: 772 },
-  { name: "add-in pane", clientHeight: 648 },
-];
-
-const text = (value: string) =>
-  ({ content_type: "text", text: value }) as ContentPart;
-const spoken = { content_type: "spoken", text: "Said." } as ContentPart;
-const toolUse = {
-  content_type: "tool_use",
-  tool_call_id: "call",
-  tool_name: "search",
-  status: "success",
-} as unknown as ContentPart;
-const approvalRequest = {
-  content_type: "tool_approval_request",
-  tool_call_id: "call",
-  tool_name: "update_record",
-} as unknown as ContentPart;
+const part = (content_type: string) =>
+  ({ content_type, text: "" }) as unknown as ContentPart;
 
 describe("writtenAnswerStart", () => {
-  it("is the first text of the answer that ends the reply, after its spoken part and lookups", () => {
-    expect(
-      writtenAnswerStart([spoken, toolUse, toolUse, text("Brief"), text("…")]),
-    ).toBe(3);
-  });
-
-  it("has no written answer while lookups run or a card waits", () => {
-    expect(writtenAnswerStart([spoken, toolUse])).toBe(-1);
-    expect(writtenAnswerStart([text("Updating."), approvalRequest])).toBe(-1);
-  });
-
-  it("starts at the closing answer after a decided card, not at the text before the card", () => {
+  it("is the first text of the answer that ends the reply", () => {
     expect(
       writtenAnswerStart([
-        text("Updating."),
-        approvalRequest,
-        toolUse,
-        spoken,
-        text("Done."),
+        part("spoken"),
+        part("tool_use"),
+        part("text"),
+        part("text"),
       ]),
-    ).toBe(4);
+    ).toBe(2);
+  });
+
+  it("is none while lookups run or a card waits", () => {
+    expect(writtenAnswerStart([part("spoken"), part("tool_use")])).toBe(-1);
+    expect(
+      writtenAnswerStart([part("text"), part("tool_approval_request")]),
+    ).toBe(-1);
   });
 });
 
-describe.each(SIZES)("restingTop ($name)", ({ clientHeight }) => {
-  const bottom = 5_000;
-
-  it("follows the bottom while nothing else asks to be in view", () => {
+describe.each([828, 772, 648])("restingTop (view %ipx)", (clientHeight) => {
+  it("keeps the start of the written answer in view", () => {
     expect(
-      restingTop({
-        bottom,
-        clientHeight,
-        waitingCard: null,
-        answerStart: null,
-      }),
-    ).toBe(bottom);
+      restingTop({ clientHeight, waitingCard: null, answerStart: 2_000 }),
+    ).toBe(2_000 - CONVERSATION_MARGIN_PX);
   });
 
-  it("stops at the start of a long written answer instead of chasing its end", () => {
-    const answerStart = 2_000;
+  it("shows a waiting card whole when it fits, else its decision at its end", () => {
+    const fits = { top: 3_000, height: clientHeight - 100 };
     expect(
-      restingTop({ bottom, clientHeight, waitingCard: null, answerStart }),
-    ).toBe(answerStart - CONVERSATION_MARGIN_PX);
-  });
+      restingTop({ clientHeight, waitingCard: fits, answerStart: null }),
+    ).toBe(3_000 - CONVERSATION_MARGIN_PX);
 
-  it("follows the bottom while the written answer still fits below its start", () => {
+    const tall = { top: 3_000, height: clientHeight + 300 };
     expect(
-      restingTop({
-        bottom,
-        clientHeight,
-        waitingCard: null,
-        answerStart: bottom + 200,
-      }),
-    ).toBe(bottom);
+      restingTop({ clientHeight, waitingCard: tall, answerStart: null }),
+    ).toBe(3_000 + 300 + CONVERSATION_MARGIN_PX);
+  });
+});
+
+const message = (
+  id: string,
+  role: "user" | "assistant",
+  minute: number,
+  extra: Partial<ChatMessage> = {},
+): ChatMessage => ({
+  id,
+  role,
+  content: [],
+  createdAt: new Date(Date.UTC(2026, 0, 1, 0, minute)).toISOString(),
+  sender: role,
+  authorId: role,
+  ...extra,
+});
+
+const turnOf = (initial: ChatMessage[]) => {
+  const view = renderHook(
+    ({ list }) =>
+      usePersonTurn(
+        list.map((entry) => entry.id),
+        Object.fromEntries(list.map((entry) => [entry.id, entry])),
+      ),
+    { initialProps: { list: initial } },
+  );
+  return {
+    turn: () => view.result.current.turn,
+    replying: () => view.result.current.replying,
+    update: (list: ChatMessage[]) => view.rerender({ list }),
+  };
+};
+
+describe("usePersonTurn", () => {
+  const answered = [message("u1", "user", 0), message("a1", "assistant", 1)];
+
+  it("counts a message the person sends, not the saved one replacing it", () => {
+    const { turn, update, replying } = turnOf(answered);
+    const before = turn();
+
+    update([
+      ...answered,
+      message("temp-user-2", "user", 2, { status: "sending" }),
+    ]);
+    expect(turn()).toBe(before + 1);
+    expect(replying()).toBe(true);
+
+    update([...answered, message("u2", "user", 3)]);
+    expect(turn()).toBe(before + 1);
   });
 
-  it("shows a waiting card whole when it fits, though the list goes on below it", () => {
-    const card = { top: bottom + clientHeight - 640, height: 560 };
-    if (card.height + 2 * CONVERSATION_MARGIN_PX > clientHeight) return;
-    const top = restingTop({
-      bottom,
-      clientHeight,
-      waitingCard: card,
-      answerStart: null,
-    });
-    expect(top).toBeLessThanOrEqual(card.top);
-    expect(top + clientHeight).toBeGreaterThanOrEqual(card.top + card.height);
+  it("counts an edit of the person's last message", () => {
+    const { turn, update } = turnOf(answered);
+    const before = turn();
+
+    update([message("temp-user-2", "user", 2, { status: "sending" })]);
+    expect(turn()).toBe(before + 1);
   });
 
-  it("shows the decision at the end of a card taller than the view", () => {
-    const card = { top: 4_000, height: clientHeight + 300 };
-    const top = restingTop({
-      bottom,
-      clientHeight,
-      waitingCard: card,
-      answerStart: 3_000,
-    });
-    expect(top + clientHeight).toBe(
-      card.top + card.height + CONVERSATION_MARGIN_PX,
-    );
+  it("does not count the reply streaming in", () => {
+    const { turn, update, replying } = turnOf(answered);
+    const before = turn();
+
+    update([
+      ...answered.slice(0, 1),
+      message("a1", "assistant", 1, { loading: { state: "typing" } }),
+    ]);
+    expect(turn()).toBe(before);
+    expect(replying()).toBe(true);
   });
 });

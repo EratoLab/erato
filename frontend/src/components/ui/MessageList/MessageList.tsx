@@ -11,17 +11,16 @@ import {
 } from "react";
 
 import { messageAttachmentFileIds } from "@/components/ui/Chat/messageAttachmentFileIds";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
-import { useMessageListVirtualization, useScrollEvents } from "@/hooks/ui";
+import { useMessageListVirtualization } from "@/hooks/ui";
 import { usePaginatedData } from "@/hooks/ui/usePaginatedData";
 import { useScrollToBottom } from "@/hooks/useScrollToBottom";
 import { getAssistantTurns } from "@/utils/chat/assistantTurns";
 import {
-  ConversationFollowContext,
-  restingTop,
-  WAITING_CARD_ATTRIBUTE,
-  WRITTEN_START_ATTRIBUTE,
+  conversationRestingTop,
+  usePersonTurn,
 } from "@/utils/chat/conversationFollow";
 import { contentSize } from "@/utils/chat/messageUtils";
 import {
@@ -206,12 +205,6 @@ export interface MessageListProps {
 
   /** Historical model switches keyed by the user message they precede. */
   modelSwitches?: Record<string, ModelSwitch>;
-
-  /**
-   * Audio mode: the view follows the conversation, which the person talks
-   * through hands-free, instead of the streamed text.
-   */
-  followsConversation?: boolean;
 }
 
 const decodeRepeatedly = (value: string, maxIterations = 3): string => {
@@ -306,166 +299,6 @@ const toMockImagePointerFile = (part: ContentPart): FileUploadItem | null => {
   }
   return null;
 };
-
-// Separate hook for managing message loading and streaming behavior
-function useMessageLoading({
-  messageOrder,
-  messages,
-  scrollToBottom,
-  isScrolledUp,
-  autoScrollPaused,
-  disabled,
-}: {
-  messageOrder: string[];
-  messages: Record<string, ChatMessage>;
-  scrollToBottom: () => void;
-  isScrolledUp: boolean;
-  autoScrollPaused: boolean;
-  disabled: boolean;
-}) {
-  // Track the last loading state to avoid unwanted scroll when message completes
-  const lastLoadingState = useRef<string | null>(null);
-  // Track the last streaming content length to avoid unnecessary scrolls
-  const lastContentLength = useRef<number>(0);
-  // Track the current message ID to reset content length when message changes
-  const lastMessageId = useRef<string | null>(null);
-
-  // Force scroll to bottom when a message is actively streaming
-  useEffect(() => {
-    if (disabled) return;
-    // Check if the last message is from the assistant and is still loading
-    if (messageOrder.length > 0) {
-      const currentLastMessageId = messageOrder[messageOrder.length - 1];
-      const lastMessage = messages[currentLastMessageId];
-
-      // Reset content length if this is a new message
-      if (lastMessageId.current !== currentLastMessageId) {
-        lastContentLength.current = 0;
-        lastMessageId.current = currentLastMessageId;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (lastMessage?.sender === "assistant") {
-        // Only scroll if message is loading or just completed (typing/thinking/done)
-        if (
-          lastMessage.loading &&
-          (lastMessage.loading.state === "typing" ||
-            lastMessage.loading.state === "thinking" ||
-            lastMessage.loading.state === "done")
-        ) {
-          // Only scroll on significant content changes to improve performance
-          // This reduces the number of scroll operations during rapid streaming
-          const contentLength = lastMessage.content.length;
-          if (contentLength - lastContentLength.current > 10) {
-            // Only scroll after 10 new chars
-            // Update last content length reference
-            lastContentLength.current = contentLength;
-
-            // Update last loading state reference
-            lastLoadingState.current = lastMessage.loading.state;
-
-            // Only scroll to bottom during active streaming if user hasn't scrolled up
-            // This allows user to interrupt auto-scroll by scrolling up
-            if (!isScrolledUp && !autoScrollPaused) {
-              scrollToBottom();
-            }
-          }
-        }
-        // Don't scroll when message changes from loading to done
-        // This prevents the unwanted "scroll up and down" at the end
-      }
-    }
-  }, [
-    messageOrder,
-    messages,
-    scrollToBottom,
-    isScrolledUp,
-    autoScrollPaused,
-    disabled,
-  ]);
-}
-
-/* eslint-disable lingui/no-unlocalized-strings -- KeyboardEvent.key constants, not user-facing text. */
-const scrollAwayFromBottomKeyboardKeys = new Set(["ArrowUp", "Home", "PageUp"]);
-
-const scrollTowardBottomKeyboardKeys = new Set([
-  "ArrowDown",
-  "End",
-  "PageDown",
-]);
-/* eslint-enable lingui/no-unlocalized-strings */
-
-const autoScrollPauseBottomThresholdPx = 4;
-const autoScrollResumeBottomThresholdPx = 100;
-
-const topInList = (element: Element, container: HTMLElement) =>
-  element.getBoundingClientRect().top -
-  container.getBoundingClientRect().top +
-  container.scrollTop;
-
-const isNearScrollBottom = (container: HTMLElement, thresholdPx: number) => {
-  const distanceFromBottom =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
-
-  return distanceFromBottom <= thresholdPx;
-};
-
-function useManualScrollPause({
-  messageOrder,
-  messages,
-}: {
-  messageOrder: string[];
-  messages: Record<string, ChatMessage>;
-}) {
-  const activeCompletionMessageId = useMemo(() => {
-    if (messageOrder.length === 0) return null;
-
-    const lastMessageId = messageOrder[messageOrder.length - 1];
-    const lastMessage = messages[lastMessageId];
-    const loadingState = lastMessage.loading?.state;
-    const isActiveAssistantCompletion =
-      lastMessage.sender === "assistant" &&
-      (loadingState === "typing" ||
-        loadingState === "thinking" ||
-        loadingState === "done");
-
-    return isActiveAssistantCompletion ? lastMessageId : null;
-  }, [messageOrder, messages]);
-
-  const [pausedCompletionMessageId, setPausedCompletionMessageId] = useState<
-    string | null
-  >(null);
-
-  useEffect(() => {
-    if (!activeCompletionMessageId) {
-      setPausedCompletionMessageId(null);
-    }
-  }, [activeCompletionMessageId]);
-
-  const pauseAutoScrollForActiveCompletion = useCallback(() => {
-    if (activeCompletionMessageId) {
-      setPausedCompletionMessageId(activeCompletionMessageId);
-    }
-  }, [activeCompletionMessageId]);
-
-  const resumeAutoScrollForActiveCompletion = useCallback(() => {
-    if (activeCompletionMessageId) {
-      setPausedCompletionMessageId((currentPausedCompletionMessageId) =>
-        currentPausedCompletionMessageId === activeCompletionMessageId
-          ? null
-          : currentPausedCompletionMessageId,
-      );
-    }
-  }, [activeCompletionMessageId]);
-
-  return {
-    isAutoScrollPaused:
-      activeCompletionMessageId !== null &&
-      pausedCompletionMessageId === activeCompletionMessageId,
-    pauseAutoScrollForActiveCompletion,
-    resumeAutoScrollForActiveCompletion,
-  };
-}
 
 // Hook to manage loading more messages when near top
 function useLoadMoreOnScroll({
@@ -624,7 +457,6 @@ export const MessageList = memo<MessageListProps>(
     isTransitioning,
     emptyStateComponent,
     modelSwitches: incomingModelSwitches,
-    followsConversation = false,
   }) => {
     // Hosts rebuild these on every streamed update; the memoized rows below
     // should re-render only for the message that actually changed.
@@ -666,265 +498,32 @@ export const MessageList = memo<MessageListProps>(
     );
     const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
 
-    const lastMessageLoadingContent = useMemo(() => {
-      const result =
-        messageOrder.length > 0 &&
-        messages[messageOrder[messageOrder.length - 1]].loading
-          ? messages[messageOrder[messageOrder.length - 1]].content
-          : null;
-
-      return result;
-    }, [messageOrder, messages]);
-
-    const {
-      isAutoScrollPaused,
-      pauseAutoScrollForActiveCompletion,
-      resumeAutoScrollForActiveCompletion,
-    } = useManualScrollPause({ messageOrder, messages });
-
-    const lastMessageId = messageOrder.at(-1);
-    const lastMessageRef = useRef<string | undefined>(lastMessageId);
-    lastMessageRef.current = lastMessageId;
-    // The person's turns: a new one when they send or edit (both add a
-    // message still being sent) or remove one; not when the saved message
-    // replaces the optimistic one with the server's id and time.
-    const { personTurns, sendingId } = useMemo(() => {
-      let count = 0;
-      let sending: string | null = null;
-      for (const id of messageOrder) {
-        const message = messages[id];
-        if (message.role !== "user" || taskResultOf(message)) continue;
-        count += 1;
-        if (message.status === "sending") sending = id;
-      }
-      return { personTurns: count, sendingId: sending };
-    }, [messageOrder, messages]);
-    const loading = isPending || !!isTransitioning;
-    const seenTurn = useRef({
-      session: currentSessionId,
-      turns: personTurns,
-      sendingId,
-      loading,
-      number: 0,
-    });
-    // The turn the person took while audio mode followed the chat. A chat
-    // opened in audio mode is history: it shows its end, as typed chat does.
-    const liveTurn = useRef<string | null>(null);
-    const seen = seenTurn.current;
-    const newTurn =
-      seen.session !== currentSessionId ||
-      seen.turns !== personTurns ||
-      (sendingId !== null && sendingId !== seen.sendingId);
-    const turnNumber = newTurn ? seen.number + 1 : seen.number;
-    const turn = `${currentSessionId ?? ""}:${turnNumber}`;
-    if (newTurn) {
-      // Turns that load with a chat are not taken now: a turn is live when
-      // it arrives in the chat on screen, or opens a new chat.
-      const takenNow =
-        seen.session === currentSessionId
-          ? seen.turns > 0 || !seen.loading
-          : !seen.session;
-      if (followsConversation && personTurns > 0 && takenNow) {
-        liveTurn.current = turn;
-      }
-    }
-    seenTurn.current = {
-      session: currentSessionId,
-      turns: personTurns,
-      sendingId,
-      loading,
-      number: turnNumber,
-    };
-    const turnRef = useRef(turn);
-    turnRef.current = turn;
-    const conversation = useMemo(
+    // Audio mode with spoken replies: a waiting card and the start of a
+    // written answer stay in view while the person listens.
+    const followsConversation = useSpeechPlayback(
+      (state) => state.conversational,
+    );
+    const { turn, replying } = usePersonTurn(messageOrder, messages);
+    const lastMessageId = useRef(messageOrder.at(-1));
+    lastMessageId.current = messageOrder.at(-1);
+    const restingTopInList = useMemo(
       () =>
         followsConversation
-          ? {
-              turn,
-              target: (container: HTMLDivElement) => {
-                const bottom = container.scrollHeight - container.clientHeight;
-                const id = lastMessageRef.current;
-                const row =
-                  id === undefined
-                    ? undefined
-                    : Array.from(
-                        container.querySelectorAll("[data-message-id]"),
-                      ).findLast(
-                        (entry) => entry.getAttribute("data-message-id") === id,
-                      );
-                if (!row) return bottom;
-                const card = Array.from(
-                  row.querySelectorAll(`[${WAITING_CARD_ATTRIBUTE}]`),
-                ).at(-1);
-                const start =
-                  liveTurn.current === turnRef.current
-                    ? row.querySelector(`[${WRITTEN_START_ATTRIBUTE}]`)
-                    : null;
-                return restingTop({
-                  bottom,
-                  clientHeight: container.clientHeight,
-                  waitingCard: card
-                    ? {
-                        top: topInList(card, container),
-                        height: card.getBoundingClientRect().height,
-                      }
-                    : null,
-                  answerStart: start ? topInList(start, container) : null,
-                });
-              },
-            }
-          : null,
-      [followsConversation, turn],
+          ? (container: HTMLDivElement) =>
+              conversationRestingTop(container, lastMessageId.current)
+          : undefined,
+      [followsConversation],
     );
 
-    // Use our custom hooks for scroll behavior and pagination
-    const {
-      containerRef,
-      isScrolledUp,
-      isNearTop,
-      checkScrollPosition,
-      scrollToBottom,
-      isConversationHeld,
-    } = useScrollToBottom({
-      enabled: true,
-      useSmoothScroll: true,
-      transitionDuration: 300,
-      isTransitioning: isPending || isTransitioning,
-      autoScrollPaused: isAutoScrollPaused,
-      deps: [messageOrder.length, currentSessionId, lastMessageLoadingContent],
-      conversation,
-    });
-
-    useEffect(() => {
-      const container = containerRef.current;
-      if (!container || followsConversation) return;
-
-      let lastTouchY: number | null = null;
-
-      let lastScrollTop = container.scrollTop;
-
-      const resumeIfNearBottom = () => {
-        // Only a paused answer needs bringing back. A smooth scroll on every
-        // wheel event races the user's own scroll in WebKit and leaves the
-        // page's scrollTop short of the screen, so hover lands above the pointer.
-        if (!isAutoScrollPaused) return;
-        if (isNearScrollBottom(container, autoScrollResumeBottomThresholdPx)) {
-          resumeAutoScrollForActiveCompletion();
-          scrollToBottom();
-        }
-      };
-
-      const pauseIfAwayFromBottom = () => {
-        if (!isNearScrollBottom(container, autoScrollPauseBottomThresholdPx)) {
-          pauseAutoScrollForActiveCompletion();
-        }
-      };
-
-      const handleWheel = (event: WheelEvent) => {
-        if (event.deltaY < 0) {
-          pauseIfAwayFromBottom();
-          return;
-        }
-
-        if (event.deltaY > 0) {
-          resumeIfNearBottom();
-        }
-      };
-
-      const handleTouchStart = (event: TouchEvent) => {
-        lastTouchY = event.touches.length > 0 ? event.touches[0].clientY : null;
-      };
-
-      const handleTouchMove = (event: TouchEvent) => {
-        if (lastTouchY === null || event.touches.length === 0) {
-          return;
-        }
-
-        const currentTouchY = event.touches[0].clientY;
-
-        if (currentTouchY > lastTouchY) {
-          pauseIfAwayFromBottom();
-        } else if (currentTouchY < lastTouchY) {
-          resumeIfNearBottom();
-        }
-
-        lastTouchY = currentTouchY;
-      };
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (
-          scrollAwayFromBottomKeyboardKeys.has(event.key) ||
-          (event.key === " " && event.shiftKey)
-        ) {
-          pauseIfAwayFromBottom();
-          return;
-        }
-
-        if (
-          scrollTowardBottomKeyboardKeys.has(event.key) ||
-          (event.key === " " && !event.shiftKey)
-        ) {
-          resumeIfNearBottom();
-        }
-      };
-
-      const handlePointerDown = (event: PointerEvent) => {
-        const bounds = container.getBoundingClientRect();
-        const scrollbarWidth = container.offsetWidth - container.clientWidth;
-
-        if (
-          scrollbarWidth > 0 &&
-          event.clientX >= bounds.right - scrollbarWidth
-        ) {
-          pauseAutoScrollForActiveCompletion();
-        }
-      };
-
-      const handleScroll = () => {
-        const currentScrollTop = container.scrollTop;
-        const isScrollingDown = currentScrollTop > lastScrollTop;
-        lastScrollTop = currentScrollTop;
-
-        if (isAutoScrollPaused) {
-          if (isScrollingDown) {
-            resumeIfNearBottom();
-          }
-          return;
-        }
-
-        if (!isScrollingDown) {
-          pauseIfAwayFromBottom();
-        }
-      };
-
-      container.addEventListener("wheel", handleWheel, { passive: true });
-      container.addEventListener("touchstart", handleTouchStart, {
-        passive: true,
+    const { containerRef, isScrolledUp, isNearTop, scrollToBottom } =
+      useScrollToBottom({
+        isTransitioning: isPending || isTransitioning,
+        chat: currentSessionId ?? "",
+        turn,
+        replying,
+        content: messages,
+        restingTop: restingTopInList,
       });
-      container.addEventListener("touchmove", handleTouchMove, {
-        passive: true,
-      });
-      container.addEventListener("keydown", handleKeyDown);
-      container.addEventListener("pointerdown", handlePointerDown);
-      container.addEventListener("scroll", handleScroll, { passive: true });
-
-      return () => {
-        container.removeEventListener("wheel", handleWheel);
-        container.removeEventListener("touchstart", handleTouchStart);
-        container.removeEventListener("touchmove", handleTouchMove);
-        container.removeEventListener("keydown", handleKeyDown);
-        container.removeEventListener("pointerdown", handlePointerDown);
-        container.removeEventListener("scroll", handleScroll);
-      };
-    }, [
-      containerRef,
-      followsConversation,
-      isAutoScrollPaused,
-      pauseAutoScrollForActiveCompletion,
-      resumeAutoScrollForActiveCompletion,
-      scrollToBottom,
-    ]);
 
     // Expose scrollToBottom function to parent component
     useEffect(() => {
@@ -932,16 +531,6 @@ export const MessageList = memo<MessageListProps>(
         onScrollToBottomRef(scrollToBottom);
       }
     }, [onScrollToBottomRef, scrollToBottom]);
-
-    // Use the message loading hook
-    useMessageLoading({
-      messageOrder,
-      messages,
-      scrollToBottom,
-      isScrolledUp,
-      autoScrollPaused: isAutoScrollPaused,
-      disabled: followsConversation,
-    });
 
     // Set up pagination for message data
     const { visibleData, hasMore, loadMore, isNewlyLoaded } = usePaginatedData({
@@ -952,22 +541,13 @@ export const MessageList = memo<MessageListProps>(
       direction: "backward", // Use backward pagination for chat (older messages first)
     });
 
-    // A paused completion streams below the viewport even while the user is
-    // still within the scrolled-up threshold.
     const newMessageCount = useUnseenMessageCount({
       messageOrder,
       messages,
       currentSessionId,
-      isAwayFromBottom: followsConversation
-        ? isConversationHeld
-        : isScrolledUp || isAutoScrollPaused,
+      isAwayFromBottom: isScrolledUp,
       foldedTaskResultRowIds: taskResultFolds.foldedRowIds,
     });
-
-    const handleNewMessagesClick = useCallback(() => {
-      resumeAutoScrollForActiveCompletion();
-      scrollToBottom();
-    }, [resumeAutoScrollForActiveCompletion, scrollToBottom]);
 
     // Create debounced function with useMemo
     const debouncedLoadMore = useMemo(
@@ -1021,13 +601,6 @@ export const MessageList = memo<MessageListProps>(
 
     // Helper function to get CSS classes for message highlighting
     const getMessageClassName = useMessageClassNameHelper();
-
-    // Use our hook for scroll events
-    useScrollEvents({
-      containerRef,
-      onScroll: checkScrollPosition,
-      deps: [apiMessagesResponse],
-    });
 
     // Use our hook to load more messages when scrolling to top
     useLoadMoreOnScroll({
@@ -1209,62 +782,60 @@ export const MessageList = memo<MessageListProps>(
             </div>
           ) : (
             <div className="mx-auto w-full" style={contentWidthStyle}>
-              <ConversationFollowContext.Provider value={followsConversation}>
-                <ConversationMessagesProvider messages={messages}>
-                  {shouldUseVirtualization ? (
-                    <VirtualizedMessageList
-                      messages={messages}
-                      visibleData={visibleData}
-                      containerSize={containerSize}
-                      isNewlyLoaded={isNewlyLoaded}
-                      getMessageClassName={getMessageClassName}
-                      maxWidth={maxWidth}
-                      showTimestamps={showTimestamps}
-                      showAvatars={showAvatars}
-                      userProfile={userProfile}
-                      userDisplayNameOverride={userDisplayNameOverride}
-                      controls={controls}
-                      messageRenderer={messageRenderer}
-                      controlsContext={controlsContext}
-                      onMessageAction={onMessageAction}
-                      onFilePreview={onFilePreview}
-                      onViewFeedback={onViewFeedback}
-                      allFilesById={allFilesById}
-                      modelSwitches={modelSwitches}
-                      taskResultFolds={taskResultFolds}
-                      assistantTurns={assistantTurns}
-                    />
-                  ) : (
-                    <StandardMessageList
-                      messages={messages}
-                      visibleData={visibleData}
-                      isNewlyLoaded={isNewlyLoaded}
-                      getMessageClassName={getMessageClassName}
-                      maxWidth={maxWidth}
-                      showTimestamps={showTimestamps}
-                      showAvatars={showAvatars}
-                      userProfile={userProfile}
-                      userDisplayNameOverride={userDisplayNameOverride}
-                      controls={controls}
-                      messageRenderer={messageRenderer}
-                      controlsContext={controlsContext}
-                      onMessageAction={onMessageAction}
-                      onFilePreview={onFilePreview}
-                      onViewFeedback={onViewFeedback}
-                      allFilesById={allFilesById}
-                      modelSwitches={modelSwitches}
-                      taskResultFolds={taskResultFolds}
-                      assistantTurns={assistantTurns}
-                    />
-                  )}
-                </ConversationMessagesProvider>
-              </ConversationFollowContext.Provider>
+              <ConversationMessagesProvider messages={messages}>
+                {shouldUseVirtualization ? (
+                  <VirtualizedMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    containerSize={containerSize}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                    taskResultFolds={taskResultFolds}
+                    assistantTurns={assistantTurns}
+                  />
+                ) : (
+                  <StandardMessageList
+                    messages={messages}
+                    visibleData={visibleData}
+                    isNewlyLoaded={isNewlyLoaded}
+                    getMessageClassName={getMessageClassName}
+                    maxWidth={maxWidth}
+                    showTimestamps={showTimestamps}
+                    showAvatars={showAvatars}
+                    userProfile={userProfile}
+                    userDisplayNameOverride={userDisplayNameOverride}
+                    controls={controls}
+                    messageRenderer={messageRenderer}
+                    controlsContext={controlsContext}
+                    onMessageAction={onMessageAction}
+                    onFilePreview={onFilePreview}
+                    onViewFeedback={onViewFeedback}
+                    allFilesById={allFilesById}
+                    modelSwitches={modelSwitches}
+                    taskResultFolds={taskResultFolds}
+                    assistantTurns={assistantTurns}
+                  />
+                )}
+              </ConversationMessagesProvider>
             </div>
           )}
         </div>
         {newMessageCount > 0 && (
           <ScrollToBottomButton
-            onClick={handleNewMessagesClick}
+            onClick={scrollToBottom}
             newMessageCount={newMessageCount}
           />
         )}

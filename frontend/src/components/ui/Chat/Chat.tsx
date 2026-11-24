@@ -863,7 +863,6 @@ export const Chat = ({
             className={layout}
             virtualizationThreshold={30}
             onScrollToBottomRef={handleMessageListRef}
-            followsConversation={isAudioMode}
             onFilePreview={openPreviewModal}
             onViewFeedback={openFeedbackViewDialog}
             assistantFiles={assistantFiles}

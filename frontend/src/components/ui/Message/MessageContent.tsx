@@ -32,6 +32,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useMessageExplainStore } from "@/hooks/chat/store/messageExplainStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -66,7 +67,6 @@ import {
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import {
   rehypeWrittenStart,
-  useFollowsConversation,
   writtenAnswerStart,
 } from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
@@ -1558,7 +1558,9 @@ export const MessageContent = memo(function MessageContent({
     [foldsWordPlan, messageContent],
   );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
-  const followsConversation = useFollowsConversation();
+  const followsConversation = useSpeechPlayback(
+    (state) => state.conversational,
+  );
   const writtenStart = React.useMemo(
     () => (followsConversation ? writtenAnswerStart(content) : -1),
     [followsConversation, content],
