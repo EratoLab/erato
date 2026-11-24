@@ -34,6 +34,35 @@ describe("buildContinueStreamBody", () => {
     });
   });
 
+  it("names the question a task's item showed, so a late tap cannot answer its next one", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        approvalIds: ["task-a", "call-b"],
+        items: [
+          {
+            approval_id: "task-a",
+            child: { child_tool_call_id: "child-message:2:call_second" },
+          },
+          { approval_id: "call-b", child: null },
+        ],
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        {
+          approval_id: "task-a",
+          decision: "approve",
+          child_tool_call_id: "child-message:2:call_second",
+        },
+        { approval_id: "call-b", decision: "approve" },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
+
   it("keeps the legacy body only for a caller that knows no approval id", () => {
     expect(
       buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),

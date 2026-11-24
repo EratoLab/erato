@@ -6002,6 +6002,10 @@
             "type": "string",
             "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
           },
+          "child_tool_call_id": {
+            "type": "string",
+            "description": "For a delegated task's item: the `child_tool_call_id` of the question\nthe card showed. A task that asks again keeps its `approval_id`, so this\nis what tells its questions apart."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },

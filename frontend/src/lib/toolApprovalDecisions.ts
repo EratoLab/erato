@@ -18,6 +18,12 @@ export interface DecidedApproval {
   voiceReceipt?: string;
 }
 
+/** What a body needs of an open item: a task's item names its question. */
+export interface DecidedItem {
+  approval_id: string;
+  child?: { child_tool_call_id?: string } | null;
+}
+
 /**
  * Whether a decision lets the gated call run.
  *
@@ -49,6 +55,10 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * predates those shows the limit's choice, or a generic card, alone, so the
  * server refuses such a stop with a child open without it.
  *
+ * `items` are the card's open items: a delegated task's decision also names
+ * the task's question the card showed, since a task that asks again keeps its
+ * approval id.
+ *
  * `readBack` asks for the continued answer to be spoken; the caller sets it
  * when the turn that stopped was spoken.
  */
@@ -57,12 +67,14 @@ export const buildContinueStreamBody = ({
   decision,
   approvalIds,
   itemDecisions,
+  items = [],
   readBack = false,
 }: {
   messageId: string;
   decision: ToolApprovalDecision;
   approvalIds?: string[];
   itemDecisions?: DecidedApproval[];
+  items?: readonly DecidedItem[];
   readBack?: boolean;
 }): ContinueStreamRequest => {
   const spoken = readBack ? { conversational_audio_back: true } : {};
@@ -85,6 +97,7 @@ export const buildContinueStreamBody = ({
         ? { change_request: item.changeRequest }
         : {}),
       ...(item.voiceReceipt ? { voice_receipt: item.voiceReceipt } : {}),
+      ...questionOf(items, item.approvalId),
     }));
     return {
       message_id: messageId,
@@ -101,4 +114,13 @@ export const buildContinueStreamBody = ({
     shows_limit_and_builtin_child_items: true,
     ...spoken,
   };
+};
+
+const questionOf = (
+  items: readonly DecidedItem[],
+  approvalId: string,
+): { child_tool_call_id?: string } => {
+  const question = items.find((item) => item.approval_id === approvalId)?.child
+    ?.child_tool_call_id;
+  return question ? { child_tool_call_id: question } : {};
 };

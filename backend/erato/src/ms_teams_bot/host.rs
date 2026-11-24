@@ -33,8 +33,8 @@ use crate::server::api::v1beta::me_profile_middleware::{
 };
 use crate::server::api::v1beta::message_streaming::{
     ARCHIVED_CHAT_MESSAGE, ContinueStreamRequest, DELEGATED_RUN_RUNNING_MESSAGE,
-    MessageSubmitRequest, STALE_REVISION_MESSAGE, StreamRouteError, ToolApprovalDecision,
-    detached_generation_event_sink, start_continuation, start_message_submit,
+    MessageSubmitRequest, PAGE_OUT_OF_DATE_MESSAGE, STALE_REVISION_MESSAGE, StreamRouteError,
+    ToolApprovalDecision, detached_generation_event_sink, start_continuation, start_message_submit,
 };
 use crate::services::background_tasks::{ClientStreamGuard, StreamingEvent, ToolCallStatus};
 use crate::services::text_language;
@@ -155,6 +155,9 @@ impl From<StreamRouteError> for StartError {
                 STALE_REVISION_MESSAGE => StartError::Refused(Msg::NotLatestQuestion),
                 ARCHIVED_CHAT_MESSAGE => StartError::Refused(Msg::ChatArchived),
                 DELEGATED_RUN_RUNNING_MESSAGE => StartError::Refused(Msg::TaskStillRunning),
+                // A card posted before it named a task's question: the card
+                // that asks the current one is posted afresh.
+                PAGE_OUT_OF_DATE_MESSAGE => StartError::DecisionsMismatch,
                 _ => StartError::Rejected(message),
             },
             // Teams sends no voice receipts; a refused one is a decision
@@ -669,6 +672,7 @@ impl Host {
         session: &Session,
         message_id: Uuid,
         decisions: Vec<(String, ApprovalChoice)>,
+        question_ids: &[String],
     ) -> Result<mpsc::Receiver<GenerationUpdate>, StartError> {
         let decisions = decisions
             .into_iter()
@@ -682,7 +686,8 @@ impl Host {
             })
             .collect();
         // Passed through as submitted: Erato checks that the set is exact.
-        let request = ContinueStreamRequest::with_decisions(message_id, decisions);
+        let request = ContinueStreamRequest::with_decisions(message_id, decisions)
+            .with_task_questions(question_ids);
         let started = start_continuation(
             &self.app_state,
             &session.policy,
@@ -1062,6 +1067,7 @@ fn completion_from_content(
                             server_id: child.mcp_server_id,
                             // The call runs in the task's own chat.
                             tool_call_id: None,
+                            question_id: Some(child.child_tool_call_id),
                             ..Default::default()
                         },
                         None => PendingApprovalItem {
@@ -1076,6 +1082,7 @@ fn completion_from_content(
                             server_id: request.mcp_server_id.clone(),
                             tool_call_id: (request.kind == ToolApprovalKind::McpTool)
                                 .then_some(item.tool_call_id),
+                            question_id: None,
                             card: None,
                         },
                     })
@@ -1268,6 +1275,14 @@ mod tests {
                 STALE_REVISION_MESSAGE.into(),
             )),
             StartError::Refused(Msg::NotLatestQuestion)
+        ));
+        // A card posted before it named a task's question is posted afresh.
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::CONFLICT,
+                PAGE_OUT_OF_DATE_MESSAGE.into(),
+            )),
+            StartError::DecisionsMismatch
         ));
         assert!(matches!(
             StartError::from(StreamRouteError::PlainText(

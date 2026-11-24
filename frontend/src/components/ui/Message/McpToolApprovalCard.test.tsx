@@ -223,6 +223,15 @@ afterEach(() => {
   useGenerationStatusStore.getState().reset();
 });
 
+/**
+ * A sent decision without the task question it names, for tests about
+ * something else; "names the question each task's item showed" checks it.
+ */
+const withoutQuestion = ({
+  child_tool_call_id: _question,
+  ...decision
+}: Record<string, unknown>) => decision;
+
 describe("McpToolApprovalCard", () => {
   it.each([
     ["Continue tool calls", "approve"],
@@ -1951,9 +1960,40 @@ describe("approval queue", () => {
   const sentDecisions = (fetchMock: ReturnType<typeof vi.fn>) =>
     (
       JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
-        decisions: unknown[];
+        decisions: Record<string, unknown>[];
+      }
+    ).decisions.map(
+      ({ child_tool_call_id: _question, ...decision }) => decision,
+    );
+
+  it("names the question each task's item showed", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={mixedRequest}
+        resolution={null}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("tool-approval-allow-all"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const sent = (
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+        decisions: { approval_id: string; child_tool_call_id?: string }[];
       }
     ).decisions;
+    expect(
+      sent.map(({ approval_id, child_tool_call_id }) => [
+        approval_id,
+        child_tool_call_id,
+      ]),
+    ).toEqual([
+      ["tool-call-1", undefined],
+      ["task-a", "child-call-1"],
+      ["task-b", "child-2"],
+    ]);
+  });
 
   it("shows the oldest open approval first, names its task and counts the rest", () => {
     renderCard(
@@ -2377,10 +2417,12 @@ describe("tasks waiting on the device", () => {
     approvals: [asking, askingTwo, waits],
   };
   const waitingStop = { ...delegatedTaskRequest, approvals: [waits] };
-  const sentBody = (fetchMock: ReturnType<typeof vi.fn>, call = 0) =>
-    JSON.parse((fetchMock.mock.calls[call][1] as { body: string }).body) as {
-      decisions?: { approval_id: string; decision: string }[];
-    };
+  const sentBody = (fetchMock: ReturnType<typeof vi.fn>, call = 0) => {
+    const body = JSON.parse(
+      (fetchMock.mock.calls[call][1] as { body: string }).body,
+    ) as { decisions?: Record<string, unknown>[] };
+    return { ...body, decisions: body.decisions?.map(withoutQuestion) };
+  };
 
   it("lists a waiting task with its host and no decision", () => {
     renderCard(
@@ -3054,7 +3096,10 @@ describe("document and response approvals", () => {
       headers: Record<string, string>;
     };
     return {
-      body: JSON.parse(init.body) as { decisions: unknown[] },
+      body: (({ decisions, ...body }) => ({
+        ...body,
+        decisions: decisions.map(withoutQuestion),
+      }))(JSON.parse(init.body) as { decisions: Record<string, unknown>[] }),
       headers: init.headers,
     };
   };
@@ -3169,8 +3214,8 @@ describe("document and response approvals", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
       const sent = JSON.parse(
         (fetchMock.mock.calls[1][1] as { body: string }).body,
-      ) as { decisions: unknown[] };
-      expect(sent.decisions).toEqual(
+      ) as { decisions: Record<string, unknown>[] };
+      expect(sent.decisions.map(withoutQuestion)).toEqual(
         [1, 2, 3].map((index) => ({
           approval_id: `task-${index}`,
           decision: "approve_context",
@@ -5369,9 +5414,11 @@ describe("tool-call limit with a task's question", () => {
   const sentDecisions = (fetchMock: ReturnType<typeof vi.fn>) =>
     (
       JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
-        decisions: unknown[];
+        decisions: Record<string, unknown>[];
       }
-    ).decisions;
+    ).decisions.map(
+      ({ child_tool_call_id: _question, ...decision }) => decision,
+    );
 
   it("asks the limit's choice first, then the task's question, and sends both", async () => {
     const fetchMock = okResponse();

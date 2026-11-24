@@ -18,6 +18,8 @@ export interface SeedableApprovalItem {
   input: unknown;
   child?: {
     child_chat_id: string;
+    /** The task's question this item asks; it changes when a task asks again. */
+    child_tool_call_id?: string;
     mcp_server_id: string;
     kind?: ToolApprovalKind | null;
   } | null;
