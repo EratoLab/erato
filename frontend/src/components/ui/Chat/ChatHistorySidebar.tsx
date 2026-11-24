@@ -26,7 +26,11 @@ import {
   useGroupedLoadMorePaused,
 } from "@/hooks/chat/useGroupedChatSessions";
 import { useScheduledFailureAlertShown } from "@/hooks/scheduled/useScheduledItems";
-import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
+import {
+  useIsNarrowScreen,
+  useResponsiveCollapsedMode,
+  useThemedIcon,
+} from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import {
   useAssistantHubConfig,
@@ -38,6 +42,7 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
+import { getAssistantUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
@@ -508,6 +513,26 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [collapsed, effectiveCollapsedMode],
     );
 
+    // On a narrow screen the open sidebar is a drawer over the page; after a
+    // pick in it the person wants to see where they went.
+    const isNarrowScreen = useIsNarrowScreen();
+    const closeDrawerAfterPick = useCallback(() => {
+      if (isNarrowScreen && !collapsed) {
+        onToggleCollapse?.();
+      }
+    }, [isNarrowScreen, collapsed, onToggleCollapse]);
+    const handleNewChatPick = useCallback(() => {
+      onNewChat?.();
+      closeDrawerAfterPick();
+    }, [onNewChat, closeDrawerAfterPick]);
+    const handleSessionPick = useCallback(
+      (sessionId: string) => {
+        onSessionSelect(sessionId);
+        closeDrawerAfterPick();
+      },
+      [onSessionSelect, closeDrawerAfterPick],
+    );
+
     // Get theme information
     const { assetPaths } = useTheme();
     const sidebarLogoPath = assetPaths.sidebarLogo;
@@ -738,16 +763,27 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const handleSearchClick = useCallback(() => {
       logger.log("[CHAT_FLOW] Navigating to search page");
       navigate("/search");
-    }, [navigate]);
+      closeDrawerAfterPick();
+    }, [navigate, closeDrawerAfterPick]);
 
     const handleAssistantsClick = useCallback(() => {
       logger.log("[ASSISTANTS_FLOW] Navigating to assistants page");
       navigate(assistantsLandingRoute);
-    }, [assistantsLandingRoute, navigate]);
+      closeDrawerAfterPick();
+    }, [assistantsLandingRoute, navigate, closeDrawerAfterPick]);
 
     const handleScheduledClick = useCallback(() => {
       navigate(scheduledRoute);
-    }, [navigate]);
+      closeDrawerAfterPick();
+    }, [navigate, closeDrawerAfterPick]);
+
+    const handleRecentAssistantPick = useCallback(
+      (assistantId: string) => {
+        navigate(getAssistantUrl(assistantId));
+        closeDrawerAfterPick();
+      },
+      [navigate, closeDrawerAfterPick],
+    );
 
     // Width is runtime state (slim vs expanded); the surface lives in
     // .sidebar-skin so [data-ui="sidebar"] stays themeable. The override
@@ -824,7 +860,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
-              <NewChatItem onNewChat={onNewChat} isSlimMode={isSlimMode} />
+              <NewChatItem
+                onNewChat={handleNewChatPick}
+                isSlimMode={isSlimMode}
+              />
 
               {/* Search Navigation Item */}
               <SearchNavigationItem
@@ -878,6 +917,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     <FrequentAssistantsList
                       limit={5}
                       showBottomDivider={true}
+                      onAssistantSelect={handleRecentAssistantPick}
                     />
                   </CollapsibleSection>
                 ) : (
@@ -892,6 +932,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     <FrequentAssistantsList
                       limit={5}
                       showBottomDivider={true}
+                      onAssistantSelect={handleRecentAssistantPick}
                     />
                   </div>
                 ))}
@@ -926,7 +967,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         <ResolvedChatHistoryList
                           sessions={pinnedSessions}
                           currentSessionId={currentSessionId}
-                          onSessionSelect={onSessionSelect}
+                          onSessionSelect={handleSessionPick}
                           onSessionArchive={onSessionArchive}
                           onSessionUnarchive={onSessionUnarchive}
                           onSessionEditTitle={onSessionEditTitle}
@@ -956,7 +997,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           <ResolvedChatHistoryList
                             sessions={sessions}
                             currentSessionId={currentSessionId}
-                            onSessionSelect={onSessionSelect}
+                            onSessionSelect={handleSessionPick}
                             onSessionArchive={onSessionArchive}
                             onSessionUnarchive={onSessionUnarchive}
                             onSessionEditTitle={onSessionEditTitle}
@@ -1008,7 +1049,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                               <ResolvedChatHistoryList
                                 sessions={group.sessions}
                                 currentSessionId={currentSessionId}
-                                onSessionSelect={onSessionSelect}
+                                onSessionSelect={handleSessionPick}
                                 onSessionArchive={onSessionArchive}
                                 onSessionUnarchive={onSessionUnarchive}
                                 onSessionEditTitle={onSessionEditTitle}

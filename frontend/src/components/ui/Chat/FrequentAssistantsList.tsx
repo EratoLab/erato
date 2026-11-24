@@ -2,6 +2,7 @@ import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useFrequentAssistants } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { getAssistantUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
 
 import { InteractiveContainer } from "../Container/InteractiveContainer";
@@ -69,7 +70,7 @@ export const FrequentAssistantsList = memo<FrequentAssistantsListProps>(
         onAssistantSelect(assistantId);
         return;
       }
-      navigate(`/a/${assistantId}`);
+      navigate(getAssistantUrl(assistantId));
     };
 
     // Don't render section if loading failed

@@ -308,7 +308,7 @@ const RemoveButton: React.FC<{
         "hover:text-[var(--theme-fg-primary)] disabled:cursor-not-allowed",
         // Hidden until hover or focus, but always shown where there is no hover.
         "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
-        "[@media(hover:none)]:opacity-100",
+        "no-hover:opacity-100",
       )
     }
   >
