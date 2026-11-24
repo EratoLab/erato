@@ -174,8 +174,8 @@ async function beginWithin(
 }
 
 /**
- * Writes one checked plan, for the in-message card and the server-called apply alike: the
- * co-author check, one host operation at a time, the write, the revert slot and the review.
+ * Writes one checked plan for the server's apply call: the co-author check, one host operation at
+ * a time, the write, the revert slot and the review the cards show.
  */
 export async function runWordPlanApply({
   key,
@@ -187,8 +187,6 @@ export async function runWordPlanApply({
   importConfirmed,
   commentRemovalsConfirmed,
   coauthors,
-  showDiagnosticOnCommentTick,
-  automatic,
   waitForOperationMs = 0,
   signal,
   onBeforeWrite,
@@ -202,13 +200,7 @@ export async function runWordPlanApply({
   importConfirmed: boolean;
   commentRemovalsConfirmed?: string;
   /** Set when the write replaces the whole document on Word for Windows: what the user saw. */
-  coauthors?: {
-    shown: WordCoauthorNotice | undefined;
-    onChange?: (now: WordCoauthorNotice | undefined) => void;
-  };
-  /** Without the card's own rows, the diagnostic tells the user why nothing ran. */
-  showDiagnosticOnCommentTick: boolean;
-  automatic?: () => boolean;
+  coauthors?: { shown: WordCoauthorNotice | undefined };
   waitForOperationMs?: number;
   /** Honoured only until the write begins: a write is never left half done. */
   signal?: AbortSignal;
@@ -217,10 +209,7 @@ export async function runWordPlanApply({
   if (signal?.aborted) return { kind: "stopped" };
   if (coauthors) {
     const now = wordCoauthorNotice(await readWordCoauthoring());
-    if (now !== coauthors.shown) {
-      coauthors.onChange?.(now);
-      if (now) return { kind: "coauthors", now };
-    }
+    if (now !== coauthors.shown && now) return { kind: "coauthors", now };
   }
   if (
     !host.beginOperation() &&
@@ -262,13 +251,7 @@ export async function runWordPlanApply({
       result?.status === "blocked" &&
       result.diagnostic?.reason === "comment-removals-need-confirmation"
     ) {
-      host.updateReview(key, {
-        applyStage: undefined,
-        status: "idle",
-        documentPlanDiagnostic: showDiagnosticOnCommentTick
-          ? result.diagnostic
-          : undefined,
-      });
+      host.updateReview(key, { applyStage: undefined, status: "idle" });
       return { kind: "comment-tick", diagnostic: result.diagnostic };
     }
     if (
@@ -308,7 +291,6 @@ export async function runWordPlanApply({
       documentPlanOutcome: result?.outcome,
       wholeDocumentBlock: undefined,
       detailsExpanded: false,
-      automatic: automatic?.() ?? false,
     });
     return { kind: "ran", run };
   } catch {

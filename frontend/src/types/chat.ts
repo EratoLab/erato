@@ -154,17 +154,6 @@ export interface HostArtifact {
    * actually implements.
    */
   allowedClientActions?: string[];
-  /**
-   * Actions the deployment enforces a per-use confirmation for (the facet's
-   * `client_actions_always_ask`). The client must not offer or honor a
-   * persistent "always allow" for these.
-   */
-  alwaysAskClientActions?: string[];
-  /**
-   * Per action, how far a persistent "always allow" reaches: `device` (the
-   * default) or `session_document`, kept only for this session and document.
-   */
-  clientActionGrantScopes?: Record<string, string>;
   /** Host-validated proposal; a rendering hint, never authorization to write. */
   proposedClientAction?: string;
   /**
@@ -175,21 +164,14 @@ export interface HostArtifact {
    */
   shouldRenderEmailCard?: boolean;
   /**
-   * The producing facet's `presentation` from `GET /me/facets`:
-   * `render_buttons` (default) or `auto_prompt`.
-   */
-  clientActionPresentation?: string;
-  /**
-   * Id of the assistant message this artifact was stamped from. Lets a
-   * fence renderer key once-per-message behavior (auto-prompt) stably
-   * across remounts.
+   * Id of the assistant message this artifact was stamped from, so a fence
+   * renderer finds its message and keeps its state stably across remounts.
    */
   messageId?: string;
   /**
    * True only when this assistant message finished streaming during the
    * current session (a status transition to complete was observed). False
-   * for messages loaded from history — auto-prompt must never fire for
-   * those.
+   * for messages loaded from history, whose send-time item is unknown.
    */
   isFreshCompletion?: boolean;
   /**
@@ -204,8 +186,7 @@ export interface HostArtifact {
    * A fresh completion ({@link HostArtifact.isFreshCompletion}) WITHOUT
    * this field means no send-time identity was recorded (no open item at
    * send, or the completion could not be matched to a send): executors must
-   * fail closed — never auto-prompt, and treat the draft as stale rather
-   * than as unguarded. Absent together with `isFreshCompletion` for history
+   * fail closed and treat the draft as stale rather than as unguarded. Absent together with `isFreshCompletion` for history
    * messages, where the generation-time item is unknown.
    */
   itemIdentity?: string;

@@ -412,8 +412,6 @@ describe("structured Word submissions", () => {
       facetId: "word_document_authoring",
       clientActionInfo: {
         clientActions: ["word.apply_document_plan"],
-        alwaysAskActions: [],
-        presentation: "auto_prompt",
       },
       content,
       messageId: "message-A",
@@ -452,7 +450,6 @@ describe("structured Word submissions", () => {
         facetId: "word_document_authoring",
         clientActionInfo: {
           clientActions: ["word.apply_edits"],
-          alwaysAskActions: [],
         },
         content,
         messageId: "message-A",
@@ -551,8 +548,6 @@ describe("Word draft repairs", () => {
       facetId: "word_document_authoring",
       clientActionInfo: {
         clientActions: ["word.apply_document_plan"],
-        alwaysAskActions: [],
-        presentation: "auto_prompt",
       },
       content,
       messageId: context.messageId,

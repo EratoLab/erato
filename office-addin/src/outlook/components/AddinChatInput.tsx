@@ -1100,7 +1100,7 @@ export const AddinChatInput = forwardRef<
       // guard must be anchored to the item the user actually sent from. A
       // send with NO item open records the no-item sentinel — a real value,
       // so neutral-context completions still count as fresh (item-independent
-      // actions like create-appointment can auto-prompt) while item-bound
+      // actions like create-appointment can run) while item-bound
       // executors treat it as a mismatch and fail closed.
       const sendItemIdentity = itemIdentity ?? NO_ITEM_SEND_IDENTITY;
       const sendConversationKey = conversationKey;

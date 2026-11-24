@@ -494,7 +494,7 @@ async function applyPlan(
         status: "blocked",
         diagnostic: diagnostic("compile", "compile-failed"),
       };
-    // Asked of every route and caller, Always and auto-prompt included: only the tick consents.
+    // Asked of every route and caller, the user's Always included: only the tick consents.
     const comments = wordPlanCommentConsequences(snapshot, compiled, prepared);
     if (
       comments.removals.length &&

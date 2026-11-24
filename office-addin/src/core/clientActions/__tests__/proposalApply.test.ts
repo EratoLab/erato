@@ -4,11 +4,9 @@ import {
   answerFences,
   carryOverMappingsFor,
   isLatestAssistantMessage,
-  isProposalChained,
   parseProposalApplyInput,
   proposalOnceByCallId,
   sameItem,
-  serverDecidedActions,
 } from "../proposalApply";
 
 import type { ApprovalToolInfo, ContentPart } from "@erato/frontend/library";
@@ -17,15 +15,6 @@ const text = (value: string): ContentPart => ({
   content_type: "text",
   text: value,
 });
-const proposal = (output: unknown): ContentPart =>
-  ({
-    content_type: "tool_use",
-    tool_call_id: "call-1",
-    tool_name: "propose_client_action",
-    status: "success",
-    input: { action: "outlook.reply" },
-    output,
-  }) as unknown as ContentPart;
 const context = { toolCallId: "call-1.apply", messageId: "m1", chatId: "c1" };
 
 describe("proposal apply input", () => {
@@ -51,25 +40,6 @@ describe("proposal apply input", () => {
       }),
     ).toMatchObject({ itemIdentity: null, confirmation: {} });
     expect(parseProposalApplyInput({ action: "outlook.reply" })).toBeNull();
-  });
-});
-
-describe("chained proposals", () => {
-  it("is chained only when the server named its call", () => {
-    expect(
-      isProposalChained([
-        proposal({
-          status: "proposed",
-          action: "outlook.reply",
-          apply: { call_id: "call-1.apply" },
-        }),
-      ]),
-    ).toBe(true);
-    expect(
-      isProposalChained([
-        proposal({ status: "proposed", action: "outlook.reply" }),
-      ]),
-    ).toBe(false);
   });
 });
 
@@ -168,6 +138,5 @@ describe("carry-over mappings from the server", () => {
     expect(mappings).toEqual([
       { serverKey: "outlook/open_reply", actions: ["outlook.reply"] },
     ]);
-    expect([...serverDecidedActions(mappings)]).toEqual(["outlook.reply"]);
   });
 });

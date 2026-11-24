@@ -25,50 +25,26 @@ import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
+const server = vi.hoisted(() => ({
+  decisions: {},
+}));
 
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   return {
     ...(await importOriginal<typeof EratoLibrary>()),
     SyntaxHighlightedCode: ({ code }: { code: string }) => <pre>{code}</pre>,
-    ActionConfirmationCard: (props: {
-      description?: unknown;
-      onAllowOnce: () => void;
-      onAlwaysAllow: () => void;
-      onDeny: () => void;
-      isBusy?: boolean;
-    }) => (
-      <div data-testid="confirmation-card">
-        <div data-testid="confirmation-description">
-          {props.description as never}
-        </div>
-        <button type="button" onClick={props.onAllowOnce}>
-          allow-once
-        </button>
-        <button type="button" onClick={props.onAlwaysAllow}>
-          always-allow
-        </button>
-        <button type="button" onClick={props.onDeny}>
-          deny
-        </button>
-      </div>
-    ),
     useChatContext: () => mockUseChatContext(),
     ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
       () => mockUseChatContext(),
     ),
     useHostArtifact: () => mockUseHostArtifact(),
-    usePersistedState: () => mockUsePersistedState(),
-    useConfirmationRegistryStore: (
-      selector: (state: {
-        registerConfirmation: () => void;
-        unregisterConfirmation: () => void;
-      }) => unknown,
-    ) =>
-      selector({
-        registerConfirmation: () => {},
-        unregisterConfirmation: () => {},
-      }),
+    useApprovalTools: () => [
+      { qualified_name: "word/apply_edits", client_actions: [APPLY] },
+      { qualified_name: "word/insert_at_cursor", client_actions: [INSERT] },
+    ],
+    useProfile: () => ({
+      profile: { client_tool_decisions: server.decisions },
+    }),
   };
 });
 
@@ -103,15 +79,11 @@ interface TestArtifact {
   messageId: string;
   cardFenceLanguages: string[];
   allowedClientActions: string[];
-  alwaysAskClientActions?: string[];
-  clientActionPresentation: string;
   isFreshCompletion?: boolean;
   itemIdentity?: string;
   proposedClientAction?: string;
 }
 
-// Unique per test: the once-per-message auto-prompt slot is module-level state
-// that intentionally survives remounts (and thus tests).
 let nextMessageId = 0;
 
 function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
@@ -122,7 +94,6 @@ function makeArtifact(overrides: Partial<TestArtifact> = {}): TestArtifact {
     messageId: `word-msg-${nextMessageId}`,
     cardFenceLanguages: ["erato-word-edits", "erato-word-insert"],
     allowedClientActions: [APPLY],
-    clientActionPresentation: "render_buttons",
     isFreshCompletion: true,
     itemIdentity: IDENTITY,
     ...overrides,
@@ -135,6 +106,7 @@ function renderCard(options: {
   content?: string;
   currentIdentity?: string | null;
   captures?: Map<string, WordDocumentCapture>;
+  /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
 }) {
   const artifact = options.artifact;
@@ -145,11 +117,7 @@ function renderCard(options: {
     messageOrder: [messageId],
     currentChatId: "chat-1",
   });
-  const setDecisions = vi.fn();
-  mockUsePersistedState.mockReturnValue([
-    options.decisions ?? {},
-    setDecisions,
-  ]);
+  server.decisions = options.decisions ?? {};
 
   const captures =
     options.captures ??
@@ -171,7 +139,7 @@ function renderCard(options: {
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  return { ...view, setDecisions };
+  return view;
 }
 
 const flush = () => act(() => Promise.resolve());
@@ -255,17 +223,24 @@ describe("WordHostCardRenderer", () => {
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
     });
 
-    it("hides the action and ignores the proposal on a `never` decision", () => {
+    it("hides the action the user set to Never", () => {
       renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "never" },
+        artifact: makeArtifact({ proposedClientAction: APPLY }),
+        decisions: { "word/apply_edits": "never_allow" },
       });
 
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
+    });
+
+    it("still offers the action under Ask or Always", () => {
+      renderCard({
+        artifact: makeArtifact(),
+        decisions: { "word/apply_edits": "always_allow" },
+      });
+
+      expect(
+        screen.getByRole("button", { name: /^Apply (edit|all \d+ edits)$/ }),
+      ).toBeEnabled();
     });
   });
 
@@ -298,38 +273,6 @@ describe("WordHostCardRenderer", () => {
       expect(
         screen.getByText(/different document than the one open now/),
       ).toBeInTheDocument();
-    });
-
-    it("re-checks identity at execution, not only at render", async () => {
-      const artifact = makeArtifact({
-        clientActionPresentation: "auto_prompt",
-        proposedClientAction: APPLY,
-      });
-      const captures = new Map<string, WordDocumentCapture>([
-        [artifact.messageId, capture()],
-      ]);
-      const { rerender } = renderCard({ artifact, captures });
-      await flush();
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-
-      rerender(
-        <WordWriteProvider
-          documentIdentity="pane-session:switched-away"
-          capturesByAssistantMessageId={captures}
-        >
-          <WordHostCardRenderer
-            language="erato-word-edits"
-            content={EDITS_FENCE}
-          />
-        </WordWriteProvider>,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(
-        screen.getAllByText(/different document than the one open now/).length,
-      ).toBeGreaterThan(0);
     });
 
     it("writes nothing when the identity is missing on either side", () => {
@@ -370,7 +313,6 @@ describe("WordHostCardRenderer", () => {
       expect(report).toBeVisible();
       expect(report).toHaveTextContent("Paragraph 2");
       expect(report).toHaveTextContent("Applied");
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
     });
 
     it("reports a partial batch and applies only the surviving edits", async () => {
@@ -515,11 +457,8 @@ describe("WordHostCardRenderer", () => {
       ).toBeInTheDocument();
     });
 
-    it("never offers or prompts for a proposal read under Track Changes", async () => {
-      const artifact = makeArtifact({
-        clientActionPresentation: "auto_prompt",
-        proposedClientAction: APPLY,
-      });
+    it("never offers a proposal read under Track Changes", async () => {
+      const artifact = makeArtifact({ proposedClientAction: APPLY });
       renderCard({
         artifact,
         captures: new Map([
@@ -529,7 +468,6 @@ describe("WordHostCardRenderer", () => {
       await flush();
 
       expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
       expect(
         screen.getByText(/Track Changes is on, so Erato doesn't apply/),
       ).toBeInTheDocument();
@@ -724,7 +662,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       render(
         <WordWriteProvider
           documentIdentity={IDENTITY}
@@ -778,7 +715,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       render(
         <WordWriteProvider
           documentIdentity={IDENTITY}
@@ -900,7 +836,6 @@ describe("WordHostCardRenderer", () => {
         messageOrder: [artifact.messageId],
         currentChatId: "chat-1",
       });
-      mockUsePersistedState.mockReturnValue([{}, vi.fn()]);
       mockUseHostArtifact.mockReturnValue(artifact);
       const cards = (withInsert: boolean) => (
         <WordWriteProvider
@@ -980,242 +915,6 @@ describe("WordHostCardRenderer", () => {
     });
   });
 
-  describe("auto_prompt consent", () => {
-    const holdWordRuns = () => {
-      const run = word.word.run.getMockImplementation()!;
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      word.word.run.mockImplementation(async (callback) => {
-        await held;
-        return run(callback);
-      });
-      return () =>
-        act(async () => {
-          release();
-          await held;
-          await Promise.resolve();
-        });
-    };
-
-    it.each([
-      ["Off", true],
-      ["TrackAll", false],
-    ] as const)(
-      "opens no prompt for edits before the live Track Changes mode (%s) is known",
-      async (mode, prompted) => {
-        word.word.setTrackingMode(mode);
-        const release = holdWordRuns();
-        renderCard({
-          artifact: makeArtifact({
-            clientActionPresentation: "auto_prompt",
-            proposedClientAction: APPLY,
-          }),
-        });
-        await flush();
-        expect(screen.queryByTestId("confirmation-card")).toBeNull();
-
-        await release();
-        await flush();
-
-        expect(!!screen.queryByTestId("confirmation-card")).toBe(prompted);
-        expect(word.word.writes()).toEqual([]);
-      },
-    );
-
-    it("explains instead of writing when Track Changes was turned on before Allow", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-
-      word.word.setTrackingMode("TrackAll");
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(screen.queryByRole("button", { name: /^Apply/ })).toBeNull();
-      expect(
-        screen.getByText(/Track Changes is on, so Erato doesn't apply/),
-      ).toBeInTheDocument();
-
-      word.word.setTrackingMode("Off");
-      await act(async () => {
-        window.dispatchEvent(new Event("blur"));
-        window.dispatchEvent(new Event("focus"));
-        await Promise.resolve();
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Apply edit" }));
-      await flush();
-
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-    });
-
-    it("surfaces ONE card per turn covering the whole edit list", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        content: JSON.stringify({
-          edits: [
-            { paragraph: 1, text: "First." },
-            { paragraph: 3, text: "Third." },
-          ],
-        }),
-      });
-      await flush();
-
-      const cards = screen.getAllByTestId("confirmation-card");
-      expect(cards).toHaveLength(1);
-      expect(
-        screen.getByTestId("confirmation-description"),
-      ).toBeEmptyDOMElement();
-      expect(
-        screen.getByText(/Every proposed edit is applied/),
-      ).toBeInTheDocument();
-      expect(screen.getAllByTestId("word-edits-list")).toHaveLength(1);
-      expect(screen.getByTestId("word-edits-list")).toHaveTextContent(
-        "Paragraph 1",
-      );
-      expect(screen.getByTestId("word-edits-list")).toHaveTextContent(
-        "Paragraph 3",
-      );
-    });
-
-    it("writes only after the card is allowed", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-      expect(word.word.writes()).toEqual([]);
-
-      fireEvent.click(screen.getByRole("button", { name: "allow-once" }));
-      await flush();
-
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-    });
-
-    it("writes nothing when the card is denied", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-
-      fireEvent.click(screen.getByRole("button", { name: "deny" }));
-      await flush();
-
-      expect(word.word.writes()).toEqual([]);
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "Proposal declined",
-      );
-    });
-
-    it("stores the grant under the Word key when Always allow is chosen", async () => {
-      const { setDecisions } = renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-      });
-      await flush();
-
-      fireEvent.click(screen.getByRole("button", { name: "always-allow" }));
-      await flush();
-
-      expect(setDecisions).toHaveBeenCalledWith({
-        [`${REVIEW_FACET}/${APPLY}`]: "always",
-      });
-    });
-
-    it("executes with no prompt on a stored `always`, and still reports", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "always" },
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.paragraphs()[1].text).toBe("Bravo, revised.");
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "1 edit applied",
-      );
-      expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-        "Always allow",
-      );
-      expect(screen.getByTestId("word-edit-report")).not.toBeVisible();
-    });
-
-    it("clamps a stored `always` back to a card when the deployment enforces asking", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-          alwaysAskClientActions: [APPLY],
-        }),
-        decisions: { [`${REVIEW_FACET}/${APPLY}`]: "always" },
-      });
-      await flush();
-
-      expect(screen.getByTestId("confirmation-card")).toBeInTheDocument();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing for a message this pane did not complete", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-          isFreshCompletion: false,
-        }),
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing when the open document is a different one", async () => {
-      renderCard({
-        artifact: makeArtifact({
-          clientActionPresentation: "auto_prompt",
-          proposedClientAction: APPLY,
-        }),
-        currentIdentity: "pane-session:other",
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-
-    it("surfaces nothing under the default render_buttons presentation", async () => {
-      renderCard({
-        artifact: makeArtifact({ proposedClientAction: APPLY }),
-      });
-      await flush();
-
-      expect(screen.queryByTestId("confirmation-card")).toBeNull();
-      expect(word.word.writes()).toEqual([]);
-    });
-  });
   describe("v1 review contract", () => {
     it("keeps all 41 edits in scope when filtering a long document", async () => {
       const texts = Array.from(

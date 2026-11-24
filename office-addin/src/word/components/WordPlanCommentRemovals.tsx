@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 
 /**
  * The comment threads a plan deletes, one row per thread, and the unticked box that consents to
- * deleting them. The box is the only consent: Always allow and auto-prompt never tick it (X-4).
+ * deleting them. The box is the only consent: Always allow never ticks it (X-4).
  */
 export function WordPlanCommentRemovals({
   removals,

@@ -5,7 +5,6 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,43 +42,26 @@ import type * as EratoLibrary from "@erato/frontend/library";
 
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
+const server = vi.hoisted(() => ({
+  decisions: {},
+}));
 
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
-  ActionConfirmationCard: (props: {
-    onAllowOnce: () => void;
-    onAlwaysAllow: () => void;
-    onDeny: () => void;
-  }) => (
-    <div data-testid="confirmation-card">
-      <button type="button" onClick={props.onAllowOnce}>
-        allow-once
-      </button>
-      <button type="button" onClick={props.onAlwaysAllow}>
-        always-allow
-      </button>
-      <button type="button" onClick={props.onDeny}>
-        deny
-      </button>
-    </div>
-  ),
   useChatContext: () => mockUseChatContext(),
   ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
     () => mockUseChatContext(),
   ),
   useHostArtifact: () => mockUseHostArtifact(),
-  usePersistedState: () => mockUsePersistedState(),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      registerConfirmation: () => void;
-      unregisterConfirmation: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
-    }),
+  useApprovalTools: () => [
+    {
+      qualified_name: "word/replace_selection",
+      client_actions: ["word.replace_selection"],
+    },
+  ],
+  useProfile: () => ({
+    profile: { client_tool_decisions: server.decisions },
+  }),
 }));
 
 const IDENTITY = "https://contoso.sharepoint.com/report.docx";
@@ -102,7 +84,7 @@ async function captureOf(
 function renderCard(options: {
   capture: WordSelectionCapture | null;
   identity?: string;
-  presentation?: string;
+  /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
   proposed?: boolean;
   content?: string;
@@ -118,7 +100,6 @@ function renderCard(options: {
     messageId,
     cardFenceLanguages: ["erato-word-replace"],
     allowedClientActions: [REPLACE],
-    clientActionPresentation: options.presentation ?? "render_buttons",
     isFreshCompletion: true,
     itemIdentity: IDENTITY,
     proposedClientAction: options.proposed ? REPLACE : undefined,
@@ -150,7 +131,7 @@ function renderCard(options: {
     messageOrder: ["user", messageId],
     currentChatId: "chat-1",
   });
-  mockUsePersistedState.mockReturnValue([options.decisions ?? {}, vi.fn()]);
+  server.decisions = options.decisions ?? {};
   const restoreRequest = vi.fn();
   const element = (identity: string) => (
     <WordWriteProvider
@@ -465,14 +446,13 @@ describe("WordSelectionCard", () => {
 
   it("explains a selection Erato can only use as context and offers no Replace", async () => {
     const capture = await captureOf(host, { p: "HT1", text: "after words" });
-    renderCard({ capture, proposed: true, presentation: "auto_prompt" });
+    renderCard({ capture, proposed: true });
     expect(
       screen.getByText(
         "This passage holds a link, field, comment, note, picture or other content a rewrite would lose.",
       ),
     ).toBeInTheDocument();
     expect(replaceButton()).toBeNull();
-    expect(screen.queryByTestId("confirmation-card")).toBeNull();
     await act(() => Promise.resolve());
     expect(host.writeSyncs()).toEqual([]);
   });
@@ -877,30 +857,28 @@ describe("WordSelectionCard", () => {
     expect(host.writeSyncs()).toEqual([]);
   });
 
-  it("replaces once on its own under Always allow", async () => {
+  it("offers no Replace for an action the user set to Never", async () => {
     const capture = await captureOf(host, { p: "PL1" });
     renderCard({
       capture,
-      presentation: "auto_prompt",
       proposed: true,
-      decisions: { [`word_selection/${REPLACE}`]: "always" },
+      decisions: { "word/replace_selection": "never_allow" },
     });
-    await waitFor(() => expect(host.paragraphs()[2].text).toBe(PROPOSAL));
-    await screen.findByText("Replaced the selected passage.");
-    expect(host.writeSyncs()).toHaveLength(1);
-  });
-
-  it("asks instead of replacing under Always when the request carried other people's comments (L2)", async () => {
-    const capture = await captureOf(host, { p: "PL1" });
-    renderCard({
-      capture: { ...capture, commentTaint: true } as WordSelectionCapture,
-      presentation: "auto_prompt",
-      proposed: true,
-      decisions: { [`word_selection/${REPLACE}`]: "always" },
-    });
-    expect(await screen.findByTestId("confirmation-card")).toBeInTheDocument();
+    expect(replaceButton()).toBeNull();
     await act(() => Promise.resolve());
     expect(host.writeSyncs()).toEqual([]);
+  });
+
+  it("writes nothing on its own, whatever the user decided for Erato", async () => {
+    const capture = await captureOf(host, { p: "PL1" });
+    renderCard({
+      capture,
+      proposed: true,
+      decisions: { "word/replace_selection": "always_allow" },
+    });
+    await act(() => Promise.resolve());
+    expect(host.writeSyncs()).toEqual([]);
+    expect(replaceButton()).toBeEnabled();
   });
 
   describe("several versions in one answer", () => {
@@ -1078,52 +1056,6 @@ describe("WordSelectionCard", () => {
           .map((p) => p.text),
       ).toEqual([original, SHORTER, BRIEFER]);
     });
-
-    it.each([
-      [1, true],
-      [2, false],
-    ] as const)(
-      "under Always allow, with %i version(s), replaces on its own: %s",
-      async (count, written) => {
-        const capture = await captureOf(host, { p: "PL1" });
-        renderCard({
-          capture,
-          versions: [SHORTER, BRIEFER].slice(0, count),
-          presentation: "auto_prompt",
-          proposed: true,
-          decisions: { [`word_selection/${REPLACE}`]: "always" },
-        });
-        if (written) {
-          await screen.findByText("Replaced the selected passage.");
-          expect(host.paragraphs()[2].text).toBe(SHORTER);
-        } else {
-          await act(() => Promise.resolve());
-          expect(host.writeSyncs()).toEqual([]);
-          expect(
-            screen.getAllByRole("button", { name: "Replace" }),
-          ).toHaveLength(2);
-        }
-      },
-    );
-
-    it.each([
-      [1, true],
-      [2, false],
-    ] as const)(
-      "under ask, with %i version(s), opens the confirmation on its own: %s",
-      async (count, opened) => {
-        const capture = await captureOf(host, { p: "PL1" });
-        renderCard({
-          capture,
-          versions: [SHORTER, BRIEFER].slice(0, count),
-          presentation: "auto_prompt",
-          proposed: true,
-        });
-        await act(() => Promise.resolve());
-        expect(!!screen.queryByTestId("confirmation-card")).toBe(opened);
-        expect(host.writeSyncs()).toEqual([]);
-      },
-    );
 
     it("replaces again with the same version after its own Undo", async () => {
       const capture = await captureOf(host, { p: "PL1" });

@@ -45,9 +45,11 @@ const inclusionOff = (): Promise<ClientToolExecutionResult> =>
 /**
  * The Word pane's client tools. Only the document read takes delegated tasks' calls (contract §7);
  * the writes and the comment read stay with the coordinator. The two apply tools are the server's
- * own calls after an accepted submission; they are offered only while the document is included. The
- * proposal tools are the server's calls for a proposed action the user approved in the chat. With inclusion off a task's call is
- * capture-unavailable at once: the pane clears the capture only after the render commits.
+ * own calls after an accepted submission; a plan's is offered only while the document is included,
+ * a comment change's always, as comment changes can be made without the document. The proposal tools
+ * are the server's calls for a proposed action the user approved in the chat. With inclusion off a
+ * task's call is capture-unavailable at once: the pane clears the capture only after the render
+ * commits.
  */
 export function registerWordClientTools({
   readEnabled,
@@ -91,10 +93,10 @@ export function registerWordClientTools({
       createWordApplyPlanExecutor({ readEnabled }),
       readEnabled,
     ),
+    // The answer has no Apply of its own, so a comment change made without the document applies too.
     registerClientToolExecutor(
       WORD_APPLY_COMMENTS_TOOL,
       createWordApplyCommentsExecutor({ readEnabled }),
-      readEnabled,
     ),
     // The server's calls for proposed actions; each writes on the copy taken at Send.
     ...Object.values(WORD_PROPOSAL_TOOLS).map((tool) =>

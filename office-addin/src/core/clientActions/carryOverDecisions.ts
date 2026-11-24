@@ -1,6 +1,23 @@
-import { isClientActionDecision, parseDecisionKey } from "./clientActionPolicy";
+/**
+ * The pane's own Ask, Always and Never, as it kept them per facet and action before the server took
+ * them over. Read only to carry them over; kept for two more releases after the pane stopped
+ * deciding.
+ */
+type ClientActionDecision = "ask" | "always" | "never";
 
-import type { ClientActionDecision } from "./clientActionPolicy";
+const isClientActionDecision = (
+  value: unknown,
+): value is ClientActionDecision =>
+  value === "ask" || value === "always" || value === "never";
+
+/** Facet ids may contain `/`, action ids never do: the last separator splits the stored key. */
+function parseDecisionKey(
+  key: string,
+): { facetId: string; action: string } | null {
+  const separator = key.lastIndexOf("/");
+  if (separator <= 0 || separator === key.length - 1) return null;
+  return { facetId: key.slice(0, separator), action: key.slice(separator + 1) };
+}
 
 /** Which pane actions a server-applied tool carries out, as the server lists them. */
 export interface CarryOverMapping {

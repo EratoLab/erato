@@ -11,7 +11,6 @@ import { WordSettingsDialog } from "./components/WordSettingsDialog";
 import { useWordDocumentCaptures } from "./hooks/useWordDocumentCaptures";
 import { WordWriteProvider } from "./providers/WordWriteProvider";
 import { buildWordArtifact } from "./utils/buildWordArtifact";
-import { WORD_CLIENT_ACTION_DECISIONS_KEY } from "./utils/clientActionPolicy";
 import {
   WORD_APPLY_COMMENTS_TOOL,
   WORD_APPLY_PLAN_TOOL,
@@ -35,6 +34,8 @@ import type { HostArtifact, Message } from "@erato/frontend/library";
 
 /** The namespace of the Word tools the server calls. */
 const WORD_NAMESPACE = "word";
+/** Where the pane kept its own Ask, Always and Never; read once to carry them over to the server. */
+const WORD_PANE_DECISIONS_KEY = "erato.addin.word.clientActionDecisions";
 
 type PaneMessage = AddinChatController["messages"][string];
 
@@ -146,7 +147,7 @@ function WordAddinChatHost({ controller }: AddinChatHostProps) {
     if (wordMappings.length === 0) return;
     void carryOverClientDecisions({
       host: "word",
-      storageKey: WORD_CLIENT_ACTION_DECISIONS_KEY,
+      storageKey: WORD_PANE_DECISIONS_KEY,
       mappings: wordMappings,
       offered: offeredApplyTools,
       sessionOnly: (facetId, action) =>

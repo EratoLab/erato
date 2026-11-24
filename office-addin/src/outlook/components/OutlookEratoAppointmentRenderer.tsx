@@ -1,7 +1,4 @@
-import {
-  ActionConfirmationCard,
-  useOutlookArtifact,
-} from "@erato/frontend/library";
+import { useOutlookArtifact } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -9,16 +6,8 @@ import {
   ACTION_BUTTON_CLASS,
   PRIMARY_ACTION_BUTTON_CLASS,
 } from "../../core/clientActions/clientActionButtonStyles";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useClientActionDecisions } from "../../core/clientActions/useClientActionDecisions";
-import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import {
-  decisionKey,
-  isActionDenied,
-  outlookClientActionDecisionStore,
-} from "../utils/clientActionPolicy";
-import {
-  clientActionDisplayLabel,
   offerableAppointmentClientActions,
   type OutlookAppointmentClientAction,
 } from "../utils/outlookClientActions";
@@ -41,10 +30,9 @@ const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
 };
 
 /**
- * The appointment's time range for the summary and the confirmation card,
- * rendered in the runtime's local zone — which is the zone the facet template
- * instructed the model to emit (`{{timezone}}` is captured from the same
- * runtime at send time).
+ * The appointment's time range for the summary, rendered in the runtime's
+ * local zone — which is the zone the facet template instructed the model to
+ * emit (`{{timezone}}` is captured from the same runtime at send time).
  */
 function formatAppointmentWhen(details: AppointmentDetails): string {
   const start = new Date(details.start);
@@ -80,8 +68,8 @@ function formatAttendees(details: AppointmentDetails): string {
  * Outlook item: the whole payload lives in this fence, and
  * `displayNewAppointmentForm` sits on the mailbox (not the item), so it works
  * identically in read, compose, and no-item contexts and cannot act on "the
- * wrong email". The auto-prompt freshness/identity guards still apply — they
- * gate SURFACING, not payload correctness.
+ * wrong email". A click is the user's consent; an action set to Never in the
+ * tool decisions is not offered.
  *
  * While the fence is still streaming (or the model emitted malformed JSON)
  * the payload doesn't parse; the raw content renders as a muted block with no
@@ -90,16 +78,8 @@ function formatAttendees(details: AppointmentDetails): string {
 export function OutlookEratoAppointmentRenderer({
   content,
 }: EratoAppointmentCodeBlockProps) {
-  const { itemIdentity } = useOutlookMailItem();
   const artifact = useOutlookArtifact();
-  const [decisions, setDecisions] = useClientActionDecisions(
-    outlookClientActionDecisionStore,
-  );
-  const facetId = artifact?.facetId ?? "";
-  const enforcedAskActions = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
-  );
+  const neverAllowed = useNeverAllowedActions("outlook");
   const details = useMemo(() => parseAppointmentDetails(content), [content]);
 
   const offeredActions = useMemo<OutlookAppointmentClientAction[]>(
@@ -110,17 +90,9 @@ export function OutlookEratoAppointmentRenderer({
       details && isCreateAppointmentSupported()
         ? offerableAppointmentClientActions(
             artifact?.allowedClientActions,
-          ).filter(
-            (action) =>
-              !isActionDenied({
-                facetId,
-                action,
-                decisions,
-                enforcedAskActions,
-              }),
-          )
+          ).filter((action) => !neverAllowed.has(action))
         : [],
-    [details, artifact, facetId, decisions, enforcedAskActions],
+    [details, artifact, neverAllowed],
   );
   const proposedAction =
     artifact?.proposedClientAction &&
@@ -151,65 +123,25 @@ export function OutlookEratoAppointmentRenderer({
     [],
   );
 
-  /** Resolves `true` only when the appointment form actually opened. */
-  const executeAppointment = useCallback(async (): Promise<boolean> => {
+  // A click IS the consent: the summary above the button discloses the full
+  // payload, and nothing is saved or sent until the user does it in Outlook.
+  const handleActionClick = useCallback(async () => {
     if (!details || !isCreateAppointmentSupported()) {
       setStatus("error");
       scheduleStatusReset(4000);
-      return false;
+      return;
     }
     setStatus("opening");
     try {
       await openNewAppointmentForm(details);
       setStatus("done");
       scheduleStatusReset(2000);
-      return true;
     } catch (err) {
       console.warn("Failed to open the new appointment form:", err);
       setStatus("error");
       scheduleStatusReset(4000);
-      return false;
     }
   }, [details, scheduleStatusReset]);
-
-  const buildSummary = useCallback(() => details, [details]);
-
-  // Shared confirm-card state machine + auto-prompt one-shot. The summary is
-  // the parsed fence payload — exactly what the form will be prefilled with.
-  // create_appointment is item-independent (payload lives in the fence, form
-  // sits on the mailbox), so passing the send-time identity as the current one
-  // makes the identity gate a no-op; freshness/latest/once-per-message still
-  // bound WHEN it auto-prompts. Also covers unsaved-compose, whose minted
-  // identity re-mints on every re-resolve and could never match itself.
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<
-      AppointmentDetails,
-      OutlookAppointmentClientAction
-    >({
-      promptScope: "appointment",
-      facetId: artifact?.facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute: executeAppointment,
-      itemIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId: artifact?.messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
-      proposedAction,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: artifact?.itemIdentity,
-    });
-
-  // A click IS the consent (universal rule, see clientActionPolicy header):
-  // the summary above the button discloses the full payload, and the confirm
-  // card exists only for the assistant-initiated auto-prompt path.
-  const handleActionClick = useCallback(
-    (_action: OutlookAppointmentClientAction) => {
-      void executeAppointment();
-    },
-    [executeAppointment],
-  );
 
   // Streaming / malformed payload: no actionable card, keep the raw text
   // visible but unstyled as an artifact.
@@ -288,8 +220,8 @@ export function OutlookEratoAppointmentRenderer({
             <button
               key={action}
               type="button"
-              onClick={() => handleActionClick(action)}
-              disabled={isBusy || isConfirmPending}
+              onClick={() => void handleActionClick()}
+              disabled={isBusy}
               className={
                 action === proposedAction
                   ? PRIMARY_ACTION_BUTTON_CLASS
@@ -322,56 +254,6 @@ export function OutlookEratoAppointmentRenderer({
               "Failed to open the appointment form. You can create the appointment manually in Outlook.",
           })}
         </p>
-      )}
-      {confirmCard && (
-        <ActionConfirmationCard
-          // Keyed per request: a replacement card remounts so the mount-only
-          // scroll/focus behavior applies to the new confirmation.
-          key={confirmCard.requestId}
-          description={
-            <div className="space-y-2 text-sm text-theme-fg-secondary">
-              <p className="font-medium text-theme-fg-primary">
-                {clientActionDisplayLabel(confirmCard.action)}
-              </p>
-              <p>
-                {t({
-                  id: "officeAddin.appointmentRenderer.confirmMessage",
-                  message:
-                    "This opens a prefilled appointment form in Outlook. Nothing is saved or sent until you do it there.",
-                })}
-              </p>
-              <p className="break-words text-xs">
-                {formatAppointmentWhen(confirmCard.summary)}
-                {confirmCard.summary.attendees.length > 0 ||
-                (confirmCard.summary.optionalAttendees?.length ?? 0) > 0
-                  ? ` · ${formatAttendees(confirmCard.summary)}`
-                  : ""}
-              </p>
-            </div>
-          }
-          onAllowOnce={() => allowCard(confirmCard)}
-          onAlwaysAllow={() => {
-            // Persist the grant for THIS facet + action, then execute. The
-            // store is the source the settings page mirrors and revises.
-            setDecisions({
-              ...decisions,
-              [decisionKey(facetId, confirmCard.action)]: "always",
-            });
-            allowCard(confirmCard);
-          }}
-          alwaysAllowDisabledReason={
-            enforcedAskActions.includes(confirmCard.action)
-              ? t({
-                  id: "officeAddin.appointmentRenderer.alwaysAllowLocked",
-                  message:
-                    "Your organization requires confirmation each time this action runs automatically.",
-                })
-              : undefined
-          }
-          onDeny={() => denyCard(confirmCard)}
-          isBusy={isBusy}
-          scrollIntoViewOnMount={confirmCard.autoTriggered}
-        />
       )}
     </div>
   );

@@ -42,7 +42,6 @@ import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
 import { useOutlookProposalTools } from "./hooks/useOutlookProposalTools";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
-import { outlookClientActionDecisionStore } from "./utils/clientActionPolicy";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
@@ -105,6 +104,9 @@ const PIN_HINT_DISMISSED_KEY = "erato.outlookAddin.pinHintDismissed";
 const pinHintDismissedPersistedOptions: PersistedStateOptions<boolean> = {
   parse: (value) => (typeof value === "boolean" ? value : null),
 };
+
+/** Where the pane kept its own Ask, Always and Never; read once to carry them over to the server. */
+const OUTLOOK_PANE_DECISIONS_KEY = "erato.outlookAddin.clientActionDecisions";
 
 export function OutlookAddinChat({
   assistantId,
@@ -564,7 +566,7 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     if (outlookMappings.length === 0) return;
     void carryOverClientDecisions({
       host: "outlook",
-      storageKey: outlookClientActionDecisionStore.storageKey,
+      storageKey: OUTLOOK_PANE_DECISIONS_KEY,
       mappings: outlookMappings,
       offered: new Set(outlookMappings.map((mapping) => mapping.serverKey)),
       sessionOnly: (facetId, action) =>
