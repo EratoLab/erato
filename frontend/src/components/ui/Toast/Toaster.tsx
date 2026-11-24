@@ -66,6 +66,7 @@ export function Toaster({ placement = "bottom-right" }: ToasterProps) {
       })}
       className={clsx(
         "pointer-events-none z-[1000] flex flex-col gap-2 p-4 sm:p-6",
+        "mb-[var(--safe-area-bottom)] ml-[var(--safe-area-left)] mr-[var(--safe-area-right)] mt-[var(--safe-area-top)]",
         placementOrigin[placement],
         placementClasses[placement],
       )}
