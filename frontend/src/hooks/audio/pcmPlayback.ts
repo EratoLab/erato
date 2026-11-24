@@ -27,10 +27,24 @@ export async function resumePlaybackContext(): Promise<AudioContext> {
     context = new AudioContext();
     reviveOnReturn(context);
   }
-  if (standingSince !== undefined) revive(context);
+  retryIfStanding(context, 0);
   if (revival) await revival;
   await context.resume();
   return context;
+}
+
+/** A tap asks for the voice now; voices arriving on their own wait a gap. */
+function retryIfStanding(playback: AudioContext, gapMs = REVIVAL_RETRY_MS) {
+  if (
+    reviving ||
+    playback.state !== "running" ||
+    standingSince === undefined ||
+    Date.now() - standingSince < gapMs ||
+    retriesLeft <= 0
+  )
+    return;
+  retriesLeft -= 1;
+  revive(playback);
 }
 
 function revive(playback: AudioContext) {
@@ -71,8 +85,7 @@ export function playbackContext(): AudioContext | undefined {
 
 /**
  * Whether audio queued on the context will be heard: it runs, or it is
- * suspended only for a moment while its clock is started again. Asked before
- * a voice plays, so a clock still standing is tried again here.
+ * suspended only for a moment while its clock is started again.
  */
 export function playbackPlays(
   playback: AudioContext | undefined,
@@ -81,16 +94,7 @@ export function playbackPlays(
   const plays =
     playback.state === "running" ||
     (revival !== undefined && playback === context);
-  if (
-    playback === context &&
-    playback.state === "running" &&
-    standingSince !== undefined &&
-    Date.now() - standingSince >= REVIVAL_RETRY_MS &&
-    retriesLeft > 0
-  ) {
-    retriesLeft -= 1;
-    revive(playback);
-  }
+  if (playback === context) retryIfStanding(playback);
   return plays;
 }
 

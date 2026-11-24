@@ -405,6 +405,27 @@ describe("the shared playback context after a phone lock", () => {
     expect(playback.suspend).toHaveBeenCalledTimes(3);
   });
 
+  it("tries a clock that stays standing again at most every 2 s and five times per return", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(playback.suspend).toHaveBeenCalledTimes(3);
+
+    for (let chunk = 0; chunk < 40; chunk++) {
+      playbackPlays(playback as unknown as AudioContext);
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(playback.suspend).toHaveBeenCalledTimes(3 + 5 * 3);
+  });
+
   it("tries again when read aloud is tapped, after the revival on return did not take", async () => {
     const { resumePlaybackContext } = await import("./pcmPlayback");
     await resumePlaybackContext();
