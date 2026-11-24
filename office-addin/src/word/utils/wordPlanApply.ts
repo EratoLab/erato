@@ -161,8 +161,9 @@ export type WordPlanApplyOutcome =
 
 const OPERATION_POLL_MS = 100;
 
-async function beginWithin(
-  host: WordPlanApplyHost,
+/** Takes Word's one operation, waiting up to `waitMs` for another to end. */
+export async function beginWithin(
+  host: Pick<WordPlanApplyHost, "beginOperation">,
   waitMs: number,
 ): Promise<boolean> {
   const until = Date.now() + waitMs;

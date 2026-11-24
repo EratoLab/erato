@@ -104,6 +104,7 @@ function bridgeFor(
     messageContext: () => stored,
     captureFor: () => undefined,
     reviewFor: () => undefined,
+    locationGeneration: () => 0,
   };
 }
 

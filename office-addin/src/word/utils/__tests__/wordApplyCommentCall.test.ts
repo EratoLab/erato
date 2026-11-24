@@ -52,6 +52,7 @@ const bridge: WordWriteBridge = {
   messageContext: () => ({}),
   captureFor: () => undefined,
   reviewFor: () => undefined,
+  locationGeneration: () => 0,
 };
 
 const context = {

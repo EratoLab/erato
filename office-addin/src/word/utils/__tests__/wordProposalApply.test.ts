@@ -59,6 +59,7 @@ function host(options: {
     captureFor: () =>
       options.copy === null ? undefined : (options.copy ?? capture()),
     reviewFor: (key) => reviews.get(key) as WordReviewState | undefined,
+    locationGeneration: () => 3,
   };
   return { bridge, reviews };
 }
@@ -94,6 +95,7 @@ function stubExecute(
 
 beforeEach(() => {
   tracking.mode = "off";
+  localStorage.clear();
 });
 afterEach(() => {
   spies.splice(0).forEach((spy) => spy.mockRestore());
@@ -171,6 +173,43 @@ describe("insert_at_cursor", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("does not insert again after a click in the answer whose outcome is unknown", async () => {
+    const execute = stubExecute("word.insert_at_cursor", () => ran(true));
+    const reviews = new Map<string, Partial<WordReviewState>>([
+      [
+        wordProposalReviewKey(
+          "m1",
+          "word.insert_at_cursor",
+          "A new paragraph.",
+        ),
+        { status: "write-failed" },
+      ],
+    ]);
+    const { bridge } = host({ reviews });
+    const call = createWordProposalExecutor("insert_at_cursor", () => bridge);
+    expect(result(await call(input("word.insert_at_cursor"), context))).toEqual(
+      { status: "unconfirmed", reason: "already_attempted" },
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing after Stop", async () => {
+    const execute = stubExecute("word.insert_at_cursor", () => ran(true));
+    const controller = new AbortController();
+    controller.abort();
+    const { bridge } = host({});
+    const call = createWordProposalExecutor("insert_at_cursor", () => bridge);
+    expect(
+      result(
+        await call(input("word.insert_at_cursor"), {
+          ...context,
+          signal: controller.signal,
+        }),
+      ),
+    ).toEqual({ status: "failed", reason: "stopped" });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("acts only for the latest answer and only with its text", async () => {
     stubExecute("word.insert_at_cursor", () => ran(true));
     const older = host({ latest: false }).bridge;
@@ -222,6 +261,10 @@ describe("apply_edits", () => {
     });
     expect(bridge.setRevertSlot).toHaveBeenCalledWith(
       expect.objectContaining({ ooxml: "<before/>", afterFingerprint: "f" }),
+    );
+    expect(bridge.updateReview).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: "done", locationGeneration: 3 }),
     );
   });
 
@@ -279,6 +322,54 @@ describe("replace_selection", () => {
         ),
       ),
     ).toEqual({ status: "applied" });
+  });
+
+  it("leaves several versions to the user's pick", async () => {
+    const execute = stubExecute("word.replace_selection", replaced);
+    const { bridge } = host({
+      answer: `${REPLACE}\n\n\`\`\`erato-word-replace\nOther words.\n\`\`\``,
+    });
+    const call = createWordProposalExecutor("replace_selection", () => bridge);
+    expect(
+      result(await call(input("word.replace_selection"), context)),
+    ).toEqual({ status: "unavailable", reason: "user_picks" });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("answers applied when the user already replaced with one of the versions", async () => {
+    const execute = stubExecute("word.replace_selection", replaced);
+    const reviews = new Map<string, Partial<WordReviewState>>([
+      [
+        wordProposalReviewKey("m1", "word.replace_selection", "Other words."),
+        { status: "done" },
+      ],
+    ]);
+    const { bridge } = host({
+      answer: `${REPLACE}\n\n\`\`\`erato-word-replace\nOther words.\n\`\`\``,
+      reviews,
+    });
+    const call = createWordProposalExecutor("replace_selection", () => bridge);
+    expect(
+      result(await call(input("word.replace_selection"), context)),
+    ).toEqual({ status: "applied", reason: "already_applied" });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("says a write that may have landed is unconfirmed", async () => {
+    stubExecute("word.replace_selection", () =>
+      ran(false, {
+        selectionResult: {
+          status: "unverified",
+          timedOut: true,
+          settled: Promise.resolve(),
+        } as never,
+      }),
+    );
+    const { bridge } = host({ answer: REPLACE });
+    const call = createWordProposalExecutor("replace_selection", () => bridge);
+    expect(
+      result(await call(input("word.replace_selection"), context)),
+    ).toEqual({ status: "unconfirmed", reason: "unverified" });
   });
 
   it("refuses another document", async () => {

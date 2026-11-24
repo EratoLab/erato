@@ -30,6 +30,7 @@ const lane = vi.hoisted(
     notice: undefined,
   }),
 );
+const availabilityChanged = vi.hoisted(() => vi.fn());
 const preferences = vi.hoisted(() => ({
   includeByDefault: true,
   setIncludeByDefault: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("@erato/frontend/library", async () => {
       data: { action_facets: advertised.ids.map((id) => ({ id })) },
     }),
     Alert: AlertMock,
+    clientToolAvailabilityChanged: availabilityChanged,
   });
 });
 
@@ -254,6 +256,18 @@ describe("WordChatInput", () => {
     await waitFor(() => expect(sends).toHaveLength(1));
     expect(lastFacet()).toBeUndefined();
     expect(lastIdentity()).toBeNull();
+  });
+
+  it("tells waiting change cards to look again when inclusion flips", async () => {
+    renderInput();
+    await waitFor(() => expect(meta()).toBe("3 ¶"));
+    availabilityChanged.mockClear();
+
+    exclude();
+    expect(availabilityChanged).toHaveBeenCalledTimes(1);
+
+    include();
+    expect(availabilityChanged).toHaveBeenCalledTimes(2);
   });
 
   it("holds the document's inclusion while the composer is locked", async () => {

@@ -44,6 +44,7 @@ import {
   WORD_EDITS_FENCE,
   type WordClientActionEntry,
 } from "../utils/wordClientActions";
+import { wordProposalReviewKey } from "../utils/wordProposalApply";
 import {
   originalWordAnchor,
   readWordTrackingMode,
@@ -149,7 +150,11 @@ function WordActionCard({
       messageId !== undefined && messages[messageId]?.status === "sending",
     Object.is,
   );
-  const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
+  const batchKey = wordProposalReviewKey(
+    messageId ?? "",
+    entry.action,
+    content,
+  );
   const review = useWordReview(batchKey);
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,

@@ -3,6 +3,7 @@ import { editExcerpt, parseWordEdits } from "@erato/frontend/word-review";
 import { WORD_APPLY_BUSY_WAIT_MS } from "./wordApplyCall";
 import { WORD_CLIENT_ACTIONS } from "./wordClientActions";
 import { wordCommentTaintedMessage } from "./wordCommentReadTool";
+import { beginWithin } from "./wordPlanApply";
 import { readWordTrackingMode } from "./wordReviewLocation";
 import { wordWriteBridge } from "./wordWriteBridge";
 import { resolveWordWriteGate } from "./wordWriteGate";
@@ -10,6 +11,7 @@ import {
   answerFences,
   proposalOnceByCallId,
   sameItem,
+  USER_PICKS,
 } from "../../core/clientActions/proposalApply";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
 
@@ -64,15 +66,6 @@ export const wordProposalReviewKey = (
   content: string,
 ) => `${messageId}:${action}:${content}`;
 
-async function beginWithin(host: WordWriteBridge, ms: number) {
-  const until = Date.now() + ms;
-  while (!host.beginOperation()) {
-    if (Date.now() >= until) return false;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  return true;
-}
-
 /** Whether the request carried other people's comment text, which never writes unasked. */
 const commentTainted = (capture: WordDocumentCapture, messageId: string) =>
   !!(capture as WordCommentsCapture).commentTaint ||
@@ -88,7 +81,7 @@ export function createWordProposalExecutor(
   bridge: () => WordWriteBridge | null = wordWriteBridge,
 ): ClientToolExecutor {
   return proposalOnceByCallId(
-    async (input, context): Promise<ProposalApplyResult> => {
+    async (input, context, writeStarts): Promise<ProposalApplyResult> => {
       const action = wordProposalActionOf(tool);
       if (!action || input.action !== action)
         return { status: "failed", reason: "invalid_input" };
@@ -107,11 +100,15 @@ export function createWordProposalExecutor(
       const fences = answerFences(message.content).filter(
         (fence) => fence.language === entry.fenceLanguage,
       );
-      if (fences.length !== 1)
-        return {
-          status: "failed",
-          reason: fences.length ? "ambiguous" : "not_found",
-        };
+      const reviewOf = (body: string) =>
+        host.reviewFor(wordProposalReviewKey(context.messageId, action, body))
+          ?.status;
+      // The user already ran it, or one of its versions, from the card in the answer.
+      if (fences.some((fence) => reviewOf(fence.body) === "done"))
+        return { status: "applied", reason: "already_applied" };
+      if (fences.length > 1)
+        return { status: "unavailable", reason: USER_PICKS };
+      if (!fences.length) return { status: "failed", reason: "not_found" };
       const content = fences[0].body;
       const gate = resolveWordWriteGate({
         capture: host.captureFor(context.messageId),
@@ -131,14 +128,23 @@ export function createWordProposalExecutor(
       )
         return { status: "needs_decision", reason: "comment_text" };
       const key = wordProposalReviewKey(context.messageId, action, content);
-      const before = host.reviewFor(key)?.status;
-      // The user already ran it from the card in the answer.
-      if (before === "done")
-        return { status: "applied", reason: "already_applied" };
+      const before = reviewOf(content);
       if (before === "applying" || before === "reverting")
         return { status: "failed", reason: "busy" };
+      // An insert has no passage to check again, so one the card tried may already be there.
+      if (
+        action === "word.insert_at_cursor" &&
+        (before === "write-failed" || before === "error")
+      )
+        return { status: "unconfirmed", reason: "already_attempted" };
+      if (context.signal?.aborted)
+        return { status: "failed", reason: "stopped" };
       if (!(await beginWithin(host, WORD_APPLY_BUSY_WAIT_MS)))
         return { status: "failed", reason: "busy" };
+      if (context.signal?.aborted) {
+        host.endOperation();
+        return { status: "failed", reason: "stopped" };
+      }
       let held = false;
       try {
         const tracking =
@@ -154,6 +160,7 @@ export function createWordProposalExecutor(
           applyStage: "checking",
           capture,
         });
+        writeStarts();
         const run = await entry
           .execute({
             fenceContent: content,
@@ -174,7 +181,7 @@ export function createWordProposalExecutor(
               excerpt: editExcerpt(edit.text),
             })),
           });
-          return { status: "failed", reason: "host_error" };
+          return { status: "unconfirmed", reason: "host_error" };
         }
         if (action === "word.replace_selection") {
           const outcome = run.selectionResult;
@@ -223,12 +230,11 @@ export function createWordProposalExecutor(
             case "refused":
               return { status: "failed", reason: outcome.code };
             case "unverified":
-              return { status: "failed", reason: "unverified" };
+              return { status: "unconfirmed", reason: "unverified" };
             default:
-              return {
-                status: "failed",
-                reason: outcome.timedOut ? "timed_out" : "host_error",
-              };
+              return outcome.timedOut
+                ? { status: "unconfirmed", reason: "timed_out" }
+                : { status: "failed", reason: "host_error" };
           }
         }
         if (run.snapshotOoxml)
@@ -254,6 +260,7 @@ export function createWordProposalExecutor(
                 : "error",
           outcomes: run.outcomes,
           anchors: run.resultAnchors,
+          locationGeneration: host.locationGeneration(),
           tracking,
         });
         if (run.ok) return { status: "applied" };

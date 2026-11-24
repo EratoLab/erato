@@ -28,7 +28,10 @@ import {
   useWordReviews,
   useWordWrite,
 } from "../providers/WordWriteProvider";
-import { wordSelectionReviewStatus } from "../utils/wordProposalApply";
+import {
+  wordProposalReviewKey,
+  wordSelectionReviewStatus,
+} from "../utils/wordProposalApply";
 import {
   isWordRevertOffered,
   revertWordSelection,
@@ -191,7 +194,7 @@ const formatSpans = (selection: WordSelectionSnapshot) =>
  * What the card shows for each kept item's marker and each format span's, so the comparison reads
  * as text: a span's text as [bold]…[/bold].
  */
-function wordKeptMarkersShown(
+export function wordKeptMarkersShown(
   text: string,
   selection: WordSelectionSnapshot,
 ): string {
@@ -585,7 +588,11 @@ export function WordSelectionCard({
   const isGenerating = message?.status === "sending";
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
-  const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
+  const batchKey = wordProposalReviewKey(
+    messageId ?? "",
+    entry.action,
+    content,
+  );
   const review = useWordReview(batchKey);
   const reviews = useWordReviews();
   const result = review.selection;

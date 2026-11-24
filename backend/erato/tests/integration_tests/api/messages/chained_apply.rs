@@ -1837,10 +1837,10 @@ async fn a_failed_action_goes_back_to_the_model(pool: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn never_takes_the_action_out_of_the_proposals(pool: Pool<Postgres>) {
+async fn a_proposal_of_an_action_turned_off_is_refused_with_a_reason(pool: Pool<Postgres>) {
     let mut chat = Chat::new(
         pool,
-        vec![Step::Text("NO PROPOSAL")],
+        vec![propose("call_p", "outlook.reply"), Step::Text("TOLD")],
         vec![],
         proposal_options(Some("never_allow"), vec![]),
     )
@@ -1848,9 +1848,87 @@ async fn never_takes_the_action_out_of_the_proposals(pool: Pool<Postgres>) {
     chat.submit().await;
     assert_eq!(
         proposed_actions(&chat.requests()[0]),
-        ["outlook.reply_all"],
-        "the user turned replies off"
+        ["outlook.reply", "outlook.reply_all"],
+        "a turned-off action is not swapped for another"
     );
+    assert!(chat.dispatched().is_empty());
+    assert_eq!(chat.requests().len(), 2);
+    let parts = parts(&chat.message().await);
+    assert_eq!(tool_use(&parts, "call_p")["output"]["status"], "turned_off");
+    assert!(!has_tool_use(&parts, "call_p.apply"));
+    assert!(chat.requests()[1].to_string().contains("turned off"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_change_request_on_a_proposal_lets_the_model_propose_again(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![
+            propose("call_p", "outlook.reply"),
+            propose("call_q", "outlook.reply"),
+        ],
+        vec![opened()],
+        proposal_options(Some("ask"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    chat.decide(json!({"decision":"request_change","change_request":"Make it more formal"}))
+        .await
+        .assert_status_ok();
+    assert_eq!(chat.requests().len(), 2);
+    assert!(chat.requests()[1].to_string().contains("more formal"));
+    let parts_before = parts(&chat.message().await);
+    assert_eq!(
+        tool_use(&parts_before, "call_q")["output"]["status"],
+        "proposed"
+    );
+    let stop = chat.stop().await.expect("the changed proposal asks");
+    assert!(
+        stop["approvals"][0]["tool_call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(":call_q.apply")
+    );
+    chat.decide(json!({"decision":"approve"}))
+        .await
+        .assert_status_ok();
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_clean_action_in_a_batch_runs_the_rest_then_ends_without_a_request(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![Step::Tools(vec![
+            ("call_p", PROPOSE, json!({"action":"outlook.reply"})),
+            ("call_r", READ, json!({"snapshot":"s1"})),
+        ])],
+        vec![opened(), read_result()],
+        Options {
+            registered: "open_reply,read_document_blocks",
+            ..proposal_options(Some("always_allow"), vec![])
+        },
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names()[0], OPEN_REPLY);
+    assert!(has_tool_use(&parts(&chat.message().await), "call_r"));
+    assert_eq!(chat.requests().len(), 1, "the answer ends after the batch");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn several_versions_for_the_user_to_pick_end_without_a_request(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![json!({"result":{"status":"unavailable","reason":"user_picks"}})],
+        proposal_options(Some("always_allow"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 1);
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

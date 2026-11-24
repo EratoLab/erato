@@ -422,6 +422,7 @@ export const DEFAULT_STUBS = {
   componentRegistry: {},
   createBrowserClientInfo: (info: unknown) => info,
   dynamicActivate: async () => {},
+  clientToolAvailabilityChanged: noop,
   extractTextFromContent: () => "",
   findCapabilityByExtension: () => null,
   getSupportedFileTypes: () => [],

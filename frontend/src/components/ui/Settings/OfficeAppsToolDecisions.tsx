@@ -24,25 +24,19 @@ export const useApprovalTools = (
 };
 
 /**
- * The approval tools as rows of the shared decision list, each named from its
- * label in the user's language. A tool without one, or one whose name would
- * read like another row's, keeps the deployment's title.
+ * The approval tools as rows of the shared decision list, each named by the
+ * deployment's title. Only a tool without a title is named from its label.
  */
-export const approvalToolRows = (tools: readonly ApprovalToolInfo[]) => {
-  const lines = tools.map((tool) => gistToolLine(tool.label));
-  return tools.map((tool, index) => {
-    const line = lines[index];
-    const unique =
-      line !== undefined &&
-      lines.filter((other) => other === line).length === 1;
-    return {
-      qualifiedName: tool.qualified_name,
-      label: unique ? line : tool.title,
-      asksEveryTime: tool.approval === "every_call",
-      "data-testid": `client-tool-decision-${tool.qualified_name}`,
-    };
-  });
-};
+export const approvalToolRows = (tools: readonly ApprovalToolInfo[]) =>
+  tools.map((tool) => ({
+    qualifiedName: tool.qualified_name,
+    // A label names the kind of call, not the tool: "comment" on "comment"
+    // reads "Comment on comment", and opening a form reads "Create event".
+    label:
+      tool.title.trim() || (gistToolLine(tool.label) ?? tool.qualified_name),
+    asksEveryTime: tool.approval === "every_call",
+    "data-testid": `client-tool-decision-${tool.qualified_name}`,
+  }));
 
 /**
  * The Servers & Tools row for changes in Office apps: Ask, Always or Never

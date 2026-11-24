@@ -184,6 +184,11 @@ vi.mock("../../utils/wordSelectionCapture", async (importOriginal) => ({
 
 vi.mock("../../utils/wordAuthoringBudget", () => ({
   checkWordAuthoringBudget: host.budget,
+  wordCompleteReadBudgetFor:
+    (args: Record<string, unknown>) => (snapshot: unknown) => async () => {
+      const budget = await host.budget(snapshot, { ...args, mode: "complete" });
+      return budget.ok ? undefined : budget.issue;
+    },
 }));
 
 vi.mock("../../utils/wordDocumentReadTool", () => ({

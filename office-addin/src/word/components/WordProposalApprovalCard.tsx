@@ -8,9 +8,13 @@ import { useMemo } from "react";
 
 import { WordDecisionChoices } from "./WordDecisionChoices";
 import { wordEditsTitleText } from "./WordEditReport";
+import { wordKeptMarkersShown } from "./WordSelectionCard";
 import { answerFences } from "../../core/clientActions/proposalApply";
+import { useWordWrite } from "../providers/WordWriteProvider";
 import { WORD_CLIENT_ACTIONS } from "../utils/wordClientActions";
 import { wordProposalActionOf } from "../utils/wordProposalApply";
+import { wordSelectionOf } from "../utils/wordSelectionAnchor";
+import { WORD_MARKER } from "../utils/wordSelectionItems";
 
 import type { WordCardDecision } from "./WordDecisionChoices";
 import type { ApprovalItemCardProps } from "@erato/frontend/library";
@@ -33,6 +37,10 @@ export function WordProposalApprovalCard({
   renderDefault,
 }: ApprovalItemCardProps) {
   const message = useConversationMessage(messageId);
+  const { capturesByAssistantMessageId } = useWordWrite();
+  const selection = wordSelectionOf(
+    capturesByAssistantMessageId.get(messageId),
+  );
   const action = wordProposalActionOf(item.tool_name);
   const entry = action ? WORD_CLIENT_ACTIONS.get(action) : undefined;
   const content = message?.content;
@@ -41,8 +49,14 @@ export function WordProposalApprovalCard({
     const fences = answerFences(content).filter(
       (fence) => fence.language === entry.fenceLanguage,
     );
-    return fences.length === 1 ? fences[0].body : undefined;
-  }, [content, entry]);
+    if (fences.length !== 1) return undefined;
+    const [{ body }] = fences;
+    // The user approves the text as the card in the answer shows it, without the item markers.
+    if (action !== "word.replace_selection") return body;
+    return selection
+      ? wordKeptMarkersShown(body, selection)
+      : body.replace(WORD_MARKER, "");
+  }, [action, content, entry, selection]);
   if (status !== "pending" || !entry || text === undefined)
     return <>{renderDefault()}</>;
   const decision: WordCardDecision = {
