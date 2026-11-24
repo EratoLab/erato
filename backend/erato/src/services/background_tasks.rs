@@ -1649,6 +1649,12 @@ impl StreamingTask {
         self.awaiting_approval.store(true, Ordering::SeqCst);
     }
 
+    /// Whether this run already has its outcome short of completing: it
+    /// stopped on an approval card or reported an error, and is only finishing.
+    pub fn parked_or_failed(&self) -> bool {
+        self.awaiting_approval.load(Ordering::SeqCst) || self.saw_error.load(Ordering::SeqCst)
+    }
+
     /// Derive the terminal outcome of this task. An abort is a user-initiated
     /// stop and deliberately counts as `Completed`; an error outranks a
     /// pending approval.

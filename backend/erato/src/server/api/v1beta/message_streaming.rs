@@ -3052,7 +3052,24 @@ async fn acquire_user_generation_lease(
             .start_task(chat_id, message_id)
             .await);
     }
+    claim_user_generation_lease(app_state, chat_id, message_id)
+        .await
+        .map_err(|held| lease_held_error(chat_id, held))
+}
 
+/// The compare-and-set half of [`acquire_user_generation_lease`], whatever the
+/// gates say.
+async fn claim_user_generation_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    LeaseHeld,
+> {
     let started = app_state
         .background_tasks
         .try_start_task(
@@ -3063,10 +3080,56 @@ async fn acquire_user_generation_lease(
             Takeover::TakeParked,
             app_state.config.generation_status.stale_after_secs,
         )
-        .await
-        .map_err(|held| lease_held_error(chat_id, held))?;
+        .await?;
     withdraw_task_calls(app_state, chat_id, Some(message_id)).await;
     Ok(started)
+}
+
+/// How long a decision waits for a turn that already parked or failed to hand
+/// the lease back.
+const PARKED_TURN_RELEASE: Duration = Duration::from_secs(1);
+
+/// The lease for a decision on an approval card: always the exclusive one,
+/// whatever the gates say. Its continuation runs the approved call before the
+/// decision is on the row, so a second decision that could start alongside it
+/// would pass every check on the row and run the call again (ERMAIN-1339).
+///
+/// A turn hands the lease back only after its client saw it end, so a decision
+/// sent the moment the card arrived, or a retry the moment a continuation
+/// failed, finds it still held. Such a turn has parked or failed and only
+/// finishes up, so the decision waits for it rather than being refused; any
+/// other holder refuses at once. The claim stays the compare-and-set either
+/// way, so waiting never lets two continuations run.
+async fn claim_decision_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    StreamRouteError,
+> {
+    let finishing = app_state
+        .background_tasks
+        .get_task(&chat_id)
+        .await
+        .filter(|task| task.parked_or_failed())
+        .map(|task| task.generation_id);
+    let deadline = tokio::time::Instant::now() + PARKED_TURN_RELEASE;
+    loop {
+        match claim_user_generation_lease(app_state, chat_id, message_id).await {
+            Err(held)
+                if finishing.is_some()
+                    && held.active_generation_id == finishing
+                    && tokio::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            claimed => return claimed.map_err(|held| lease_held_error(chat_id, held)),
+        }
+    }
 }
 
 /// Ends the waits of the tasks this chat's turns started, but those of
@@ -22754,7 +22817,7 @@ pub(crate) async fn start_continuation(
             .await
             .map_err(|held| lease_held_error(chat_id, held))?
     } else {
-        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?
+        claim_decision_lease(app_state, chat_id, request.message_id).await?
     };
 
     let client_stream_guard = task.client_stream_guard();

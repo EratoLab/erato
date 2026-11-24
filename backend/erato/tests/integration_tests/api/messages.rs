@@ -1,6 +1,7 @@
 //! Message submission and streaming API tests.
 
 mod approval_change_requests;
+mod approval_decided_once;
 mod approval_voice_commands;
 mod client_operations;
 mod client_submissions;
