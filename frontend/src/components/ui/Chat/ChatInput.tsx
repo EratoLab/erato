@@ -97,6 +97,7 @@ import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
+import { useDocumentHidden } from "@/hooks/useDocumentHidden";
 import { useIsMobile } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
@@ -583,6 +584,34 @@ export const ChatInput = ({
     setConversationAutoSendSignal((signal) => signal + 1);
   }, [clearPendingAutoSendTimeout]);
 
+  // The turn's words are dropped and the conversation listens again once
+  // what holds it back is over, as after an answer.
+  const dropTurnAndListenAgain = useCallback(() => {
+    shouldRestartAudioModeAfterResponseRef.current = true;
+    audioModeRestartSawPendingResponseRef.current = true;
+    clearPendingAutoSendTimeout();
+    pendingAutoSendRef.current = false;
+    dictationTargetRef.current = null;
+    setMessage("");
+  }, [clearPendingAutoSendTimeout]);
+  // Hiding the page, as a phone lock does, ended the turn without an error.
+  // Listening again waits until the page is shown: a hidden page cannot open
+  // the microphone.
+  const pageHidden = useDocumentHidden();
+  const listensWhenShownRef = useRef(false);
+  const handleStoppedByHiddenPage = useCallback(() => {
+    if (!isAudioMode || dictationTargetRef.current?.card) return;
+    listensWhenShownRef.current = true;
+    dropTurnAndListenAgain();
+  }, [dropTurnAndListenAgain, isAudioMode]);
+  /** Read live: the hook's state may lag behind the event that hid the page. */
+  const restartWaitsForPage = useCallback(() => {
+    if (!listensWhenShownRef.current) return false;
+    if (document.visibilityState === "hidden") return true;
+    listensWhenShownRef.current = false;
+    return false;
+  }, []);
+
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
 
@@ -953,6 +982,7 @@ export const ChatInput = ({
     onVoiceLowered: lowerVoice,
     chatId,
     onTurnLanguage: handleTurnLanguage,
+    onStoppedByHiddenPage: handleStoppedByHiddenPage,
   });
 
   const ownsAudio =
@@ -3160,25 +3190,22 @@ export const ChatInput = ({
     if (dictationTargetRef.current?.card) {
       return;
     }
-    shouldRestartAudioModeAfterResponseRef.current = true;
-    audioModeRestartSawPendingResponseRef.current = true;
-    clearPendingAutoSendTimeout();
-    pendingAutoSendRef.current = false;
     cancelDictation();
-    dictationTargetRef.current = null;
-    setMessage("");
+    dropTurnAndListenAgain();
   }, [
     cancelDictation,
-    clearPendingAutoSendTimeout,
     decisionWaiting,
+    dropTurnAndListenAgain,
     isAudioMode,
     isDictating,
     isDictationStarting,
-    setMessage,
   ]);
 
   useEffect(() => {
-    if (!shouldRestartAudioModeAfterResponseRef.current) {
+    if (
+      !shouldRestartAudioModeAfterResponseRef.current ||
+      restartWaitsForPage()
+    ) {
       return;
     }
     if (
@@ -3224,6 +3251,8 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    pageHidden,
+    restartWaitsForPage,
     speech.enabled,
     speech.playing,
     speechEnabled,
@@ -3235,7 +3264,10 @@ export const ChatInput = ({
   ]);
 
   useEffect(() => {
-    if (!shouldRestartAudioModeAfterResponseRef.current) {
+    if (
+      !shouldRestartAudioModeAfterResponseRef.current ||
+      restartWaitsForPage()
+    ) {
       return;
     }
     if (!audioModeRestartSawPendingResponseRef.current) {
@@ -3296,6 +3328,8 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    pageHidden,
+    restartWaitsForPage,
     speech.enabled,
     speech.playing,
     speech.spokenPartDone,

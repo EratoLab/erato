@@ -2,6 +2,35 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { getAudioEnvironment } from "./audioEnvironment";
 
+/** Long enough for a running clock to move on by several render quanta. */
+export const CLOCK_CHECK_MS = 300;
+/** Right after unlocking the audio output may still be waking up. */
+const CLOCK_REVIVE_ATTEMPTS = 3;
+
+/**
+ * Starts the clock of a context that says `"running"` but stands still, as
+ * WebKit leaves one after a phone lock (`clockMayStandStillWhileRunning`):
+ * only a suspend followed by a resume moves it on. A context whose clock
+ * moves, or that is not running, is left alone.
+ */
+export async function reviveStandingClock(context: AudioContext) {
+  if (!getAudioEnvironment().clockMayStandStillWhileRunning) return;
+  // A call, not a narrowed property: the state changes across the awaits.
+  const running = () => context.state === "running";
+  for (let attempt = 0; attempt < CLOCK_REVIVE_ATTEMPTS; attempt++) {
+    if (!running() || document.visibilityState === "hidden") return;
+    const before = context.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, CLOCK_CHECK_MS));
+    if (!running() || context.currentTime !== before) return;
+    try {
+      await context.suspend();
+      await context.resume();
+    } catch {
+      return;
+    }
+  }
+}
+
 /**
  * iOS/WebKit recovery for a wedged AudioContext, shared by both recorder
  * hooks (ERMAIN-379). WebKit can drop a context into an `"interrupted"` /
@@ -11,7 +40,8 @@ import { getAudioEnvironment } from "./audioEnvironment";
  * foreground), but ONLY while a capture is active — between sessions the
  * context is deliberately suspended to stay warm, and recovery must never
  * wake that intentionally-idle context. Other engines auto-resume, so the
- * listeners are skipped there entirely.
+ * listeners are skipped there entirely. On return a capture's clock that
+ * stands still while "running" is started again too (`reviveStandingClock`).
  *
  * Known narrow gap (#2, intentionally not closed here): on session 2+ the
  * processor ref is null between teardown and the post-`getUserMedia`
@@ -52,6 +82,17 @@ export function useAudioContextInterruptionRecovery({
     });
   }, [audioContextRef, audioProcessorRef]);
 
+  const recoverOnReturn = useCallback(() => {
+    const audioContext = audioContextRef.current;
+    if (
+      audioContext?.state === "running" &&
+      audioProcessorRef.current &&
+      document.visibilityState === "visible"
+    )
+      void reviveStandingClock(audioContext);
+    else resumeIfInterrupted();
+  }, [audioContextRef, audioProcessorRef, resumeIfInterrupted]);
+
   const attachStateChangeListener = useCallback(
     (context: AudioContext) => {
       if (!getAudioEnvironment().needsGestureResume) {
@@ -71,22 +112,26 @@ export function useAudioContextInterruptionRecovery({
   );
 
   useEffect(() => {
+    const environment = getAudioEnvironment();
     if (
       typeof document === "undefined" ||
-      !getAudioEnvironment().needsGestureResume
+      !(
+        environment.needsGestureResume ||
+        environment.clockMayStandStillWhileRunning
+      )
     ) {
       return;
     }
-    document.addEventListener("visibilitychange", resumeIfInterrupted);
+    document.addEventListener("visibilitychange", recoverOnReturn);
     return () => {
-      document.removeEventListener("visibilitychange", resumeIfInterrupted);
+      document.removeEventListener("visibilitychange", recoverOnReturn);
       boundContextRef.current?.removeEventListener(
         "statechange",
         resumeIfInterrupted,
       );
       boundContextRef.current = null;
     };
-  }, [resumeIfInterrupted]);
+  }, [recoverOnReturn, resumeIfInterrupted]);
 
   return { attachStateChangeListener };
 }

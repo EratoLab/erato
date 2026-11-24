@@ -9,6 +9,7 @@ import {
   waitsOnly,
 } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
+import { useDocumentHidden } from "@/hooks/useDocumentHidden";
 import { useChatsInReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 export type TabChatActivity = "idle" | "working" | "ready" | "attention";
@@ -16,23 +17,6 @@ export type TabChatActivity = "idle" | "working" | "ready" | "attention";
 // Framed (the Teams tab), the favicon belongs to the host page and nothing this
 // hook drives is ever visible.
 const isFramed = (): boolean => window.self !== window.top;
-
-const useDocumentHidden = (): boolean => {
-  const [hidden, setHidden] = useState(() => document.hidden);
-
-  useEffect(() => {
-    const sync = () => {
-      setHidden(document.hidden);
-    };
-    document.addEventListener("visibilitychange", sync);
-    sync();
-    return () => {
-      document.removeEventListener("visibilitychange", sync);
-    };
-  }, []);
-
-  return hidden;
-};
 
 /**
  * Tab-strip state for the chat this tab has open, and nothing else — a
