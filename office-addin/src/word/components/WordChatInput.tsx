@@ -1,5 +1,6 @@
 import {
   actionFacetEstimate,
+  clientToolAvailabilityChanged,
   useLiveAnnouncement,
   useProfile,
 } from "@erato/frontend/library";
@@ -44,7 +45,10 @@ import {
   wordSelectionForFacets,
 } from "../utils/wordActionFacet";
 import { renderWordDiagnosticReport } from "../utils/wordApplyDiagnostics";
-import { checkWordAuthoringBudget } from "../utils/wordAuthoringBudget";
+import {
+  checkWordAuthoringBudget,
+  wordCompleteReadBudgetFor,
+} from "../utils/wordAuthoringBudget";
 import {
   readOnlyText,
   wordAuthoringIssueText,
@@ -134,10 +138,7 @@ import type {
 import type { WordCaptureNotice } from "../utils/wordComposerNotice";
 import type { WordSendCarrier } from "../utils/wordSendPreview";
 import type { ChatInputControlsHandle } from "@erato/frontend/library";
-import type {
-  WordAuthoringSnapshot,
-  WordDocumentCapture,
-} from "@erato/frontend/word-review";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 export interface WordChatInputProps {
   chatInputProps: AddinChatInputRenderProps;
@@ -580,6 +581,8 @@ export function WordChatInput({
   sendingContextRef.current = { chatId, documentIdentity };
   const readEnabledRef = useRef(chipEnabled);
   readEnabledRef.current = chipEnabled;
+  // The apply tools' isAvailable reads the ref, so waiting cards must look again.
+  useEffect(() => clientToolAvailabilityChanged(), [chipEnabled]);
   const { profile } = useProfile();
   const principalEmail = profile?.email ?? null;
   const principalName = profile?.name ?? undefined;
@@ -996,17 +999,13 @@ export function WordChatInput({
           // Finalize paging limits before exposing whole-document availability.
           const authoringSnapshot = build?.authoring;
           // A copy an applied change leaves for this answer is checked like this one.
-          const budgetFor = (snapshot: WordAuthoringSnapshot) => async () => {
-            const budget = await checkWordAuthoringBudget(snapshot, {
-              message,
-              chatId,
-              assistantId: chatInputProps.assistantId,
-              modelId: resolvedModelId,
-              fileIds: inputFileIds,
-              mode: "complete",
-            });
-            return budget.ok ? undefined : budget.issue;
-          };
+          const budgetFor = wordCompleteReadBudgetFor({
+            message,
+            chatId,
+            assistantId: chatInputProps.assistantId,
+            modelId: resolvedModelId,
+            fileIds: inputFileIds,
+          });
           wordDocumentReadSession.activate(
             authoringSnapshot,
             undefined,
