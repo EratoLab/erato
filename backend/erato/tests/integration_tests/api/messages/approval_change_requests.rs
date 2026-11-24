@@ -417,7 +417,10 @@ async fn a_queued_call_stays_to_be_decided_after_a_change_request(pool: Pool<Pos
     server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": queued["approval_id"], "decision": "approve"}],
+        }))
         .await
         .assert_status_ok();
     let content = message_content(&app_state, message_id).await;

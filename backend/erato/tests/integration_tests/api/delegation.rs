@@ -17367,7 +17367,12 @@ async fn a_child_that_asks_again_after_a_mixed_decision_reparks_the_turn(pool: P
         "awaiting_approval"
     );
 
-    let finished = post_continuestream(&server, park.parent_message_id, "approve").await;
+    let finished = post_continuestream_decisions(
+        &server,
+        park.parent_message_id,
+        &[(task_a_id.as_str(), "approve")],
+    )
+    .await;
     finished.assert_status_ok();
     assert!(extract_full_text_answer(&parse_sse_events(&finished)).contains("PARENT-GATED-FINAL"));
     let slot_a = slot_for(
@@ -18286,7 +18291,11 @@ async fn an_approved_client_call_waits_through_a_repark_and_runs_once(pool: Pool
         &server,
         &app_state,
         park.parent_chat_id,
-        post_continuestream(&server, park.parent_message_id, "approve"),
+        post_continuestream_decisions(
+            &server,
+            park.parent_message_id,
+            &[(task_a_id.as_str(), "approve")],
+        ),
     )
     .await;
     finished.assert_status_ok();

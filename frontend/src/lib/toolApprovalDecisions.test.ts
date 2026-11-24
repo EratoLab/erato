@@ -19,7 +19,7 @@ describe("isApprovalDecision", () => {
 });
 
 describe("buildContinueStreamBody", () => {
-  it("keeps the legacy body while one approval is open", () => {
+  it("names a single open item, so a late tap cannot answer a later card", () => {
     expect(
       buildContinueStreamBody({
         messageId: "message-1",
@@ -28,23 +28,18 @@ describe("buildContinueStreamBody", () => {
       }),
     ).toEqual({
       message_id: "message-1",
-      decision: "approve",
+      decisions: [{ approval_id: "call-a", decision: "approve" }],
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });
   });
 
-  it("names a single open item when asked to enumerate", () => {
+  it("keeps the legacy body only for a caller that knows no approval id", () => {
     expect(
-      buildContinueStreamBody({
-        messageId: "message-1",
-        decision: "approve",
-        approvalIds: ["call-a"],
-        enumerate: true,
-      }),
+      buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),
     ).toEqual({
       message_id: "message-1",
-      decisions: [{ approval_id: "call-a", decision: "approve" }],
+      decision: "approve",
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });
@@ -91,8 +86,8 @@ describe("buildContinueStreamBody", () => {
   });
 
   it("answers a single open item with its own decision, not the default", () => {
-    // A one-row plan is still decided per row: the legacy body carries the
-    // row's answer rather than whatever the card's bulk default was.
+    // A one-row plan is still decided per row: the body carries the row's
+    // answer rather than whatever the card's bulk default was.
     expect(
       buildContinueStreamBody({
         messageId: "message-1",
@@ -102,7 +97,7 @@ describe("buildContinueStreamBody", () => {
       }),
     ).toEqual({
       message_id: "message-1",
-      decision: "withdraw",
+      decisions: [{ approval_id: "plan:0:0", decision: "withdraw" }],
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });

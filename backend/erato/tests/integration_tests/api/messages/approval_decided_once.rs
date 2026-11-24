@@ -3,6 +3,8 @@
 //! first was lost, two tabs or two replicas. However the decisions meet, the
 //! approved call runs at most once and every decision after the one that was
 //! taken is refused with a `409` the card answers by reading the row again.
+//! A late decision for a card the turn has already moved past is refused the
+//! same way and never lands on the card that replaced it.
 
 use super::*;
 use std::sync::Arc;
@@ -68,6 +70,14 @@ async fn replica(
     records: &Records,
     exclusive: bool,
 ) -> (erato::state::AppState, TestServer) {
+    replica_answering(pool, records, one_card_answers(), |config| {
+        config.chat_history_compaction.enabled = exclusive;
+    })
+    .await
+}
+
+/// The model's answers for a turn that asks once: the update to Done.
+fn one_card_answers() -> MockSet {
     let mut mocks = MockSet::new();
     answers_with(
         &mut mocks,
@@ -97,6 +107,48 @@ async fn replica(
             json!({"id": mock_mcp_server::RECORD_ID, "status": "Done"}),
         )]),
     );
+    mocks
+}
+
+/// The model's answers for a turn that asks twice: once the update to Done
+/// ran, it asks for the update to Review on a second card.
+fn two_card_answers() -> MockSet {
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &["updated to Review"],
+        &[],
+        build_openai_text_streaming_response(&["DONE"]),
+    );
+    answers_with(
+        &mut mocks,
+        &["updated to Done"],
+        &["updated to Review"],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_second",
+            "update_record",
+            json!({"id": mock_mcp_server::RECORD_ID, "status": "Review"}),
+        )]),
+    );
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &["updated to"],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_update",
+            "update_record",
+            json!({"id": mock_mcp_server::RECORD_ID, "status": "Done"}),
+        )]),
+    );
+    mocks
+}
+
+async fn replica_answering(
+    pool: Pool<Postgres>,
+    records: &Records,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (erato::state::AppState, TestServer) {
     let (mut config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
     config.mcp_servers.insert(
         "records".to_string(),
@@ -119,7 +171,7 @@ async fn replica(
     };
     config.approval_voice_commands.enabled = true;
     config.approval_voice_decisions.enabled = true;
-    config.chat_history_compaction.enabled = exclusive;
+    configure(&mut config);
     let app_state = test_app_state(config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
@@ -424,4 +476,95 @@ fn held_everywhere(report: Vec<String>) {
     let text = report.join("\n");
     println!("{text}");
     assert!(!text.contains("FAIL"), "{text}");
+}
+
+/// The approval id of the card the turn waits on, if one is still open.
+async fn waiting_card(app_state: &erato::state::AppState, message_id: Uuid) -> Option<String> {
+    let content = message_content(app_state, message_id).await;
+    let index = content
+        .iter()
+        .rposition(|part| part["content_type"] == "tool_approval_request")?;
+    let id = content[index]["approvals"][0]["approval_id"]
+        .as_str()?
+        .to_string();
+    let decided = content[index + 1..].iter().any(|part| {
+        (part["content_type"] == "tool_approval" || part["content_type"] == "tool_rejection")
+            && part["approval_id"] == id.as_str()
+    });
+    (!decided).then_some(id)
+}
+
+/// A decision that names no card, as clients sent before they named it.
+async fn decide_unnamed(
+    server: &TestServer,
+    message_id: Uuid,
+    decision: &str,
+) -> axum_test::TestResponse {
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"message_id": message_id, "decision": decision}))
+        .await
+}
+
+/// The turn asks twice. A tab that still shows the first card answers it
+/// after the turn moved on to the second: by tap, "always allow", deny, a
+/// change request or "Ich bestätige" with the first card's receipt, or as a
+/// client that names no card. None of them runs anything or settles the
+/// second card, which nobody saw; it waits until it is answered itself.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_late_decision_for_an_earlier_card_leaves_the_next_card_waiting(pool: Pool<Postgres>) {
+    let records = Records::serve().await;
+    let (app_state, server) = replica_answering(pool, &records, two_card_answers(), |config| {
+        config.mcp_servers_global.approval.allow_always = true;
+    })
+    .await;
+    let (message_id, first) = park(&server, &app_state).await;
+    let spoken = receipt(&server, message_id, &first).await;
+    // The turn's first card is still taken from a client that names no card.
+    decide_unnamed(&server, message_id, "approve")
+        .await
+        .assert_status_ok();
+    assert_eq!(records.calls(), 1);
+    let second = waiting_card(&app_state, message_id)
+        .await
+        .expect("the turn asks again");
+    assert_ne!(second, first);
+
+    let mut report = Vec::new();
+    for (case, decision, voice) in [
+        ("allow once", "approve", None),
+        ("always allow", "approve_always", None),
+        ("deny", "reject", None),
+        ("change request", "request_change", None),
+        ("Ich bestätige", "approve", Some(spoken)),
+    ] {
+        let response = decide(&server, message_id, &first, decision, voice).await;
+        report.push((case, outcome(&response)));
+    }
+    let unnamed = decide_unnamed(&server, message_id, "approve").await;
+    report.push(("unnamed", outcome(&unnamed)));
+    let calls = records.calls();
+    let still_waiting = waiting_card(&app_state, message_id).await;
+    assert_eq!(
+        (calls, still_waiting.as_deref()),
+        (1, Some(second.as_str())),
+        "late decisions ran the second card: {report:?}"
+    );
+    for (case, outcome) in &report {
+        // A page that names no card treats a coded 409 as an answer that
+        // landed and would go quiet; it shows plain text.
+        let expected = if *case == "unnamed" {
+            "409 This page is out of date for this card. Reload the page to decide it."
+        } else {
+            "409 already_continued"
+        };
+        assert_eq!(outcome, expected, "{case}: {report:?}");
+    }
+
+    decide(&server, message_id, &second, "approve", None)
+        .await
+        .assert_status_ok();
+    assert_eq!(records.calls(), 2);
+    assert_eq!(waiting_card(&app_state, message_id).await, None);
 }
