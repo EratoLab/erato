@@ -1227,6 +1227,15 @@ body:has(.app-viewport) {
     max(var(--modal-overlay-gutter), var(--safe-area-left));
 }
 
+/* Scrim beside a drawer: the add-in's history drawer and the host sidebar
+   on a narrow screen. Deliberately NOT the modal overlay skin: its backdrop
+   blur re-filters the region behind the scrim on every frame while the panel
+   slides over it (the main drawer-jank source in the Office webviews), and
+   the panel's edge already carries the depth cue. */
+.drawer-overlay-skin {
+  background-color: var(--theme-overlay-modal);
+}
+
 .modal-shell-skin {
   background-color: var(--theme-shell-modal);
   border-radius: var(--theme-radius-modal);
