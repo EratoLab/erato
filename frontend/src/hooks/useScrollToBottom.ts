@@ -1,12 +1,4 @@
-import { debounce } from "lodash";
-import {
-  useRef,
-  useEffect,
-  useCallback,
-  useMemo,
-  useState,
-  useReducer,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * What content that changes its own height after it has rendered, such as an
@@ -15,400 +7,227 @@ import {
  */
 export const CONTENT_RESIZED_EVENT = "erato:content-resized";
 
+/** How close to its bottom the list counts as being there. */
+const AT_BOTTOM_PX = 8;
+
 /**
- * How close to its bottom the user must have left the list for content that
- * grows to keep it there.
+ * How long after the messages change their content keeps settling (markdown,
+ * a card, a view mounting): growth then is followed; growth later, with no
+ * reply coming, is the person opening something, and stays where it is.
  */
-const FOLLOW_BOTTOM_THRESHOLD_PX = 8;
+const SETTLING_MS = 1500;
+
+/** How close to its top the list counts as near it, for loading history. */
+const NEAR_TOP_PX = 50;
 
 interface UseScrollToBottomOptions {
   /**
-   * Whether to enable auto-scrolling to bottom
-   */
-  enabled?: boolean;
-
-  /**
-   * Dependencies that should trigger a re-evaluation of scroll position
-   */
-  deps?: React.DependencyList;
-
-  /**
-   * Pixel threshold for considering user as "scrolled up" (reading history)
-   * When scrolled further up than this value, auto-scroll is disabled
-   */
-  scrollUpThreshold?: number;
-
-  /**
-   * Debounce time in ms for scroll events
-   */
-  debounceMs?: number;
-
-  /**
-   * Whether to use CSS smooth scrolling
-   * This can be more performant than manual animation in some cases
-   */
-  useSmoothScroll?: boolean;
-
-  /**
-   * Duration in ms for smooth scroll transitions
-   */
-  transitionDuration?: number;
-
-  /**
-   * Whether the component is in a transition state
-   * (e.g., navigating between chats)
+   * A chat is loading or the list is switching chats: the view holds still,
+   * then shows the end of the chat.
    */
   isTransitioning?: boolean;
 
+  /** The chat shown: another one shows its end. */
+  chat?: string;
+
+  /** Changes when the person starts a turn: the view follows again, to it. */
+  turn?: number;
+
+  /** A reply to the person is coming now, also in a chat just opened. */
+  replying?: boolean;
+
+  /** Changes whenever the messages change. */
+  content?: unknown;
+
   /**
-   * Whether automatic dependency-driven scrolls should be paused.
+   * Where the view rests while it follows, as a scrollTop, when that is not
+   * the bottom; null for the bottom.
    */
-  autoScrollPaused?: boolean;
+  restingTop?: (container: HTMLDivElement) => number | null;
 }
 
-/**
- * Types for scroll state tracking
- */
-interface ScrollState {
-  hasScrolledToBottom: boolean;
-  isUserScrolledUp: boolean;
-  isNearTop: boolean;
-  initiallyLoaded: boolean;
-}
-
-// Actions for the scroll state reducer
-type ScrollAction =
-  | { type: "SCROLL_TO_BOTTOM" }
-  | { type: "SET_SCROLLED_UP"; value: boolean }
-  | { type: "SET_NEAR_TOP"; value: boolean }
-  | { type: "SET_INITIALLY_LOADED"; value: boolean }
-  | { type: "RESET_SCROLL_STATE" };
-
-// Reducer function for scroll state
-function scrollReducer(state: ScrollState, action: ScrollAction): ScrollState {
-  switch (action.type) {
-    case "SCROLL_TO_BOTTOM":
-      return {
-        ...state,
-        hasScrolledToBottom: true,
-        isUserScrolledUp: false,
-      };
-    case "SET_SCROLLED_UP":
-      return {
-        ...state,
-        isUserScrolledUp: action.value,
-      };
-    case "SET_NEAR_TOP":
-      return {
-        ...state,
-        isNearTop: action.value,
-      };
-    case "SET_INITIALLY_LOADED":
-      return {
-        ...state,
-        initiallyLoaded: action.value,
-      };
-    case "RESET_SCROLL_STATE":
-      return {
-        ...state,
-        hasScrolledToBottom: false,
-      };
-    default:
-      return state;
-  }
-}
-
-/**
- * Return type for the useScrollToBottom hook
- */
 interface ScrollToBottomResult {
   /** Ref to attach to the scrollable container */
   containerRef: React.RefObject<HTMLDivElement | null>;
 
-  /** Function to force scroll to bottom regardless of current position */
+  /** Goes to the bottom and follows it again. */
   scrollToBottom: () => void;
 
-  /** Whether the user has scrolled up and is reading history */
+  /** Whether the person scrolled away from where the view follows. */
   isScrolledUp: boolean;
 
   /** Whether the user is near the top of the message list */
   isNearTop: boolean;
-
-  /** Whether the initial loading has completed */
-  initiallyLoaded: boolean;
-
-  /** Function to manually check and update scroll position */
-  checkScrollPosition: () => void;
 }
 
 /**
- * Hook for managing scroll-to-bottom behavior in chat interfaces
- *
- * This hook handles:
- * 1. Auto-scrolling to bottom on initial load
- * 2. Auto-scrolling when new messages arrive (only if user hasn't scrolled up)
- * 3. Tracking scroll position to determine user intent (reading history vs. following latest)
- * 4. Managing visibility transitions to prevent flickering on load
- *
- * @param options Configuration options
- * @returns An object containing the ref to attach to the scrollable container and controls
+ * Keeps a chat's view where the conversation is: the list follows its end
+ * (or `restingTop`) as content arrives, set at once on every change of size,
+ * so it never ends short of content that grew meanwhile. Only the person
+ * scrolling away from where the view was put stops it; being back at the
+ * bottom, a new turn or a chat that finished loading starts it again.
  */
 export function useScrollToBottom({
-  enabled = true,
-  deps = [],
-  scrollUpThreshold = 100,
-  debounceMs = 50,
-  useSmoothScroll = false,
-  transitionDuration = 300,
   isTransitioning = false,
-  autoScrollPaused = false,
+  chat,
+  turn,
+  replying = false,
+  content,
+  restingTop,
 }: UseScrollToBottomOptions = {}): ScrollToBottomResult {
-  // Ref for the scrollable container element - use more specific type
   const containerRef = useRef<HTMLDivElement>(null);
+  const follows = useRef(true);
+  // Back at the bottom by hand, or a chat just opened: its end, not a
+  // resting point above it.
+  const toEnd = useRef(true);
+  // Where the list last put the view: the scroll that causes is not the
+  // person's.
+  const ownTop = useRef<number | null>(null);
+  // The view was put above the end (a resting point), not at it.
+  const restsAbove = useRef(false);
+  // Where the view was at the last scroll or pin, for the direction of the
+  // next move.
+  const lastTop = useRef(0);
+  const changedAt = useRef(0);
 
-  // Use reducer for managing scroll state
-  const [scrollState, dispatch] = useReducer(scrollReducer, {
-    hasScrolledToBottom: false,
-    isUserScrolledUp: false,
-    isNearTop: false,
-    initiallyLoaded: false,
-  });
-
-  // Extract values from scroll state for convenience and backward compatibility
-  const { hasScrolledToBottom, isUserScrolledUp, isNearTop, initiallyLoaded } =
-    scrollState;
-
-  // Also provide separate state values for UI updates
+  const holds = useRef(isTransitioning);
+  holds.current = isTransitioning;
+  const restingTopRef = useRef(restingTop);
+  restingTopRef.current = restingTop;
+  const replyingRef = useRef(replying);
+  replyingRef.current = replying;
   const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const [isNearTop, setIsNearTop] = useState(false);
 
-  // Whether the list follows its bottom: until the user scrolls up away from
-  // it, and again once the list scrolls to its bottom. Read when content
-  // grows, before the list has scrolled.
-  const followsBottom = useRef(true);
-  const holdsStill = useRef(false);
-  holdsStill.current = autoScrollPaused || isTransitioning;
-
-  // Memoize the scroll position check function for performance
-  const checkIfUserIsScrolledUp = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const distanceFromTop = scrollTop;
-
-    // Consider user as scrolled up if they're not at the bottom
-    const scrolledUp = distanceFromBottom > scrollUpThreshold;
-
-    // Consider user near top if they're within 50px of the top of the message list
-    const nearTop = distanceFromTop < 50;
-
-    // If user was scrolled up but is now at the bottom, re-enable auto-scroll
-    // This allows users to manually scroll to bottom to resume auto-scroll
-    if (isUserScrolledUp && !scrolledUp) {
-      // User has manually scrolled back to bottom, reset scroll state to re-enable auto-scroll
-      dispatch({ type: "SCROLL_TO_BOTTOM" });
-    } else {
-      // Update state with new values
-      dispatch({ type: "SET_SCROLLED_UP", value: scrolledUp });
-    }
-
-    dispatch({ type: "SET_NEAR_TOP", value: nearTop });
-
-    // Also update the UI state for backward compatibility
-    setIsScrolledUp(scrolledUp);
-  }, [scrollUpThreshold, isUserScrolledUp]);
-
-  // Memoized implementation of smooth scrolling
-  const smoothScrollToBottom = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Use CSS smooth scrolling for better performance
-    container.style.scrollBehavior = "smooth";
-    container.scrollTop = container.scrollHeight;
-    followsBottom.current = true;
-
-    // Reset after transition completes to not interfere with other scrolling
-    setTimeout(() => {
-      container.style.scrollBehavior = "auto";
-    }, transitionDuration);
-
-    dispatch({ type: "SCROLL_TO_BOTTOM" });
-    setIsScrolledUp(false);
-  }, [transitionDuration]);
-
-  // Memoized implementation of instant scrolling
-  const instantScrollToBottom = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Use requestAnimationFrame for smoother scrolling
-    requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
-      followsBottom.current = true;
-      dispatch({ type: "SCROLL_TO_BOTTOM" });
-
-      // When we scroll to bottom, update scrolled up state
-      setIsScrolledUp(false);
-    });
+  const setFollows = useCallback((value: boolean) => {
+    follows.current = value;
+    setIsScrolledUp(!value);
   }, []);
 
-  // Force a scroll to bottom regardless of current scroll position
+  const pin = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || !follows.current || holds.current) return;
+    const bottom = container.scrollHeight - container.clientHeight;
+    const resting = toEnd.current
+      ? null
+      : (restingTopRef.current?.(container) ?? null);
+    const top = Math.max(0, Math.min(bottom, resting ?? bottom));
+    restsAbove.current = bottom - top > AT_BOTTOM_PX;
+    // Resting above the end, the browser must not move the view for content
+    // above it: a move down from there is the person's.
+    container.style.overflowAnchor = restsAbove.current ? "none" : "";
+    if (Math.abs(container.scrollTop - top) < 1) return;
+    container.scrollTop = top;
+    ownTop.current = container.scrollTop;
+    lastTop.current = container.scrollTop;
+  }, []);
+
   const scrollToBottom = useCallback(() => {
-    if (useSmoothScroll) {
-      smoothScrollToBottom();
-    } else {
-      instantScrollToBottom();
-    }
-  }, [useSmoothScroll, smoothScrollToBottom, instantScrollToBottom]);
+    toEnd.current = true;
+    setFollows(true);
+    pin();
+  }, [pin, setFollows]);
 
   useEffect(() => {
-    if (autoScrollPaused && containerRef.current) {
-      containerRef.current.style.scrollBehavior = "auto";
-    }
-  }, [autoScrollPaused]);
-
-  // Debounced scroll handler to minimize performance impact
-  const debouncedCheckScrollPosition = useMemo(
-    () =>
-      debounce(() => {
-        checkIfUserIsScrolledUp();
-      }, debounceMs),
-    [checkIfUserIsScrolledUp, debounceMs],
-  );
-
-  const handleScroll = useCallback(() => {
-    debouncedCheckScrollPosition();
-  }, [debouncedCheckScrollPosition]);
-
-  // Handle scroll events to detect if user is reading history
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !enabled) return;
-
-    container.addEventListener("scroll", handleScroll);
-
-    // Check initial scroll position
-    checkIfUserIsScrolledUp();
-
-    return () => {
-      container.removeEventListener("scroll", handleScroll);
-      // Make sure to cancel any pending debounced calls on cleanup
-      debouncedCheckScrollPosition.cancel();
-    };
-  }, [
-    enabled,
-    handleScroll,
-    debouncedCheckScrollPosition,
-    checkIfUserIsScrolledUp,
-  ]);
-
-  // Content that grows keeps a list the user follows at its bottom: where the
-  // user left the list is read from its scrolling, which growing content
-  // does not change. Scrolling up away from the bottom stops following it,
-  // scrolling down to it follows it again; scrolling down elsewhere, as the
-  // browser does when it keeps the content in view in place, changes
-  // nothing.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !enabled) return;
-    let lastScrollTop = container.scrollTop;
-    const followScrolling = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const atBottom =
-        scrollHeight - scrollTop - clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
-      if (atBottom || scrollTop < lastScrollTop) {
-        followsBottom.current = atBottom;
-      }
-      lastScrollTop = scrollTop;
-    };
-    const keepBottom = () => {
-      if (!followsBottom.current || holdsStill.current) return;
-      container.scrollTop = container.scrollHeight;
-    };
-    container.addEventListener("scroll", followScrolling, { passive: true });
-    container.addEventListener(CONTENT_RESIZED_EVENT, keepBottom);
-    return () => {
-      container.removeEventListener("scroll", followScrolling);
-      container.removeEventListener(CONTENT_RESIZED_EVENT, keepBottom);
-    };
-  }, [enabled]);
-
-  // Handle automatic scrolling on initial load and when new messages arrive
-  useEffect(() => {
-    if (!enabled) return;
-
     const container = containerRef.current;
     if (!container) return;
 
-    // During transitions, we just reset state but don't scroll yet
-    if (isTransitioning) {
-      dispatch({ type: "RESET_SCROLL_STATE" });
-      return;
-    }
+    // The list's own size (the composer changing height) and its content
+    // while it arrives and settles: text streaming, a card or view mounting,
+    // an answer folding.
+    const box = new ResizeObserver(pin);
+    box.observe(container);
+    const resizes = new ResizeObserver(() => {
+      if (replyingRef.current || Date.now() - changedAt.current < SETTLING_MS)
+        pin();
+    });
+    const observeChildren = () => {
+      resizes.disconnect();
+      for (const child of Array.from(container.children)) {
+        resizes.observe(child);
+      }
+    };
+    observeChildren();
+    const childrenChange = new MutationObserver(observeChildren);
+    childrenChange.observe(container, { childList: true });
+    container.addEventListener(CONTENT_RESIZED_EVENT, pin);
 
-    // If we haven't scrolled to bottom yet or user isn't scrolled up
-    if (!autoScrollPaused && (!hasScrolledToBottom || !isUserScrolledUp)) {
-      // Add a small delay to ensure content is fully rendered
-      const timer = setTimeout(() => {
-        if (useSmoothScroll) {
-          updateContainerStyle(container, { scrollBehavior: "smooth" });
-          container.scrollTop = container.scrollHeight;
-
-          // Reset scroll behavior after animation completes
-          setTimeout(() => {
-            updateContainerStyle(container, { scrollBehavior: "auto" });
-          }, transitionDuration);
-        } else {
-          container.scrollTop = container.scrollHeight;
+    lastTop.current = container.scrollTop;
+    // The list's size at the last scroll: a move that comes with a change of
+    // size is the browser's.
+    let size = {
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    };
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      setIsNearTop(scrollTop < NEAR_TOP_PX);
+      const movedUp = scrollTop < lastTop.current;
+      lastTop.current = scrollTop;
+      const before = size;
+      size = { scrollHeight, clientHeight };
+      const own =
+        ownTop.current !== null && Math.abs(scrollTop - ownTop.current) < 1;
+      ownTop.current = null;
+      if (own || holds.current) return;
+      if (scrollHeight - scrollTop - clientHeight <= AT_BOTTOM_PX) {
+        // Back at the end, by hand or because content above it went.
+        if (!follows.current) {
+          toEnd.current = true;
+          setFollows(true);
+        } else if (restsAbove.current && !movedUp) {
+          toEnd.current = true;
         }
-        followsBottom.current = true;
+        return;
+      }
+      if (!follows.current) return;
+      // Up, while the list stayed the same size: the person. With a change
+      // of size it is the browser keeping the list in bounds (the composer
+      // shrinking, content folding). Down, away from the end: the person
+      // reading on from a resting point, else the browser or a view
+      // scrolling itself into view.
+      const browser = movedUp
+        ? clientHeight > before.clientHeight ||
+          scrollHeight < before.scrollHeight
+        : !restsAbove.current;
+      if (browser) pin();
+      else setFollows(false);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
 
-        // Update state after scrolling
-        dispatch({ type: "SCROLL_TO_BOTTOM" });
+    return () => {
+      box.disconnect();
+      resizes.disconnect();
+      childrenChange.disconnect();
+      container.removeEventListener(CONTENT_RESIZED_EVENT, pin);
+      container.removeEventListener("scroll", onScroll);
+    };
+  }, [pin, setFollows]);
 
-        if (!hasScrolledToBottom) {
-          dispatch({ type: "SET_INITIALLY_LOADED", value: true });
-        }
-      }, 50);
+  useEffect(() => {
+    changedAt.current = Date.now();
+    pin();
+  }, [content, pin]);
 
-      return () => clearTimeout(timer);
-    }
+  // The person's new turn brings the view to it, also from where they had
+  // scrolled to; its reply may rest above the end.
+  const lastTurn = useRef(turn);
+  useEffect(() => {
+    if (lastTurn.current === turn) return;
+    lastTurn.current = turn;
+    toEnd.current = false;
+    setFollows(true);
+    pin();
+  }, [turn, pin, setFollows]);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    enabled,
-    isTransitioning,
-    autoScrollPaused,
-    useSmoothScroll,
-    transitionDuration,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    ...deps,
-  ]);
+  // A chat opened or finished loading shows its end, unless a reply is
+  // coming in it now; after the turn above, as its messages count as turns.
+  useEffect(() => {
+    if (isTransitioning) return;
+    toEnd.current = !replyingRef.current;
+    setFollows(true);
+    pin();
+  }, [chat, isTransitioning, pin, setFollows]);
 
-  // Helper function for managing container styles
-  const updateContainerStyle = useCallback(
-    (container: HTMLDivElement, styles: Partial<CSSStyleDeclaration>) => {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- isUserMessage can be undefined based on props type
-      if (!container) return;
-
-      Object.entries(styles).forEach(([property, value]) => {
-        if (value !== undefined && value !== null) {
-          // @ts-ignore - we know these styles exist
-          container.style[property] = value;
-        }
-      });
-    },
-    [],
-  );
-
-  return {
-    containerRef,
-    scrollToBottom,
-    isScrolledUp,
-    isNearTop,
-    initiallyLoaded,
-    checkScrollPosition: checkIfUserIsScrolledUp,
-  };
+  return { containerRef, scrollToBottom, isScrolledUp, isNearTop };
 }
