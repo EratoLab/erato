@@ -1522,15 +1522,133 @@ describe("listening against the endpoint", () => {
       expect(send).not.toHaveBeenCalled();
     });
 
-    it("the phrase from a recording that could not carry it is no miss", async () => {
-      const { decision } = deciding();
-      const { heardApprovalWords, useApprovalListening } = await heardCard(
-        undefined,
-        CARD,
-        decision,
-      );
+    /** The sentences of what the voice said last. */
+    const lastSaid = () => {
+      const said = notices();
+      const last = said[said.length - 1];
+      audio(last, 0);
+      playOut();
+      return sentences(last);
+    };
+    const SAY_AGAIN = {
+      approve: {
+        words: "Ich bestätige.",
+        again: "Bitte noch einmal „Ich bestätige“ sagen.",
+        screen: "Dann bitte auf dem Bildschirm bestätigen.",
+        receipt: "receipt-ok",
+      },
+      reject: {
+        words: "Nein.",
+        again: "Das habe ich nicht sicher gehört. Bitte noch einmal sagen.",
+        screen: "Das ging nicht durch. Bitte auf dem Bildschirm entscheiden.",
+        receipt: "receipt-no",
+      },
+    } as const;
+
+    describe.each(["approve", "reject"] as const)(
+      "ERMAIN-1340: %s from a recording that could not carry it",
+      (meaning) => {
+        const { words, again, screen, receipt } = SAY_AGAIN[meaning];
+
+        it("is asked for once more, and the next good try decides", async () => {
+          const { decision, send } = deciding();
+          const { heardApprovalWords } = await heardCard(
+            undefined,
+            CARD,
+            decision,
+          );
+          answer(meaning, { status: "say_again" });
+          await heardApprovalWords(KEY, words, RECORDING);
+          expect(lastSaid()).toEqual([again]);
+          answer(meaning, { status: "accepted", receipt });
+          const heard = heardApprovalWords(KEY, words, RECORDING);
+          if (meaning === "reject") {
+            await vi.waitFor(() => expect(notices()).toHaveLength(2));
+            expect(lastSaid()).toEqual(["Gut, ich mache nichts."]);
+          }
+          await heard;
+          expect(send).toHaveBeenCalledWith(meaning, receipt);
+        });
+
+        it("a second failed try points to the screen, and the card listens on", async () => {
+          const { decision, send } = deciding();
+          const {
+            heardApprovalWords,
+            useApprovalListening,
+            useApprovalSpeech,
+          } = await heardCard(undefined, CARD, decision);
+          for (const expected of [again, screen, screen]) {
+            answer(meaning, { status: "say_again" });
+            await heardApprovalWords(KEY, words, RECORDING);
+            expect(lastSaid()).toEqual([expected]);
+          }
+          expect(send).not.toHaveBeenCalled();
+          expect(useApprovalListening.getState().quiet).toBeNull();
+          // Navigation still works after the screen was named.
+          answer("repeat");
+          await heardApprovalWords(KEY, "nochmal", RECORDING);
+          expect(useApprovalSpeech.getState().speaking).toBe(true);
+        });
+
+        it("a near miss and a failed recording count together", async () => {
+          const { decision, send } = deciding();
+          const { heardApprovalWords } = await heardCard(
+            undefined,
+            CARD,
+            decision,
+          );
+          answer("approve", { status: "phrase_needed" });
+          await heardApprovalWords(KEY, "Ja.", RECORDING);
+          expect(lastSaid()).toEqual(["Bitte „Ich bestätige“ sagen."]);
+          answer(meaning, { status: "say_again" });
+          await heardApprovalWords(KEY, words, RECORDING);
+          expect(lastSaid()).toEqual([screen]);
+          expect(send).not.toHaveBeenCalled();
+        });
+      },
+    );
+
+    it("failed tries count per card: the next card asks again first", async () => {
+      const { decision, send } = deciding();
+      const { heardApprovalWords, speakApprovalCard, useApprovalListening } =
+        await heardCard(undefined, CARD, decision);
       answer("approve", { status: "say_again" });
       await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+      expect(lastSaid()).toEqual([SAY_AGAIN.approve.again]);
+      const NEXT = "message-1:stop-2";
+      speakApprovalCard({
+        key: NEXT,
+        messageId: "message-1",
+        pieces: CARD,
+        language: "de",
+        approval: { type: "pointer" },
+        decision: { ...decision, approvalId: "call-8" },
+      });
+      const before = connections.length;
+      await vi.waitFor(() => expect(connections.length).toBe(before + 1));
+      CARD.forEach((_, index) => {
+        audio(connections[before], index);
+        playOut();
+      });
+      answer("approve", { status: "say_again" });
+      await heardApprovalWords(NEXT, "Ich bestätige.", RECORDING);
+      expect(lastSaid()).toEqual([SAY_AGAIN.approve.again]);
+      expect(useApprovalListening.getState().misses).toMatchObject({
+        [KEY]: 1,
+        [NEXT]: 1,
+      });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("with deciding by voice off, a failed recording changes nothing", async () => {
+      const { heardApprovalWords, useApprovalListening } = await heardCard();
+      for (let i = 0; i < 2; i += 1) {
+        answer("approve", { status: "say_again" });
+        await heardApprovalWords(KEY, "Ich bestätige.", RECORDING);
+        expect(lastSaid()).toEqual([
+          "Zustimmen geht im Moment nur auf dem Bildschirm.",
+        ]);
+      }
       expect(useApprovalListening.getState().misses[KEY] ?? 0).toBe(0);
     });
 

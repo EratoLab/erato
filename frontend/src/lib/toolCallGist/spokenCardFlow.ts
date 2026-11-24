@@ -57,7 +57,7 @@ export type SpokenNotice =
   | { kind: "say_phrase_again" }
   /** A refusal not from a recording that may decide: once more. */
   | { kind: "say_again" }
-  /** Near misses again: the screen, without teaching further. */
+  /** A second failed try at the phrase: the screen, without teaching further. */
   | { kind: "phrase_on_screen" }
   /** Refused by voice; said before the refusal goes out. */
   | { kind: "declined" }
