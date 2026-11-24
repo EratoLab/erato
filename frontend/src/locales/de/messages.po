@@ -3290,6 +3290,11 @@ msgid "chat.warning.budget.period_suffix"
 msgstr " Dies gilt für deine {days}-Tage-Budgetperiode."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.addMenu.modelHeader"
+msgstr "Modell"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.toolsHeader"
 msgstr "Tools"
@@ -3298,6 +3303,11 @@ msgstr "Tools"
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.trigger"
 msgstr "Dateien und Tools hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.triggerWithTools"
+msgstr "{selectedToolCount, plural, one {Dateien und Tools hinzufügen, # Tool aktiv} other {Dateien und Tools hinzufügen, # Tools aktiv}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
