@@ -106,6 +106,13 @@ export function noteVoiceChunk(
  * around the spot reached in the passage then playing, at that passage's
  * own pace. Empty when nothing was sounding.
  */
+/** All of the reply's audio is scheduled: its last passage ends where it ends. */
+function completeLastPassage() {
+  const last = said.at(-1);
+  if (last && audioEnded && held === null && gate === null)
+    last.complete = true;
+}
+
 export function voiceTextAtPause(): string {
   return pausedAt === null ? "" : voiceTextAt(said, pausedAt);
 }
@@ -297,6 +304,7 @@ export function releaseReplyAudio() {
     }
   }
   if (audioEnded) queue.flush();
+  completeLastPassage();
   useSpeechPlayback.setState({ playing: true });
 }
 
@@ -399,6 +407,7 @@ export function resumeSpeechPlayback() {
   }
   // Already there: it goes on at once.
   queue.flush();
+  completeLastPassage();
   if (chunks.length > 0) useSpeechPlayback.setState({ playing: true });
 }
 export function beginSpeechResponse(streamKey?: string) {
@@ -444,6 +453,7 @@ export function endSpeechResponse(streamKey?: string, messageId?: string) {
   // A paused voice or one behind a wait line is finished by its release.
   if (held !== null || gate !== null) return;
   queue.flush();
+  completeLastPassage();
   if (!queue.active) {
     clearUnderrun();
     useSpeechPlayback.setState({ playing: false });

@@ -530,6 +530,28 @@ describe("what the voice was saying when it was talked over", () => {
     expect(p.voiceTextAtPause()).toBe("");
   });
 
+  it("reads the last passage at its own pace once all its audio has come", async () => {
+    const p = await import("./speechPlayback");
+    const { playbackContext } = await import("./pcmPlayback");
+    p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+    await p.unlockSpeechPlayback();
+    const clock = playbackContext() as unknown as { currentTime: number };
+    clock.currentTime = 0;
+    p.beginSpeechResponse("s");
+    // 72 words of 5 characters in 20 s: 18 characters a second.
+    const passage = Array.from(
+      { length: 72 },
+      (_, at) => `w${String(at).padStart(3, "0")}`,
+    ).join(" ");
+    const twentySeconds = "AAAA".repeat((24000 * 2 * 20) / 3);
+    p.playSpeechChunk("m", 0, twentySeconds, 24000, "s", passage);
+    p.endSpeechResponse("s");
+    clock.currentTime = 14.5;
+    p.pauseSpeechPlayback();
+    // At 15 characters a second the window would end near "w050".
+    expect(p.voiceTextAtPause()).toContain("w055");
+  });
+
   it("still knows the passage after the voice went on from a pause", async () => {
     const p = await import("./speechPlayback");
     const { playbackContext } = await import("./pcmPlayback");
