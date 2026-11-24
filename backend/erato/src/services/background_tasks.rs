@@ -611,18 +611,6 @@ impl BackgroundTaskManager {
     /// outcome. Gated on `generation_id` so a stale wrapper finishing late
     /// cannot remove (or mark terminal) a replacement generation.
     pub async fn remove_task(&self, chat_id: &Uuid, generation_id: Uuid, outcome: TaskOutcome) {
-        {
-            let mut tasks =
-                crate::latency::stage("generation.registry_lock_wait", self.tasks.write()).await;
-            let _hold_timer = crate::latency::StageTimer::new("generation.registry_lock_hold");
-            if tasks
-                .get(chat_id)
-                .is_some_and(|task| task.generation_id == generation_id)
-            {
-                tasks.remove(chat_id);
-            }
-        }
-
         if let Some(db) = &self.db {
             let shared_statement = named_statement_from_sql_and_values(
                 sea_orm::DatabaseBackend::Postgres,
@@ -660,6 +648,21 @@ impl BackgroundTaskManager {
                     error = %err,
                     "Failed to persist generation outcome"
                 );
+            }
+        }
+
+        // Left in the map until the row says the generation ended: a decision
+        // that finds it there waits for that write instead of being refused by
+        // a row still reading 'running' (`claim_decision_lease`).
+        {
+            let mut tasks =
+                crate::latency::stage("generation.registry_lock_wait", self.tasks.write()).await;
+            let _hold_timer = crate::latency::StageTimer::new("generation.registry_lock_hold");
+            if tasks
+                .get(chat_id)
+                .is_some_and(|task| task.generation_id == generation_id)
+            {
+                tasks.remove(chat_id);
             }
         }
     }
