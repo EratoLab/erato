@@ -4,7 +4,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use config::builder::DefaultState;
 use config::{Config, ConfigBuilder, ConfigError, Environment, File, FileFormat};
 use erato_memory::HeapSize;
-use eyre::{OptionExt, Report, eyre};
+use eyre::{OptionExt, Report, WrapErr, eyre};
 use facet::Facet;
 use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
@@ -108,6 +108,9 @@ pub fn validate_mcp_server_ids(
         }
         server.glossary.validate(id)?;
         server.mcp_apps.validate(id)?;
+        for (tool, tool_config) in &server.tools {
+            tool_config.validate(id, tool)?;
+        }
     }
 
     Ok(())
@@ -5164,6 +5167,15 @@ pub struct McpServerConfig {
     pub max_session_idle_seconds: Option<u64>,
 }
 
+impl McpServerConfig {
+    /// The record link rules of the tool named exactly `tool`.
+    pub fn record_links(&self, tool: &str) -> &[McpRecordLinkConfig] {
+        self.tools
+            .get(tool)
+            .map_or(&[], |tool| tool.record_links.as_slice())
+    }
+}
+
 /// MCP Apps for one server: the `ui://` view a tool names in
 /// `_meta.ui.resourceUri` is read with `resources/read` when the tool is
 /// called, and the web app shows it beside the call.
@@ -5357,6 +5369,228 @@ pub struct McpToolConfig {
     pub default_tool_annotations: McpToolAnnotationsConfig,
     #[serde(default)]
     pub override_tool_annotations: McpToolAnnotationsConfig,
+    /// Links to the records a call of this tool reads, creates or changes,
+    /// for servers whose results name records without saying where to open
+    /// them. Erato builds each link from the call and its result, shows it on
+    /// the call and lists it after the result the model reads. For each
+    /// result row, and once for the call itself, the first rule whose values
+    /// are all found wins.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub record_links: Vec<McpRecordLinkConfig>,
+}
+
+/// One way to build a record link: an `https` URL with `{name}` placeholders
+/// and where each placeholder's value comes from.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpRecordLinkConfig {
+    /// The link, such as `https://records.example.com/{table}/{id}`. Each
+    /// placeholder must name one of `values`; its value is percent-encoded
+    /// where it is put in.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub url: String,
+    /// What the link is called, such as `{name}`. A title whose values are
+    /// not all found is left out, and the link shows its host instead.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub title: Option<String>,
+    /// A JSON pointer with `*` to the rows of the result, such as `/*` or
+    /// `/value/*`, when the rule builds a link per row. Required exactly when
+    /// a value reads `row`. The result is its structured content, else its
+    /// text read as JSON, else the JSON after the text's first line.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub rows: Option<String>,
+    /// Where each placeholder's value comes from, keyed by its name.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub values: HashMap<String, McpRecordLinkValueConfig>,
+    /// Regular expressions that values must match for this rule to apply,
+    /// keyed by the value's name, such as `{ status = "^Draft$" }`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub when: HashMap<String, String>,
+}
+
+/// Where one value of a record link comes from: exactly one of `argument`,
+/// `sql_table`, `result_text` and `row`.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpRecordLinkValueConfig {
+    /// JSON pointers into the call's arguments, such as `/tablename`; the
+    /// first that holds a text or a number wins.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub argument: Vec<String>,
+    /// A JSON pointer to an argument holding one SQL `SELECT`; the value is
+    /// the table it reads, when it reads exactly one.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub sql_table: Option<String>,
+    /// A regular expression with one capture group, matched against the
+    /// result's text, such as `ID ([0-9a-fA-F-]{36})`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub result_text: Option<String>,
+    /// Members of each row `rows` reaches, the first that holds a text or a
+    /// number wins. A name may hold placeholders of the rule's values that
+    /// are not rows, such as `{table}id`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub row: Vec<String>,
+    /// A regular expression with one capture group applied to the value
+    /// found; the group becomes the value, and a value it does not match
+    /// counts as not found.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub pattern: Option<String>,
+}
+
+/// Record link rules one tool holds.
+const MAX_RECORD_LINK_RULES: usize = 64;
+
+impl McpRecordLinkValueConfig {
+    pub fn is_row(&self) -> bool {
+        !self.row.is_empty()
+    }
+}
+
+/// The `{name}` placeholders of a record link template, in order.
+pub fn record_link_placeholders(template: &str) -> Vec<&str> {
+    let mut names = Vec::new();
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else { break };
+        names.push(&after[..end]);
+        rest = &after[end + 1..];
+    }
+    names
+}
+
+impl McpToolConfig {
+    /// Called from both config load paths, like `validate_mcp_server_ids`.
+    fn validate(&self, server_id: &str, tool: &str) -> Result<(), Report> {
+        if self.record_links.len() > MAX_RECORD_LINK_RULES {
+            return Err(eyre!(
+                "MCP server '{server_id}', tool '{tool}': at most {MAX_RECORD_LINK_RULES} record_links"
+            ));
+        }
+        for (index, rule) in self.record_links.iter().enumerate() {
+            rule.validate().wrap_err_with(|| {
+                format!("MCP server '{server_id}', tool '{tool}': record_links[{index}]")
+            })?;
+        }
+        Ok(())
+    }
+}
+
+impl McpRecordLinkConfig {
+    fn validate(&self) -> Result<(), Report> {
+        let authority_end = self
+            .url
+            .split_once("://")
+            .map(|(scheme, rest)| {
+                scheme.len() + 3 + rest.find(['/', '?', '#']).unwrap_or(rest.len())
+            })
+            .unwrap_or(self.url.len());
+        if self.url[..authority_end].contains('{') {
+            return Err(eyre!(
+                "url must name its scheme and host itself: values may only fill its path, query or fragment"
+            ));
+        }
+        let mut sample = self.url.clone();
+        for name in record_link_placeholders(&self.url) {
+            if !self.values.contains_key(name) {
+                return Err(eyre!("url placeholder '{{{name}}}' has no entry in values"));
+            }
+            sample = sample.replacen(&format!("{{{name}}}"), "x", 1);
+        }
+        let url = url::Url::parse(&sample).wrap_err("url must be an absolute URL")?;
+        if url.scheme() != "https"
+            || url.host_str().is_none_or(str::is_empty)
+            || !url.username().is_empty()
+            || url.password().is_some()
+        {
+            return Err(eyre!("url must be https with a host and without user info"));
+        }
+        if let Some(title) = &self.title
+            && let Some(name) = record_link_placeholders(title)
+                .into_iter()
+                .find(|name| !self.values.contains_key(*name))
+        {
+            return Err(eyre!(
+                "title placeholder '{{{name}}}' has no entry in values"
+            ));
+        }
+        let reads_rows = self.values.values().any(McpRecordLinkValueConfig::is_row);
+        match &self.rows {
+            Some(rows) if !rows.starts_with('/') => {
+                return Err(eyre!(
+                    "rows '{rows}' must be a JSON pointer starting with '/'"
+                ));
+            }
+            Some(_) if !reads_rows => {
+                return Err(eyre!("rows is set but no value reads a row"));
+            }
+            None if reads_rows => {
+                return Err(eyre!("a value reads a row, so rows is required"));
+            }
+            _ => {}
+        }
+        for (name, value) in &self.values {
+            value
+                .validate(&self.values)
+                .wrap_err_with(|| format!("values.{name}"))?;
+        }
+        for (name, pattern) in &self.when {
+            if !self.values.contains_key(name) {
+                return Err(eyre!("when.{name} has no entry in values"));
+            }
+            regex::Regex::new(pattern).wrap_err_with(|| format!("when.{name}"))?;
+        }
+        Ok(())
+    }
+}
+
+impl McpRecordLinkValueConfig {
+    fn validate(&self, values: &HashMap<String, McpRecordLinkValueConfig>) -> Result<(), Report> {
+        let sources = usize::from(!self.argument.is_empty())
+            + usize::from(self.sql_table.is_some())
+            + usize::from(self.result_text.is_some())
+            + usize::from(!self.row.is_empty());
+        if sources != 1 {
+            return Err(eyre!(
+                "set exactly one of argument, sql_table, result_text and row"
+            ));
+        }
+        for pointer in self.argument.iter().chain(&self.sql_table) {
+            if !pointer.starts_with('/') {
+                return Err(eyre!(
+                    "'{pointer}' must be a JSON pointer starting with '/'"
+                ));
+            }
+        }
+        for pattern in self.result_text.iter().chain(&self.pattern) {
+            let regex = regex::Regex::new(pattern)?;
+            if regex.captures_len() < 2 {
+                return Err(eyre!("'{pattern}' needs a capture group"));
+            }
+        }
+        for field in &self.row {
+            for name in record_link_placeholders(field) {
+                if values
+                    .get(name)
+                    .is_none_or(McpRecordLinkValueConfig::is_row)
+                {
+                    return Err(eyre!(
+                        "row member '{field}' may only use placeholders of values that are not rows"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default, HeapSize)]

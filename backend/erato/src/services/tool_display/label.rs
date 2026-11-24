@@ -20,6 +20,7 @@ mod words;
 
 pub use arguments::{json_strings_read, readable_arguments};
 pub use context::ToolResultContext;
+pub(crate) use sql::single_read_table;
 
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource,

@@ -4935,6 +4935,60 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].rows": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].title": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].url": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.argument.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.pattern": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.result_text": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.row.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.sql_table": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "mcp_servers.<server-id>.tools.<tool-name>.record_links.[].when.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "mcp_servers.<server-id>.transport_type": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",

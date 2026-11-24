@@ -244,6 +244,16 @@ fn after_leading_comments(text: &str) -> &str {
     }
 }
 
+/// The one table `text` reads, when it is certainly a plain read of exactly
+/// one table.
+pub(crate) fn single_read_table(text: &str) -> Option<String> {
+    let read = plain_read(text)?;
+    match read.tables.as_slice() {
+        [table] if read.tables_omitted == 0 => Some(table.clone()),
+        _ => None,
+    }
+}
+
 /// The description of `text` when it is certainly one plain read: one
 /// SELECT, alone, that only reads tables and calls only functions on the
 /// pure list. `None` for anything else, including what no dialect parses.

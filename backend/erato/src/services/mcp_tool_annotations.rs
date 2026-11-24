@@ -290,6 +290,7 @@ mod tests {
                     McpToolConfig {
                         override_tool_annotations: hints(layer(0)),
                         default_tool_annotations: hints(layer(4)),
+                        record_links: Vec::new(),
                     },
                 );
                 let declared = tool(Some(ToolAnnotations::from_raw(

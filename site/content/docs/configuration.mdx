@@ -5221,7 +5221,7 @@ destructive_hint = true
 
 **Default:** `{}`
 
-Annotation settings keyed by exact, case-sensitive, original MCP tool name within that server. Wildcards are not supported for these entries. Quote TOML key segments when a name contains punctuation, for example `[mcp_servers.files.tools."Read.File".default_tool_annotations]`. Entries do not expose excluded tools or create new tools. A configured name may be absent from discovery, since tools can depend on authentication or change over time. Per-tool entries accept only `default_tool_annotations` and `override_tool_annotations`.
+Annotation settings keyed by exact, case-sensitive, original MCP tool name within that server. Wildcards are not supported for these entries. Quote TOML key segments when a name contains punctuation, for example `[mcp_servers.files.tools."Read.File".default_tool_annotations]`. Entries do not expose excluded tools or create new tools. A configured name may be absent from discovery, since tools can depend on authentication or change over time. Per-tool entries accept only `default_tool_annotations`, `override_tool_annotations` and `record_links`.
 
 #### `mcp_servers_global.default_tool_annotations`
 
@@ -5486,6 +5486,74 @@ Whether repeated calls with identical arguments have no additional effect. Omitt
 **Type:** `boolean | None`
 
 Whether the tool can interact with external entities beyond a closed domain. Omitted values inherit.
+
+##### `mcp_servers.<server-id>.tools.<tool-name>.record_links`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[] */}
+
+**Type:** `array<object>`
+
+**Default:** `[]`
+
+Links to the records a call of this tool reads, creates or changes, for servers whose results name records (by key or number) without saying where to open them, such as the Dataverse and Business Central MCP servers. Erato builds each link from the call's arguments and its result, shows it on the call, and lists it after the result the model reads (`Links to open these records:` with one line per link), so the model can put the link in its answer. The model reads the list in later turns too. The server's output itself is kept as it was.
+
+For each result row, the first rule with `rows` whose values are all found (and match `when`) builds that row's link. For the call itself, the first rule without `rows` that finds all its values builds one link. A call gets at most 25 links, and a result the server marks as an error gets none. Rules are checked at startup and on reload.
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].url */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].title */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].rows */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].when */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].when.<key> */}
+
+Each rule has:
+
+- `url` (required): an `https` URL with `{name}` placeholders in its path, query or fragment (never in its scheme or host). Each placeholder must name an entry of `values`; its value is percent-encoded where it is put in, so write the rest of the URL already encoded.
+- `title`: what the link is called, such as `"{name}"`. Left out when one of its values is not found; the call then shows the link's host.
+- `rows`: a JSON pointer with `*` to the rows of the result, such as `"/*"` or `"/value/*"`, for a rule that builds a link per row. Required exactly when a value reads `row`. The result is its structured content, else its text read as JSON, else the JSON after the text's first line.
+- `values` (required): where each placeholder's value comes from, keyed by its name.
+- `when`: regular expressions that values must match for the rule to apply, keyed by the value's name.
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.argument.[] */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.sql_table */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.result_text */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.row.[] */}
+{/* erato_toml_config_key: mcp_servers.<server-id>.tools.<tool-name>.record_links.[].values.<key>.pattern */}
+
+Each value sets exactly one source:
+
+- `argument`: JSON pointers into the call's arguments, such as `["/tablename"]`; the first that holds a text or a number wins.
+- `sql_table`: a JSON pointer to an argument holding one SQL `SELECT`; the value is the table it reads, when it certainly reads exactly one.
+- `result_text`: a regular expression with a capture group, matched against the result's text; the first group is the value.
+- `row`: members of each row `rows` reaches, the first that holds a text or a number wins. A name may hold placeholders of the rule's values that are not rows, such as `"{table}id"`.
+
+and may set `pattern`, a regular expression with a capture group applied to the value found: the first group becomes the value, and a value it does not match counts as not found.
+
+**Example** (Dataverse and Business Central):
+
+```toml
+[[mcp_servers.dynamics.tools.read_query.record_links]]
+url = "https://org.crm.dynamics.com/main.aspx?pagetype=entityrecord&etn={table}&id={id}"
+title = "{name}"
+rows = "/*"
+values.table = { sql_table = "/querytext" }
+values.id = { row = ["{table}id", "activityid"] }
+values.name = { row = ["name", "subject", "fullname", "title"] }
+
+[[mcp_servers.dynamics.tools.create_record.record_links]]
+url = "https://org.crm.dynamics.com/main.aspx?pagetype=entityrecord&etn={table}&id={id}"
+values.table = { argument = ["/tablename"] }
+values.id = { result_text = "ID ([0-9a-fA-F-]{36})" }
+
+[[mcp_servers.business_central.tools.bc_actions_invoke.record_links]]
+url = "https://businesscentral.dynamics.com/<tenant-id>/Production?company=CRONUS%20DE&page=42&filter=%27No.%27%20IS%20%27{number}%27"
+title = "{number}"
+rows = "/value/*"
+values.entity = { argument = ["/ActionName"], pattern = "^[A-Za-z]+_([A-Za-z]+?)_PAG[0-9]+$" }
+values.number = { row = ["number"] }
+when.entity = "^SalesOrders?$"
+```
 
 #### `mcp_servers.<server-id>.wait_tools`
 

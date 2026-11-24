@@ -37,6 +37,7 @@ pub mod mcp_apps;
 pub mod mcp_call_error;
 pub mod mcp_manager;
 pub mod mcp_oauth;
+pub mod mcp_record_links;
 pub mod mcp_session_manager;
 mod mcp_stateless;
 pub mod mcp_surface;

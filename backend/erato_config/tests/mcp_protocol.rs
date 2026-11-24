@@ -373,3 +373,37 @@ fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
         "I \u{2764}\u{FE0F} it, 1\u{FE0F}\u{20E3}"
     ));
 }
+
+#[test]
+fn record_link_rules_are_checked() {
+    let rule = |body: &str| format!("[[tools.read_query.record_links]]\n{body}");
+    let valid = "url = 'https://org.example.com/main.aspx?etn={table}&id={id}'\nrows = '/*'\nvalues.table = { sql_table = '/querytext' }\nvalues.id = { row = ['{table}id', 'activityid'] }";
+    assert!(validates(&rule(valid)));
+    let server = parse(&rule(valid)).unwrap();
+    assert_eq!(server.record_links("read_query").len(), 1);
+    assert!(server.record_links("search").is_empty());
+
+    for invalid in [
+        "url = 'https://org.example.com/{table}/{id}'\nvalues.table = { argument = ['/tablename'] }",
+        "url = 'http://org.example.com/{id}'\nvalues.id = { argument = ['/id'] }",
+        "url = 'https://{host}/{id}'\nvalues.id = { argument = ['/id'] }\nvalues.host = { argument = ['/host'] }",
+        "url = 'https://org.example.com/{id}'\nvalues.id = { argument = ['/id'], result_text = 'ID ([0-9]+)' }",
+        "url = 'https://org.example.com/{id}'\nvalues.id = {}",
+        "url = 'https://org.example.com/{id}'\nvalues.id = { result_text = 'ID [0-9]+' }",
+        "url = 'https://org.example.com/{id}'\nvalues.id = { argument = ['id'] }",
+        "url = 'https://org.example.com/{id}'\nvalues.id = { row = ['id'] }",
+        "url = 'https://org.example.com/{id}'\nrows = '/*'\nvalues.id = { argument = ['/id'] }",
+        "url = 'https://org.example.com/{id}'\nrows = 'value'\nvalues.id = { row = ['id'] }",
+        "url = 'https://org.example.com/{id}'\nrows = '/*'\nvalues.id = { row = ['{kind}id'] }\nvalues.kind = { row = ['kind'] }",
+        "url = 'https://org.example.com/{id}'\nrows = '/*'\nvalues.id = { row = ['id'] }\nwhen.status = '^Open$'",
+        "url = 'https://org.example.com/{id}'\nrows = '/*'\ntitle = '{name}'\nvalues.id = { row = ['id'] }",
+    ] {
+        assert!(!validates(&rule(invalid)), "{invalid}");
+    }
+    assert!(
+        parse(&rule(
+            "url = 'https://org.example.com/'\nvalues = {}\nlinks = 1"
+        ))
+        .is_err()
+    );
+}

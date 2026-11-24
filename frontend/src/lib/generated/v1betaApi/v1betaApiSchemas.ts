@@ -6018,6 +6018,11 @@ export type ToolResultDetails = {
  */
 export type ToolResultLink = {
   /**
+   * Erato built this link from the tool's `record_links`, and the model
+   * reads it with the result. Links the server returned stay the UI's.
+   */
+  for_model?: boolean;
+  /**
    * The link's host as the URL parser reads it: lowercase, and punycode for
    * a non-ASCII name, so a lookalike host reads as `xn--…`.
    */

@@ -456,8 +456,8 @@ pub struct ToolUse {
     pub total: Option<f64>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
-    /// The links of an MCP result. For the UI only: replay drops it, so the
-    /// model never sees it.
+    /// The links of an MCP result. For the UI, except links marked
+    /// `for_model`, which replay keeps and the model reads after the output.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -574,6 +574,10 @@ pub struct ToolResultLink {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub title: Option<String>,
+    /// Erato built this link from the tool's `record_links`, and the model
+    /// reads it with the result. Links the server returned stay the UI's.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub for_model: bool,
 }
 
 /// Snapshot of the MCP annotations used to decide whether a tool call needs

@@ -107,10 +107,9 @@ impl From<ContentPart> for GenAiMessageContent {
             ContentPart::ToolUse(tool_use) => {
                 GenAiMessageContent::from_parts(vec![genai::chat::ContentPart::ToolResponse(
                     ToolResponse {
+                        content: tool_response_text(&tool_use),
                         fn_name: Some(tool_use.tool_name),
                         call_id: tool_use.tool_call_id,
-                        content: serde_json::to_string(&tool_use.output)
-                            .expect("Failed to serialize tool output"),
                     },
                 )])
             }
@@ -164,6 +163,18 @@ impl From<ContentPart> for GenAiMessageContent {
     }
 }
 
+/// A replayed tool result as the model reads it: its output, then the
+/// record links Erato built for it.
+fn tool_response_text(tool_use: &crate::models::message::ToolUse) -> String {
+    let output = serde_json::to_string(&tool_use.output).expect("Failed to serialize tool output");
+    match &tool_use.result_details {
+        Some(details) => {
+            output + &crate::services::mcp_record_links::model_read_links(&details.links)
+        }
+        None => output,
+    }
+}
+
 impl InputMessage {
     pub fn into_chat_message(mut self) -> ChatMessage {
         if let ContentPart::ToolUse(tool_use) = &mut self.content
@@ -186,10 +197,9 @@ impl InputMessage {
             },
             MessageRole::Tool => match self.content {
                 ContentPart::ToolUse(tool_use) => ChatMessage::from(ToolResponse {
+                    content: tool_response_text(&tool_use),
                     fn_name: Some(tool_use.tool_name),
                     call_id: tool_use.tool_call_id,
-                    content: serde_json::to_string(&tool_use.output)
-                        .expect("Failed to serialize tool output"),
                 }),
                 content => ChatMessage {
                     role: GenAiChatRole::Tool,

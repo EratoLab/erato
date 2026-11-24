@@ -869,14 +869,16 @@ pub(crate) fn replay_assistant_content(
                     continue;
                 }
                 flush_spoken(&mut spoken, &mut input_messages);
-                // For the UI only; the snapshot stores both copies, so both drop it.
+                // For the UI, except the record links the model reads after the
+                // output; the snapshot stores both copies, so both drop the rest.
                 // The Tool copy keeps `allowed_by`: the label context reads it.
-                tool_use.result_details = None;
+                tool_use.result_details = model_read_details(tool_use.result_details.take());
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
                     content: ContentPart::ToolUse(crate::models::message::ToolUse {
                         display: None,
                         allowed_by: None,
+                        result_details: None,
                         ..tool_use.clone()
                     }),
                 });
@@ -938,6 +940,21 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
         }
         _ => false,
     }
+}
+
+/// The links of `details` the model reads with the result, alone.
+fn model_read_details(
+    details: Option<crate::models::message::ToolResultDetails>,
+) -> Option<crate::models::message::ToolResultDetails> {
+    let links: Vec<_> = details?
+        .links
+        .into_iter()
+        .filter(|link| link.for_model)
+        .collect();
+    (!links.is_empty()).then(|| crate::models::message::ToolResultDetails {
+        links,
+        ..Default::default()
+    })
 }
 
 /// A replayed tool output must carry only what the tool returned, in the form
@@ -1304,6 +1321,52 @@ mod tests {
     }
 
     #[test]
+    fn a_replayed_tool_result_keeps_only_its_record_links_for_the_model() {
+        let link = |uri: &str, for_model: bool| ToolResultLink {
+            uri: uri.to_string(),
+            host: "records.example.test".to_string(),
+            matches_server_host: false,
+            name: None,
+            title: Some("Row one".to_string()),
+            for_model,
+        };
+        let mut stored = part("read_rows", serde_json::json!([{"rowsid": "1"}]));
+        stored.result_details = Some(ToolResultDetails {
+            links: vec![
+                link("https://records.example.test/server", false),
+                link("https://records.example.test/rows/1", true),
+            ],
+            ..Default::default()
+        });
+
+        let replayed = replay_assistant_content(
+            &MessageRole::Assistant,
+            vec![ContentPart::ToolUse(stored.clone())],
+        );
+        let [call, result] = replayed.as_slice() else {
+            panic!("not a call and a result: {replayed:?}");
+        };
+        let ContentPart::ToolUse(call_use) = &call.content else {
+            panic!("not a tool use: {call:?}");
+        };
+        assert_eq!(call_use.result_details, None);
+        let ContentPart::ToolUse(result_use) = &result.content else {
+            panic!("not a tool use: {result:?}");
+        };
+        assert_eq!(
+            result_use.result_details.as_ref().unwrap().links,
+            vec![link("https://records.example.test/rows/1", true)]
+        );
+        assert_eq!(result_use.output, stored.output);
+
+        let message = result.clone().into_chat_message();
+        assert_eq!(
+            message.content.tool_responses()[0].content,
+            "[{\"rowsid\":\"1\"}]\n\nLinks to open these records:\n- Row one: https://records.example.test/rows/1"
+        );
+    }
+
+    #[test]
     fn a_replayed_tool_result_drops_its_result_details() {
         let mut stored = part("create_row", serde_json::json!("Created row row-1."));
         stored.result_details = Some(ToolResultDetails {
@@ -1313,6 +1376,7 @@ mod tests {
                 matches_server_host: false,
                 name: Some("row-1".to_string()),
                 title: Some("SYNTHETIC-LINK-TITLE".to_string()),
+                for_model: false,
             }],
             failure: None,
             view: Some(Box::new(crate::models::message::ToolResultView {

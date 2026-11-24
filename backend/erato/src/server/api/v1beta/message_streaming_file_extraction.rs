@@ -542,11 +542,25 @@ fn https_link(
     resource: &rmcp::model::Resource,
     server_host: Option<&str>,
 ) -> Option<ToolResultLink> {
+    https_link_to(
+        &resource.uri,
+        Some(&resource.name),
+        resource.title.as_deref(),
+        server_host,
+    )
+}
+
+fn https_link_to(
+    uri: &str,
+    name: Option<&str>,
+    title: Option<&str>,
+    server_host: Option<&str>,
+) -> Option<ToolResultLink> {
     // Before parsing, so a URI of any length costs nothing to drop.
-    if resource.uri.len() > MAX_RECEIPT_FIELD_BYTES {
+    if uri.len() > MAX_RECEIPT_FIELD_BYTES {
         return None;
     }
-    let url = url::Url::parse(&resource.uri).ok()?;
+    let url = url::Url::parse(uri).ok()?;
     let host = url.host_str().filter(|host| !host.is_empty())?.to_owned();
     // Userinfo lets `https://trusted.example@other.example/` read as the
     // wrong host, and would store any credentials in it.
@@ -561,9 +575,55 @@ fn https_link(
         matches_server_host: server_host.is_some_and(|server| server.eq_ignore_ascii_case(&host)),
         host,
         uri: url.into(),
-        name: display_name(Some(&resource.name)),
-        title: display_name(resource.title.as_deref()),
+        name: display_name(name),
+        title: display_name(title),
+        for_model: false,
     })
+}
+
+/// Adds the links `record_links` build for this call to the call's links,
+/// marked for the model, and lists them after the text the model reads.
+/// The output stays as the server sent it.
+fn add_record_links(
+    record_links: &[crate::config::McpRecordLinkConfig],
+    tool_call: &ToolCall,
+    tool_call_result: &rmcp::model::CallToolResult,
+    server_url: Option<&str>,
+    tool_response_content: &mut String,
+    result_details: &mut Option<ToolResultDetails>,
+) {
+    if record_links.is_empty() || tool_call_result.is_error == Some(true) {
+        return;
+    }
+    let server_host = server_url.and_then(url_host);
+    let links: Vec<_> = crate::services::mcp_record_links::record_links(
+        record_links,
+        Some(&tool_call.fn_arguments),
+        &mcp_result_to_text(tool_call_result),
+        tool_call_result.structured_content.as_ref(),
+    )
+    .into_iter()
+    .filter_map(|link| {
+        https_link_to(
+            &link.url,
+            None,
+            link.title.as_deref(),
+            server_host.as_deref(),
+        )
+    })
+    .map(|link| ToolResultLink {
+        for_model: true,
+        ..link
+    })
+    .collect();
+    if links.is_empty() {
+        return;
+    }
+    tool_response_content.push_str(&crate::services::mcp_record_links::model_read_links(&links));
+    result_details
+        .get_or_insert_with(ToolResultDetails::default)
+        .links
+        .extend(links);
 }
 
 fn url_host(url: &str) -> Option<String> {
@@ -674,7 +734,8 @@ pub fn parse_content_filter_error_from_mcp_tool_result(
 }
 
 /// `server_url` is the MCP server's configured URL, if it has one; a result
-/// link on its host is marked as the server's own.
+/// link on its host is marked as the server's own. `record_links` are the
+/// called tool's rules for links to the records the result names.
 #[allow(clippy::too_many_arguments)]
 pub async fn post_process_mcp_tool_result(
     app_state: &AppState,
@@ -685,6 +746,7 @@ pub async fn post_process_mcp_tool_result(
     output_schema: Option<&std::sync::Arc<rmcp::model::JsonObject>>,
     tool_call_result: &rmcp::model::CallToolResult,
     server_url: Option<&str>,
+    record_links: &[crate::config::McpRecordLinkConfig],
 ) -> Result<McpToolPostProcessResult, Report> {
     let mut tool_response_content = mcp_result_to_text(tool_call_result);
     let mut output_value = serde_json::from_str(&tool_response_content)
@@ -712,7 +774,15 @@ pub async fn post_process_mcp_tool_result(
         }
     }
 
-    let result_details = mcp_result_details(&tool_call_result.content, server_url);
+    let mut result_details = mcp_result_details(&tool_call_result.content, server_url);
+    add_record_links(
+        record_links,
+        unfinished_tool_call,
+        tool_call_result,
+        server_url,
+        &mut tool_response_content,
+        &mut result_details,
+    );
     Ok(McpToolPostProcessResult {
         tool_response: ToolResponse {
             fn_name: Some(unfinished_tool_call.fn_name.clone()),
@@ -878,6 +948,7 @@ mod tests {
                             Some(&schema),
                             &result,
                             Some(SERVER_URL),
+                            &[],
                         )
                         .await
                         .expect("omitted optional files are valid");
@@ -921,6 +992,7 @@ mod tests {
                 matches_server_host: true,
                 name: Some("row-1".into()),
                 title: Some("Synthetic row".into()),
+                for_model: false,
             }],
             ..ToolResultDetails::default()
         }
@@ -930,11 +1002,20 @@ mod tests {
         result: Value,
         server_url: Option<&str>,
     ) -> (McpToolPostProcessResult, Option<Value>) {
+        details_with_record_links(result, server_url, json!({}), &[]).await
+    }
+
+    async fn details_with_record_links(
+        result: Value,
+        server_url: Option<&str>,
+        arguments: Value,
+        record_links: &[crate::config::McpRecordLinkConfig],
+    ) -> (McpToolPostProcessResult, Option<Value>) {
         let result: CallToolResult = serde_json::from_value(result).unwrap();
         let tool_call = ToolCall {
             call_id: "create-call".into(),
             fn_name: "create_row".into(),
-            fn_arguments: json!({}),
+            fn_arguments: arguments,
             thought_signatures: None,
         };
         let processed = post_process_mcp_tool_result(
@@ -946,6 +1027,7 @@ mod tests {
             None,
             &result,
             server_url,
+            record_links,
         )
         .await
         .unwrap();
@@ -1001,6 +1083,57 @@ mod tests {
             let (_, details) = details_of(result.clone(), Some(SERVER_URL)).await;
             assert_eq!(details, None, "{result}");
         }
+    }
+
+    #[tokio::test]
+    async fn record_links_reach_the_model_text_and_the_call_but_not_the_output() {
+        let rules: Vec<crate::config::McpRecordLinkConfig> = serde_json::from_value(json!([{
+            "url": "https://records.example.test/{table}/{id}",
+            "title": "{name}",
+            "rows": "/*",
+            "values": {
+                "table": {"sql_table": "/query"},
+                "id": {"row": ["{table}id"]},
+                "name": {"row": ["name"]},
+            },
+        }]))
+        .unwrap();
+        let rows = json!([{"name": "Row one", "rowsid": "1"}, {"name": "No id"}]);
+        let arguments = json!({"query": "SELECT name, rowsid FROM rows"});
+        let (processed, details) = details_with_record_links(
+            json!({"content": [{"type": "text", "text": rows.to_string()}]}),
+            Some(SERVER_URL),
+            arguments.clone(),
+            &rules,
+        )
+        .await;
+        assert_eq!(processed.output_value, Some(rows.clone()));
+        assert_eq!(
+            processed.tool_response.content,
+            format!(
+                "{rows}\n\nLinks to open these records:\n- Row one: https://records.example.test/rows/1"
+            )
+        );
+        assert_eq!(
+            details.unwrap()["links"],
+            json!([{
+                "uri": "https://records.example.test/rows/1",
+                "host": "records.example.test",
+                "matches_server_host": true,
+                "title": "Row one",
+                "for_model": true,
+            }])
+        );
+
+        let (failed, details) = details_with_record_links(
+            json!({"content": [{"type": "text", "text": rows.to_string()}], "isError": true}),
+            Some(SERVER_URL),
+            arguments,
+            &rules,
+        )
+        .await;
+        assert_eq!(failed.tool_response.content, rows.to_string());
+        assert_eq!(details, None);
     }
 
     #[tokio::test]
@@ -1309,6 +1442,7 @@ mod tests {
                 Some(&schema),
                 &result,
                 None,
+                &[],
             )
             .await
             .err()

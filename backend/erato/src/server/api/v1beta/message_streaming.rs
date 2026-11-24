@@ -7359,6 +7359,7 @@ mod generation_event_wire_format_tests {
                                     matches_server_host: true,
                                     name: Some("row-1".into()),
                                     title: None,
+                                    for_model: false,
                                 }],
                                 ..Default::default()
                             }
@@ -10464,6 +10465,12 @@ async fn stream_generate_chat_completion<'a>(
                 .mcp_servers
                 .get(&managed_tool_call.server_id)
                 .map(|server| server.url.clone());
+            let record_links = mcp
+                .config
+                .mcp_servers
+                .get(&managed_tool_call.server_id)
+                .map(|server| server.record_links(&managed_tool_call.tool.name).to_vec())
+                .unwrap_or_default();
             let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
@@ -10648,6 +10655,7 @@ async fn stream_generate_chat_completion<'a>(
                         output_schema.as_ref(),
                         &tool_call_result,
                         server_url.as_deref(),
+                        &record_links,
                     )
                     .await
                     {
@@ -24516,6 +24524,12 @@ pub(crate) async fn run_continuation(
             };
             let output_schema = managed_tool.tool.output_schema.clone();
             let app_view_uri = view_uri(&managed_tool.tool).map(str::to_owned);
+            let record_links = mcp
+                .config
+                .mcp_servers
+                .get(&managed_tool.server_id)
+                .map(|server| server.record_links(&managed_tool.tool.name).to_vec())
+                .unwrap_or_default();
             let started_at = now_timestamp();
             let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
             let dispatched_call = mcp.servers.call_tool_with_progress(
@@ -24587,6 +24601,7 @@ pub(crate) async fn run_continuation(
                                 .mcp_servers
                                 .get(&server_id)
                                 .map(|server| server.url.as_str()),
+                            &record_links,
                         )
                         .await
                         {
