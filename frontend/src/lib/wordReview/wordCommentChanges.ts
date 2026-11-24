@@ -195,7 +195,7 @@ export type WordCommentConsentState =
   | "dismissed"
   | "expired";
 
-export type WordCommentConsentKind = "click" | "standing_grant";
+export type WordCommentConsentKind = "click";
 
 export type WordCommentAuthorMode = "user" | "assistant";
 

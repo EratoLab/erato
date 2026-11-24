@@ -25,14 +25,16 @@ export type ActionFacetInfo = {
   /**
    * Fixed identifiers of client-side actions the model may propose via the
    * `propose_client_action` tool when this facet is active. The client
-   * must only execute actions from this list, after user confirmation.
+   * must only execute actions from this list: through the server's call
+   * of the action's tool once the user decided, or on a click on the
+   * action's button.
    */
   client_actions?: string[];
   /**
    * Subset of `client_actions` the deployment enforces a per-use
-   * confirmation for: the client must always ask and must not offer or
-   * honor a persistent "always allow" for these actions. Users may still
-   * deny them entirely.
+   * confirmation for: in this facet the server asks every time for a call
+   * that carries out one of these actions and offers no "always allow"
+   * for it. Users may still deny them entirely.
    */
   client_actions_always_ask?: string[];
   /**
@@ -40,9 +42,11 @@ export type ActionFacetInfo = {
    */
   display_name: string;
   /**
-   * How far a persistent "always allow" reaches per action: `device`
-   * (the default for actions not listed) or `session_document`, which the
-   * client keeps only for its session and the document it was given on.
+   * Per action: `device` (the default for actions not listed) or
+   * `session_document`. Read only to carry the client's old on-device
+   * decisions over to the server once: an "always allow" for a
+   * `session_document` action held for one session and document and is
+   * not carried over.
    */
   grant_scope?: {
     [key: string]: string;
@@ -50,11 +54,10 @@ export type ActionFacetInfo = {
   id: string;
   platform?: string;
   /**
-   * How the client should surface a proposed client action:
-   * `render_buttons` (show buttons, user clicks) or `auto_prompt` (the
-   * client may surface the proposal immediately after a fresh assistant
-   * completion, subject to the user's local approval preferences). Present
-   * only when `client_actions` is non-empty; defaults to `render_buttons`.
+   * The facet's configured `presentation`, `render_buttons` when unset.
+   * Kept for older clients; current clients do not read it, as a proposed
+   * action follows the user's decision for its tool. Present only when
+   * `client_actions` is non-empty.
    */
   presentation?: string;
 };

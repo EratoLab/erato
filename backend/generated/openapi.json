@@ -5815,14 +5815,14 @@
             "items": {
               "type": "string"
             },
-            "description": "Fixed identifiers of client-side actions the model may propose via the\n`propose_client_action` tool when this facet is active. The client\nmust only execute actions from this list, after user confirmation."
+            "description": "Fixed identifiers of client-side actions the model may propose via the\n`propose_client_action` tool when this facet is active. The client\nmust only execute actions from this list: through the server's call\nof the action's tool once the user decided, or on a click on the\naction's button."
           },
           "client_actions_always_ask": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Subset of `client_actions` the deployment enforces a per-use\nconfirmation for: the client must always ask and must not offer or\nhonor a persistent \"always allow\" for these actions. Users may still\ndeny them entirely."
+            "description": "Subset of `client_actions` the deployment enforces a per-use\nconfirmation for: in this facet the server asks every time for a call\nthat carries out one of these actions and offers no \"always allow\"\nfor it. Users may still deny them entirely."
           },
           "display_name": {
             "type": "string",
@@ -5830,7 +5830,7 @@
           },
           "grant_scope": {
             "type": "object",
-            "description": "How far a persistent \"always allow\" reaches per action: `device`\n(the default for actions not listed) or `session_document`, which the\nclient keeps only for its session and the document it was given on.",
+            "description": "Per action: `device` (the default for actions not listed) or\n`session_document`. Read only to carry the client's old on-device\ndecisions over to the server once: an \"always allow\" for a\n`session_document` action held for one session and document and is\nnot carried over.",
             "additionalProperties": {
               "type": "string"
             },
@@ -5846,7 +5846,7 @@
           },
           "presentation": {
             "type": "string",
-            "description": "How the client should surface a proposed client action:\n`render_buttons` (show buttons, user clicks) or `auto_prompt` (the\nclient may surface the proposal immediately after a fresh assistant\ncompletion, subject to the user's local approval preferences). Present\nonly when `client_actions` is non-empty; defaults to `render_buttons`."
+            "description": "The facet's configured `presentation`, `render_buttons` when unset.\nKept for older clients; current clients do not read it, as a proposed\naction follows the user's decision for its tool. Present only when\n`client_actions` is non-empty."
           }
         }
       },
