@@ -95,7 +95,6 @@ import {
 } from "@/hooks/chat/useMentionableAssistants";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
-import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useIsMobile } from "@/hooks/useResponsive";
@@ -143,8 +142,7 @@ import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
-import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
-import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
+import { ChatUsageAdvisory, useUsageAdvisory } from "./ChatUsageAdvisory";
 import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
 import { ComposerModeChips } from "./ComposerContext/ComposerModeChips";
 import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
@@ -667,7 +665,7 @@ export const ChatInput = ({
     maxFiles: maxFilesPerMessage,
     keepToolsDropdownOpen,
   } = useChatInputFeature();
-  const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
+  const usageAdvisory = useUsageAdvisory();
 
   // Use local model selection hook
   const {
@@ -3356,7 +3354,7 @@ export const ChatInput = ({
       <form
         ref={formRef}
         className={clsx("w-full ", className, {
-          "pb-0 sm:pb-0": renderUsageAdvisory && aiUsageAdvisory,
+          "pb-0 sm:pb-0": renderUsageAdvisory && usageAdvisory,
         })}
         onSubmit={handleComposerSubmit}
       >
@@ -4236,9 +4234,6 @@ export const ChatInput = ({
           {audioStatusAnnouncement}
         </div>
       )}
-      {/* Above the AI advisory: this one is about what happens to THIS
-          message, which is the more immediate of the two. */}
-      <ChatTaskPlanAdvisory />
       {renderUsageAdvisory ? <ChatUsageAdvisory /> : null}
     </div>
   );

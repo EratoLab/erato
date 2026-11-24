@@ -199,7 +199,7 @@ const meta: Meta<typeof ChatEmptyStateLayout> = {
       <QueryClientProvider client={makeQueryClient()}>
         <StaticFeatureConfigProvider
           config={{
-            chatInput: { autofocus: false },
+            chatInput: { autofocus: false, showUsageAdvisory: true },
             starterPrompts: { enabled: true },
           }}
         >

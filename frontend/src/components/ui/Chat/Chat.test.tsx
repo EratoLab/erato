@@ -914,6 +914,30 @@ describe("Chat empty-state shell", () => {
     ).toBeNull();
   });
 
+  it("omits the advisory on a phone even when the feature is on", () => {
+    const matchMedia = vi
+      .spyOn(window, "matchMedia")
+      .mockImplementation((query: string) => ({
+        matches: query === "(max-width: 767.98px)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+    try {
+      const { container } = renderChat({ emptyStateComponent: welcome });
+
+      expect(
+        container.querySelector('[data-ui="chat-usage-advisory"]'),
+      ).toBeNull();
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
   it("omits the advisory when the translation is blank", () => {
     i18n.load("en", { "chat.ai_usage_advisory": "   " });
     const { container } = renderChat({ emptyStateComponent: welcome });

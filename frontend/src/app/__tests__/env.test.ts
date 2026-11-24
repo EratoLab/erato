@@ -38,6 +38,27 @@ describe("env keepToolsDropdownOpen", () => {
   );
 });
 
+describe("env showUsageAdvisory", () => {
+  afterEach(() => {
+    delete window.SHOW_USAGE_ADVISORY;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to false", () => {
+    expect(env().showUsageAdvisory).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads backend values and Vite overrides (%s)",
+    (value) => {
+      window.SHOW_USAGE_ADVISORY = value;
+      expect(env().showUsageAdvisory).toBe(value);
+      vi.stubEnv("VITE_SHOW_USAGE_ADVISORY", String(!value));
+      expect(env().showUsageAdvisory).toBe(!value);
+    },
+  );
+});
+
 describe("env readAloudEnabled", () => {
   afterEach(() => {
     delete window.READ_ALOUD_ENABLED;
