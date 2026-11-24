@@ -17,6 +17,7 @@ let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
 let mockedScheduledEnabled = false;
+let mockedNarrowScreen = false;
 const mockUseChatDetail = vi.fn();
 let mockedScheduledLists: Record<string, { data?: unknown; error?: unknown }> =
   {};
@@ -37,6 +38,7 @@ vi.mock("@/config/themeConfig", () => ({
 }));
 
 vi.mock("@/hooks/ui", () => ({
+  useIsNarrowScreen: () => mockedNarrowScreen,
   useResponsiveCollapsedMode: (mode: string) => mode,
   useThemedIcon: () => null,
 }));
@@ -78,6 +80,7 @@ const historyListProps = vi.hoisted(
     [] as {
       sessions: { id: string }[];
       hasMore?: boolean;
+      onSessionSelect?: (sessionId: string) => void;
       onSessionUnarchive?: (sessionId: string) => void;
     }[],
 );
@@ -85,6 +88,7 @@ vi.mock("./ChatHistoryList", () => ({
   ChatHistoryList: (props: {
     sessions: { id: string }[];
     hasMore?: boolean;
+    onSessionSelect?: (sessionId: string) => void;
     onSessionUnarchive?: (sessionId: string) => void;
   }) => {
     historyListProps.push(props);
@@ -183,6 +187,7 @@ describe("ChatHistorySidebar", () => {
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
     mockedScheduledEnabled = false;
+    mockedNarrowScreen = false;
     mockedScheduledLists = {};
     mockUseChatDetail.mockReset();
     mockUseChatDetail.mockReturnValue({ data: undefined });
@@ -1251,5 +1256,91 @@ describe("ChatHistorySidebar", () => {
     ).not.toBeInTheDocument();
     expect(screen.getAllByTestId("history-list")).toHaveLength(1);
     expect(historyListProps[0].sessions).toEqual([]);
+  });
+
+  describe("after a pick in the drawer", () => {
+    const renderOpenSidebar = async (collapsed = false) => {
+      mockedAssistantsEnabled = true;
+      mockedScheduledEnabled = true;
+      const onToggleCollapse = vi.fn();
+      const onSessionSelect = vi.fn();
+      const onNewChat = vi.fn();
+      const { i18n } = await import("@lingui/core");
+      render(
+        <MemoryRouter initialEntries={["/chat/chat-1"]}>
+          <I18nProvider i18n={i18n}>
+            <ChatHistorySidebar
+              sessions={sessions}
+              currentSessionId="chat-1"
+              collapsed={collapsed}
+              onToggleCollapse={onToggleCollapse}
+              onNewChat={onNewChat}
+              onSessionSelect={onSessionSelect}
+              onSessionArchive={vi.fn()}
+              onSessionUnarchive={vi.fn()}
+              isLoading={false}
+            />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+      const pickChat = () =>
+        historyListProps.at(-1)!.onSessionSelect!("chat-1");
+      return { onToggleCollapse, onSessionSelect, onNewChat, pickChat };
+    };
+    const navigationRows = ["New Chat", "Search", "Assistants", "Scheduled"];
+
+    it("closes on a narrow screen once the picked chat is opened", async () => {
+      mockedNarrowScreen = true;
+      const { onToggleCollapse, onSessionSelect, pickChat } =
+        await renderOpenSidebar();
+
+      pickChat();
+
+      expect(onSessionSelect).toHaveBeenCalledWith("chat-1");
+      expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(navigationRows)(
+      "closes on a narrow screen after %s",
+      async (label) => {
+        mockedNarrowScreen = true;
+        const { onToggleCollapse } = await renderOpenSidebar();
+
+        fireEvent.click(screen.getByRole("link", { name: label }));
+
+        expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("still starts the new chat on a narrow screen", async () => {
+      mockedNarrowScreen = true;
+      const { onNewChat } = await renderOpenSidebar();
+
+      fireEvent.click(screen.getByRole("link", { name: "New Chat" }));
+
+      expect(onNewChat).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays open on a wide screen", async () => {
+      const { onToggleCollapse, onSessionSelect, pickChat } =
+        await renderOpenSidebar();
+
+      pickChat();
+      for (const label of navigationRows) {
+        fireEvent.click(screen.getByRole("link", { name: label }));
+      }
+
+      expect(onSessionSelect).toHaveBeenCalledWith("chat-1");
+      expect(onToggleCollapse).not.toHaveBeenCalled();
+    });
+
+    it("does not reopen a closed drawer", async () => {
+      mockedNarrowScreen = true;
+      const { onToggleCollapse, pickChat } = await renderOpenSidebar(true);
+
+      pickChat();
+
+      expect(onToggleCollapse).not.toHaveBeenCalled();
+    });
   });
 });

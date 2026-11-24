@@ -228,6 +228,8 @@ If `VITE_THEME_CONFIG_PATH` or `THEME_CONFIG_PATH` points to a specific `theme.j
 
 For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `data-role` hooks over DOM-depth selectors or Tailwind class names.
 
+The app's hover looks apply only under a mouse or trackpad (`@media (hover: hover) and (pointer: fine)`); on a touch screen the same look shows while a control is pressed. A `:hover` rule in `theme.css` applies on a touch screen too and stays on whatever was tapped last, so put it inside that media query.
+
 - `data-ui="app-shell"` (the outermost one is the app's viewport box; its height and padding follow the visible viewport, system bars and an open on-screen keyboard, and are the app's to set. `html[data-virtual-keyboard="open"]` marks the time a keyboard covers part of the page. Behind the box the body takes `colors.shell.page`)
 - `data-ui="page-shell"`
 - `data-ui="sidebar"`

@@ -584,6 +584,31 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  /* A fingertip needs about 44px. Smaller buttons keep their look and take
+     taps from a margin around them; `absolute` and `fixed` utilities still
+     outrank the positioning. */
+  @media (pointer: coarse) {
+    :is(
+      .btn-geometry-sm,
+      .btn-geometry-md,
+      .btn-geometry-icon-sm,
+      .btn-geometry-icon-md
+    ) {
+      position: relative;
+    }
+
+    :is(
+        .btn-geometry-sm,
+        .btn-geometry-md,
+        .btn-geometry-icon-sm,
+        .btn-geometry-icon-md
+      )::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc((100% - 44px) / 2));
+    }
+  }
+
   /* The capsule/circle dialect. A capsule is a text label plus inline padding
      and reads the pill token; a circle is an intrinsic square with no label
      and declares 50%, so a theme softening the pill radius — which is what
@@ -1164,6 +1189,27 @@ body:has(.app-viewport) {
   height: var(--visual-viewport-height, 100dvh);
 }
 
+/* Fixed layers that hug one edge and take their content's height (toasts). */
+:root[data-virtual-keyboard="open"] .viewport-layer-top {
+  top: var(--visual-viewport-offset-top, 0px);
+}
+
+:root[data-virtual-keyboard="open"] .viewport-layer-bottom {
+  bottom: calc(
+    100% - var(--visual-viewport-offset-top, 0px) -
+      var(--visual-viewport-height, 100%)
+  );
+}
+
+/* Without a pointer that hovers, hover looks show while a control is pressed
+   (the `hover` variant in tailwind.config.ts). They show at once, as a
+   phone's own controls do; letting go still fades them out. */
+@media not all and (hover: hover) and (pointer: fine) {
+  :active {
+    transition-duration: 0s;
+  }
+}
+
 /* Surfaces for the remaining documented data-ui hooks. Same reasoning and the
    same placement rule as .anchored-popover-skin below: an inline style
    outranks every author rule, so holding these here is what makes the hooks
@@ -1266,14 +1312,28 @@ body:has(.app-viewport) {
    the two, and a hover tint over it reads as a third state. The exclusions sit
    inside :where() so they cost no specificity — a theme rule keyed on the hook
    and :hover still meets this one on level ground and wins on order. */
-.card-skin[data-variant="interactive"]:hover:where(
-    :not([data-selected], [data-disabled], :disabled)
-  ),
-.card-skin[data-variant="selectable"]:hover:where(
-    :not([data-selected], [data-disabled], :disabled)
-  ) {
-  --card-bg: var(--theme-bg-hover);
-  --card-border: var(--theme-border-focus);
+@media (hover: hover) and (pointer: fine) {
+  .card-skin[data-variant="interactive"]:hover:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ),
+  .card-skin[data-variant="selectable"]:hover:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ) {
+    --card-bg: var(--theme-bg-hover);
+    --card-border: var(--theme-border-focus);
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .card-skin[data-variant="interactive"]:active:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ),
+  .card-skin[data-variant="selectable"]:active:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ) {
+    --card-bg: var(--theme-bg-hover);
+    --card-border: var(--theme-border-focus);
+  }
 }
 
 .card-skin[data-selected] {
@@ -1352,8 +1412,22 @@ body:has(.app-viewport) {
   background-color: var(--composer-context-chip-bg, var(--theme-bg-secondary));
 }
 
-.composer-context-chip-skin:hover {
-  border-color: var(--composer-context-chip-border, var(--theme-border-focus));
+@media (hover: hover) and (pointer: fine) {
+  .composer-context-chip-skin:hover {
+    border-color: var(
+      --composer-context-chip-border,
+      var(--theme-border-focus)
+    );
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .composer-context-chip-skin:active {
+    border-color: var(
+      --composer-context-chip-border,
+      var(--theme-border-focus)
+    );
+  }
 }
 
 /* Drawn inside the frame: the staged area clips anything past its edges. */
@@ -1673,11 +1747,22 @@ body:has(.app-viewport) {
 
 /* Meta steps up to fg-secondary on the hover and selected fills: fg-muted on
    them falls below 4.5:1 (3.9:1 light, 3:1 dark on the hover fill). */
-.selectable-row-skin:hover:where(
-    :not([data-tone="warning"], [data-tone="error"], [data-disabled])
-  ) {
-  --selectable-row-bg: var(--theme-bg-hover);
-  --selectable-row-meta: var(--theme-fg-secondary);
+@media (hover: hover) and (pointer: fine) {
+  .selectable-row-skin:hover:where(
+      :not([data-tone="warning"], [data-tone="error"], [data-disabled])
+    ) {
+    --selectable-row-bg: var(--theme-bg-hover);
+    --selectable-row-meta: var(--theme-fg-secondary);
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .selectable-row-skin:active:where(
+      :not([data-tone="warning"], [data-tone="error"], [data-disabled])
+    ) {
+    --selectable-row-bg: var(--theme-bg-hover);
+    --selectable-row-meta: var(--theme-fg-secondary);
+  }
 }
 
 .selectable-row-skin[data-selected] {
