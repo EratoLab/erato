@@ -11,24 +11,31 @@ const CLOCK_REVIVE_ATTEMPTS = 3;
  * Starts the clock of a context that says `"running"` but stands still, as
  * WebKit leaves one after a phone lock (`clockMayStandStillWhileRunning`):
  * only a suspend followed by a resume moves it on. A context whose clock
- * moves, or that is not running, is left alone.
+ * moves, or that is not running, is left alone. Resolves to whether the
+ * clock was last seen standing: a suspend and resume do not always start it.
  */
-export async function reviveStandingClock(context: AudioContext) {
-  if (!getAudioEnvironment().clockMayStandStillWhileRunning) return;
+export async function reviveStandingClock(
+  context: AudioContext,
+): Promise<boolean> {
+  if (!getAudioEnvironment().clockMayStandStillWhileRunning) return false;
   // A call, not a narrowed property: the state changes across the awaits.
   const running = () => context.state === "running";
-  for (let attempt = 0; attempt < CLOCK_REVIVE_ATTEMPTS; attempt++) {
-    if (!running() || document.visibilityState === "hidden") return;
+  const stands = async () => {
     const before = context.currentTime;
     await new Promise((resolve) => setTimeout(resolve, CLOCK_CHECK_MS));
-    if (!running() || context.currentTime !== before) return;
+    return running() && context.currentTime === before;
+  };
+  for (let attempt = 0; attempt < CLOCK_REVIVE_ATTEMPTS; attempt++) {
+    if (!running() || document.visibilityState === "hidden") return false;
+    if (!(await stands())) return false;
     try {
       await context.suspend();
       await context.resume();
     } catch {
-      return;
+      return true;
     }
   }
+  return stands();
 }
 
 /**

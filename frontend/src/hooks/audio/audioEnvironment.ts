@@ -72,10 +72,12 @@ export type AudioEnvironment = {
    * Evidence: WebKit in an embedded iOS 27.2 web view on a device, three
    * lock runs 2026-11-23: every context's clock stood still from the lock
    * on, the shared playback context still after unlocking; a suspend and
-   * resume after unlocking started it again within 0.3 s (2026-11-24). Not
-   * checked in Safari itself. Remove once a context's clock moves on after
-   * unlocking without help (re-check on a real device: the simulator does
-   * not lock like a phone).
+   * resume after unlocking started it again within 0.3 s (2026-11-24).
+   * While another audio context made at the return was open, no suspend and
+   * resume took; once it closed, a later one did (2026-11-24), hence the
+   * retry when the next voice plays. Not checked in Safari itself. Remove
+   * once a context's clock moves on after unlocking without help (re-check
+   * on a real device: the simulator does not lock like a phone).
    */
   clockMayStandStillWhileRunning: boolean;
 };

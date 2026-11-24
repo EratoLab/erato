@@ -143,7 +143,13 @@ describe("useAudioContextInterruptionRecovery on non-WebKit", () => {
  * A running context whose clock moves with the (fake) time, or stands still
  * as after a phone lock until it is suspended and resumed.
  */
-function makeClockContext({ standing }: { standing: boolean }) {
+function makeClockContext({
+  standing,
+  wedged = false,
+}: {
+  standing: boolean;
+  wedged?: boolean;
+}) {
   let stands = standing;
   let state: AudioContextState = "running";
   const startedAt = Date.now();
@@ -159,7 +165,7 @@ function makeClockContext({ standing }: { standing: boolean }) {
       return Promise.resolve();
     }),
     resume: vi.fn(() => {
-      if (state === "suspended") stands = false;
+      if (state === "suspended" && !wedged) stands = false;
       state = "running";
       return Promise.resolve();
     }),
@@ -183,13 +189,23 @@ describe("reviveStandingClock", () => {
 
     const revived = reviveStandingClock(context as unknown as AudioContext);
     await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
-    await revived;
 
+    expect(await revived).toBe(false);
     expect(context.suspend).toHaveBeenCalledOnce();
     expect(context.resume).toHaveBeenCalledOnce();
     const before = context.currentTime;
     vi.advanceTimersByTime(100);
     expect(context.currentTime).toBeGreaterThan(before);
+  });
+
+  it("says so when the clock still stands after every suspend and resume", async () => {
+    const context = makeClockContext({ standing: true, wedged: true });
+
+    const revived = reviveStandingClock(context as unknown as AudioContext);
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 10);
+
+    expect(await revived).toBe(true);
+    expect(context.suspend).toHaveBeenCalledTimes(3);
   });
 
   it("leaves a running context alone whose clock moves", async () => {

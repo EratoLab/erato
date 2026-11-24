@@ -252,6 +252,8 @@ describe("the shared playback context after a phone lock", () => {
     state: AudioContextState = "running";
     private standsAt: number | null = null;
     private offset = 0;
+    /** Suspend and resume leave the clock standing, as the phone did at times. */
+    wedged = false;
     constructor() {
       LockableContext.last = this;
     }
@@ -265,7 +267,11 @@ describe("the shared playback context after a phone lock", () => {
       this.state = "suspended";
     });
     resume = vi.fn(async () => {
-      if (this.state === "suspended" && this.standsAt !== null) {
+      if (
+        this.state === "suspended" &&
+        this.standsAt !== null &&
+        !this.wedged
+      ) {
         this.offset = Date.now() / 1000 - this.standsAt;
         this.standsAt = null;
       }
@@ -355,6 +361,89 @@ describe("the shared playback context after a phone lock", () => {
     });
     await vi.advanceTimersByTimeAsync(3000);
     expect(handed).toBe(true);
+  });
+
+  it("tries again when a voice is about to play, after the revival on return did not take", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    const standing = playback.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(playback.currentTime).toBe(standing);
+
+    playback.wedged = false;
+    expect(playbackPlays(playback as unknown as AudioContext)).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const before = playback.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(playback.currentTime).toBeGreaterThan(before);
+  });
+
+  it("does not count a context that is not running as playing while a retry is due", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    vi.advanceTimersByTime(2500);
+
+    playback.state = "interrupted" as AudioContextState;
+    expect(playbackPlays(playback as unknown as AudioContext)).toBe(false);
+    expect(playback.suspend).toHaveBeenCalledTimes(3);
+  });
+
+  it("tries a clock that stays standing again at most every 2 s and five times per return", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(playback.suspend).toHaveBeenCalledTimes(3);
+
+    for (let chunk = 0; chunk < 40; chunk++) {
+      playbackPlays(playback as unknown as AudioContext);
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(playback.suspend).toHaveBeenCalledTimes(3 + 5 * 3);
+  });
+
+  it("tries again when read aloud is tapped, after the revival on return did not take", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+
+    playback.wedged = false;
+    const tapped = resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(2000);
+    const context = await tapped;
+
+    const before = context.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(context.currentTime).toBeGreaterThan(before);
   });
 
   it("leaves a clock alone that moves on after the page is shown", async () => {
