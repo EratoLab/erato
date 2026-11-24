@@ -3386,6 +3386,7 @@ export function useChatMessaging(
                     decision,
                     approvalIds,
                     itemDecisions,
+                    items,
                     readBack,
                   }),
             ),

@@ -409,6 +409,7 @@ export const McpToolApprovalCard = ({
             decision,
             approvalIds,
             itemDecisions,
+            items: approvalItems,
           }),
         ),
       });

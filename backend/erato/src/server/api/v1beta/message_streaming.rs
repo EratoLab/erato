@@ -2677,6 +2677,12 @@ pub struct ApprovalDecisionItem {
     #[serde(default)]
     #[schema(nullable = false)]
     pub voice_receipt: Option<String>,
+    /// For a delegated task's item: the `child_tool_call_id` of the question
+    /// the card showed. A task that asks again keeps its `approval_id`, so this
+    /// is what tells its questions apart.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub child_tool_call_id: Option<String>,
 }
 
 /// Rehydrates a generation that was deliberately stopped for tool approval.
@@ -2743,6 +2749,15 @@ impl ContinueStreamRequest {
     /// The decisions an approval card submitted, one per approval id. The
     /// set is validated like any other continuation (exact, no duplicates).
     /// The card lists every item, a parked child's included.
+    /// Names, per decision in order, the task question its card showed; an
+    /// empty entry names none.
+    pub(crate) fn with_task_questions(mut self, question_ids: &[String]) -> Self {
+        for (item, question) in self.decisions.iter_mut().zip(question_ids) {
+            item.child_tool_call_id = (!question.is_empty()).then(|| question.clone());
+        }
+        self
+    }
+
     pub(crate) fn with_decisions(
         message_id: Uuid,
         decisions: Vec<(String, ToolApprovalDecision)>,
@@ -2757,6 +2772,7 @@ impl ContinueStreamRequest {
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,
@@ -14971,6 +14987,7 @@ mod tests {
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,
@@ -15569,6 +15586,7 @@ mod tests {
             scope_position: None,
             change_request: None,
             voice_receipt: None,
+            child_tool_call_id: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
             message_id: Uuid::new_v4(),
@@ -16310,6 +16328,7 @@ mod tests {
             scope_position: None,
             change_request: Some("nimm den 22.".to_string()),
             voice_receipt: None,
+            child_tool_call_id: None,
         };
         let refused = |stop: &super::ContentPartToolApprovalRequest, decisions| {
             let mut request = super::ContinueStreamRequest::with_decisions(Uuid::nil(), Vec::new());
@@ -21816,6 +21835,9 @@ pub(crate) struct ParkedApprovalState {
     /// cards are settled; a decision that names one of them, or that names no
     /// card while there are any, was not given on the card that waits now.
     pub(crate) earlier_approval_ids: Vec<String>,
+    /// Those of them an earlier stop asked as a question rather than showed
+    /// as a task still waiting: a task that asks again keeps its id.
+    pub(crate) earlier_question_ids: Vec<String>,
 }
 
 pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
@@ -21933,13 +21955,21 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
                 | ContentPart::AudioFilePointer(_)
         )
     });
-    let earlier_approval_ids = content[..request_index]
+    let earlier_items: Vec<ApprovalItem> = content[..request_index]
         .iter()
         .filter_map(|part| match part {
             ContentPart::ToolApprovalRequest(earlier) => Some(earlier.approval_items()),
             _ => None,
         })
         .flatten()
+        .collect();
+    let earlier_question_ids = earlier_items
+        .iter()
+        .filter(|item| !is_waiting_item(item))
+        .map(|item| item.approval_id.clone())
+        .collect();
+    let earlier_approval_ids = earlier_items
+        .into_iter()
         .map(|item| item.approval_id)
         .collect();
     Some(ParkedApprovalState {
@@ -21948,6 +21978,7 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
         open,
         unanswered,
         earlier_approval_ids,
+        earlier_question_ids,
     })
 }
 
@@ -22059,12 +22090,7 @@ fn already_continued() -> StreamRouteError {
 /// order.
 type SubmittedDecisions = Vec<(String, ToolApprovalDecision)>;
 
-/// Pair every approval a parked turn has open with the decision submitted for
-/// it, refusing any body that does not answer the turn exactly.
-///
-/// Returned in the row's order, not the body's: the continuation settles the
-/// resolved slots, and those follow the order the model made the calls in.
-/// [`resolve_submitted_decisions`] against the stop the row waits on now.
+/// The decisions of `request` for the stop the row waits on now.
 ///
 /// A decision is taken only for the card it was given on. A tap that arrives
 /// late from a tab still showing an earlier card of the turn names that card,
@@ -22073,7 +22099,9 @@ type SubmittedDecisions = Vec<(String, ToolApprovalDecision)>;
 /// before cards were named, and can only be meant for the turn's first card;
 /// on a later one it is refused rather than run on a card that page may never
 /// have shown, with text that page shows, since it treats every coded `409`
-/// as an answer that already landed (ERMAIN-1342).
+/// as an answer that already landed (ERMAIN-1342). A delegated task that asks
+/// again keeps its approval id, so its question is told apart by the child's
+/// call id the card showed (ERMAIN-1343).
 fn resolve_decisions_on_stop(
     request: &ContinueStreamRequest,
     state: &ParkedApprovalState,
@@ -22088,11 +22116,7 @@ fn resolve_decisions_on_stop(
             .iter()
             .all(|item| item.replaces_approval_id.is_none())
     {
-        return Err((
-            axum::http::StatusCode::CONFLICT,
-            "This page is out of date for this card. Reload the page to decide it.".to_string(),
-        )
-            .into());
+        return Err(page_out_of_date());
     }
     // A task's question can come back on a later stop under the same id, and
     // there it is open again: only an id asked earlier and open no longer is
@@ -22107,9 +22131,45 @@ fn resolve_decisions_on_stop(
     {
         return Err(already_continued());
     }
+    for decision in &request.decisions {
+        let Some(child) = decidable
+            .iter()
+            .find(|open| open.approval_id == decision.approval_id)
+            .and_then(|open| open.child.as_ref())
+        else {
+            continue;
+        };
+        match decision.child_tool_call_id.as_deref() {
+            Some(shown) if shown != child.child_tool_call_id => return Err(already_continued()),
+            None if state.earlier_question_ids.contains(&decision.approval_id) => {
+                return Err(page_out_of_date());
+            }
+            _ => {}
+        }
+    }
     resolve_submitted_decisions(request, decidable)
 }
 
+/// The refusal of a decision that does not say which card or task question
+/// it answers, where the answer could land on one its client never showed.
+pub(crate) const PAGE_OUT_OF_DATE_MESSAGE: &str =
+    "This page is out of date for this card. Reload the page to decide it.";
+
+/// A `409` in plain text: a page that predates naming what it decides shows
+/// it, where it treats every coded `409` as an answer that already landed.
+fn page_out_of_date() -> StreamRouteError {
+    (
+        axum::http::StatusCode::CONFLICT,
+        PAGE_OUT_OF_DATE_MESSAGE.to_string(),
+    )
+        .into()
+}
+
+/// Pair every approval a parked turn has open with the decision submitted for
+/// it, refusing any body that does not answer the turn exactly.
+///
+/// Returned in the row's order, not the body's: the continuation settles the
+/// resolved slots, and those follow the order the model made the calls in.
 fn resolve_submitted_decisions(
     request: &ContinueStreamRequest,
     open: &[ApprovalItem],
@@ -23266,6 +23326,7 @@ async fn resume_parked_child(
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,

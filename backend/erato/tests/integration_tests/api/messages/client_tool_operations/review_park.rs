@@ -525,13 +525,41 @@ fn slot(content: &[Value], tool_call_id: &str) -> Value {
         .clone()
 }
 
+/// Approves `approval_id` as the card does, naming the task's question when
+/// the waiting item is a task's.
 async fn decide(state: &erato::state::AppState, message_id: Uuid, approval_id: &Value) {
+    let content = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap()
+        .raw_message["content"]
+        .clone();
+    let question = content
+        .as_array()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|part| part["content_type"] == "tool_approval_request")
+        .and_then(|stop| stop["approvals"].as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .find(|item| &item["approval_id"] == approval_id)
+        .and_then(|item| {
+            item["child"]["child_tool_call_id"]
+                .as_str()
+                .map(str::to_string)
+        });
+    let mut decision = json!({"approval_id": approval_id, "decision": "approve"});
+    if let Some(question) = question {
+        decision["child_tool_call_id"] = json!(question);
+    }
     app_server(state.clone())
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
         .json(&json!({
             "message_id": message_id,
-            "decisions": [{"approval_id": approval_id, "decision": "approve"}],
+            "decisions": [decision],
             "shows_child_items": true,
         }))
         .await

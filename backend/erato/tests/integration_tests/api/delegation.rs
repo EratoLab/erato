@@ -17367,12 +17367,9 @@ async fn a_child_that_asks_again_after_a_mixed_decision_reparks_the_turn(pool: P
         "awaiting_approval"
     );
 
-    let finished = post_continuestream_decisions(
-        &server,
-        park.parent_message_id,
-        &[(task_a_id.as_str(), "approve")],
-    )
-    .await;
+    let finished =
+        decide_waiting_task_question(&server, &app_state.db, park.parent_message_id, "approve")
+            .await;
     finished.assert_status_ok();
     assert!(extract_full_text_answer(&parse_sse_events(&finished)).contains("PARENT-GATED-FINAL"));
     let slot_a = slot_for(
@@ -18291,11 +18288,7 @@ async fn an_approved_client_call_waits_through_a_repark_and_runs_once(pool: Pool
         &server,
         &app_state,
         park.parent_chat_id,
-        post_continuestream_decisions(
-            &server,
-            park.parent_message_id,
-            &[(task_a_id.as_str(), "approve")],
-        ),
+        decide_waiting_task_question(&server, &app_state.db, park.parent_message_id, "approve"),
     )
     .await;
     finished.assert_status_ok();
@@ -21073,4 +21066,214 @@ async fn a_mentioned_assistants_unusable_default_falls_back_to_the_parent_turns_
     );
     assert_eq!(reported["chat_provider_id"], MODEL_C.0);
     assert_eq!(reported["unavailable_chat_provider_id"], MODEL_X.0);
+}
+
+/// `decision` on the task question the turn waits on now, named as the card
+/// shows it: by the task's approval id and the question's child call id.
+async fn decide_waiting_task_question(
+    server: &TestServer,
+    db: &sea_orm::DatabaseConnection,
+    message_id: Uuid,
+    decision: &str,
+) -> axum_test::TestResponse {
+    let (approval_id, question) = waiting_task_question(db, message_id).await;
+    post_task_question_decision(server, message_id, &approval_id, Some(&question), decision).await
+}
+
+/// The task item and its question on the stop the turn waits on now.
+async fn waiting_task_question(
+    db: &sea_orm::DatabaseConnection,
+    message_id: Uuid,
+) -> (String, String) {
+    let content = content_of(&message_row(db, message_id).await);
+    let stop = content
+        .iter()
+        .rev()
+        .find(|part| part["content_type"] == "tool_approval_request")
+        .expect("a stop");
+    let item = &stop["approvals"][0];
+    (
+        item["approval_id"].as_str().unwrap().to_string(),
+        item["child"]["child_tool_call_id"]
+            .as_str()
+            .unwrap()
+            .to_string(),
+    )
+}
+
+async fn post_task_question_decision(
+    server: &TestServer,
+    message_id: Uuid,
+    approval_id: &str,
+    question: Option<&str>,
+    decision: &str,
+) -> axum_test::TestResponse {
+    let mut item = json!({ "approval_id": approval_id, "decision": decision });
+    if let Some(question) = question {
+        item["child_tool_call_id"] = json!(question);
+    }
+    if decision == "request_change" {
+        item["change_request"] = json!("publish it later");
+    }
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decisions": [item] }))
+        .await
+}
+
+/// The start of a response's body, enough to tell a refusal from a stream.
+fn opening(response: &axum_test::TestResponse) -> String {
+    response.text().chars().take(80).collect()
+}
+
+const ASK_TWICE_USER_MESSAGE: &str = "plan one gated sub-task that publishes twice";
+const ASK_TWICE_BRIEF: &str = "ASK-TWICE-BRIEF: publish the probe twice";
+
+/// The task's calls of the gated tool that actually ran, across its chat.
+async fn task_probe_runs(db: &sea_orm::DatabaseConnection, parent_chat_id: Uuid) -> usize {
+    let child = delegated_child_chat(db, parent_chat_id).await;
+    chat_messages_by_created_at(db, child.id)
+        .await
+        .iter()
+        .flat_map(|row| {
+            row.raw_message["content"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .filter(|part| {
+            part["content_type"] == "tool_use"
+                && part["status"] == "success"
+                && part.to_string().contains(PARKED_TOOL_RESULT)
+        })
+        .count()
+}
+
+/// A task asks twice, so the turn asks twice about the same task. A tab that
+/// still shows the first question answers it after the second appeared: by
+/// allow once, always allow, deny or a change request naming the first
+/// question, by a page that names no question, or by one that names no card.
+/// None of them runs anything or settles the second question, which waits
+/// until it is answered itself (ERMAIN-1343).
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_late_decision_for_a_tasks_first_question_leaves_its_second_waiting(
+    pool: Pool<Postgres>,
+) {
+    let mut mocks = MockSet::new();
+    mock_child_reaches_the_gate(&mut mocks, ASK_TWICE_BRIEF, "call_child_first");
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASK_TWICE_BRIEF, PARKED_TOOL_RESULT],
+                &["child_run_id", "call_child_second"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_tool_calls_streaming_response(&[(
+                "call_child_second",
+                PARKED_TOOL,
+                json!({}),
+            )]),
+        );
+    });
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[ASK_TWICE_BRIEF, "call_child_second", PARKED_TOOL_RESULT],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(
+            then,
+            crate::test_utils::build_openai_text_streaming_response(&["CHILD-PUBLISHED-TWICE"]),
+        );
+    });
+    mock_parent_plans_one_task(
+        &mut mocks,
+        ASK_TWICE_USER_MESSAGE,
+        ASK_TWICE_BRIEF,
+        "call_task_one",
+    );
+    mock_parent_final_answer(&mut mocks, ASK_TWICE_USER_MESSAGE);
+    let (app_state, _llm) = task_state(
+        pool,
+        mocks,
+        &["erato/delegate_task", "mock_mcp_approval/*"],
+        gate_mock_mcp_tools_on_approval,
+    )
+    .await;
+    let server = app_server(app_state.clone());
+    let chat = create_chat(&server, None).await;
+    let events = submit_with_facets(&server, &chat, ASK_TWICE_USER_MESSAGE, &["plan"]).await;
+    let parent_chat_id = Uuid::parse_str(&chat).unwrap();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let db = &app_state.db;
+
+    let (task, first) = waiting_task_question(db, message_id).await;
+    decide_waiting_task_question(&server, db, message_id, "approve")
+        .await
+        .assert_status_ok();
+    assert_eq!(task_probe_runs(db, parent_chat_id).await, 1);
+    let (same_task, second) = waiting_task_question(db, message_id).await;
+    assert_eq!(same_task, task, "a task that asks again keeps its item");
+    assert_ne!(second, first);
+
+    let mut report = Vec::new();
+    for decision in ["approve", "approve_always", "reject", "request_change"] {
+        let late =
+            post_task_question_decision(&server, message_id, &task, Some(&first), decision).await;
+        report.push((decision, late.status_code().as_u16(), opening(&late)));
+    }
+    let unnamed_question =
+        post_task_question_decision(&server, message_id, &task, None, "approve").await;
+    report.push((
+        "no question",
+        unnamed_question.status_code().as_u16(),
+        opening(&unnamed_question),
+    ));
+    let unnamed_card = post_continuestream(&server, message_id, "approve").await;
+    report.push((
+        "no card",
+        unnamed_card.status_code().as_u16(),
+        unnamed_card.text(),
+    ));
+
+    assert_eq!(
+        (
+            task_probe_runs(db, parent_chat_id).await,
+            waiting_task_question(db, message_id).await
+        ),
+        (1, (task.clone(), second.clone())),
+        "late decisions ran the second question: {report:?}"
+    );
+    for (case, status, body) in &report {
+        let expected = if case.starts_with("no ") {
+            "This page is out of date for this card. Reload the page to decide it."
+        } else {
+            r#"{"code":"already_continued"}"#
+        };
+        assert_eq!(
+            (*status, body.as_str()),
+            (409, expected),
+            "{case}: {report:?}"
+        );
+    }
+    assert_eq!(
+        generation_state(db, parent_chat_id).await,
+        "awaiting_approval"
+    );
+
+    let finished = decide_waiting_task_question(&server, db, message_id, "approve").await;
+    finished.assert_status_ok();
+    assert!(extract_full_text_answer(&parse_sse_events(&finished)).contains("PARENT-GATED-FINAL"));
+    assert_eq!(task_probe_runs(db, parent_chat_id).await, 2);
 }

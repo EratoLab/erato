@@ -159,6 +159,12 @@ export type ApprovalDecisionItem = {
    * Refused on any other decision.
    */
   change_request?: string;
+  /**
+   * For a delegated task's item: the `child_tool_call_id` of the question
+   * the card showed. A task that asks again keeps its `approval_id`, so this
+   * is what tells its questions apart.
+   */
+  child_tool_call_id?: string;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
