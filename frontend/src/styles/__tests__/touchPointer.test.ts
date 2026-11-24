@@ -129,3 +129,32 @@ describe("hover styles on a touch screen", () => {
     }
   });
 });
+
+describe("holding a finger on a control", () => {
+  it("does not select a control's label without a hovering pointer, but leaves links selectable", async () => {
+    const result = await postcss([
+      tailwindcss({
+        ...tailwindConfig,
+        content: [{ raw: "<div></div>", extension: "html" }],
+      }),
+    ]).process("@tailwind base;", { from: undefined });
+    const unselectable: Rule[] = [];
+    result.root.walkRules((rule) => {
+      if (
+        rule.selector.includes("button") &&
+        rule.nodes.some((node) => node.toString() === "user-select: none")
+      ) {
+        unselectable.push(rule);
+      }
+    });
+
+    expect(unselectable).toHaveLength(1);
+    const [rule] = unselectable;
+    expect(mediaOf(rule)).toBe(NOT_HOVERING);
+    for (const control of ["button", '[role="menuitem"]', '[role="option"]']) {
+      expect(rule.selector).toContain(control);
+    }
+    expect(rule.selector).not.toContain("a[href]");
+    expect(rule.selector).not.toContain('[role="link"]');
+  });
+});
