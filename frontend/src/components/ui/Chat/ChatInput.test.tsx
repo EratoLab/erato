@@ -990,6 +990,20 @@ describe("ChatInput", () => {
       expect(textarea.selectionEnd).toBe(expected.length);
     });
 
+    it("appends plain text with the caret right after it", async () => {
+      const controls = createRef<ChatInputControlsHandle>();
+      await renderChatInput(null, controls);
+      const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+
+      act(() => {
+        controls.current?.appendToDraft?.("https://example.com/", {
+          emptyLineAfter: false,
+        });
+      });
+      expect(textarea).toHaveValue("https://example.com/");
+      expect(textarea.selectionStart).toBe(textarea.value.length);
+    });
+
     it("re-initializes facets on a genuine chat switch", async () => {
       const { rerender } = await renderChatInput("chat-a");
 
@@ -1263,10 +1277,12 @@ describe("ChatInput", () => {
       touch,
       enforceTools = false,
       availableModels = models,
+      audioMode,
     }: {
       touch: boolean;
       enforceTools?: boolean;
       availableModels?: typeof models;
+      audioMode?: boolean;
     }) => {
       mockUseIsMobile.mockReturnValue(true);
       mockUseIsNarrowTouchScreen.mockReturnValue(touch);
@@ -1285,21 +1301,27 @@ describe("ChatInput", () => {
         defaultOptions: { queries: { retry: false } },
       });
       const { i18n } = await import("@lingui/core");
-      const view = render(
+      const composer = (inAudioMode: boolean | undefined) => (
         <QueryClientProvider client={queryClient}>
           <I18nProvider i18n={i18n}>
             <ChatInput
               onSendMessage={vi.fn()}
-              controlledAvailableModels={availableModels as never}
-              controlledSelectedModel={availableModels[0] as never}
+              controlledAvailableModels={availableModels}
+              controlledSelectedModel={availableModels[0]}
               onControlledSelectedModelChange={onModelChange as never}
               controlledIsModelSelectionReady
               enforceSelectedFacetIds={enforceTools}
+              controlledIsAudioMode={inAudioMode}
+              onControlledIsAudioModeChange={
+                inAudioMode === undefined ? undefined : vi.fn()
+              }
             />
           </I18nProvider>
-        </QueryClientProvider>,
+        </QueryClientProvider>
       );
-      return { ...view, onModelChange };
+      const view = render(composer(audioMode));
+      const setAudioMode = (next: boolean) => view.rerender(composer(next));
+      return { ...view, onModelChange, setAudioMode };
     };
 
     const addControlsProps = () =>
@@ -1360,6 +1382,92 @@ describe("ChatInput", () => {
       expect(addControlsProps().toolsDisabledReason).toBe(
         "This assistant sets the tools for its chats.",
       );
+    });
+
+    describe("in audio mode", () => {
+      const microphone = (open: boolean) => {
+        mockUseAudioDictationFeature.mockReturnValue({
+          enabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseAudioDictationRecorder.mockReturnValue({
+          isDictating: open,
+          isDictationStarting: false,
+          isDictationCompleting: false,
+          isCapturingAudio: open,
+          dictationError: null,
+          setDictationError: vi.fn(),
+          dictationBars: [3, 6, 9, 6, 3],
+          toggleDictation: vi.fn(),
+        });
+      };
+
+      afterEach(() => {
+        useSpeechPlayback.setState({ playing: false });
+      });
+
+      it.each([
+        ["Listening", "the microphone is open"],
+        ["Speaking", "the voice speaks"],
+        ["Thinking", "the answer is coming"],
+        ["Audio mode is on", "nothing else happens"],
+      ] as const)(
+        "writes %s where the field was while %s",
+        async (label, state) => {
+          microphone(state === "the microphone is open");
+          if (state === "the voice speaks")
+            useSpeechPlayback.setState({ playing: true });
+          if (state === "the answer is coming")
+            mockUseChatContext.mockReturnValue({
+              isPendingResponse: true,
+              isMessagingLoading: false,
+              isUploading: false,
+              cancelMessage: vi.fn(),
+            });
+
+          const { container } = await renderPhoneComposer({
+            touch: true,
+            audioMode: true,
+          });
+
+          const status = screen.getByTestId("chat-input-audio-mode-status");
+          expect(status).toHaveTextContent(label);
+          expect(
+            container.querySelector('[data-ui="chat-input-controls"]'),
+          ).toContainElement(status);
+        },
+      );
+
+      it("writes nothing in the rows of a narrow window under a mouse", async () => {
+        microphone(true);
+
+        await renderPhoneComposer({ touch: false, audioMode: true });
+
+        expect(screen.queryByTestId("chat-input-audio-mode-status")).toBeNull();
+      });
+
+      it("leaves the keyboard closed when audio mode ends, but focuses the field under a mouse", async () => {
+        mockUseChatInputFeature.mockReturnValue({ autofocus: true });
+
+        for (const touch of [true, false]) {
+          microphone(true);
+          const { setAudioMode, unmount } = await renderPhoneComposer({
+            touch,
+            audioMode: true,
+          });
+          microphone(false);
+          setAudioMode(false);
+
+          const field = screen.getByPlaceholderText("Type a message...");
+          if (touch) expect(field).not.toHaveFocus();
+          else expect(field).toHaveFocus();
+          unmount();
+        }
+      });
     });
 
     it("keeps the rows of a narrow window under a mouse", async () => {

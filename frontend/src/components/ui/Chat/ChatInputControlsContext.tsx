@@ -8,15 +8,24 @@ export type DraftMessageOptions = {
   onlyIfEmpty?: boolean;
 };
 
+export type AppendToDraftOptions = {
+  /**
+   * Leave an empty line after the block for the caret (the default). Off for
+   * plain text, so the caret stays at its end as if it had been typed.
+   */
+  emptyLineAfter?: boolean;
+};
+
 export interface ChatInputControls {
   setDraftMessage: (message: string, options?: DraftMessageOptions) => void;
   /**
    * Adds a block after what the user typed: an empty line before it when
-   * there is text, an empty line after it, the caret at the end and the
-   * composer focused. Optional, so a provider value built before shared
-   * surface 1.28 still satisfies the type; callers use `?.()`.
+   * there is text, an empty line after it unless `emptyLineAfter` is false,
+   * the caret at the end and the composer focused. Optional, so a provider
+   * value built before shared surface 1.28 still satisfies the type; callers
+   * use `?.()`.
    */
-  appendToDraft?: (block: string) => void;
+  appendToDraft?: (block: string, options?: AppendToDraftOptions) => void;
   focusInput: () => void;
   setSelectedFacetIds: (facetIds: string[]) => void;
   setSelectedChatProviderId: (chatProviderId: string) => void;

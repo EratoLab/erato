@@ -9,6 +9,9 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 
 type Listener = (payload: unknown) => void;
 
+// Shared text ends where it ends, as if typed: no empty line after it.
+const asTyped = { emptyLineAfter: false };
+
 function base64(text: string) {
   return window.btoa(text);
 }
@@ -153,6 +156,7 @@ describe("useSharedItemsIntoComposer", () => {
     expect(shell.request).toHaveBeenCalledTimes(1);
     expect(appendToDraft).toHaveBeenCalledWith(
       "https://example.com/\n\nPlease summarise this",
+      asTyped,
     );
     expect(uploadFiles).toHaveBeenCalledTimes(1);
     const files = uploadFiles.mock.calls[0][0];
@@ -179,7 +183,7 @@ describe("useSharedItemsIntoComposer", () => {
     });
 
     await waitFor(() =>
-      expect(appendToDraft).toHaveBeenCalledWith("Shared later"),
+      expect(appendToDraft).toHaveBeenCalledWith("Shared later", asTyped),
     );
     expect(shell.request).toHaveBeenCalledTimes(2);
   });
@@ -195,7 +199,9 @@ describe("useSharedItemsIntoComposer", () => {
 
     rerender({ ...props, ready: true });
 
-    await waitFor(() => expect(appendToDraft).toHaveBeenCalledWith("Waiting"));
+    await waitFor(() =>
+      expect(appendToDraft).toHaveBeenCalledWith("Waiting", asTyped),
+    );
   });
 
   it("names a file that arrived without its content", async () => {
@@ -348,7 +354,7 @@ describe("useSharedItemsIntoComposer", () => {
         "Unsupported file type(s): notes.txt",
       ),
     );
-    expect(appendToDraft).toHaveBeenCalledWith("Look at this");
+    expect(appendToDraft).toHaveBeenCalledWith("Look at this", asTyped);
     expect(uploadFiles).not.toHaveBeenCalled();
   });
 

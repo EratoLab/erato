@@ -45,6 +45,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import {
   ChatInputControlsProvider,
+  type AppendToDraftOptions,
   type ChatInputControlsHandle,
   type DraftMessageOptions,
 } from "./ChatInputControlsContext";
@@ -253,8 +254,8 @@ export const Chat = ({
       setDraftMessage: (message: string, options?: DraftMessageOptions) => {
         chatInputControlsRef.current?.setDraftMessage(message, options);
       },
-      appendToDraft: (block: string) => {
-        chatInputControlsRef.current?.appendToDraft?.(block);
+      appendToDraft: (block: string, options?: AppendToDraftOptions) => {
+        chatInputControlsRef.current?.appendToDraft?.(block, options);
       },
       focusInput: () => {
         chatInputControlsRef.current?.focusInput();
