@@ -24,9 +24,9 @@ function pageAudioSession(): PageAudioSession | undefined {
 
 /**
  * Says the page plays and records for as long as a conversation that may go
- * on hidden runs. Left to choose by itself, WebKit changed the session as a
- * turn ended with the phone locked, and the voice's context was interrupted
- * until the phone was unlocked (iPhone 15, iOS 27.2). Returns the release.
+ * on hidden runs. Without it, the voice's context was interrupted as a turn
+ * ended with the phone locked, until the phone was unlocked (iPhone 15,
+ * iOS 27.2). Returns the release.
  */
 export function holdPlayAndRecordSession(): () => void {
   const session = pageAudioSession();
