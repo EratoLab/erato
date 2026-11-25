@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/Controls/Disclosure";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
+import { useInDecisionPlace } from "@/components/ui/Message/decisionPlace";
 import { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 import { UndoIcon } from "@/components/ui/icons";
 
@@ -92,15 +93,17 @@ export function WordReviewCard({
   trailing?: ReactNode;
   children: ReactNode;
 }) {
+  const flush = useInDecisionPlace();
   return (
     <Card
       variant="surface"
       size="none"
+      bordered={!flush}
       ref={cardRef}
       tabIndex={-1}
       role="region"
       aria-label={label}
-      className="word-review focus-ring"
+      className={clsx("word-review focus-ring", flush && "word-review--flush")}
       data-testid={testId}
       footer={
         footer == null ? undefined : (

@@ -7,6 +7,7 @@ import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
 import { WarningIcon } from "../icons";
+import { useInDecisionPlace } from "./decisionPlace";
 
 import type { AllowOnceEmphasis } from "@/lib/toolCallGist/decision";
 import type React from "react";
@@ -168,6 +169,8 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   "data-testid": dataTestId,
 }) => {
   const cardRef = useRef<HTMLElement | null>(null);
+  // In the decision place the place's own frame holds the decision.
+  const flush = useInDecisionPlace();
   const alwaysAllowReasonId = useId();
   const allowScopeHintId = useId();
   const lossHintId = useId();
@@ -399,13 +402,19 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     <Card
       ref={cardRef}
       variant="surface"
-      size="sm"
+      bordered={!flush}
+      size={flush ? "none" : "sm"}
       // Programmatic focus target so keyboard focus never drops to <body>
       // when the trigger disables on open or the button row unmounts.
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      className={`focus-ring-tight ${standing ? "mt-4" : "mt-2"} min-w-0 ${className}`}
+      className={clsx(
+        "focus-ring-tight min-w-0",
+        standing ? "mt-4" : "mt-2",
+        flush && "[--card-bg:transparent]",
+        className,
+      )}
       bodyClassName={
         isPending
           ? standing
@@ -450,13 +459,17 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                 data-testid="action-confirmation-standing"
               >
                 <span id={standingLabelId}>{standingLabel}</span>
-                {alwaysAllowButton}
-                {alwaysAllowButton && neverAllowButton && (
-                  <span aria-hidden="true" className="text-theme-fg-muted">
-                    ·
-                  </span>
-                )}
-                {neverAllowButton}
+                {/* Kept on one line, so a wrap breaks after the label and
+                    never opens a line with the dot. */}
+                <span className="inline-flex items-center gap-x-2">
+                  {alwaysAllowButton}
+                  {alwaysAllowButton && neverAllowButton && (
+                    <span aria-hidden="true" className="text-theme-fg-muted">
+                      ·
+                    </span>
+                  )}
+                  {neverAllowButton}
+                </span>
               </div>
             </>
           ) : (

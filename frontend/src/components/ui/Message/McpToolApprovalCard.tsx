@@ -67,6 +67,7 @@ import {
   scopeGroup,
   scopeOf,
 } from "./approvalItems";
+import { DecisionPlaceContext } from "./decisionPlace";
 
 import type {
   ApprovalItemPart,
@@ -87,6 +88,7 @@ import type {
 import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
 import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
 import type { ChatTranscriptValue } from "@/providers/ChatProvider";
+import type { ReactNode } from "react";
 
 /** The `409` a child card gets while its origin is asking the same question. */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
@@ -225,6 +227,10 @@ const mismatchedIds = (
  * make `input` unusable; track every other field from the generated type and
  * override just those.
  */
+const inDecisionPlace = (card: ReactNode) => (
+  <DecisionPlaceContext.Provider value>{card}</DecisionPlaceContext.Provider>
+);
+
 export type McpToolApprovalRequestPart = Omit<
   ContentPartToolApprovalRequest,
   "input" | "approvals"
@@ -1053,7 +1059,7 @@ export const McpToolApprovalCard = ({
   );
 
   if (kind === "tool_call_limit" && !isQueue) {
-    return (
+    return inDecisionPlace(
       <div
         className={APPROVAL_CARD_SHELL_CLASS}
         data-testid="tool-call-limit-approval"
@@ -1067,12 +1073,12 @@ export const McpToolApprovalCard = ({
           onDecide={decideAll}
         />
         {refusal}
-      </div>
+      </div>,
     );
   }
 
   if (isQueue) {
-    return (
+    return inDecisionPlace(
       <>
         <ApprovalQueueCard
           messageId={messageId}
@@ -1090,12 +1096,12 @@ export const McpToolApprovalCard = ({
           onDecideScope={decideScope}
         />
         {refusal}
-      </>
+      </>,
     );
   }
 
   if (kind === "task_plan") {
-    return (
+    return inDecisionPlace(
       <>
         <TaskPlanApprovalCard
           items={approvalItems}
@@ -1106,12 +1112,12 @@ export const McpToolApprovalCard = ({
           onDecideAll={decideAll}
         />
         {refusal}
-      </>
+      </>,
     );
   }
 
   if (isBuiltinTool) {
-    return (
+    return inDecisionPlace(
       <div
         data-testid="builtin-tool-approval"
         data-waiting-card=""
@@ -1130,7 +1136,7 @@ export const McpToolApprovalCard = ({
           onDecide={(decision) => void decide(decision)}
         />
         {refusal}
-      </div>
+      </div>,
     );
   }
 
@@ -1138,7 +1144,7 @@ export const McpToolApprovalCard = ({
   // server added reaches this client although the generated union says it
   // cannot, and the turn cannot go on until it is answered either way.
   if ((kind as string) !== "mcp_tool" && !isClientTool) {
-    return (
+    return inDecisionPlace(
       <div
         data-testid="tool-approval-generic"
         data-waiting-card=""
@@ -1167,11 +1173,11 @@ export const McpToolApprovalCard = ({
           data-testid="tool-approval-generic-card"
         />
         {refusal}
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return inDecisionPlace(
     <div
       data-testid="mcp-tool-approval"
       data-waiting-card=""
@@ -1220,6 +1226,6 @@ export const McpToolApprovalCard = ({
         </p>
       )}
       {refusal}
-    </div>
+    </div>,
   );
 };
