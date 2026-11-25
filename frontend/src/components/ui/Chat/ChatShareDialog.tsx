@@ -113,7 +113,8 @@ export function ChatShareDialog({
         anchor: { x, y, width, height },
       });
     } catch {
-      await handleCopy();
+      // Copying after the round trip may no longer count as the tap's.
+      await handleCopy().catch(() => undefined);
     }
   };
 
