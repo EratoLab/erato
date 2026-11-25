@@ -8116,6 +8116,7 @@ fn word_action_facet(
         presentation: None,
         client_actions_always_ask: vec![],
         grant_scope: Default::default(),
+        draft_block_actions: Default::default(),
         tool_call_allowlist: tool_call_allowlist.iter().map(|s| s.to_string()).collect(),
         delegation: Some(serde_json::from_value(delegation).unwrap()),
     }

@@ -37,17 +37,76 @@ const PROVIDER_CALL_ID_CHARS: usize = 9;
 /// `[A-Za-z0-9]`. Derived from the chained id, so every request of the answer
 /// and every later replay sends the same one.
 pub fn provider_call_id(call_id: &str) -> Option<String> {
-    use sha2::{Digest, Sha256};
     call_id.strip_suffix(CALL_ID_SUFFIX)?;
+    Some(short_call_id(call_id))
+}
+
+fn short_call_id(seed: &str) -> String {
+    use sha2::{Digest, Sha256};
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let digest = Sha256::digest(call_id.as_bytes());
-    Some(
-        digest
-            .iter()
-            .take(PROVIDER_CALL_ID_CHARS)
-            .map(|byte| ALPHABET[usize::from(*byte) % ALPHABET.len()] as char)
-            .collect(),
-    )
+    Sha256::digest(seed.as_bytes())
+        .iter()
+        .take(PROVIDER_CALL_ID_CHARS)
+        .map(|byte| ALPHABET[usize::from(*byte) % ALPHABET.len()] as char)
+        .collect()
+}
+
+/// The provider call id of a proposal the server makes for a model turn, in
+/// the same form as a chained call's.
+pub fn server_proposal_call_id(turn_seed: &str) -> String {
+    short_call_id(&format!("{turn_seed}:proposal"))
+}
+
+fn closed_block_languages(markdown: &str) -> Vec<&str> {
+    use crate::services::speech::sentences::{closes_fence, opens_fence};
+    let mut languages = Vec::new();
+    let mut open: Option<((char, usize), &str)> = None;
+    for line in markdown.lines() {
+        open = match open {
+            Some((fence, language)) if closes_fence(line, fence) => {
+                languages.push(language);
+                None
+            }
+            Some(open) => Some(open),
+            None => opens_fence(line).map(|fence| {
+                let info = &line.trim_start()[fence.1..];
+                (fence, info.split_whitespace().next().unwrap_or_default())
+            }),
+        };
+    }
+    languages
+}
+
+/// The action the answer's one draft block stands for, when the facet maps
+/// its language to an action an offered proposal tool carries out. None for
+/// no such block or several, which leave the choice to the user.
+pub fn drafted_action(
+    offered: &HashMap<String, OfferedClientTool>,
+    content: &[ContentPart],
+) -> Option<String> {
+    let actions: HashMap<&str, &str> = offered
+        .values()
+        .filter(|tool| tool.proposal)
+        .flat_map(|tool| tool.draft_block_actions.iter())
+        .map(|(language, action)| (language.as_str(), action.as_str()))
+        .collect();
+    if actions.is_empty() {
+        return None;
+    }
+    let mut found = None;
+    let mut count = 0;
+    for part in content {
+        let ContentPart::Text(text) = part else {
+            continue;
+        };
+        for language in closed_block_languages(&text.text) {
+            if let Some(action) = actions.get(language) {
+                count += 1;
+                found = Some(*action);
+            }
+        }
+    }
+    (count == 1).then(|| found.map(str::to_owned)).flatten()
 }
 
 /// The reason of a chained call whose client went away before it answered.
@@ -388,6 +447,7 @@ pub fn offer_proposal_tools(
     decisions: &BTreeMap<String, ClientToolDecision>,
     facet_always_ask: &[String],
     item_identity: Option<&str>,
+    draft_block_actions: &HashMap<String, String>,
     mcp_has_tool: impl Fn(&str) -> bool,
     executor_for: impl Fn(
         &ClientToolConfig,
@@ -414,6 +474,11 @@ pub fn offer_proposal_tools(
         ) {
             policy.proposal = true;
             policy.item_identity = item_identity.map(str::to_owned);
+            policy.draft_block_actions = draft_block_actions
+                .iter()
+                .filter(|(_, action)| tool.client_actions.contains(action))
+                .map(|(language, action)| (language.clone(), action.clone()))
+                .collect();
         }
     }
 }
@@ -1306,5 +1371,78 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn drafting(proposal: bool) -> HashMap<String, OfferedClientTool> {
+        let config = ClientToolConfig {
+            name: "open_form".into(),
+            namespace: Some("editor".into()),
+            called_by: ClientToolCalledBy::Server,
+            client_actions: vec!["editor.open_form".into()],
+            ..Default::default()
+        };
+        let mut tool = OfferedClientTool::prepare(&config, &json!({"type": "object"})).unwrap();
+        tool.proposal = proposal;
+        tool.draft_block_actions = [
+            ("editor-draft".to_string(), "editor.open_form".to_string()),
+            (
+                "editor-draft-rich".to_string(),
+                "editor.open_form".to_string(),
+            ),
+        ]
+        .into();
+        HashMap::from([("open_form".to_string(), tool)])
+    }
+
+    fn answer(texts: &[&str]) -> Vec<ContentPart> {
+        texts
+            .iter()
+            .map(|text| {
+                ContentPart::Text(crate::models::message::ContentPartText {
+                    text: text.to_string(),
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_closed_draft_block_names_its_action() {
+        let offered = drafting(true);
+        let drafted = |texts: &[&str]| drafted_action(&offered, &answer(texts));
+        let action = Some("editor.open_form".to_string());
+        assert_eq!(
+            drafted(&["Here:\n```editor-draft\nHello\n```\nDone."]),
+            action
+        );
+        assert_eq!(
+            drafted(&["~~~~ editor-draft-rich x\n<p>Hi</p>\n~~~~\n"]),
+            action
+        );
+        assert_eq!(
+            drafted(&["```text\n```editor-draft\n```\n", "```editor-draft\nA\n```"]),
+            action,
+            "a block inside another block is not a draft"
+        );
+        assert_eq!(drafted(&["No draft, just `editor-draft` in prose."]), None);
+        assert_eq!(drafted(&["```editor-draft\ncut off"]), None);
+        assert_eq!(drafted(&["```python\nprint()\n```"]), None);
+        assert_eq!(
+            drafted(&["```editor-draft\nA\n```", "```editor-draft-rich\nB\n```"]),
+            None,
+            "several versions leave the pick to the user"
+        );
+        assert_eq!(
+            drafted_action(&drafting(false), &answer(&["```editor-draft\nA\n```"])),
+            None
+        );
+    }
+
+    #[test]
+    fn a_server_proposal_id_is_a_short_provider_id() {
+        let id = server_proposal_call_id("message:2");
+        assert_eq!(id.len(), PROVIDER_CALL_ID_CHARS);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert_eq!(id, server_proposal_call_id("message:2"));
+        assert_ne!(id, server_proposal_call_id("message:3"));
     }
 }

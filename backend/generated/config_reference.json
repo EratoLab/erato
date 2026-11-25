@@ -95,6 +95,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "action_facets.facets.<facet-id>.draft_block_actions.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "action_facets.facets.<facet-id>.grant_scope.<key>": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
