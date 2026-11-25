@@ -1,7 +1,3 @@
-// Button classes shared by the host client-action renderers (Outlook's email
-// + appointment today): compact geometry matching the sibling action buttons.
+// The Word comment picker's filter chips: compact, on the shared control tokens.
 export const ACTION_BUTTON_CLASS =
   "rounded-[var(--theme-radius-control)] border border-theme-border bg-theme-bg-primary px-3 py-1 text-xs hover:bg-theme-bg-tertiary disabled:opacity-50";
-// Mirrors the library Button "primary" variant tokens (Button.tsx).
-export const PRIMARY_ACTION_BUTTON_CLASS =
-  "rounded-[var(--theme-radius-control)] px-3 py-1 text-xs font-medium bg-theme-action-primary-bg text-theme-action-primary-fg hover:bg-theme-action-primary-hover theme-transition disabled:opacity-50";

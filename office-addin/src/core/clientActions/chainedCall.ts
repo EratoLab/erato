@@ -93,29 +93,28 @@ function cancelledResult(reason: unknown): ProposalApplyResult {
 
 /**
  * Where the server's call for the answer's proposed action stands. Undefined when the server
- * makes none, or when the answer's versions are left to the user to pick with their own buttons.
+ * makes none, or when the card's own buttons are the way to act on what it shows.
  */
 export function chainedProposalState<R extends ChainedCallResult>(
   content: readonly ContentPart[] | undefined,
   actions: readonly string[],
-  /** The answer holds several versions of what the action writes. */
-  userPicks: (content: readonly ContentPart[] | undefined) => boolean,
+  /** The card's own buttons act: the answer holds several versions, or the card shows another. */
+  leftToCard: (content: readonly ContentPart[] | undefined) => boolean,
 ): ChainedCallState<R> | undefined {
-  // A change asked for on the card lets Erato propose again: the newest proposal is the one asked.
-  const proposal = [...(content ?? [])]
-    .reverse()
-    .find(
-      (part) =>
-        part.content_type === "tool_use" &&
-        part.tool_name === CLIENT_ACTION_TOOL_NAME &&
-        object(part.input) &&
-        actions.includes(part.input.action as string),
-    );
-  const callId =
-    proposal?.content_type === "tool_use"
-      ? chainedCallId(content, proposal.tool_call_id)
-      : undefined;
-  if (!callId || userPicks(content)) return undefined;
+  // A change asked for on the card lets Erato propose again, so the newest chained proposal is the
+  // one asked; a second proposal the server refused has no call and never replaces it.
+  let callId: string | undefined;
+  for (let index = (content?.length ?? 0) - 1; index >= 0 && !callId; index--) {
+    const part = content![index];
+    if (
+      part.content_type === "tool_use" &&
+      part.tool_name === CLIENT_ACTION_TOOL_NAME &&
+      object(part.input) &&
+      actions.includes(part.input.action as string)
+    )
+      callId = chainedCallId(content, part.tool_call_id);
+  }
+  if (!callId || leftToCard(content)) return undefined;
   const state = chainedCallState<R>(content, callId);
   return state.kind === "done" && state.result.reason === USER_PICKS
     ? undefined

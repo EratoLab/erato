@@ -8,16 +8,13 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import {
-  ACTION_BUTTON_CLASS,
-  PRIMARY_ACTION_BUTTON_CLASS,
-} from "../../../core/clientActions/clientActionButtonStyles";
 import { createMockAsyncResult } from "../../../test/helpers/asyncResult";
 import { createMockMessageCompose } from "../../../test/mocks/outlook/composeMail";
 import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../../test/mocks/outlook/mailbox";
+import { markOutlookFormOpened } from "../../utils/outlookProposalApply";
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
 
 import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
@@ -40,6 +37,10 @@ const mockComposeSelection = vi.fn(() => ({
 }));
 
 vi.mock("@erato/frontend/library", async () => ({
+  Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
+    <button type="button" {...props} />
+  ),
+  looksLikeHtmlFragment: () => false,
   sanitizeHtmlPreview: (html: string) => html,
   copyEmailToClipboard: (...args: unknown[]) =>
     Promise.resolve(mockCopyEmailToClipboard(...args)),
@@ -319,24 +320,55 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
         ]
       : []),
   ];
-  const show = (content: unknown[]) => {
-    prime({
-      artifact: makeArtifact({ proposedClientAction: REPLY }),
-      currentItemIdentity: "item-a",
-      content,
-    });
-    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+  const show = (
+    content: unknown[],
+    block = "Draft body",
+    before?: (artifact: TestArtifact) => void,
+  ) => {
+    const artifact = makeArtifact({ proposedClientAction: REPLY });
+    before?.(artifact);
+    prime({ artifact, currentItemIdentity: "item-a", content });
+    render(<OutlookEratoEmailRenderer content={block} isHtml={false} />);
   };
 
-  it("says the reply waits for the decision, which stays the one primary action", () => {
+  it("says the reply waits for the decision, and offers no second way to make it", () => {
     show(proposed());
 
     expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
       "Waiting for your decision",
     );
-    expect(screen.getByRole("button", { name: "Reply" }).className).toBe(
-      ACTION_BUTTON_CLASS,
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("speaks only for the draft the proposal opens", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed(),
+      ],
+      "An aside",
     );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "primary",
+    );
+  });
+
+  it("does not say no reply was opened when the draft's own button opened one", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+      "Draft body",
+      (artifact) => markOutlookFormOpened(artifact.messageId, REPLY),
+    );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
   });
 
   it("says no reply was opened after the user denied it", () => {
@@ -420,8 +452,9 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
     show([{ content_type: "text", text: "```erato-email\nDraft body\n```\n" }]);
 
     expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
-    expect(screen.getByRole("button", { name: "Reply" }).className).toBe(
-      PRIMARY_ACTION_BUTTON_CLASS,
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "primary",
     );
   });
 });

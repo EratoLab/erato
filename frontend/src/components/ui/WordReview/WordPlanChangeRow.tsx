@@ -41,7 +41,6 @@ import {
   rowsRemovedLabel,
   storyLabel,
   tableCountLabel,
-  WORD_NEUTRAL_PILL_TONE,
 } from "./wordPlanLabels";
 
 import type { WordAuthoringSnapshot } from "@/lib/wordReview/wordDocumentPlan";
@@ -87,7 +86,7 @@ export function planRowStatusLabel(status: PillStatus): string {
 }
 /** Pill tones the Word review rows share. */
 export const WORD_PILL_TONE = {
-  neutral: WORD_NEUTRAL_PILL_TONE,
+  neutral: "bg-theme-bg-secondary text-theme-fg-secondary",
   success: "bg-theme-success-bg text-theme-success-fg",
   error: "bg-theme-error-bg text-theme-error-fg",
   info: "bg-theme-info-bg text-theme-info-fg",

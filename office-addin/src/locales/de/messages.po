@@ -4041,7 +4041,7 @@ msgstr "Nicht geändert."
 #. js-lingui-explicit-id
 #: src/word/utils/wordChainedApply.ts
 msgid "officeAddin.word.chained.onScreen"
-msgstr "Wartet auf deine Entscheidung auf dem Bildschirm"
+msgstr "Wartet auf Ihre Entscheidung auf dem Bildschirm"
 
 #. js-lingui-explicit-id
 #: src/word/utils/wordChainedApply.ts
@@ -4081,7 +4081,7 @@ msgstr "Die Änderung ist vielleicht schon im Dokument. Erato liest es neu, bevo
 #. js-lingui-explicit-id
 #: src/word/utils/wordChainedApply.ts
 msgid "officeAddin.word.chained.waiting"
-msgstr "Wartet auf deine Entscheidung"
+msgstr "Wartet auf Ihre Entscheidung"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx

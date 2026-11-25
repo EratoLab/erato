@@ -72,6 +72,7 @@ import {
 } from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
+import { looksLikeHtmlFragment } from "@/utils/htmlFragment";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
@@ -201,16 +202,6 @@ const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "plain",
   "html",
 ]);
-
-// Element tags model-produced HTML fragments reliably contain. Deliberately
-// narrow: plain German business text with `<Name>`, `<mail@firma.de>` or
-// `<30 T€` must not match.
-const HTML_FRAGMENT_TAG_RE =
-  /<\/?(?:p|br|div|span|a|ul|ol|li|blockquote|h[1-6]|b|i|em|strong|u|s|table|thead|tbody|tr|td|th|pre|code|hr|img)(?:\s[^<>]*)?\/?>/i;
-
-function looksLikeHtmlFragment(text: string): boolean {
-  return HTML_FRAGMENT_TAG_RE.test(text);
-}
 
 /**
  * The `erato-appointment` fence (the JSON payload a scheduling facet's

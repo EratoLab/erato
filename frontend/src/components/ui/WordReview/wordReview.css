@@ -2,18 +2,19 @@
   --review-line: var(--theme-border);
   --review-muted: var(--theme-fg-secondary);
   --review-inset: var(--theme-spacing-message-padding-x);
-  --review-raised: var(--theme-bg-secondary);
   margin-block: var(--theme-spacing-message-gap);
   min-width: 0;
   max-width: 100%;
   text-align: left;
 }
-/* In the chat's decision place the place's own frame and inset hold the card. */
+/* In the chat's decision place the place's own frame and inset hold the card;
+   a bordered box inside it keeps an inset of its own. */
 .word-review--flush {
   --review-inset: 0px;
-  --review-raised: var(--theme-bg-primary);
-  --card-bg: transparent;
   margin-block: 0;
+}
+.word-review--flush :where(.card-skin, .word-parts__changes) {
+  --review-inset: var(--theme-spacing-message-padding-x);
 }
 :where(.word-review) :where(h3, h4, p) {
   margin: 0;
@@ -89,7 +90,11 @@
   border-bottom: none;
 }
 .word-review__row--open {
-  background: var(--review-raised);
+  background: var(--theme-bg-secondary);
+}
+/* With no inset of its own a fill would end at the text's edge. */
+.word-review--flush .word-review__row--open {
+  background: none;
 }
 /* Row variant="list" owns no padding or type scale; the card's inset and
    text size come from here so rows line up with the header above them. */

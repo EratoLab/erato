@@ -25,6 +25,10 @@ const mockOpenNewAppointmentForm = vi.fn();
 const mockIsCreateAppointmentSupported = vi.fn();
 
 vi.mock("@erato/frontend/library", async () => ({
+  Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
+    <button type="button" {...props} />
+  ),
+  looksLikeHtmlFragment: () => false,
   useChatContext: () => mockUseChatContext(),
   ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
     () => mockUseChatContext(),
@@ -93,6 +97,8 @@ function prime(options: {
   /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
   supported?: boolean;
+  /** The stored answer's parts. */
+  content?: unknown[];
 }) {
   mockUseOutlookArtifact.mockReturnValue(options.artifact);
   mockUseOutlookMailItem.mockReturnValue({
@@ -101,7 +107,13 @@ function prime(options: {
   });
   const messageId = options.artifact?.messageId ?? "unrelated";
   mockUseChatContext.mockReturnValue({
-    messages: { [messageId]: { id: messageId, role: "assistant" } },
+    messages: {
+      [messageId]: {
+        id: messageId,
+        role: "assistant",
+        content: options.content,
+      },
+    },
     messageOrder: [messageId],
   });
   server.decisions = options.decisions ?? {};
@@ -195,6 +207,62 @@ describe("OutlookEratoAppointmentRenderer — click semantics", () => {
     render(<OutlookEratoAppointmentRenderer content={FENCE} />);
 
     expect(mockOpenNewAppointmentForm).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toBeEnabled();
+  });
+
+  it("leaves the decision to the chat while it waits, and offers the button again after it", () => {
+    const proposal = {
+      content_type: "tool_use",
+      tool_call_id: "call-propose",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: CREATE },
+      output: { apply: { call_id: "call-propose.apply" }, action: CREATE },
+    };
+    const fence = {
+      content_type: "text",
+      text: "```erato-appointment\n" + FENCE + "\n```\n",
+    };
+    const artifact = makeArtifact({ proposedClientAction: CREATE });
+    prime({
+      artifact,
+      currentItemIdentity: "item-a",
+      content: [fence, proposal],
+    });
+    const { rerender } = render(
+      <OutlookEratoAppointmentRenderer content={FENCE} />,
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open appointment" }),
+    ).toBeNull();
+
+    prime({
+      artifact,
+      currentItemIdentity: "item-a",
+      content: [
+        fence,
+        proposal,
+        {
+          content_type: "tool_use",
+          tool_call_id: "call-propose.apply",
+          tool_name: "open_appointment",
+          status: "error",
+          input: {},
+          output: { status: "rejected" },
+        },
+      ],
+    });
+    rerender(<OutlookEratoAppointmentRenderer content={FENCE} />);
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Denied. No appointment was opened.",
+    );
     expect(
       screen.getByRole("button", { name: "Open appointment" }),
     ).toBeEnabled();

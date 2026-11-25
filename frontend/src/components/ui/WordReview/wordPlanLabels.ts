@@ -489,10 +489,6 @@ export function wordPlanChip(review: WordPlanReview): {
   return wordSizeChip(review.size);
 }
 
-/** A quiet pill on the card's raised fill, which changes when the card sits flush on another. */
-export const WORD_NEUTRAL_PILL_TONE =
-  "bg-[var(--review-raised,var(--theme-bg-secondary))] text-theme-fg-secondary";
-
 export function wordSizeChip(size: WordPlanReviewSize): {
   label: string;
   toneClassName?: string;
@@ -511,7 +507,7 @@ export function wordSizeChip(size: WordPlanReviewSize): {
         }
       : {
           label: t({ id: "officeAddin.word.planSize.small", message: "Small" }),
-          toneClassName: WORD_NEUTRAL_PILL_TONE,
+          toneClassName: "bg-theme-bg-secondary text-theme-fg-secondary",
         };
 }
 

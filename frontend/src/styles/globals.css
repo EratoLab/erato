@@ -1386,6 +1386,20 @@ body:has(.app-viewport) {
   --card-border: var(--theme-border-focus);
 }
 
+/* A card's own row of buttons in a slim pane takes the compact size, under a
+   mouse only: a finger keeps the full target. The buttons stay size "sm" so a
+   theme's data-geometry rules still reach them; two classes outrank the
+   button's own geometry and type scale. */
+@media (max-width: 639.98px) and (hover: hover) and (pointer: fine) {
+  .card-actions .btn-geometry-sm {
+    padding-block: 0.25rem;
+    min-height: 0;
+    min-width: 0;
+    font-size: var(--theme-font-size-xs);
+    line-height: var(--theme-line-height-xs);
+  }
+}
+
 /* Opening a card paints nothing at stock: every expandable frame in the app
    keeps its resting colours while open, and a declaration here is past the
    reach of any call-site utility, so anything this rule painted would become

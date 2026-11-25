@@ -18,25 +18,38 @@ export type OutlookProposalState = ChainedCallState<ProposalApplyResult>;
 export function useOutlookProposalState(
   messageId: string | undefined,
   actions: readonly string[],
-  /** The answer holds several versions, so the user picks one with its button. */
-  userPicks: (content: readonly ContentPart[] | undefined) => boolean,
+  /** The card's own buttons act: the answer holds several versions, or this card shows another. */
+  leftToCard: (content: readonly ContentPart[] | undefined) => boolean,
 ): OutlookProposalState | undefined {
   return useChainedState<ProposalApplyResult>(messageId, (content) =>
-    chainedProposalState<ProposalApplyResult>(content, actions, userPicks),
+    chainedProposalState<ProposalApplyResult>(content, actions, leftToCard),
   );
 }
+
+/** The decision waits in the chat, so the draft offers no second way to make it. */
+export const outlookProposalPending = (
+  state: OutlookProposalState | undefined,
+): boolean => state?.kind === "waiting" || state?.kind === "applying";
 
 /** One line under the draft: where the proposed reply or appointment stands. */
 export function OutlookProposalStatus({
   state,
   kind,
+  openedHere = false,
 }: {
   state: OutlookProposalState;
   kind: "reply" | "appointment";
+  /** The draft's own button opened the form, so "nothing was opened" would be untrue. */
+  openedHere?: boolean;
 }) {
+  const nothingOpened =
+    state.kind === "cancelled" ||
+    (state.kind === "done" &&
+      (state.result.status === "failed" ||
+        state.result.status === "unavailable"));
+  if (openedHere && nothingOpened) return null;
   return (
     <p
-      role="status"
       className="mt-1 text-xs text-theme-fg-secondary"
       data-testid="outlook-proposal-status"
     >

@@ -756,6 +756,7 @@ export {
   type TeamsTranscriptIndexWindow,
 } from "@/utils/teams/teamsTranscriptIndex";
 export { sanitizeHtmlPreview } from "@/utils/sanitizeHtmlPreview";
+export { looksLikeHtmlFragment } from "@/utils/htmlFragment";
 export {
   extractTextFromContent,
   parseContent,

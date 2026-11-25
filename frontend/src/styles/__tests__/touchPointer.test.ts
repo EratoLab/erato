@@ -130,6 +130,24 @@ describe("hover styles on a touch screen", () => {
   });
 });
 
+describe("a card's own buttons in a slim pane", () => {
+  it("shrink only under a hovering pointer, so a finger keeps the full target", () => {
+    const root = postcss.parse(
+      readFileSync(join(process.cwd(), "src/styles/globals.css"), "utf8"),
+    );
+    const compact: Rule[] = [];
+    root.walkRules((rule) => {
+      if (rule.selector.includes(".card-actions")) compact.push(rule);
+    });
+
+    expect(compact.length).toBeGreaterThan(0);
+    for (const rule of compact) {
+      expect(mediaOf(rule), rule.selector).toContain(HOVERING);
+      expect(mediaOf(rule), rule.selector).toContain("max-width");
+    }
+  });
+});
+
 describe("holding a finger on a control", () => {
   it("does not select a control's label without a hovering pointer, but leaves links selectable", async () => {
     const result = await postcss([

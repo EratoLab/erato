@@ -1,3 +1,5 @@
+import { looksLikeHtmlFragment } from "@erato/frontend/library";
+
 import {
   parseAppointmentDetails,
   isCreateAppointmentSupported,
@@ -59,7 +61,6 @@ const DRIFTED_EMAIL_FENCES = new Set([
   "plain",
   "html",
 ]);
-const MARKUP = /<\/?(?:p|br|div|span|ul|ol|li|b|strong|i|em|a|table|h\d)\b/i;
 
 export type OutlookDraft =
   | { content: string; isHtml: boolean }
@@ -86,7 +87,7 @@ export function outlookEmailDraft(
       fence.language === "erato-email-html" || artifact?.bodyFormat === "html";
     return {
       content: fence.body,
-      isHtml: wantsHtml && MARKUP.test(fence.body),
+      isHtml: wantsHtml && looksLikeHtmlFragment(fence.body),
     };
   }
   // The whole answer is the draft when the model wrote it with no fence at all.
@@ -103,7 +104,7 @@ export function outlookEmailDraft(
   )
     return {
       content: text,
-      isHtml: artifact.bodyFormat === "html" && MARKUP.test(text),
+      isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(text),
     };
   return { missing: "not_found" };
 }
@@ -140,8 +141,11 @@ export function markOutlookFormOpened(
   if (messageId) openedForms.add(`${messageId}:${action}`);
 }
 
-const formOpened = (messageId: string, action: string) =>
-  openedForms.has(`${messageId}:${action}`);
+/** Whether the card in this answer opened this action's form on the user's click. */
+export const outlookFormOpened = (
+  messageId: string | undefined,
+  action: string,
+): boolean => !!messageId && openedForms.has(`${messageId}:${action}`);
 
 /** For tests: forgets the forms the cards opened. */
 export function resetOutlookOpenedForms(): void {
@@ -173,7 +177,7 @@ export function createOutlookProposalExecutor(
       if (!message) return { status: "unavailable", reason: "no_message" };
       if (!message.latest)
         return { status: "unavailable", reason: "not_latest" };
-      if (formOpened(context.messageId, input.action))
+      if (outlookFormOpened(context.messageId, input.action))
         return { status: "applied", reason: "already_applied" };
       if (isEmailAction(input.action)) {
         const expected =

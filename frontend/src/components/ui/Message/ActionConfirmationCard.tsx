@@ -412,7 +412,6 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
       className={clsx(
         "focus-ring-tight min-w-0",
         standing ? "mt-4" : "mt-2",
-        flush && "[--card-bg:transparent]",
         className,
       )}
       bodyClassName={
@@ -444,7 +443,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
           {lossHint}
           {standing ? (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="card-actions flex flex-wrap gap-2">
                 {allowOnceButton}
                 {allowScopeButton}
                 {denyButton}
@@ -474,7 +473,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
             </>
           ) : (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="card-actions flex flex-wrap gap-2">
                 {allowOnceButton}
                 {allowScopeButton}
                 {alwaysAllowButton}

@@ -1,4 +1,5 @@
 import {
+  Button,
   copyEmailToClipboard,
   sanitizeHtmlPreview,
   useOutlookArtifact,
@@ -8,12 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   OutlookProposalStatus,
+  outlookProposalPending,
   useOutlookProposalState,
 } from "./OutlookProposalStatus";
-import {
-  ACTION_BUTTON_CLASS,
-  PRIMARY_ACTION_BUTTON_CLASS,
-} from "../../core/clientActions/clientActionButtonStyles";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import { useComposeSelectionSnapshot } from "../hooks/composeSelectionStore";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
@@ -31,6 +29,7 @@ import {
 import {
   markOutlookFormOpened,
   outlookEmailDraft,
+  outlookFormOpened,
 } from "../utils/outlookProposalApply";
 import {
   ReplyBodyTooLargeError,
@@ -130,9 +129,13 @@ export function OutlookEratoEmailRenderer({
     EMAIL_CLIENT_ACTIONS,
     (answer) => {
       const draft = outlookEmailDraft(answer, artifact ?? undefined);
-      return "missing" in draft && draft.missing === "ambiguous";
+      // Only the block the proposal opens speaks for it.
+      return "missing" in draft
+        ? draft.missing === "ambiguous"
+        : draft.content.trim() !== content.trim();
     },
   );
+  const proposalPending = outlookProposalPending(proposal);
 
   const [status, setStatus] = useState<
     "idle" | "inserting" | "done" | "copied" | "error"
@@ -301,7 +304,7 @@ export function OutlookEratoEmailRenderer({
     : readActions;
 
   return (
-    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
       {isHtml ? (
         <div
           className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
@@ -312,21 +315,20 @@ export function OutlookEratoEmailRenderer({
       ) : (
         <div className="mb-2 whitespace-pre-wrap text-sm">{content}</div>
       )}
-      <div className="flex gap-2">
+      <div className="card-actions flex flex-wrap gap-2">
         {showReadReplyActions
-          ? orderedReadActions.map((action, index) => (
-              <button
+          ? !proposalPending &&
+            orderedReadActions.map((action, index) => (
+              <Button
                 key={action}
-                type="button"
+                variant={
+                  // Once the proposal went to the chat, no draft button is the main one.
+                  index === 0 && proposedAction && !proposal
+                    ? "primary"
+                    : "secondary"
+                }
                 onClick={() => void handleReplyAction(action)}
                 disabled={isBusy}
-                className={
-                  // A proposal the user decides in the chat keeps the decision the one
-                  // primary action.
-                  index === 0 && proposedAction && !proposal
-                    ? PRIMARY_ACTION_BUTTON_CLASS
-                    : ACTION_BUTTON_CLASS
-                }
               >
                 {busyAction === action
                   ? t({
@@ -339,24 +341,18 @@ export function OutlookEratoEmailRenderer({
                         message: "Opened!",
                       })
                     : replyActionLabel(action)}
-              </button>
+              </Button>
             ))
           : !isReadMode && (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={() => void handleInsert()}
                 disabled={isBusy || isSelectionChanged}
-                className={ACTION_BUTTON_CLASS}
               >
                 {insertLabel}
-              </button>
+              </Button>
             )}
-        <button
-          type="button"
-          onClick={handleCopy}
-          disabled={isBusy}
-          className={ACTION_BUTTON_CLASS}
-        >
+        <Button variant="secondary" onClick={handleCopy} disabled={isBusy}>
           {status === "copied"
             ? t({
                 id: "officeAddin.emailRenderer.copied",
@@ -366,9 +362,17 @@ export function OutlookEratoEmailRenderer({
                 id: "officeAddin.emailRenderer.copy",
                 message: "Copy",
               })}
-        </button>
+        </Button>
       </div>
-      {proposal && <OutlookProposalStatus state={proposal} kind="reply" />}
+      {proposal && (
+        <OutlookProposalStatus
+          state={proposal}
+          kind="reply"
+          openedHere={EMAIL_CLIENT_ACTIONS.some((action) =>
+            outlookFormOpened(artifact?.messageId, action),
+          )}
+        />
+      )}
       {isSelectionChanged && !isReadMode && (
         <p className="mt-1 text-xs text-theme-fg-secondary">
           {t({

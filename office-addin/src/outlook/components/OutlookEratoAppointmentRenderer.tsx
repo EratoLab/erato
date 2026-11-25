@@ -1,15 +1,12 @@
-import { useOutlookArtifact } from "@erato/frontend/library";
+import { Button, useOutlookArtifact } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   OutlookProposalStatus,
+  outlookProposalPending,
   useOutlookProposalState,
 } from "./OutlookProposalStatus";
-import {
-  ACTION_BUTTON_CLASS,
-  PRIMARY_ACTION_BUTTON_CLASS,
-} from "../../core/clientActions/clientActionButtonStyles";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import {
   APPOINTMENT_CLIENT_ACTIONS,
@@ -26,6 +23,7 @@ import {
 import {
   markOutlookFormOpened,
   outlookAppointmentDraft,
+  outlookFormOpened,
 } from "../utils/outlookProposalApply";
 
 import type { EratoAppointmentCodeBlockProps } from "@erato/frontend/library";
@@ -134,7 +132,7 @@ export function OutlookEratoAppointmentRenderer({
   // visible but unstyled as an artifact.
   if (!details) {
     return (
-      <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+      <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
         <pre className="whitespace-pre-wrap break-words text-xs text-theme-fg-muted">
           {content}
         </pre>
@@ -146,7 +144,7 @@ export function OutlookEratoAppointmentRenderer({
   const attendeesText = appointmentAttendeesText(details);
 
   return (
-    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
       <dl className="mb-2 space-y-0.5 text-sm">
         <div className="flex gap-1">
           <dt className="font-medium text-theme-fg-primary">
@@ -201,19 +199,16 @@ export function OutlookEratoAppointmentRenderer({
           </div>
         )}
       </dl>
-      {offeredActions.length > 0 && (
-        <div className="flex gap-2">
+      {offeredActions.length > 0 && !outlookProposalPending(proposal) && (
+        <div className="card-actions flex flex-wrap gap-2">
           {offeredActions.map((action) => (
-            <button
+            <Button
               key={action}
-              type="button"
+              variant={
+                action === proposedAction && !proposal ? "primary" : "secondary"
+              }
               onClick={() => void handleActionClick()}
               disabled={isBusy}
-              className={
-                action === proposedAction && !proposal
-                  ? PRIMARY_ACTION_BUTTON_CLASS
-                  : ACTION_BUTTON_CLASS
-              }
             >
               {isBusy
                 ? t({
@@ -229,12 +224,19 @@ export function OutlookEratoAppointmentRenderer({
                       id: "officeAddin.appointmentRenderer.openAppointment",
                       message: "Open appointment",
                     })}
-            </button>
+            </Button>
           ))}
         </div>
       )}
       {proposal && (
-        <OutlookProposalStatus state={proposal} kind="appointment" />
+        <OutlookProposalStatus
+          state={proposal}
+          kind="appointment"
+          openedHere={outlookFormOpened(
+            artifact?.messageId,
+            "outlook.create_appointment",
+          )}
+        />
       )}
       {status === "error" && (
         <p role="alert" className="mt-1 text-xs text-theme-error-fg">
