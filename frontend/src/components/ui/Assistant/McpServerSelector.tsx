@@ -4,6 +4,7 @@ import { useCallback, useId, useMemo } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
+import { sortMcpServersByName } from "@/utils/chat/mcpServerOrder";
 
 import { CheckCircleIcon, ErrorIcon, WarningCircleIcon } from "../icons";
 
@@ -45,6 +46,7 @@ export const McpServerSelector = ({
   );
 
   const openServerSettings = useOpenMcpServersSettings();
+  const sortedServers = useMemo(() => sortMcpServersByName(servers), [servers]);
 
   const toggleServerSelection = useCallback(
     (serverId: string) => {
@@ -103,7 +105,7 @@ export const McpServerSelector = ({
             })}
       </p>
       <ul className="divide-y divide-theme-border rounded-md border border-theme-border">
-        {servers.map((server, index) => {
+        {sortedServers.map((server, index) => {
           const isSelected = selectedServerIdsSet.has(server.id);
           const needsAuthentication =
             server.connection_status === "NEEDS_AUTHENTICATION";
@@ -125,7 +127,7 @@ export const McpServerSelector = ({
               >
                 <span className="flex min-w-0 items-center gap-2">
                   {/* The label spans the row, so name-from-content would
-                      swallow the status text; the name stays the server id. */}
+                      swallow the status text; the name stays the server's. */}
                   <input
                     type="checkbox"
                     checked={isSelected}
@@ -143,7 +145,7 @@ export const McpServerSelector = ({
                         : "text-theme-fg-primary",
                     )}
                   >
-                    {server.id}
+                    {server.display_name}
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
@@ -194,7 +196,7 @@ export const McpServerSelector = ({
                     variant="secondary"
                     size="sm"
                     disabled={disabled}
-                    onClick={openServerSettings}
+                    onClick={() => openServerSettings(server.id)}
                     data-testid={`mcp-server-connect-${server.id}`}
                   >
                     {t({

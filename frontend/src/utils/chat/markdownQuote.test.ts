@@ -36,6 +36,19 @@ describe("appendBlockToDraft", () => {
     );
   });
 
+  it("leaves the caret on the line of text that is not a quote", () => {
+    expect(
+      appendBlockToDraft("", "https://example.com/", {
+        emptyLineAfter: false,
+      }),
+    ).toBe("https://example.com/ ");
+    expect(
+      appendBlockToDraft("Look at this ", "https://example.com/", {
+        emptyLineAfter: false,
+      }),
+    ).toBe("Look at this\n\nhttps://example.com/ ");
+  });
+
   it("appends each further block the same way", () => {
     const once = appendBlockToDraft("Typed. ", "> one");
     expect(appendBlockToDraft(once, "> two\n>\n> three")).toBe(

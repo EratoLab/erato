@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useState } from "react";
+import clsx from "clsx";
+import { useCallback, useMemo, useState } from "react";
 
 import { Input } from "@/components/ui/Input/Input";
 import { useFuzzySearch } from "@/hooks/search/useFuzzySearch";
@@ -8,10 +9,14 @@ import { Card } from "../Container/Card";
 import { Row } from "../Controls/Row";
 import { ModalBase } from "../Modal/ModalBase";
 
+import type { AssistantToolsMenuDescriptionDisplay } from "@/app/env";
 import type { MentionableAssistant } from "@/hooks/chat/useMentionableAssistants";
 import type React from "react";
 
-const SEARCH_KEYS = ["name"];
+// Descriptions are searched only where they are shown, so a match is always
+// on text the user can see.
+const NAME_KEYS = ["name"];
+const NAME_AND_DESCRIPTION_KEYS = ["name", "description"];
 
 // No fill of its own — the well sits on the modal shell. The inset is off the
 // size scale and is what publishes the concentric corner the rows read.
@@ -25,24 +30,44 @@ export interface AssistantBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
   assistants: MentionableAssistant[];
+  /**
+   * The ones the user turns to most, listed first while nothing is searched;
+   * the same list the "@" picker opens with.
+   */
+  suggested?: MentionableAssistant[];
+  /** How much of each description shows, as in the composer's menus. */
+  descriptionDisplay?: AssistantToolsMenuDescriptionDisplay;
   onSelect: (assistant: MentionableAssistant) => void;
 }
 
 /**
- * Full accessible-assistant list behind the picker's "Browse" row. Filtering is
- * client-side: the list is already loaded for the picker, so a round trip per
- * keystroke would only add latency.
+ * The assistant dialog behind the composer's "Ask an assistant…" row: every
+ * accessible assistant, the ones the user turns to most first. Picking one
+ * mentions it, as typing "@" does; the chat itself keeps its assistant.
+ * Filtering is client-side over names and descriptions: the list is already
+ * loaded for the picker, so a round trip per keystroke would only add latency.
  */
 export function AssistantBrowserModal({
   isOpen,
   onClose,
   assistants,
+  suggested = [],
+  descriptionDisplay = "truncated",
   onSelect,
 }: AssistantBrowserModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  // Without a query the search hands the list back as it is, so this order
+  // is what an empty search shows.
+  const orderedAssistants = useMemo(() => {
+    const suggestedIds = new Set(suggested.map((assistant) => assistant.id));
+    return [
+      ...suggested,
+      ...assistants.filter((assistant) => !suggestedIds.has(assistant.id)),
+    ];
+  }, [assistants, suggested]);
   const matches = useFuzzySearch({
-    items: assistants,
-    keys: SEARCH_KEYS,
+    items: orderedAssistants,
+    keys: descriptionDisplay === "none" ? NAME_KEYS : NAME_AND_DESCRIPTION_KEYS,
     query: searchQuery,
     // A single character is a legitimate filter here: the list is short and the
     // user is narrowing it, not searching prose.
@@ -64,11 +89,18 @@ export function AssistantBrowserModal({
       isOpen={isOpen}
       onClose={closeAndReset}
       title={t({
-        id: "chatInput.mentions.browseTitle",
-        message: "Mention an assistant",
+        id: "chatInput.mentions.dialogTitle",
+        message: "Ask an assistant",
       })}
       contentClassName="max-w-lg"
     >
+      <p className="mb-3 text-sm text-theme-fg-secondary">
+        {t({
+          id: "chatInput.mentions.dialogDescription",
+          message:
+            "Hands your message to the assistant you pick. This chat stays as it is.",
+        })}
+      </p>
       {/* Single return keeps the input mounted across every result state, so
           typing never loses focus. */}
       <div className="mb-3">
@@ -121,8 +153,14 @@ export function AssistantBrowserModal({
                 <span className="w-full truncate font-medium text-theme-fg-primary">
                   {assistant.name}
                 </span>
-                {assistant.description && (
-                  <span className="w-full truncate text-sm text-theme-fg-secondary">
+                {assistant.description && descriptionDisplay !== "none" && (
+                  <span
+                    className={clsx(
+                      "w-full text-sm text-theme-fg-secondary",
+                      descriptionDisplay === "truncated" &&
+                        "line-clamp-2 whitespace-normal break-words",
+                    )}
+                  >
                     {assistant.description}
                   </span>
                 )}

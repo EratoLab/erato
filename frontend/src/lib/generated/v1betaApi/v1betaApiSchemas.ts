@@ -115,6 +115,16 @@ export type ApprovalCardPiece = {
    * consequence, recipients outside.
    */
   must_say?: boolean;
+  /**
+   * Other names of the field: as the card shows it, and as the vocabulary
+   * says it in each language. Words naming any of them name the piece.
+   */
+  names?: string[];
+  /**
+   * A field the card counts as "more" and says only when asked for by
+   * name. Hearing it never stands in for any piece of the card.
+   */
+  on_request?: boolean;
   role: ApprovalCardPieceRole;
   state: ApprovalCardPieceState;
 };
@@ -149,6 +159,12 @@ export type ApprovalDecisionItem = {
    * Refused on any other decision.
    */
   change_request?: string;
+  /**
+   * For a delegated task's item: the `child_tool_call_id` of the question
+   * the card showed. A task that asks again keeps its `approval_id`, so this
+   * is what tells its questions apart.
+   */
+  child_tool_call_id?: string;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -318,6 +334,11 @@ export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
 export type ApprovalSpeechWording = "precise" | "natural";
 
 export type ApprovalVoiceCommand = {
+  /**
+   * For `repeat` without a piece: the fields the words fit equally, for
+   * asking which one is meant instead of guessing.
+   */
+  candidates?: string[];
   decision?: ApprovalVoiceDecision;
   meaning: ApprovalVoiceMeaning;
   /**
@@ -397,7 +418,7 @@ export type ApprovalVoiceMeaning =
  * What the voice just asked about the card, when the user's words may
  * answer it.
  */
-export type ApprovalVoiceQuestion = "which_text";
+export type ApprovalVoiceQuestion = "which_text" | "which_field";
 
 /**
  * What the device measured about the recording the words came from. Times

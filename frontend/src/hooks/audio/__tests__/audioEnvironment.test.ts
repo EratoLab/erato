@@ -41,12 +41,14 @@ describe("audioEnvironmentForEngine", () => {
     expect(webkit.warmUpEmitsNoiseFloor).toBe(true);
     expect(webkit.mayReturnStereoWithoutEchoCancellation).toBe(true);
     expect(webkit.needsGestureResume).toBe(true);
+    expect(webkit.clockMayStandStillWhileRunning).toBe(true);
 
     for (const engine of ["chromium", "firefox", "unknown"] as const) {
       const env = audioEnvironmentForEngine(engine);
       expect(env.warmUpEmitsNoiseFloor).toBe(false);
       expect(env.mayReturnStereoWithoutEchoCancellation).toBe(false);
       expect(env.needsGestureResume).toBe(false);
+      expect(env.clockMayStandStillWhileRunning).toBe(false);
     }
   });
 });

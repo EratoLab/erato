@@ -508,6 +508,11 @@ export function useAudioTranscriptionRecorder({
   const { watchTrack: watchCaptureTrack, unwatchTrack: unwatchCaptureTrack } =
     useMediaStreamTrackWatchdog({
       onTrackLost: (reason) => {
+        // A phone lock: what was recorded is kept, as when the user stops.
+        if (reason === "hidden") {
+          stopAudioRecording();
+          return;
+        }
         setRecordingError(
           reason === "ended"
             ? t`The microphone was disconnected. Please check your microphone and start recording again.`

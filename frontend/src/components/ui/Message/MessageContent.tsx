@@ -32,6 +32,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useMessageExplainStore } from "@/hooks/chat/store/messageExplainStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useOptionalTranslation } from "@/hooks/i18n";
@@ -64,6 +65,10 @@ import {
   useTraceFeature,
 } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
+import {
+  rehypeWrittenStart,
+  writtenAnswerStart,
+} from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -552,7 +557,7 @@ function MarkdownPre({
             ? t({ id: "chat.message.code.copied", message: "Copied" })
             : t({ id: "chat.message.code.copy", message: "Copy code" })
         }
-        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100"
+        className="absolute right-2 top-2 z-10 flex items-center justify-center rounded border border-theme-border bg-theme-bg-secondary p-1 text-theme-fg-muted opacity-0 transition-opacity hover:bg-theme-bg-tertiary hover:text-theme-fg-primary focus:opacity-100 group-hover:opacity-100 no-hover:opacity-100"
       >
         {copied ? (
           <CheckIcon className="size-3.5 text-theme-success-fg" />
@@ -954,6 +959,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       status: "approved",
       alwaysAllow: part.always_allow === true,
       ...(part.covers ? { covers: part.covers } : {}),
+      ...(part.voice ? { byVoice: true } : {}),
     };
   }
   if (part.content_type === "tool_rejection") {
@@ -963,6 +969,7 @@ const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
       neverAllow: part.never_allow === true,
       withdrawn: reason === "withdrawn",
       changeRequested: reason === "change_requested",
+      ...(part.voice ? { byVoice: true } : {}),
     };
   }
   return undefined;
@@ -1551,6 +1558,13 @@ export const MessageContent = memo(function MessageContent({
     [foldsWordPlan, messageContent],
   );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
+  const followsConversation = useSpeechPlayback(
+    (state) => state.conversational,
+  );
+  const writtenStart = React.useMemo(
+    () => (followsConversation ? writtenAnswerStart(content) : -1),
+    [followsConversation, content],
+  );
   const { maskReasoningText } = useTraceFeature();
   const textActions = useMessageTextActionsFeature();
   // The markers are what the toolbar on marked text recognises as the text of
@@ -1898,7 +1912,7 @@ export const MessageContent = memo(function MessageContent({
   );
 
   const renderMarkdown = React.useCallback(
-    (text: string, textBlockPrefix?: string) => {
+    (text: string, textBlockPrefix?: string, writtenStart = false) => {
       const mentionLinkedText =
         mentionedAssistants && mentionedAssistants.length > 0
           ? linkAssistantMentions(text, mentionedAssistants)
@@ -1916,6 +1930,7 @@ export const MessageContent = memo(function MessageContent({
                     rehypeRaw,
                     [rehypeSanitize, markdownSanitizeSchema],
                     rehypeKatex,
+                    ...(writtenStart ? [rehypeWrittenStart] : []),
                     ...(textBlockPrefix === undefined
                       ? []
                       : [
@@ -2279,6 +2294,7 @@ export const MessageContent = memo(function MessageContent({
               {renderMarkdown(
                 displayText,
                 marksTextBlocks ? String(index) : undefined,
+                index === writtenStart,
               )}
             </React.Fragment>
           );

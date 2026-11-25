@@ -16,10 +16,7 @@ import {
   DEFAULT_MAX_FILES_PER_MESSAGE,
 } from "@/utils/fileUploadLimits";
 
-import type {
-  AssistantToolsMenuDescriptionDisplay,
-  DelegationTasksApprovalMode,
-} from "@/app/env";
+import type { AssistantToolsMenuDescriptionDisplay } from "@/app/env";
 import type { ReactNode } from "react";
 
 /**
@@ -127,13 +124,7 @@ interface AssistantsFeatureConfig {
   delegationEnabled: boolean;
   /** Whether the deployment lets a delegated run be sent to the background */
   delegationAllowBackground: boolean;
-  /**
-   * Whether the deployment offers delegated tasks at all. Needed alongside
-   * the approval mode below, which the backend publishes ungated: a
-   * deployment can be configured to demand approval while tasks are off, and
-   * a client reading the mode alone would announce a stop that nothing can
-   * reach.
-   */
+  /** Whether the deployment offers delegated tasks at all */
   delegationTasksEnabled: boolean;
   /**
    * Whether the deployment can run a delegated task asynchronously — which is
@@ -142,13 +133,6 @@ interface AssistantsFeatureConfig {
    * endpoint gates on, so a hidden control and a 404 route cannot disagree.
    */
   delegationTasksAllowAsync: boolean;
-  /**
-   * The deployment's `[delegation.tasks.approval] mode`, so a composer can say
-   * in advance that a plan will need approving. The GLOBAL value only: a
-   * per-facet override is resolved per turn from the facet selection, and a
-   * client reading one would promise a policy the next turn might not run.
-   */
-  delegationTasksApprovalMode: DelegationTasksApprovalMode;
   /** Whether assistants may be shared with edit access */
   enableEditSharing: boolean;
   /** Whether the direct Share dialog offers the organization target */
@@ -351,7 +335,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     autofocus: true,
     keepToolsDropdownOpen: false,
     emptyStateLayout: "centered",
-    showUsageAdvisory: true,
+    showUsageAdvisory: false,
     maxFiles: DEFAULT_MAX_FILES_PER_MESSAGE,
   },
   audioTranscription: {
@@ -376,7 +360,6 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     delegationAllowBackground: false,
     delegationTasksEnabled: false,
     delegationTasksAllowAsync: false,
-    delegationTasksApprovalMode: "async_only",
     enableEditSharing: true,
     enableDirectOrganizationSharing: true,
     usageViewEnabled: false,
@@ -484,7 +467,7 @@ function createFeatureConfig(
       autofocus: !environment.disableChatInputAutofocus,
       keepToolsDropdownOpen: environment.keepToolsDropdownOpen ?? false,
       emptyStateLayout: environment.chatInputEmptyStateLayout,
-      showUsageAdvisory: true,
+      showUsageAdvisory: environment.showUsageAdvisory ?? false,
       maxFiles: environment.maxFilesPerMessage ?? DEFAULT_MAX_FILES_PER_MESSAGE,
     },
     audioTranscription: {
@@ -539,7 +522,6 @@ function createFeatureConfig(
       // the config they derive from rather than after this section.
       delegationTasksEnabled: Boolean(environment.delegationTasksEnabled),
       delegationTasksAllowAsync: Boolean(environment.delegationTasksAllowAsync),
-      delegationTasksApprovalMode: environment.delegationTasksApprovalMode,
       enableEditSharing: environment.assistantsEnableEditSharing ?? true,
       enableDirectOrganizationSharing:
         environment.assistantsEnableDirectOrganizationSharing ?? true,

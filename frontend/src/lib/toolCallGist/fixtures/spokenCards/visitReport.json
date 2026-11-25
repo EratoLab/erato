@@ -1,0 +1,374 @@
+[
+  {
+    "tool_name": "update_record",
+    "input": {
+      "item": {
+        "budgetamount": 1200000,
+        "erato_customerdecisiondate": "2026-12-14"
+      },
+      "recordId": "ae6c577c-e845-5994-a169-6713bbd1296a",
+      "tablename": "opportunity"
+    },
+    "display": {
+      "title": "update_record",
+      "server_name": "Dynamics",
+      "label": {
+        "action": "update",
+        "object_kind": "row",
+        "items": [
+          {
+            "id": {
+              "pointer": "/recordId",
+              "values": [
+                {
+                  "path": "/recordId",
+                  "text": "ae6c577c-e845-5994-a169-6713bbd1296a",
+                  "resolved": "Retrofit Dosierlinie – Werk Nord",
+                  "machine_id": true
+                }
+              ]
+            },
+            "fields": [
+              {
+                "pointer": "/item/budgetamount",
+                "name": "budgetamount",
+                "values": [
+                  {
+                    "path": "/item/budgetamount",
+                    "text": "1200000",
+                    "resolved": "1000000.0"
+                  }
+                ]
+              },
+              {
+                "pointer": "/item/erato_customerdecisiondate",
+                "name": "erato_customerdecisiondate",
+                "values": [
+                  {
+                    "path": "/item/erato_customerdecisiondate",
+                    "text": "2026-12-14",
+                    "resolved": "2026-11-30T00:00:00"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "arguments": {
+          "path": "",
+          "kind": "group",
+          "children": [
+            { "path": "/tablename", "kind": "value" },
+            { "path": "/recordId", "kind": "machine_id" },
+            {
+              "path": "/item",
+              "kind": "group",
+              "children": [
+                { "path": "/item/budgetamount", "kind": "value" },
+                { "path": "/item/erato_customerdecisiondate", "kind": "value" }
+              ]
+            }
+          ]
+        },
+        "source": "rules",
+        "change": {
+          "effects": [
+            {
+              "path": "/item/budgetamount",
+              "name": "Budget amount",
+              "raw_name": "budgetamount",
+              "effect": "changed",
+              "values": [{ "text": "1200000" }],
+              "old": { "text": "1000000.0" }
+            },
+            {
+              "path": "/item/erato_customerdecisiondate",
+              "name": "Erato customerdecisiondate",
+              "raw_name": "erato_customerdecisiondate",
+              "effect": "changed",
+              "values": [{ "text": "2026-12-14" }],
+              "old": { "text": "2026-11-30" }
+            }
+          ],
+          "counts": {
+            "emptied": 0,
+            "list_replaced": 0,
+            "list_removed": 0,
+            "list_added": 0,
+            "changed": 2,
+            "set": 0,
+            "unchanged": 0,
+            "unreadable": 0
+          },
+          "table": "opportunity",
+          "notes": ["operator_marked_destructive", "old_values_from_earlier"],
+          "complete": true
+        },
+        "spoken_names": {
+          "de": { "fields": { "budgetamount": "Budget" } },
+          "en": { "fields": { "budgetamount": "Budget" } }
+        }
+      }
+    }
+  },
+  {
+    "tool_name": "create_record",
+    "input": {
+      "item": {
+        "erato_name": "Besuchsbericht Retrofit Dosierlinie – Werk Nord",
+        "erato_siteid": {
+          "name": "Werk Nord",
+          "recordId": "3f087330-6d73-57e3-b5cb-47e456791c7f",
+          "relatedTable": "erato_site"
+        },
+        "erato_summary": "Budget in Höhe von 1.200.000 EUR bestätigt. Kundenentscheidung ist für den 14.12.2026 vorgesehen.",
+        "erato_accountid": {
+          "name": "Müller Anlagenbau GmbH (fiktiv)",
+          "recordId": "439a9081-b1e5-552a-b3af-eeed9b6e4fdf",
+          "relatedTable": "account"
+        },
+        "erato_nextsteps": "Aktualisiertes Angebot bis zum 25.09.2026 senden.",
+        "erato_visitedon": "2026-09-18",
+        "erato_customerneed": "Modernisierung der Dosierlinie im Werk Nord.",
+        "erato_followupdate": "2026-09-25",
+        "erato_opportunityid": {
+          "name": "Retrofit Dosierlinie – Werk Nord",
+          "recordId": "ae6c577c-e845-5994-a169-6713bbd1296a",
+          "relatedTable": "opportunity"
+        },
+        "erato_competitionnotes": "Demo Fluidtechnik A bleibt im Rennen."
+      },
+      "tablename": "erato_visitreport"
+    },
+    "display": {
+      "title": "create_record",
+      "server_name": "Dynamics",
+      "label": {
+        "action": "create",
+        "object_kind": "row",
+        "items": [
+          {
+            "title": {
+              "pointer": "/item/erato_name",
+              "values": [
+                {
+                  "path": "/item/erato_name",
+                  "text": "Besuchsbericht Retrofit Dosierlinie – Werk Nord"
+                }
+              ]
+            },
+            "fields": [
+              {
+                "pointer": "/item/erato_visitedon",
+                "name": "erato_visitedon",
+                "values": [
+                  { "path": "/item/erato_visitedon", "text": "2026-09-18" }
+                ]
+              },
+              {
+                "pointer": "/item/erato_customerneed",
+                "name": "erato_customerneed",
+                "values": [
+                  {
+                    "path": "/item/erato_customerneed",
+                    "text": "Modernisierung der Dosierlinie im Werk Nord."
+                  }
+                ]
+              },
+              {
+                "pointer": "/item/erato_competitionnotes",
+                "name": "erato_competitionnotes",
+                "values": [
+                  {
+                    "path": "/item/erato_competitionnotes",
+                    "text": "Demo Fluidtechnik A bleibt im Rennen."
+                  }
+                ]
+              },
+              {
+                "pointer": "/item/erato_nextsteps",
+                "name": "erato_nextsteps",
+                "values": [
+                  {
+                    "path": "/item/erato_nextsteps",
+                    "text": "Aktualisiertes Angebot bis zum 25.09.2026 senden."
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "arguments": {
+          "path": "",
+          "kind": "group",
+          "children": [
+            { "path": "/tablename", "kind": "value" },
+            {
+              "path": "/item",
+              "kind": "group",
+              "children": [
+                { "path": "/item/erato_name", "kind": "value" },
+                { "path": "/item/erato_visitedon", "kind": "value" },
+                { "path": "/item/erato_summary", "kind": "text" },
+                { "path": "/item/erato_customerneed", "kind": "value" },
+                { "path": "/item/erato_competitionnotes", "kind": "value" },
+                { "path": "/item/erato_nextsteps", "kind": "value" },
+                { "path": "/item/erato_followupdate", "kind": "value" },
+                {
+                  "path": "/item/erato_opportunityid",
+                  "kind": "group",
+                  "children": [
+                    {
+                      "path": "/item/erato_opportunityid/relatedTable",
+                      "kind": "value"
+                    },
+                    {
+                      "path": "/item/erato_opportunityid/recordId",
+                      "kind": "machine_id"
+                    },
+                    {
+                      "path": "/item/erato_opportunityid/name",
+                      "kind": "value"
+                    }
+                  ]
+                },
+                {
+                  "path": "/item/erato_accountid",
+                  "kind": "group",
+                  "children": [
+                    {
+                      "path": "/item/erato_accountid/relatedTable",
+                      "kind": "value"
+                    },
+                    {
+                      "path": "/item/erato_accountid/recordId",
+                      "kind": "machine_id"
+                    },
+                    { "path": "/item/erato_accountid/name", "kind": "value" }
+                  ]
+                },
+                {
+                  "path": "/item/erato_siteid",
+                  "kind": "group",
+                  "children": [
+                    {
+                      "path": "/item/erato_siteid/relatedTable",
+                      "kind": "value"
+                    },
+                    {
+                      "path": "/item/erato_siteid/recordId",
+                      "kind": "machine_id"
+                    },
+                    { "path": "/item/erato_siteid/name", "kind": "value" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "source": "rules",
+        "change": {
+          "effects": [
+            {
+              "path": "/item/erato_visitedon",
+              "name": "Visitedon",
+              "raw_name": "erato_visitedon",
+              "effect": "set",
+              "values": [{ "text": "2026-09-18" }]
+            },
+            {
+              "path": "/item/erato_summary",
+              "name": "Summary",
+              "raw_name": "erato_summary",
+              "effect": "set",
+              "values": [
+                {
+                  "text": "Budget in Höhe von 1.200.000 EUR bestätigt. Kundenentscheidung ist für den 14.12.2026 vorgesehen."
+                }
+              ]
+            },
+            {
+              "path": "/item/erato_customerneed",
+              "name": "Customerneed",
+              "raw_name": "erato_customerneed",
+              "effect": "set",
+              "values": [
+                { "text": "Modernisierung der Dosierlinie im Werk Nord." }
+              ]
+            },
+            {
+              "path": "/item/erato_competitionnotes",
+              "name": "Competitionnotes",
+              "raw_name": "erato_competitionnotes",
+              "effect": "set",
+              "values": [{ "text": "Demo Fluidtechnik A bleibt im Rennen." }]
+            },
+            {
+              "path": "/item/erato_nextsteps",
+              "name": "Nextsteps",
+              "raw_name": "erato_nextsteps",
+              "effect": "set",
+              "values": [
+                { "text": "Aktualisiertes Angebot bis zum 25.09.2026 senden." }
+              ]
+            },
+            {
+              "path": "/item/erato_followupdate",
+              "name": "Followupdate",
+              "raw_name": "erato_followupdate",
+              "effect": "set",
+              "values": [{ "text": "2026-09-25" }]
+            },
+            {
+              "path": "/item/erato_opportunityid",
+              "name": "Opportunity ID",
+              "raw_name": "erato_opportunityid",
+              "effect": "set",
+              "values": [
+                {
+                  "text": "Retrofit Dosierlinie – Werk Nord",
+                  "machine_id": true
+                }
+              ],
+              "link": true
+            },
+            {
+              "path": "/item/erato_accountid",
+              "name": "Account ID",
+              "raw_name": "erato_accountid",
+              "effect": "set",
+              "values": [
+                {
+                  "text": "Müller Anlagenbau GmbH (fiktiv)",
+                  "machine_id": true
+                }
+              ],
+              "link": true
+            },
+            {
+              "path": "/item/erato_siteid",
+              "name": "Site ID",
+              "raw_name": "erato_siteid",
+              "effect": "set",
+              "values": [{ "machine_id": true }],
+              "link": true
+            }
+          ],
+          "counts": {
+            "emptied": 0,
+            "list_replaced": 0,
+            "list_removed": 0,
+            "list_added": 0,
+            "changed": 0,
+            "set": 9,
+            "unchanged": 0,
+            "unreadable": 0
+          },
+          "table": "erato_visitreport",
+          "notes": ["operator_marked_destructive"],
+          "complete": true
+        }
+      }
+    }
+  }
+]

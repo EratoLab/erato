@@ -26,7 +26,11 @@ import {
   useGroupedLoadMorePaused,
 } from "@/hooks/chat/useGroupedChatSessions";
 import { useScheduledFailureAlertShown } from "@/hooks/scheduled/useScheduledItems";
-import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
+import {
+  useIsNarrowScreen,
+  useResponsiveCollapsedMode,
+  useThemedIcon,
+} from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import {
   useAssistantHubConfig,
@@ -38,7 +42,9 @@ import {
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
+import { getAssistantUrl } from "@/utils/chat/urlUtils";
 import { createLogger } from "@/utils/debugLogger";
+import { isImeComposing } from "@/utils/isImeComposing";
 
 import { ChatHistoryFilterMenu } from "./ChatHistoryFilterMenu";
 import { ChatHistoryList, ChatHistoryListSkeleton } from "./ChatHistoryList";
@@ -72,7 +78,7 @@ import {
 import type { SidebarToggleSurface } from "./SidebarToggle";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatSession } from "@/types/chat";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 // Create logger for this component
 const logger = createLogger("UI", "ChatHistorySidebar");
@@ -94,11 +100,13 @@ const GENERATION_ANNOUNCE_DEBOUNCE_MS = 1000;
  * it is aria-hidden.
  */
 const SidebarExpandToggle = ({
+  ref,
   surface,
   onToggle,
   className,
   children,
 }: {
+  ref?: Ref<HTMLButtonElement>;
   surface: SidebarToggleSurface;
   onToggle?: () => void;
   className?: string;
@@ -108,6 +116,7 @@ const SidebarExpandToggle = ({
 
   return (
     <SidebarToggle
+      ref={ref}
       surface={surface}
       expanded={false}
       onClick={onToggle}
@@ -508,6 +517,72 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       [collapsed, effectiveCollapsedMode],
     );
 
+    // On a narrow screen the open sidebar is a drawer over the page; after a
+    // pick in it the person wants to see where they went.
+    const isNarrowScreen = useIsNarrowScreen();
+    const isDrawerOpen = isNarrowScreen && !collapsed;
+    const closeDrawerAfterPick = useCallback(() => {
+      if (isDrawerOpen) {
+        onToggleCollapse?.();
+      }
+    }, [isDrawerOpen, onToggleCollapse]);
+
+    // Closing from beside the drawer or by Escape: focus inside the drawer
+    // would stay on a control that has slid out of view, so it goes to the
+    // control that opens the drawer again.
+    const expandToggleRef = useRef<HTMLButtonElement>(null);
+    const returnFocusOnHideRef = useRef(false);
+    const dismissDrawer = useCallback(() => {
+      returnFocusOnHideRef.current = Boolean(
+        ref.current?.contains(document.activeElement),
+      );
+      onToggleCollapse?.();
+    }, [onToggleCollapse]);
+    useEffect(() => {
+      if (isHiddenMode && returnFocusOnHideRef.current) {
+        returnFocusOnHideRef.current = false;
+        expandToggleRef.current?.focus();
+      }
+    }, [isHiddenMode]);
+    useEffect(() => {
+      if (!isDrawerOpen) {
+        return;
+      }
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (
+          event.key !== "Escape" ||
+          event.defaultPrevented ||
+          isImeComposing(event)
+        ) {
+          return;
+        }
+        // A menu or dialog over the drawer takes its Escape first; its own
+        // document listener may run after this one.
+        if (
+          event.target instanceof Element &&
+          event.target.closest(
+            '[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]',
+          )
+        ) {
+          return;
+        }
+        dismissDrawer();
+      };
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isDrawerOpen, dismissDrawer]);
+    const handleNewChatPick = useCallback(() => {
+      onNewChat?.();
+      closeDrawerAfterPick();
+    }, [onNewChat, closeDrawerAfterPick]);
+    const handleSessionPick = useCallback(
+      (sessionId: string) => {
+        onSessionSelect(sessionId);
+        closeDrawerAfterPick();
+      },
+      [onSessionSelect, closeDrawerAfterPick],
+    );
+
     // Get theme information
     const { assetPaths } = useTheme();
     const sidebarLogoPath = assetPaths.sidebarLogo;
@@ -738,16 +813,27 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const handleSearchClick = useCallback(() => {
       logger.log("[CHAT_FLOW] Navigating to search page");
       navigate("/search");
-    }, [navigate]);
+      closeDrawerAfterPick();
+    }, [navigate, closeDrawerAfterPick]);
 
     const handleAssistantsClick = useCallback(() => {
       logger.log("[ASSISTANTS_FLOW] Navigating to assistants page");
       navigate(assistantsLandingRoute);
-    }, [assistantsLandingRoute, navigate]);
+      closeDrawerAfterPick();
+    }, [assistantsLandingRoute, navigate, closeDrawerAfterPick]);
 
     const handleScheduledClick = useCallback(() => {
       navigate(scheduledRoute);
-    }, [navigate]);
+      closeDrawerAfterPick();
+    }, [navigate, closeDrawerAfterPick]);
+
+    const handleRecentAssistantPick = useCallback(
+      (assistantId: string) => {
+        navigate(getAssistantUrl(assistantId));
+        closeDrawerAfterPick();
+      },
+      [navigate, closeDrawerAfterPick],
+    );
 
     // Width is runtime state (slim vs expanded); the surface lives in
     // .sidebar-skin so [data-ui="sidebar"] stays themeable. The override
@@ -786,9 +872,31 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               about the z-index. */}
           {isHiddenMode && (
             <SidebarExpandToggle
+              ref={expandToggleRef}
               surface="floating"
               onToggle={onToggleCollapse}
               className="absolute left-2 top-2 z-30"
+            />
+          )}
+
+          {/* On a narrow screen the open sidebar lies over the page. A tap
+              beside it lands here and only closes it; the control underneath
+              never gets that tap. */}
+          {isNarrowScreen && (
+            <div
+              role="presentation"
+              // A press here would otherwise blur the focused control before
+              // the click, and dismissDrawer could no longer see that focus
+              // was in the drawer.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={dismissDrawer}
+              className={clsx(
+                "drawer-overlay-skin viewport-layer fixed inset-0 z-40",
+                "transition-opacity duration-300 ease-in-out motion-reduce:transition-none",
+                isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
+              )}
+              data-ui="sidebar-scrim"
+              data-testid="sidebar-scrim"
             />
           )}
 
@@ -796,7 +904,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             ref={ref}
             className={clsx(
               "flex h-full flex-col border-r",
-              "fixed inset-y-0 left-0 z-40",
+              // Fixed, so the app's safe-area padding does not reach it. It
+              // starts beside the left inset, where the page's margin for it
+              // starts too.
+              "viewport-layer fixed inset-y-0 left-[var(--safe-area-left)] z-40",
+              "pb-[var(--safe-area-bottom)] pt-[var(--safe-area-top)]",
               "transition-[width,transform,opacity] duration-300 ease-in-out motion-reduce:transition-none",
               // Hidden mode: slide completely off-screen
               isHiddenMode && "pointer-events-none -translate-x-full opacity-0",
@@ -820,7 +932,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
             <div className="flex min-h-0 flex-1 flex-col">
               {/* New Chat Item */}
-              <NewChatItem onNewChat={onNewChat} isSlimMode={isSlimMode} />
+              <NewChatItem
+                onNewChat={handleNewChatPick}
+                isSlimMode={isSlimMode}
+              />
 
               {/* Search Navigation Item */}
               <SearchNavigationItem
@@ -874,6 +989,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     <FrequentAssistantsList
                       limit={5}
                       showBottomDivider={true}
+                      onAssistantSelect={handleRecentAssistantPick}
                     />
                   </CollapsibleSection>
                 ) : (
@@ -888,6 +1004,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                     <FrequentAssistantsList
                       limit={5}
                       showBottomDivider={true}
+                      onAssistantSelect={handleRecentAssistantPick}
                     />
                   </div>
                 ))}
@@ -922,7 +1039,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                         <ResolvedChatHistoryList
                           sessions={pinnedSessions}
                           currentSessionId={currentSessionId}
-                          onSessionSelect={onSessionSelect}
+                          onSessionSelect={handleSessionPick}
                           onSessionArchive={onSessionArchive}
                           onSessionUnarchive={onSessionUnarchive}
                           onSessionEditTitle={onSessionEditTitle}
@@ -952,7 +1069,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                           <ResolvedChatHistoryList
                             sessions={sessions}
                             currentSessionId={currentSessionId}
-                            onSessionSelect={onSessionSelect}
+                            onSessionSelect={handleSessionPick}
                             onSessionArchive={onSessionArchive}
                             onSessionUnarchive={onSessionUnarchive}
                             onSessionEditTitle={onSessionEditTitle}
@@ -1004,7 +1121,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                               <ResolvedChatHistoryList
                                 sessions={group.sessions}
                                 currentSessionId={currentSessionId}
-                                onSessionSelect={onSessionSelect}
+                                onSessionSelect={handleSessionPick}
                                 onSessionArchive={onSessionArchive}
                                 onSessionUnarchive={onSessionUnarchive}
                                 onSessionEditTitle={onSessionEditTitle}

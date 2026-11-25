@@ -93,6 +93,8 @@ export type ToolDecision =
       alwaysAllow: boolean;
       /** Set when the call was allowed for its document or response. */
       covers?: ApprovalScopeCovers;
+      /** Allowed by saying the confirmation phrase. */
+      byVoice?: boolean;
     }
   | {
       status: "denied";
@@ -101,6 +103,8 @@ export type ToolDecision =
       withdrawn: boolean;
       /** Not run because the user asked for the call to be different. */
       changeRequested?: boolean;
+      /** Refused by voice. */
+      byVoice?: boolean;
     };
 
 /** Each chunk builds a new decision object per step; comparing its fields lets every finished step skip. */

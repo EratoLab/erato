@@ -35,6 +35,7 @@ const FRONTEND_ENV_KEY_DISABLE_UPLOAD: &str = "DISABLE_UPLOAD";
 const FRONTEND_ENV_KEY_MAX_FILES_PER_MESSAGE: &str = "MAX_FILES_PER_MESSAGE";
 const FRONTEND_ENV_KEY_DISABLE_CHAT_INPUT_AUTOFOCUS: &str = "DISABLE_CHAT_INPUT_AUTOFOCUS";
 const FRONTEND_ENV_KEY_KEEP_TOOLS_DROPDOWN_OPEN: &str = "KEEP_TOOLS_DROPDOWN_OPEN";
+const FRONTEND_ENV_KEY_SHOW_USAGE_ADVISORY: &str = "SHOW_USAGE_ADVISORY";
 const FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT: &str = "CHAT_INPUT_EMPTY_STATE_LAYOUT";
 const FRONTEND_ENV_KEY_DISABLE_LOGOUT: &str = "DISABLE_LOGOUT";
 const FRONTEND_ENV_KEY_ASSISTANTS_ENABLED: &str = "ASSISTANTS_ENABLED";
@@ -56,7 +57,6 @@ const FRONTEND_ENV_KEY_ASSISTANTS_DELEGATION_ALLOW_BACKGROUND: &str =
     "ASSISTANTS_DELEGATION_ALLOW_BACKGROUND";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ENABLED: &str = "DELEGATION_TASKS_ENABLED";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC: &str = "DELEGATION_TASKS_ALLOW_ASYNC";
-const FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE: &str = "DELEGATION_TASKS_APPROVAL_MODE";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_SCHEDULED_ENABLED: &str = "SCHEDULED_ENABLED";
 const FRONTEND_ENV_KEY_TEAMS_APP_NAME: &str = "TEAMS_APP_NAME";
@@ -505,6 +505,10 @@ fn build_frontend_environment_with(
         Value::Bool(config.frontend.keep_tools_dropdown_open),
     );
     env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SHOW_USAGE_ADVISORY.to_string(),
+        Value::Bool(config.frontend.show_usage_advisory),
+    );
+    env.additional_environment.insert(
         FRONTEND_ENV_KEY_CHAT_INPUT_EMPTY_STATE_LAYOUT.to_string(),
         Value::String(config.frontend.chat_input_empty_state_layout.clone()),
     );
@@ -583,13 +587,6 @@ fn build_frontend_environment_with(
                     .run_modes
                     .contains(&erato_config::config::TaskRunMode::Async),
         ),
-    );
-    env.additional_environment.insert(
-        FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE.to_string(),
-        // The GLOBAL mode only. A per-facet override is resolved per turn from
-        // the facet selection the server knows about, so publishing one here
-        // would let the composer promise a policy the next turn does not run.
-        Value::String(config.delegation.tasks.approval.mode.as_str().to_string()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
@@ -2688,47 +2685,6 @@ mod tests {
                 Some(&Value::Bool(false))
             );
         }
-    }
-
-    /// The GLOBAL mode, as its config spelling, and present whatever the
-    /// feature flags say: a composer that has to pre-announce an approval must
-    /// be able to read the policy without a second round trip.
-    #[test]
-    fn delegation_tasks_approval_mode_is_injected_for_both_frontends() {
-        for mode in [
-            erato_config::config::TaskApprovalMode::Never,
-            erato_config::config::TaskApprovalMode::Always,
-            erato_config::config::TaskApprovalMode::Plan,
-            erato_config::config::TaskApprovalMode::AsyncOnly,
-        ] {
-            let mut config = AppConfig::default();
-            config.delegation.tasks.enabled = true;
-            config.delegation.tasks.approval.mode = mode;
-
-            for frontend_kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
-                let environment = build_frontend_environment(&config, frontend_kind);
-                assert_eq!(
-                    environment
-                        .additional_environment
-                        .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE),
-                    Some(&Value::String(mode.as_str().to_string())),
-                    "mode={mode:?} on {frontend_kind:?}"
-                );
-            }
-        }
-    }
-
-    /// The shipped default reaches the client as the literal it is, so a client
-    /// never has to reimplement "async_only behaves as never here".
-    #[test]
-    fn delegation_tasks_approval_mode_defaults_to_async_only() {
-        let environment = build_frontend_environment(&AppConfig::default(), FrontendKind::Web);
-        assert_eq!(
-            environment
-                .additional_environment
-                .get(FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE),
-            Some(&Value::String("async_only".to_string()))
-        );
     }
 
     #[test]

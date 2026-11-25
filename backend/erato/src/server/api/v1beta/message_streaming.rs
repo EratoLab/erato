@@ -2762,6 +2762,12 @@ pub struct ApprovalDecisionItem {
     #[serde(default)]
     #[schema(nullable = false, value_type = Object)]
     pub client_confirmation: Option<Value>,
+    /// For a delegated task's item: the `child_tool_call_id` of the question
+    /// the card showed. A task that asks again keeps its `approval_id`, so this
+    /// is what tells its questions apart.
+    #[serde(default)]
+    #[schema(nullable = false)]
+    pub child_tool_call_id: Option<String>,
 }
 
 /// Rehydrates a generation that was deliberately stopped for tool approval.
@@ -2828,6 +2834,15 @@ impl ContinueStreamRequest {
     /// The decisions an approval card submitted, one per approval id. The
     /// set is validated like any other continuation (exact, no duplicates).
     /// The card lists every item, a parked child's included.
+    /// Names, per decision in order, the task question its card showed; an
+    /// empty entry names none.
+    pub(crate) fn with_task_questions(mut self, question_ids: &[String]) -> Self {
+        for (item, question) in self.decisions.iter_mut().zip(question_ids) {
+            item.child_tool_call_id = (!question.is_empty()).then(|| question.clone());
+        }
+        self
+    }
+
     pub(crate) fn with_decisions(
         message_id: Uuid,
         decisions: Vec<(String, ToolApprovalDecision)>,
@@ -2843,6 +2858,7 @@ impl ContinueStreamRequest {
                     change_request: None,
                     voice_receipt: None,
                     client_confirmation: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,
@@ -3138,7 +3154,24 @@ async fn acquire_user_generation_lease(
             .start_task(chat_id, message_id)
             .await);
     }
+    claim_user_generation_lease(app_state, chat_id, message_id)
+        .await
+        .map_err(|held| lease_held_error(chat_id, held))
+}
 
+/// The compare-and-set half of [`acquire_user_generation_lease`], whatever the
+/// gates say.
+async fn claim_user_generation_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    LeaseHeld,
+> {
     let started = app_state
         .background_tasks
         .try_start_task(
@@ -3149,10 +3182,56 @@ async fn acquire_user_generation_lease(
             Takeover::TakeParked,
             app_state.config.generation_status.stale_after_secs,
         )
-        .await
-        .map_err(|held| lease_held_error(chat_id, held))?;
+        .await?;
     withdraw_task_calls(app_state, chat_id, Some(message_id)).await;
     Ok(started)
+}
+
+/// How long a decision waits for a turn that already parked or failed to hand
+/// the lease back.
+const PARKED_TURN_RELEASE: Duration = Duration::from_secs(1);
+
+/// The lease for a decision on an approval card: always the exclusive one,
+/// whatever the gates say. Its continuation runs the approved call before the
+/// decision is on the row, so a second decision that could start alongside it
+/// would pass every check on the row and run the call again (ERMAIN-1339).
+///
+/// A turn hands the lease back only after its client saw it end, so a decision
+/// sent the moment the card arrived, or a retry the moment a continuation
+/// failed, finds it still held. Such a turn has parked or failed and only
+/// finishes up, so the decision waits for it rather than being refused; any
+/// other holder refuses at once. The claim stays the compare-and-set either
+/// way, so waiting never lets two continuations run.
+async fn claim_decision_lease(
+    app_state: &AppState,
+    chat_id: Uuid,
+    message_id: Uuid,
+) -> Result<
+    (
+        tokio::sync::broadcast::Receiver<StreamingEvent>,
+        Arc<StreamingTask>,
+    ),
+    StreamRouteError,
+> {
+    let finishing = app_state
+        .background_tasks
+        .get_task(&chat_id)
+        .await
+        .filter(|task| task.parked_or_failed())
+        .map(|task| task.generation_id);
+    let deadline = tokio::time::Instant::now() + PARKED_TURN_RELEASE;
+    loop {
+        match claim_user_generation_lease(app_state, chat_id, message_id).await {
+            Err(held)
+                if finishing.is_some()
+                    && held.active_generation_id == finishing
+                    && tokio::time::Instant::now() < deadline =>
+            {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            claimed => return claimed.map_err(|held| lease_held_error(chat_id, held)),
+        }
+    }
 }
 
 /// Ends the waits of the tasks this chat's turns started, but those of
@@ -15376,6 +15455,7 @@ mod tests {
                     change_request: None,
                     voice_receipt: None,
                     client_confirmation: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,
@@ -15982,6 +16062,7 @@ mod tests {
             change_request: None,
             voice_receipt: None,
             client_confirmation: None,
+            child_tool_call_id: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
             message_id: Uuid::new_v4(),
@@ -16725,6 +16806,7 @@ mod tests {
             change_request: Some("nimm den 22.".to_string()),
             voice_receipt: None,
             client_confirmation: None,
+            child_tool_call_id: None,
         };
         let refused = |stop: &super::ContentPartToolApprovalRequest, decisions| {
             let mut request = super::ContinueStreamRequest::with_decisions(Uuid::nil(), Vec::new());
@@ -22227,6 +22309,13 @@ pub(crate) struct ParkedApprovalState {
     /// a `text` part is no proof of an answer. That case is admitted by
     /// `GenerationMetadata::continuation_in_flight` instead.
     pub(crate) unanswered: bool,
+    /// The approvals the turn's earlier stops on this message asked for. Their
+    /// cards are settled; a decision that names one of them, or that names no
+    /// card while there are any, was not given on the card that waits now.
+    pub(crate) earlier_approval_ids: Vec<String>,
+    /// Those of them an earlier stop asked as a question rather than showed
+    /// as a task still waiting: a task that asks again keeps its id.
+    pub(crate) earlier_question_ids: Vec<String>,
 }
 
 pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
@@ -22344,11 +22433,30 @@ pub(crate) fn parked_approval_state(content: &[ContentPart]) -> Option<ParkedApp
                 | ContentPart::AudioFilePointer(_)
         )
     });
+    let earlier_items: Vec<ApprovalItem> = content[..request_index]
+        .iter()
+        .filter_map(|part| match part {
+            ContentPart::ToolApprovalRequest(earlier) => Some(earlier.approval_items()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let earlier_question_ids = earlier_items
+        .iter()
+        .filter(|item| !is_waiting_item(item))
+        .map(|item| item.approval_id.clone())
+        .collect();
+    let earlier_approval_ids = earlier_items
+        .into_iter()
+        .map(|item| item.approval_id)
+        .collect();
     Some(ParkedApprovalState {
         request,
         request_index,
         open,
         unanswered,
+        earlier_approval_ids,
+        earlier_question_ids,
     })
 }
 
@@ -22459,6 +22567,81 @@ fn already_continued() -> StreamRouteError {
 /// Every open approval paired with the decision submitted for it, in the row's
 /// order.
 type SubmittedDecisions = Vec<(String, ToolApprovalDecision)>;
+
+/// The decisions of `request` for the stop the row waits on now.
+///
+/// A decision is taken only for the card it was given on. A tap that arrives
+/// late from a tab still showing an earlier card of the turn names that card,
+/// which is settled: it is answered `already_continued`, and the card reads
+/// the row again. A decision that names no card comes from a page loaded
+/// before cards were named, and can only be meant for the turn's first card;
+/// on a later one it is refused rather than run on a card that page may never
+/// have shown, with text that page shows, since it treats every coded `409`
+/// as an answer that already landed (ERMAIN-1342). A delegated task that asks
+/// again keeps its approval id, so its question is told apart by the child's
+/// call id the card showed (ERMAIN-1343).
+fn resolve_decisions_on_stop(
+    request: &ContinueStreamRequest,
+    state: &ParkedApprovalState,
+    decidable: &[ApprovalItem],
+) -> Result<SubmittedDecisions, StreamRouteError> {
+    // A corrected card keeps its own refusal, `card_changed`, which the pages
+    // that name a corrected card already expect.
+    if request.decision.is_some()
+        && !state.earlier_approval_ids.is_empty()
+        && !decidable.is_empty()
+        && decidable
+            .iter()
+            .all(|item| item.replaces_approval_id.is_none())
+    {
+        return Err(page_out_of_date());
+    }
+    // A task's question can come back on a later stop under the same id, and
+    // there it is open again: only an id asked earlier and open no longer is
+    // a settled card.
+    if !request.decisions.is_empty()
+        && request.decisions.iter().all(|decision| {
+            state.earlier_approval_ids.contains(&decision.approval_id)
+                && !decidable
+                    .iter()
+                    .any(|open| open.approval_id == decision.approval_id)
+        })
+    {
+        return Err(already_continued());
+    }
+    for decision in &request.decisions {
+        let Some(child) = decidable
+            .iter()
+            .find(|open| open.approval_id == decision.approval_id)
+            .and_then(|open| open.child.as_ref())
+        else {
+            continue;
+        };
+        match decision.child_tool_call_id.as_deref() {
+            Some(shown) if shown != child.child_tool_call_id => return Err(already_continued()),
+            None if state.earlier_question_ids.contains(&decision.approval_id) => {
+                return Err(page_out_of_date());
+            }
+            _ => {}
+        }
+    }
+    resolve_submitted_decisions(request, decidable)
+}
+
+/// The refusal of a decision that does not say which card or task question
+/// it answers, where the answer could land on one its client never showed.
+pub(crate) const PAGE_OUT_OF_DATE_MESSAGE: &str =
+    "This page is out of date for this card. Reload the page to decide it.";
+
+/// A `409` in plain text: a page that predates naming what it decides shows
+/// it, where it treats every coded `409` as an answer that already landed.
+fn page_out_of_date() -> StreamRouteError {
+    (
+        axum::http::StatusCode::CONFLICT,
+        PAGE_OUT_OF_DATE_MESSAGE.to_string(),
+    )
+        .into()
+}
 
 /// Pair every approval a parked turn has open with the decision submitted for
 /// it, refusing any body that does not answer the turn exactly.
@@ -23196,7 +23379,7 @@ pub(crate) async fn start_continuation(
         } else {
             // Validated here as well as in the worker: a body that does not answer
             // the turn should be an HTTP status, not a stream that opens and dies.
-            let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
+            let submitted_decisions = resolve_decisions_on_stop(&request, &state, &decidable)?;
             if let Some(refusal) =
                 budget_decision_refused(&state.request, &decidable, &submitted_decisions)
             {
@@ -23281,7 +23464,7 @@ pub(crate) async fn start_continuation(
             .await
             .map_err(|held| lease_held_error(chat_id, held))?
     } else {
-        acquire_user_generation_lease(app_state, chat_id, request.message_id).await?
+        claim_decision_lease(app_state, chat_id, request.message_id).await?
     };
 
     let client_stream_guard = task.client_stream_guard();
@@ -23671,6 +23854,7 @@ async fn resume_parked_child(
                     change_request: None,
                     voice_receipt: None,
                     client_confirmation: None,
+                    child_tool_call_id: None,
                 })
                 .collect(),
             decision: None,
@@ -24477,7 +24661,7 @@ pub(crate) async fn run_continuation(
                 "Another continuation already settled this generation's approvals"
             ));
         }
-        ContinuationEntry::Decide => resolve_submitted_decisions(&request, &decidable).map_err(
+        ContinuationEntry::Decide => resolve_decisions_on_stop(&request, &state, &decidable).map_err(
             |error| match error {
                 StreamRouteError::PlainText(_, message) => eyre!(message),
                 StreamRouteError::DecisionsMismatch(body) => eyre!(

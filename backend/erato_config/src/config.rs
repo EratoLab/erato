@@ -5862,6 +5862,14 @@ pub struct FrontendConfig {
     #[facet(erato_config::security_relevance(level = "none"))]
     pub keep_tools_dropdown_open: bool,
 
+    // Whether to show the "you are interacting with an AI" notice beneath the chat input.
+    // It never shows on phone-sized screens. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "beta"))]
+    #[facet(erato_config::security_relevance(level = "none"))]
+    pub show_usage_advisory: bool,
+
     // Layout of the chat input before a conversation has started: "centered" (default)
     // or "bottom".
     #[serde(default = "default_chat_input_empty_state_layout")]
@@ -5985,6 +5993,7 @@ impl Default for FrontendConfig {
             max_files: default_max_files_per_message(),
             disable_chat_input_autofocus: false,
             keep_tools_dropdown_open: false,
+            show_usage_advisory: false,
             chat_input_empty_state_layout: default_chat_input_empty_state_layout(),
             disable_logout: false,
             enable_message_editing: true,
@@ -6023,6 +6032,21 @@ mod frontend_config_tests {
         }))
         .unwrap();
         assert!(config.keep_tools_dropdown_open);
+    }
+
+    #[test]
+    fn usage_advisory_is_off_unless_opted_in() {
+        for config in [
+            FrontendConfig::default(),
+            serde_json::from_str("{}").unwrap(),
+        ] {
+            assert!(!config.show_usage_advisory);
+        }
+        let config: FrontendConfig = serde_json::from_value(serde_json::json!({
+            "show_usage_advisory": true
+        }))
+        .unwrap();
+        assert!(config.show_usage_advisory);
     }
 
     #[test]

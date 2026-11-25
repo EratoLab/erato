@@ -26,6 +26,8 @@ export interface MentionableAssistants {
   isAvailable: boolean;
   /** Most-used first, falling back to list order when usage is unknown. */
   suggested: MentionableAssistant[];
+  /** Whether `suggested` comes from the user's usage, not the list order. */
+  suggestedFromUsage: boolean;
   /** Everything the user may delegate to, for the browse surface. */
   all: MentionableAssistant[];
 }
@@ -121,6 +123,7 @@ export function useMentionableAssistants(
         0,
         MENTION_SUGGESTION_LIMIT,
       ),
+      suggestedFromUsage: frequent.length > 0,
       all: browsable,
     };
   }, [

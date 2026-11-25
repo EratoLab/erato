@@ -2,32 +2,49 @@ import { useCallback } from "react";
 import { useInRouterContext, useSearchParams } from "react-router-dom";
 
 import { useUserPreferencesFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useMcpSettingsHostOpener,
+  type McpSettingsOpener,
+} from "@/providers/McpSettingsOpenProvider";
 
-const useOpenMcpServersSettingsUnderRouter = () => {
+const useOpenMcpServersSettingsUnderRouter = (): McpSettingsOpener => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  return useCallback(() => {
-    /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("preferencesDialog", "open");
-    nextParams.set("preferencesTab", "serversTools");
-    /* eslint-enable lingui/no-unlocalized-strings */
-    setSearchParams(nextParams);
-  }, [searchParams, setSearchParams]);
+  return useCallback(
+    (serverId?: string) => {
+      /* eslint-disable lingui/no-unlocalized-strings -- URL query parameter keys */
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("preferencesDialog", "open");
+      nextParams.set("preferencesTab", "serversTools");
+      if (serverId) {
+        nextParams.set("mcpServerId", serverId);
+      } else {
+        nextParams.delete("mcpServerId");
+      }
+      /* eslint-enable lingui/no-unlocalized-strings */
+      setSearchParams(nextParams);
+    },
+    [searchParams, setSearchParams],
+  );
 };
 
 /**
- * Opens the settings dialog on the MCP servers tab. The dialog opener lives in
- * `UserProfileDropdown`, which watches exactly this query-param pair wherever
- * the sidebar chrome is mounted — every "connect this server" affordance must
- * mint the same spelling, so this hook is the single place it is written.
+ * Opens the settings dialog on the MCP servers tab, expanded on one server
+ * when an id is given. The dialog opener lives in `UserProfileDropdown`, which
+ * watches exactly these query params wherever the sidebar chrome is mounted —
+ * every "connect this server" affordance must mint the same spelling, so this
+ * hook is the single place it is written.
  *
- * Returns `null` when the MCP tab is hidden or no react-router `Router` is
- * mounted (component-kit and add-in hosts). Consumers must
+ * A host that mounts a `McpSettingsOpenProvider` (the add-in pane, which has a
+ * Router but no such dialog) opens its own way instead.
+ *
+ * Returns `null` when the MCP tab is hidden, or when there is neither a host
+ * opener nor a react-router `Router` (component-kit hosts). Consumers must
  * treat `null` as "no settings shortcut available" and drop their affordance
  * instead of rendering a dead button.
  */
-export const useOpenMcpServersSettings = (): (() => void) | null => {
+export const useOpenMcpServersSettings = (): McpSettingsOpener | null => {
+  const hostOpener = useMcpSettingsHostOpener();
   const isRouterMounted = useInRouterContext();
   const { mcpServersTabEnabled } = useUserPreferencesFeature();
 
@@ -37,5 +54,8 @@ export const useOpenMcpServersSettings = (): (() => void) | null => {
     ? // eslint-disable-next-line react-hooks/rules-of-hooks
       useOpenMcpServersSettingsUnderRouter()
     : null;
-  return mcpServersTabEnabled ? openSettings : null;
+  if (!mcpServersTabEnabled) {
+    return null;
+  }
+  return hostOpener ?? openSettings;
 };

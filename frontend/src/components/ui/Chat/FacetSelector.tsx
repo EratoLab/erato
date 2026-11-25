@@ -24,12 +24,13 @@ interface FacetSelectorProps {
   keepOpenOnSelect?: boolean;
   /**
    * Extra group appended below the tools — the same section the mobile "+"
-   * menu renders, so both hosts offer identical assistant rows.
+   * menu renders, so both hosts offer the same row into the assistant dialog.
    */
   assistantSection?: AddMenuSection;
   /**
-   * The connectors group (write toggle, tool browser) rendered between the
-   * facets and the assistants — again the same section the "+" menu shows.
+   * The connectors row (its summary, opening the connectors dialog) rendered
+   * between the facets and the assistants — again the same section the "+"
+   * menu shows.
    */
   mcpToolsSection?: AddMenuSection;
   /** Disable the whole control (composer lock). */
@@ -127,10 +128,11 @@ export const FacetSelector = ({
         continue;
       }
       // The group label is only worth a row when there is something above it
-      // to separate the group from.
+      // to separate the group from; a group without one gets a divider.
       section.items.forEach((item, index) => {
-        const sectionHeader =
-          index === 0 && items.length > 0 ? section.header : undefined;
+        const opensGroup = index === 0 && items.length > 0;
+        const sectionHeader = opensGroup ? section.header : undefined;
+        const separatorBefore = opensGroup && section.header == null;
         items.push(
           isAddMenuToolItem(item)
             ? {
@@ -143,6 +145,7 @@ export const FacetSelector = ({
                 checked: item.checked,
                 disabled: item.disabled,
                 sectionHeader,
+                separatorBefore,
               }
             : {
                 id: item.id,
@@ -154,6 +157,7 @@ export const FacetSelector = ({
                 disabled: item.disabled,
                 closesImmediately: item.closesImmediately,
                 sectionHeader,
+                separatorBefore,
               },
         );
       });

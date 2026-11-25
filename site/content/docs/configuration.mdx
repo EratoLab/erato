@@ -312,6 +312,25 @@ The menu can still be dismissed with Escape, a click outside, or the trigger but
 keep_tools_dropdown_open = true
 ```
 
+#### `frontend.show_usage_advisory`
+
+{/* erato_toml_config_key: frontend.show_usage_advisory */}
+
+Whether to show the "You are interacting with an AI chatbot…" notice beneath the chat input. The wording comes from the `chat.ai_usage_advisory` translation, which a deployment can override (Markdown links are allowed); an empty translation hides the notice as well.
+
+The notice never shows on phone-sized screens (narrower than 768 px), even when this is `true`.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[frontend]
+show_usage_advisory = true
+```
+
 #### `frontend.disable_logout`
 
 {/* erato_toml_config_key: frontend.disable_logout */}
@@ -6515,7 +6534,7 @@ enable_direct_organization_sharing = false
 
 {/* erato_toml_config_key: assistants.tools_menu_description_display */}
 
-Controls assistant descriptions in the desktop Tools menu and the mobile add menu.
+Controls assistant descriptions in the assistant dialog, which the composer's "Ask an assistant…" row opens (the Tools menu and the "+" menu list no assistants themselves).
 
 - `none`: Hide descriptions.
 - `truncated`: Show up to two lines, with an ellipsis when the description does not fit.

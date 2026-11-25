@@ -4,10 +4,10 @@
  * Provides a clean interface for components to interact with the sidebar state
  * without directly accessing the Zustand store implementation.
  */
-import { useEffect, useState } from "react";
 
 import { useSidebarFeature } from "../../providers/FeatureConfigProvider";
 import { useUIStore } from "../../state/uiStore";
+import { useIsBelow } from "../useResponsive";
 
 export function useSidebar() {
   const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
@@ -41,6 +41,14 @@ export function useSidebar() {
 }
 
 /**
+ * Whether the screen is narrower than Tailwind's sm: breakpoint, where the
+ * open sidebar is a drawer over the page instead of a column beside it.
+ */
+export function useIsNarrowScreen(): boolean {
+  return useIsBelow("sm");
+}
+
+/**
  * Hook to determine the effective collapsed mode based on screen size
  *
  * On mobile devices (below Tailwind's sm: breakpoint of 640px), this will
@@ -53,27 +61,7 @@ export function useSidebar() {
 export function useResponsiveCollapsedMode(
   configuredMode: "slim" | "hidden",
 ): "slim" | "hidden" {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    // Tailwind's sm: breakpoint is 640px
-    // eslint-disable-next-line lingui/no-unlocalized-strings
-    const mediaQuery = window.matchMedia("(min-width: 640px)");
-
-    // Initial check
-    setIsMobile(!mediaQuery.matches);
-
-    // Listen for changes
-    const handleChange = (e: MediaQueryListEvent) => {
-      setIsMobile(!e.matches);
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, []);
+  const isMobile = useIsNarrowScreen();
 
   // On mobile, always use hidden mode regardless of configuration
   if (isMobile && configuredMode === "slim") {

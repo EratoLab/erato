@@ -278,7 +278,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               variant === "ghost" && ariaPressed === true,
             "justify-center": usesIconGeometry,
           },
-          showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
+          showOnHover &&
+            "theme-transition opacity-0 group-hover:opacity-100 no-hover:opacity-100",
           "disabled:cursor-not-allowed disabled:opacity-50",
           className,
         ),

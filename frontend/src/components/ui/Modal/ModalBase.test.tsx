@@ -273,7 +273,10 @@ describe("ModalBase", () => {
         <div>body</div>
       </ModalBase>,
     );
-    expect(overlay()).toHaveClass("items-end", "!p-2");
+    expect(overlay()).toHaveClass(
+      "items-end",
+      "[--modal-viewport-margin:0.5rem]",
+    );
     expect(overlay()).not.toHaveClass("items-center");
     const dialog = screen.getByRole("dialog", { name: "Details" });
     expect(dialog).toHaveAttribute("data-placement", "bottom");
