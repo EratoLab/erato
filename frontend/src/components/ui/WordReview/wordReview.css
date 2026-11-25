@@ -145,6 +145,10 @@
 .word-review__footer > button {
   justify-self: start;
 }
+/* A notice or a button row inside the card, set in a little from the card's own inset. */
+.word-review__aside {
+  margin-inline: calc(var(--review-inset) * 0.75);
+}
 .word-review__actions {
   display: flex;
   flex-wrap: wrap;

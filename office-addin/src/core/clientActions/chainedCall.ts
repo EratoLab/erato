@@ -10,19 +10,27 @@ import type { ContentPart } from "@erato/frontend/library";
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The stored answer's tool call with this id. */
+export function toolUseOf(
+  content: readonly ContentPart[] | undefined,
+  callId: string,
+): Extract<ContentPart, { content_type: "tool_use" }> | undefined {
+  const part = (content ?? []).find(
+    (candidate) =>
+      candidate.content_type === "tool_use" &&
+      candidate.tool_call_id === callId,
+  );
+  return part?.content_type === "tool_use" ? part : undefined;
+}
+
 /** The server's call for an accepted submission or proposal, when the server chained one. */
 export function chainedCallId(
   content: readonly ContentPart[] | undefined,
   proposalCallId: string | undefined,
 ): string | undefined {
   if (!proposalCallId) return undefined;
-  const part = (content ?? []).find(
-    (candidate) =>
-      candidate.content_type === "tool_use" &&
-      candidate.tool_call_id === proposalCallId,
-  );
-  if (part?.content_type !== "tool_use" || !object(part.output))
-    return undefined;
+  const part = toolUseOf(content, proposalCallId);
+  if (!part || !object(part.output)) return undefined;
   const apply = part.output.apply;
   return object(apply) && typeof apply.call_id === "string"
     ? apply.call_id
@@ -46,12 +54,8 @@ export function chainedCallState<R extends ChainedCallResult>(
   content: readonly ContentPart[] | undefined,
   callId: string,
 ): ChainedCallState<R> {
-  const part = (content ?? []).find(
-    (candidate) =>
-      candidate.content_type === "tool_use" &&
-      candidate.tool_call_id === callId,
-  );
-  if (part?.content_type !== "tool_use") return { kind: "waiting" };
+  const part = toolUseOf(content, callId);
+  if (!part) return { kind: "waiting" };
   const raw: unknown = part.output;
   const output = object(raw) ? raw : undefined;
   if (output?.status === "rejected") return { kind: "cancelled" };
@@ -89,24 +93,29 @@ function cancelledResult(reason: unknown): ProposalApplyResult {
 
 /**
  * Where the server's call for the answer's proposed action stands. Undefined when the server
- * makes none, or when the answer's versions were left to the user to pick with their own buttons.
+ * makes none, or when the answer's versions are left to the user to pick with their own buttons.
  */
 export function chainedProposalState<R extends ChainedCallResult>(
   content: readonly ContentPart[] | undefined,
   actions: readonly string[],
+  /** The answer holds several versions of what the action writes. */
+  userPicks: (content: readonly ContentPart[] | undefined) => boolean,
 ): ChainedCallState<R> | undefined {
-  const proposal = (content ?? []).find(
-    (part) =>
-      part.content_type === "tool_use" &&
-      part.tool_name === CLIENT_ACTION_TOOL_NAME &&
-      object(part.input) &&
-      actions.includes(part.input.action as string),
-  );
+  // A change asked for on the card lets Erato propose again: the newest proposal is the one asked.
+  const proposal = [...(content ?? [])]
+    .reverse()
+    .find(
+      (part) =>
+        part.content_type === "tool_use" &&
+        part.tool_name === CLIENT_ACTION_TOOL_NAME &&
+        object(part.input) &&
+        actions.includes(part.input.action as string),
+    );
   const callId =
     proposal?.content_type === "tool_use"
       ? chainedCallId(content, proposal.tool_call_id)
       : undefined;
-  if (!callId) return undefined;
+  if (!callId || userPicks(content)) return undefined;
   const state = chainedCallState<R>(content, callId);
   return state.kind === "done" && state.result.reason === USER_PICKS
     ? undefined

@@ -1,6 +1,6 @@
 import { t } from "@lingui/core/macro";
 
-import { chainedCallId } from "../../core/clientActions/chainedCall";
+import { chainedCallId, toolUseOf } from "../../core/clientActions/chainedCall";
 
 import type { WordApplyCallResult, WordApplyStatus } from "./wordApplyCall";
 import type { ChainedCallState } from "../../core/clientActions/chainedCall";
@@ -18,15 +18,8 @@ export function wordChainedApplyDeclined(
   submissionCallId: string | undefined,
 ): boolean {
   const applyCallId = chainedCallId(content, submissionCallId);
-  const part = applyCallId
-    ? (content ?? []).find(
-        (candidate) =>
-          candidate.content_type === "tool_use" &&
-          candidate.tool_call_id === applyCallId,
-      )
-    : undefined;
-  if (part?.content_type !== "tool_use" || part.status !== "error")
-    return false;
+  const part = applyCallId ? toolUseOf(content, applyCallId) : undefined;
+  if (part?.status !== "error") return false;
   const output: unknown = part.output;
   const status = object(output) ? output.status : undefined;
   return status === "rejected" || status === "change_requested";

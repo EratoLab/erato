@@ -40,12 +40,13 @@ export function wordChainedProposalState(
   action: WordClientAction,
 ): WordChainedApplyState | undefined {
   const language = WORD_CLIENT_ACTIONS.get(action)?.fenceLanguage;
-  const versions = answerFences(content).filter(
-    (fence) => fence.language === language,
-  ).length;
-  return versions > 1
-    ? undefined
-    : chainedProposalState<WordApplyCallResult>(content, [action]);
+  return chainedProposalState<WordApplyCallResult>(
+    content,
+    [action],
+    (answer) =>
+      answerFences(answer).filter((fence) => fence.language === language)
+        .length > 1,
+  );
 }
 
 /** {@link wordChainedProposalState} for a card in the answer. */

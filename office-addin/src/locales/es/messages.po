@@ -1408,7 +1408,17 @@ msgstr "Abriendo la respuesta…"
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.outlook.proposal.otherEmail"
-msgstr "No se abrió ninguna respuesta: hay abierto otro correo distinto de aquel para el que se redactó esta respuesta."
+msgstr "No se abrió ninguna respuesta: ahora hay otro correo abierto."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneAppointment"
+msgstr "No se abrió ninguna cita: se cerró el panel de Erato."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneReply"
+msgstr "No se abrió ninguna respuesta: se cerró el panel de Erato."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx
@@ -1424,6 +1434,16 @@ msgstr "No se abrió ninguna respuesta."
 #: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.outlook.proposal.replyOpened"
 msgstr "Respuesta abierta en Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedAppointment"
+msgstr "Detenido. No se abrió ninguna cita."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedReply"
+msgstr "Detenido. No se abrió ninguna respuesta."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx

@@ -375,7 +375,44 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
     );
 
     expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
-      "another email is open",
+      "a different email is open now",
+    );
+  });
+
+  it("follows the newest proposal once a change was asked for on the card", () => {
+    const [draft, first, firstCall] = proposed({
+      status: "error",
+      output: { status: "change_requested" },
+    });
+    show([
+      draft,
+      first,
+      firstCall,
+      {
+        content_type: "tool_use",
+        tool_call_id: "call-again",
+        tool_name: "propose_client_action",
+        status: "success",
+        input: { action: REPLY },
+        output: { apply: { call_id: "call-again.apply" }, action: REPLY },
+      },
+    ]);
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+  });
+
+  it("says Stop ended the call before any reply opened", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "cancelled", reason: "aborted" },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Stopped. No reply was opened.",
     );
   });
 

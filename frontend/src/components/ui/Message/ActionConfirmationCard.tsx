@@ -459,9 +459,9 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                 data-testid="action-confirmation-standing"
               >
                 <span id={standingLabelId}>{standingLabel}</span>
-                {/* Kept on one line, so a wrap breaks after the label and
-                    never opens a line with the dot. */}
-                <span className="inline-flex items-center gap-x-2">
+                {/* Kept together, so a wrap breaks after the label and opens
+                    no line with the dot unless the pair alone is too wide. */}
+                <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                   {alwaysAllowButton}
                   {alwaysAllowButton && neverAllowButton && (
                     <span aria-hidden="true" className="text-theme-fg-muted">

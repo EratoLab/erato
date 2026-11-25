@@ -108,7 +108,7 @@
   padding: var(--theme-spacing-message-padding-y)
     var(--theme-spacing-message-padding-x);
   color: var(--theme-fg-secondary);
-  background: var(--theme-bg-secondary);
+  background: var(--review-raised, var(--theme-bg-secondary));
   border: 1px dashed var(--theme-border);
 }
 .word-rich-preview__changes {

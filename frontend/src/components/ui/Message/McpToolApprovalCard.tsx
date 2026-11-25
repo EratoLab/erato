@@ -227,10 +227,6 @@ const mismatchedIds = (
  * make `input` unusable; track every other field from the generated type and
  * override just those.
  */
-const inDecisionPlace = (card: ReactNode) => (
-  <DecisionPlaceContext.Provider value>{card}</DecisionPlaceContext.Provider>
-);
-
 export type McpToolApprovalRequestPart = Omit<
   ContentPartToolApprovalRequest,
   "input" | "approvals"
@@ -238,6 +234,10 @@ export type McpToolApprovalRequestPart = Omit<
   input: unknown;
   approvals?: ApprovalItemPart[];
 };
+
+const inDecisionPlace = (card: ReactNode) => (
+  <DecisionPlaceContext.Provider value>{card}</DecisionPlaceContext.Provider>
+);
 
 /**
  * Message-scoped UI for a durable MCP approval request. The decision is

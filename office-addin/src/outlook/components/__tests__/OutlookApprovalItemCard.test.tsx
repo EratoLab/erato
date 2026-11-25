@@ -13,12 +13,13 @@ import type { ApprovalItemCardProps } from "@erato/frontend/library";
 import type { ReactNode } from "react";
 
 const DRAFT = "Thank you, the deletion was intended.";
-const messages = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+const mockUseChatContext = vi.fn();
 
-vi.mock("@erato/frontend/library", () => ({
-  useConversationMessage: (messageId?: string) =>
-    messageId ? messages.current[messageId] : undefined,
-}));
+vi.mock("@erato/frontend/library", async () =>
+  (
+    await import("../../../test/helpers/eratoLibraryMock")
+  ).createEratoLibraryMock({ useChatContext: () => mockUseChatContext() }),
+);
 
 beforeAll(() => {
   i18n.load("en", {});
@@ -36,13 +37,15 @@ const renderDefault = (options?: { note?: ReactNode }) => (
 );
 
 const props = (toolName: string, text: string): ApprovalItemCardProps => {
-  messages.current = {
-    answer: {
-      id: "answer",
-      role: "assistant",
-      content: [{ content_type: "text", text }],
+  mockUseChatContext.mockReturnValue({
+    messages: {
+      answer: {
+        id: "answer",
+        role: "assistant",
+        content: [{ content_type: "text", text }],
+      },
     },
-  };
+  });
   return {
     item: {
       approval_id: "call-propose.apply",

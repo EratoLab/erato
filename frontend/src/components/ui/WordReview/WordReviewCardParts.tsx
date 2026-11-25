@@ -240,7 +240,7 @@ export function WordCheckFirst({
         id: "officeAddin.word.checkFirst.title",
         message: "Check first",
       })}
-      className="m-3 [overflow-wrap:anywhere]"
+      className="word-review__aside my-3 [overflow-wrap:anywhere]"
     >
       <ul className="word-review__risks">
         {risks.map((risk) => (

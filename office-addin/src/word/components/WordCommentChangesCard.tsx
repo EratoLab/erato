@@ -714,7 +714,7 @@ export function WordCommentChangesCard({
           <Alert
             type="info"
             role="status"
-            className="m-3 [overflow-wrap:anywhere]"
+            className="word-review__aside my-3 [overflow-wrap:anywhere]"
           >
             {note}
           </Alert>

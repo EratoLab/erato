@@ -21,10 +21,9 @@ export function useOutlookProposalState(
   /** The answer holds several versions, so the user picks one with its button. */
   userPicks: (content: readonly ContentPart[] | undefined) => boolean,
 ): OutlookProposalState | undefined {
-  return useChainedState<ProposalApplyResult>(messageId, (content) => {
-    const state = chainedProposalState<ProposalApplyResult>(content, actions);
-    return state && !userPicks(content) ? state : undefined;
-  });
+  return useChainedState<ProposalApplyResult>(messageId, (content) =>
+    chainedProposalState<ProposalApplyResult>(content, actions, userPicks),
+  );
 }
 
 /** One line under the draft: where the proposed reply or appointment stands. */
@@ -108,11 +107,30 @@ function outlookProposalStatusText(
       });
     case "failed":
     case "unavailable":
+      if (state.result.reason === "stopped")
+        return reply
+          ? t({
+              id: "officeAddin.outlook.proposal.stoppedReply",
+              message: "Stopped. No reply was opened.",
+            })
+          : t({
+              id: "officeAddin.outlook.proposal.stoppedAppointment",
+              message: "Stopped. No appointment was opened.",
+            });
+      if (state.result.reason === "pane_gone")
+        return reply
+          ? t({
+              id: "officeAddin.outlook.proposal.paneGoneReply",
+              message: "No reply was opened: the Erato pane was closed.",
+            })
+          : t({
+              id: "officeAddin.outlook.proposal.paneGoneAppointment",
+              message: "No appointment was opened: the Erato pane was closed.",
+            });
       if (reply && state.result.reason === "other_item")
         return t({
           id: "officeAddin.outlook.proposal.otherEmail",
-          message:
-            "No reply was opened: another email is open than the one this reply was written for.",
+          message: "No reply was opened: a different email is open now.",
         });
       return reply
         ? t({

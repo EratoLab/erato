@@ -1408,7 +1408,17 @@ msgstr "Opening the reply…"
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.outlook.proposal.otherEmail"
-msgstr "No reply was opened: another email is open than the one this reply was written for."
+msgstr "No reply was opened: a different email is open now."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneAppointment"
+msgstr "No appointment was opened: the Erato pane was closed."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneReply"
+msgstr "No reply was opened: the Erato pane was closed."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx
@@ -1424,6 +1434,16 @@ msgstr "No reply was opened."
 #: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.outlook.proposal.replyOpened"
 msgstr "Reply opened in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedAppointment"
+msgstr "Stopped. No appointment was opened."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedReply"
+msgstr "Stopped. No reply was opened."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookProposalStatus.tsx
