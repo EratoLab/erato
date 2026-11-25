@@ -1,9 +1,16 @@
 import { I18nProvider } from "@lingui/react";
 import { skipToken } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
 
@@ -38,6 +45,12 @@ vi.mock("@/config/themeConfig", () => ({
   },
 }));
 
+const mockReleaseLeftEdge = vi.fn();
+const mockClaimLeftEdge = vi.fn((_shell: unknown) => mockReleaseLeftEdge);
+vi.mock("@/lib/hostLeftEdge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hostLeftEdge")>()),
+  claimLeftEdge: (shell: unknown) => mockClaimLeftEdge(shell),
+}));
 vi.mock("@/hooks/ui", () => ({
   useIsNarrowScreen: () => mockedNarrowScreen,
   useResponsiveCollapsedMode: (mode: string) => mode,
@@ -1490,6 +1503,229 @@ describe("ChatHistorySidebar", () => {
 
       expect(sidebarMode()).toBe("expanded");
       expect(pageAction).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("dragging the drawer", () => {
+    const DRAWER_WIDTH = 280;
+    const ToggleHarness = ({ initiallyOpen }: { initiallyOpen: boolean }) => {
+      const [collapsed, setCollapsed] = useState(!initiallyOpen);
+      return (
+        <ChatHistorySidebar
+          sessions={sessions}
+          currentSessionId="chat-1"
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((value) => !value)}
+          onSessionSelect={vi.fn()}
+          onSessionArchive={vi.fn()}
+          onSessionUnarchive={vi.fn()}
+          isLoading={false}
+        />
+      );
+    };
+    const renderDrawer = async (initiallyOpen: boolean) => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <MemoryRouter initialEntries={["/chat/chat-1"]}>
+          <I18nProvider i18n={i18n}>
+            <ToggleHarness initiallyOpen={initiallyOpen} />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+    };
+    const drawer = () =>
+      document.querySelector<HTMLElement>('[data-ui="sidebar"]')!;
+    const sidebarMode = () => drawer().getAttribute("data-sidebar-mode");
+
+    // A finger: one touch per event, at a given time in ms.
+    const touch = (
+      target: Element,
+      type: "touchstart" | "touchmove" | "touchend",
+      x: number,
+      y: number,
+      time: number,
+    ) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const point = { clientX: x, clientY: y };
+      const touchList = (points: (typeof point)[]) =>
+        Object.assign([...points], {
+          item: (index: number) => points[index] ?? null,
+        });
+      Object.defineProperties(event, {
+        touches: { value: touchList(type === "touchend" ? [] : [point]) },
+        changedTouches: { value: touchList([point]) },
+        timeStamp: { value: time },
+      });
+      act(() => {
+        target.dispatchEvent(event);
+      });
+      return event;
+    };
+    /** Moves in 10 steps over `ms`, then lifts. Returns the last move. */
+    const drag = (target: Element, fromX: number, toX: number, ms: number) => {
+      const y = 400;
+      touch(target, "touchstart", fromX, y, 0);
+      let last: Event | undefined;
+      for (let step = 1; step <= 10; step += 1) {
+        last = touch(
+          target,
+          "touchmove",
+          fromX + ((toX - fromX) * step) / 10,
+          y,
+          (ms * step) / 10,
+        );
+      }
+      // Holding still before lifting: a slow release, not a flick.
+      touch(target, "touchend", toX, y, ms + 200);
+      return last!;
+    };
+
+    beforeEach(() => {
+      mockedNarrowScreen = true;
+      window.ERATO_SHELL = {
+        contract: 1,
+        capabilities: { leftEdgeSwipe: 1 },
+        request: () => Promise.resolve(null),
+        on: () => () => {},
+      };
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+        DOMRect.fromRect({ width: DRAWER_WIDTH, height: 800 }),
+      );
+    });
+    afterEach(() => {
+      delete window.ERATO_SHELL;
+      vi.restoreAllMocks();
+    });
+
+    it("follows the finger in from the edge and stays open past half", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      const move = touch(edge, "touchmove", 145, 400, 400);
+
+      expect(move.defaultPrevented).toBe(true);
+      expect(drawer().style.transform).toBe("translateX(-140px)");
+      expect(screen.getByTestId("sidebar-scrim").style.opacity).toBe("0.5");
+
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+
+      expect(sidebarMode()).toBe("expanded");
+      expect(drawer().style.transform).toBe("");
+    });
+
+    it("springs back from a slow pull short of half", async () => {
+      await renderDrawer(false);
+
+      drag(screen.getByTestId("sidebar-edge"), 5, 115, 600);
+
+      expect(sidebarMode()).toBe("hidden");
+      expect(drawer().style.transform).toBe("");
+      expect(drawer().style.opacity).toBe("");
+    });
+
+    it("springs back from a quick pull that stops before the finger lifts", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 50, 400, 40);
+      touch(edge, "touchmove", 95, 400, 80);
+      touch(edge, "touchend", 95, 400, 1080);
+
+      expect(sidebarMode()).toBe("hidden");
+    });
+
+    it("takes the left edge from the host while it can be pulled from there", async () => {
+      mockClaimLeftEdge.mockClear();
+      mockReleaseLeftEdge.mockClear();
+      await renderDrawer(false);
+
+      expect(mockClaimLeftEdge).toHaveBeenCalledWith(window.ERATO_SHELL);
+      expect(mockReleaseLeftEdge).not.toHaveBeenCalled();
+
+      cleanup();
+      expect(mockReleaseLeftEdge).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens on a short flick", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 40, 400, 40);
+      touch(edge, "touchmove", 80, 400, 80);
+      touch(edge, "touchend", 80, 400, 90);
+
+      expect(sidebarMode()).toBe("expanded");
+    });
+
+    it("closes when dragged left on the drawer or on the dimmed page", async () => {
+      await renderDrawer(true);
+
+      drag(drawer(), 250, 60, 600);
+      expect(sidebarMode()).toBe("hidden");
+
+      fireEvent.click(screen.getByRole("button", { name: "expand sidebar" }));
+      expect(sidebarMode()).toBe("expanded");
+
+      drag(screen.getByTestId("sidebar-scrim"), 350, 150, 600);
+      expect(sidebarMode()).toBe("hidden");
+    });
+
+    it("leaves a vertical drag in the drawer to the list's scrolling", async () => {
+      await renderDrawer(true);
+      const target = drawer();
+
+      touch(target, "touchstart", 200, 400, 0);
+      const first = touch(target, "touchmove", 196, 380, 20);
+      const later = touch(target, "touchmove", 120, 300, 200);
+      touch(target, "touchend", 120, 300, 400);
+
+      expect(first.defaultPrevented).toBe(false);
+      expect(later.defaultPrevented).toBe(false);
+      expect(drawer().style.transform).toBe("");
+      expect(sidebarMode()).toBe("expanded");
+    });
+
+    it("settles at once when the person asks for reduced motion", async () => {
+      const matchMedia = window.matchMedia;
+      window.matchMedia = (query: string) => ({
+        ...matchMedia(query),
+        matches: query.includes("prefers-reduced-motion"),
+      });
+      try {
+        await renderDrawer(true);
+
+        drag(drawer(), 250, 200, 600);
+
+        expect(drawer().style.transition).toContain("transform 0ms");
+        expect(sidebarMode()).toBe("expanded");
+      } finally {
+        window.matchMedia = matchMedia;
+      }
+    });
+
+    it("offers no edge in a browser, where the edge swipe is the browser's", async () => {
+      delete window.ERATO_SHELL;
+      await renderDrawer(true);
+
+      expect(screen.queryByTestId("sidebar-edge")).not.toBeInTheDocument();
+      drag(drawer(), 250, 60, 600);
+      expect(sidebarMode()).toBe("hidden");
+    });
+
+    it("changes nothing on a wide screen", async () => {
+      mockedNarrowScreen = false;
+      await renderDrawer(true);
+
+      expect(screen.queryByTestId("sidebar-edge")).not.toBeInTheDocument();
+      const move = drag(drawer(), 250, 60, 600);
+
+      expect(move.defaultPrevented).toBe(false);
+      expect(drawer().style.transform).toBe("");
+      expect(sidebarMode()).toBe("expanded");
     });
   });
 });
