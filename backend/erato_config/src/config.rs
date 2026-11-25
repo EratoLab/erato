@@ -2370,7 +2370,7 @@ impl AppConfig {
                         && tool.client_actions.contains(action)
                 }) {
                     panic!(
-                        "Action facet '{}' maps block '{}' to '{}', which no server-called client tool carries out.",
+                        "Action facet '{}' maps block '{}' to '{}', which no server-called client tool without follows_tool carries out.",
                         id, language, action
                     );
                 }

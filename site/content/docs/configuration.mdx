@@ -8202,9 +8202,10 @@ grant_scope = { "word.add_comments" = "session_document" }
 `draft_block_actions` maps fenced code block languages to one of the facet's `client_actions`. When
 an answer in the facet holds exactly one closed block of a listed language and the model proposed
 no action, the server proposes the mapped action itself, through the same approval as a proposal
-the model makes. Several such blocks leave the choice to the user. Each action needs a
-`called_by = "server"` client tool that carries it out; nothing is proposed when the client did not
-register that tool or the user set it to Never.
+the model makes. Several such blocks leave the choice to the user. Languages match exactly, and a
+block without a language never matches. Each action needs a `called_by = "server"` client tool
+without `follows_tool` that carries it out; nothing is proposed when the client did not register
+that tool or the user set it to Never.
 
 ```toml
 [action_facets.facets.editor_compose]

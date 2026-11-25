@@ -710,7 +710,7 @@ fn test_action_facet_draft_block_action_needs_a_client_action() {
 
 #[test]
 #[should_panic(
-    expected = "maps block 'editor-draft' to 'word.add_comments', which no server-called client tool carries out"
+    expected = "maps block 'editor-draft' to 'word.add_comments', which no server-called client tool without follows_tool carries out"
 )]
 fn test_action_facet_draft_block_action_needs_a_server_called_tool() {
     ms_office_addin_config_from_toml(&format!(
