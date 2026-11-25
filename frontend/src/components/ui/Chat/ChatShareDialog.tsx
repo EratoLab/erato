@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input/Input";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { toast } from "@/components/ui/Toast";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
-import { hostShellWithCapability } from "@/lib/hostShell";
+import { hostShellWithCapability, shellAnchor } from "@/lib/hostShell";
 
 import { CheckIcon, CopyIcon, ShareIcon } from "../icons";
 
@@ -106,11 +106,10 @@ export function ChatShareDialog({
     if (!shareUrl || !shareSheet) {
       return;
     }
-    const { x, y, width, height } = anchor.getBoundingClientRect();
     try {
       await shareSheet.request(SHARE_SHEET_OPEN, {
         url: shareUrl,
-        anchor: { x, y, width, height },
+        anchor: shellAnchor(anchor),
       });
     } catch {
       // Copying after the round trip may no longer count as the tap's.
