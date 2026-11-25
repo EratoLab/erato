@@ -1,4 +1,4 @@
-import { t } from "@lingui/core/macro";
+import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 import {
   Fragment,
@@ -14,6 +14,7 @@ import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
+import { CountBadge } from "../Controls/CountBadge";
 import {
   PopoverChrome,
   PopoverSectionHeader,
@@ -64,6 +65,11 @@ export interface AddMenuActionItem extends AddMenuItemBase {
  */
 export interface AddMenuToolItem extends AddMenuItemBase {
   checked: boolean;
+  /**
+   * One choice among its section's rows (a radio) rather than a toggle; the
+   * menu closes after it, like after an action.
+   */
+  exclusive?: boolean;
   /** Optional secondary line explaining what the toggle changes. */
   description?: React.ReactNode;
   onToggle: () => void;
@@ -113,6 +119,11 @@ export interface ChatInputAddMenuProps {
   disabled?: boolean;
   /** Show a spinner in the trigger while files are uploading/linking. */
   isProcessing?: boolean;
+  /**
+   * How many tools are on, shown on the trigger where the composer has no
+   * room for the tool chips.
+   */
+  selectedToolCount?: number;
   className?: string;
 }
 
@@ -145,6 +156,7 @@ export function ChatInputAddMenu({
   extraContent,
   disabled = false,
   isProcessing = false,
+  selectedToolCount = 0,
   className = "",
 }: ChatInputAddMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -278,7 +290,7 @@ export function ChatInputAddMenu({
       <Row
         key={tool.id}
         variant="menu"
-        role="menuitemcheckbox"
+        role={tool.exclusive ? "menuitemradio" : "menuitemcheckbox"}
         checked={tool.checked}
         // An unavailable tool still explains itself, so it stays in
         // the tab order and in the roving walk; only the activation
@@ -286,7 +298,16 @@ export function ChatInputAddMenu({
         disabled={toolDisabled}
         disabledMode="aria"
         tabIndex={-1}
-        onClick={toolDisabled ? undefined : tool.onToggle}
+        onClick={
+          toolDisabled
+            ? undefined
+            : () => {
+                tool.onToggle();
+                if (tool.exclusive) {
+                  closeAfterSelect();
+                }
+              }
+        }
         data-testid={testId}
         leading={
           tool.icon && (
@@ -434,15 +455,36 @@ export function ChatInputAddMenu({
           variant="icon-only"
           size="sm"
           disabled={isBusy}
-          aria-label={t({
-            id: "chatInput.addMenu.trigger",
-            message: "Add files and tools",
-          })}
+          aria-label={
+            selectedToolCount > 0
+              ? t({
+                  id: "chatInput.addMenu.triggerWithTools",
+                  message: plural(selectedToolCount, {
+                    one: "Add files and tools, # tool switched on",
+                    other: "Add files and tools, # tools switched on",
+                  }),
+                })
+              : t({
+                  id: "chatInput.addMenu.trigger",
+                  message: "Add files and tools",
+                })
+          }
           data-testid="chat-input-add-menu-trigger"
           className={className}
           icon={
             isProcessing ? (
               <SpinnerIcon size="md" style={TRIGGER_RING_STYLE} />
+            ) : selectedToolCount > 0 ? (
+              <span className="relative flex">
+                <PlusIcon className="size-5" />
+                <CountBadge
+                  variant="attention"
+                  className="absolute -end-2 -top-1.5"
+                  data-testid="chat-input-add-menu-badge"
+                >
+                  {selectedToolCount}
+                </CountBadge>
+              </span>
             ) : (
               <PlusIcon className="size-5" />
             )

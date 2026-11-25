@@ -2,7 +2,14 @@ import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import { MUTE_GRACE_MS } from "./audioTuning";
 
-export type TrackLossReason = "ended" | "muted";
+/** A timer this much later than asked for was not run by a live page. */
+const FROZEN_PAGE_SLACK_MS = 2_000;
+
+/**
+ * `hidden`: the track went quiet because the page was hidden; a phone mutes
+ * capture on lock or on the home screen. Not a microphone failure.
+ */
+export type TrackLossReason = "ended" | "muted" | "hidden";
 
 /**
  * Watches the live capture `MediaStreamTrack` for mid-session device-loss:
@@ -20,6 +27,10 @@ export type TrackLossReason = "ended" | "muted";
  *     outlives the window is treated as lost. `unmute` is not guaranteed to
  *     arrive, so grace-expiry escalation is the intended fallback; the timer
  *     re-reads live track state rather than trusting the stale event.
+ *   - A track that is muted while the page is hidden is reported as
+ *     `hidden` at once, whichever of the two came first: the page is not
+ *     shown, so nobody is talking to it, and the timers of a locked phone
+ *     may only run again after unlocking, too late to tell a lock apart.
  *
  * No re-acquire: re-running getUserMedia can return a different sample rate
  * that collides with the rate-coupled `new AudioContext({ sampleRate })`, so
@@ -92,8 +103,17 @@ export function useMediaStreamTrackWatchdog({
       unwatchTrack();
 
       const handleEnded = () => reportLost("ended");
+      const reportIfHidden = () => {
+        if (track.muted && document.visibilityState === "hidden") {
+          reportLost("hidden");
+          return true;
+        }
+        return false;
+      };
       const handleMute = () => {
         clearPendingLossTimer();
+        if (reportIfHidden()) return;
+        const armedAt = Date.now();
         pendingLossTimerRef.current = window.setTimeout(() => {
           pendingLossTimerRef.current = null;
           if (watchedTrackRef.current !== track) {
@@ -108,7 +128,13 @@ export function useMediaStreamTrackWatchdog({
             reportLost("ended");
             return;
           }
-          if (!track.muted) {
+          if (!track.muted || reportIfHidden()) {
+            return;
+          }
+          // Far too late: the page was frozen, as a locked phone freezes it,
+          // and the hide may only be told after this.
+          if (Date.now() - armedAt > MUTE_GRACE_MS + FROZEN_PAGE_SLACK_MS) {
+            reportLost("hidden");
             return;
           }
           reportLost("muted");
@@ -119,10 +145,12 @@ export function useMediaStreamTrackWatchdog({
       track.addEventListener("ended", handleEnded);
       track.addEventListener("mute", handleMute);
       track.addEventListener("unmute", handleUnmute);
+      document.addEventListener("visibilitychange", reportIfHidden);
       detachRef.current = () => {
         track.removeEventListener("ended", handleEnded);
         track.removeEventListener("mute", handleMute);
         track.removeEventListener("unmute", handleUnmute);
+        document.removeEventListener("visibilitychange", reportIfHidden);
       };
       watchedTrackRef.current = track;
 
@@ -137,6 +165,12 @@ export function useMediaStreamTrackWatchdog({
           if (watchedTrackRef.current === track) {
             reportLost("ended");
           }
+        }, 0);
+      } else if (track.muted) {
+        // Muted already, it fires no `mute` of its own.
+        pendingLossTimerRef.current = window.setTimeout(() => {
+          pendingLossTimerRef.current = null;
+          if (watchedTrackRef.current === track && track.muted) handleMute();
         }, 0);
       }
     },

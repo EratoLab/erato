@@ -1,3 +1,5 @@
+import { decodeBase64 } from "@/utils/file/decodeBase64";
+
 import type { McpUiDownloadFileRequest } from "@modelcontextprotocol/ext-apps/app-bridge";
 
 /** The file types a view may save, with the extension each file gets. */
@@ -63,15 +65,6 @@ export const viewDownloadName = (uri: string, extension: string): string => {
  * one that counts.
  */
 const MAX_BASE64_CHARS = Math.ceil(MAX_VIEW_DOWNLOAD_BYTES / 3) * 4 * 2;
-
-/** The bytes of base64 `data`, or none when it is not base64. */
-const decodeBase64 = (data: string) => {
-  try {
-    return Uint8Array.from(globalThis.atob(data), (char) => char.charCodeAt(0));
-  } catch {
-    return undefined;
-  }
-};
 
 /**
  * The file a view's `ui/download-file` asks to save, when the host saves it:

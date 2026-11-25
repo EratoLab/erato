@@ -106,6 +106,16 @@ export interface SpokenPiece {
    * counted as a field or a condition until then.
    */
   held?: "field" | "condition";
+  /**
+   * A field the card counts as "more" and never says: said only when the
+   * listener asks for it by name. Never part of a reading, never owed.
+   */
+  onRequest?: true;
+  /**
+   * Other names of the piece's field: as the card shows it, and as the
+   * vocabulary says it in each language. For telling which field words name.
+   */
+  names?: string[];
 }
 
 export interface SpokenReadOut {
@@ -1203,17 +1213,30 @@ const withIds = (pieces: readonly ComposedPiece[]): SpokenPiece[] => {
 export const spokenApprovalPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
-): SpokenPiece[] =>
-  withIds(
-    fitted(
-      mustHearWhatIsApproved(
-        composedPieces(approval, options),
-        approval,
-        options,
-      ),
-      spokenWordsFor(options.language, options).cut(),
-    ),
+): SpokenPiece[] => {
+  const cut = spokenWordsFor(options.language, options).cut();
+  const composed = mustHearWhatIsApproved(
+    composedPieces(approval, options),
+    approval,
+    options,
   );
+  const card = fitted(
+    composed.filter((piece) => piece.onRequest === undefined),
+    cut,
+  );
+  // Each is spoken in a request of its own, so only its own length counts.
+  const asked = composed
+    .filter((piece) => piece.onRequest !== undefined)
+    .slice(0, Math.max(0, MAX_COMMAND_PIECES - card.length))
+    .map((piece) => fitted([piece], cut).at(0) ?? piece);
+  return withIds([...card, ...asked]);
+};
+
+/**
+ * Pieces the voice command endpoint takes, said and asked for together: the
+ * card's own and those said only on request.
+ */
+export const MAX_COMMAND_PIECES = 32;
 
 /** Composed pieces as the endpoint takes them, with their ids. */
 export const spokenPiecesOf = (
@@ -1397,7 +1420,148 @@ const composedPieces = (
     });
   }
   pieces.push(loss ? { ...request, pauseBeforeMs: DELETE_PAUSE_MS } : request);
-  return hold.withMore(pieces);
+  const whole = spokenFactsOf(
+    card.gist,
+    approval.server,
+    options.timeZone,
+    true,
+    names,
+  );
+  return withFieldNames(
+    [
+      ...hold.withMore(pieces),
+      ...onRequestPieces(facts, whole, card.gist.change, {
+        detail: (detail) => words.detail(detail, whole),
+        text: (spokenText) => words.text(spokenText),
+      }),
+    ],
+    card.gist.change,
+    approval.label,
+  );
+};
+
+/** The field a detail or text is about, as the card shows it. */
+const shownField = (item: SpokenDetail | SpokenText): string | undefined =>
+  "field" in item ? (item.cardField ?? item.field) : undefined;
+
+/**
+ * The details and texts the card counts as "more" instead of saying them, as
+ * pieces said only when asked for by name. A batch has no fields to ask for.
+ */
+const onRequestPieces = (
+  said: SpokenFacts,
+  whole: SpokenFacts,
+  change: GistChange | undefined,
+  sentence: {
+    detail: (detail: SpokenDetail) => string;
+    text: (spokenText: SpokenText) => string;
+  },
+): ComposedPiece[] => {
+  if (said.detailsOmitted === 0) return [];
+  const saidFields = new Set(
+    [...said.details, ...said.texts].flatMap((item) => shownField(item) ?? []),
+  );
+  const details = whole.details.flatMap((detail): ComposedPiece[] => {
+    const shown = shownField(detail);
+    if (shown === undefined || saidFields.has(shown)) return [];
+    const asked = inFull(detail, shown, change);
+    return [
+      {
+        role: "detail",
+        text: sentence.detail(asked),
+        mustSay: false,
+        values: detailValues(asked),
+        ...(detail.cardField ? { idField: detail.cardField } : {}),
+        onRequest: true,
+      },
+    ];
+  });
+  const texts = whole.texts.flatMap((spokenText): ComposedPiece[] => {
+    const shown = shownField(spokenText);
+    if (shown === undefined || saidFields.has(shown)) return [];
+    return [
+      {
+        role: "text",
+        text: sentence.text(spokenText),
+        mustSay: false,
+        values: textValues(spokenText),
+        ...(spokenText.read === undefined && spokenText.full
+          ? { readOut: spokenText.full }
+          : {}),
+        ...(spokenText.cardField ? { idField: spokenText.cardField } : {}),
+        onRequest: true,
+      },
+    ];
+  });
+  return [...details, ...texts];
+};
+
+/**
+ * A detail asked for by name with its text value as the card holds it, not
+ * cut to what a reading says: the listener asked to hear this one field.
+ */
+const inFull = (
+  detail: SpokenDetail,
+  shown: string,
+  change: GistChange | undefined,
+): SpokenDetail => {
+  if (detail.type !== "set" && detail.type !== "changed") return detail;
+  const value = detail.type === "set" ? detail.value : detail.to;
+  if (value.kind !== "text" || !value.text.endsWith(SPOKEN_CUT)) return detail;
+  const first = change?.effects.find((effect) => effectField(effect) === shown)
+    ?.values[0];
+  if (!first || first.machineId) return detail;
+  const full: EarValue = {
+    kind: "text",
+    text: first.truncated ? `${first.text}${SPOKEN_CUT}` : first.text,
+  };
+  return detail.type === "set"
+    ? { ...detail, value: full }
+    : { ...detail, to: full };
+};
+
+/** Names of one field compared without case, spaces or punctuation. */
+const nameKey = (name: string): string =>
+  name.toLocaleLowerCase().replace(/[\s\p{P}]+/gu, "");
+
+/**
+ * Each detail and text piece with the other names its field has: the card's
+ * own and the vocabulary's in every language the label carries words for,
+ * so a field can be named in the language the listener speaks.
+ */
+const withFieldNames = (
+  pieces: ComposedPiece[],
+  change: GistChange | undefined,
+  label: ToolCallLabel | null | undefined,
+): ComposedPiece[] => {
+  const languages = Object.keys(label?.spoken_names ?? {});
+  return pieces.map((piece) => {
+    if (piece.role !== "detail" && piece.role !== "text") return piece;
+    const field = spokenPieceField(piece);
+    if (field === undefined) return piece;
+    const shown = piece.idField ?? field;
+    const raw =
+      change?.effects.find((effect) => effectField(effect) === shown)
+        ?.rawName ??
+      change?.texts.find((text) => fieldName(text) === shown)?.rawName;
+    const candidates = [
+      shown,
+      ...(raw === undefined
+        ? []
+        : languages.flatMap(
+            (language) =>
+              spokenFieldName(spokenNamesFor(label, language), raw) ?? [],
+          )),
+    ];
+    const seen = new Set([nameKey(field)]);
+    const names = candidates.filter((name) => {
+      const key = nameKey(name);
+      if (key.length === 0 || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return names.length > 0 ? { ...piece, names } : piece;
+  });
 };
 
 /** An app's own sentence, ended so the voice pauses after it. */

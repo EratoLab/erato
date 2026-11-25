@@ -120,6 +120,8 @@ let fellBack = false;
 /** The prepared notice being said, whose own request still loads it. */
 let playingPrepared: Prepared | null = null;
 let closeStream: (() => void) | undefined;
+/** Streams of pieces said only on request, each loaded when asked for. */
+const askedStreams = new Map<number, () => void>();
 let buffers: Buffered[] = [];
 let said: SpokenPiece[] = [];
 let flow: SpokenCardFlow = spokenCardFlow([]);
@@ -170,6 +172,8 @@ const finish = () => {
   const close = closeStream;
   closeStream = undefined;
   close?.();
+  for (const closeAsked of askedStreams.values()) closeAsked();
+  askedStreams.clear();
   silence();
 };
 
@@ -349,11 +353,49 @@ const loadPieces = (indices: number[]) => {
         closeStream = undefined;
         close?.();
         const playing = currentPiece();
-        if (playing !== null && !loaded[playing].done) fail();
+        // A field said on request loads in its own request.
+        if (
+          playing !== null &&
+          indices.includes(playing) &&
+          !loaded[playing].done
+        )
+          fail();
       },
     },
   );
   closeStream = thisStream;
+};
+
+/**
+ * Asks for a piece said only on request, in a request of its own: the card's
+ * stream may still be loading, and nothing is spoken for it in advance.
+ */
+const loadAsked = (index: number) => {
+  const card = speaking;
+  if (!card) return;
+  const thisCard = cardRun;
+  const buffer = emptyBuffer();
+  buffers[index] = buffer;
+  const close = openSpeech(card.messageId, card.language, [said[index].text], {
+    stale: () => thisCard !== cardRun || buffers[index] !== buffer,
+    audio: (_, chunk) => {
+      pushChunk(buffer, chunk);
+      if (currentPiece() === index) feed();
+    },
+    done: () => {
+      buffer.done = true;
+      if (currentPiece() === index) feed();
+    },
+    ended: () => {
+      askedStreams.delete(index);
+    },
+    failed: () => {
+      askedStreams.get(index)?.();
+      askedStreams.delete(index);
+      if (currentPiece() === index && !buffer.done) fail();
+    },
+  });
+  askedStreams.set(index, close);
 };
 
 /** Plays what the card's logic says is being said now. */
@@ -373,11 +415,17 @@ const startPlaying = () => {
     return;
   }
   const current = playing.index;
-  // The card's audio broke off while the voice was quiet: ask again.
-  if (!buffers[current].done && closeStream === undefined)
+  if (said[current].onRequest) {
+    if (!buffers[current].done && !askedStreams.has(current))
+      loadAsked(current);
+  } else if (!buffers[current].done && closeStream === undefined) {
+    // The card's audio broke off while the voice was quiet: ask again.
     loadPieces(
-      buffers.flatMap((buffer, index) => (buffer.done ? [] : [index])),
+      buffers.flatMap((buffer, index) =>
+        buffer.done || said[index].onRequest ? [] : [index],
+      ),
     );
+  }
   buffers[current].queued = 0;
   const pause = said[current].pauseBeforeMs ?? 0;
   if (pause > 0) {
@@ -590,6 +638,74 @@ export function prepareApprovalNotice(
   return prepared;
 }
 
+/** A notice's audio, loaded while its approval waits and kept, not played. */
+export interface LoadedNotice {
+  text: string;
+  chunks: { text: string; audio: string; sampleRate: number }[];
+  state: "loading" | "done" | "failed";
+  /** Resolves once it is done or failed. */
+  settled: Promise<void>;
+  close(): void;
+}
+
+/**
+ * Asks the voice for `notice` about `messageId` now, while an approval of it
+ * still waits, and keeps the audio for whoever plays it: the voice speaks
+ * nothing for a message once its approval is gone. `null` where nothing may
+ * be said.
+ */
+export function loadApprovalNotice(
+  messageId: string,
+  notice: SpokenNotice,
+  language: string,
+): LoadedNotice | null {
+  if (!approvalSpeechAllowed()) return null;
+  const text = noticeText(notice, language);
+  if (text.trim().length === 0) return null;
+  let settle = () => {};
+  const loaded: LoadedNotice = {
+    text,
+    chunks: [],
+    state: "loading",
+    settled: new Promise<void>((resolve) => {
+      settle = resolve;
+    }),
+    close: () => {
+      closed = true;
+      stream();
+      end("failed");
+    },
+  };
+  let closed = false;
+  const end = (state: "done" | "failed") => {
+    if (loaded.state !== "loading") return;
+    loaded.state = state;
+    if (state === "failed") loaded.chunks = [];
+    settle();
+  };
+  // Audio far too short for its words was cut on the way: not said at all.
+  const complete = () =>
+    end(
+      loaded.chunks.length === 0 || audioTooShort(text, loaded.chunks)
+        ? "failed"
+        : "done",
+    );
+  const stream = openSpeech(messageId, language, [text], {
+    stale: () => closed,
+    audio: (_, chunk) => {
+      loaded.chunks.push({
+        text,
+        audio: chunk.audio,
+        sampleRate: chunk.sample_rate,
+      });
+    },
+    done: complete,
+    ended: complete,
+    failed: () => end("failed"),
+  });
+  return loaded;
+}
+
 /** Says a prepared notice from what was loaded; a failed one says nothing. */
 export function sayPreparedNotice(notice: PreparedNotice) {
   const prepared = notice as Prepared;
@@ -666,7 +782,10 @@ function play_(
       return;
     }
     context = resumed;
-    if (!prepared) loadPieces(pieces.map((_, index) => index));
+    if (!prepared)
+      loadPieces(
+        pieces.flatMap((piece, index) => (piece.onRequest ? [] : [index])),
+      );
     apply({ type: "start" });
   };
   void resumePlaybackContext().then(

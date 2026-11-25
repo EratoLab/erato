@@ -34,7 +34,8 @@ export type ComposerContextIconName =
   | "attachment"
   | "chats"
   | "file"
-  | "clock";
+  | "clock"
+  | "lock";
 
 export interface ComposerContextDetailAction {
   id: string;

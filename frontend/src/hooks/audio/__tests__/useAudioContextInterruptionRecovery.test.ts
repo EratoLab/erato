@@ -1,7 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAudioContextInterruptionRecovery } from "../useAudioContextInterruptionRecovery";
+import {
+  CLOCK_CHECK_MS,
+  reviveStandingClock,
+  useAudioContextInterruptionRecovery,
+} from "../useAudioContextInterruptionRecovery";
 
 const SAFARI_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
@@ -132,5 +136,116 @@ describe("useAudioContextInterruptionRecovery on non-WebKit", () => {
       "visibilitychange",
       expect.anything(),
     );
+  });
+});
+
+/**
+ * A running context whose clock moves with the (fake) time, or stands still
+ * as after a phone lock until it is suspended and resumed.
+ */
+function makeClockContext({
+  standing,
+  wedged = false,
+}: {
+  standing: boolean;
+  wedged?: boolean;
+}) {
+  let stands = standing;
+  let state: AudioContextState = "running";
+  const startedAt = Date.now();
+  const context = {
+    get state() {
+      return state;
+    },
+    get currentTime() {
+      return stands ? 6.7 : 6.7 + (Date.now() - startedAt) / 1000;
+    },
+    suspend: vi.fn(() => {
+      state = "suspended";
+      return Promise.resolve();
+    }),
+    resume: vi.fn(() => {
+      if (state === "suspended" && !wedged) stands = false;
+      state = "running";
+      return Promise.resolve();
+    }),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  };
+  return context;
+}
+
+describe("reviveStandingClock", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("navigator", { userAgent: SAFARI_UA });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("suspends and resumes a running context whose clock stands still", async () => {
+    const context = makeClockContext({ standing: true });
+
+    const revived = reviveStandingClock(context as unknown as AudioContext);
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
+
+    expect(await revived).toBe(false);
+    expect(context.suspend).toHaveBeenCalledOnce();
+    expect(context.resume).toHaveBeenCalledOnce();
+    const before = context.currentTime;
+    vi.advanceTimersByTime(100);
+    expect(context.currentTime).toBeGreaterThan(before);
+  });
+
+  it("says so when the clock still stands after every suspend and resume", async () => {
+    const context = makeClockContext({ standing: true, wedged: true });
+
+    const revived = reviveStandingClock(context as unknown as AudioContext);
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 10);
+
+    expect(await revived).toBe(true);
+    expect(context.suspend).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves a running context alone whose clock moves", async () => {
+    const context = makeClockContext({ standing: false });
+
+    const revived = reviveStandingClock(context as unknown as AudioContext);
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
+    await revived;
+
+    expect(context.suspend).not.toHaveBeenCalled();
+  });
+
+  it("does nothing on Chromium, which has no such clock", async () => {
+    vi.stubGlobal("navigator", { userAgent: CHROME_UA });
+    const context = makeClockContext({ standing: true });
+
+    const revived = reviveStandingClock(context as unknown as AudioContext);
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
+    await revived;
+
+    expect(context.suspend).not.toHaveBeenCalled();
+  });
+
+  it("revives a capture's standing clock when the page is shown again", async () => {
+    const context = makeClockContext({ standing: true });
+    renderRecovery(context as unknown as FakeContext, {});
+
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
+
+    expect(context.suspend).toHaveBeenCalledOnce();
+  });
+
+  it("does not touch a standing clock between captures", async () => {
+    const context = makeClockContext({ standing: true });
+    renderRecovery(context as unknown as FakeContext, null);
+
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(CLOCK_CHECK_MS * 4);
+
+    expect(context.suspend).not.toHaveBeenCalled();
   });
 });

@@ -49,10 +49,15 @@ export const toolDecisionLabel = (
             id: "trace.tool.decision.alwaysAllowed",
             message: "You chose “Always allow”",
           })
-        : t({
-            id: "trace.tool.decision.allowedOnce",
-            message: "You allowed this once",
-          }),
+        : decision.byVoice === true
+          ? t({
+              id: "trace.tool.decision.allowedByVoice",
+              message: "You allowed this by voice",
+            })
+          : t({
+              id: "trace.tool.decision.allowedOnce",
+              message: "You allowed this once",
+            }),
     };
   }
   if (decision?.status === "denied") {
@@ -81,10 +86,15 @@ export const toolDecisionLabel = (
             id: "trace.tool.decision.neverAllowed",
             message: "You chose “Never allow”",
           })
-        : t({
-            id: "trace.tool.decision.denied",
-            message: "You denied this",
-          }),
+        : decision.byVoice === true
+          ? t({
+              id: "trace.tool.decision.deniedByVoice",
+              message: "You denied this by voice",
+            })
+          : t({
+              id: "trace.tool.decision.denied",
+              message: "You denied this",
+            }),
     };
   }
   if (refused) {

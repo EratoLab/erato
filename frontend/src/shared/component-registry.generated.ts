@@ -41,6 +41,7 @@ export type { ChatHistoryRowMenuId } from "@/components/ui/Chat/chatHistoryRowMe
 export { CHAT_HISTORY_ROW_TEST_ID } from "@/components/ui/Chat/chatHistoryRowTestIds";
 export { ChatInputControlsProvider } from "@/components/ui/Chat/ChatInputControlsContext";
 export { useChatInputControls } from "@/components/ui/Chat/ChatInputControlsContext";
+export type { AppendToDraftOptions } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { ChatInputControls } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { DraftMessageOptions } from "@/components/ui/Chat/ChatInputControlsContext";

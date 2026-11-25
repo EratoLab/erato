@@ -50,7 +50,6 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   assistantsDelegationAllowBackground: false,
   delegationTasksEnabled: false,
   delegationTasksAllowAsync: false,
-  delegationTasksApprovalMode: "async_only",
   assistantsShowRecentItems: false,
   assistantsShowRecentItemsCollapsible: false,
   assistantContextWarningThreshold: 0.5,

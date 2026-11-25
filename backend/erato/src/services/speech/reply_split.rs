@@ -18,7 +18,11 @@ It must stand on its own for a reader and contain any question you asked aloud. 
 Write the written part whenever the reply holds a fact, number, date, name, source, list or step. \
 Only for pure conversation (thanks, a greeting, a question back) may you write nothing after </spoken>. \
 Before a tool call, write at most a short spoken part and no written part. \
-After tool results, begin again with <spoken>: the spoken part gives the result, then the written answer follows.";
+A call that creates, changes, sends or deletes something usually stops for a confirmation card that shows every value it writes, and the user confirms that card. \
+Before such a call, the spoken part first answers any question the user asked in this turn, even when the answer is a value the call will write. \
+Then it says in one short sentence what you are preparing and for which record, for example \"I'm preparing the update to the opportunity.\" It does not list the values the call will write, unless the user asked to hear them first. \
+After tool results, begin again with <spoken>: the spoken part gives the result, then the written answer follows. \
+After a change has run, the spoken part says briefly that it is done and repeats a value only when the user asked about it.";
 
 /// How long the spoken part is, for a deployment without a
 /// `turn_instructions.spoken_reply` text of its own.

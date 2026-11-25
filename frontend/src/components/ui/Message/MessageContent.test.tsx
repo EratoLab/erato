@@ -2243,6 +2243,22 @@ describe("decisions in the trace", () => {
       },
       "Not run: you no longer allow this tool",
     ],
+    [
+      {
+        content_type: "tool_approval",
+        always_allow: false,
+        voice: { matched_words: "ich bestaetige" },
+      },
+      "You allowed this by voice",
+    ],
+    [
+      {
+        content_type: "tool_rejection",
+        never_allow: false,
+        voice: { matched_words: "nein" },
+      },
+      "You denied this by voice",
+    ],
   ])("keeps what %o recorded beside the call", (decision, text) => {
     renderWithQueryClient(
       <MessageContent

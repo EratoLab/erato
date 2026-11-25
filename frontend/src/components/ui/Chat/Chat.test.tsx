@@ -1,7 +1,13 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import {
   afterEach,
@@ -222,11 +228,12 @@ vi.mock("@/hooks/files/useConversationDropzone", () => ({
   },
 }));
 
+const uploadState = vi.hoisted(() => ({ isUploading: false }));
 vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
   useFileUploadWithTokenCheck: () => ({
     uploadFiles: vi.fn(),
     uploadError: null,
-    isUploading: false,
+    isUploading: uploadState.isUploading,
   }),
 }));
 
@@ -914,6 +921,30 @@ describe("Chat empty-state shell", () => {
     ).toBeNull();
   });
 
+  it("omits the advisory on a phone even when the feature is on", () => {
+    const matchMedia = vi
+      .spyOn(window, "matchMedia")
+      .mockImplementation((query: string) => ({
+        matches: query === "(max-width: 767.98px)",
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+    try {
+      const { container } = renderChat({ emptyStateComponent: welcome });
+
+      expect(
+        container.querySelector('[data-ui="chat-usage-advisory"]'),
+      ).toBeNull();
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
   it("omits the advisory when the translation is blank", () => {
     i18n.load("en", { "chat.ai_usage_advisory": "   " });
     const { container } = renderChat({ emptyStateComponent: welcome });
@@ -1096,5 +1127,96 @@ describe("Chat top bar", () => {
     expect(topBar(container)).not.toBeNull();
     const strip = screen.getByTestId("top-content-stub").parentElement!;
     expect(strip.className).not.toContain("pr-28");
+  });
+});
+
+describe("Chat shared items", () => {
+  const installShell = () => {
+    const request = vi.fn(() => Promise.resolve({ batches: [] }));
+    window.ERATO_SHELL = {
+      contract: 1,
+      capabilities: { share: 1 },
+      request,
+      on: () => () => {},
+    };
+    return request;
+  };
+
+  afterEach(() => {
+    delete window.ERATO_SHELL;
+    testState.chatContext = {};
+    uploadState.isUploading = false;
+  });
+
+  it("takes shared items into an open composer", async () => {
+    const request = installShell();
+
+    renderChat();
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith("share.takePending"),
+    );
+  });
+
+  it.each([
+    ["closed", { composerDisabled: true }],
+    ["read-only", { readOnly: true }],
+  ])(
+    "leaves them with the shell while the composer is %s",
+    async (_, props) => {
+      const request = installShell();
+
+      renderChat(props);
+
+      await act(async () => {});
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves them with the shell while the chat loads or an upload runs", async () => {
+    const request = installShell();
+    testState.chatContext = { isMessagingLoading: true };
+    const { rerenderChat } = renderChat();
+    await act(async () => {});
+
+    testState.chatContext = {};
+    uploadState.isUploading = true;
+    rerenderChat();
+    await act(async () => {});
+    expect(request).not.toHaveBeenCalled();
+
+    uploadState.isUploading = false;
+    rerenderChat();
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  });
+
+  it("leaves them with the shell after a prompt injection blocked the last message", async () => {
+    const request = installShell();
+
+    renderChat({
+      messages: {
+        "assistant-error": {
+          id: "assistant-error",
+          content: [],
+          role: "assistant",
+          sender: "assistant",
+          authorId: "assistant-1",
+          createdAt: "2026-08-25T12:00:00.000Z",
+          status: "error",
+          error: {
+            error_type: "content_filter",
+            error_description: "blocked",
+            filter_details: {
+              pattern_id: "ignore-previous-instructions",
+              matched_text: "Ignore previous instructions",
+            },
+          },
+        },
+      },
+      messageOrder: ["assistant-error"],
+    });
+
+    await act(async () => {});
+    expect(request).not.toHaveBeenCalled();
   });
 });

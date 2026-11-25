@@ -1941,6 +1941,11 @@ msgid "chat.audio.hesitation_held"
 msgstr "“{heldHesitation}” · Still listening"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.mode.speaking"
+msgstr "Speaking"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "More"
@@ -3270,21 +3275,6 @@ msgid "chat.submission.word.readNoResponse"
 msgstr "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.always"
-msgstr "Any task run for you here needs your approval first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.asyncOnly"
-msgstr "If any of this runs as a background task, you will be asked to approve it first."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
-msgid "chat.task_approval.plan"
-msgstr "If this is split into separate tasks, you will be asked to approve the plan before any of it runs."
-
-#. js-lingui-explicit-id
 #: src/components/ui/Chat/ComposerToolChips.tsx
 msgid "chat.toolChips.announce.deselected"
 msgstr "{name} deselected."
@@ -3315,6 +3305,11 @@ msgid "chat.warning.budget.period_suffix"
 msgstr " This is for your {days}-day budget period."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.addMenu.modelHeader"
+msgstr "Model"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.toolsHeader"
 msgstr "Tools"
@@ -3325,14 +3320,39 @@ msgid "chatInput.addMenu.trigger"
 msgstr "Add files and tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.description"
-msgstr "Off, only tools the server marks read-only are offered."
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.triggerWithTools"
+msgstr "{selectedToolCount, plural, one {Add files and tools, # tool switched on} other {Add files and tools, # tools switched on}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.descriptionHostActions"
-msgstr "Off, only tools the server marks read-only are offered. Also pauses actions in the host application."
+msgid "chatInput.connectors.allowChanges.descriptionOff"
+msgstr "Off: only tools the server marks read-only are offered."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.allowChanges.descriptionOffHostActions"
+msgstr "Off: only tools the server marks read-only are offered, and actions in this application are paused."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.allowChanges.descriptionOn"
+msgstr "Connected tools may create, change and delete things."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.allowChanges.label"
+msgstr "Allow changes"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.description"
+#~ msgstr "Off, only tools the server marks read-only are offered."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.allowWrites.descriptionHostActions"
+#~ msgstr "Off, only tools the server marks read-only are offered. Also pauses actions in the host application."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
@@ -3341,13 +3361,13 @@ msgstr "Off, only tools the server marks read-only are offered. Also pauses acti
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.allowWrites.label"
-msgstr "Allow write operations"
+#~ msgid "chatInput.connectors.allowWrites.label"
+#~ msgstr "Allow write operations"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.browse"
-msgstr "Browse tools…"
+#~ msgid "chatInput.connectors.browse"
+#~ msgstr "Browse tools…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3356,13 +3376,28 @@ msgstr "The tools each connected server offers in your chats. Decide what may ru
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
-msgid "chatInput.connectors.browseDescriptionWithSwitches"
-msgstr "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings."
+#~ msgid "chatInput.connectors.browseDescriptionWithSwitches"
+#~ msgstr "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
-msgid "chatInput.connectors.browseTitle"
-msgstr "Connected tools"
+#~ msgid "chatInput.connectors.browseTitle"
+#~ msgstr "Connected tools"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.connect"
+msgstr "Connect"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.dialogDescriptionWithSwitches"
+msgstr "What this chat may use. Switch a connector off, or open it to switch single tools off, for this chat only."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.dialogTitle"
+msgstr "Connectors"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3370,29 +3405,89 @@ msgid "chatInput.connectors.manageInSettings"
 msgstr "Manage in Settings"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.sectionHeader"
-msgstr "Connectors"
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.noResults"
+msgstr "No connectors match your search"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.allToolsDisabled"
-msgstr "All tools switched off"
+msgid "chatInput.connectors.open"
+msgstr "Connectors…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.end"
+msgstr "Allow changes again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.ended"
+msgstr "Changes allowed again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chatInput.connectors.readOnlyMode.label"
+msgstr "Read only"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.searchPlaceholder"
+msgstr "Search connectors..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.disabledTools"
-msgstr "{disabledToolCount, plural, one {# tool switched off} other {# tools switched off}}"
+#~ msgid "chatInput.connectors.sectionHeader"
+#~ msgstr "Connectors"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/mcpToolsSection.ts
-msgid "chatInput.connectors.server.someToolsDisabled"
-msgstr "Some tools switched off"
+#~ msgid "chatInput.connectors.server.allToolsDisabled"
+#~ msgstr "All tools switched off"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.server.disabledTools"
+#~ msgstr "{disabledToolCount, plural, one {# tool switched off} other {# tools switched off}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+#~ msgid "chatInput.connectors.server.someToolsDisabled"
+#~ msgstr "Some tools switched off"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
 msgid "chatInput.connectors.server.switchedOff"
 msgstr "Switched off for this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/McpToolsBrowserModal.tsx
+msgid "chatInput.connectors.server.switchLabel"
+msgstr "Use {serverName} in this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.allOn"
+msgstr "{onCount, plural, one {# on} other {All # on}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.countsOff"
+msgstr "On: {onCount}, off: {offCount}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.namedOff"
+msgstr "{offCount, plural, one {Off: {names}} other {Off: {names}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.readOnly"
+msgstr "read only"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/mcpToolsSection.ts
+msgid "chatInput.connectors.summary.toConnect"
+msgstr "{toConnectCount, plural, one {# to connect} other {# to connect}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/McpToolsBrowserModal.tsx
@@ -3436,19 +3531,43 @@ msgstr "Wait for the answer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantMentionPopover.tsx
-#: src/components/ui/Chat/assistantMentionSection.ts
 msgid "chatInput.mentions.browse"
 msgstr "Browse assistants…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantBrowserModal.tsx
-msgid "chatInput.mentions.browseTitle"
-msgstr "Mention an assistant"
+#~ msgid "chatInput.mentions.browseTitle"
+#~ msgstr "Mention an assistant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.dialogDescription"
+msgstr "Hands your message to the assistant you pick. This chat stays as it is."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/AssistantBrowserModal.tsx
+msgid "chatInput.mentions.dialogTitle"
+msgstr "Ask an assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/AssistantBrowserModal.tsx
 msgid "chatInput.mentions.noResults"
 msgstr "No assistants match your search"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open"
+msgstr "Ask an assistant…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.description"
+msgstr "{moreCount, plural, one {{firstName} and # more you use often} other {{firstName} and # more you use often}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/assistantMentionSection.ts
+msgid "chatInput.mentions.open.descriptionUnranked"
+msgstr "{moreCount, plural, one {{firstName} and # more} other {{firstName} and # more}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -3466,7 +3585,6 @@ msgid "chatInput.mentions.searchPlaceholder"
 msgstr "Search assistants..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/assistantMentionSection.ts
 #: src/components/ui/Chat/FacetSelector.tsx
 msgid "chatInput.mentions.sectionHeader"
 msgstr "Assistants"
@@ -6783,7 +6901,6 @@ msgid "preferences.dialog.mcpServers.loading"
 msgstr "Loading MCP server status..."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/McpToolsBrowserModal.tsx
 #: src/components/ui/Settings/ServersToolsPane.tsx
 msgid "preferences.dialog.mcpServers.oauth.authorize"
 msgstr "Authorize"
@@ -9169,6 +9286,11 @@ msgstr "That was everything."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.approved"
+msgstr "All right, I'm running it now."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeConflict"
 msgstr "The card has changed in the meantime. Please check the screen."
 
@@ -9251,6 +9373,11 @@ msgstr "Voice commands aren't working right now. The card is waiting on screen."
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.unclear"
 msgstr "{commands, select, withText {I didn't catch that. You can say: go on, what else, again, read the text, or stop.} other {I didn't catch that. You can say: go on, what else, again, or stop.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.whichField"
+msgstr "{shape, select, named {Which field: {fields}?} other {Which field? Please say its name.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -11457,6 +11584,11 @@ msgstr "You allowed this"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.allowedByVoice"
+msgstr "You allowed this by voice"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "You allowed this for this document"
 
@@ -11484,6 +11616,11 @@ msgstr "Not run: you asked for a change"
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.denied"
 msgstr "You denied this"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.deniedByVoice"
+msgstr "You denied this by voice"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts
@@ -11625,6 +11762,11 @@ msgstr "Image Preview"
 #: src/hooks/files/errors.ts
 msgid "upload.error.cloudLink"
 msgstr "Failed to link cloud file. Please try again."
+
+#. js-lingui-explicit-id
+#: src/hooks/files/errors.ts
+msgid "upload.error.sharedWithoutContent"
+msgstr "{count, plural, one {{filenames} could not be brought over from the other app. Add it with the + button instead.} other {{filenames} could not be brought over from the other app. Add them with the + button instead.}}"
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts
@@ -12102,6 +12244,7 @@ msgstr "Audio input device selection is not supported in this browser."
 #~ msgid "Audio input is not supported in this browser."
 #~ msgstr "Audio input is not supported in this browser."
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Audio mode is on"
 msgstr "Audio mode is on"
@@ -12766,6 +12909,7 @@ msgstr "Largest file context contributors:"
 #~ msgid "Link"
 #~ msgstr "Link"
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
 msgstr "Listening"
@@ -13505,6 +13649,7 @@ msgstr "The source context is no longer available for this request."
 #~ msgid "The work limit was reached."
 #~ msgstr "The work limit was reached."
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Thinking"

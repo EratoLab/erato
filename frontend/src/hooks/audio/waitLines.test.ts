@@ -662,4 +662,115 @@ describe("wait lines", () => {
     await vi.advanceTimersByTimeAsync(1100);
     expect(sources).toHaveLength(1);
   });
+
+  it("after a tap, a continuation has its opener, counted from the tap", async () => {
+    const { playback, lines } = await setup();
+    const speechEnd = await import("./speechEnd");
+    speechEnd.markSpeechEnded(Date.now() - 25000);
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true, opener: true });
+    await vi.advanceTimersByTimeAsync(2900);
+    expect(sources).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sources).toHaveLength(1);
+  });
+});
+
+describe("the word that an approval by voice was taken", () => {
+  const CLIP = [
+    {
+      text: "Gut, ich führe das jetzt aus.",
+      audio: "AQIDBA==",
+      sampleRate: 24000,
+    },
+  ];
+
+  it("is said at once and counts as the turn's line: no opener over it or after it, and the gap before 'still on it'", async () => {
+    const { playback, lines } = await setup();
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true, opener: true });
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(true);
+    expect(sources).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(4000);
+    // Still playing: nothing over it.
+    expect(sources).toHaveLength(1);
+    endSources();
+    await vi.advanceTimersByTimeAsync(7000);
+    expect(sources).toHaveLength(0);
+    // "Still on it" no earlier than its own time, with the gap kept.
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(sources).toHaveLength(1);
+  });
+
+  it("counts toward the turn's cap", async () => {
+    const base = response();
+    const { playback, lines } = await setup({
+      timing: { ...base.timing, max_per_turn: 1 },
+    });
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true, opener: true });
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
+    endSources();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("holds the answer and the next card back until it has finished", async () => {
+    const { playback, lines } = await setup();
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true });
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
+    lines.waitTurnSpeaks("s");
+    playback.spokenPartBegins("s");
+    playback.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s");
+    expect(sources).toHaveLength(1);
+    let cardMayStart = false;
+    void lines.afterWaitLine().then(() => {
+      cardMayStart = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cardMayStart).toBe(false);
+    endSources();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(sources).toHaveLength(1);
+    expect(cardMayStart).toBe(true);
+  });
+
+  it("is not said once the reply's spoken part has begun, or with read-back off", async () => {
+    const { playback, lines } = await setup();
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true });
+    lines.waitTurnSpeaks("s");
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(false);
+    lines.beginWaitTurn("s", { continuation: true });
+    playback.useSpeechPlayback.setState({ enabled: false });
+    expect(lines.sayAsideLine(CLIP, lines.waitTurnNow())).toBe(false);
+    expect(sources).toHaveLength(0);
+  });
+
+  it("stops when a microphone opens without the echo-cancelling hold, and when stopped", async () => {
+    const { playback, lines } = await setup();
+    const speechEnd = await import("./speechEnd");
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s", { continuation: true });
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
+    expect(lines.waitLinePlaying()).toBe(true);
+    speechEnd.microphoneOpened();
+    expect(lines.waitLinePlaying()).toBe(false);
+    lines.beginWaitTurn("s", { continuation: true });
+    lines.sayAsideLine(CLIP, lines.waitTurnNow());
+    lines.stopAsideLine();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(lines.waitLinePlaying()).toBe(false);
+  });
+
+  it("stopping it leaves a planned line alone", async () => {
+    const { playback, lines } = await setup();
+    playback.beginSpeechResponse("s");
+    lines.beginWaitTurn("s");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(lines.waitLinePlaying()).toBe(true);
+    lines.stopAsideLine();
+    expect(lines.waitLinePlaying()).toBe(true);
+  });
 });

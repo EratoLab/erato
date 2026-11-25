@@ -297,12 +297,6 @@ export const McpToolApprovalCard = ({
     : (waitingItems ?? approvalItemsOf(request).filter(isWaitingItem));
   const approvalIds = approvalItems.map((item) => item.approval_id);
   const openItemCount = approvalItems.length;
-  // A corrected card is answered by name: the server refuses an unnamed
-  // decision on it, which a stale tab could otherwise send for a version it
-  // never showed.
-  const enumerate =
-    waiting.length > 0 ||
-    approvalItems.some((item) => item.replaces_approval_id != null);
   // Nothing to decide: the stop waits for its tasks alone.
   const waitingOnly = openItemCount === 0 && waiting.length > 0;
   const queryClient = useQueryClient();
@@ -417,7 +411,6 @@ export const McpToolApprovalCard = ({
         mcpServerId: request.mcp_server_id,
         approvalIds,
         itemDecisions,
-        enumerate,
         items: approvalItems,
         kind,
       });
@@ -445,7 +438,7 @@ export const McpToolApprovalCard = ({
             decision,
             approvalIds,
             itemDecisions,
-            enumerate,
+            items: approvalItems,
           }),
         ),
       });
@@ -1064,6 +1057,7 @@ export const McpToolApprovalCard = ({
       <div
         className={APPROVAL_CARD_SHELL_CLASS}
         data-testid="tool-call-limit-approval"
+        data-waiting-card=""
       >
         <ToolCallLimitItem
           status={isArchived ? "dismissed" : "pending"}
@@ -1120,6 +1114,7 @@ export const McpToolApprovalCard = ({
     return (
       <div
         data-testid="builtin-tool-approval"
+        data-waiting-card=""
         data-tool-name={request.tool_name}
         data-approval-kind={kind}
         className={APPROVAL_CARD_SHELL_CLASS}
@@ -1146,6 +1141,7 @@ export const McpToolApprovalCard = ({
     return (
       <div
         data-testid="tool-approval-generic"
+        data-waiting-card=""
         data-approval-kind={kind}
         className={APPROVAL_CARD_SHELL_CLASS}
       >
@@ -1178,6 +1174,7 @@ export const McpToolApprovalCard = ({
   return (
     <div
       data-testid="mcp-tool-approval"
+      data-waiting-card=""
       data-tool-name={request.tool_name}
       data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}

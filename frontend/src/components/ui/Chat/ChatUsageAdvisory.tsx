@@ -2,6 +2,7 @@ import { t } from "@lingui/core/macro";
 
 import { ReadOnlyMarkdown } from "@/components/ui/Markdown/ReadOnlyMarkdown";
 import { useOptionalTranslation } from "@/hooks/i18n";
+import { useIsMobile } from "@/hooks/useResponsive";
 import { useChatInputFeature } from "@/providers/FeatureConfigProvider";
 
 const advisoryStyle = {
@@ -9,12 +10,13 @@ const advisoryStyle = {
 } as const;
 
 /**
- * The "you are talking to an AI" line that sits beneath the composer shell.
- * Renders nothing when the feature is off or the deployment has no
- * translation for it.
+ * The advisory text when it shows, otherwise null. It needs the deployment to
+ * opt in, a non-empty translation, and a screen wider than a phone: on a phone
+ * nothing sits beneath the composer.
  */
-export function ChatUsageAdvisory() {
-  const { showUsageAdvisory = true } = useChatInputFeature();
+export function useUsageAdvisory(): string | null {
+  const { showUsageAdvisory } = useChatInputFeature();
+  const isMobile = useIsMobile();
   // Dummy for i18n:extract
   void t({
     id: "chat.ai_usage_advisory",
@@ -23,7 +25,17 @@ export function ChatUsageAdvisory() {
   });
   const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
 
-  if (!showUsageAdvisory || !aiUsageAdvisory) {
+  if (!showUsageAdvisory || isMobile) {
+    return null;
+  }
+  return aiUsageAdvisory;
+}
+
+/** The "you are talking to an AI" line that sits beneath the composer shell. */
+export function ChatUsageAdvisory() {
+  const aiUsageAdvisory = useUsageAdvisory();
+
+  if (!aiUsageAdvisory) {
     return null;
   }
 

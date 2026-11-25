@@ -14,6 +14,12 @@ import {
 import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 
 import {
+  cancelApprovalAcknowledgement,
+  dropApprovalAcknowledgement,
+  prepareApprovalAcknowledgement,
+  sayApprovalAcknowledgement,
+} from "./approvalAcknowledgement";
+import {
   dropChange,
   nextChangeRound,
   noteChangeSending,
@@ -61,6 +67,8 @@ import type {
 export const VOICE_COMMAND_TIMEOUT_MS = 8_000;
 /** What the endpoint takes of the user's words. */
 const MAX_TRANSCRIPT_CHARS = 300;
+/** Other names of one field the endpoint takes. */
+const MAX_FIELD_NAMES = 6;
 /** What a change request takes of them: `max_chars` of `[approval_change_requests]` by default. */
 const MAX_CHANGE_CHARS = 1_000;
 /** The confirmation is short; past this the change goes out anyway. */
@@ -87,6 +95,11 @@ interface ApprovalListeningState {
    */
   askedWhichText: string | null;
   /**
+   * The card whose voice just asked which of several fields to say: the
+   * next words to it may answer that by naming one.
+   */
+  askedWhichField: string | null;
+  /**
    * The card the user told to stop. It keeps listening, but acts only on
    * words that resume the card ("weiter", "nochmal", "was noch", "lies …
    * vor"); to anything else, a yes, a no or a change included, it says
@@ -96,7 +109,10 @@ interface ApprovalListeningState {
   stopped: string | null;
   /** The card the microphone is open for. */
   listening: string | null;
-  /** Approvals by voice that missed the phrase, by card. */
+  /**
+   * Decisions by voice that did not decide, by card: an approval without
+   * the phrase, or words from a recording that could not carry them.
+   */
   misses: Record<string, number>;
 }
 
@@ -111,6 +127,7 @@ export const useApprovalListening = create<ApprovalListeningState>(() => ({
   quiet: null,
   heard: null,
   askedWhichText: null,
+  askedWhichField: null,
   stopped: null,
   listening: null,
   misses: {},
@@ -159,11 +176,13 @@ export interface MeaningStep {
   change?: true;
   /** The voice asks which text to read; the next words may answer it. */
   asksWhichText?: true;
+  /** The voice asks which field to say; the next words may answer it. */
+  asksWhichField?: true;
   /** The voice was told to stop: it listens on, silent to what it cannot use. */
   stops?: true;
   /** The words decide the card: the decision goes out with this receipt. */
   decide?: { decision: "approve" | "reject"; receipt: string | undefined };
-  /** An approval that missed the phrase. */
+  /** A decision by voice that did not decide. */
   missed?: true;
 }
 
@@ -171,6 +190,13 @@ export interface MeaningStep {
 export interface MeaningContext {
   /** The voice had just asked which text to read. */
   askedWhichText?: boolean;
+  /** The piece the voice was saying when the words came. */
+  current?: number | null;
+  /**
+   * For a repeat without a piece: the fields the words fit equally, by id.
+   * The voice asks which one instead of guessing.
+   */
+  candidates?: readonly string[];
   /** The voice had been told to stop. */
   stopped?: boolean;
   /**
@@ -180,7 +206,7 @@ export interface MeaningContext {
   byVoice?: { approves: boolean };
   /** The endpoint's answer on whether the words decide the card. */
   decision?: ApprovalVoiceDecision;
-  /** Approvals on this card that missed the phrase so far. */
+  /** Decisions by voice on this card that did not decide so far. */
   misses?: number;
 }
 
@@ -217,15 +243,36 @@ export const stepForMeaning = (
       return listen({ type: "skip" });
     case "rest":
       return listen({ type: "rest" });
-    case "repeat":
-      // A text named in answer to "which text" is read, not its piece again.
-      if (context.askedWhichText && named)
+    case "repeat": {
+      // A text named in answer to "which text", or asked for by name while
+      // the voice says something else, is read, not its piece again.
+      if (named && (context.askedWhichText || index !== context.current))
         return listen({ type: "read", index });
+      const which = (context.candidates ?? []).flatMap((id) => {
+        const at = indexOf(pieces, id);
+        return at === undefined ? [] : [at];
+      });
+      // Several fields fit the words: ask which, never guess by order.
+      if (index === undefined && which.length > 1)
+        return {
+          ...listen({
+            type: "notice",
+            notice: {
+              kind: "which_field",
+              fields: which.map((at) => spokenPieceField(pieces[at]) ?? ""),
+            },
+          }),
+          asksWhichField: true,
+        };
       // No piece to repeat: the card again, from its start.
       return listen(
         index === undefined ? { type: "start" } : { type: "repeat", index },
       );
+    }
     case "read_text": {
+      // A text short enough to be said whole is said, not another text read.
+      if (index !== undefined && !named && pieces[index].role === "text")
+        return listen({ type: "repeat", index });
       const texts = longTexts(pieces);
       if (texts.length === 0)
         return listen({ type: "notice", notice: { kind: "no_text" } });
@@ -277,15 +324,20 @@ export const stepForMeaning = (
           return approve
             ? confirmOnScreen
             : listen({ type: "notice", notice: { kind: "decline_on_screen" } });
-        case "say_again":
-          // The words were right; the recording could not carry them.
-          if (!approve)
-            return listen({ type: "notice", notice: { kind: "say_again" } });
-          if (!byVoice.approves) return confirmOnScreen;
-          return listen({
-            type: "notice",
-            notice: { kind: "say_phrase_again" },
-          });
+        case "say_again": {
+          // The words were right; the recording could not carry them. Asked
+          // once more, then the screen, as after a near miss.
+          if (approve && !byVoice.approves) return confirmOnScreen;
+          const second = (context.misses ?? 0) >= 1;
+          const notice: SpokenNotice = second
+            ? approve
+              ? { kind: "phrase_on_screen" }
+              : { kind: "decision_failed" }
+            : approve
+              ? { kind: "say_phrase_again" }
+              : { kind: "say_again" };
+          return { ...listen({ type: "notice", notice }), missed: true };
+        }
         case "phrase_needed": {
           if (!approve) return onScreen;
           if (!byVoice.approves) return confirmOnScreen;
@@ -343,12 +395,17 @@ export const commandPieces = (
   const states = heardStates(flow);
   return pieces.map((piece, index) => {
     const field = spokenPieceField(piece);
+    const names = (piece.names ?? [])
+      .slice(0, MAX_FIELD_NAMES)
+      .map((name) => Array.from(name).slice(0, 100).join(""));
     return {
       id: piece.id,
       role: piece.role,
       ...(field ? { field: Array.from(field).slice(0, 100).join("") } : {}),
       state: states[index],
       ...(piece.mustSay ? { must_say: true } : {}),
+      ...(names.length > 0 ? { names } : {}),
+      ...(piece.onRequest ? { on_request: true } : {}),
     };
   });
 };
@@ -467,15 +524,24 @@ export async function heardApprovalWords(
   const overVoice = takeTalkedOver(key, flow);
   const current = currentPiece(flow);
   const listening = useApprovalListening.getState();
+  const askedWhichField = listening.askedWhichField === key;
   const context: MeaningContext = {
     askedWhichText: listening.askedWhichText === key,
+    current,
     stopped: listening.stopped === key,
     ...(card.decision ? { byVoice: { approves: card.decision.approves } } : {}),
     misses: listening.misses[key] ?? 0,
   };
   const signals = card.decision ? voiceSignals(key, recording) : undefined;
+  // Words that may approve: the voice's answer to an approval is loaded now,
+  // while the card still waits and the voice may speak about it.
+  prepareApprovalAcknowledgement(card);
   // A question is answered by the next words only.
-  useApprovalListening.setState({ pending: key, askedWhichText: null });
+  useApprovalListening.setState({
+    pending: key,
+    askedWhichText: null,
+    askedWhichField: null,
+  });
   noteHeard(key, { words, meaning: null });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), VOICE_COMMAND_TIMEOUT_MS);
@@ -493,7 +559,11 @@ export async function heardApprovalWords(
             : {}),
           pieces: commandPieces(pieces, flow) as ApprovalCardPiece[],
           ...(current !== null ? { current_piece_id: pieces[current].id } : {}),
-          ...(context.askedWhichText ? { question: "which_text" } : {}),
+          ...(context.askedWhichText
+            ? { question: "which_text" }
+            : askedWhichField
+              ? { question: "which_field" }
+              : {}),
           ...(card.decision ? { approval_id: card.decision.approvalId } : {}),
           ...(signals ? { signals } : {}),
         },
@@ -502,10 +572,12 @@ export async function heardApprovalWords(
     );
     const pieceId = (answer as { piece_id?: string | null }).piece_id;
     const decision = (answer as { decision?: ApprovalVoiceDecision }).decision;
+    const { candidates } = answer;
     noteHeard(key, { meaning: answer.meaning });
     step = stepForMeaning(answer.meaning, pieceId, pieces, {
       ...context,
       ...(decision ? { decision } : {}),
+      ...(candidates ? { candidates } : {}),
     });
   } catch (error) {
     // 409: the card was decided meanwhile; it says nothing more.
@@ -542,6 +614,8 @@ export async function heardApprovalWords(
   if (step.event) steerApprovalCard(key, step.event);
   if (step.asksWhichText)
     useApprovalListening.setState({ askedWhichText: key });
+  if (step.asksWhichField)
+    useApprovalListening.setState({ askedWhichField: key });
   if (step.stops) useApprovalListening.setState({ stopped: key });
   if (!step.listen) useApprovalListening.setState({ quiet: key });
 }
@@ -575,8 +649,9 @@ const voiceSignals = (
 /**
  * Sends the decision the user said to the card under `key`, once the card
  * still waits and has asked with nothing owed. A refusal is confirmed first,
- * then sent; an approval goes out at once, and the answer is read back as
- * after a tap. A failure is said once, and the card waits on screen.
+ * then sent; an approval goes out at once, and the voice says meanwhile that
+ * it was taken, never that it is done; the answer is read back as after a
+ * tap. A failure is said once, and the card waits on screen.
  */
 async function decideByVoice(
   key: string,
@@ -597,17 +672,30 @@ async function decideByVoice(
   }
   useApprovalListening.setState({ quiet: key });
   if (decision === "reject") {
+    dropApprovalAcknowledgement();
     notice({ kind: "declined" });
     await untilSilent(key, CONFIRMATION_WAIT_MS);
     if (!stillOpen(key)) return;
   }
   let outcome: Awaited<ReturnType<typeof voice.send>>;
   try {
-    outcome = await voice.send(decision, receipt);
+    // Sending stops the card's voice at once and starts the turn the
+    // sentence belongs to; it is said once the server took the approval.
+    const sending = voice.send(decision, receipt);
+    if (decision === "approve")
+      void sayApprovalAcknowledgement(
+        key,
+        sending.then(
+          (sent) => sent === "sent",
+          () => false,
+        ),
+      );
+    outcome = await sending;
   } catch {
     outcome = "failed";
   }
   if (outcome === "sent") return;
+  cancelApprovalAcknowledgement();
   notice({ kind: "decision_failed" });
   useApprovalListening.setState({ quiet: key });
 }
@@ -660,6 +748,7 @@ const untilSilent = (key: string, ms: number): Promise<void> =>
 async function changeByVoice(key: string, transcript: string): Promise<void> {
   const now = spokenApprovalCardNow();
   if (now?.card.key !== key) return;
+  dropApprovalAcknowledgement();
   const { card, pieces, flow } = now;
   const notice = cardNotice(key, card);
   if (!card.change) {

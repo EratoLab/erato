@@ -3,301 +3,152 @@ import { describe, expect, it, vi } from "vitest";
 import { isAddMenuToolItem } from "../ChatInputAddMenu";
 import {
   buildMcpToolsSection,
-  mcpToolsServerItemId,
-  MCP_TOOLS_BROWSE_ITEM_ID,
+  MCP_TOOLS_OPEN_ITEM_ID,
   MCP_TOOLS_SECTION_ID,
-  MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+  describeAllowChanges,
+  summarizeMcpConnectors,
 } from "../mcpToolsSection";
 
 import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const server = (
   id: string,
+  displayName: string,
   connectionStatus: McpServerStatus["connection_status"] = "SUCCESS",
 ): McpServerStatus => ({
   id,
-  display_name: id,
+  display_name: displayName,
   connection_status: connectionStatus,
   authentication_mode: "oauth2",
 });
 
-const build = (
-  overrides: Partial<Parameters<typeof buildMcpToolsSection>[0]> = {},
+const dynamics = server("dynamics", "Dynamics 365");
+const notion = server("notion", "Notion");
+const teams = server("teams", "Microsoft Teams");
+const linear = server("linear", "Linear", "NEEDS_AUTHENTICATION");
+const broken = server("kertos", "Kertos", "FAILURE");
+
+const summary = (
+  overrides: Partial<Parameters<typeof summarizeMcpConnectors>[0]> = {},
 ) =>
-  buildMcpToolsSection({
+  summarizeMcpConnectors({
+    servers: [dynamics, notion, teams],
     writeToolsEnabled: true,
-    onToggleWriteTools: vi.fn(),
-    onBrowse: vi.fn(),
     ...overrides,
   });
 
-const toggleOf = (section: ReturnType<typeof build>) => {
-  const item = section.items.find(
-    (candidate) => candidate.id === MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
-  );
-  if (!item || !isAddMenuToolItem(item)) {
-    throw new Error("write toggle row missing");
-  }
-  return item;
-};
-
-const browseOf = (section: ReturnType<typeof build>) => {
-  const item = section.items.find(
-    (candidate) => candidate.id === MCP_TOOLS_BROWSE_ITEM_ID,
-  );
-  if (!item || isAddMenuToolItem(item)) {
-    throw new Error("browse row missing");
-  }
-  return item;
-};
-
 describe("buildMcpToolsSection", () => {
-  it("groups the write switch and the browse row under Connectors below the tools", () => {
-    const section = build();
+  it("is one row below the tools that opens the connectors dialog without the select delay", () => {
+    const onOpen = vi.fn();
+    const section = buildMcpToolsSection({
+      servers: [dynamics],
+      writeToolsEnabled: true,
+      onOpen,
+    });
 
     expect(section.id).toBe(MCP_TOOLS_SECTION_ID);
-    expect(section.header).toBe("Connectors");
+    expect(section.header).toBeUndefined();
     expect(section.placement).toBe("belowTools");
-    expect(section.items.map((item) => item.id)).toEqual([
-      MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
-      MCP_TOOLS_BROWSE_ITEM_ID,
-    ]);
+    expect(section.items).toHaveLength(1);
+    const [row] = section.items;
+    expect(row.id).toBe(MCP_TOOLS_OPEN_ITEM_ID);
+    expect(row.label).toBe("Connectors…");
+    if (isAddMenuToolItem(row)) {
+      throw new Error("the connectors row is an action, not a toggle");
+    }
+    expect(row.closesImmediately).toBe(true);
+    row.onSelect();
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
-  it("shows the chat's write setting as the toggle state and flips it on toggle", () => {
-    const onToggleWriteTools = vi.fn();
+  it("carries the summary as its description", () => {
+    const section = buildMcpToolsSection({
+      servers: [dynamics, notion],
+      disabledServerIds: ["notion"],
+      writeToolsEnabled: false,
+      onOpen: vi.fn(),
+    });
 
-    expect(toggleOf(build({ writeToolsEnabled: true })).checked).toBe(true);
+    expect(section.items[0].description).toBe("Off: Notion · read only");
+  });
 
-    const toggle = toggleOf(
-      build({ writeToolsEnabled: false, onToggleWriteTools }),
+  it("is disabled while the composer is locked", () => {
+    const section = buildMcpToolsSection({
+      servers: [dynamics],
+      writeToolsEnabled: true,
+      onOpen: vi.fn(),
+      disabled: true,
+    });
+
+    expect(section.items[0].disabled).toBe(true);
+  });
+});
+
+describe("summarizeMcpConnectors", () => {
+  it("counts every connector as on when none is switched off", () => {
+    expect(summary()).toBe("All 3 on");
+  });
+
+  it("does not say 'All' for a single connector", () => {
+    expect(summary({ servers: [dynamics] })).toBe("1 on");
+  });
+
+  it("names up to two switched-off connectors by their display name, state first", () => {
+    expect(summary({ disabledServerIds: ["dynamics"] })).toBe(
+      "Off: Dynamics 365",
     );
-    expect(toggle.checked).toBe(false);
-    expect(toggle.label).toBe("Allow write operations");
-    toggle.onToggle();
-    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
-  });
-
-  // An unannotated tool is not read-only under protocol defaults, so the
-  // copy must credit the server's marking rather than promise "read-only".
-  it("describes the off state as tools the server marks read-only", () => {
-    expect(toggleOf(build()).description).toBe(
-      "Off, only tools the server marks read-only are offered.",
+    expect(summary({ disabledServerIds: ["dynamics", "notion"] })).toBe(
+      "Off: Dynamics 365, Notion",
     );
   });
 
-  it("names the paused host actions where the host proposes them", () => {
-    expect(toggleOf(build({ pausesHostActions: true })).description).toBe(
-      "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
+  it("counts instead of naming when more than two are switched off", () => {
+    const servers = [dynamics, notion, teams, server("granola", "Granola")];
+    expect(
+      summary({
+        servers,
+        disabledServerIds: ["dynamics", "notion", "teams"],
+      }),
+    ).toBe("On: 1, off: 3");
+  });
+
+  it("says how many connectors still wait for the user to connect", () => {
+    expect(summary({ servers: [dynamics, notion, linear] })).toBe(
+      "All 2 on · 1 to connect",
     );
   });
 
-  // The row opens a dialog, which must claim focus before the menu returns
-  // it to the trigger.
-  it("opens the browser without the select delay", () => {
-    const onBrowse = vi.fn();
-    const browse = browseOf(build({ onBrowse }));
-
-    expect(browse.label).toBe("Browse tools…");
-    expect(browse.closesImmediately).toBe(true);
-    browse.onSelect();
-    expect(onBrowse).toHaveBeenCalledTimes(1);
+  it("counts a connector that failed to connect as on, since it was not switched off", () => {
+    expect(summary({ servers: [dynamics, broken] })).toBe("All 2 on");
   });
 
-  it("disables every row while the composer is locked", () => {
-    const section = build({ disabled: true });
-
-    expect(section.items.every((item) => item.disabled)).toBe(true);
+  it("ignores a switch-off recorded for a connector that waits to be connected", () => {
+    expect(
+      summary({ servers: [dynamics, linear], disabledServerIds: ["linear"] }),
+    ).toBe("1 on · 1 to connect");
   });
 
-  describe("server rows", () => {
-    const itemOf = (section: ReturnType<typeof build>, serverId: string) => {
-      const item = section.items.find(
-        (candidate) => candidate.id === mcpToolsServerItemId(serverId),
-      );
-      if (!item) {
-        throw new Error(`row for ${serverId} missing`);
-      }
-      return item;
-    };
+  it("ends with 'read only' when changes are off", () => {
+    expect(summary({ writeToolsEnabled: false })).toBe("All 3 on · read only");
+  });
 
-    it("lists one switch per server ahead of the write switch, ticked unless switched off", () => {
-      const section = build({
-        servers: [server("linear"), server("github")],
-        disabledServerIds: ["github"],
-        onToggleServer: vi.fn(),
-      });
+  it("only speaks of connecting when no connector is connected yet", () => {
+    expect(summary({ servers: [linear] })).toBe("1 to connect");
+  });
+});
 
-      expect(section.items.map((item) => item.id)).toEqual([
-        "server-linear",
-        "server-github",
-        MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
-        MCP_TOOLS_BROWSE_ITEM_ID,
-      ]);
-      const linear = itemOf(section, "linear");
-      const github = itemOf(section, "github");
-      expect(isAddMenuToolItem(linear) && linear.checked).toBe(true);
-      expect(isAddMenuToolItem(github) && github.checked).toBe(false);
-      expect(linear.label).toBe("linear");
-      expect(isAddMenuToolItem(linear) && linear.description).toBeUndefined();
-    });
-
-    it("flips the server the row belongs to", () => {
-      const onToggleServer = vi.fn();
-      const section = build({
-        servers: [server("linear"), server("github")],
-        onToggleServer,
-      });
-
-      const github = itemOf(section, "github");
-      if (!isAddMenuToolItem(github)) {
-        throw new Error("server row is not a switch");
-      }
-      github.onToggle();
-      expect(onToggleServer).toHaveBeenCalledWith("github");
-    });
-
-    // Nothing to switch off before the user connects; the row is the way
-    // to connect instead, and it opens a dialog like the browse row.
-    it("offers a connect row instead of a switch for a server awaiting authorization", () => {
-      const onConnect = vi.fn();
-      const onToggleServer = vi.fn();
-      const section = build({
-        servers: [server("jira", "NEEDS_AUTHENTICATION")],
-        onToggleServer,
-        onConnect,
-      });
-
-      const jira = itemOf(section, "jira");
-      expect(isAddMenuToolItem(jira)).toBe(false);
-      if (isAddMenuToolItem(jira)) {
-        throw new Error("connect row is a switch");
-      }
-      expect(jira.description).toBe("Needs authentication");
-      expect(jira.closesImmediately).toBe(true);
-      jira.onSelect();
-      expect(onConnect).toHaveBeenCalledTimes(1);
-      expect(onToggleServer).not.toHaveBeenCalled();
-    });
-
-    it("keeps a failed server's switch live and says why it is idle", () => {
-      const onToggleServer = vi.fn();
-      const section = build({
-        servers: [server("wiki", "FAILURE")],
-        disabledServerIds: ["wiki"],
-        onToggleServer,
-      });
-
-      const wiki = itemOf(section, "wiki");
-      if (!isAddMenuToolItem(wiki)) {
-        throw new Error("server row is not a switch");
-      }
-      expect(wiki.checked).toBe(false);
-      expect(wiki.disabled).toBe(false);
-      expect(wiki.description).toBe(
-        "The server is configured, but the backend could not connect to it.",
-      );
-      wiki.onToggle();
-      expect(onToggleServer).toHaveBeenCalledWith("wiki");
-    });
-
-    it("locks only the switches while the chat's list is not known yet", () => {
-      const section = build({
-        servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],
-        onToggleServer: vi.fn(),
-        onConnect: vi.fn(),
-        serverSwitchesLocked: true,
-      });
-
-      expect(itemOf(section, "linear").disabled).toBe(true);
-      expect(itemOf(section, "jira").disabled).toBe(false);
-      expect(
-        section.items
-          .filter((item) => !item.id.startsWith("server-"))
-          .every((item) => !item.disabled),
-      ).toBe(true);
-    });
-
-    // The count is the trail into the browser, where the tools are switched;
-    // it only means something on a server that is on and healthy.
-    it("says how many of a server's tools are switched off, on a healthy server that is on", () => {
-      const section = build({
-        servers: [
-          server("linear"),
-          server("github"),
-          server("wiki", "FAILURE"),
-        ],
-        disabledServerIds: ["github"],
-        disabledToolPatterns: [
-          "linear/create_issue",
-          "linear/delete_issue",
-          "github/create_issue",
-          "wiki/edit_page",
-        ],
-        onToggleServer: vi.fn(),
-      });
-
-      const linear = itemOf(section, "linear");
-      const github = itemOf(section, "github");
-      const wiki = itemOf(section, "wiki");
-      expect(isAddMenuToolItem(linear) && linear.description).toBe(
-        "2 tools switched off",
-      );
-      expect(isAddMenuToolItem(github) && github.description).toBeUndefined();
-      expect(isAddMenuToolItem(wiki) && wiki.description).toBe(
-        "The server is configured, but the backend could not connect to it.",
-      );
-
-      const one = itemOf(
-        build({
-          servers: [server("linear")],
-          disabledToolPatterns: ["linear/create_issue"],
-          onToggleServer: vi.fn(),
-        }),
-        "linear",
-      );
-      expect(isAddMenuToolItem(one) && one.description).toBe(
-        "1 tool switched off",
-      );
-    });
-
-    // A wildcard entry has no number without the roster; the row says how
-    // far it reaches instead of counting the entry as one tool.
-    it("says all or some tools are off for a server a wildcard entry covers", () => {
-      const section = build({
-        servers: [server("linear"), server("files"), server("github")],
-        disabledToolPatterns: [
-          "linear/*",
-          "files/read/*",
-          "files/write_file",
-          "github/create_issue",
-        ],
-        onToggleServer: vi.fn(),
-      });
-
-      const linear = itemOf(section, "linear");
-      const files = itemOf(section, "files");
-      const github = itemOf(section, "github");
-      expect(isAddMenuToolItem(linear) && linear.description).toBe(
-        "All tools switched off",
-      );
-      expect(isAddMenuToolItem(files) && files.description).toBe(
-        "Some tools switched off",
-      );
-      expect(isAddMenuToolItem(github) && github.description).toBe(
-        "1 tool switched off",
-      );
-    });
-
-    it("locks the server rows with the rest of the group", () => {
-      const section = build({
-        servers: [server("linear"), server("jira", "NEEDS_AUTHENTICATION")],
-        onToggleServer: vi.fn(),
-        onConnect: vi.fn(),
-        disabled: true,
-      });
-
-      expect(section.items.every((item) => item.disabled)).toBe(true);
-    });
+describe("describeAllowChanges", () => {
+  it("describes the switch by its current state", () => {
+    expect(
+      describeAllowChanges({ enabled: true, pausesHostActions: true }),
+    ).toBe("Connected tools may create, change and delete things.");
+    expect(
+      describeAllowChanges({ enabled: false, pausesHostActions: false }),
+    ).toBe("Off: only tools the server marks read-only are offered.");
+    expect(
+      describeAllowChanges({ enabled: false, pausesHostActions: true }),
+    ).toBe(
+      "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
+    );
   });
 });

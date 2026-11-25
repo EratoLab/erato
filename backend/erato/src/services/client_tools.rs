@@ -2259,6 +2259,9 @@ mod tests {
             child_dispatch: None,
             approval_scope: Default::default(),
             called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
             approval: Default::default(),
             client_actions: Vec::new(),
         }

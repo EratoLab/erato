@@ -5,6 +5,7 @@ import {
   ChatBubbleIcon,
   ChatLinesIcon,
   EditIcon,
+  LockIcon,
   MailIcon,
   PageIcon,
   QuoteIcon,
@@ -35,6 +36,7 @@ const GLYPHS: Record<
   chats: ChatBubbleIcon,
   file: PageIcon,
   clock: TimerIcon,
+  lock: LockIcon,
 };
 
 const isIconName = (icon: string): icon is ComposerContextIconName =>

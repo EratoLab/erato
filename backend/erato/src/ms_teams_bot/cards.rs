@@ -67,6 +67,9 @@ pub struct PendingApprovalItem {
     /// The call this item decides when it runs in this chat, so the decided
     /// card can show how it ended.
     pub tool_call_id: Option<String>,
+    /// For a delegated task's item: the task's question, which a task that
+    /// asks again changes under the same `approval_id`.
+    pub question_id: Option<String>,
     /// The web's card for the call, once `render_cards` drew it.
     pub card: Option<ApprovalItemCard>,
 }
@@ -242,6 +245,10 @@ pub struct ApprovalSubmit {
     /// where an item runs elsewhere; only for the decided card's results.
     #[serde(default)]
     pub tool_call_ids: Vec<String>,
+    /// The task questions the items showed, in the order of `approval_ids`
+    /// and empty where an item is no task's.
+    #[serde(default)]
+    pub question_ids: Vec<String>,
     #[serde(flatten)]
     pub inputs: HashMap<String, Value>,
 }
@@ -438,6 +445,14 @@ fn build_approval_card(
         }
         if let Some(all) = all {
             data["all"] = json!(all);
+        }
+        if set.items.iter().any(|item| item.question_id.is_some()) {
+            data["question_ids"] = json!(
+                set.items
+                    .iter()
+                    .map(|item| item.question_id.as_deref().unwrap_or_default())
+                    .collect::<Vec<_>>()
+            );
         }
         if set.items.iter().any(|item| item.tool_call_id.is_some()) {
             data["tool_call_ids"] = json!(
@@ -1276,6 +1291,28 @@ mod tests {
         set.items[0].tool_call_id = Some("call-0".into());
         set.items[0].card = Some(web_card(emphasis));
         set
+    }
+
+    /// A task's item names the question the card showed, so the decision
+    /// cannot land on the next question the task asks under the same id.
+    #[test]
+    fn a_task_item_sends_the_question_it_showed() {
+        let mut set = set(2);
+        set.items[1].question_id = Some("child-message:2:call_second".into());
+        let card = approval_card(&set, "Erato", Lang::En);
+        let actions = &card["content"]["actions"];
+        assert_eq!(
+            actions[0]["data"]["question_ids"],
+            json!(["", "child-message:2:call_second"])
+        );
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 0, json!({}))).unwrap();
+        assert_eq!(submit.question_ids, ["", "child-message:2:call_second"]);
+        let without = approval_card(&self::set(1), "Erato", Lang::En);
+        assert!(
+            without["content"]["actions"][0]["data"]
+                .get("question_ids")
+                .is_none()
+        );
     }
 
     /// A call with a label reads as the web's card: no raw input, the web's

@@ -20,6 +20,7 @@ import { useApplyComposerPreset } from "@/hooks/chat/useComposerPreset";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
+import { useSharedItemsIntoComposer } from "@/hooks/files/useSharedItemsIntoComposer";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
@@ -44,6 +45,7 @@ import { ChatHistorySidebar } from "./ChatHistorySidebar";
 import { ChatInput } from "./ChatInput";
 import {
   ChatInputControlsProvider,
+  type AppendToDraftOptions,
   type ChatInputControlsHandle,
   type DraftMessageOptions,
 } from "./ChatInputControlsContext";
@@ -252,8 +254,8 @@ export const Chat = ({
       setDraftMessage: (message: string, options?: DraftMessageOptions) => {
         chatInputControlsRef.current?.setDraftMessage(message, options);
       },
-      appendToDraft: (block: string) => {
-        chatInputControlsRef.current?.appendToDraft?.(block);
+      appendToDraft: (block: string, options?: AppendToDraftOptions) => {
+        chatInputControlsRef.current?.appendToDraft?.(block, options);
       },
       focusInput: () => {
         chatInputControlsRef.current?.focusInput();
@@ -348,7 +350,11 @@ export const Chat = ({
     },
   );
 
-  const { maxSizeBytes, maxSizeFormatted } = useUploadFeature();
+  const {
+    enabled: uploadsEnabled,
+    maxSizeBytes,
+    maxSizeFormatted,
+  } = useUploadFeature();
 
   const { profile } = useProfile();
   const { enabled: chatSharingEnabled } = useChatSharingFeature();
@@ -754,6 +760,21 @@ export const Chat = ({
     maxSizeFormatted,
   });
 
+  useSharedItemsIntoComposer({
+    ready:
+      !readOnly &&
+      !composerDisabled &&
+      !isLastMessageBlockedByPromptInjection &&
+      !chatLoading &&
+      !isUploading,
+    uploadFiles,
+    addUploadedFiles: chatInputControls.addUploadedFiles,
+    appendToDraft: chatInputControls.appendToDraft,
+    uploadsEnabled,
+    maxSizeBytes,
+    maxSizeFormatted,
+  });
+
   if (process.env.NODE_ENV === "development") {
     logger.log(
       `Chat.tsx rendering. chatLoading: ${chatLoading}, currentChatId: ${currentChatId ?? ""}, sidebarCollapsed: ${sidebarCollapsed}, hasMessages: ${hasMessages}`,
@@ -802,7 +823,7 @@ export const Chat = ({
       handleFileAttachments={handleFileAttachments}
       chatId={currentChatId}
       assistantId={assistantId}
-      className="p-2 sm:p-4"
+      className="p-[var(--chat-composer-gutter)]"
       isLoading={chatLoading}
       disabled={composerDisabled || isLastMessageBlockedByPromptInjection}
       showControls

@@ -151,7 +151,8 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
     <div
       className={clsx(
         "flex items-center",
-        showOnHover && "theme-transition opacity-0 group-hover:opacity-100",
+        showOnHover &&
+          "theme-transition opacity-0 group-hover:opacity-100 no-hover:opacity-100",
         className,
       )}
       style={controlsRowStyle}

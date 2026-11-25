@@ -115,6 +115,16 @@ export type ApprovalCardPiece = {
    * consequence, recipients outside.
    */
   must_say?: boolean;
+  /**
+   * Other names of the field: as the card shows it, and as the vocabulary
+   * says it in each language. Words naming any of them name the piece.
+   */
+  names?: string[];
+  /**
+   * A field the card counts as "more" and says only when asked for by
+   * name. Hearing it never stands in for any piece of the card.
+   */
+  on_request?: boolean;
   role: ApprovalCardPieceRole;
   state: ApprovalCardPieceState;
 };
@@ -150,9 +160,15 @@ export type ApprovalDecisionItem = {
    */
   change_request?: string;
   /**
+   * For a delegated task's item: the `child_tool_call_id` of the question
+   * the card showed. A task that asks again keeps its `approval_id`, so this
+   * is what tells its questions apart.
+   */
+  child_tool_call_id?: string;
+  /**
    * What the user chose on a host's own card, such as a tick, for
-   * `approve` or `approve_always` of an item with `chained` set. Opaque to
-   * the server, at most 4 KiB of JSON; the apply call carries it to the
+   * `approve` or `approve_always` of an item with `follows` set. Opaque to
+   * the server, at most 4 KiB of JSON; the operation carries it to the
    * client as `confirmation`.
    */
   client_confirmation?: Record<string, any>;
@@ -206,9 +222,9 @@ export type ApprovalItem = {
    * is stored and replayed under it.
    */
   called_as?: string;
-  chained?: ChainedApprovalRef;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
+  follows?: ChainedApprovalRef;
   input: Value;
   /**
    * The item of an earlier stop on the same message this one replaces: the
@@ -347,6 +363,11 @@ export type ApprovalToolInfo = {
 };
 
 export type ApprovalVoiceCommand = {
+  /**
+   * For `repeat` without a piece: the fields the words fit equally, for
+   * asking which one is meant instead of guessing.
+   */
+  candidates?: string[];
   decision?: ApprovalVoiceDecision;
   meaning: ApprovalVoiceMeaning;
   /**
@@ -426,7 +447,7 @@ export type ApprovalVoiceMeaning =
  * What the voice just asked about the card, when the user's words may
  * answer it.
  */
-export type ApprovalVoiceQuestion = "which_text";
+export type ApprovalVoiceQuestion = "which_text" | "which_field";
 
 /**
  * What the device measured about the recording the words came from. Times
@@ -1095,7 +1116,7 @@ export type CardChangedError = {
 };
 
 /**
- * The accepted submission a server-chained apply call applies.
+ * The accepted proposal a server-called operation follows.
  */
 export type ChainedApprovalRef = {
   /**
@@ -1103,13 +1124,13 @@ export type ChainedApprovalRef = {
    * it offers no Always and takes no decision by voice.
    */
   decide_on_screen: boolean;
+  proposal_call_id: string;
   /**
    * The host's short code for why it asks again after it found, while
    * writing, that the user must confirm something, such as
    * `whole_document`.
    */
   reason?: string;
-  submission_call_id: string;
 };
 
 /**
