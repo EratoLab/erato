@@ -1,6 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setPageVisibility } from "@/test/pageVisibility";
+
 import { MUTE_GRACE_MS } from "../audioTuning";
 import {
   useMediaStreamTrackWatchdog,
@@ -183,5 +185,81 @@ describe("useMediaStreamTrackWatchdog", () => {
     track.end();
 
     expect(onTrackLost).not.toHaveBeenCalled();
+  });
+});
+
+describe("useMediaStreamTrackWatchdog while the page is hidden", () => {
+  it("reports `hidden` at once for a mute on a hidden page, as on a phone lock", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    setPageVisibility("hidden");
+    expect(onTrackLost).not.toHaveBeenCalled();
+    track.mute();
+
+    expect(onTrackLost).toHaveBeenCalledExactlyOnceWith("hidden");
+    vi.advanceTimersByTime(MUTE_GRACE_MS);
+    expect(onTrackLost).toHaveBeenCalledOnce();
+  });
+
+  it("reports `hidden` at once when the page hides after the track muted", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    track.mute();
+    setPageVisibility("hidden");
+
+    expect(onTrackLost).toHaveBeenCalledExactlyOnceWith("hidden");
+    vi.advanceTimersByTime(MUTE_GRACE_MS);
+    expect(onTrackLost).toHaveBeenCalledOnce();
+  });
+
+  it("reports nothing when a hidden page leaves the track live", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    setPageVisibility("hidden");
+    vi.advanceTimersByTime(MUTE_GRACE_MS);
+
+    expect(onTrackLost).not.toHaveBeenCalled();
+  });
+
+  it("still reports `muted` for a mute that outlives the grace window on a shown page", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    setPageVisibility("visible");
+    track.mute();
+    vi.advanceTimersByTime(MUTE_GRACE_MS);
+
+    expect(onTrackLost).toHaveBeenCalledExactlyOnceWith("muted");
+  });
+
+  it("reports `hidden` for a mute whose timer only runs long after, on a page that was frozen", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    track.mute();
+    // A frozen page runs no timers; the clock goes on without them.
+    vi.setSystemTime(Date.now() + 60_000);
+    vi.advanceTimersByTime(MUTE_GRACE_MS);
+
+    expect(onTrackLost).toHaveBeenCalledExactlyOnceWith("hidden");
+  });
+
+  it("watches a track that is muted already when it is attached", () => {
+    const { hook, onTrackLost } = renderWatchdog();
+    const track = new FakeTrack();
+    track.muted = true;
+    hook.result.current.watchTrack(track as unknown as MediaStreamTrack);
+
+    vi.advanceTimersByTime(MUTE_GRACE_MS + 1);
+
+    expect(onTrackLost).toHaveBeenCalledExactlyOnceWith("muted");
   });
 });

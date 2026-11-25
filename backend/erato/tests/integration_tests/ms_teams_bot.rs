@@ -401,7 +401,7 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
         .map(|item| (item.approval_id.clone(), ApprovalChoice::Reject))
         .collect();
     let resumed = host
-        .continue_approval(&session, parked.message_id, decisions)
+        .continue_approval(&session, parked.message_id, decisions, &[])
         .await
         .expect("continuation starts");
     // Before the broadcast fix, the continuation's completion never reached

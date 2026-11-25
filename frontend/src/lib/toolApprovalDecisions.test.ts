@@ -19,7 +19,7 @@ describe("isApprovalDecision", () => {
 });
 
 describe("buildContinueStreamBody", () => {
-  it("keeps the legacy body while one approval is open", () => {
+  it("names a single open item, so a late tap cannot answer a later card", () => {
     expect(
       buildContinueStreamBody({
         messageId: "message-1",
@@ -28,23 +28,47 @@ describe("buildContinueStreamBody", () => {
       }),
     ).toEqual({
       message_id: "message-1",
-      decision: "approve",
+      decisions: [{ approval_id: "call-a", decision: "approve" }],
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });
   });
 
-  it("names a single open item when asked to enumerate", () => {
+  it("names the question a task's item showed, so a late tap cannot answer its next one", () => {
     expect(
       buildContinueStreamBody({
         messageId: "message-1",
         decision: "approve",
-        approvalIds: ["call-a"],
-        enumerate: true,
+        approvalIds: ["task-a", "call-b"],
+        items: [
+          {
+            approval_id: "task-a",
+            child: { child_tool_call_id: "child-message:2:call_second" },
+          },
+          { approval_id: "call-b", child: null },
+        ],
       }),
     ).toEqual({
       message_id: "message-1",
-      decisions: [{ approval_id: "call-a", decision: "approve" }],
+      decisions: [
+        {
+          approval_id: "task-a",
+          decision: "approve",
+          child_tool_call_id: "child-message:2:call_second",
+        },
+        { approval_id: "call-b", decision: "approve" },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
+
+  it("keeps the legacy body only for a caller that knows no approval id", () => {
+    expect(
+      buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),
+    ).toEqual({
+      message_id: "message-1",
+      decision: "approve",
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });
@@ -91,8 +115,8 @@ describe("buildContinueStreamBody", () => {
   });
 
   it("answers a single open item with its own decision, not the default", () => {
-    // A one-row plan is still decided per row: the legacy body carries the
-    // row's answer rather than whatever the card's bulk default was.
+    // A one-row plan is still decided per row: the body carries the row's
+    // answer rather than whatever the card's bulk default was.
     expect(
       buildContinueStreamBody({
         messageId: "message-1",
@@ -102,7 +126,7 @@ describe("buildContinueStreamBody", () => {
       }),
     ).toEqual({
       message_id: "message-1",
-      decision: "withdraw",
+      decisions: [{ approval_id: "plan:0:0", decision: "withdraw" }],
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });
@@ -309,7 +333,7 @@ describe("buildContinueStreamBody", () => {
       }),
     ).toEqual({
       message_id: "message-1",
-      decision: "reject",
+      decisions: [{ approval_id: "call-a.apply", decision: "reject" }],
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
     });

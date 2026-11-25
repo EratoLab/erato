@@ -42,6 +42,15 @@ pub(super) fn heldout_set() -> SentenceSet {
     serde_json::from_str(include_str!("heldout_sentences.json")).expect("the held-out set is valid")
 }
 
+/// Questions for one field of the visit report card from MS staging
+/// (2026-11-23), with and without the fields' German names; scored by the
+/// eval, not part of the startup check.
+#[cfg(test)]
+pub(super) fn field_question_set() -> SentenceSet {
+    serde_json::from_str(include_str!("field_question_sentences.json"))
+        .expect("the field question set is valid")
+}
+
 /// The adversarial phrasings, as (language, words).
 pub(super) fn attacks() -> Vec<(&'static str, &'static str)> {
     include_str!("attacks.txt")

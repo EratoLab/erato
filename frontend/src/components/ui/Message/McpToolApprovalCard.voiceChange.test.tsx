@@ -240,19 +240,25 @@ describe("changing a card by voice", () => {
     fireEvent.click(screen.getByText("Allow once"));
     await waitFor(() =>
       expect(continueToolApproval).toHaveBeenCalledWith(
-        expect.objectContaining({ decision: "approve", enumerate: true }),
+        expect.objectContaining({
+          decision: "approve",
+          approvalIds: ["call-2"],
+        }),
       ),
     );
   });
 
-  it("a first card still sends the decision unnamed, as before", async () => {
+  it("a first card names its item too", async () => {
     const continueToolApproval = vi.fn().mockResolvedValue(undefined);
     renderCard(request, continueToolApproval);
     expect(spoken.items).toEqual([{ approvalId: "call-1", replaces: null }]);
     fireEvent.click(screen.getByText("Allow once"));
     await waitFor(() =>
       expect(continueToolApproval).toHaveBeenCalledWith(
-        expect.objectContaining({ decision: "approve", enumerate: false }),
+        expect.objectContaining({
+          decision: "approve",
+          approvalIds: ["call-1"],
+        }),
       ),
     );
   });

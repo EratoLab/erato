@@ -27,7 +27,7 @@ vi.mock("../Feedback/Alert", () => ({
 }));
 
 const mockOpenMcpServersSettings = vi.fn();
-let openSettings: (() => void) | null = null;
+let openSettings: ((serverId?: string) => void) | null = null;
 vi.mock("@/hooks/ui/useOpenMcpServersSettings", () => ({
   useOpenMcpServersSettings: () => openSettings,
 }));
@@ -35,9 +35,10 @@ vi.mock("@/hooks/ui/useOpenMcpServersSettings", () => ({
 const server = (
   id: string,
   connectionStatus: McpServerStatus["connection_status"] = "SUCCESS",
+  displayName = id,
 ): McpServerStatus => ({
   id,
-  display_name: id,
+  display_name: displayName,
   connection_status: connectionStatus,
   authentication_mode: "oauth2",
 });
@@ -113,6 +114,11 @@ const renderModal = (
       | "onToggleTool"
       | "toolSwitchesLocked"
       | "disabledServerIds"
+      | "onToggleServer"
+      | "serverSwitchesLocked"
+      | "writeToolsEnabled"
+      | "onToggleWriteTools"
+      | "pausesHostActions"
     >
   > = {},
 ) => {
@@ -211,7 +217,7 @@ describe("McpToolsBrowserModal", () => {
     });
     renderModal([server("linear")]);
 
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Connected tools");
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("Connectors");
     const row = serverRow("linear");
     expect(within(row).getByText("Connected")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -375,7 +381,7 @@ describe("McpToolsBrowserModal", () => {
 
       expect(
         screen.getByText(
-          "The tools each connected server offers in this chat. Switch a tool off to keep it out of this chat; decide what may run for you at all in Settings.",
+          "What this chat may use. Switch a connector off, or open it to switch single tools off, for this chat only.",
         ),
       ).toBeInTheDocument();
       expand(serverRow("linear"));
@@ -524,9 +530,11 @@ describe("McpToolsBrowserModal", () => {
       screen.queryByTestId("mcp-tools-browser-tools"),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("mcp-tools-browser-authorize"));
+    const connect = screen.getByTestId("mcp-tools-browser-authorize");
+    expect(connect).toHaveTextContent("Connect");
+    fireEvent.click(connect);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(mockOpenMcpServersSettings).toHaveBeenCalledTimes(1);
+    expect(mockOpenMcpServersSettings).toHaveBeenCalledWith("jira");
   });
 
   it("links into Settings, where decisions live", () => {
@@ -536,7 +544,7 @@ describe("McpToolsBrowserModal", () => {
     fireEvent.click(screen.getByTestId("mcp-tools-browser-manage"));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(mockOpenMcpServersSettings).toHaveBeenCalledTimes(1);
+    expect(mockOpenMcpServersSettings).toHaveBeenCalledWith(undefined);
   });
 
   // Without a settings dialog to open (component-kit and add-in hosts) both
@@ -555,6 +563,127 @@ describe("McpToolsBrowserModal", () => {
     expect(
       within(serverRow("jira")).getByText("Needs authentication"),
     ).toBeInTheDocument();
+  });
+
+  it("names each server as the listing does, with the ones waiting to connect last", () => {
+    stubToolsFetch({});
+    renderModal([
+      server("business_central", "SUCCESS", "Business Central"),
+      server("jira", "NEEDS_AUTHENTICATION", "Jira"),
+      server("teams", "SUCCESS", "Microsoft Teams"),
+    ]);
+
+    expect(
+      screen
+        .getAllByTestId("mcp-tools-browser-server")
+        .map(
+          (row) =>
+            within(row).getByRole("button", { expanded: false }).textContent,
+        ),
+    ).toEqual([
+      expect.stringContaining("Business Central"),
+      expect.stringContaining("Microsoft Teams"),
+      expect.stringContaining("Jira"),
+    ]);
+    expect(screen.queryByText("business_central")).not.toBeInTheDocument();
+  });
+
+  it("narrows the list as the user types a name", () => {
+    stubToolsFetch({});
+    renderModal([
+      server("business_central", "SUCCESS", "Business Central"),
+      server("teams", "SUCCESS", "Microsoft Teams"),
+    ]);
+
+    fireEvent.change(screen.getByTestId("mcp-tools-browser-search"), {
+      target: { value: "teams" },
+    });
+
+    expect(screen.getAllByTestId("mcp-tools-browser-server")).toHaveLength(1);
+    expect(serverRow("Microsoft Teams")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("mcp-tools-browser-search"), {
+      target: { value: "zzz" },
+    });
+    expect(
+      screen.getByText("No connectors match your search"),
+    ).toBeInTheDocument();
+  });
+
+  it("switches a connected server for this chat from its row, without opening it", () => {
+    stubToolsFetch({});
+    const onToggleServer = vi.fn();
+    renderModal(
+      [
+        server("linear", "SUCCESS", "Linear"),
+        server("jira", "NEEDS_AUTHENTICATION", "Jira"),
+      ],
+      vi.fn(),
+      { disabledServerIds: ["linear"], onToggleServer },
+    );
+
+    const linearSwitch = within(serverRow("Linear")).getByRole("checkbox", {
+      name: "Use Linear in this chat",
+    });
+    expect(linearSwitch).not.toBeChecked();
+    expect(
+      within(serverRow("Linear")).getByText("Switched off for this chat"),
+    ).toBeInTheDocument();
+    fireEvent.click(linearSwitch);
+    expect(onToggleServer).toHaveBeenCalledWith("linear");
+    expect(
+      screen.queryByTestId("mcp-tools-browser-tools"),
+    ).not.toBeInTheDocument();
+    // A server that still waits for the user has nothing to switch.
+    expect(
+      within(serverRow("Jira")).queryByRole("checkbox"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("locks the server switches while the chat's list is not known yet", () => {
+    stubToolsFetch({});
+    renderModal([server("linear", "SUCCESS", "Linear")], vi.fn(), {
+      onToggleServer: vi.fn(),
+      serverSwitchesLocked: true,
+    });
+
+    expect(within(serverRow("Linear")).getByRole("checkbox")).toBeDisabled();
+  });
+
+  it("holds the chat's Allow changes switch in the footer, described by its current state", () => {
+    stubToolsFetch({});
+    const onToggleWriteTools = vi.fn();
+    renderModal([server("linear")], vi.fn(), {
+      writeToolsEnabled: true,
+      onToggleWriteTools,
+    });
+
+    const allowChanges = screen.getByRole("checkbox", {
+      name: "Allow changes",
+    });
+    expect(allowChanges).toBeChecked();
+    expect(allowChanges).toHaveAccessibleDescription(
+      "Connected tools may create, change and delete things.",
+    );
+    fireEvent.click(allowChanges);
+    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("says that host actions pause too when changes are off in an add-in", () => {
+    stubToolsFetch({});
+    renderModal([server("linear")], vi.fn(), {
+      writeToolsEnabled: false,
+      onToggleWriteTools: vi.fn(),
+      pausesHostActions: true,
+    });
+
+    const allowChanges = screen.getByRole("checkbox", {
+      name: "Allow changes",
+    });
+    expect(allowChanges).not.toBeChecked();
+    expect(allowChanges).toHaveAccessibleDescription(
+      "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
+    );
   });
 
   it("says so when no server is available", () => {

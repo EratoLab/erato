@@ -142,6 +142,7 @@ pub struct FixedWords {
     pub(super) date_prepositions: HashSet<String>,
     pub(super) date_words: HashSet<String>,
     pub(super) repeat_cues: Vec<Vec<String>>,
+    pub(super) content_cues: Vec<Vec<String>>,
     pub(super) read_cues: Vec<Vec<String>>,
     pub(super) rest_ask: HashSet<String>,
     pub(super) rest_what: HashSet<String>,
@@ -189,6 +190,7 @@ fn fixed_words() -> &'static FixedWords {
             date_prepositions: fixed_set(DATE_PREPOSITIONS),
             date_words: fixed_set(DATE_WORDS),
             repeat_cues: cue_list(REPEAT_CUES),
+            content_cues: cue_list(CONTENT_CUES),
             read_cues: cue_list(READ_CUES),
             rest_ask: fixed_set(REST_ASK),
             rest_what: fixed_set(REST_WHAT),
@@ -1007,6 +1009,39 @@ mod tests {
         );
         assert_eq!(wait_lines.tools["de"].items, None);
         assert_eq!(dropped.len(), 4, "{dropped:#?}");
+    }
+
+    /// The sentence the voice says while an approval by voice goes out, as
+    /// the web app's catalogs have it (`spokenCard.notice.approved`; its test
+    /// pins the same text): never a confirmation phrase, and nothing the
+    /// rules of either language take for any command, on any example card.
+    #[test]
+    fn approval_acknowledgement_sentences_are_never_commands() {
+        let by_language = CommandWordsByLanguage::default();
+        for sentence in [
+            "Gut, ich führe das jetzt aus.",
+            "All right, I'm running it now.",
+        ] {
+            for language in SHARED_LANGUAGES {
+                let words = by_language.for_language(language);
+                assert!(
+                    super::super::phrase::match_phrase(sentence, words).is_none(),
+                    "{sentence:?} is a phrase in {language}"
+                );
+                for card in &super::super::corpus::CORPUS.cards {
+                    let input = super::super::VoiceCommandInput {
+                        transcript: sentence,
+                        language,
+                        pieces: &card.pieces,
+                        current_piece_id: Some(&card.current_piece_id),
+                        question: None,
+                    };
+                    let heard = super::super::classify_by_rules(&input, words)
+                        .map(|classified| classified.command.meaning.wire_name());
+                    assert_eq!(heard, None, "{sentence:?} with the {language} rules");
+                }
+            }
+        }
     }
 
     /// The lines of the `erato-wait-lines` configuration package.

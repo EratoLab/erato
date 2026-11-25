@@ -1035,6 +1035,11 @@ const noticeSentence = (
         id: "spokenCard.notice.declined",
         message: "All right, I won't do it.",
       });
+    case "approved":
+      return t({
+        id: "spokenCard.notice.approved",
+        message: "All right, I'm running it now.",
+      });
     case "decision_failed":
       return t({
         id: "spokenCard.notice.decisionFailed",
@@ -1129,6 +1134,22 @@ const noticeSentence = (
         message: select(shape, {
           named: `Which text: ${texts}?`,
           other: "Which text? The texts are on screen.",
+        }),
+      });
+    }
+    case "which_field": {
+      const named = notice.fields.every((field) => field.length > 0);
+      const fields = named
+        ? new Intl.ListFormat(locale, { type: "disjunction" }).format(
+            notice.fields,
+          )
+        : "";
+      const shape = named ? "named" : "unnamed";
+      return t({
+        id: "spokenCard.notice.whichField",
+        message: select(shape, {
+          named: `Which field: ${fields}?`,
+          other: "Which field? Please say its name.",
         }),
       });
     }

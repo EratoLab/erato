@@ -923,7 +923,7 @@ async fn a_cancel_in_teams_is_approved_in_teams(pool: Pool<Postgres>) {
 
     let decisions = vec![(set.items[0].approval_id.clone(), ApprovalChoice::Approve)];
     let resumed = completion(
-        host.continue_approval(&session, parked.message_id, decisions)
+        host.continue_approval(&session, parked.message_id, decisions, &[])
             .await
             .unwrap(),
     )

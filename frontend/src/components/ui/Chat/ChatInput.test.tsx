@@ -40,6 +40,7 @@ import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { setPageVisibility } from "@/test/pageVisibility";
 import {
   teamsIndex,
   teamsMessage,
@@ -50,11 +51,16 @@ import {
 import { ChatInput, type ComposerSizeLimit } from "./ChatInput";
 import { useToastStore } from "../Toast/toastStore";
 
-import type { AddMenuActionItem, AddMenuSection } from "./ChatInputAddMenu";
+import type {
+  AddMenuActionItem,
+  AddMenuSection,
+  AddMenuToolItem,
+} from "./ChatInputAddMenu";
 import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
 import type {
   ComposerContextChipFaceProps,
   ComposerContextItem,
+  ComposerMode,
 } from "./ComposerContext/types";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { TeamsTranscriptContextEntry } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
@@ -83,6 +89,7 @@ const mockUseAssistantHubConfig = vi.fn();
 const mockUseListAssistantHubAssistants = vi.fn();
 const mockUseFrequentAssistants = vi.fn();
 const mockUseListMcpServers = vi.fn();
+const mockUseGetAssistant = vi.fn();
 const mockUseChatDetail = vi.fn();
 const mockUseUpdateChat = vi.fn();
 const mockUseOptionalTranslation = vi.fn();
@@ -98,6 +105,8 @@ const mockFileUploadControl = vi.fn();
 const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
 const mockUseIsMobile = vi.fn();
+const mockUseIsNarrowTouchScreen = vi.fn();
+const mockUseIsTouchPointer = vi.fn();
 const mockChatInputAddControls = vi.fn();
 
 vi.mock("@/providers/ChatProvider", async () =>
@@ -199,6 +208,7 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useFrequentAssistants: (...args: unknown[]) =>
     mockUseFrequentAssistants(...args),
   useListMcpServers: (...args: unknown[]) => mockUseListMcpServers(...args),
+  useGetAssistant: (...args: unknown[]) => mockUseGetAssistant(...args),
   useChatDetail: (...args: unknown[]) => mockUseChatDetail(...args),
   useUpdateChat: (...args: unknown[]) => mockUseUpdateChat(...args),
   chatDetailQuery: (variables: { pathParams: { chatId: string } }) => ({
@@ -288,6 +298,8 @@ vi.mock("./ChatInputTokenUsage", () => ({
 
 vi.mock("@/hooks/useResponsive", () => ({
   useIsMobile: () => mockUseIsMobile(),
+  useIsNarrowTouchScreen: () => mockUseIsNarrowTouchScreen(),
+  useIsTouchPointer: () => mockUseIsTouchPointer(),
 }));
 
 // The "+" menu's own rendering of the section is covered against the real
@@ -316,6 +328,11 @@ vi.mock("./ModelSelector", () => ({
     mockModelSelector(props);
     return <div data-testid="model-selector" />;
   },
+  ModelSelectorOptionContent: ({
+    model,
+  }: {
+    model: { model_display_name: string };
+  }) => <span>{model.model_display_name}</span>,
 }));
 
 vi.mock("../Controls/Button", () => ({
@@ -375,23 +392,44 @@ vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
 vi.mock("./McpToolsBrowserModal", () => ({
   McpToolsBrowserModal: (props: {
     isOpen: boolean;
+    servers: { id: string }[];
     disabledToolPatterns?: string[];
     disabledServerIds?: string[];
     toolSwitchesLocked?: boolean;
+    serverSwitchesLocked?: boolean;
+    writeToolsEnabled?: boolean;
+    pausesHostActions?: boolean;
     onToggleTool?: (serverId: string, toolName: string) => void;
+    onToggleServer?: (serverId: string) => void;
+    onToggleWriteTools?: () => void;
   }) => (
     <div
       data-testid="mcp-tools-browser-modal"
       data-open={String(props.isOpen)}
+      data-server-ids={props.servers.map((server) => server.id).join(",")}
       data-disabled-tools={(props.disabledToolPatterns ?? []).join(",")}
       data-disabled-servers={(props.disabledServerIds ?? []).join(",")}
       data-switches-locked={String(props.toolSwitchesLocked ?? false)}
+      data-server-switches-locked={String(props.serverSwitchesLocked ?? false)}
+      data-write-enabled={String(props.writeToolsEnabled ?? true)}
+      data-pauses-host-actions={String(props.pausesHostActions ?? false)}
     >
-      {/* Stands in for one tool row's switch, so the wiring can be flipped. */}
+      {/* Stand in for one tool row's switch, the linear row's switch and the
+          footer's write switch, so the wiring can be flipped. */}
       <button
         type="button"
         data-testid="mcp-tools-browser-tool-probe"
         onClick={() => props.onToggleTool?.("linear", "create_issue")}
+      />
+      <button
+        type="button"
+        data-testid="mcp-tools-browser-server-probe"
+        onClick={() => props.onToggleServer?.("linear")}
+      />
+      <button
+        type="button"
+        data-testid="mcp-tools-browser-write-probe"
+        onClick={() => props.onToggleWriteTools?.()}
       />
     </div>
   ),
@@ -445,6 +483,8 @@ describe("ChatInput", () => {
     });
 
     mockUseIsMobile.mockReturnValue(false);
+    mockUseIsNarrowTouchScreen.mockReturnValue(false);
+    mockUseIsTouchPointer.mockReturnValue(false);
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAssistantsFeature.mockReturnValue({
       enabled: false,
@@ -458,6 +498,7 @@ describe("ChatInput", () => {
       mcpServersTabEnabled: false,
     });
     mockUseListMcpServers.mockReturnValue({ data: undefined });
+    mockUseGetAssistant.mockReturnValue({ data: undefined, isPending: false });
     mockUseChatDetail.mockReturnValue({ data: undefined });
     mockUseUpdateChat.mockReturnValue({
       mutateAsync: vi.fn().mockResolvedValue({}),
@@ -952,6 +993,20 @@ describe("ChatInput", () => {
       expect(textarea.selectionEnd).toBe(expected.length);
     });
 
+    it("appends plain text with the caret on its line", async () => {
+      const controls = createRef<ChatInputControlsHandle>();
+      await renderChatInput(null, controls);
+      const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+
+      act(() => {
+        controls.current?.appendToDraft?.("https://example.com/", {
+          emptyLineAfter: false,
+        });
+      });
+      expect(textarea).toHaveValue("https://example.com/ ");
+      expect(textarea.selectionStart).toBe(textarea.value.length);
+    });
+
     it("re-initializes facets on a genuine chat switch", async () => {
       const { rerender } = await renderChatInput("chat-a");
 
@@ -1135,9 +1190,22 @@ describe("ChatInput", () => {
       });
       mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
 
-      await renderComposer();
+      const { container } = await renderComposer();
 
       expect(screen.queryByText(plainAdvisory)).not.toBeInTheDocument();
+      expect(container.querySelector("form")).not.toHaveClass("pb-0");
+    });
+
+    it("shows nothing below the composer on a phone, even when enabled", async () => {
+      mockUseIsMobile.mockReturnValue(true);
+      mockUseOptionalTranslation.mockReturnValue(plainAdvisory);
+
+      const { container } = await renderComposer();
+
+      expect(
+        container.querySelector('[data-ui="chat-usage-advisory"]'),
+      ).toBeNull();
+      expect(container.querySelector("form")).not.toHaveClass("pb-0");
     });
 
     it("leaves the advisory and the form padding to the parent when renderUsageAdvisory is false", async () => {
@@ -1200,6 +1268,246 @@ describe("ChatInput", () => {
     expect(onControlledSelectedModelChange).toHaveBeenCalledWith(
       controlledModel,
     );
+  });
+
+  describe("on a narrow touch screen", () => {
+    const models = [
+      { chat_provider_id: "model-a", model_display_name: "Model A" },
+      { chat_provider_id: "model-b", model_display_name: "Model B" },
+    ];
+
+    const renderPhoneComposer = async ({
+      touch,
+      enforceTools = false,
+      availableModels = models,
+      audioMode,
+    }: {
+      touch: boolean;
+      enforceTools?: boolean;
+      availableModels?: typeof models;
+      audioMode?: boolean;
+    }) => {
+      mockUseIsMobile.mockReturnValue(true);
+      mockUseIsNarrowTouchScreen.mockReturnValue(touch);
+      mockUseFacets.mockReturnValue({
+        data: {
+          facets: [
+            { id: "search", display_name: "Search", default_enabled: true },
+            { id: "files", display_name: "Files", default_enabled: false },
+          ],
+          global_facet_settings: undefined,
+        },
+        error: null,
+      });
+      const onModelChange = vi.fn();
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      const composer = (inAudioMode: boolean | undefined) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledAvailableModels={availableModels}
+              controlledSelectedModel={availableModels[0]}
+              onControlledSelectedModelChange={onModelChange as never}
+              controlledIsModelSelectionReady
+              enforceSelectedFacetIds={enforceTools}
+              controlledIsAudioMode={inAudioMode}
+              onControlledIsAudioModeChange={
+                inAudioMode === undefined ? undefined : vi.fn()
+              }
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const view = render(composer(audioMode));
+      const setAudioMode = (next: boolean) => view.rerender(composer(next));
+      return { ...view, onModelChange, setAudioMode };
+    };
+
+    const addControlsProps = () =>
+      mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
+        modelSection?: AddMenuSection;
+        selectedToolCount?: number;
+        toolsDisabledReason?: string;
+      };
+
+    it("marks the shell one-line, drops the tool chips and model picker, and hands the model and tool count to the + menu", async () => {
+      const { container, onModelChange } = await renderPhoneComposer({
+        touch: true,
+      });
+
+      expect(
+        container.querySelector('[data-ui="chat-input-shell"]'),
+      ).toHaveAttribute("data-layout", "one-line");
+      expect(screen.queryByTestId("model-selector")).toBeNull();
+      expect(
+        container.querySelector('[data-ui="composer-tool-chips"]'),
+      ).toBeNull();
+
+      const { modelSection, selectedToolCount } = addControlsProps();
+      expect(selectedToolCount).toBe(1);
+      const items = modelSection?.items as AddMenuToolItem[];
+      expect(items.map((item) => [item.checked, item.exclusive])).toEqual([
+        [true, true],
+        [false, true],
+      ]);
+      items[1].onToggle();
+      expect(onModelChange).toHaveBeenCalledWith(models[1]);
+    });
+
+    it("reads +, the field, then the buttons in the order they show", async () => {
+      const { container } = await renderPhoneComposer({ touch: true });
+
+      const controls = container.querySelector(
+        '[data-ui="chat-input-controls"]',
+      )!;
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      expect(controls).toContainElement(textarea);
+      expect(
+        screen
+          .getByTestId("chat-input-add-controls")
+          .compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("still names the one model there is, in the + menu", async () => {
+      await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
+
+      expect(addControlsProps().modelSection?.items).toHaveLength(1);
+    });
+
+    it("says in the + menu why an assistant's tools cannot be changed", async () => {
+      await renderPhoneComposer({ touch: true, enforceTools: true });
+
+      expect(addControlsProps().toolsDisabledReason).toBe(
+        "This assistant sets the tools for its chats.",
+      );
+    });
+
+    describe("in audio mode", () => {
+      const microphone = (open: boolean, completing = false) => {
+        mockUseAudioDictationFeature.mockReturnValue({
+          enabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseAudioDictationRecorder.mockReturnValue({
+          isDictating: open,
+          isDictationStarting: false,
+          isDictationCompleting: completing,
+          isCapturingAudio: open,
+          dictationError: null,
+          setDictationError: vi.fn(),
+          dictationBars: [3, 6, 9, 6, 3],
+          toggleDictation: vi.fn(),
+        });
+      };
+
+      afterEach(() => {
+        useSpeechPlayback.setState({ playing: false });
+      });
+
+      it.each([
+        ["Listening", "the microphone is open"],
+        ["Speaking", "the voice speaks"],
+        ["Speaking", "the voice speaks and the microphone listens over it"],
+        ["Thinking", "what was said is written down"],
+        ["Thinking", "the answer is coming"],
+        ["Audio mode is on", "nothing else happens"],
+      ] as const)(
+        "writes %s where the field was while %s",
+        async (label, state) => {
+          microphone(
+            state === "the microphone is open" ||
+              state === "the voice speaks and the microphone listens over it",
+            state === "what was said is written down",
+          );
+          if (state.startsWith("the voice speaks"))
+            useSpeechPlayback.setState({ playing: true });
+          if (state === "the answer is coming")
+            mockUseChatContext.mockReturnValue({
+              isPendingResponse: true,
+              isMessagingLoading: false,
+              isUploading: false,
+              cancelMessage: vi.fn(),
+            });
+
+          const { container } = await renderPhoneComposer({
+            touch: true,
+            audioMode: true,
+          });
+
+          const status = screen.getByTestId("chat-input-audio-mode-status");
+          expect(status).toHaveTextContent(label);
+          expect(
+            container.querySelector('[data-ui="chat-input-controls"]'),
+          ).toContainElement(status);
+        },
+      );
+
+      it("writes nothing in the rows of a narrow window under a mouse", async () => {
+        microphone(true);
+
+        await renderPhoneComposer({ touch: false, audioMode: true });
+
+        expect(screen.queryByTestId("chat-input-audio-mode-status")).toBeNull();
+      });
+
+      it.each([
+        ["leaves the keyboard closed", "on a narrow touch screen", true, false],
+        ["leaves the keyboard closed", "on a wide touch screen", false, false],
+        ["focuses the field", "under a mouse", false, true],
+      ] as const)(
+        "%s when audio mode ends %s",
+        async (_, __, narrowTouch, hoveringPointer) => {
+          mockUseChatInputFeature.mockReturnValue({ autofocus: true });
+          mockUseIsTouchPointer.mockReturnValue(!hoveringPointer);
+          microphone(true);
+          const { setAudioMode } = await renderPhoneComposer({
+            touch: narrowTouch,
+            audioMode: true,
+          });
+          microphone(false);
+          setAudioMode(false);
+
+          const field = screen.getByPlaceholderText("Type a message...");
+          if (hoveringPointer) expect(field).toHaveFocus();
+          else expect(field).not.toHaveFocus();
+        },
+      );
+
+      it("writes no second listening state beside a held hesitation", async () => {
+        microphone(true);
+        mockUseAudioDictationRecorder.mockReturnValue({
+          ...mockUseAudioDictationRecorder(),
+          heldHesitation: "äh",
+        });
+
+        await renderPhoneComposer({ touch: true, audioMode: true });
+
+        expect(
+          screen.getByTestId("chat-input-audio-hesitation"),
+        ).toBeInTheDocument();
+        expect(screen.queryByTestId("chat-input-audio-mode-status")).toBeNull();
+      });
+    });
+
+    it("keeps the rows of a narrow window under a mouse", async () => {
+      const { container } = await renderPhoneComposer({ touch: false });
+
+      expect(
+        container.querySelector('[data-ui="chat-input-shell"]'),
+      ).not.toHaveAttribute("data-layout");
+      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+      expect(addControlsProps().modelSection).toBeUndefined();
+      expect(addControlsProps().selectedToolCount).toBeUndefined();
+    });
   });
 
   it("hides the inline model selector when a top-left accessory override is registered", async () => {
@@ -2662,6 +2970,66 @@ describe("ChatInput", () => {
       ).toMatchObject({
         vadAutoStopEnabled: true,
       });
+    });
+
+    it("listens again only once the page is shown after a phone lock ended the turn", async () => {
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      let listening = false;
+      const toggleDictation = vi.fn();
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockImplementation(() => ({
+        isDictating: listening,
+        isDictationStarting: false,
+        isDictationCompleting: false,
+        isCapturingAudio: listening,
+        dictationError: null,
+        setDictationError: vi.fn(),
+        dictationBars: [2, 2, 2, 2, 2],
+        toggleDictation,
+      }));
+
+      const { i18n } = await import("@lingui/core");
+      const composer = (audioMode: boolean) => (
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledIsAudioMode={audioMode}
+              onControlledIsAudioModeChange={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>
+      );
+      const { rerender } = render(composer(false));
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(composer(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      listening = true;
+      rerender(composer(true));
+
+      const options = mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0] as {
+        onStoppedByHiddenPage?: () => void;
+      };
+      act(() => {
+        setPageVisibility("hidden");
+        listening = false;
+        options.onStoppedByHiddenPage?.();
+      });
+      rerender(composer(true));
+      expect(toggleDictation).toHaveBeenCalledTimes(1);
+
+      act(() => setPageVisibility("visible"));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      vi.restoreAllMocks();
     });
 
     it("asks which audio mode to start when transcript and conversational modes are available", async () => {
@@ -5702,10 +6070,12 @@ describe("ChatInput", () => {
 
         const section = mockFacetSelector.mock.calls.at(-1)?.[0]
           .assistantSection as AddMenuSection;
-        const researcher = section.items.find(
-          (item) => item.label === "Researcher",
-        ) as AddMenuActionItem;
-        act(() => researcher.onSelect());
+        act(() => (section.items[0] as AddMenuActionItem).onSelect());
+        fireEvent.click(
+          screen.getByTestId(
+            "chat-input-mention-browse-option-assistant-research",
+          ),
+        );
 
         expect(textarea).toHaveValue("please review @Researcher ");
         expect(textarea).toHaveFocus();
@@ -5826,12 +6196,13 @@ describe("ChatInput", () => {
       const props = mockChatInputAddControls.mock.calls.at(-1)?.[0] as {
         assistantSection: AddMenuSection;
       };
-      expect(props.assistantSection.header).toBe("Assistants");
+      expect(props.assistantSection.header).toBeUndefined();
       expect(props.assistantSection.items.map((item) => item.label)).toEqual([
-        "Researcher",
-        "Editor",
-        "Browse assistants…",
+        "Ask an assistant…",
       ]);
+      expect(props.assistantSection.items[0].description).toBe(
+        "Researcher and 1 more you use often",
+      );
     });
 
     it("gives the desktop tool surface the same assistants section", async () => {
@@ -5847,11 +6218,9 @@ describe("ChatInput", () => {
 
       const section = mockFacetSelector.mock.calls.at(-1)?.[0]
         .assistantSection as AddMenuSection;
-      expect(section.header).toBe("Assistants");
+      expect(section.header).toBeUndefined();
       expect(section.items.map((item) => item.label)).toEqual([
-        "Researcher",
-        "Editor",
-        "Browse assistants…",
+        "Ask an assistant…",
       ]);
     });
 
@@ -7262,13 +7631,13 @@ describe("ChatInput", () => {
   describe("connectors", () => {
     const CONNECTED = {
       id: "linear",
-      display_name: "linear",
+      display_name: "Linear",
       connection_status: "SUCCESS",
       authentication_mode: "oauth2",
     };
     const UNCONNECTED = {
       id: "jira",
-      display_name: "jira",
+      display_name: "Jira",
       connection_status: "NEEDS_AUTHENTICATION",
       authentication_mode: "oauth2",
     };
@@ -7312,7 +7681,11 @@ describe("ChatInput", () => {
     const renderComposer = async (
       chatId: string | null,
       onSendMessage: (...args: unknown[]) => void = vi.fn(),
-      props: { pausesHostActionsWhenWritesOff?: boolean } = {},
+      props: {
+        pausesHostActionsWhenWritesOff?: boolean;
+        assistantId?: string;
+        composerModes?: ComposerMode[];
+      } = {},
     ) => {
       const queryClient = new QueryClient({
         defaultOptions: {
@@ -7342,26 +7715,35 @@ describe("ChatInput", () => {
         }
       ).mcpToolsSection;
 
-    const writeToggle = () => {
-      const section = latestConnectorsSection();
-      const item = section?.items.find(
-        (candidate) => candidate.id === "allow-write-operations",
-      );
-      if (!item || !("onToggle" in item)) {
-        throw new Error("write toggle not offered");
+    const connectorsRow = () => {
+      const item = latestConnectorsSection()?.items[0];
+      if (!item || "onToggle" in item) {
+        throw new Error("connectors row not offered");
       }
       return item;
     };
 
-    it("offers the connectors group once a connected server exists", async () => {
+    const browser = () => screen.getByTestId("mcp-tools-browser-modal");
+    const flipInBrowser = async (probe: "tool" | "server" | "write") => {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`mcp-tools-browser-${probe}-probe`));
+      });
+    };
+
+    it("offers one connectors row that opens the connectors dialog", async () => {
       enableConnectors([UNCONNECTED, CONNECTED]);
       await renderComposer("chat-1");
 
-      expect(latestConnectorsSection()?.header).toBe("Connectors");
-      expect(screen.getByTestId("mcp-tools-browser-modal")).toHaveAttribute(
-        "data-open",
-        "false",
-      );
+      expect(latestConnectorsSection()?.header).toBeUndefined();
+      expect(connectorsRow().label).toBe("Connectors…");
+      expect(connectorsRow().description).toBe("1 on · 1 to connect");
+      expect(browser()).toHaveAttribute("data-open", "false");
+      expect(browser()).toHaveAttribute("data-server-ids", "jira,linear");
+
+      await act(async () => {
+        connectorsRow().onSelect();
+      });
+      expect(browser()).toHaveAttribute("data-open", "true");
     });
 
     // A server the user still has to authorize is listed too: the browser is
@@ -7370,8 +7752,8 @@ describe("ChatInput", () => {
       enableConnectors([UNCONNECTED]);
       await renderComposer("chat-1");
 
-      expect(latestConnectorsSection()?.header).toBe("Connectors");
-      expect(writeToggle().checked).toBe(true);
+      expect(connectorsRow().description).toBe("1 to connect");
+      expect(browser()).toHaveAttribute("data-write-enabled", "true");
     });
 
     it("withholds the group while no server is listed for the user", async () => {
@@ -7408,7 +7790,7 @@ describe("ChatInput", () => {
         });
         await renderComposer("chat-1");
         if (enabled) {
-          expect(latestConnectorsSection()?.header).toBe("Connectors");
+          expect(connectorsRow().label).toBe("Connectors…");
           expect(mockUseListMcpServers).toHaveBeenLastCalledWith(
             {},
             expect.any(Object),
@@ -7433,16 +7815,15 @@ describe("ChatInput", () => {
       const onSendMessage = vi.fn();
       const textarea = await renderComposer("chat-1", onSendMessage);
 
-      expect(writeToggle().checked).toBe(true);
-      await act(async () => {
-        writeToggle().onToggle();
-      });
+      expect(browser()).toHaveAttribute("data-write-enabled", "true");
+      await flipInBrowser("write");
 
       expect(mutateAsync).toHaveBeenCalledWith({
         pathParams: { chatId: "chat-1" },
         body: { mcp_write_tools_enabled: false },
       });
-      expect(writeToggle().checked).toBe(false);
+      expect(browser()).toHaveAttribute("data-write-enabled", "false");
+      expect(connectorsRow().description).toBe("1 on · read only");
 
       // The row is the writer for an existing chat: nothing rides on the send.
       fireEvent.change(textarea, { target: { value: "now read only" } });
@@ -7463,10 +7844,8 @@ describe("ChatInput", () => {
       const onSendMessage = vi.fn();
       const textarea = await renderComposer(null, onSendMessage);
 
-      await act(async () => {
-        writeToggle().onToggle();
-      });
-      expect(writeToggle().checked).toBe(false);
+      await flipInBrowser("write");
+      expect(browser()).toHaveAttribute("data-write-enabled", "false");
       expect(mutateAsync).not.toHaveBeenCalled();
 
       fireEvent.change(textarea, { target: { value: "first message" } });
@@ -7500,47 +7879,103 @@ describe("ChatInput", () => {
       );
     });
 
-    it("names the paused host actions when the host asks for it", async () => {
+    it("tells the dialog to name the paused host actions when the host asks for it", async () => {
       enableConnectors();
       await renderComposer("chat-1", vi.fn(), {
         pausesHostActionsWhenWritesOff: true,
       });
 
-      expect(writeToggle().description).toBe(
-        "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
-      );
+      expect(browser()).toHaveAttribute("data-pauses-host-actions", "true");
     });
 
-    const serverRow = (serverId: string) => {
-      const item = latestConnectorsSection()?.items.find(
-        (candidate) => candidate.id === `server-${serverId}`,
-      );
-      if (!item) {
-        throw new Error(`row for ${serverId} not offered`);
-      }
-      return item;
-    };
-
-    const serverSwitch = (serverId: string) => {
-      const item = serverRow(serverId);
-      if (!("onToggle" in item)) {
-        throw new Error(`row for ${serverId} is not a switch`);
-      }
-      return item;
-    };
-
-    it("lists every server ahead of the write switch, connected ones as switches", async () => {
-      enableConnectors([CONNECTED, UNCONNECTED]);
+    it("shows a Read only mode while changes are off, whose end allows them again", async () => {
+      enableConnectors();
+      const mutateAsync = vi.fn().mockResolvedValue({});
+      mockUseUpdateChat.mockReturnValue({ mutateAsync, isPending: false });
+      mockUseChatDetail.mockReturnValue({
+        data: { id: "chat-1", mcp_write_tools_enabled: false },
+      });
       await renderComposer("chat-1");
 
-      expect(latestConnectorsSection()?.items.map((item) => item.id)).toEqual([
-        "server-linear",
-        "server-jira",
-        "allow-write-operations",
-        "browse-tools",
-      ]);
-      expect(serverSwitch("linear").checked).toBe(true);
-      expect("onToggle" in serverRow("jira")).toBe(false);
+      const mode = screen.getByRole("group", { name: "Read only" });
+      await act(async () => {
+        fireEvent.click(
+          within(mode).getByRole("button", { name: "Allow changes again" }),
+        );
+      });
+
+      expect(mutateAsync).toHaveBeenCalledWith({
+        pathParams: { chatId: "chat-1" },
+        body: { mcp_write_tools_enabled: true },
+      });
+      expect(
+        screen.queryByRole("group", { name: "Read only" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lists only the assistant's servers in a new chat with an assistant", async () => {
+      enableConnectors([CONNECTED, UNCONNECTED]);
+      mockUseGetAssistant.mockReturnValue({
+        data: { id: "assistant-1", mcp_server_ids: ["linear"] },
+        isPending: false,
+      });
+      await renderComposer(null, vi.fn(), { assistantId: "assistant-1" });
+
+      expect(browser()).toHaveAttribute("data-server-ids", "linear");
+      expect(connectorsRow().description).toBe("1 on");
+    });
+
+    // The web app hands the assistant in only until the chat exists.
+    it("keeps the assistant's servers once the chat exists, from the chat itself", async () => {
+      enableConnectors([CONNECTED, UNCONNECTED]);
+      mockUseChatDetail.mockReturnValue({
+        data: {
+          id: "chat-1",
+          assistant_id: "assistant-1",
+          mcp_write_tools_enabled: true,
+        },
+      });
+      mockUseGetAssistant.mockReturnValue({
+        data: { id: "assistant-1", mcp_server_ids: ["linear"] },
+        isPending: false,
+      });
+      await renderComposer("chat-1");
+
+      expect(browser()).toHaveAttribute("data-server-ids", "linear");
+    });
+
+    it("draws the Read only mode after the host's own modes", async () => {
+      enableConnectors();
+      mockUseChatDetail.mockReturnValue({
+        data: { id: "chat-1", mcp_write_tools_enabled: false },
+      });
+      await renderComposer("chat-1", vi.fn(), {
+        composerModes: [
+          {
+            id: "outlook.scheduling",
+            label: "Scheduling",
+            icon: "calendar",
+            endLabel: "End scheduling",
+            onEnd: vi.fn(),
+          },
+        ],
+      });
+
+      expect(
+        Array.from(
+          document.querySelectorAll('[data-ui="composer-mode-chip"]'),
+        ).map((chip) => chip.getAttribute("aria-label")),
+      ).toEqual(["Scheduling", "Read only"]);
+    });
+
+    it("waits for the assistant before offering its servers", async () => {
+      enableConnectors([CONNECTED]);
+      mockUseGetAssistant.mockReturnValue({ data: undefined, isPending: true });
+      await renderComposer("chat-1", vi.fn(), { assistantId: "assistant-1" });
+
+      expect(
+        screen.queryByTestId("mcp-tools-browser-modal"),
+      ).not.toBeInTheDocument();
     });
 
     it("switches a server off on an existing chat through the update endpoint", async () => {
@@ -7557,15 +7992,14 @@ describe("ChatInput", () => {
       const onSendMessage = vi.fn();
       const textarea = await renderComposer("chat-1", onSendMessage);
 
-      await act(async () => {
-        serverSwitch("linear").onToggle();
-      });
+      await flipInBrowser("server");
 
       expect(mutateAsync).toHaveBeenCalledWith({
         pathParams: { chatId: "chat-1" },
         body: { disabled_mcp_server_ids: ["linear"] },
       });
-      expect(serverSwitch("linear").checked).toBe(false);
+      expect(browser()).toHaveAttribute("data-disabled-servers", "linear");
+      expect(connectorsRow().description).toBe("Off: Linear");
 
       // The row is the writer for an existing chat: nothing rides on the send.
       fireEvent.change(textarea, { target: { value: "without linear" } });
@@ -7586,15 +8020,11 @@ describe("ChatInput", () => {
       await renderComposer("chat-1");
 
       // The update replaces the whole list, so a flip without the row as its
-      // base would re-enable whatever the row holds; the write switch and the
-      // browser row do not depend on the list and stay live.
-      expect(serverSwitch("linear").disabled).toBe(true);
-      expect(writeToggle().disabled).toBe(false);
-      await act(async () => {
-        serverSwitch("linear").onToggle();
-      });
+      // base would re-enable whatever the row holds.
+      expect(browser()).toHaveAttribute("data-server-switches-locked", "true");
+      await flipInBrowser("server");
       expect(mutateAsync).not.toHaveBeenCalled();
-      expect(serverSwitch("linear").checked).toBe(true);
+      expect(browser()).toHaveAttribute("data-disabled-servers", "");
     });
 
     it("carries the switched-off servers into the first send of a new chat", async () => {
@@ -7604,10 +8034,8 @@ describe("ChatInput", () => {
       const onSendMessage = vi.fn();
       const textarea = await renderComposer(null, onSendMessage);
 
-      await act(async () => {
-        serverSwitch("linear").onToggle();
-      });
-      expect(serverSwitch("linear").checked).toBe(false);
+      await flipInBrowser("server");
+      expect(browser()).toHaveAttribute("data-disabled-servers", "linear");
       expect(mutateAsync).not.toHaveBeenCalled();
 
       fireEvent.change(textarea, { target: { value: "first message" } });
@@ -7624,13 +8052,6 @@ describe("ChatInput", () => {
         ["linear"],
       );
     });
-
-    const browser = () => screen.getByTestId("mcp-tools-browser-modal");
-    const flipToolInBrowser = async () => {
-      await act(async () => {
-        fireEvent.click(screen.getByTestId("mcp-tools-browser-tool-probe"));
-      });
-    };
 
     it("switches a tool off on an existing chat through the update endpoint and tells the browser and the server row", async () => {
       enableConnectors();
@@ -7650,7 +8071,7 @@ describe("ChatInput", () => {
       expect(browser()).toHaveAttribute("data-switches-locked", "false");
       expect(browser()).toHaveAttribute("data-disabled-servers", "jira");
 
-      await flipToolInBrowser();
+      await flipInBrowser("tool");
 
       expect(mutateAsync).toHaveBeenCalledWith({
         pathParams: { chatId: "chat-1" },
@@ -7660,7 +8081,6 @@ describe("ChatInput", () => {
         "data-disabled-tools",
         "linear/create_issue",
       );
-      expect(serverSwitch("linear").description).toBe("1 tool switched off");
 
       // The row is the writer for an existing chat: nothing rides on the send.
       fireEvent.change(textarea, { target: { value: "without creating" } });
@@ -7690,7 +8110,7 @@ describe("ChatInput", () => {
       const textarea = await renderComposer(null, onSendMessage);
 
       expect(browser()).toHaveAttribute("data-switches-locked", "false");
-      await flipToolInBrowser();
+      await flipInBrowser("tool");
       expect(browser()).toHaveAttribute(
         "data-disabled-tools",
         "linear/create_issue",
@@ -7722,10 +8142,8 @@ describe("ChatInput", () => {
       const onSendMessage = vi.fn();
       const textarea = await renderComposer(null, onSendMessage);
 
-      await act(async () => {
-        serverSwitch("linear").onToggle();
-      });
-      await flipToolInBrowser();
+      await flipInBrowser("server");
+      await flipInBrowser("tool");
 
       fireEvent.change(textarea, { target: { value: "first message" } });
       fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
@@ -7740,26 +8158,6 @@ describe("ChatInput", () => {
         undefined,
         ["linear"],
         ["linear/create_issue"],
-      );
-    });
-
-    // No Router here, so no settings dialog answers; the browser is where
-    // the Authorize affordance and the status live instead.
-    it("opens the tool browser from an unauthorized server's row where no settings dialog answers", async () => {
-      enableConnectors([UNCONNECTED, CONNECTED]);
-      await renderComposer("chat-1");
-
-      const jira = serverRow("jira");
-      if ("onToggle" in jira) {
-        throw new Error("connect row is a switch");
-      }
-      await act(async () => {
-        jira.onSelect();
-      });
-
-      expect(screen.getByTestId("mcp-tools-browser-modal")).toHaveAttribute(
-        "data-open",
-        "true",
       );
     });
   });
@@ -7883,9 +8281,10 @@ describe("ChatInput", () => {
       )!;
       const textarea = screen.getByPlaceholderText("Type a message...");
       expect(children.indexOf(notice)).toBeLessThan(children.indexOf(area));
-      expect(children.indexOf(area)).toBeLessThan(
-        children.indexOf(textarea.parentElement!),
-      );
+      expect(
+        area.compareDocumentPosition(textarea) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
       expect(area).toHaveClass("flex");
       const lane = within(area).getByRole("list", { name: "Message context" });
       const files = area.querySelector<HTMLElement>(

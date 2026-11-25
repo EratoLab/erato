@@ -1121,6 +1121,61 @@ body {
   @apply transition-[background-color,border-color,color,fill,stroke,opacity,box-shadow,transform] duration-150 ease-in-out motion-reduce:transition-none;
 }
 
+/* Where the page reaches the screen edges (viewport-fit=cover), the system
+   reports what its bars and display cutouts cover. An embedding shell can
+   re-declare these. */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+}
+
+/* The app's outer box. 100vh is the browser's tallest viewport on a phone
+   and runs under its toolbar; dvh is what is visible. */
+.app-viewport {
+  height: 100dvh;
+  padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom)
+    var(--safe-area-left);
+}
+
+/* The box paints nothing, so its padding shows the body. Safari also tints
+   its status bar with the body's colour. */
+body:has(.app-viewport) {
+  background: var(--theme-shell-page);
+}
+
+/* An on-screen keyboard covers the page instead of resizing it
+   (useVirtualKeyboardViewport). The box and the fixed layers over it take
+   what is left visible; the keyboard covers the bottom safe area. */
+:root[data-virtual-keyboard="open"] {
+  --safe-area-bottom: 0px;
+}
+
+:root[data-virtual-keyboard="open"] .app-viewport {
+  position: relative;
+  top: var(--visual-viewport-page-top, 0px);
+  height: var(--visual-viewport-height, 100dvh);
+}
+
+:root[data-virtual-keyboard="open"] :is(.modal-overlay-skin, .viewport-layer) {
+  top: var(--visual-viewport-offset-top, 0px);
+  bottom: auto;
+  height: var(--visual-viewport-height, 100dvh);
+}
+
+/* Fixed layers that hug one edge and take their content's height (toasts). */
+:root[data-virtual-keyboard="open"] .viewport-layer-top {
+  top: var(--visual-viewport-offset-top, 0px);
+}
+
+:root[data-virtual-keyboard="open"] .viewport-layer-bottom {
+  bottom: calc(
+    100% - var(--visual-viewport-offset-top, 0px) -
+      var(--visual-viewport-height, 100%)
+  );
+}
+
 /* Surfaces for the remaining documented data-ui hooks. Same reasoning and the
    same placement rule as .anchored-popover-skin below: an inline style
    outranks every author rule, so holding these here is what makes the hooks
@@ -1147,6 +1202,76 @@ body {
   box-shadow: var(--theme-elevation-input);
 }
 
+/* The gap around the chat's composer, which the one-line composer below
+   offsets its own position from. */
+[data-ui="composer-cluster"] {
+  --chat-composer-gutter: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  [data-ui="composer-cluster"] {
+    --chat-composer-gutter: 1rem;
+  }
+}
+
+/* The one-line composer (ChatInput sets data-layout on a narrow screen
+   without a hovering pointer). Weighted like the hook alone through :where()
+   and placed after the skin: it wins over the skin, and a later theme.css rule
+   on the hook wins over it. */
+[data-ui="chat-input-shell"]:where([data-layout="one-line"]) {
+  /* The small icon buttons' size (.btn-geometry-icon-sm). */
+  --chat-input-line-height: calc(
+    var(--theme-spacing-control-min-height) - 0.25rem
+  );
+  padding-block: var(--theme-spacing-input-compact-padding-x);
+  /* Up to a capsule: half the one-line height, its 1px border included. A
+     larger theme radius would make a taller composer a stadium. */
+  border-radius: min(
+    var(--theme-radius-input),
+    calc(
+      var(--chat-input-line-height) / 2 +
+        var(--theme-spacing-input-compact-padding-x) + 1px
+    )
+  );
+}
+
+/* One text line (1.5rem) as tall as the buttons beside it. Audio mode's state
+   stands where the field was, at the same height. */
+[data-ui="chat-input-shell"]:where([data-layout="one-line"]) textarea,
+[data-ui="chat-input-shell"]:where([data-layout="one-line"])
+  :where([data-ui="chat-input-audio-mode-status"]) {
+  min-height: var(--chat-input-line-height);
+  padding-block: calc((var(--chat-input-line-height) - 1.5rem) / 2);
+}
+
+/* At the foot of a chat it floats as low as the system's own bottom bars and
+   as far from the sides as from the bottom, so its corners follow the
+   screen's. The side gap reads env() itself: an open keyboard zeroes
+   --safe-area-bottom, and the composer keeps its width. */
+:where(
+    :not([data-ui="chat-empty-state-centered-shell"])
+      > [data-ui="composer-cluster"]
+  )
+  [data-ui="chat-input-shell"]:where([data-layout="one-line"]) {
+  /* How far the system's own bottom bars reach into the bottom safe area. */
+  --bottom-bar-safe-area-overlap: 6px;
+  width: auto;
+  margin-inline: calc(
+    max(
+        var(--chat-composer-gutter),
+        env(safe-area-inset-bottom, 0px) - var(--bottom-bar-safe-area-overlap)
+      ) -
+      var(--chat-composer-gutter)
+  );
+  margin-bottom: calc(
+    max(
+        var(--chat-composer-gutter),
+        var(--safe-area-bottom) - var(--bottom-bar-safe-area-overlap)
+      ) -
+      var(--safe-area-bottom) - var(--chat-composer-gutter)
+  );
+}
+
 .chat-message-skin {
   border-radius: var(--theme-radius-message);
   padding: var(--theme-spacing-message-padding-y)
@@ -1162,7 +1287,23 @@ body {
   backdrop-filter: blur(var(--theme-layout-modal-backdrop-blur));
   /* Viewport gutter, held here rather than on the shell so a consumer's
      max-w-* utility on contentClassName cannot eat into it. */
-  padding: var(--theme-layout-modal-viewport-margin);
+  --modal-overlay-gutter: var(
+    --modal-viewport-margin,
+    var(--theme-layout-modal-viewport-margin)
+  );
+  padding: max(var(--modal-overlay-gutter), var(--safe-area-top))
+    max(var(--modal-overlay-gutter), var(--safe-area-right))
+    max(var(--modal-overlay-gutter), var(--safe-area-bottom))
+    max(var(--modal-overlay-gutter), var(--safe-area-left));
+}
+
+/* Scrim beside a drawer: the add-in's history drawer and the host sidebar
+   on a narrow screen. Deliberately NOT the modal overlay skin: its backdrop
+   blur re-filters the region behind the scrim on every frame while the panel
+   slides over it (the main drawer-jank source in the Office webviews), and
+   the panel's edge already carries the depth cue. */
+.drawer-overlay-skin {
+  background-color: var(--theme-overlay-modal);
 }
 
 .modal-shell-skin {
@@ -1216,14 +1357,28 @@ body {
    the two, and a hover tint over it reads as a third state. The exclusions sit
    inside :where() so they cost no specificity — a theme rule keyed on the hook
    and :hover still meets this one on level ground and wins on order. */
-.card-skin[data-variant="interactive"]:hover:where(
-    :not([data-selected], [data-disabled], :disabled)
-  ),
-.card-skin[data-variant="selectable"]:hover:where(
-    :not([data-selected], [data-disabled], :disabled)
-  ) {
-  --card-bg: var(--theme-bg-hover);
-  --card-border: var(--theme-border-focus);
+@media (hover: hover) and (pointer: fine) {
+  .card-skin[data-variant="interactive"]:hover:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ),
+  .card-skin[data-variant="selectable"]:hover:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ) {
+    --card-bg: var(--theme-bg-hover);
+    --card-border: var(--theme-border-focus);
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .card-skin[data-variant="interactive"]:active:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ),
+  .card-skin[data-variant="selectable"]:active:where(
+      :not([data-selected], [data-disabled], :disabled)
+    ) {
+    --card-bg: var(--theme-bg-hover);
+    --card-border: var(--theme-border-focus);
+  }
 }
 
 .card-skin[data-selected] {
@@ -1302,8 +1457,22 @@ body {
   background-color: var(--composer-context-chip-bg, var(--theme-bg-secondary));
 }
 
-.composer-context-chip-skin:hover {
-  border-color: var(--composer-context-chip-border, var(--theme-border-focus));
+@media (hover: hover) and (pointer: fine) {
+  .composer-context-chip-skin:hover {
+    border-color: var(
+      --composer-context-chip-border,
+      var(--theme-border-focus)
+    );
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .composer-context-chip-skin:active {
+    border-color: var(
+      --composer-context-chip-border,
+      var(--theme-border-focus)
+    );
+  }
 }
 
 /* Drawn inside the frame: the staged area clips anything past its edges. */
@@ -1623,11 +1792,22 @@ body {
 
 /* Meta steps up to fg-secondary on the hover and selected fills: fg-muted on
    them falls below 4.5:1 (3.9:1 light, 3:1 dark on the hover fill). */
-.selectable-row-skin:hover:where(
-    :not([data-tone="warning"], [data-tone="error"], [data-disabled])
-  ) {
-  --selectable-row-bg: var(--theme-bg-hover);
-  --selectable-row-meta: var(--theme-fg-secondary);
+@media (hover: hover) and (pointer: fine) {
+  .selectable-row-skin:hover:where(
+      :not([data-tone="warning"], [data-tone="error"], [data-disabled])
+    ) {
+    --selectable-row-bg: var(--theme-bg-hover);
+    --selectable-row-meta: var(--theme-fg-secondary);
+  }
+}
+
+@media not all and (hover: hover) and (pointer: fine) {
+  .selectable-row-skin:active:where(
+      :not([data-tone="warning"], [data-tone="error"], [data-disabled])
+    ) {
+    --selectable-row-bg: var(--theme-bg-hover);
+    --selectable-row-meta: var(--theme-fg-secondary);
+  }
 }
 
 .selectable-row-skin[data-selected] {

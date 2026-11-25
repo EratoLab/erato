@@ -6,7 +6,9 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub(super) use super::corpus::{Card, Sentence, SentenceSet, heldout_set, sentence_set};
+pub(super) use super::corpus::{
+    Card, Sentence, SentenceSet, field_question_set, heldout_set, sentence_set,
+};
 
 impl Sentence {
     /// The card named by a `card:` tag, else the language's example card.
@@ -131,7 +133,7 @@ enum Script {
     Sleep(Duration),
 }
 
-struct ScriptedModel {
+pub(super) struct ScriptedModel {
     script: Script,
     calls: AtomicUsize,
     request: Mutex<Option<(ChatRequest, ChatOptions)>>,
@@ -146,7 +148,7 @@ impl ScriptedModel {
         }
     }
 
-    fn answering(meaning: &str, piece_id: Option<&str>) -> Self {
+    pub(super) fn answering(meaning: &str, piece_id: Option<&str>) -> Self {
         Self::new(Script::Reply(
             serde_json::json!({"meaning": meaning, "piece_id": piece_id}).to_string(),
         ))
@@ -194,7 +196,7 @@ impl GenAIClient for ScriptedModel {
     }
 }
 
-fn provider() -> ChatProviderConfig {
+pub(super) fn provider() -> ChatProviderConfig {
     ChatProviderConfig {
         provider_kind: "openai".into(),
         model_name: "test-model".into(),
@@ -247,6 +249,7 @@ async fn the_model_is_asked_only_when_the_rules_do_not_match() {
         VoiceCommand {
             meaning: VoiceMeaning::Rest,
             piece_id: None,
+            candidates: Vec::new(),
             source: VoiceCommandSource::Model,
             decision: None,
         }
@@ -297,7 +300,7 @@ async fn a_late_failing_or_off_list_model_gives_unclear() {
             "wrong_piece",
         ),
         (
-            ScriptedModel::answering("read_text", Some("p3")),
+            ScriptedModel::answering("read_text", Some("p8")),
             "wrong_piece",
         ),
     ] {
@@ -307,6 +310,7 @@ async fn a_late_failing_or_off_list_model_gives_unclear() {
             VoiceCommand {
                 meaning: VoiceMeaning::Unclear,
                 piece_id: None,
+                candidates: Vec::new(),
                 source: VoiceCommandSource::None,
                 decision: None,
             },
@@ -968,6 +972,8 @@ fn requests_keep_their_limits() {
             field: None,
             state: CardPieceState::NotSaid,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         })
         .collect();
     assert_eq!(checked("weiter", &many, None), Err(InputProblem::TooLarge));
@@ -984,6 +990,8 @@ fn naming_a_text_answers_which_text() {
             field: None,
             state: CardPieceState::Heard,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         },
         CardPiece {
             id: "text:summary".into(),
@@ -991,6 +999,8 @@ fn naming_a_text_answers_which_text() {
             field: Some("Zusammenfassung".into()),
             state: CardPieceState::Heard,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         },
         CardPiece {
             id: "text:need".into(),
@@ -998,6 +1008,8 @@ fn naming_a_text_answers_which_text() {
             field: Some("Kundenbedarf".into()),
             state: CardPieceState::Heard,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         },
         CardPiece {
             id: "request".into(),
@@ -1005,6 +1017,8 @@ fn naming_a_text_answers_which_text() {
             field: None,
             state: CardPieceState::Heard,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         },
     ];
     let rules = |words: &str, language: &str, question: Option<VoiceQuestion>| {
@@ -1061,6 +1075,8 @@ fn the_model_hears_that_the_voice_asked_which_text() {
         field: Some("Summary".into()),
         state: CardPieceState::Heard,
         must_say: false,
+        names: Vec::new(),
+        on_request: false,
     }];
     let input = |question| VoiceCommandInput {
         transcript: "the first one",
@@ -1351,6 +1367,8 @@ mod deciding_by_voice {
             field: None,
             state,
             must_say: false,
+            names: Vec::new(),
+            on_request: false,
         }
     }
 
@@ -1380,6 +1398,8 @@ mod deciding_by_voice {
         assert!(!approve(&[piece("w", What, Heard)]));
         let loss = CardPiece {
             must_say: true,
+            names: Vec::new(),
+            on_request: false,
             ..piece("d", Detail, CutShort)
         };
         assert!(!approve(&[loss.clone(), piece("r", Request, Heard)]));
@@ -1390,6 +1410,8 @@ mod deciding_by_voice {
         let skipped_what = [
             CardPiece {
                 must_say: true,
+                names: Vec::new(),
+                on_request: false,
                 ..piece("w", What, CutShort)
             },
             piece("d", Detail, Heard),
@@ -1431,7 +1453,7 @@ mod deciding_by_voice {
             input: json!({"id": 7, "status": "done"}),
             child: None,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         }
     }
 
@@ -1472,8 +1494,8 @@ mod deciding_by_voice {
         ));
         let chained = |decide_on_screen| {
             [ApprovalItem {
-                chained: Some(crate::models::message::ChainedApprovalRef {
-                    submission_call_id: "call_plan".into(),
+                follows: Some(crate::models::message::ChainedApprovalRef {
+                    proposal_call_id: "call_plan".into(),
                     decide_on_screen,
                     reason: None,
                 }),

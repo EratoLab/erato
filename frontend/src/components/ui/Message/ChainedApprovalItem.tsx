@@ -51,7 +51,7 @@ export const ChainedApprovalItem = ({
   const summary = display?.description ?? undefined;
   // A card that needs a choice on screen never offers Always: the next
   // change would need that choice too.
-  const onScreen = item.chained?.decide_on_screen === true;
+  const onScreen = item.follows?.decide_on_screen === true;
   const offersAlways = runsHere && !onScreen;
   return (
     <div
