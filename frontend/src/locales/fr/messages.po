@@ -1931,6 +1931,11 @@ msgid "chat.audio.hesitation_held"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.mode.speaking"
+msgstr "Parle"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Plus"
@@ -12209,6 +12214,7 @@ msgstr "La sélection du périphérique d'entrée audio n'est pas prise en charg
 #~ msgid "Audio input is not supported in this browser."
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Audio mode is on"
 msgstr "Le mode audio est activé"
@@ -12873,9 +12879,10 @@ msgstr "Principales contributions des fichiers au contexte :"
 #~ msgid "Link"
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
-msgstr ""
+msgstr "À l’écoute"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Listening for your next message"
@@ -13612,6 +13619,7 @@ msgstr ""
 #~ msgid "The work limit was reached."
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Réflexion"

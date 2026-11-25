@@ -98,7 +98,11 @@ import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useDocumentHidden } from "@/hooks/useDocumentHidden";
-import { useIsMobile, useIsNarrowTouchScreen } from "@/hooks/useResponsive";
+import {
+  useIsMobile,
+  useIsNarrowTouchScreen,
+  useIsTouchPointer,
+} from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -174,6 +178,7 @@ import { toast } from "../Toast/toast";
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
 import type { AddMenuSection } from "./ChatInputAddMenu";
 import type {
+  AppendToDraftOptions,
   ChatInputControlsHandle,
   DraftMessageOptions,
 } from "./ChatInputControlsContext";
@@ -1442,10 +1447,15 @@ export const ChatInput = ({
 
   // The handle is built above the pending-caret hook, whose layout effect has
   // to stay behind the auto-resize one, so the method reaches it through a ref.
-  const appendToDraftRef = useRef<(block: string) => void>(() => {});
-  const appendToDraft = useCallback((block: string) => {
-    appendToDraftRef.current(block);
-  }, []);
+  const appendToDraftRef = useRef<
+    (block: string, options?: AppendToDraftOptions) => void
+  >(() => {});
+  const appendToDraft = useCallback(
+    (block: string, options?: AppendToDraftOptions) => {
+      appendToDraftRef.current(block, options);
+    },
+    [],
+  );
 
   const applySelectedChatProviderId = useCallback(
     (chatProviderId: string) => {
@@ -2026,8 +2036,12 @@ export const ChatInput = ({
   const placeCaret = usePendingCaret(textareaRef);
 
   useEffect(() => {
-    appendToDraftRef.current = (block: string) => {
-      const next = appendBlockToDraft(textareaRef.current?.value ?? "", block);
+    appendToDraftRef.current = (block, options) => {
+      const next = appendBlockToDraft(
+        textareaRef.current?.value ?? "",
+        block,
+        options,
+      );
       scrollTextareaToEndRef.current = true;
       setMessage(next);
       placeCaret(next, next.length);
@@ -2464,6 +2478,7 @@ export const ChatInput = ({
       canBrowseMcpTools);
 
   const isNarrowTouchScreen = useIsNarrowTouchScreen();
+  const isTouchPointer = useIsTouchPointer();
   const oneLineComposer =
     showControls && useUnifiedMobileMenu && isNarrowTouchScreen;
   // The layout changes the field's width and padding under a kept draft.
@@ -3423,6 +3438,29 @@ export const ChatInput = ({
     message: "This assistant sets the tools for its chats.",
   });
 
+  // On one line the audio-mode button alone does not say what is happening,
+  // so the state is written where the text field was. Hidden from screen
+  // readers: the button announces whether it listens, and the voice itself
+  // is heard. A held hesitation already says it is still listening.
+  const audioModeStatusField = isAudioMode &&
+    oneLineComposer &&
+    !(isDictating && heldHesitation) && (
+      <span
+        aria-hidden="true"
+        className="chat-input-textarea-geometry min-w-0 flex-1 truncate text-base text-theme-fg-secondary"
+        data-ui="chat-input-audio-mode-status"
+        data-testid="chat-input-audio-mode-status"
+      >
+        {speech.playing || cardSpeaking
+          ? t({ id: "chat.audio.mode.speaking", message: "Speaking" })
+          : showsListening
+            ? t`Listening`
+            : isPendingResponse || isDictationCompleting
+              ? t`Thinking`
+              : t`Audio mode is on`}
+      </span>
+    );
+
   const textareaField = !isAudioMode && (
     // isolate keeps the backdrop's negative layer above the shell's own
     // background instead of behind it; flex keeps the textarea from
@@ -3483,7 +3521,9 @@ export const ChatInput = ({
         rows={1}
         disabled={composeLocked}
         tabIndex={0}
-        autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+        // Under a finger focus opens the on-screen keyboard, and the field
+        // mounts again when audio mode ends, inside the tap that ended it.
+        autoFocus={shouldAutofocus && !isTouchPointer} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
         className={clsx(
           "w-full resize-none overflow-y-auto",
           "chat-input-textarea-geometry",
@@ -4020,7 +4060,7 @@ export const ChatInput = ({
                 )}
             </div>
 
-            {oneLineComposer && textareaField}
+            {oneLineComposer && (textareaField || audioModeStatusField)}
             <div
               className={clsx(
                 "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",

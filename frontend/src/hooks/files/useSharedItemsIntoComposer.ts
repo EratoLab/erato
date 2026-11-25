@@ -16,6 +16,7 @@ import {
 } from "@/lib/sharedItems";
 import { createLogger } from "@/utils/debugLogger";
 
+import type { AppendToDraftOptions } from "@/components/ui/Chat/ChatInputControlsContext";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const logger = createLogger("UI", "useSharedItemsIntoComposer");
@@ -28,7 +29,7 @@ interface UseSharedItemsIntoComposerOptions {
   ready: boolean;
   uploadFiles: (files: File[]) => Promise<FileUploadItem[] | undefined>;
   addUploadedFiles: (files: FileUploadItem[]) => void;
-  appendToDraft: (block: string) => void;
+  appendToDraft: (block: string, options?: AppendToDraftOptions) => void;
   uploadsEnabled: boolean;
   maxSizeBytes?: number;
   maxSizeFormatted?: string;
@@ -142,7 +143,8 @@ async function placeHandOver(
     maxSizeFormatted,
   } = latest.current;
 
-  if (texts.length > 0) appendToDraft(texts.join("\n\n"));
+  if (texts.length > 0)
+    appendToDraft(texts.join("\n\n"), { emptyLineAfter: false });
   if (uploaded.length > 0) addUploadedFiles(uploaded);
 
   const reports: UploadError[] = [];

@@ -1931,6 +1931,11 @@ msgid "chat.audio.hesitation_held"
 msgstr "„{heldHesitation}“ · Ich höre weiter zu"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.mode.speaking"
+msgstr "Spricht"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Mehr"
@@ -12209,6 +12214,7 @@ msgstr "Die Auswahl des Audioeingabegeräts wird in diesem Browser nicht unterst
 #~ msgid "Audio input is not supported in this browser."
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Audio mode is on"
 msgstr "Audiomodus ist an"
@@ -12873,6 +12879,7 @@ msgstr "Größte Kontextbeiträge von Dateien:"
 #~ msgid "Link"
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Chat/ChatInputAudioModeButton.tsx
 msgid "Listening"
 msgstr "Hört zu"
@@ -13612,6 +13619,7 @@ msgstr "Der Quellinhalt ist für diese Anfrage nicht mehr verfügbar."
 #~ msgid "The work limit was reached."
 #~ msgstr ""
 
+#: src/components/ui/Chat/ChatInput.tsx
 #: src/components/ui/Feedback/LoadingIndicator.tsx
 msgid "Thinking"
 msgstr "Denkt nach"
