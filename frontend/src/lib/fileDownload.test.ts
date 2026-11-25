@@ -14,6 +14,9 @@ const CSV_BASE64 = globalThis.btoa(CSV);
 const respond = (body: string, headers: Record<string, string> = {}) =>
   fileFetch(body, "text/csv", headers);
 
+/** Lets every pending promise and the helper's fallback run. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const anchor = () => {
   const button = document.createElement("button");
   button.getBoundingClientRect = () => new DOMRect(10, 20, 30, 40);
@@ -138,7 +141,52 @@ describe("downloadFile", () => {
     await vi.waitFor(() => {
       expect(request).toHaveBeenCalledOnce();
     });
-    await Promise.resolve();
+    await settled();
     expect(browserDownload).not.toHaveBeenCalled();
+  });
+
+  it("falls back for a file found over the limit once read", async () => {
+    vi.stubGlobal("fetch", respond("x".repeat(MAX_HOST_FILE_BYTES + 1)));
+    const request = installHostShell({ files: 1 });
+    const browserDownload = vi.fn();
+
+    downloadFile({ name: "big.csv", content: "/big" }, browserDownload);
+
+    await vi.waitFor(() => {
+      expect(browserDownload).toHaveBeenCalledOnce();
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("ignores a second tap while a file is on its way", async () => {
+    vi.stubGlobal("fetch", respond(CSV));
+    let close: (value: unknown) => void = () => undefined;
+    const request = installHostShell(
+      { files: 1 },
+      vi.fn(() => new Promise((resolve) => (close = resolve))),
+    );
+    const browserDownload = vi.fn();
+
+    downloadFile({ name: "cities.csv", content: "/f" }, browserDownload);
+    await vi.waitFor(() => {
+      expect(request).toHaveBeenCalledOnce();
+    });
+    downloadFile({ name: "cities.csv", content: "/f" }, browserDownload);
+    expect(fetch).toHaveBeenCalledOnce();
+    close({ completed: true });
+    await settled();
+
+    expect(request).toHaveBeenCalledOnce();
+    expect(browserDownload).not.toHaveBeenCalled();
+  });
+
+  it("downloads in the browser when the file has no address", () => {
+    const request = installHostShell({ files: 1 });
+    const browserDownload = vi.fn();
+
+    downloadFile({ name: "image-1", content: "" }, browserDownload);
+
+    expect(browserDownload).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
   });
 });

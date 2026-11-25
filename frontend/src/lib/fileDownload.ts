@@ -1,9 +1,9 @@
 import { createLogger } from "@/utils/debugLogger";
 import { encodeBase64 } from "@/utils/file/encodeBase64";
 
-import { hostShellWithCapability } from "./hostShell";
+import { hostShellWithCapability, shellAnchor } from "./hostShell";
 
-import type { HostShell } from "./hostShell";
+import type { HostShell, ShellAnchor } from "./hostShell";
 
 const logger = createLogger("UI", "fileDownload");
 
@@ -25,12 +25,15 @@ export interface DownloadableFile {
   content: Blob | string;
 }
 
+/** A file is on its way to the host app, whose sheet answers one at a time. */
+let sharing = false;
+
 /**
  * Downloads `file` where this page runs. In a host app that offers `files`,
- * the app's share sheet gets the file (Save to Files, mail, other apps);
- * anywhere else, or when that fails, `browserDownload` runs, which is what
- * the browser did before. Call it from the click's own handler, where a
- * browser download may start.
+ * the app's share sheet gets the file (save, mail, other apps); anywhere
+ * else, or when that fails, `browserDownload` runs, which is what the browser
+ * did before. Call it from the click's own handler, where a browser download
+ * may start.
  */
 export function downloadFile(
   file: DownloadableFile,
@@ -38,22 +41,29 @@ export function downloadFile(
   anchor?: Element | null,
 ): void {
   const shell = hostShellWithCapability(FILES_CAPABILITY, 1);
-  if (!shell) {
+  if (!shell || file.content === "") {
     browserDownload();
     return;
   }
+  // A second tap while a file is read would fall back and leave the app.
+  if (sharing) return;
+  sharing = true;
   // Measured now: the anchor may be gone by the time the bytes are read.
-  const rect = anchor?.getBoundingClientRect();
-  shareThroughHost(shell, file, rect).catch((error: unknown) => {
-    logger.warn("host app did not take the file", error);
-    browserDownload();
-  });
+  const rect = anchor ? shellAnchor(anchor) : undefined;
+  shareThroughHost(shell, file, rect)
+    .catch((error: unknown) => {
+      logger.warn("host app did not take the file", error);
+      browserDownload();
+    })
+    .finally(() => {
+      sharing = false;
+    });
 }
 
 async function shareThroughHost(
   shell: HostShell,
   { name, content }: DownloadableFile,
-  rect: DOMRect | undefined,
+  anchor: ShellAnchor | undefined,
 ): Promise<void> {
   const blob = typeof content === "string" ? await read(content) : content;
   if (blob.size > MAX_HOST_FILE_BYTES) {
@@ -63,12 +73,7 @@ async function shareThroughHost(
     fileName: name,
     contentType: blob.type || undefined,
     data: await encodeBase64(blob),
-    anchor: rect && {
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    },
+    anchor,
   });
 }
 
