@@ -2351,6 +2351,30 @@ impl AppConfig {
                     );
                 }
             }
+            for (language, action) in &action_facet.draft_block_actions {
+                if language.is_empty() || language.contains(char::is_whitespace) {
+                    panic!(
+                        "Action facet '{}' has an empty block language or one with spaces in draft_block_actions.",
+                        id
+                    );
+                }
+                if !action_facet.client_actions.contains(action) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which is not in client_actions.",
+                        id, language, action
+                    );
+                }
+                if !config.client_tools.tools.values().any(|tool| {
+                    tool.called_by == ClientToolCalledBy::Server
+                        && tool.follows_tool.is_none()
+                        && tool.client_actions.contains(action)
+                }) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which no server-called client tool without follows_tool carries out.",
+                        id, language, action
+                    );
+                }
+            }
         }
 
         // Validate top-level `client_tools` (client-executed returning tools).
@@ -7957,6 +7981,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -7976,6 +8001,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -8107,6 +8133,13 @@ pub struct ActionFacetConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub grant_scope: HashMap<String, String>,
+
+    // Fenced code block languages mapped to one of `client_actions`: when an
+    // answer holds exactly one such block and the model proposed nothing, the
+    // server proposes the mapped action.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub draft_block_actions: HashMap<String, String>,
 
     // Allowlist of tools the model may call when this action facet is active,
     // using the same `namespace/*` / `server/tool` pattern syntax as regular

@@ -676,6 +676,48 @@ fn test_action_facet_grant_scope_needs_a_client_action() {
     ));
 }
 
+const DRAFT_BLOCK_TOOL: &str = r#"
+[client_tools.tools.open_form]
+name = "open_form"
+namespace = "editor"
+description = "Open a form"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["word.add_comments"]
+"#;
+
+#[test]
+fn test_action_facet_draft_block_actions_are_parsed() {
+    let config = ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.add_comments\" }}\n{DRAFT_BLOCK_TOOL}"
+    ));
+    assert_eq!(
+        config.action_facets.facets["word_selection"].draft_block_actions["editor-draft"],
+        "word.add_comments"
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "maps block 'editor-draft' to 'word.other', which is not in client_actions"
+)]
+fn test_action_facet_draft_block_action_needs_a_client_action() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.other\" }}\n{DRAFT_BLOCK_TOOL}"
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "maps block 'editor-draft' to 'word.add_comments', which no server-called client tool without follows_tool carries out"
+)]
+fn test_action_facet_draft_block_action_needs_a_server_called_tool() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.add_comments\" }}\n"
+    ));
+}
+
 #[test]
 #[should_panic(expected = "`comment_assistant_author` must contain `{user}` exactly once")]
 fn test_config_with_comment_author_template_without_user_is_invalid() {

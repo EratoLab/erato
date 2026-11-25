@@ -5589,6 +5589,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
             me_profile_input.client_tool_decisions,
             &facet_config.client_actions_always_ask,
             crate::services::chained_apply::item_identity(Some(&action_facet.args)).as_deref(),
+            &facet_config.draft_block_actions,
             |name| mcp_claimed_names.contains(name),
             |tool| generation_request_context.executor_for_tool(tool).cloned(),
         );
@@ -13087,6 +13088,67 @@ async fn stream_generate_chat_completion<'a>(
                 }
             }
 
+            // A draft that always leads to one action needs no judgment, so
+            // the server proposes it when the model did not.
+            if stream_end
+                .captured_tool_calls()
+                .is_none_or(|calls| calls.is_empty())
+                && !client_action_already_proposed
+                && !is_delegated_run
+                && !available_mcp_tools_by_name
+                    .contains_key(crate::services::client_actions::CLIENT_ACTION_TOOL_NAME)
+                && let Some(action) = crate::services::chained_apply::drafted_action(
+                    &offered_client_tools,
+                    &current_message_content,
+                )
+                .filter(|action| {
+                    crate::services::client_actions::allowed_client_actions_from_tools(
+                        current_turn_chat_request.tools.as_ref(),
+                    )
+                    .contains(action)
+                })
+            {
+                let call = genai::chat::ToolCall {
+                    call_id: generation_tool_call_id(
+                        assistant_message_id,
+                        current_turn,
+                        &crate::services::chained_apply::server_proposal_call_id(&format!(
+                            "{assistant_message_id}:{current_turn}"
+                        )),
+                    ),
+                    fn_name: crate::services::client_actions::CLIENT_ACTION_TOOL_NAME.to_string(),
+                    fn_arguments: json!({ "action": action }),
+                    thought_signatures: None,
+                };
+                let mut parts = stream_end
+                    .captured_content
+                    .as_ref()
+                    .map(|content| {
+                        assistant_content_for_replay(
+                            content,
+                            &current_turn_captured_reasoning_summary,
+                        )
+                        .into_parts()
+                    })
+                    .unwrap_or_default();
+                parts.push(genai::chat::ContentPart::ToolCall(call.clone()));
+                current_turn_chat_request.messages.push(GenAiChatMessage {
+                    role: ChatRole::Assistant,
+                    content: MessageContent::from_parts(parts),
+                    options: None,
+                });
+                all_tool_names.insert(call.fn_name.clone());
+                tool_charges.insert(
+                    call.call_id.clone(),
+                    crate::services::client_operations::ToolCallCharge {
+                        charged: true,
+                        ..Default::default()
+                    },
+                );
+                unfinished_tool_calls.push_back(call);
+                continue 'loop_call_turns;
+            }
+
             if let Some(captured_tool_calls) = stream_end.captured_tool_calls() {
                 if !captured_tool_calls.is_empty() {
                     // Track tool names for Langfuse metadata
@@ -17588,6 +17650,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17613,6 +17676,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17639,6 +17703,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17663,6 +17728,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17689,6 +17755,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17713,6 +17780,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17740,6 +17808,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17770,6 +17839,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -17839,6 +17909,7 @@ mod tests {
                     presentation: None,
                     client_actions_always_ask: vec![],
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec![],
                     delegation: None,
                 },
@@ -26448,6 +26519,7 @@ async fn resume_parked_generation(
                     generation_parameters.action_facet_args.as_ref(),
                 )
                 .as_deref(),
+                &facet.draft_block_actions,
                 |name| mcp_claimed_names.contains(name),
                 |tool| {
                     generation_parameters
