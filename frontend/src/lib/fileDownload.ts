@@ -8,14 +8,13 @@ import type { HostShell, ShellAnchor } from "./hostShell";
 const logger = createLogger("UI", "fileDownload");
 
 const FILES_CAPABILITY = "files";
-const FILES_SHARE = "files.share";
+const FILES_SAVE = "files.save";
 
 /** The largest file a host app's `files: 1` takes: 25 MiB. */
 export const MAX_HOST_FILE_BYTES = 25 * 1024 * 1024;
 
 /** A file the person asked to download. */
 export interface DownloadableFile {
-  /** The name it is saved under. */
   name: string;
   /**
    * Its bytes, or an address this page reads them from with its own
@@ -41,7 +40,7 @@ export function downloadFile(
   anchor?: Element | null,
 ): void {
   const shell = hostShellWithCapability(FILES_CAPABILITY, 1);
-  if (!shell || file.content === "") {
+  if (!shell) {
     browserDownload();
     return;
   }
@@ -69,7 +68,7 @@ async function shareThroughHost(
   if (blob.size > MAX_HOST_FILE_BYTES) {
     throw new Error(`${name} is larger than the host app takes`);
   }
-  await shell.request(FILES_SHARE, {
+  await shell.request(FILES_SAVE, {
     fileName: name,
     contentType: blob.type || undefined,
     data: await encodeBase64(blob),

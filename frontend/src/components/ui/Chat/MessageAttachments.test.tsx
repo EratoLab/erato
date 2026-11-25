@@ -188,7 +188,7 @@ describe("MessageAttachments", () => {
 
       await waitFor(() => {
         expect(request).toHaveBeenCalledExactlyOnceWith(
-          "files.share",
+          "files.save",
           expect.objectContaining({
             fileName: "report.csv",
             contentType: "text/csv",

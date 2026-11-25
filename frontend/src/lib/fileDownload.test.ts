@@ -54,7 +54,7 @@ describe("downloadFile", () => {
     );
 
     await vi.waitFor(() => {
-      expect(request).toHaveBeenCalledExactlyOnceWith("files.share", {
+      expect(request).toHaveBeenCalledExactlyOnceWith("files.save", {
         fileName: "cities.csv",
         contentType: "text/csv",
         data: CSV_BASE64,
@@ -73,7 +73,7 @@ describe("downloadFile", () => {
     downloadFile({ name: "chart.png", content: new Blob([CSV]) }, vi.fn());
 
     await vi.waitFor(() => {
-      expect(request).toHaveBeenCalledExactlyOnceWith("files.share", {
+      expect(request).toHaveBeenCalledExactlyOnceWith("files.save", {
         fileName: "chart.png",
         contentType: undefined,
         data: CSV_BASE64,
@@ -178,15 +178,5 @@ describe("downloadFile", () => {
 
     expect(request).toHaveBeenCalledOnce();
     expect(browserDownload).not.toHaveBeenCalled();
-  });
-
-  it("downloads in the browser when the file has no address", () => {
-    const request = installHostShell({ files: 1 });
-    const browserDownload = vi.fn();
-
-    downloadFile({ name: "image-1", content: "" }, browserDownload);
-
-    expect(browserDownload).toHaveBeenCalledOnce();
-    expect(request).not.toHaveBeenCalled();
   });
 });

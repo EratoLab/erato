@@ -38,6 +38,11 @@ export const ImageLightbox = ({
   };
 
   const handleDownload = (anchor: Element) => {
+    // An image without an address has nothing for a host app to read.
+    if (!image.src) {
+      browserDownload();
+      return;
+    }
     // A host app adds the extension of the image's type.
     downloadFile(
       { name: `image-${image.id}`, content: image.src },

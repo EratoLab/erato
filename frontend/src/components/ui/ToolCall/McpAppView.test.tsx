@@ -1023,7 +1023,7 @@ describe("McpAppView", () => {
 
       await waitFor(() => {
         expect(request).toHaveBeenCalledExactlyOnceWith(
-          "files.share",
+          "files.save",
           expect.objectContaining({
             fileName: "Revenue by region.png",
             data: PNG_BASE64,

@@ -68,7 +68,7 @@ describe("ImageLightbox download", () => {
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledExactlyOnceWith(
-        "files.share",
+        "files.save",
         expect.objectContaining({
           fileName: "image-img-1",
           contentType: "image/png",
@@ -78,5 +78,16 @@ describe("ImageLightbox download", () => {
     });
     expect(fetch).toHaveBeenCalledWith(PIXEL, expect.anything());
     expect(click).not.toHaveBeenCalled();
+  });
+
+  it("keeps the browser path for an image without an address", () => {
+    const request = installHostShell({ files: 1 });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    renderLightbox("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(request).not.toHaveBeenCalled();
   });
 });

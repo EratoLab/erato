@@ -346,7 +346,7 @@ describe("FilePreviewModal", () => {
 
       await waitFor(() => {
         expect(request).toHaveBeenCalledExactlyOnceWith(
-          "files.share",
+          "files.save",
           expect.objectContaining({
             fileName: "cities.csv",
             contentType: "text/csv",
