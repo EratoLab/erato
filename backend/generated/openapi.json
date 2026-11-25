@@ -6008,7 +6008,7 @@
           },
           "client_confirmation": {
             "type": "object",
-            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `chained` set. Opaque to\nthe server, at most 4 KiB of JSON; the apply call carries it to the\nclient as `confirmation`."
+            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `follows` set. Opaque to\nthe server, at most 4 KiB of JSON; the operation carries it to the\nclient as `confirmation`."
           },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
@@ -6069,10 +6069,6 @@
             "type": "string",
             "description": "The name the model called the tool by, set only where it is not\n`tool_name`: a name qualified with the MCP server. The continued call\nis stored and replayed under it."
           },
-          "chained": {
-            "$ref": "#/components/schemas/ChainedApprovalRef",
-            "description": "Set when the server itself made this call to apply a change the client\nchecked and accepted: the card is the host's own."
-          },
           "child": {
             "oneOf": [
               {
@@ -6092,6 +6088,10 @@
                 "$ref": "#/components/schemas/ToolDisplayMetadata"
               }
             ]
+          },
+          "follows": {
+            "$ref": "#/components/schemas/ChainedApprovalRef",
+            "description": "Set when the server itself made this call (the operation) after a\nproposal the client checked and accepted: the card is the host's own."
           },
           "input": {
             "$ref": "#/components/schemas/Value"
@@ -7636,9 +7636,9 @@
       },
       "ChainedApprovalRef": {
         "type": "object",
-        "description": "The accepted submission a server-chained apply call applies.",
+        "description": "The accepted proposal a server-called operation follows.",
         "required": [
-          "submission_call_id",
+          "proposal_call_id",
           "decide_on_screen"
         ],
         "properties": {
@@ -7646,12 +7646,12 @@
             "type": "boolean",
             "description": "The user decides on screen: the card needs a tick or a row choice, so\nit offers no Always and takes no decision by voice."
           },
+          "proposal_call_id": {
+            "type": "string"
+          },
           "reason": {
             "type": "string",
             "description": "The host's short code for why it asks again after it found, while\nwriting, that the user must confirm something, such as\n`whole_document`."
-          },
-          "submission_call_id": {
-            "type": "string"
           }
         }
       },

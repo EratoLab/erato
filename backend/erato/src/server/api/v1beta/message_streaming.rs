@@ -668,7 +668,7 @@ fn ask_for_tool_call(
             input: tool_call.fn_arguments.clone(),
             child: None,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         }],
         // The rest of the parked batch is recorded by the caller that owns the
         // queue, not by this per-call gate.
@@ -791,8 +791,8 @@ fn chained_or_every_call_ask(
         ToolCallGate::Ask(mut request) => {
             if let Some(state) = chained {
                 for item in &mut request.approvals {
-                    item.chained = Some(crate::models::message::ChainedApprovalRef {
-                        submission_call_id: state.submission_call_id.clone(),
+                    item.follows = Some(crate::models::message::ChainedApprovalRef {
+                        proposal_call_id: state.submission_call_id.clone(),
                         decide_on_screen: state.decide_on_screen,
                         reason: state.reason.clone(),
                     });
@@ -2756,8 +2756,8 @@ pub struct ApprovalDecisionItem {
     #[schema(nullable = false)]
     pub voice_receipt: Option<String>,
     /// What the user chose on a host's own card, such as a tick, for
-    /// `approve` or `approve_always` of an item with `chained` set. Opaque to
-    /// the server, at most 4 KiB of JSON; the apply call carries it to the
+    /// `approve` or `approve_always` of an item with `follows` set. Opaque to
+    /// the server, at most 4 KiB of JSON; the operation carries it to the
     /// client as `confirmation`.
     #[serde(default)]
     #[schema(nullable = false, value_type = Object)]
@@ -6768,7 +6768,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
         input: child.tool_call.fn_arguments.clone(),
         child: Some(child_ref),
         replaces_approval_id: None,
-        chained: None,
+        follows: None,
     }
 }
 
@@ -6850,7 +6850,7 @@ fn task_plan_approval_part(
             input: call.fn_arguments.clone(),
             child: None,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         })
         .collect();
     let head = &gated[0];
@@ -8093,8 +8093,7 @@ async fn stream_generate_chat_completion<'a>(
                     .config
                     .submission
                     .as_ref()
-                    .and_then(|submission| submission.apply.as_ref())
-                    .and_then(|apply| apply.more_steps.as_deref())
+                    .and_then(|submission| submission.more_steps_key.as_deref())
                     && let Some((value, position)) = crate::services::chained_apply::take_more_steps(
                         &mut call.fn_arguments,
                         pointer,
@@ -8107,8 +8106,10 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 }
                 if !is_delegated_run
-                    && crate::services::chained_apply::offered_apply(tool, &offered_client_tools)
-                        .is_some_and(|(apply, _)| chained_applies_run >= apply.max_changes)
+                    && crate::services::chained_apply::offered_follower(tool, &offered_client_tools)
+                        .is_some_and(|follower| {
+                            chained_applies_run >= follower.config.max_calls_per_message()
+                        })
                 {
                     // Refused before dispatch, as an ordinary call that opens
                     // no editing step and counts toward the tool-call limit.
@@ -9472,11 +9473,13 @@ async fn stream_generate_chat_completion<'a>(
                 let chain_capped = !is_delegated_run
                     && tool_policy.is_some_and(|policy| {
                         policy.submission.is_some()
-                            && crate::services::chained_apply::offered_apply(
+                            && crate::services::chained_apply::offered_follower(
                                 policy,
                                 &offered_client_tools,
                             )
-                            .is_some_and(|(apply, _)| chained_applies_run >= apply.max_changes)
+                            .is_some_and(|follower| {
+                                chained_applies_run >= follower.config.max_calls_per_message()
+                            })
                     });
                 // Set when a context approval covers the call: the lineage a
                 // host that checks the scope gets, and whether the call needs
@@ -9669,7 +9672,7 @@ async fn stream_generate_chat_completion<'a>(
                     )),
                     _ => None,
                 };
-                // Every chained apply counts toward `max_changes` whatever its
+                // Every chained apply counts toward `max_calls_per_message` whatever its
                 // outcome, so a refusal cannot loop; the run after a tick is the
                 // same change.
                 let counts_as_change = chained_state.as_ref().is_some_and(|state| !state.reparked);
@@ -9807,8 +9810,7 @@ async fn stream_generate_chat_completion<'a>(
                     } else {
                         let pointer = tool_policy
                             .and_then(|policy| policy.config.submission.as_ref())
-                            .and_then(|config| config.apply.as_ref())
-                            .and_then(|apply| apply.more_steps.as_deref());
+                            .and_then(|config| config.more_steps_key.as_deref());
                         match (pointer, tool_charges.get(&call_id).and_then(|charge| charge.more_steps.as_ref())) {
                             (Some(pointer), Some(value)) => submission.validate(
                                 &crate::services::chained_apply::with_more_steps(&tool_input, pointer, value, None),
@@ -10468,20 +10470,14 @@ async fn stream_generate_chat_completion<'a>(
                             break 'pop_calls;
                         }
                     }
-                    if report.status == "needs_decision" {
+                    if report.status == crate::services::chained_apply::ApplyStatus::NeedsDecision {
                         crate::services::chained_apply::mark_needs_decision_again(
                             &mut output_value,
                         );
                     }
                     let max_changes = tool_policy
-                        .and_then(|policy| {
-                            offered_client_tools.values().find_map(|submission| {
-                                let apply =
-                                    submission.config.submission.as_ref()?.apply.as_ref()?;
-                                (apply.tool == policy.config.qualified_name())
-                                    .then_some(apply.max_changes)
-                            })
-                        })
+                        .filter(|policy| policy.config.follows_tool.is_some())
+                        .map(|policy| policy.config.max_calls_per_message())
                         .unwrap_or(chained_applies_run);
                     output_value["changes_left"] =
                         json!(max_changes.saturating_sub(chained_applies_run));
@@ -10554,10 +10550,10 @@ async fn stream_generate_chat_completion<'a>(
                             && correction.outcome.status
                                 == crate::services::submission_correction::SubmissionStatus::Accepted =>
                     {
-                        crate::services::chained_apply::offered_apply(policy, &offered_client_tools)
-                            .filter(|(apply, _)| chained_applies_run < apply.max_changes)
-                            .map(|(apply, apply_tool)| {
-                                (result.clone(), apply.tool.clone(), apply_tool.config.clone(), correction.outcome.clone())
+                        crate::services::chained_apply::offered_follower(policy, &offered_client_tools)
+                            .filter(|follower| chained_applies_run < follower.config.max_calls_per_message())
+                            .map(|follower| {
+                                (result.clone(), follower.config.qualified_name(), follower.config.clone(), correction.outcome.clone())
                             })
                     }
                     _ => None,
@@ -15421,7 +15417,7 @@ mod tests {
             input: json!({}),
             child: None,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         }
     }
 
@@ -16450,7 +16446,7 @@ mod tests {
             input: json!({}),
             child,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         };
         let open = vec![
             item("own", None),
@@ -22865,7 +22861,7 @@ fn client_confirmation_refused(
         }
         if !open
             .iter()
-            .any(|open| open.approval_id == item.approval_id && open.chained.is_some())
+            .any(|open| open.approval_id == item.approval_id && open.follows.is_some())
         {
             return Some(
                 "`client_confirmation` belongs to a change the server applies only".to_string(),
@@ -22926,8 +22922,8 @@ async fn voice_receipts_taken(
             .iter()
             .find(|open| open.approval_id == item.approval_id);
         let on_screen = open_item
-            .and_then(|open| open.chained.as_ref())
-            .is_some_and(|chained| chained.decide_on_screen);
+            .and_then(|open| open.follows.as_ref())
+            .is_some_and(|follows| follows.decide_on_screen);
         let checked = open_item.zip(user_id).map(|(open, user_id)| {
             check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
         });
@@ -25360,7 +25356,7 @@ pub(crate) async fn run_continuation(
                     voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
             let mut fn_arguments = item.input.clone();
-            if item.chained.is_some()
+            if item.follows.is_some()
                 && let Some(confirmation) = request
                     .decisions
                     .iter()
@@ -25722,7 +25718,7 @@ pub(crate) async fn run_continuation(
                 .open
                 .iter()
                 .find(|item| &item.approval_id == approval_id)
-                .filter(|item| item.chained.is_some())
+                .filter(|item| item.follows.is_some())
         })
         .collect();
     let only_chained = !plan_decisions.is_empty()

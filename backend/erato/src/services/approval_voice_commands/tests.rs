@@ -1453,7 +1453,7 @@ mod deciding_by_voice {
             input: json!({"id": 7, "status": "done"}),
             child: None,
             replaces_approval_id: None,
-            chained: None,
+            follows: None,
         }
     }
 
@@ -1494,8 +1494,8 @@ mod deciding_by_voice {
         ));
         let chained = |decide_on_screen| {
             [ApprovalItem {
-                chained: Some(crate::models::message::ChainedApprovalRef {
-                    submission_call_id: "call_plan".into(),
+                follows: Some(crate::models::message::ChainedApprovalRef {
+                    proposal_call_id: "call_plan".into(),
                     decide_on_screen,
                     reason: None,
                 }),
