@@ -189,7 +189,7 @@ mod tests {
                 input: json!({}),
                 child: None,
                 replaces_approval_id: None,
-                chained: None,
+                follows: None,
             }],
             pending_tool_calls: Vec::new(),
             approval_scope: None,

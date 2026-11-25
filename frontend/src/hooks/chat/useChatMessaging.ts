@@ -84,7 +84,10 @@ import {
   useChatMessages,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
-import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
+import {
+  buildContinueStreamBody,
+  isApprovalDecision,
+} from "@/lib/toolApprovalDecisions";
 import { abortableDelay } from "@/utils/abortableDelay";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
@@ -204,11 +207,6 @@ export interface ContinueToolApprovalInput {
    * answer a uniform card gave the whole stop.
    */
   itemDecisions?: DecidedApproval[];
-  /**
-   * Name every decided item even when there is one: set while tasks on the
-   * stop still wait, so one that turns into a question is reported back.
-   */
-  enumerate?: boolean;
   /**
    * The stop's open items, so the seeded parts can be numbered the way the
    * server numbers them. Without them only the flat fields are seeded, which is
@@ -3081,7 +3079,6 @@ export function useChatMessaging(
       mcpServerId,
       approvalIds,
       itemDecisions,
-      enumerate,
       items,
       kind,
       nothingToDecide = false,
@@ -3137,6 +3134,9 @@ export function useChatMessaging(
                 decision: answer?.decision ?? decision,
                 ...(answer?.changeRequest
                   ? { changeRequest: answer.changeRequest }
+                  : {}),
+                ...(answer?.voiceReceipt !== undefined
+                  ? { byVoice: true }
                   : {}),
               };
             })
@@ -3243,8 +3243,20 @@ export function useChatMessaging(
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) {
         beginSpeechResponse(streamKey);
+        // A refusal said to the voice and a change request were answered
+        // aloud before they went out. A tap was answered only on screen, and
+        // an approval by voice is answered as the wait's first line, which
+        // keeps the opener out; without it, the opener covers the wait.
+        const answeredAloud =
+          settled.some(({ decision: given }) => given === "request_change") ||
+          (itemDecisions ?? []).some(
+            (answer) =>
+              answer.voiceReceipt !== undefined &&
+              !isApprovalDecision(answer.decision),
+          );
         beginWaitTurn(streamKey, {
           continuation: true,
+          opener: !answeredAloud,
           language: voiceTurnLanguage(),
         });
       }
@@ -3374,7 +3386,7 @@ export function useChatMessaging(
                     decision,
                     approvalIds,
                     itemDecisions,
-                    enumerate,
+                    items,
                     readBack,
                   }),
             ),

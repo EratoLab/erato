@@ -50,6 +50,14 @@ describe("FeatureConfigProvider", () => {
     expect(result.current.keepToolsDropdownOpen).toBe(true);
   });
 
+  it("maps the AI usage advisory opt-in from the environment", () => {
+    mockEnv.mockReturnValue({ ...env(), showUsageAdvisory: true });
+    const { result } = renderHook(() => useChatInputFeature(), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.showUsageAdvisory).toBe(true);
+  });
+
   it("maps the actions on marked message text, each on its own flag", () => {
     mockEnv.mockReturnValue({ ...env(), messageTextExplainEnabled: true });
     const { result } = renderHook(() => useFeatureConfig(), {
@@ -102,7 +110,6 @@ describe("FeatureConfigProvider", () => {
       chatInputEmptyStateLayout: "centered",
       disableLogout: false,
       assistantsEnabled: false,
-      delegationTasksApprovalMode: "async_only",
       assistantsShowRecentItems: false,
       assistantsShowRecentItemsCollapsible: false,
       assistantContextWarningThreshold: 0.5,
@@ -183,7 +190,7 @@ describe("FeatureConfigProvider", () => {
           autofocus: true,
           keepToolsDropdownOpen: false,
           emptyStateLayout: "centered",
-          showUsageAdvisory: true,
+          showUsageAdvisory: false,
           maxFiles: 10,
         },
         audioTranscription: {
@@ -216,7 +223,6 @@ describe("FeatureConfigProvider", () => {
           delegationAllowBackground: false,
           delegationTasksEnabled: false,
           delegationTasksAllowAsync: false,
-          delegationTasksApprovalMode: "async_only",
           enableEditSharing: true,
           enableDirectOrganizationSharing: true,
           usageViewEnabled: false,
@@ -355,7 +361,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current.upload.enabled).toBe(true);
       expect(result.current.chatInput.autofocus).toBe(false);
-      expect(result.current.chatInput.showUsageAdvisory).toBe(true);
+      expect(result.current.chatInput.showUsageAdvisory).toBe(false);
       expect(result.current.chatInput.maxFiles).toBe(7);
       expect(result.current.auth.showLogout).toBe(true);
     });
@@ -670,7 +676,7 @@ describe("FeatureConfigProvider", () => {
         autofocus: true,
         keepToolsDropdownOpen: false,
         emptyStateLayout: "centered",
-        showUsageAdvisory: true,
+        showUsageAdvisory: false,
         maxFiles: 10,
       });
     });
@@ -1003,7 +1009,6 @@ describe("FeatureConfigProvider", () => {
         delegationAllowBackground: false,
         delegationTasksEnabled: false,
         delegationTasksAllowAsync: false,
-        delegationTasksApprovalMode: "async_only",
         enableEditSharing: true,
         enableDirectOrganizationSharing: true,
         usageViewEnabled: false,
@@ -1030,7 +1035,6 @@ describe("FeatureConfigProvider", () => {
         disableChatInputAutofocus: false,
         disableLogout: false,
         assistantsEnabled: true,
-        delegationTasksApprovalMode: "async_only",
         assistantsEnableDirectOrganizationSharing: false,
         assistantsShowRecentItems: true,
         assistantsShowRecentItemsCollapsible: true,
@@ -1062,7 +1066,6 @@ describe("FeatureConfigProvider", () => {
         delegationAllowBackground: false,
         delegationTasksEnabled: false,
         delegationTasksAllowAsync: false,
-        delegationTasksApprovalMode: "async_only",
         enableEditSharing: true,
         enableDirectOrganizationSharing: false,
         usageViewEnabled: false,

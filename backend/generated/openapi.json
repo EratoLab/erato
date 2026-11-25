@@ -3742,7 +3742,7 @@
             "description": "The message has no approval waiting for a decision"
           },
           "413": {
-            "description": "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters"
+            "description": "Words over 300 characters, more than 32 pieces, a piece id over 64, a field name over 100 characters or more than 6 other names of a field"
           }
         },
         "security": [
@@ -5943,6 +5943,17 @@
             "type": "boolean",
             "description": "The card must say this piece before a decision counts: a loss, a\nconsequence, recipients outside."
           },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Other names of the field: as the card shows it, and as the vocabulary\nsays it in each language. Words naming any of them name the piece."
+          },
+          "on_request": {
+            "type": "boolean",
+            "description": "A field the card counts as \"more\" and says only when asked for by\nname. Hearing it never stands in for any piece of the card."
+          },
           "role": {
             "$ref": "#/components/schemas/ApprovalCardPieceRole"
           },
@@ -5991,9 +6002,13 @@
             "type": "string",
             "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
           },
+          "child_tool_call_id": {
+            "type": "string",
+            "description": "For a delegated task's item: the `child_tool_call_id` of the question\nthe card showed. A task that asks again keeps its `approval_id`, so this\nis what tells its questions apart."
+          },
           "client_confirmation": {
             "type": "object",
-            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `chained` set. Opaque to\nthe server, at most 4 KiB of JSON; the apply call carries it to the\nclient as `confirmation`."
+            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `follows` set. Opaque to\nthe server, at most 4 KiB of JSON; the operation carries it to the\nclient as `confirmation`."
           },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
@@ -6054,10 +6069,6 @@
             "type": "string",
             "description": "The name the model called the tool by, set only where it is not\n`tool_name`: a name qualified with the MCP server. The continued call\nis stored and replayed under it."
           },
-          "chained": {
-            "$ref": "#/components/schemas/ChainedApprovalRef",
-            "description": "Set when the server itself made this call to apply a change the client\nchecked and accepted: the card is the host's own."
-          },
           "child": {
             "oneOf": [
               {
@@ -6077,6 +6088,10 @@
                 "$ref": "#/components/schemas/ToolDisplayMetadata"
               }
             ]
+          },
+          "follows": {
+            "$ref": "#/components/schemas/ChainedApprovalRef",
+            "description": "Set when the server itself made this call (the operation) after a\nproposal the client checked and accepted: the card is the host's own."
           },
           "input": {
             "$ref": "#/components/schemas/Value"
@@ -6286,6 +6301,13 @@
           "source"
         ],
         "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For `repeat` without a piece: the fields the words fit equally, for\nasking which one is meant instead of guessing."
+          },
           "decision": {
             "$ref": "#/components/schemas/ApprovalVoiceDecision",
             "description": "For `approve` and `reject` while deciding by voice is on: whether the\nwords decide the card."
@@ -6403,7 +6425,8 @@
         "type": "string",
         "description": "What the voice just asked about the card, when the user's words may\nanswer it.",
         "enum": [
-          "which_text"
+          "which_text",
+          "which_field"
         ]
       },
       "ApprovalVoiceSignals": {
@@ -7620,9 +7643,9 @@
       },
       "ChainedApprovalRef": {
         "type": "object",
-        "description": "The accepted submission a server-chained apply call applies.",
+        "description": "The accepted proposal a server-called operation follows.",
         "required": [
-          "submission_call_id",
+          "proposal_call_id",
           "decide_on_screen"
         ],
         "properties": {
@@ -7630,12 +7653,12 @@
             "type": "boolean",
             "description": "The user decides on screen: the card needs a tick or a row choice, so\nit offers no Always and takes no decision by voice."
           },
+          "proposal_call_id": {
+            "type": "string"
+          },
           "reason": {
             "type": "string",
             "description": "The host's short code for why it asks again after it found, while\nwriting, that the user must confirm something, such as\n`whole_document`."
-          },
-          "submission_call_id": {
-            "type": "string"
           }
         }
       },

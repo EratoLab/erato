@@ -17,6 +17,7 @@ import voiceApprovals from "./fixtures/spokenCards/voiceApprovals.json";
 import { toolCallCardOf } from "./gist";
 import { gistPlainLine } from "./gistLabels";
 import {
+  MAX_COMMAND_PIECES,
   MAX_READ_WORDS,
   MAX_SPOKEN_DETAILS,
   MAX_VOICE_ITEMS,
@@ -140,7 +141,9 @@ const pieces = (
       timeZone: ZONE,
       position,
     }),
-  ).map(said);
+  )
+    .filter((piece) => !piece.onRequest)
+    .map(said);
 
 const spoken = (id: string, language = "de") =>
   pieces(id, language)
@@ -400,13 +403,13 @@ describe("spoken approval card", () => {
     const changeOf = (decideOnScreen: boolean) =>
       spokenApprovalFor("client_tool", {
         tool_name: "apply_document_plan",
-        input: { submission_call_id: "call-plan", draft_id: "d-1" },
+        input: { proposal_call_id: "call-plan", draft_id: "d-1" },
         display: {
           title: "Change “Vertrag.docx”",
           description: "Updates 2 of 9 sections: § 3, § 5",
           label,
         },
-        chained: { decide_on_screen: decideOnScreen },
+        follows: { decide_on_screen: decideOnScreen },
       });
     const change = changeOf(false);
     expect(
@@ -821,7 +824,7 @@ describe("one ranking with the card", () => {
           now: NOW,
           timeZone: ZONE,
         }),
-      );
+      ).filter((piece) => !piece.onRequest);
       const card = cardFields(
         call,
         said.some(
@@ -1113,8 +1116,19 @@ describe("every scenario of the set", () => {
         expect(cards, `${scenario.id} ${language}`).toEqual(
           expected[scenario.id]?.[language],
         );
-        cards.forEach((card, index) => {
+        cards.forEach((whole, index) => {
           const where = `${scenario.id} ${language} #${index}`;
+          // Fields said only on request follow the card, are never owed and
+          // are each spoken on their own.
+          const card = whole.filter((piece) => !piece.onRequest);
+          const asked = whole.slice(card.length);
+          expect(
+            asked.every((piece) => piece.onRequest && !piece.mustSay),
+            where,
+          ).toBe(true);
+          expect(whole.length, where).toBeLessThanOrEqual(MAX_COMMAND_PIECES);
+          for (const piece of asked)
+            expect(piece.text.length, where).toBeLessThanOrEqual(400);
           const order = card.map((piece) => piece.role);
           if (order[0] === "pointer") {
             expect(order, where).toEqual(["pointer"]);

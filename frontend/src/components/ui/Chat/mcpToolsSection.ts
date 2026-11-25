@@ -1,198 +1,172 @@
 import { plural, t } from "@lingui/core/macro";
 
-import { countDisabledMcpTools } from "@/utils/chat/mcpToolPatterns";
-
-import {
-  mcpServerDescription,
-  mcpServerStatus,
-} from "../Settings/mcpServerStatus";
-
-import type { AddMenuSection, AddMenuSectionItem } from "./ChatInputAddMenu";
+import type { AddMenuSection } from "./ChatInputAddMenu";
 import type { McpServerStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export const MCP_TOOLS_SECTION_ID = "mcp-tools";
-export const MCP_TOOLS_WRITE_TOGGLE_ITEM_ID = "allow-write-operations";
-export const MCP_TOOLS_BROWSE_ITEM_ID = "browse-tools";
-// Prefixed so a server id can never coincide with one of the fixed rows.
-export const MCP_TOOLS_SERVER_ITEM_ID_PREFIX = "server-";
+export const MCP_TOOLS_OPEN_ITEM_ID = "connectors";
 
-export const mcpToolsServerItemId = (serverId: string) =>
-  `${MCP_TOOLS_SERVER_ITEM_ID_PREFIX}${serverId}`;
+/**
+ * What the chat's "Allow changes" switch means in its current state, for the
+ * switch itself and for the "Read only" mode. Off says "tools the server marks
+ * read-only" on purpose: an unannotated tool is not read-only under protocol
+ * defaults, so it disappears too, and "read-only tools" would misdescribe it.
+ */
+export function describeAllowChanges({
+  enabled,
+  pausesHostActions,
+}: {
+  enabled: boolean;
+  /** Whether the host proposes actions of its own, which pause too. */
+  pausesHostActions: boolean;
+}): string {
+  if (enabled) {
+    return t({
+      id: "chatInput.connectors.allowChanges.descriptionOn",
+      message: "Connected tools may create, change and delete things.",
+    });
+  }
+  return pausesHostActions
+    ? t({
+        id: "chatInput.connectors.allowChanges.descriptionOffHostActions",
+        message:
+          "Off: only tools the server marks read-only are offered, and actions in this application are paused.",
+      })
+    : t({
+        id: "chatInput.connectors.allowChanges.descriptionOff",
+        message: "Off: only tools the server marks read-only are offered.",
+      });
+}
+
+// Up to this many switched-off servers are named in the summary; more are
+// counted instead, so the line stays one line.
+const NAMED_OFF_LIMIT = 2;
 
 interface McpToolsSectionOptions {
-  /** The chat's current write setting; the toggle row shows it as checked. */
-  writeToolsEnabled: boolean;
-  onToggleWriteTools: () => void;
-  onBrowse: () => void;
-  /**
-   * The servers offered to this chat, one row each above the write switch.
-   * A server's id doubles as its label — the listing carries no other name.
-   */
-  servers?: McpServerStatus[];
-  /** Servers the user switched off for this chat; their rows are unticked. */
+  /** The servers this chat can use, sorted the way the dialog lists them. */
+  servers: McpServerStatus[];
+  /** Servers the user switched off for this chat. */
   disabledServerIds?: string[];
-  onToggleServer?: (serverId: string) => void;
-  /**
-   * Locks the server switches alone: the chat's list is not known yet, so a
-   * flip has no base. The connect rows, the write switch and the browser row
-   * stay live.
-   */
-  serverSwitchesLocked?: boolean;
-  /**
-   * The chat's switched-off `server/tool` patterns; a server row that is on
-   * says how many of its tools are off, which is the trail into the browser
-   * where they are switched.
-   */
-  disabledToolPatterns?: string[];
-  /**
-   * Where a server still awaiting the user's authorization sends them: its
-   * row is not a switch — there is nothing to switch off — but the way to
-   * connect.
-   */
-  onConnect?: () => void;
+  /** The chat's write setting; off is part of the summary. */
+  writeToolsEnabled: boolean;
+  /** Opens the connectors dialog. */
+  onOpen: () => void;
   disabled?: boolean;
-  /**
-   * Whether this host also proposes actions of its own — the Outlook add-in
-   * sends its action facet with every request — so the toggle's description
-   * names that those pause too. Copy only; the switch itself is one control.
-   */
-  pausesHostActions?: boolean;
 }
 
 /**
- * The "Connectors" group in its host-neutral form: one switch per server,
- * the per-chat write switch and the row into the tool browser. Both composer
- * surfaces — the mobile "+" menu and the desktop tool dropdown — render this
- * same data.
+ * The state of the connectors in one line, exceptions first: which are
+ * switched off, how many still need the user to connect, and whether changes
+ * are paused. A server that failed to connect counts as on — it was not
+ * switched off, and the dialog says why it is idle.
+ */
+export function summarizeMcpConnectors({
+  servers,
+  disabledServerIds = [],
+  writeToolsEnabled,
+}: Pick<
+  McpToolsSectionOptions,
+  "servers" | "disabledServerIds" | "writeToolsEnabled"
+>): string {
+  const disabled = new Set(disabledServerIds);
+  const switchable = servers.filter(
+    (server) => server.connection_status !== "NEEDS_AUTHENTICATION",
+  );
+  const off = switchable.filter((server) => disabled.has(server.id));
+  const onCount = switchable.length - off.length;
+  const toConnectCount = servers.length - switchable.length;
+
+  const parts: string[] = [];
+  if (off.length === 0) {
+    if (onCount > 0) {
+      parts.push(
+        t({
+          id: "chatInput.connectors.summary.allOn",
+          message: plural(onCount, { one: "# on", other: "All # on" }),
+        }),
+      );
+    }
+  } else {
+    const offCount = off.length;
+    if (offCount <= NAMED_OFF_LIMIT) {
+      // The state comes first, so a long name cannot push it past the
+      // ellipsis.
+      const names = off.map((server) => server.display_name).join(", ");
+      parts.push(
+        t({
+          id: "chatInput.connectors.summary.namedOff",
+          message: plural(offCount, {
+            one: `Off: ${names}`,
+            other: `Off: ${names}`,
+          }),
+        }),
+      );
+    } else {
+      parts.push(
+        t({
+          id: "chatInput.connectors.summary.countsOff",
+          message: `On: ${onCount}, off: ${offCount}`,
+        }),
+      );
+    }
+  }
+  if (toConnectCount > 0) {
+    parts.push(
+      t({
+        id: "chatInput.connectors.summary.toConnect",
+        message: plural(toConnectCount, {
+          one: "# to connect",
+          other: "# to connect",
+        }),
+      }),
+    );
+  }
+  if (!writeToolsEnabled) {
+    parts.push(
+      t({
+        id: "chatInput.connectors.summary.readOnly",
+        message: "read only",
+      }),
+    );
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * The connectors in their host-neutral form: one row that says their state
+ * and opens the connectors dialog, where each one is switched, connected or
+ * opened to its tools. Both composer surfaces — the mobile "+" menu and the
+ * desktop tool dropdown — render this same data.
  *
- * A server row is ticked while the server is on for the chat, so the group
- * reads like the tool rows above it: ticked means offered. A server whose
- * connection failed keeps a live switch — it may have been switched off
- * while healthy and must stay re-enableable — and says why it is idle.
- *
- * The write description deliberately says "tools the server marks
- * read-only": under protocol defaults an unannotated tool is not read-only,
- * so with writes off it disappears too, and "read-only tools" would
- * misdescribe that.
+ * The row carries no group header: its own label names the group, and the
+ * menus separate header-less groups with a divider.
  */
 export function buildMcpToolsSection({
-  writeToolsEnabled,
-  onToggleWriteTools,
-  onBrowse,
-  servers = [],
+  servers,
   disabledServerIds = [],
-  onToggleServer,
-  serverSwitchesLocked = false,
-  disabledToolPatterns = [],
-  onConnect,
+  writeToolsEnabled,
+  onOpen,
   disabled = false,
-  pausesHostActions = false,
 }: McpToolsSectionOptions): AddMenuSection {
-  const disabledServerIdSet = new Set(disabledServerIds);
-
-  // Only a healthy, switched-on server gets the count: a failed server's
-  // row explains the failure instead, and a switched-off one offers nothing
-  // for the count to narrow. A wildcard entry has no number without the
-  // roster, so the row says how far it reaches instead.
-  const disabledToolsDescription = (server: McpServerStatus) => {
-    if (
-      server.connection_status !== "SUCCESS" ||
-      disabledServerIdSet.has(server.id)
-    ) {
-      return undefined;
-    }
-    const disabledToolCount = countDisabledMcpTools(
-      disabledToolPatterns,
-      server.id,
-    );
-    if (disabledToolCount === "all") {
-      return t({
-        id: "chatInput.connectors.server.allToolsDisabled",
-        message: "All tools switched off",
-      });
-    }
-    if (disabledToolCount === "some") {
-      return t({
-        id: "chatInput.connectors.server.someToolsDisabled",
-        message: "Some tools switched off",
-      });
-    }
-    if (disabledToolCount === 0) {
-      return undefined;
-    }
-    return t({
-      id: "chatInput.connectors.server.disabledTools",
-      message: plural(disabledToolCount, {
-        one: "# tool switched off",
-        other: "# tools switched off",
-      }),
-    });
-  };
-
-  const serverItems: AddMenuSectionItem[] = servers.map((server) => {
-    const id = mcpToolsServerItemId(server.id);
-    if (server.connection_status === "NEEDS_AUTHENTICATION") {
-      return {
-        id,
-        label: server.id,
-        description: mcpServerStatus(server).label,
-        disabled: disabled || !onConnect,
-        closesImmediately: true,
-        onSelect: () => onConnect?.(),
-      };
-    }
-    return {
-      id,
-      label: server.id,
-      description:
-        mcpServerDescription(server) ?? disabledToolsDescription(server),
-      checked: !disabledServerIdSet.has(server.id),
-      disabled: disabled || serverSwitchesLocked,
-      onToggle: () => onToggleServer?.(server.id),
-    };
-  });
-
   return {
     id: MCP_TOOLS_SECTION_ID,
-    header: t({
-      id: "chatInput.connectors.sectionHeader",
-      message: "Connectors",
-    }),
     // eslint-disable-next-line lingui/no-unlocalized-strings -- AddMenuSection placement enum
     placement: "belowTools",
     items: [
-      ...serverItems,
       {
-        id: MCP_TOOLS_WRITE_TOGGLE_ITEM_ID,
+        id: MCP_TOOLS_OPEN_ITEM_ID,
         label: t({
-          id: "chatInput.connectors.allowWrites.label",
-          message: "Allow write operations",
+          id: "chatInput.connectors.open",
+          message: "Connectors…",
         }),
-        description: pausesHostActions
-          ? // A new Lingui ID avoids reusing translations that name Outlook.
-            t({
-              id: "chatInput.connectors.allowWrites.descriptionHostActions",
-              message:
-                "Off, only tools the server marks read-only are offered. Also pauses actions in the host application.",
-            })
-          : t({
-              id: "chatInput.connectors.allowWrites.description",
-              message:
-                "Off, only tools the server marks read-only are offered.",
-            }),
-        checked: writeToolsEnabled,
-        disabled,
-        onToggle: onToggleWriteTools,
-      },
-      {
-        id: MCP_TOOLS_BROWSE_ITEM_ID,
-        label: t({
-          id: "chatInput.connectors.browse",
-          message: "Browse tools…",
+        description: summarizeMcpConnectors({
+          servers,
+          disabledServerIds,
+          writeToolsEnabled,
         }),
         disabled,
         closesImmediately: true,
-        onSelect: onBrowse,
+        onSelect: onOpen,
       },
     ],
   };

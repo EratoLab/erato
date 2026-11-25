@@ -1,8 +1,9 @@
-import { test, expect, Page, Response } from "@playwright/test";
+import { test, expect, Page, Response, Route } from "@playwright/test";
 import { TAG_CI } from "./tags";
 import {
   chatIsReadyToChat,
   ensureOpenSidebar,
+  RECENT_CHATS_ROUTE,
   RECENT_CHATS_URL,
   selectModel,
   sendFirstMessage,
@@ -193,21 +194,35 @@ test(
       }
     });
 
+    // Every worker signs in as the same e2e user, so the listing marks other
+    // workers' chats as running, and that legitimately starts the poll. This
+    // page owns no chat until it sends one, so until then the listing is
+    // stripped of those markers to give a deterministic idle client.
+    const hideForeignActivity = async (route: Route) => {
+      const response = await route.fetch();
+      let body: { chats?: Record<string, unknown>[] };
+      try {
+        body = (await response.json()) as typeof body;
+      } catch {
+        await route.fulfill({ response });
+        return;
+      }
+      for (const chat of body.chats ?? []) {
+        delete chat.active_generation_started_at;
+        delete chat.pending_tool_approval_at;
+        delete chat.delegated_runs_in_flight;
+      }
+      await route.fulfill({ response, json: body });
+    };
+    await page.route(RECENT_CHATS_ROUTE, hideForeignActivity);
+    const firstListing = page.waitForResponse((response) =>
+      response.url().includes(RECENT_CHATS_URL),
+    );
+
     await page.goto("/");
     await chatIsReadyToChat(page);
     await ensureOpenSidebar(page);
-
-    // Settle to an idle baseline: a still-running chat from an earlier test
-    // would legitimately keep the poller alive.
-    await expect(
-      page
-        .getByRole("complementary")
-        .locator(
-          '[data-testid="chat-generation-status"][data-status="running"]',
-        ),
-    ).toHaveCount(0, { timeout: 60000 });
-    // eslint-disable-next-line playwright/no-wait-for-timeout -- settle beat between the terminal transition and the idle measurement window below
-    await page.waitForTimeout(2000);
+    await firstListing;
 
     // The poll must be disabled while idle, not merely slowed down.
     const idleStart = Date.now();
@@ -220,6 +235,7 @@ test(
     ).toBe(0);
 
     // A running chat turns the poll on.
+    await page.unroute(RECENT_CHATS_ROUTE, hideForeignActivity);
     await selectModel(page, MOCK_MODEL);
     const firstPoll = page.waitForRequest(
       (request) => request.url().includes(GENERATING_URL),
@@ -247,11 +263,21 @@ test(
     await ensureOpenSidebar(page);
     await selectModel(page, MOCK_MODEL);
 
+    const listed = watchForChatListed(page);
     const chatId = await sendFirstMessage(page, "long running 15");
-    await expect(rowIndicator(page, chatId)).toHaveAttribute(
-      "data-status",
-      "running",
-    );
+    const indicator = rowIndicator(page, chatId);
+    await expect(indicator).toHaveAttribute("data-status", "running");
+    await listed(chatId);
+
+    // The chat in view never counts toward the badge, so leave it while the
+    // backend turn keeps running.
+    await page
+      .getByRole("complementary")
+      .getByRole("link", { name: "New Chat", exact: true })
+      .filter({ has: page.locator('[data-ui="sidebar-new-chat-item"]') })
+      .click();
+    await expect(page).toHaveURL(/\/chat\/new$/);
+    await expect(indicator).toHaveAttribute("data-status", "running");
 
     // Another chat may legitimately be active in parallel, so assert a
     // count, not "1".
@@ -262,9 +288,8 @@ test(
 
     // Let the turn finish so the suite leaves no running chat behind.
     await ensureOpenSidebar(page);
-    await chatIsReadyToChat(page, {
-      expectAssistantResponse: true,
-      loadingTimeoutMs: 60000,
+    await expect(indicator).toHaveAttribute("data-status", "finished", {
+      timeout: 45000,
     });
   },
 );

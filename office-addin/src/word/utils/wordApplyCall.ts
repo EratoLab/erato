@@ -78,7 +78,7 @@ export const WORD_APPLY_BUSY_WAIT_MS = 10_000;
 export function parseWordApplyInput(input: unknown): WordApplyInput | null {
   if (typeof input !== "object" || input === null || Array.isArray(input))
     return null;
-  const { submission_call_id: callId, confirmation } = input as Record<
+  const { proposal_call_id: callId, confirmation } = input as Record<
     string,
     unknown
   >;

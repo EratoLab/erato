@@ -156,12 +156,13 @@ test.describe("centered layout", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: WELCOME_HEADING }),
     ).toBeInViewport();
-    const advisory = await box(page.locator(ADVISORY));
+    // The story turns the advisory on; a phone still hides it.
+    await expect(page.locator(ADVISORY)).toHaveCount(0);
     const lower = await box(page.locator(WELCOME_LOWER));
     console.log(
-      `centered-default 390x700: advisory bottom ${advisory.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, gap ${(lower.y - advisory.bottom).toFixed(1)}px`,
+      `centered-default 390x700: shell bottom ${shell.bottom.toFixed(1)}, lower top ${lower.y.toFixed(1)}, gap ${(lower.y - shell.bottom).toFixed(1)}px`,
     );
-    expect(lower.y - advisory.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
+    expect(lower.y - shell.bottom).toBeGreaterThanOrEqual(MIN_LOWER_GAP);
   });
 
   test("each half scrolls on its own without moving the shell", async ({

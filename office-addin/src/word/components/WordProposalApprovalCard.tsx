@@ -61,7 +61,7 @@ export function WordProposalApprovalCard({
     return <>{renderDefault()}</>;
   const decision: WordCardDecision = {
     allowAlways,
-    decideOnScreen: item.chained?.decide_on_screen === true,
+    decideOnScreen: item.follows?.decide_on_screen === true,
     status,
     resolvedLabel,
     isBusy,

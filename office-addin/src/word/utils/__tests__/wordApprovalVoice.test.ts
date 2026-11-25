@@ -37,13 +37,13 @@ const spokenChange = (
 ) =>
   spokenApprovalFor("client_tool", {
     tool_name: tool,
-    input: { submission_call_id: "submit-A", draft_id: "submit-A" },
+    input: { proposal_call_id: "submit-A", draft_id: "submit-A" },
     display: {
       title: preview.title,
       description: preview.summary,
       label: { ...LABELS[tool], source: "own_mapping" } as never,
     },
-    chained: { decide_on_screen: preview.decide_on_screen },
+    follows: { decide_on_screen: preview.decide_on_screen },
   });
 
 const said = (

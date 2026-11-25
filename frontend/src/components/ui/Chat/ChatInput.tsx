@@ -95,11 +95,14 @@ import {
 } from "@/hooks/chat/useMentionableAssistants";
 import { UnsupportedFileTypeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
-import { useOptionalTranslation } from "@/hooks/i18n";
 import { useChatInputHandlers } from "@/hooks/ui";
-import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
-import { useIsMobile } from "@/hooks/useResponsive";
+import { useDocumentHidden } from "@/hooks/useDocumentHidden";
+import {
+  useIsMobile,
+  useIsNarrowTouchScreen,
+  useIsTouchPointer,
+} from "@/hooks/useResponsive";
 import {
   fetchGetFile,
   useFacets,
@@ -144,8 +147,7 @@ import { AssistantMentionPopover } from "./AssistantMentionPopover";
 import { ChatInputAddControls } from "./ChatInputAddControls";
 import { ChatInputAudioModeButton } from "./ChatInputAudioModeButton";
 import { ChatInputTokenUsage } from "./ChatInputTokenUsage";
-import { ChatTaskPlanAdvisory } from "./ChatTaskPlanAdvisory";
-import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
+import { ChatUsageAdvisory, useUsageAdvisory } from "./ChatUsageAdvisory";
 import { ComposerContextArea } from "./ComposerContext/ComposerContextArea";
 import { ComposerModeChips } from "./ComposerContext/ComposerModeChips";
 import { ComposerNoticeView } from "./ComposerContext/ComposerNoticeView";
@@ -161,10 +163,10 @@ import { ComposerToolChips } from "./ComposerToolChips";
 import { DelegationRunModePopover } from "./DelegationRunModePopover";
 import { FacetSelector } from "./FacetSelector";
 import { McpToolsBrowserModal } from "./McpToolsBrowserModal";
-import { ModelSelector } from "./ModelSelector";
+import { ModelSelector, ModelSelectorOptionContent } from "./ModelSelector";
 import { WaveformButton } from "./WaveformButton";
 import { buildAssistantMentionSection } from "./assistantMentionSection";
-import { buildMcpToolsSection } from "./mcpToolsSection";
+import { buildMcpToolsSection, describeAllowChanges } from "./mcpToolsSection";
 import { useAudioTranscriptionAnnouncements } from "./useAudioTranscriptionAnnouncements";
 import { Button } from "../Controls/Button";
 import { Alert } from "../Feedback/Alert";
@@ -174,7 +176,9 @@ import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
+import type { AddMenuSection } from "./ChatInputAddMenu";
 import type {
+  AppendToDraftOptions,
   ChatInputControlsHandle,
   DraftMessageOptions,
 } from "./ChatInputControlsContext";
@@ -397,6 +401,11 @@ function isScrolledToEnd(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= 4;
 }
 
+function fitTextareaHeight(textarea: HTMLTextAreaElement) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+}
+
 function appendDictationText(current: string, transcript: string): string {
   const text = transcript.trim();
   if (!text) {
@@ -586,6 +595,34 @@ export const ChatInput = ({
     setConversationAutoSendSignal((signal) => signal + 1);
   }, [clearPendingAutoSendTimeout]);
 
+  // The turn's words are dropped and the conversation listens again once
+  // what holds it back is over, as after an answer.
+  const dropTurnAndListenAgain = useCallback(() => {
+    shouldRestartAudioModeAfterResponseRef.current = true;
+    audioModeRestartSawPendingResponseRef.current = true;
+    clearPendingAutoSendTimeout();
+    pendingAutoSendRef.current = false;
+    dictationTargetRef.current = null;
+    setMessage("");
+  }, [clearPendingAutoSendTimeout]);
+  // Hiding the page, as a phone lock does, ended the turn without an error.
+  // Listening again waits until the page is shown: a hidden page cannot open
+  // the microphone.
+  const pageHidden = useDocumentHidden();
+  const listensWhenShownRef = useRef(false);
+  const handleStoppedByHiddenPage = useCallback(() => {
+    if (!isAudioMode || dictationTargetRef.current?.card) return;
+    listensWhenShownRef.current = true;
+    dropTurnAndListenAgain();
+  }, [dropTurnAndListenAgain, isAudioMode]);
+  /** Read live: the hook's state may lag behind the event that hid the page. */
+  const restartWaitsForPage = useCallback(() => {
+    if (!listensWhenShownRef.current) return false;
+    if (document.visibilityState === "hidden") return true;
+    listensWhenShownRef.current = false;
+    return false;
+  }, []);
+
   // Combine loading states
   const isLoading = propIsLoading ?? isMessagingLoading;
 
@@ -668,7 +705,7 @@ export const ChatInput = ({
     maxFiles: maxFilesPerMessage,
     keepToolsDropdownOpen,
   } = useChatInputFeature();
-  const aiUsageAdvisory = useOptionalTranslation("chat.ai_usage_advisory");
+  const usageAdvisory = useUsageAdvisory();
 
   // Use local model selection hook
   const {
@@ -956,6 +993,7 @@ export const ChatInput = ({
     onVoiceLowered: lowerVoice,
     chatId,
     onTurnLanguage: handleTurnLanguage,
+    onStoppedByHiddenPage: handleStoppedByHiddenPage,
   });
 
   const ownsAudio =
@@ -1008,6 +1046,7 @@ export const ChatInput = ({
   const {
     isAvailable: canMentionAssistants,
     suggested: suggestedAssistants,
+    suggestedFromUsage,
     all: mentionableAssistants,
   } = useMentionableAssistants(assistantId);
 
@@ -1015,7 +1054,7 @@ export const ChatInput = ({
   // Gated like the mentions: on a host-injected feature flag plus a live
   // listing, never on env — the add-in gets the group through the same hook.
   const { isAvailable: canBrowseMcpTools, servers: mcpServers } =
-    useBrowsableMcpServers();
+    useBrowsableMcpServers({ assistantId, chatId });
   const mcpWriteTools = useChatMcpWriteTools({
     chatId,
     isAvailable: canBrowseMcpTools,
@@ -1028,9 +1067,6 @@ export const ChatInput = ({
     chatId,
     isAvailable: canBrowseMcpTools,
   });
-  // A server awaiting authorization connects in the settings dialog; hosts
-  // without that chrome get the tool browser, which states the status.
-  const openMcpServersSettings = useOpenMcpServersSettings();
 
   // --- Wait-or-background for mentioned sends ------------------------------
   // Gated on the feature flags rather than `canMentionAssistants`: a restored
@@ -1411,10 +1447,15 @@ export const ChatInput = ({
 
   // The handle is built above the pending-caret hook, whose layout effect has
   // to stay behind the auto-resize one, so the method reaches it through a ref.
-  const appendToDraftRef = useRef<(block: string) => void>(() => {});
-  const appendToDraft = useCallback((block: string) => {
-    appendToDraftRef.current(block);
-  }, []);
+  const appendToDraftRef = useRef<
+    (block: string, options?: AppendToDraftOptions) => void
+  >(() => {});
+  const appendToDraft = useCallback(
+    (block: string, options?: AppendToDraftOptions) => {
+      appendToDraftRef.current(block, options);
+    },
+    [],
+  );
 
   const applySelectedChatProviderId = useCallback(
     (chatProviderId: string) => {
@@ -1984,8 +2025,7 @@ export const ChatInput = ({
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+      fitTextareaHeight(textarea);
       if (scrollTextareaToEndRef.current) {
         textarea.scrollTop = textarea.scrollHeight;
       }
@@ -1996,8 +2036,12 @@ export const ChatInput = ({
   const placeCaret = usePendingCaret(textareaRef);
 
   useEffect(() => {
-    appendToDraftRef.current = (block: string) => {
-      const next = appendBlockToDraft(textareaRef.current?.value ?? "", block);
+    appendToDraftRef.current = (block, options) => {
+      const next = appendBlockToDraft(
+        textareaRef.current?.value ?? "",
+        block,
+        options,
+      );
       scrollTextareaToEndRef.current = true;
       setMessage(next);
       placeCaret(next, next.length);
@@ -2336,19 +2380,17 @@ export const ChatInput = ({
     () =>
       canMentionAssistants
         ? buildAssistantMentionSection({
-            assistants: suggestedAssistants,
-            descriptionDisplay: toolsMenuDescriptionDisplay,
-            onSelect: insertAssistantMention,
-            onBrowse: () => setIsAssistantBrowserOpen(true),
+            suggested: suggestedAssistants,
+            suggestedFromUsage,
+            onOpen: () => setIsAssistantBrowserOpen(true),
             disabled: composeLocked,
           })
         : undefined,
     [
       canMentionAssistants,
       composeLocked,
-      insertAssistantMention,
       suggestedAssistants,
-      toolsMenuDescriptionDisplay,
+      suggestedFromUsage,
     ],
   );
 
@@ -2356,40 +2398,64 @@ export const ChatInput = ({
     () =>
       canBrowseMcpTools
         ? buildMcpToolsSection({
-            writeToolsEnabled: mcpWriteTools.enabled,
-            onToggleWriteTools: mcpWriteTools.toggle,
-            onBrowse: () => setIsMcpToolsBrowserOpen(true),
             servers: mcpServers,
             disabledServerIds: disabledMcpServers.disabledServerIds,
-            onToggleServer: disabledMcpServers.toggleServer,
-            serverSwitchesLocked: !disabledMcpServers.isReady,
-            disabledToolPatterns: disabledMcpTools.disabledToolPatterns,
-            onConnect:
-              openMcpServersSettings ?? (() => setIsMcpToolsBrowserOpen(true)),
-            disabled:
-              composeLocked ||
-              mcpWriteTools.isSaving ||
-              disabledMcpServers.isSaving ||
-              disabledMcpTools.isSaving,
-            pausesHostActions: pausesHostActionsWhenWritesOff,
+            writeToolsEnabled: mcpWriteTools.enabled,
+            onOpen: () => setIsMcpToolsBrowserOpen(true),
+            disabled: composeLocked,
           })
         : undefined,
     [
       canBrowseMcpTools,
       composeLocked,
       disabledMcpServers.disabledServerIds,
-      disabledMcpServers.isReady,
-      disabledMcpServers.isSaving,
-      disabledMcpServers.toggleServer,
-      disabledMcpTools.disabledToolPatterns,
-      disabledMcpTools.isSaving,
       mcpServers,
+      mcpWriteTools.enabled,
+    ],
+  );
+
+  // With changes off, the composer says so where the next send's modes are
+  // drawn, so a paused document edit is never a mystery; ending the mode
+  // turns changes back on.
+  const readOnlyMode = useMemo<ComposerMode | null>(
+    () =>
+      canBrowseMcpTools && !mcpWriteTools.enabled
+        ? {
+            id: "connectors.read-only",
+            label: t({
+              id: "chatInput.connectors.readOnlyMode.label",
+              message: "Read only",
+            }),
+            icon: "lock",
+            description: describeAllowChanges({
+              enabled: false,
+              pausesHostActions: pausesHostActionsWhenWritesOff,
+            }),
+            endLabel: t({
+              id: "chatInput.connectors.readOnlyMode.end",
+              message: "Allow changes again",
+            }),
+            onEnd: mcpWriteTools.toggle,
+            endedAnnouncement: t({
+              id: "chatInput.connectors.readOnlyMode.ended",
+              message: "Changes allowed again.",
+            }),
+            locked: composeLocked || mcpWriteTools.isSaving,
+          }
+        : null,
+    [
+      canBrowseMcpTools,
+      composeLocked,
       mcpWriteTools.enabled,
       mcpWriteTools.isSaving,
       mcpWriteTools.toggle,
-      openMcpServersSettings,
       pausesHostActionsWhenWritesOff,
     ],
+  );
+  const visibleComposerModes = useMemo(
+    () =>
+      readOnlyMode ? [...(composerModes ?? []), readOnlyMode] : composerModes,
+    [composerModes, readOnlyMode],
   );
 
   // Collapse the file-upload button and the Tools dropdown into a single "+"
@@ -2410,6 +2476,37 @@ export const ChatInput = ({
       hasAddMenuExtraContent ||
       canMentionAssistants ||
       canBrowseMcpTools);
+
+  const isNarrowTouchScreen = useIsNarrowTouchScreen();
+  const isTouchPointer = useIsTouchPointer();
+  const oneLineComposer =
+    showControls && useUnifiedMobileMenu && isNarrowTouchScreen;
+  // The layout changes the field's width and padding under a kept draft.
+  useLayoutEffect(() => {
+    if (textareaRef.current) {
+      fitTextareaHeight(textareaRef.current);
+    }
+  }, [oneLineComposer]);
+  const modelMenuSection = useMemo<AddMenuSection | undefined>(() => {
+    if (availableModels.length === 0) {
+      return undefined;
+    }
+    return {
+      id: "model",
+      header: t({ id: "chatInput.addMenu.modelHeader", message: "Model" }),
+      // Menu placement is an internal key.
+      // eslint-disable-next-line lingui/no-unlocalized-strings
+      placement: "belowTools",
+      items: availableModels.map((model) => ({
+        id: `model-${model.chat_provider_id}`,
+        label: <ModelSelectorOptionContent model={model} compact />,
+        checked: selectedModel?.chat_provider_id === model.chat_provider_id,
+        exclusive: true,
+        disabled: !isSelectionReady,
+        onToggle: () => setSelectedModel(model),
+      })),
+    };
+  }, [availableModels, selectedModel, isSelectionReady, setSelectedModel]);
 
   // Add token limit exceeded to disabled state for the send button
   const isSendDisabled =
@@ -3143,25 +3240,22 @@ export const ChatInput = ({
     if (dictationTargetRef.current?.card) {
       return;
     }
-    shouldRestartAudioModeAfterResponseRef.current = true;
-    audioModeRestartSawPendingResponseRef.current = true;
-    clearPendingAutoSendTimeout();
-    pendingAutoSendRef.current = false;
     cancelDictation();
-    dictationTargetRef.current = null;
-    setMessage("");
+    dropTurnAndListenAgain();
   }, [
     cancelDictation,
-    clearPendingAutoSendTimeout,
     decisionWaiting,
+    dropTurnAndListenAgain,
     isAudioMode,
     isDictating,
     isDictationStarting,
-    setMessage,
   ]);
 
   useEffect(() => {
-    if (!shouldRestartAudioModeAfterResponseRef.current) {
+    if (
+      !shouldRestartAudioModeAfterResponseRef.current ||
+      restartWaitsForPage()
+    ) {
       return;
     }
     if (
@@ -3207,6 +3301,8 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    pageHidden,
+    restartWaitsForPage,
     speech.enabled,
     speech.playing,
     speechEnabled,
@@ -3218,7 +3314,10 @@ export const ChatInput = ({
   ]);
 
   useEffect(() => {
-    if (!shouldRestartAudioModeAfterResponseRef.current) {
+    if (
+      !shouldRestartAudioModeAfterResponseRef.current ||
+      restartWaitsForPage()
+    ) {
       return;
     }
     if (!audioModeRestartSawPendingResponseRef.current) {
@@ -3279,6 +3378,8 @@ export const ChatInput = ({
     isFileButtonProcessing,
     isLoading,
     isPendingResponse,
+    pageHidden,
+    restartWaitsForPage,
     speech.enabled,
     speech.playing,
     speech.spokenPartDone,
@@ -3332,12 +3433,123 @@ export const ChatInput = ({
     maxWidth: "var(--theme-layout-chat-input-max-width)",
   } as const;
 
+  const toolsLockReason = t({
+    id: "chat.toolChips.lockReason",
+    message: "This assistant sets the tools for its chats.",
+  });
+
+  // On one line the audio-mode button alone does not say what is happening,
+  // so the state is written where the text field was. Hidden from screen
+  // readers: the button announces whether it listens, and the voice itself
+  // is heard. A held hesitation already says it is still listening.
+  const audioModeStatusField = isAudioMode &&
+    oneLineComposer &&
+    !(isDictating && heldHesitation) && (
+      <span
+        aria-hidden="true"
+        className="chat-input-textarea-geometry min-w-0 flex-1 truncate text-base text-theme-fg-secondary"
+        data-ui="chat-input-audio-mode-status"
+        data-testid="chat-input-audio-mode-status"
+      >
+        {speech.playing || cardSpeaking
+          ? t({ id: "chat.audio.mode.speaking", message: "Speaking" })
+          : showsListening
+            ? t`Listening`
+            : isPendingResponse || isDictationCompleting
+              ? t`Thinking`
+              : t`Audio mode is on`}
+      </span>
+    );
+
+  const textareaField = !isAudioMode && (
+    // isolate keeps the backdrop's negative layer above the shell's own
+    // background instead of behind it; flex keeps the textarea from
+    // gaining an inline-block descender now that it is wrapped.
+    <div
+      className={clsx(
+        "relative isolate flex",
+        oneLineComposer ? "min-w-[50%] flex-1" : "w-full",
+      )}
+    >
+      {/* Gated on the tracked list, not on the mention affordances: the
+                  list is restored from the draft and outlives the assistant
+                  query, and whatever it holds is what submit delegates to. */}
+      {mentionedAssistants.length > 0 && (
+        <AssistantMentionBackdrop
+          text={message}
+          tracked={mentionedAssistants}
+          textareaRef={textareaRef}
+          dimmed={composeLocked}
+        />
+      )}
+      <textarea
+        ref={textareaRef}
+        value={message}
+        onChange={(e) => {
+          setMessage(e.target.value);
+          syncMentionTrigger(e.target);
+        }}
+        onSelect={(e) => syncMentionTrigger(e.currentTarget)}
+        onClick={(e) => syncMentionTrigger(e.currentTarget)}
+        onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
+        onPaste={handleTextareaPaste}
+        onKeyDown={(e) => {
+          if (isImeComposing(e)) {
+            return;
+          }
+          // The open picker owns Enter, Tab and the arrows — it has to
+          // run before Enter reaches send/queue.
+          if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
+            return;
+          }
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            // While a turn is generating, Enter queues the draft to
+            // auto-send when the turn finishes (ERMAIN-470); otherwise it
+            // submits normally.
+            if (enqueueCurrentMessage()) {
+              return;
+            }
+            handleComposerSubmit(e);
+          }
+        }}
+        placeholder={
+          isAnyTokenLimitExceeded
+            ? t`Message exceeds token limit. Please reduce length or remove files.`
+            : (sizeLimitPlaceholder ?? placeholder)
+        }
+        rows={1}
+        disabled={composeLocked}
+        tabIndex={0}
+        // Under a finger focus opens the on-screen keyboard, and the field
+        // mounts again when audio mode ends, inside the tap that ended it.
+        autoFocus={shouldAutofocus && !isTouchPointer} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+        className={clsx(
+          "w-full resize-none overflow-y-auto",
+          "chat-input-textarea-geometry",
+          "bg-transparent",
+          "text-[var(--theme-fg-primary)]",
+          "focus:outline-none",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          "max-h-[200px]",
+          "text-base",
+          "scrollbar-auto-hide",
+          // One placeholder colour at a time: with both classes the
+          // stylesheet order, not the condition, picks the winner.
+          isComposerBlocked
+            ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
+            : "placeholder:text-[var(--theme-fg-muted)]",
+        )}
+      />
+    </div>
+  );
+
   return (
     <div className="mx-auto w-full" style={shellWrapperStyle}>
       <form
         ref={formRef}
         className={clsx("w-full ", className, {
-          "pb-0 sm:pb-0": renderUsageAdvisory && aiUsageAdvisory,
+          "pb-0 sm:pb-0": renderUsageAdvisory && usageAdvisory,
         })}
         onSubmit={handleComposerSubmit}
       >
@@ -3502,6 +3714,8 @@ export const ChatInput = ({
               focusInput();
             }}
             assistants={mentionableAssistants}
+            suggested={suggestedAssistants}
+            descriptionDisplay={toolsMenuDescriptionDisplay}
             onSelect={insertAssistantMention}
           />
         )}
@@ -3522,6 +3736,16 @@ export const ChatInput = ({
               disabledMcpTools.isSaving
             }
             disabledServerIds={disabledMcpServers.disabledServerIds}
+            onToggleServer={disabledMcpServers.toggleServer}
+            serverSwitchesLocked={
+              composeLocked ||
+              !disabledMcpServers.isReady ||
+              disabledMcpServers.isSaving
+            }
+            writeToolsEnabled={mcpWriteTools.enabled}
+            onToggleWriteTools={mcpWriteTools.toggle}
+            writeSwitchLocked={composeLocked || mcpWriteTools.isSaving}
+            pausesHostActions={pausesHostActionsWhenWritesOff}
           />
         )}
 
@@ -3535,6 +3759,7 @@ export const ChatInput = ({
             "chat-input-shell-skin",
           )}
           data-ui="chat-input-shell"
+          data-layout={oneLineComposer ? "one-line" : undefined}
         >
           {/* Out of flow on purpose: the shell is a gapped flex column, so an
               in-flow anchor would add a row of spacing to every composer. */}
@@ -3638,99 +3863,30 @@ export const ChatInput = ({
             );
           })()}
 
-          {!isAudioMode && (
-            // isolate keeps the backdrop's negative layer above the shell's own
-            // background instead of behind it; flex keeps the textarea from
-            // gaining an inline-block descender now that it is wrapped.
-            <div className="relative isolate flex w-full">
-              {/* Gated on the tracked list, not on the mention affordances: the
-                  list is restored from the draft and outlives the assistant
-                  query, and whatever it holds is what submit delegates to. */}
-              {mentionedAssistants.length > 0 && (
-                <AssistantMentionBackdrop
-                  text={message}
-                  tracked={mentionedAssistants}
-                  textareaRef={textareaRef}
-                  dimmed={composeLocked}
-                />
-              )}
-              <textarea
-                ref={textareaRef}
-                value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                  syncMentionTrigger(e.target);
-                }}
-                onSelect={(e) => syncMentionTrigger(e.currentTarget)}
-                onClick={(e) => syncMentionTrigger(e.currentTarget)}
-                onKeyUp={(e) => syncMentionTrigger(e.currentTarget)}
-                onPaste={handleTextareaPaste}
-                onKeyDown={(e) => {
-                  if (isImeComposing(e)) {
-                    return;
-                  }
-                  // The open picker owns Enter, Tab and the arrows — it has to
-                  // run before Enter reaches send/queue.
-                  if (mentionPopoverRef.current?.handleComposerKeyDown(e)) {
-                    return;
-                  }
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    // While a turn is generating, Enter queues the draft to
-                    // auto-send when the turn finishes (ERMAIN-470); otherwise it
-                    // submits normally.
-                    if (enqueueCurrentMessage()) {
-                      return;
-                    }
-                    handleComposerSubmit(e);
-                  }
-                }}
-                placeholder={
-                  isAnyTokenLimitExceeded
-                    ? t`Message exceeds token limit. Please reduce length or remove files.`
-                    : (sizeLimitPlaceholder ?? placeholder)
-                }
-                rows={1}
-                disabled={composeLocked}
-                tabIndex={0}
-                autoFocus={shouldAutofocus} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
-                className={clsx(
-                  "w-full resize-none overflow-y-auto",
-                  "chat-input-textarea-geometry",
-                  "bg-transparent",
-                  "text-[var(--theme-fg-primary)]",
-                  "focus:outline-none",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                  "max-h-[200px]",
-                  "text-base",
-                  "scrollbar-auto-hide",
-                  // One placeholder colour at a time: with both classes the
-                  // stylesheet order, not the condition, picks the winner.
-                  isComposerBlocked
-                    ? "border-[var(--theme-error-border)] placeholder:text-[var(--theme-error-fg)]"
-                    : "placeholder:text-[var(--theme-fg-muted)]",
-                )}
-              />
-            </div>
-          )}
+          {!oneLineComposer && textareaField}
 
           <div
             className={clsx(
-              "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
+              oneLineComposer
+                ? "flex gap-[var(--theme-spacing-control-gap)]"
+                : "flex flex-wrap justify-between gap-[calc(var(--theme-spacing-control-gap)/2)]",
               useUnifiedMobileMenu ? "items-end" : "items-center",
             )}
             data-ui="chat-input-controls"
           >
             <div
               className={clsx(
-                "chat-input-controls-geometry flex flex-wrap",
+                "chat-input-controls-geometry flex",
                 // Never narrower than its widest control: a wide right side
                 // (Exit audio mode) wraps to a line of its own rather than
                 // cutting the tool names. Top-aligned so + stays on the first
-                // chip row.
-                useUnifiedMobileMenu
-                  ? "flex-1 items-start"
-                  : "min-w-0 items-center",
+                // chip row. On one line a mode chip shortens its label
+                // instead, so the field beside it keeps its share.
+                oneLineComposer
+                  ? "min-w-0 items-end"
+                  : useUnifiedMobileMenu
+                    ? "flex-1 flex-wrap items-start"
+                    : "min-w-0 flex-wrap items-center",
               )}
             >
               {showControls &&
@@ -3781,6 +3937,19 @@ export const ChatInput = ({
                     disabled={composeLocked}
                     uploadDisabled={attachedFiles.length >= maxFiles}
                     toolsDisabled={enforceSelectedFacetIds}
+                    toolsDisabledReason={
+                      oneLineComposer && enforceSelectedFacetIds
+                        ? toolsLockReason
+                        : undefined
+                    }
+                    modelSection={
+                      oneLineComposer && showModelSelector
+                        ? modelMenuSection
+                        : undefined
+                    }
+                    selectedToolCount={
+                      oneLineComposer ? selectedFacets.length : undefined
+                    }
                   />
                 ) : (
                   <>
@@ -3847,49 +4016,51 @@ export const ChatInput = ({
                     )}
                   </>
                 ))}
-              {composerModes !== undefined && (
+              {/* Mounted whenever a mode can appear, so the announcement
+                  after the last one ends is still read. */}
+              {(visibleComposerModes !== undefined || canBrowseMcpTools) && (
                 <ComposerModeChips
-                  modes={composerModes}
+                  modes={visibleComposerModes ?? []}
                   onFocusComposer={focusInput}
                 />
               )}
               {/* The unified "+" hides the Tools dropdown and its selected
                   buttons, so the selection is drawn here instead. Mounted
                   while tools exist, so the last chip's announcement is read. */}
-              {showControls && useUnifiedMobileMenu && hasFacets && (
-                <ComposerToolChips
-                  facets={selectedFacets}
-                  showFacetIndicatorWithDisplayName={
-                    globalFacetSettings?.show_facet_indicator_with_display_name ??
-                    false
-                  }
-                  onDeselect={toggleFacetId}
-                  locked={enforceSelectedFacetIds || composeLocked}
-                  lockReason={
-                    enforceSelectedFacetIds
-                      ? t({
-                          id: "chat.toolChips.lockReason",
-                          message:
-                            "This assistant sets the tools for its chats.",
-                        })
-                      : undefined
-                  }
-                  onFocusAfterLast={focusAddMenuTrigger}
-                />
-              )}
-              {useUnifiedMobileMenu && showModelSelector && (
-                <ModelSelector
-                  availableModels={availableModels}
-                  selectedModel={selectedModel}
-                  onModelChange={setSelectedModel}
-                  disabled={!isSelectionReady}
-                  align="left"
-                  // Beside wrapped tool rows it lines up with Send, not +.
-                  className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
-                />
-              )}
+              {showControls &&
+                useUnifiedMobileMenu &&
+                !oneLineComposer &&
+                hasFacets && (
+                  <ComposerToolChips
+                    facets={selectedFacets}
+                    showFacetIndicatorWithDisplayName={
+                      globalFacetSettings?.show_facet_indicator_with_display_name ??
+                      false
+                    }
+                    onDeselect={toggleFacetId}
+                    locked={enforceSelectedFacetIds || composeLocked}
+                    lockReason={
+                      enforceSelectedFacetIds ? toolsLockReason : undefined
+                    }
+                    onFocusAfterLast={focusAddMenuTrigger}
+                  />
+                )}
+              {useUnifiedMobileMenu &&
+                !oneLineComposer &&
+                showModelSelector && (
+                  <ModelSelector
+                    availableModels={availableModels}
+                    selectedModel={selectedModel}
+                    onModelChange={setSelectedModel}
+                    disabled={!isSelectionReady}
+                    align="left"
+                    // Beside wrapped tool rows it lines up with Send, not +.
+                    className="ms-[var(--theme-spacing-control-gap)] min-h-9 self-end"
+                  />
+                )}
             </div>
 
+            {oneLineComposer && (textareaField || audioModeStatusField)}
             <div
               className={clsx(
                 "relative flex min-w-0 flex-wrap items-center gap-[var(--theme-spacing-control-gap)]",
@@ -4203,9 +4374,6 @@ export const ChatInput = ({
           {audioStatusAnnouncement}
         </div>
       )}
-      {/* Above the AI advisory: this one is about what happens to THIS
-          message, which is the more immediate of the two. */}
-      <ChatTaskPlanAdvisory />
       {renderUsageAdvisory ? <ChatUsageAdvisory /> : null}
     </div>
   );

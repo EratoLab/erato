@@ -26,20 +26,25 @@ const WEB_SEARCH: FacetInfo = {
 
 const RESEARCHER = { id: "assistant-research", name: "Researcher" };
 
+const LINEAR: McpServerStatus = {
+  id: "linear",
+  display_name: "Linear",
+  connection_status: "SUCCESS",
+  authentication_mode: "oauth2",
+};
+
 function renderSelector({
   facets = [] as FacetInfo[],
   toolsDisabled = false,
   keepOpenOnSelect = false,
-  onSelect = vi.fn(),
-  onBrowse = vi.fn(),
+  onOpenAssistants = vi.fn(),
+  onOpenConnectors = vi.fn(),
   onSelectionChange = vi.fn(),
   withAssistants = true,
   withConnectors = false,
   writeToolsEnabled = true,
-  onToggleWriteTools = vi.fn(),
-  servers = [] as McpServerStatus[],
+  servers = [LINEAR] as McpServerStatus[],
   disabledServerIds = [] as string[],
-  onToggleServer = vi.fn(),
 } = {}) {
   render(
     <FacetSelector
@@ -53,33 +58,24 @@ function renderSelector({
       assistantSection={
         withAssistants
           ? buildAssistantMentionSection({
-              assistants: [RESEARCHER],
-              onSelect,
-              onBrowse,
+              suggested: [RESEARCHER],
+              onOpen: onOpenAssistants,
             })
           : undefined
       }
       mcpToolsSection={
         withConnectors
           ? buildMcpToolsSection({
-              writeToolsEnabled,
-              onToggleWriteTools,
-              onBrowse: vi.fn(),
               servers,
               disabledServerIds,
-              onToggleServer,
+              writeToolsEnabled,
+              onOpen: onOpenConnectors,
             })
           : undefined
       }
     />,
   );
-  return {
-    onSelect,
-    onBrowse,
-    onSelectionChange,
-    onToggleWriteTools,
-    onToggleServer,
-  };
+  return { onOpenAssistants, onOpenConnectors, onSelectionChange };
 }
 
 describe("FacetSelector", () => {
@@ -195,52 +191,55 @@ describe("FacetSelector", () => {
 
   // A deployment without facets must still reach delegation from the composer.
   it("carries the assistants alone when no facet is configured", async () => {
-    const { onSelect } = renderSelector();
+    const { onOpenAssistants } = renderSelector();
 
     const trigger = screen.getByRole("button", { name: "Open menu" });
     expect(trigger).toHaveTextContent("Assistants");
 
     fireEvent.click(trigger);
 
-    expect(
-      await screen.findByRole("menuitem", { name: "Browse assistants…" }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Researcher" }));
-    expect(onSelect).toHaveBeenCalledWith(RESEARCHER);
+    const row = await screen.findByRole("menuitem", {
+      name: /Ask an assistant…/,
+    });
+    expect(row).toHaveTextContent("Researcher");
+    fireEvent.click(row);
+    expect(onOpenAssistants).toHaveBeenCalledTimes(1);
   });
 
   // The dialog focuses itself; the dropdown's usual delayed close would hand
   // focus back to the trigger behind the overlay.
-  it("closes without the select delay when browse opens the dialog", async () => {
-    const { onBrowse } = renderSelector({ keepOpenOnSelect: true });
+  it("closes without the select delay when a row opens a dialog", async () => {
+    const { onOpenAssistants } = renderSelector({ keepOpenOnSelect: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Browse assistants…" }),
+      await screen.findByRole("menuitem", { name: /Ask an assistant…/ }),
     );
 
-    expect(onBrowse).toHaveBeenCalledTimes(1);
+    expect(onOpenAssistants).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("labels the assistants as their own group below the tools", async () => {
-    renderSelector({ facets: [WEB_SEARCH] });
+  it("divides the connectors and the assistants from the tools without group headers", async () => {
+    renderSelector({ facets: [WEB_SEARCH], withConnectors: true });
 
     const trigger = screen.getByRole("button", { name: "Open menu" });
     expect(trigger).toHaveTextContent("Tools");
     fireEvent.click(trigger);
 
-    const group = await screen.findByRole("group", { name: "Assistants" });
+    const menu = await screen.findByRole("menu");
     expect(
-      within(group)
+      within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["Researcher", "Browse assistants…"]);
+    ).toEqual(["Web search", "Connectors…1 on", "Ask an assistant…Researcher"]);
+    expect(within(menu).getAllByRole("separator")).toHaveLength(2);
+    expect(within(menu).queryByRole("group")).not.toBeInTheDocument();
   });
 
   // Enforced facet settings lock the tools, not delegation to other assistants.
-  it("keeps the assistants selectable while the facet rows are locked", async () => {
-    const { onSelect, onSelectionChange } = renderSelector({
+  it("keeps the assistants row live while the facet rows are locked", async () => {
+    const { onOpenAssistants, onSelectionChange } = renderSelector({
       facets: [WEB_SEARCH],
       toolsDisabled: true,
     });
@@ -254,8 +253,10 @@ describe("FacetSelector", () => {
     fireEvent.click(facetRow);
     expect(onSelectionChange).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "Researcher" }));
-    expect(onSelect).toHaveBeenCalledWith(RESEARCHER);
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: /Ask an assistant…/ }),
+    );
+    expect(onOpenAssistants).toHaveBeenCalledTimes(1);
   });
 
   // Without delegation there is nothing left to pick, so enforcement keeps the
@@ -271,48 +272,22 @@ describe("FacetSelector", () => {
     expect(trigger.closest(".pointer-events-none")).not.toBeNull();
   });
 
-  it("renders the connectors write switch as a ticked row below the tools", async () => {
-    const { onToggleWriteTools } = renderSelector({
+  it("renders the connectors as one row with their summary that opens their dialog", async () => {
+    const { onOpenConnectors } = renderSelector({
       facets: [WEB_SEARCH],
       withAssistants: false,
       withConnectors: true,
-      writeToolsEnabled: true,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
-
-    expect(await screen.findByText("Connectors")).toBeInTheDocument();
-    const toggle = screen.getByRole("menuitem", {
-      name: /Allow write operations/,
-    });
-    expect(
-      within(toggle).getByText(
-        "Off, only tools the server marks read-only are offered.",
-      ),
-    ).toBeInTheDocument();
-    // Section rows carry no leading icon, so the only SVG in the row is the
-    // tick — present exactly while the switch is on.
-    expect(toggle.querySelector("svg")).not.toBeNull();
-
-    fireEvent.click(toggle);
-    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders the connectors write switch unticked while writes are off", async () => {
-    renderSelector({
-      facets: [WEB_SEARCH],
-      withAssistants: false,
-      withConnectors: true,
+      disabledServerIds: ["linear"],
       writeToolsEnabled: false,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 
-    expect(await screen.findByText("Connectors")).toBeInTheDocument();
-    const toggle = screen.getByRole("menuitem", {
-      name: /Allow write operations/,
-    });
-    expect(toggle.querySelector("svg")).toBeNull();
+    const row = await screen.findByRole("menuitem", { name: /Connectors…/ });
+    expect(row).toHaveTextContent("Off: Linear · read only");
+    fireEvent.click(row);
+    expect(onOpenConnectors).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   // Connectors are tools, so a facet-less deployment with a connector keeps
@@ -324,8 +299,8 @@ describe("FacetSelector", () => {
     expect(screen.queryByText("Assistants")).not.toBeInTheDocument();
   });
 
-  it("keeps the connectors live while the facet rows are locked", async () => {
-    const { onToggleWriteTools } = renderSelector({
+  it("keeps the connectors row live while the facet rows are locked", async () => {
+    const { onOpenConnectors } = renderSelector({
       facets: [WEB_SEARCH],
       toolsDisabled: true,
       withAssistants: false,
@@ -337,64 +312,8 @@ describe("FacetSelector", () => {
     fireEvent.click(trigger);
 
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: /Allow write operations/ }),
+      await screen.findByRole("menuitem", { name: /Connectors…/ }),
     );
-    expect(onToggleWriteTools).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders a switched-off server as an unticked row above the write switch and flips it", async () => {
-    const { onToggleServer } = renderSelector({
-      facets: [WEB_SEARCH],
-      withAssistants: false,
-      withConnectors: true,
-      servers: [
-        {
-          id: "linear",
-          display_name: "linear",
-          connection_status: "SUCCESS",
-          authentication_mode: "oauth2",
-        },
-      ],
-      disabledServerIds: ["linear"],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
-
-    expect(await screen.findByText("Connectors")).toBeInTheDocument();
-    const items = screen
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent ?? "");
-    expect(items.findIndex((text) => text.startsWith("linear"))).toBeLessThan(
-      items.findIndex((text) => text.includes("Allow write operations")),
-    );
-
-    const row = screen.getByRole("menuitem", { name: /^linear/ });
-    // The tick is the only SVG in a section row, so its absence is the
-    // switched-off state itself.
-    expect(row.querySelector("svg")).toBeNull();
-    fireEvent.click(row);
-    expect(onToggleServer).toHaveBeenCalledWith("linear");
-  });
-
-  it("renders a server that is on as a ticked row", async () => {
-    renderSelector({
-      facets: [WEB_SEARCH],
-      withAssistants: false,
-      withConnectors: true,
-      servers: [
-        {
-          id: "linear",
-          display_name: "linear",
-          connection_status: "SUCCESS",
-          authentication_mode: "oauth2",
-        },
-      ],
-      disabledServerIds: [],
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
-
-    const row = await screen.findByRole("menuitem", { name: /^linear/ });
-    expect(row.querySelector("svg")).not.toBeNull();
+    expect(onOpenConnectors).toHaveBeenCalledTimes(1);
   });
 });

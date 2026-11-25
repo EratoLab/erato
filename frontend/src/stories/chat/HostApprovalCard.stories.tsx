@@ -33,7 +33,7 @@ const chainedRequest = (
     tool_call_id: APPLY_ID,
     tool_name: "apply_document_plan",
     mcp_server_id: "word",
-    input: { submission_call_id: "call-plan", draft_id: "d-1" },
+    input: { proposal_call_id: "call-plan", draft_id: "d-1" },
     annotations: {
       destructiveHint: false,
       idempotentHint: false,
@@ -50,10 +50,10 @@ const chainedRequest = (
         approval_id: APPLY_ID,
         tool_call_id: APPLY_ID,
         tool_name: "apply_document_plan",
-        input: { submission_call_id: "call-plan", draft_id: "d-1" },
+        input: { proposal_call_id: "call-plan", draft_id: "d-1" },
         display,
         child: null,
-        chained: { submission_call_id: "call-plan", ...chained },
+        follows: { proposal_call_id: "call-plan", ...chained },
       },
     ],
   }) as unknown as McpToolApprovalRequestPart;
@@ -101,7 +101,7 @@ const ExampleHostCard = (props: ApprovalItemCardProps) => {
           </li>
         ))}
       </ul>
-      {props.item.chained?.decide_on_screen ? (
+      {props.item.follows?.decide_on_screen ? (
         <Checkbox
           checked={keepComments}
           onCheckedChange={setKeepComments}

@@ -1,10 +1,13 @@
 import { I18nProvider } from "@lingui/react";
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { listMcpServersQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
+import { McpSettingsOpenProvider } from "@/providers/McpSettingsOpenProvider";
 
 import { McpNotices } from "./McpNotices";
 
@@ -82,5 +85,47 @@ describe("McpNotices", () => {
     expect(
       screen.queryByTestId("mcp-needs-auth-connect"),
     ).not.toBeInTheDocument();
+  });
+
+  it("names the servers as the loaded listing does, and connects the one server named", async () => {
+    const { i18n } = await import("@lingui/core");
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(listMcpServersQuery({}).queryKey, {
+      servers: [
+        {
+          id: "business_central",
+          display_name: "Business Central",
+          connection_status: "NEEDS_AUTHENTICATION",
+          authentication_mode: "oauth2",
+        },
+      ],
+    });
+    const onOpen = vi.fn();
+
+    render(
+      <I18nProvider i18n={i18n}>
+        <QueryClientProvider client={queryClient}>
+          <StaticFeatureConfigProvider
+            config={{ userPreferences: { mcpServersTabEnabled: true } }}
+          >
+            <McpSettingsOpenProvider onOpen={onOpen}>
+              <McpNotices
+                message={assistantMessage({
+                  mcp_servers_needing_auth: ["business_central"],
+                })}
+              />
+            </McpSettingsOpenProvider>
+          </StaticFeatureConfigProvider>
+        </QueryClientProvider>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByTestId("mcp-needs-auth-notice")).toHaveTextContent(
+      "Business Central is available in this chat but not connected",
+    );
+    fireEvent.click(screen.getByTestId("mcp-needs-auth-connect"));
+    expect(onOpen).toHaveBeenCalledWith("business_central");
   });
 });

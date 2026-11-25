@@ -44,6 +44,32 @@ export class CloudLinkError extends Error {
   }
 }
 
+/** A file shared from another app that arrived without content this page can read. */
+export class SharedFileWithoutContentError extends Error {
+  public readonly filenames: string[];
+
+  constructor(filenames: string[]) {
+    super(
+      i18n._("upload.error.sharedWithoutContent", {
+        count: filenames.length,
+        filenames: filenames.join(", "),
+      }),
+    );
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "SharedFileWithoutContentError";
+    this.filenames = filenames;
+  }
+}
+
+/** Several reports about one set of files, shown together in the one error slot. */
+export class CombinedUploadError extends Error {
+  constructor(errors: Error[]) {
+    super(errors.map((error) => error.message).join(" "));
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "CombinedUploadError";
+  }
+}
+
 /**
  * Error for unsupported file types (no operations available)
  */
@@ -124,4 +150,6 @@ export type UploadError =
   | UploadTooLargeError
   | UploadUnknownError
   | CloudLinkError
-  | UnsupportedFileTypeError;
+  | UnsupportedFileTypeError
+  | SharedFileWithoutContentError
+  | CombinedUploadError;

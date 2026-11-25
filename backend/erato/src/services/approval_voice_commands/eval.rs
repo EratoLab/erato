@@ -13,7 +13,7 @@
 //! file), `APPROVAL_VOICE_COMMANDS_EVAL_CONCURRENCY`. Every sentence costs one
 //! model call per provider.
 
-use super::tests::{Sentence, SentenceSet, heldout_set, sentence_set};
+use super::tests::{Sentence, SentenceSet, field_question_set, heldout_set, sentence_set};
 use super::*;
 use futures::StreamExt;
 use std::collections::BTreeMap;
@@ -95,6 +95,7 @@ async fn score_sentence_set() {
     let sets = [
         ("sentences.json", sentence_set()),
         ("heldout_sentences.json", heldout_set()),
+        ("field_question_sentences.json", field_question_set()),
     ];
     for (name, config) in &providers {
         let client =

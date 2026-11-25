@@ -258,6 +258,10 @@ fn allow_for_scope(
             if document(row) {
                 decision["scope_position"] = position.clone();
             }
+            // As the card answers it: naming the task's question it showed.
+            if let Some(question) = item["child"]["child_tool_call_id"].as_str() {
+                decision["child_tool_call_id"] = json!(question);
+            }
             decision
         })
         .collect();
@@ -1642,7 +1646,8 @@ async fn the_key_names_the_binding_and_the_tool(pool: Pool<Postgres>) {
         &chat.base,
         json!({
             "message_id": parent.id,
-            "decisions": [{"approval_id": item["approval_id"], "decision": "approve"}],
+            "decisions": [{"approval_id": item["approval_id"], "decision": "approve",
+                "child_tool_call_id": item["child"]["child_tool_call_id"]}],
             "shows_child_items": true,
         }),
     );

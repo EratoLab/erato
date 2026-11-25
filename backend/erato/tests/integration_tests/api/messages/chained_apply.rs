@@ -5,7 +5,7 @@ use super::*;
 use erato::config::{
     ClientToolApproval, ClientToolCalledBy, ClientToolLabelAction, ClientToolLabelConfig,
     ClientToolLabelObjectKind, ClientToolReplayConfig, ClientToolReplayMode,
-    ClientToolSubmissionApplyConfig, ClientToolSubmissionConfig,
+    ClientToolSubmissionConfig,
 };
 use erato::services::background_tasks::StreamingEvent;
 use std::collections::{HashSet, VecDeque};
@@ -63,7 +63,7 @@ fn read_result() -> Value {
 struct Options {
     registered: &'static str,
     decision: Option<&'static str>,
-    max_changes: u32,
+    max_calls_per_message: u32,
     budget: u32,
     apply_approval: ClientToolApproval,
     /// An action facet whose `client_actions_always_ask` lists these.
@@ -90,7 +90,7 @@ impl Default for Options {
         Self {
             registered: REGISTERED,
             decision: Some("always_allow"),
-            max_changes: 5,
+            max_calls_per_message: 5,
             budget: 10,
             apply_approval: ClientToolApproval::UserDecision,
             always_ask: None,
@@ -206,12 +206,7 @@ impl Chat {
                 submission: Some(ClientToolSubmissionConfig {
                     max_attempts: 3,
                     recovery_read_tools: vec!["word/read_document_blocks".into()],
-                    apply: Some(ClientToolSubmissionApplyConfig {
-                        tool: "word/apply_document_plan".into(),
-                        more_steps: Some("/more_changes".into()),
-                        max_changes: options.max_changes,
-                        consumed_reads: None,
-                    }),
+                    more_steps_key: Some("/more_changes".into()),
                     ..Default::default()
                 }),
                 ..tool(SUBMIT)
@@ -220,9 +215,11 @@ impl Chat {
         config.client_tools.tools.insert(
             APPLY.into(),
             ClientToolConfig {
-                description: "Change the open Word document".into(),
+                description: "Apply the checked plan".into(),
                 parameters: json!({"type":"object"}).to_string(),
                 called_by: ClientToolCalledBy::Server,
+                follows_tool: Some("word/submit_document_plan".into()),
+                max_calls_per_message: Some(options.max_calls_per_message),
                 approval: options.apply_approval,
                 client_actions: options
                     .apply_actions
@@ -595,7 +592,7 @@ async fn a_single_clean_change_applies_and_ends_without_another_request(pool: Po
     );
     assert!(dispatched[1].1.ends_with(":call_one.apply"));
     assert!(
-        dispatched[1].2["submission_call_id"]
+        dispatched[1].2["proposal_call_id"]
             .as_str()
             .unwrap()
             .ends_with(":call_one")
@@ -732,12 +729,12 @@ async fn ask_parks_the_chained_call_and_approve_applies_before_any_request(pool:
             .ends_with(":call_one.apply")
     );
     assert!(
-        item["chained"]["submission_call_id"]
+        item["follows"]["proposal_call_id"]
             .as_str()
             .unwrap()
             .ends_with(":call_one")
     );
-    assert_eq!(item["chained"]["decide_on_screen"], false);
+    assert_eq!(item["follows"]["decide_on_screen"], false);
     assert_eq!(chat.dispatched_names(), [SUBMIT]);
     chat.decide(json!({"decision":"approve"}))
         .await
@@ -939,7 +936,7 @@ async fn a_card_decided_on_screen_asks_under_always_and_refuses_a_standing_allow
     chat.submit().await;
     let stop = chat.stop().await.expect("on-screen card asks under Always");
     assert_eq!(stop["allow_always"], false);
-    assert_eq!(stop["approvals"][0]["chained"]["decide_on_screen"], true);
+    assert_eq!(stop["approvals"][0]["follows"]["decide_on_screen"], true);
     chat.decide(json!({"decision":"approve_always"}))
         .await
         .assert_status(http::StatusCode::BAD_REQUEST);
@@ -966,8 +963,8 @@ async fn a_tick_found_while_writing_asks_again_once_without_a_request(pool: Pool
     assert_eq!(chat.requests().len(), 1);
     let stop = chat.stop().await.expect("parked again");
     assert_eq!(stop["allow_always"], false);
-    assert_eq!(stop["approvals"][0]["chained"]["decide_on_screen"], true);
-    assert_eq!(stop["approvals"][0]["chained"]["reason"], "whole_document");
+    assert_eq!(stop["approvals"][0]["follows"]["decide_on_screen"], true);
+    assert_eq!(stop["approvals"][0]["follows"]["reason"], "whole_document");
     assert!(!has_tool_use(
         &parts(&chat.message().await),
         "call_one.apply"
@@ -1039,7 +1036,7 @@ async fn never_saved_while_the_answer_runs_refuses_the_apply(pool: Pool<Postgres
     assert_eq!(
         chat.message().await.generation_parameters.unwrap()["turn_consumption"]["chained_applies_run"],
         1,
-        "a refused apply counts toward max_changes"
+        "a refused apply counts toward max_calls_per_message"
     );
 }
 
@@ -1187,7 +1184,7 @@ async fn the_cap_counts_every_apply_and_refuses_the_next_submission(pool: Pool<P
             apply_result("failed"),
         ],
         Options {
-            max_changes: 2,
+            max_calls_per_message: 2,
             ..Default::default()
         },
     )
@@ -1250,7 +1247,7 @@ async fn submissions_past_the_cap_count_toward_the_tool_call_limit(pool: Pool<Po
         ],
         vec![receipt(), applied()],
         Options {
-            max_changes: 1,
+            max_calls_per_message: 1,
             budget: 2,
             ..Default::default()
         },
@@ -1275,7 +1272,7 @@ async fn the_chain_survives_an_approval_park(pool: Pool<Postgres>) {
         vec![receipt(), applied()],
         Options {
             decision: Some("ask"),
-            max_changes: 1,
+            max_calls_per_message: 1,
             ..Default::default()
         },
     )
@@ -1458,7 +1455,7 @@ async fn the_facets_list_the_apply_tools_they_reach(pool: Pool<Postgres>) {
     let listed = response.json::<Value>()["approval_tools"].clone();
     assert_eq!(listed.as_array().unwrap().len(), 1);
     assert_eq!(listed[0]["qualified_name"], "word/apply_document_plan");
-    assert_eq!(listed[0]["title"], "Change the open Word document");
+    assert_eq!(listed[0]["title"], "Apply the checked plan");
     assert_eq!(listed[0]["approval"], "user_decision");
     assert_eq!(
         (
@@ -1611,7 +1608,7 @@ async fn the_model_cannot_call_the_apply_tool_itself(pool: Pool<Postgres>) {
             Step::Tools(vec![(
                 "call_forged",
                 APPLY,
-                json!({"submission_call_id":"call_other","draft_id":null,"confirmation":null}),
+                json!({"proposal_call_id":"call_other","draft_id":null,"confirmation":null}),
             )]),
             Step::Text("COULD_NOT"),
         ],
@@ -1685,7 +1682,7 @@ async fn a_proposed_action_asks_and_approve_carries_it_out_without_another_reque
     assert_eq!(stop["display"]["title"], "Open a reply to the email");
     let item = &stop["approvals"][0];
     assert!(
-        item["chained"]["submission_call_id"]
+        item["follows"]["proposal_call_id"]
             .as_str()
             .unwrap()
             .ends_with(":call_p")

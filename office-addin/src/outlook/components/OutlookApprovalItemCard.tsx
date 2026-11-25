@@ -31,7 +31,7 @@ export function OutlookApprovalItemCard(props: ApprovalItemCardProps) {
   const { item, serverId, status, renderDefault } = props;
   if (
     serverId !== OUTLOOK_NAMESPACE ||
-    !item.chained ||
+    !item.follows ||
     !PROPOSAL_TOOLS.has(item.tool_name) ||
     status !== "pending"
   )

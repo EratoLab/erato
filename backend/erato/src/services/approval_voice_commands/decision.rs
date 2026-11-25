@@ -148,9 +148,9 @@ pub fn stop_is_screen_only(
         ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
     ) || item.child.is_some()
         || item
-            .chained
+            .follows
             .as_ref()
-            .is_some_and(|chained| chained.decide_on_screen)
+            .is_some_and(|follows| follows.decide_on_screen)
         || approval_id != Some(item.approval_id.as_str())
 }
 

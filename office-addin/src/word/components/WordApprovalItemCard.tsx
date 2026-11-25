@@ -44,13 +44,13 @@ export function WordApprovalItemCard(props: ApprovalItemCardProps) {
   const { item, serverId } = props;
   if (
     serverId === WORD_NAMESPACE &&
-    item.chained &&
+    item.follows &&
     wordProposalActionOf(item.tool_name)
   )
     return <WordProposalApprovalCard {...props} />;
   if (
     serverId !== WORD_NAMESPACE ||
-    !item.chained ||
+    !item.follows ||
     (item.tool_name !== WORD_APPLY_PLAN_TOOL &&
       item.tool_name !== WORD_APPLY_COMMENTS_TOOL)
   )
@@ -69,7 +69,7 @@ function WordChainedApprovalCard({
   renderDefault,
 }: ApprovalItemCardProps) {
   const message = useConversationMessage(messageId);
-  const submissionCallId = item.chained?.submission_call_id ?? "";
+  const submissionCallId = item.follows?.proposal_call_id ?? "";
   const plan =
     item.tool_name === WORD_APPLY_PLAN_TOOL
       ? wordAcceptedPlan(submissionCallId)
@@ -79,7 +79,7 @@ function WordChainedApprovalCard({
   if (status !== "pending" || !artifact) return <>{renderDefault()}</>;
   const decision: WordCardDecision = {
     allowAlways,
-    decideOnScreen: item.chained?.decide_on_screen === true,
+    decideOnScreen: item.follows?.decide_on_screen === true,
     status,
     resolvedLabel,
     isBusy,

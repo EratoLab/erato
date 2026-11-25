@@ -12,6 +12,18 @@ afterEach(() => {
 });
 
 describe("toast / Toaster", () => {
+  it.each([
+    ["bottom-center", "viewport-layer-bottom"],
+    ["bottom-right", "viewport-layer-bottom"],
+    ["top-left", "viewport-layer-top"],
+  ] as const)(
+    "keeps a %s stack on the edge an on-screen keyboard leaves visible",
+    (placement, edgeClass) => {
+      render(<Toaster placement={placement} />);
+      expect(screen.getByLabelText("Notifications")).toHaveClass(edgeClass);
+    },
+  );
+
   it("renders a queued toast", () => {
     render(<Toaster />);
     act(() => {

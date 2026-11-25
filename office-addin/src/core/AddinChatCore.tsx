@@ -10,6 +10,7 @@ import {
   FeedbackCommentDialog,
   FeedbackViewDialog,
   FilePreviewModal,
+  McpSettingsOpenProvider,
   MessageEditProvider,
   MessageList,
   SidebarToggle,
@@ -30,6 +31,7 @@ import {
   useFilePreviewModal,
   useFileUploadWithTokenCheck,
   useGenerationIndicatorCount,
+  useMcpBrowserAuthorization,
   useMessageFeedback,
   useModelSwitches,
   useProfile,
@@ -55,7 +57,10 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AddinChatInputCore } from "./AddinChatInputCore";
 import { AddinHistoryDrawerCore } from "./AddinHistoryDrawerCore";
-import { AddinSettingsDialogCore } from "./AddinSettingsDialogCore";
+import {
+  AddinSettingsDialogCore,
+  type AddinSettingsTab,
+} from "./AddinSettingsDialogCore";
 import { useAvailableActionFacetIds } from "./clientActions/useAvailableActionFacets";
 
 import type {
@@ -195,7 +200,11 @@ export interface AddinChatController {
   standardMessageActionHandler: ReturnType<typeof useStandardMessageActions>;
   feedback: ReturnType<typeof useMessageFeedback>;
   isSettingsOpen: boolean;
+  /** Closing also forgets the tab a caller asked for. */
   setIsSettingsOpen: (isOpen: boolean) => void;
+  /** The tab the settings open on, when a caller asked for one. */
+  settingsTab: AddinSettingsTab | undefined;
+  openSettingsOnTab: (tab: AddinSettingsTab) => void;
   isHistoryMenuOpen: boolean;
   setIsHistoryMenuOpen: (isOpen: boolean) => void;
   /** Strip explaining a state that refuses messages; null when none does. */
@@ -620,7 +629,20 @@ function useAddinChatController({
       ) as ComponentType<ChatMessageProps>,
     [],
   );
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpenState] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<
+    AddinSettingsTab | undefined
+  >();
+  const setIsSettingsOpen = useCallback((isOpen: boolean) => {
+    if (!isOpen) {
+      setSettingsTab(undefined);
+    }
+    setIsSettingsOpenState(isOpen);
+  }, []);
+  const openSettingsOnTab = useCallback((tab: AddinSettingsTab) => {
+    setSettingsTab(tab);
+    setIsSettingsOpenState(true);
+  }, []);
   const [isHistoryMenuOpen, setIsHistoryMenuOpen] = useState(false);
 
   return {
@@ -666,6 +688,8 @@ function useAddinChatController({
     feedback,
     isSettingsOpen,
     setIsSettingsOpen,
+    settingsTab,
+    openSettingsOnTab,
     isHistoryMenuOpen,
     setIsHistoryMenuOpen,
     chatHeader,
@@ -763,6 +787,41 @@ function NeutralAddinChatHostView({
   );
 }
 
+/**
+ * How surfaces deep in the messages and the composer open what the web app
+ * reaches through routes: a delegated run opens through the session
+ * controller, and the MCP server settings open in the pane's own settings.
+ * Connecting one server authorizes it in the browser, as those settings do,
+ * because the OAuth round-trip is web-shaped.
+ */
+function AddinPaneOpenProviders({
+  controller,
+  children,
+}: {
+  controller: AddinChatController;
+  children: ReactNode;
+}) {
+  const authorizeInBrowser = useMcpBrowserAuthorization();
+  const { openChatById, openSettingsOnTab } = controller;
+  const openMcpSettings = useCallback(
+    (serverId?: string) => {
+      if (serverId) {
+        authorizeInBrowser(serverId);
+        return;
+      }
+      openSettingsOnTab("serversTools");
+    },
+    [authorizeInBrowser, openSettingsOnTab],
+  );
+  return (
+    <DelegatedRunOpenProvider onOpen={openChatById}>
+      <McpSettingsOpenProvider onOpen={openMcpSettings}>
+        {children}
+      </McpSettingsOpenProvider>
+    </DelegatedRunOpenProvider>
+  );
+}
+
 export function AddinChatCoreView({
   controller,
   dropzone,
@@ -786,6 +845,7 @@ export function AddinChatCoreView({
   renderSettings: (props: {
     isOpen: boolean;
     onClose: () => void;
+    openTab?: AddinSettingsTab;
   }) => ReactNode;
   /** Forwarded into the history drawer's future-section slots. */
   drawerSectionsBeforeHistory?: ReactNode;
@@ -862,9 +922,9 @@ export function AddinChatCoreView({
 
   return (
     <ChatInputControlsProvider value={controller.chatInputControls}>
-      {/* Deep message surfaces (the trace's open-run affordance) open chats
-          through the session controller instead of routes the pane lacks. */}
-      <DelegatedRunOpenProvider onOpen={controller.openChatById}>
+      {/* Deep message and composer surfaces open delegated runs and the MCP
+          server settings through the pane instead of routes it lacks. */}
+      <AddinPaneOpenProviders controller={controller}>
         <ClientOperationPoller />
         <div className="app-shell-skin relative flex size-full min-w-0 flex-col">
           {TopLeftAccessory ? (
@@ -1025,6 +1085,7 @@ export function AddinChatCoreView({
           {renderSettings({
             isOpen: controller.isSettingsOpen,
             onClose: () => controller.setIsSettingsOpen(false),
+            openTab: controller.settingsTab,
           })}
           <AddinHistoryDrawerCore
             isOpen={controller.isHistoryMenuOpen}
@@ -1035,7 +1096,7 @@ export function AddinChatCoreView({
             sectionsAfterHistory={drawerSectionsAfterHistory}
           />
         </div>
-      </DelegatedRunOpenProvider>
+      </AddinPaneOpenProviders>
     </ChatInputControlsProvider>
   );
 }

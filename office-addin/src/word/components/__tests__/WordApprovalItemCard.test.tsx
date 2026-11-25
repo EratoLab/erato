@@ -44,7 +44,7 @@ const props = (
       title: "Change “Vertrag.docx”",
       description: "Change 1 paragraph",
     },
-    chained: { submission_call_id: "submit-A", decide_on_screen: false },
+    follows: { proposal_call_id: "submit-A", decide_on_screen: false },
     ...overrides,
   } as ApprovalItemCardProps["item"],
   serverId,

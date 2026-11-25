@@ -590,11 +590,9 @@ describe("ChatPage", () => {
     expect(above).toContainElement(screen.getByTestId("welcome-screen"));
     const lower = screen.getByTestId("welcome-screen-lower");
     expect(below).toContainElement(lower);
-    const advisory = below.querySelector('[data-ui="chat-usage-advisory"]')!;
     expect(
-      advisory.compareDocumentPosition(lower) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      container.querySelector('[data-ui="chat-usage-advisory"]'),
+    ).toBeNull();
   });
 
   it("keeps only the advisory below the composer when a welcome override is registered", () => {
@@ -606,7 +604,9 @@ describe("ChatPage", () => {
 
     const { container } = render(
       <TestWrapper>
-        <StaticFeatureConfigProvider>
+        <StaticFeatureConfigProvider
+          config={{ chatInput: { showUsageAdvisory: true } }}
+        >
           <ChatPageStructure>
             <div />
           </ChatPageStructure>
@@ -652,6 +652,14 @@ describe("ChatPage", () => {
     ).not.toBeNull();
     expect(screen.getByTestId("welcome-screen")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+
+    const below = container.querySelector('[data-ui="welcome-below"]')!;
+    const advisory = below.querySelector('[data-ui="chat-usage-advisory"]')!;
+    expect(
+      advisory.compareDocumentPosition(
+        screen.getByTestId("welcome-screen-lower"),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("bottom-aligns the welcome state when configured", () => {
