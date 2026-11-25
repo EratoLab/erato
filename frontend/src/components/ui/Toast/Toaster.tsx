@@ -28,13 +28,18 @@ const placementClasses: Record<ToasterPlacement, string> = {
   "top-center": "items-start justify-center",
 };
 
+// The viewport-layer-* edge follows an on-screen keyboard (globals.css).
 const placementOrigin: Record<ToasterPlacement, string> = {
-  "bottom-right": "fixed inset-x-0 bottom-0 sm:inset-x-auto sm:right-0",
-  "bottom-left": "fixed inset-x-0 bottom-0 sm:inset-x-auto sm:left-0",
-  "bottom-center": "fixed inset-x-0 bottom-0",
-  "top-right": "fixed inset-x-0 top-0 sm:inset-x-auto sm:right-0",
-  "top-left": "fixed inset-x-0 top-0 sm:inset-x-auto sm:left-0",
-  "top-center": "fixed inset-x-0 top-0",
+  "bottom-right":
+    "viewport-layer-bottom fixed inset-x-0 bottom-0 sm:inset-x-auto sm:right-0",
+  "bottom-left":
+    "viewport-layer-bottom fixed inset-x-0 bottom-0 sm:inset-x-auto sm:left-0",
+  "bottom-center": "viewport-layer-bottom fixed inset-x-0 bottom-0",
+  "top-right":
+    "viewport-layer-top fixed inset-x-0 top-0 sm:inset-x-auto sm:right-0",
+  "top-left":
+    "viewport-layer-top fixed inset-x-0 top-0 sm:inset-x-auto sm:left-0",
+  "top-center": "viewport-layer-top fixed inset-x-0 top-0",
 };
 
 /**
@@ -66,6 +71,7 @@ export function Toaster({ placement = "bottom-right" }: ToasterProps) {
       })}
       className={clsx(
         "pointer-events-none z-[1000] flex flex-col gap-2 p-4 sm:p-6",
+        "mb-[var(--safe-area-bottom)] ml-[var(--safe-area-left)] mr-[var(--safe-area-right)] mt-[var(--safe-area-top)]",
         placementOrigin[placement],
         placementClasses[placement],
       )}

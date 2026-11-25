@@ -321,16 +321,25 @@ async fn on_approval(
         return target.send_text(Msg::ChooseEveryItem.text(lang)).await;
     };
     let updates = match host
-        .continue_approval(&user.session, message_id, decisions.clone())
+        .continue_approval(
+            &user.session,
+            message_id,
+            decisions.clone(),
+            &submit.question_ids,
+        )
         .await
     {
         Ok(updates) => updates,
-        Err(StartError::DecisionsMismatch) => {
-            // The open set changed since the card was posted: show it afresh.
+        // The open set changed since the card was posted, or what it asked was
+        // decided meanwhile and the turn asks something else: show it afresh.
+        Err(error @ (StartError::DecisionsMismatch | StartError::AlreadyDecided)) => {
             return match host.pending_approvals(&user.session, message_id).await? {
                 Some(set) => {
                     target.send_text(Msg::ApprovalsChanged.text(lang)).await?;
                     send_approval_card(target, &set, &bot.settings.app_name).await
+                }
+                None if matches!(error, StartError::AlreadyDecided) => {
+                    target.send_text(&approval_error_text(error, lang)).await
                 }
                 None => {
                     target

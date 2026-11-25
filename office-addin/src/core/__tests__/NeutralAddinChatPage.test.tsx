@@ -45,6 +45,13 @@ const spies = vi.hoisted(() => ({
   unarchiveChat: vi.fn(async () => undefined),
   updateChatTitle: vi.fn(async () => undefined),
   runOpenHandler: { current: null as ((chatId: string) => void) | null },
+  mcpSettingsOpenHandler: {
+    current: null as ((serverId?: string) => void) | null,
+  },
+  authorizeMcpInBrowser: vi.fn(),
+  settingsDialogProps: {
+    current: null as null | { isOpen: boolean; openTab?: string },
+  },
   chatContextValue: { current: null as ChatContextValue | null },
   sendMessage: vi.fn(async () => undefined),
   uploadedFiles: [] as { id: string; filename: string }[],
@@ -189,6 +196,17 @@ vi.mock("@erato/frontend/library", async () => {
       spies.runOpenHandler.current = onOpen;
       return children;
     },
+    McpSettingsOpenProvider: ({
+      onOpen,
+      children,
+    }: {
+      onOpen: (serverId?: string) => void;
+      children?: ReactNode;
+    }) => {
+      spies.mcpSettingsOpenHandler.current = onOpen;
+      return children;
+    },
+    useMcpBrowserAuthorization: () => spies.authorizeMcpInBrowser,
     DelegatedRunsSection: ({
       chatId,
       onOpenRun,
@@ -240,7 +258,10 @@ vi.mock("../AddinChatInputCore", () => ({
   },
 }));
 vi.mock("../AddinSettingsDialogCore", () => ({
-  AddinSettingsDialogCore: () => null,
+  AddinSettingsDialogCore: (props: { isOpen: boolean; openTab?: string }) => {
+    spies.settingsDialogProps.current = props;
+    return null;
+  },
 }));
 
 describe("NeutralAddinChatPage host boundary", () => {
@@ -519,6 +540,31 @@ describe("NeutralAddinChatPage host boundary", () => {
     expect(spies.useChatMessaging).toHaveBeenLastCalledWith(
       expect.objectContaining({ chatId: "run-88" }),
     );
+  });
+
+  // The pane has its own settings with a servers tab; only the OAuth
+  // round-trip of connecting one server is web-shaped.
+  it("opens the pane's own settings on the servers tab to manage MCP servers", () => {
+    renderPage();
+    expect(spies.mcpSettingsOpenHandler.current).toBeTypeOf("function");
+    expect(spies.settingsDialogProps.current?.isOpen).toBe(false);
+
+    act(() => spies.mcpSettingsOpenHandler.current?.());
+
+    expect(spies.settingsDialogProps.current).toMatchObject({
+      isOpen: true,
+      openTab: "serversTools",
+    });
+    expect(spies.authorizeMcpInBrowser).not.toHaveBeenCalled();
+  });
+
+  it("connects one MCP server through the browser, leaving the settings closed", () => {
+    renderPage();
+
+    act(() => spies.mcpSettingsOpenHandler.current?.("linear"));
+
+    expect(spies.authorizeMcpInBrowser).toHaveBeenCalledWith("linear");
+    expect(spies.settingsDialogProps.current?.isOpen).toBe(false);
   });
 
   it("carries the background run-mode choice through to the send", () => {

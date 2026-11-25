@@ -1,27 +1,26 @@
 //! The server-chained apply.
 //!
-//! A submission whose tool names `[submission.apply]` is checked by the client
-//! as before. Once the client accepts it, the server itself calls the named
-//! `called_by = "server"` tool with the accepted submission's call id, through
-//! the normal client tool approval. The model never calls the apply tool, so
-//! the change the user approves is always the change the client checked.
+//! A submission (the proposal) is checked by the client as before. Once the
+//! client accepts it, the server itself calls the `called_by = "server"` tool
+//! whose `follows_tool` names the submission (the operation) with the accepted
+//! submission's call id, through the normal client tool approval. The model
+//! never calls the operation, so the change the user approves is always the
+//! change the client checked.
 //!
-//! After the apply's result, the answer ends without another model request
-//! unless the result needs it (it did not fully apply, or the host asks for a
-//! follow-up) or the submission said more steps follow (`more_steps`).
+//! After the operation's result, the answer ends without another model
+//! request unless the result needs it (it did not fully apply, or the host
+//! asks for a follow-up) or the submission said more steps follow
+//! (`more_steps_key`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::config::{
-    ClientToolApproval, ClientToolCalledBy, ClientToolConfig, ClientToolSubmissionApplyConfig,
-    ClientToolsConfig,
-};
+use crate::config::{ClientToolApproval, ClientToolCalledBy, ClientToolConfig, ClientToolsConfig};
 use crate::models::message::{ContentPart, InputMessage, MessageRole, ToolDisplayMetadata};
 use crate::models::user_preference::ClientToolDecision;
-use crate::services::client_operations::ToolCallCharge;
+use crate::services::client_operations::{OperationOutcome, ToolCallCharge};
 use crate::services::client_tools::{ClientToolOutcome, OfferedClientTool};
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::prompt_composition::replay_policy::ToolReplayPolicy;
@@ -157,14 +156,14 @@ pub fn read_preview(result: &Value, apply: &ClientToolConfig) -> ApplyPreview {
     }
 }
 
-/// The chained call's input: which accepted submission to apply.
+/// The chained call's input: which accepted proposal to apply.
 pub fn apply_input(submission_call_id: &str, result: &Value) -> Value {
     let draft_id = result
         .get("draft_id")
         .and_then(Value::as_str)
         .filter(|id| id.chars().count() <= MAX_DRAFT_ID_CHARS);
     json!({
-        "submission_call_id": submission_call_id,
+        "proposal_call_id": submission_call_id,
         "draft_id": draft_id,
         "confirmation": null,
     })
@@ -213,17 +212,28 @@ pub fn with_more_steps(
     Value::Object(restored)
 }
 
-/// The apply configuration of a submission, when its apply tool is offered.
-pub fn offered_apply<'a>(
-    submission: &'a OfferedClientTool,
+/// The offered server-called tool that follows a submission.
+pub fn offered_follower<'a>(
+    submission: &OfferedClientTool,
     offered: &'a HashMap<String, OfferedClientTool>,
-) -> Option<(&'a ClientToolSubmissionApplyConfig, &'a OfferedClientTool)> {
-    let apply = submission.config.submission.as_ref()?.apply.as_ref()?;
-    let tool = offered.values().find(|tool| {
+) -> Option<&'a OfferedClientTool> {
+    submission.config.submission.as_ref()?;
+    let followed = submission.config.qualified_name();
+    offered.values().find(|tool| {
         tool.config.called_by == ClientToolCalledBy::Server
-            && tool.config.qualified_name() == apply.tool
-    })?;
-    Some((apply, tool))
+            && tool.config.follows_tool.as_ref() == Some(&followed)
+    })
+}
+
+/// The configured submission a tool follows.
+fn followed_submission<'a>(
+    tools: &'a HashMap<String, ClientToolConfig>,
+    follower: &ClientToolConfig,
+) -> Option<&'a ClientToolConfig> {
+    let followed = follower.follows_tool.as_ref()?;
+    tools
+        .values()
+        .find(|tool| tool.submission.is_some() && tool.qualified_name() == *followed)
 }
 
 /// Qualified names of the submissions, and their part tools, whose apply tool
@@ -233,15 +243,15 @@ pub fn turned_off(
     decisions: &BTreeMap<String, ClientToolDecision>,
 ) -> HashSet<String> {
     let mut names = HashSet::new();
-    for tool in tools.values() {
-        let Some(submission) = &tool.submission else {
+    for follower in tools.values() {
+        if decisions.get(&follower.qualified_name()) != Some(&ClientToolDecision::NeverAllow) {
+            continue;
+        }
+        let Some(followed) = followed_submission(tools, follower) else {
             continue;
         };
-        let Some(apply) = &submission.apply else {
-            continue;
-        };
-        if decisions.get(&apply.tool) == Some(&ClientToolDecision::NeverAllow) {
-            names.insert(tool.qualified_name());
+        names.insert(followed.qualified_name());
+        if let Some(submission) = &followed.submission {
             names.extend(submission.part_tools.iter().cloned());
         }
     }
@@ -262,17 +272,22 @@ pub fn offer_apply_tools(
         &ClientToolConfig,
     ) -> Option<crate::services::client_operations::ExecutorBinding>,
 ) {
-    let wanted: Vec<String> = offered
+    let submissions: HashSet<String> = offered
         .values()
-        .filter_map(|tool| tool.config.submission.as_ref()?.apply.as_ref())
-        .map(|apply| apply.tool.clone())
+        .filter(|tool| tool.config.submission.is_some())
+        .map(|tool| tool.config.qualified_name())
         .collect();
-    for qualified in wanted {
-        let Some(apply) = tools.values().find(|tool| {
-            tool.called_by == ClientToolCalledBy::Server && tool.qualified_name() == qualified
-        }) else {
-            continue;
-        };
+    let wanted: Vec<&ClientToolConfig> = tools
+        .values()
+        .filter(|tool| {
+            tool.called_by == ClientToolCalledBy::Server
+                && tool
+                    .follows_tool
+                    .as_ref()
+                    .is_some_and(|followed| submissions.contains(followed))
+        })
+        .collect();
+    for apply in wanted {
         offer_server_tool(
             apply,
             offered,
@@ -326,22 +341,12 @@ fn offer_server_tool<'a>(
     offered.get_mut(&apply.name)
 }
 
-/// Whether a server-called tool carries out proposed client actions: no
-/// submission applies it, so `propose_client_action` is its only caller.
-pub fn is_proposal_tool(
-    tools: &HashMap<String, ClientToolConfig>,
-    tool: &ClientToolConfig,
-) -> bool {
-    let qualified = tool.qualified_name();
+/// Whether a server-called tool carries out proposed client actions: it
+/// follows no submission, so `propose_client_action` is its only caller.
+pub fn is_proposal_tool(tool: &ClientToolConfig) -> bool {
     tool.called_by == ClientToolCalledBy::Server
+        && tool.follows_tool.is_none()
         && !tool.client_actions.is_empty()
-        && !tools.values().any(|owner| {
-            owner
-                .submission
-                .as_ref()
-                .and_then(|submission| submission.apply.as_ref())
-                .is_some_and(|apply| apply.tool == qualified)
-        })
 }
 
 /// The configured tool that carries out a proposed client action.
@@ -350,7 +355,7 @@ pub fn proposal_tool<'a>(
     action: &str,
 ) -> Option<&'a ClientToolConfig> {
     tools.values().find(|tool| {
-        tool.client_actions.iter().any(|known| known == action) && is_proposal_tool(tools, tool)
+        tool.client_actions.iter().any(|known| known == action) && is_proposal_tool(tool)
     })
 }
 
@@ -535,10 +540,50 @@ pub fn facet_always_asks(tool: &OfferedClientTool, actions: &[String]) -> bool {
         .any(|action| used.contains(action))
 }
 
+/// The host's `status` of an operation, read once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApplyStatus {
+    Applied,
+    Partial,
+    Unconfirmed,
+    NeedsDecision,
+    Failed,
+    Stale,
+    Unavailable,
+}
+
+impl ApplyStatus {
+    /// Unknown or missing reads as `Failed`.
+    pub fn parse(status: Option<&str>) -> Self {
+        match status {
+            Some("applied") => Self::Applied,
+            Some("partial") => Self::Partial,
+            Some("unconfirmed") => Self::Unconfirmed,
+            Some("needs_decision") => Self::NeedsDecision,
+            Some("stale") => Self::Stale,
+            Some("unavailable") => Self::Unavailable,
+            _ => Self::Failed,
+        }
+    }
+
+    /// The operation outcome where it is the same thing. `Partial` (some of
+    /// it was written) and `NeedsDecision` (nothing written, it waits for the
+    /// user) have none.
+    pub fn outcome(self) -> Option<OperationOutcome> {
+        match self {
+            Self::Applied => Some(OperationOutcome::Succeeded),
+            Self::Failed => Some(OperationOutcome::Failed),
+            Self::Unconfirmed => Some(OperationOutcome::Unknown),
+            Self::Stale | Self::Unavailable => Some(OperationOutcome::Rejected),
+            Self::Partial | Self::NeedsDecision => None,
+        }
+    }
+}
+
 /// How the apply ended, as the continue rule reads it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplyReport {
-    pub status: String,
+    pub status: ApplyStatus,
     pub reason: Option<String>,
     pub needs_follow_up: bool,
 }
@@ -546,11 +591,7 @@ pub struct ApplyReport {
 pub fn report(outcome: &ClientToolOutcome) -> ApplyReport {
     match outcome {
         ClientToolOutcome::Result(result, _) => ApplyReport {
-            status: result
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("failed")
-                .to_string(),
+            status: ApplyStatus::parse(result.get("status").and_then(Value::as_str)),
             reason: result
                 .get("reason")
                 .and_then(Value::as_str)
@@ -558,17 +599,17 @@ pub fn report(outcome: &ClientToolOutcome) -> ApplyReport {
             needs_follow_up: result.get("needs_follow_up") == Some(&Value::Bool(true)),
         },
         ClientToolOutcome::Cancelled { reason } if reason == PANE_GONE => ApplyReport {
-            status: "unavailable".into(),
+            status: ApplyStatus::Unavailable,
             reason: Some(PANE_GONE.into()),
             needs_follow_up: false,
         },
         ClientToolOutcome::Cancelled { reason } => ApplyReport {
-            status: "failed".into(),
+            status: ApplyStatus::Failed,
             reason: Some(reason.clone()),
             needs_follow_up: false,
         },
         ClientToolOutcome::Error(_) | ClientToolOutcome::ValidationFailed(..) => ApplyReport {
-            status: "failed".into(),
+            status: ApplyStatus::Failed,
             reason: Some("host_error".into()),
             needs_follow_up: false,
         },
@@ -591,7 +632,7 @@ pub enum AfterApply {
 /// pane ends; anything short of `applied`, a follow-up the host asks for, or
 /// more planned steps continue; a clean single change ends.
 pub fn after_apply(report: &ApplyReport, state: &ChainedApplyState) -> AfterApply {
-    if report.status == "needs_decision" {
+    if report.status == ApplyStatus::NeedsDecision {
         return if state.reparked {
             AfterApply::Continue
         } else {
@@ -601,18 +642,22 @@ pub fn after_apply(report: &ApplyReport, state: &ChainedApplyState) -> AfterAppl
         };
     }
     if is_pane_gone(report)
-        || (report.status == "unavailable" && report.reason.as_deref() == Some(USER_PICKS))
+        || (report.status == ApplyStatus::Unavailable
+            && report.reason.as_deref() == Some(USER_PICKS))
     {
         return AfterApply::End;
     }
-    if report.status != "applied" || report.needs_follow_up || state.more_steps {
+    if report.status.outcome() != Some(OperationOutcome::Succeeded)
+        || report.needs_follow_up
+        || state.more_steps
+    {
         return AfterApply::Continue;
     }
     AfterApply::End
 }
 
 pub fn is_pane_gone(report: &ApplyReport) -> bool {
-    report.status == "unavailable" && report.reason.as_deref() == Some(PANE_GONE)
+    report.status == ApplyStatus::Unavailable && report.reason.as_deref() == Some(PANE_GONE)
 }
 
 /// A second `needs_decision` for the same call is recorded as a failure.
@@ -655,9 +700,10 @@ pub fn consumed_read_output(
 #[derive(Debug, Clone, Default)]
 pub struct AnswerCuts {
     pub replay: ToolReplayPolicy,
-    /// Submissions with an apply table, with their `more_steps` pointer.
+    /// Submissions that a tool follows or that set `more_steps_key`, with
+    /// that pointer.
     pub submissions: HashMap<String, Option<String>>,
-    /// The reads each apply tool's change uses up, by apply tool.
+    /// The reads each following tool's change uses up, by following tool.
     pub consumed_reads: HashMap<String, HashSet<String>>,
 }
 
@@ -675,22 +721,32 @@ impl AnswerCuts {
                 .map(|tool| tool.name.clone())
         };
         for tool in config.tools.values() {
-            let Some(submission) = &tool.submission else {
+            if let Some(pointer) = tool
+                .submission
+                .as_ref()
+                .and_then(|submission| submission.more_steps_key.clone())
+            {
+                cuts.submissions.insert(tool.name.clone(), Some(pointer));
+            }
+        }
+        for follower in config.tools.values() {
+            let Some(followed) = followed_submission(&config.tools, follower) else {
                 continue;
             };
-            let Some(apply) = &submission.apply else {
+            let Some(submission) = &followed.submission else {
                 continue;
             };
             cuts.submissions
-                .insert(tool.name.clone(), apply.more_steps.clone());
-            if let Some(applier) = model_name(&apply.tool) {
-                cuts.consumed_reads.entry(applier).or_default().extend(
-                    submission
-                        .consumed_reads()
+                .insert(followed.name.clone(), submission.more_steps_key.clone());
+            cuts.consumed_reads
+                .entry(follower.name.clone())
+                .or_default()
+                .extend(
+                    follower
+                        .invalidated_read_tools(submission)
                         .iter()
                         .filter_map(|read| model_name(read)),
                 );
-            }
         }
         cuts
     }
@@ -1036,17 +1092,15 @@ mod tests {
             namespace: Some("word".into()),
             submission: Some(crate::config::ClientToolSubmissionConfig {
                 max_attempts: 3,
-                apply: Some(ClientToolSubmissionApplyConfig {
-                    tool: "word/apply_comment_changes".into(),
-                    more_steps: None,
-                    max_changes: 5,
-                    consumed_reads: None,
-                }),
                 ..Default::default()
             }),
             ..Default::default()
         };
-        let tools: HashMap<String, ClientToolConfig> = [submit.clone(), apply_tool()]
+        let apply = ClientToolConfig {
+            follows_tool: Some("word/submit_comment_changes".into()),
+            ..apply_tool()
+        };
+        let tools: HashMap<String, ClientToolConfig> = [submit.clone(), apply]
             .into_iter()
             .map(|tool| (tool.name.clone(), tool))
             .collect();
@@ -1087,26 +1141,25 @@ mod tests {
             replay: receipt.clone(),
             ..Default::default()
         };
-        let submission = |name: &str, apply: &str, read: &str| ClientToolConfig {
+        let submission = |name: &str, read: &str| ClientToolConfig {
             submission: Some(ClientToolSubmissionConfig {
                 max_attempts: 3,
                 recovery_read_tools: vec![format!("word/{read}")],
-                apply: Some(ClientToolSubmissionApplyConfig {
-                    tool: format!("word/{apply}"),
-                    more_steps: None,
-                    max_changes: 5,
-                    consumed_reads: None,
-                }),
                 ..Default::default()
             }),
             ..tool(name)
         };
+        let follower = |name: &str, followed: &str| ClientToolConfig {
+            called_by: ClientToolCalledBy::Server,
+            follows_tool: Some(format!("word/{followed}")),
+            ..tool(name)
+        };
         let config = ClientToolsConfig {
             tools: [
-                submission("submit_document_plan", "apply_document_plan", "read_blocks"),
-                submission("submit_comments", "apply_comments", "read_comments"),
-                tool("apply_document_plan"),
-                tool("apply_comments"),
+                submission("submit_document_plan", "read_blocks"),
+                submission("submit_comments", "read_comments"),
+                follower("apply_document_plan", "submit_document_plan"),
+                follower("apply_comments", "submit_comments"),
                 tool("read_blocks"),
                 tool("read_comments"),
             ]
@@ -1166,11 +1219,92 @@ mod tests {
     fn the_apply_input_carries_only_a_bounded_draft_id() {
         assert_eq!(
             apply_input("call_1", &json!({"draft_id":"d-1","plan":{}})),
-            json!({"submission_call_id":"call_1","draft_id":"d-1","confirmation":null})
+            json!({"proposal_call_id":"call_1","draft_id":"d-1","confirmation":null})
         );
         assert_eq!(
             apply_input("call_1", &json!({"draft_id":"d".repeat(200)}))["draft_id"],
             Value::Null
         );
+    }
+
+    #[test]
+    fn status_outcome_mapping() {
+        use ApplyStatus::*;
+        let mapped: Vec<_> = [
+            Applied,
+            Partial,
+            Unconfirmed,
+            NeedsDecision,
+            Failed,
+            Stale,
+            Unavailable,
+        ]
+        .into_iter()
+        .map(ApplyStatus::outcome)
+        .collect();
+        assert_eq!(
+            mapped,
+            [
+                Some(OperationOutcome::Succeeded),
+                None,
+                Some(OperationOutcome::Unknown),
+                None,
+                Some(OperationOutcome::Failed),
+                Some(OperationOutcome::Rejected),
+                Some(OperationOutcome::Rejected),
+            ]
+        );
+        assert_eq!(ApplyStatus::parse(None), Failed);
+        assert_eq!(ApplyStatus::parse(Some("done")), Failed);
+    }
+
+    #[test]
+    fn every_status_continues_as_before() {
+        use AfterApply::*;
+        let repark = Repark { reason: None };
+        // status, then (plain, more steps, reparked, more steps and reparked)
+        let expected = [
+            (Some("applied"), [End, Continue, End, Continue]),
+            (Some("partial"), [Continue, Continue, Continue, Continue]),
+            (
+                Some("unconfirmed"),
+                [Continue, Continue, Continue, Continue],
+            ),
+            (
+                Some("needs_decision"),
+                [repark.clone(), repark, Continue, Continue],
+            ),
+            (Some("failed"), [Continue, Continue, Continue, Continue]),
+            (Some("stale"), [Continue, Continue, Continue, Continue]),
+            (
+                Some("unavailable"),
+                [Continue, Continue, Continue, Continue],
+            ),
+            (Some("done"), [Continue, Continue, Continue, Continue]),
+            (None, [Continue, Continue, Continue, Continue]),
+        ];
+        for (status, results) in expected {
+            let result = match status {
+                Some(status) => json!({ "status": status }),
+                None => json!({}),
+            };
+            let report = report(&ClientToolOutcome::Result(result, vec![]));
+            for ((more_steps, reparked), want) in
+                [(false, false), (true, false), (false, true), (true, true)]
+                    .into_iter()
+                    .zip(results)
+            {
+                let state = ChainedApplyState {
+                    more_steps,
+                    reparked,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    after_apply(&report, &state),
+                    want,
+                    "{status:?} more_steps={more_steps} reparked={reparked}"
+                );
+            }
+        }
     }
 }

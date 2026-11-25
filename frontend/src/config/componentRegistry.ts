@@ -83,8 +83,8 @@ export interface ApprovalItemDecisionExtras {
   /**
    * The user's choices on the host's own card, such as a tick, sent as the
    * decision's `client_confirmation`. Sent only with an approval of an item
-   * the server chained (`item.chained`); opaque to the server, at most 4 KiB
-   * of JSON.
+   * that follows an accepted proposal (`item.follows`); opaque to the server,
+   * at most 4 KiB of JSON.
    */
   clientConfirmation?: unknown;
   /** For `request_change`: what the user wants different, in their words. */
@@ -98,7 +98,7 @@ export interface ApprovalItemDecisionExtras {
  * does not draw.
  */
 export interface ApprovalItemCardProps {
-  /** The item: `approval_id`, `tool_name`, `input`, `display`, `chained`. */
+  /** The item: `approval_id`, `tool_name`, `input`, `display`, `follows`. */
   item: ApprovalItemPart;
   /** The request's `mcp_server_id`: a client tool's namespace. */
   serverId: string;

@@ -2,9 +2,11 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+import { setPageVisibility } from "@/test/pageVisibility";
 
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
+import { MUTE_GRACE_MS } from "../audioTuning";
 import { hesitationMatcher } from "../hesitations";
 import {
   resolveEndOfTurnSilenceMs,
@@ -1177,7 +1179,8 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
 
-  const render = () =>
+  const stoppedByHiddenPage = vi.fn();
+  const render = (conversation = true) =>
     renderHook(
       ({ conversation }: { conversation: boolean }) =>
         useAudioDictationRecorder({
@@ -1186,9 +1189,15 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
           maxRecordingDurationSeconds: 1200,
           onTranscriptChunk: vi.fn(),
           vadAutoStopEnabled: conversation,
+          onStoppedByHiddenPage: stoppedByHiddenPage,
         }),
-      { initialProps: { conversation: true } },
+      { initialProps: { conversation } },
     );
+
+  const mute = (muted: MockMediaStreamTrack) => {
+    muted.muted = true;
+    muted.dispatchEvent(new Event("mute"));
+  };
 
   const track = (index: number) =>
     (getUserMedia.mock.results[index].value as Promise<MockMediaStream>).then(
@@ -1294,19 +1303,10 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     await listen(hook);
     await cancel(hook);
 
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "hidden",
-    });
-    act(() => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    act(() => setPageVisibility("hidden"));
     expect((await track(0)).stop).toHaveBeenCalled();
 
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "visible",
-    });
+    act(() => setPageVisibility("visible"));
     await listen(hook);
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });
@@ -1314,17 +1314,92 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
   it("closes the microphone a hidden page's running turn used, as that turn ends", async () => {
     const hook = render();
     await listen(hook);
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "hidden",
-    });
-    act(() => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    act(() => setPageVisibility("hidden"));
     expect((await track(0)).stop).not.toHaveBeenCalled();
 
     await cancel(hook);
     expect((await track(0)).stop).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the page hides first", ["hide", "mute"]],
+    ["the microphone mutes first", ["mute", "hide"]],
+  ])(
+    "a phone lock ends the turn at once without an error (%s)",
+    async (_order, steps) => {
+      stoppedByHiddenPage.mockClear();
+      const hook = render();
+      await listen(hook);
+      const locked = await track(0);
+      act(() => {
+        for (const step of steps)
+          if (step === "hide") setPageVisibility("hidden");
+          else mute(locked);
+      });
+
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+      expect(hook.result.current.dictationError).toBeNull();
+      expect(locked.stop).toHaveBeenCalled();
+      expect(stoppedByHiddenPage).toHaveBeenCalledOnce();
+
+      act(() => setPageVisibility("visible"));
+      await listen(hook);
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("a phone lock while dictating finishes the dictation without an error", async () => {
+    const hook = render(false);
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    const socket = MockWebSocket.instances[0];
+    act(() => socket.emit("open"));
+    await waitFor(() =>
+      expect(socket.sentJsonFrames).toContainEqual({
+        mode: "dictation",
+        type: "start",
+      }),
+    );
+    act(() =>
+      socket.emitJson({
+        type: "session_state",
+        next_chunk_index: 0,
+        chunk_duration_ms: 30_000,
+      }),
+    );
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+
+    act(() => {
+      setPageVisibility("hidden");
+      emitAudioSamples(new Float32Array(RATE / 2).fill(0.2));
+    });
+    await act(async () => mute(await track(0)));
+
+    await waitFor(() =>
+      expect(socket.sentJsonFrames).toContainEqual({ type: "finish" }),
+    );
+    act(() => socket.emitJson({ type: "completed" }));
+    await waitFor(() =>
+      expect(hook.result.current.isDictationCompleting).toBe(false),
+    );
+    expect(hook.result.current.dictationError).toBeNull();
+  });
+
+  it("a microphone that stops sending while the page is shown is still reported", async () => {
+    const hook = render();
+    await listen(hook);
+    const dead = await track(0);
+    vi.useFakeTimers();
+    try {
+      act(() => mute(dead));
+      act(() => vi.advanceTimersByTime(MUTE_GRACE_MS));
+    } finally {
+      vi.useRealTimers();
+    }
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+    expect(hook.result.current.dictationError).toMatch(/stopped sending audio/);
   });
 
   it("drops a microphone that was lost and opens a new one for the next turn", async () => {
@@ -1402,13 +1477,7 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     const hook = render();
     await listen(hook);
     await endWhileConnecting(hook);
-    Object.defineProperty(document, "visibilityState", {
-      configurable: true,
-      get: () => "hidden",
-    });
-    act(() => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
+    act(() => setPageVisibility("hidden"));
 
     await finishConnecting(hook);
     expect((await track(0)).stop).toHaveBeenCalled();

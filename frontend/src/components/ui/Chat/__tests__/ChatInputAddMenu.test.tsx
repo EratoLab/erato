@@ -44,7 +44,7 @@ describe("ChatInputAddMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("carries no count badge: selected tools show as chips beside it", () => {
+  it("carries no count badge when the selected tools show as chips beside it", () => {
     render(<ChatInputAddMenu fileSources={fileSources} />);
 
     expect(
@@ -53,6 +53,85 @@ describe("ChatInputAddMenu", () => {
     expect(
       screen.getByRole("button", { name: "Add files and tools" }),
     ).toHaveTextContent("");
+  });
+
+  it("shows how many tools are on where no chips show them, and says so to screen readers", () => {
+    render(
+      <ChatInputAddMenu fileSources={fileSources} selectedToolCount={2} />,
+    );
+
+    expect(screen.getByTestId("chat-input-add-menu-badge")).toHaveTextContent(
+      "2",
+    );
+    expect(
+      screen.getByTestId("chat-input-add-menu-trigger"),
+    ).toHaveAccessibleName("Add files and tools, 2 tools switched on");
+  });
+
+  it("offers an exclusive section's rows as radios", () => {
+    render(
+      <ChatInputAddMenu
+        extraSections={[
+          {
+            id: "model",
+            header: "Model",
+            items: [
+              {
+                id: "a",
+                label: "Model A",
+                checked: true,
+                exclusive: true,
+                onToggle: vi.fn(),
+              },
+              {
+                id: "b",
+                label: "Model B",
+                checked: false,
+                exclusive: true,
+                onToggle: vi.fn(),
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+    expect(
+      screen.getByRole("menuitemradio", { name: "Model A" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByRole("menuitemradio", { name: "Model B" }),
+    ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("closes after a radio row is picked, unlike a tool toggle", async () => {
+    const onPick = vi.fn();
+    render(
+      <ChatInputAddMenu
+        extraSections={[
+          {
+            id: "model",
+            items: [
+              {
+                id: "b",
+                label: "Model B",
+                checked: false,
+                exclusive: true,
+                onToggle: onPick,
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Model B" }));
+
+    expect(onPick).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
   });
 
   // A mention row puts focus in the composer; closing after the select delay

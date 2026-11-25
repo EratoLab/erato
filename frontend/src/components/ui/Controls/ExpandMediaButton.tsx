@@ -42,7 +42,7 @@ export const ExpandMediaButton: React.FC<ExpandMediaButtonProps> = ({
       "border border-[var(--theme-border)] bg-[var(--theme-bg-primary)] text-[var(--theme-fg-muted)] shadow-sm",
       "hover:text-[var(--theme-fg-primary)]",
       "opacity-0 transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100",
-      "[@media(hover:none)]:opacity-100",
+      "no-hover:opacity-100",
       className,
     )}
   >

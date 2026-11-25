@@ -2,6 +2,8 @@ import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
+
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
 import { WarningIcon } from "../icons";
@@ -186,8 +188,10 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     ? (standingNote ?? alwaysAllowDisabledReason)
     : alwaysAllowDisabledReason;
 
+  // In audio mode the message list places a waiting card itself.
+  const placedByList = useSpeechPlayback((state) => state.conversational);
   useEffect(() => {
-    if (scrollIntoViewOnMount) {
+    if (scrollIntoViewOnMount && !placedByList) {
       cardRef.current?.scrollIntoView({ block: "nearest" });
     }
     if (isPending) {

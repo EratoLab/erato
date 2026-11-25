@@ -567,7 +567,7 @@ function ArtifactCard({
 
 function SetupFrame({ children }: { children: React.ReactNode }) {
   return (
-    <main className="h-screen w-full overflow-y-auto bg-theme-bg-secondary">
+    <main className="size-full overflow-y-auto bg-theme-bg-secondary">
       <div className="mx-auto w-full max-w-5xl px-5 py-8 sm:px-8 sm:py-12">
         <Link
           to="/"

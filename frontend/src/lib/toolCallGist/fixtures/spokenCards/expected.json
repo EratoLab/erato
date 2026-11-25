@@ -52,6 +52,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -76,6 +80,10 @@
                 "day": 15
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -98,6 +106,10 @@
                 "text": "Hoch"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priority"
           ]
         },
         {
@@ -125,7 +137,10 @@
           "readOut": {
             "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
             "cut": false
-          }
+          },
+          "names": [
+            "Description"
+          ]
         },
         {
           "id": "request",
@@ -188,6 +203,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -212,6 +231,10 @@
                 "day": 15
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -234,6 +257,10 @@
                 "text": "High"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priorität"
           ]
         },
         {
@@ -261,7 +288,10 @@
           "readOut": {
             "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
             "cut": false
-          }
+          },
+          "names": [
+            "Beschreibung"
+          ]
         },
         {
           "id": "request",
@@ -326,6 +356,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -348,6 +382,9 @@
                 "text": "Werk Augsburg"
               }
             }
+          ],
+          "names": [
+            "Location"
           ]
         },
         {
@@ -374,6 +411,10 @@
                 "minute": 30
               }
             }
+          ],
+          "names": [
+            "Scheduled start",
+            "Start"
           ]
         },
         {
@@ -398,6 +439,37 @@
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Ende: 20. Januar 2030 um 12 Uhr.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Ende"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "datetime",
+                "year": 2030,
+                "month": 1,
+                "day": 20,
+                "hour": 12,
+                "minute": 0
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Scheduled end",
+            "End"
+          ]
         }
       ]
     ],
@@ -453,6 +525,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -475,6 +551,9 @@
                 "text": "Werk Augsburg"
               }
             }
+          ],
+          "names": [
+            "Ort"
           ]
         },
         {
@@ -501,6 +580,10 @@
                 "minute": 30
               }
             }
+          ],
+          "names": [
+            "Scheduled start",
+            "Beginn"
           ]
         },
         {
@@ -525,6 +608,37 @@
           "text": "Please confirm on screen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "End: 20 January 2030 at 12 pm.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "End"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "datetime",
+                "year": 2030,
+                "month": 1,
+                "day": 20,
+                "hour": 12,
+                "minute": 0
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Scheduled end",
+            "Ende"
+          ]
         }
       ]
     ]
@@ -582,6 +696,10 @@
                 "text": "Beispiel Industrie GmbH"
               }
             }
+          ],
+          "names": [
+            "Parent customer",
+            "Company"
           ]
         },
         {
@@ -604,6 +722,9 @@
                 "text": "Clara"
               }
             }
+          ],
+          "names": [
+            "First name"
           ]
         },
         {
@@ -626,6 +747,9 @@
                 "text": "Projektleiterin"
               }
             }
+          ],
+          "names": [
+            "Job title"
           ]
         },
         {
@@ -650,6 +774,32 @@
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Email address 1",
+          "role": "detail",
+          "text": "E-Mail: clara.weber@beispiel-industrie.de.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "E-Mail"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "clara.weber@beispiel-industrie.de"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Email address 1"
+          ]
         }
       ]
     ],
@@ -705,6 +855,10 @@
                 "text": "Beispiel Industrie GmbH"
               }
             }
+          ],
+          "names": [
+            "Parent customer",
+            "Firma"
           ]
         },
         {
@@ -727,6 +881,9 @@
                 "text": "Clara"
               }
             }
+          ],
+          "names": [
+            "Vorname"
           ]
         },
         {
@@ -749,6 +906,9 @@
                 "text": "Projektleiterin"
               }
             }
+          ],
+          "names": [
+            "Position"
           ]
         },
         {
@@ -773,6 +933,32 @@
           "text": "Please confirm on screen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Email address 1",
+          "role": "detail",
+          "text": "Email: clara.weber@beispiel-industrie.de.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Email"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "clara.weber@beispiel-industrie.de"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Email address 1"
+          ]
         }
       ]
     ]
@@ -838,6 +1024,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -865,7 +1055,10 @@
           "readOut": {
             "text": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
             "cut": false
-          }
+          },
+          "names": [
+            "Description"
+          ]
         },
         {
           "id": "request",
@@ -936,6 +1129,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -963,7 +1160,10 @@
           "readOut": {
             "text": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
             "cut": false
-          }
+          },
+          "names": [
+            "Beschreibung"
+          ]
         },
         {
           "id": "request",
@@ -1028,6 +1228,10 @@
                 "text": "Ersatzteil-Rahmenvertrag"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -1052,6 +1256,10 @@
                 "day": 22
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -1074,6 +1282,10 @@
                 "text": "Hoch"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priority"
           ]
         },
         {
@@ -1098,6 +1310,139 @@
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Percentcomplete",
+          "role": "detail",
+          "text": "Prozent abgeschlossen: 0 Prozent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Prozent abgeschlossen"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": true
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Percentcomplete"
+          ]
+        },
+        {
+          "id": "detail:Actualdurationminutes",
+          "role": "detail",
+          "text": "Dauer in Minuten: 30.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Dauer in Minuten"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 30,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Actualdurationminutes",
+            "Duration in minutes"
+          ]
+        },
+        {
+          "id": "detail:Category",
+          "role": "detail",
+          "text": "Kategorie: Vertrieb.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Kategorie"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Vertrieb"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Category"
+          ]
+        },
+        {
+          "id": "detail:Sub category",
+          "role": "detail",
+          "text": "Unterkategorie: Nachfassen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Unterkategorie"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Nachfassen"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Sub category"
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "Status: Offen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Offen"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "State code"
+          ]
         }
       ]
     ],
@@ -1153,6 +1498,10 @@
                 "text": "Ersatzteil-Rahmenvertrag"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -1177,6 +1526,10 @@
                 "day": 22
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -1199,6 +1552,10 @@
                 "text": "High"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priorität"
           ]
         },
         {
@@ -1223,6 +1580,139 @@
           "text": "Please confirm on screen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Percentcomplete",
+          "role": "detail",
+          "text": "Percent complete: 0 percent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Percent complete"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": true
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Prozent abgeschlossen"
+          ]
+        },
+        {
+          "id": "detail:Actualdurationminutes",
+          "role": "detail",
+          "text": "Duration in minutes: 30.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Duration in minutes"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 30,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Actualdurationminutes",
+            "Dauer in Minuten"
+          ]
+        },
+        {
+          "id": "detail:Category",
+          "role": "detail",
+          "text": "Category: Vertrieb.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Category"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Vertrieb"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Kategorie"
+          ]
+        },
+        {
+          "id": "detail:Sub category",
+          "role": "detail",
+          "text": "Subcategory: Nachfassen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Subcategory"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Nachfassen"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Unterkategorie"
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "Status: Open.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Open"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "State code"
+          ]
         }
       ]
     ]
@@ -1282,6 +1772,10 @@
                 "day": 16
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -1303,6 +1797,10 @@
                 "kind": "unread"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -1368,6 +1866,10 @@
                 "day": 16
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -1389,6 +1891,10 @@
                 "kind": "unread"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -1454,6 +1960,9 @@
                 "text": "+49 89 1234 500"
               }
             }
+          ],
+          "names": [
+            "Phone number"
           ]
         },
         {
@@ -1480,6 +1989,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -1502,6 +2015,9 @@
                 "text": "Kurz klären, ob zwei Tage Stillstand reichen."
               }
             }
+          ],
+          "names": [
+            "Description"
           ]
         },
         {
@@ -1565,6 +2081,9 @@
                 "text": "+49 89 1234 500"
               }
             }
+          ],
+          "names": [
+            "Telefonnummer"
           ]
         },
         {
@@ -1591,6 +2110,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -1613,6 +2136,9 @@
                 "text": "Kurz klären, ob zwei Tage Stillstand reichen."
               }
             }
+          ],
+          "names": [
+            "Beschreibung"
           ]
         },
         {
@@ -1678,6 +2204,9 @@
                 "text": "Beispiel Industrie GmbH"
               }
             }
+          ],
+          "names": [
+            "Customer"
           ]
         },
         {
@@ -1701,6 +2230,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Estimated value",
+            "Estimated revenue"
           ]
         },
         {
@@ -1749,6 +2282,30 @@
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: 40 Prozent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Probability"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 40,
+                "percent": true
+              }
+            }
+          ],
+          "onRequest": true
         }
       ]
     ],
@@ -1804,6 +2361,9 @@
                 "text": "Beispiel Industrie GmbH"
               }
             }
+          ],
+          "names": [
+            "Kunde"
           ]
         },
         {
@@ -1827,6 +2387,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Estimated value",
+            "Geschätzter Umsatz"
           ]
         },
         {
@@ -1875,6 +2439,30 @@
           "text": "Please confirm on screen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: 40 percent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Probability"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 40,
+                "percent": true
+              }
+            }
+          ],
+          "onRequest": true
         }
       ]
     ]
@@ -1932,6 +2520,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Object",
+            "Regarding"
           ]
         },
         {
@@ -1959,7 +2551,11 @@
           "readOut": {
             "text": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
             "cut": false
-          }
+          },
+          "names": [
+            "Note text",
+            "Note"
+          ]
         },
         {
           "id": "request",
@@ -2022,6 +2618,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Object",
+            "Bezug"
           ]
         },
         {
@@ -2049,7 +2649,11 @@
           "readOut": {
             "text": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
             "cut": false
-          }
+          },
+          "names": [
+            "Note text",
+            "Notiz"
+          ]
         },
         {
           "id": "request",
@@ -2114,6 +2718,10 @@
                 "text": "+49 821 555 0100"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Phone"
           ]
         },
         {
@@ -2136,6 +2744,9 @@
                 "text": "https://www.muster-maschinenbau.example"
               }
             }
+          ],
+          "names": [
+            "Website URL"
           ]
         },
         {
@@ -2158,6 +2769,10 @@
                 "text": "Augsburg"
               }
             }
+          ],
+          "names": [
+            "Address 1 city",
+            "City"
           ]
         },
         {
@@ -2221,6 +2836,10 @@
                 "text": "+49 821 555 0100"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Telefon"
           ]
         },
         {
@@ -2243,6 +2862,9 @@
                 "text": "https://www.muster-maschinenbau.example"
               }
             }
+          ],
+          "names": [
+            "Website URL"
           ]
         },
         {
@@ -2265,6 +2887,10 @@
                 "text": "Augsburg"
               }
             }
+          ],
+          "names": [
+            "Address 1 city",
+            "Ort"
           ]
         },
         {
@@ -2458,6 +3084,10 @@
                 "day": 12
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -2523,6 +3153,10 @@
                 "day": 12
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -2590,6 +3224,10 @@
                 "day": 12
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -2655,6 +3293,10 @@
                 "day": 12
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -3559,6 +4201,10 @@
                 "text": "Ben Schmidt"
               }
             }
+          ],
+          "names": [
+            "Parent contact",
+            "Contact"
           ]
         },
         {
@@ -3621,6 +4267,10 @@
                 "text": "Ben Schmidt"
               }
             }
+          ],
+          "names": [
+            "Parent contact",
+            "Kontakt"
           ]
         },
         {
@@ -3671,6 +4321,10 @@
                 "text": "Telefon"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Phone"
           ]
         },
         {
@@ -3686,6 +4340,9 @@
                 "text": "Beschreibung"
               }
             }
+          ],
+          "names": [
+            "Description"
           ]
         },
         {
@@ -3765,6 +4422,10 @@
                 "text": "Phone"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Telefon"
           ]
         },
         {
@@ -3780,6 +4441,9 @@
                 "text": "Description"
               }
             }
+          ],
+          "names": [
+            "Beschreibung"
           ]
         },
         {
@@ -4061,6 +4725,111 @@
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Estimated value",
+          "role": "detail",
+          "text": "Geschätzter Umsatz wird auf 240.000 gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Geschätzter Umsatz"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 240000,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Estimated value",
+            "Estimated revenue"
+          ]
+        },
+        {
+          "id": "detail:Step name",
+          "role": "detail",
+          "text": "Phase wird auf Angebot gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Phase"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Angebot"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Step name",
+            "Pipeline phase"
+          ]
+        },
+        {
+          "id": "detail:Budget status",
+          "role": "detail",
+          "text": "Budgetstatus wird auf 2 gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Budgetstatus"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true
+        },
+        {
+          "id": "detail:Purchasetimeframe",
+          "role": "detail",
+          "text": "Kaufzeitrahmen wird auf Dieses Quartal gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Kaufzeitrahmen"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Dieses Quartal"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Purchasetimeframe"
+          ]
         }
       ]
     ],
@@ -4203,6 +4972,111 @@
           "text": "Please confirm on screen.",
           "mustSay": false,
           "values": []
+        },
+        {
+          "id": "detail:Estimated value",
+          "role": "detail",
+          "text": "Estimated revenue will be set to 240,000.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Estimated revenue"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 240000,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Estimated value",
+            "Geschätzter Umsatz"
+          ]
+        },
+        {
+          "id": "detail:Step name",
+          "role": "detail",
+          "text": "Pipeline phase will be set to Angebot.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Pipeline phase"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Angebot"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Step name",
+            "Phase"
+          ]
+        },
+        {
+          "id": "detail:Budget status",
+          "role": "detail",
+          "text": "Budget status will be set to 2.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Budget status"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ],
+          "onRequest": true
+        },
+        {
+          "id": "detail:Purchasetimeframe",
+          "role": "detail",
+          "text": "Purchase timeframe will be set to This quarter.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Purchase timeframe"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "This quarter"
+              }
+            }
+          ],
+          "onRequest": true,
+          "names": [
+            "Kaufzeitrahmen"
+          ]
         }
       ]
     ]
@@ -4267,6 +5141,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled start",
+            "Start"
           ]
         },
         {
@@ -4304,6 +5182,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "End"
           ]
         },
         {
@@ -4374,6 +5256,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled start",
+            "Beginn"
           ]
         },
         {
@@ -4411,6 +5297,10 @@
                 "minute": 0
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Ende"
           ]
         },
         {
@@ -4473,7 +5363,10 @@
           "readOut": {
             "text": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme.",
             "cut": false
-          }
+          },
+          "names": [
+            "Description"
+          ]
         },
         {
           "id": "request",
@@ -4533,7 +5426,10 @@
           "readOut": {
             "text": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme.",
             "cut": false
-          }
+          },
+          "names": [
+            "Beschreibung"
+          ]
         },
         {
           "id": "request",
@@ -4590,6 +5486,9 @@
                 "text": "Abgeschlossen"
               }
             }
+          ],
+          "names": [
+            "State code"
           ]
         },
         {
@@ -4613,6 +5512,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Status code",
+            "Status reason"
           ]
         },
         {
@@ -4668,6 +5571,9 @@
                 "text": "Completed"
               }
             }
+          ],
+          "names": [
+            "State code"
           ]
         },
         {
@@ -4691,6 +5597,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Status code",
+            "Statusgrund"
           ]
         },
         {
@@ -4741,6 +5651,10 @@
                 "text": "Hoch"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priority"
           ]
         },
         {
@@ -4789,6 +5703,10 @@
                 "text": "High"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priorität"
           ]
         },
         {
@@ -4839,6 +5757,10 @@
                 "text": "Normal"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priority"
           ]
         },
         {
@@ -4884,6 +5806,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Priorität",
+            "Priority"
           ]
         },
         {
@@ -4932,6 +5858,10 @@
                 "text": "Normal"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priorität"
           ]
         },
         {
@@ -4977,6 +5907,10 @@
                 "percent": false
               }
             }
+          ],
+          "names": [
+            "Priorität",
+            "Priority"
           ]
         },
         {
@@ -5041,6 +5975,9 @@
                 "text": "Technische Leiterin"
               }
             }
+          ],
+          "names": [
+            "Job title"
           ]
         },
         {
@@ -5063,6 +6000,10 @@
                 "text": "+49 89 1234 510"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Phone"
           ]
         },
         {
@@ -5125,6 +6066,9 @@
                 "text": "Technische Leiterin"
               }
             }
+          ],
+          "names": [
+            "Position"
           ]
         },
         {
@@ -5147,6 +6091,10 @@
                 "text": "+49 89 1234 510"
               }
             }
+          ],
+          "names": [
+            "Telephone 1",
+            "Telefon"
           ]
         },
         {
@@ -10006,6 +10954,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10030,6 +10982,10 @@
                 "day": 10
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -10091,6 +11047,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10115,6 +11075,10 @@
                 "day": 20
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -10176,6 +11140,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10200,6 +11168,10 @@
                 "day": 3
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -10263,6 +11235,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -10287,6 +11263,10 @@
                 "day": 10
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -10348,6 +11328,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -10372,6 +11356,10 @@
                 "day": 20
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -10433,6 +11421,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -10457,6 +11449,10 @@
                 "day": 3
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -10553,6 +11549,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10577,6 +11577,10 @@
                 "day": 15
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -10599,6 +11603,10 @@
                 "text": "Hoch"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priority"
           ]
         },
         {
@@ -10626,7 +11634,10 @@
           "readOut": {
             "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
             "cut": false
-          }
+          },
+          "names": [
+            "Description"
+          ]
         },
         {
           "id": "request",
@@ -10720,6 +11731,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -10744,6 +11759,10 @@
                 "day": 15
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -10766,6 +11785,10 @@
                 "text": "High"
               }
             }
+          ],
+          "names": [
+            "Priority code",
+            "Priorität"
           ]
         },
         {
@@ -10793,7 +11816,10 @@
           "readOut": {
             "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
             "cut": false
-          }
+          },
+          "names": [
+            "Beschreibung"
+          ]
         },
         {
           "id": "request",
@@ -10874,6 +11900,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10898,6 +11928,10 @@
                 "day": 10
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -10951,6 +11985,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -10975,6 +12013,10 @@
                 "day": 20
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -11028,6 +12070,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Regarding"
           ]
         },
         {
@@ -11052,6 +12098,10 @@
                 "day": 3
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Due date"
           ]
         },
         {
@@ -11131,6 +12181,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -11155,6 +12209,10 @@
                 "day": 10
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -11208,6 +12266,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -11232,6 +12294,10 @@
                 "day": 20
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {
@@ -11285,6 +12351,10 @@
                 "text": "Line 4 Retrofit"
               }
             }
+          ],
+          "names": [
+            "Regardingobjectid",
+            "Bezug"
           ]
         },
         {
@@ -11309,6 +12379,10 @@
                 "day": 3
               }
             }
+          ],
+          "names": [
+            "Scheduled end",
+            "Fälligkeitsdatum"
           ]
         },
         {

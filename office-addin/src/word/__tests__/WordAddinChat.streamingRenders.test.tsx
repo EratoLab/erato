@@ -317,7 +317,7 @@ describe("the Word pane while a reply streams", () => {
       title: "Change “Vertrag.docx”",
       description: "Updates 1 of 3 sections: § 2",
     };
-    const chained = { submission_call_id: "submit-0", decide_on_screen: false };
+    const follows = { proposal_call_id: "submit-0", decide_on_screen: false };
     harness.messages.u0 = {
       ...userMessage(0),
       action_facet_id: "word_document_authoring",
@@ -347,7 +347,7 @@ describe("the Word pane while a reply streams", () => {
           tool_call_id: "submit-0.apply",
           tool_name: "apply_document_plan",
           mcp_server_id: "word",
-          input: { submission_call_id: "submit-0", draft_id: "submit-0" },
+          input: { proposal_call_id: "submit-0", draft_id: "submit-0" },
           allow_always: true,
           requested_at: "2026-01-01T00:01:30Z",
           kind: "client_tool",
@@ -357,10 +357,10 @@ describe("the Word pane while a reply streams", () => {
               approval_id: "submit-0.apply",
               tool_call_id: "submit-0.apply",
               tool_name: "apply_document_plan",
-              input: { submission_call_id: "submit-0", draft_id: "submit-0" },
+              input: { proposal_call_id: "submit-0", draft_id: "submit-0" },
               display,
               child: null,
-              chained,
+              follows,
             },
           ],
         },

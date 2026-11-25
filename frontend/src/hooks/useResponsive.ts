@@ -1,6 +1,8 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+
+import { HOVERING_POINTER, TOUCH_POINTER } from "@/styles/pointerQueries";
 
 // Define breakpoints based on Tailwind's default breakpoints
 export const breakpoints = {
@@ -92,38 +94,58 @@ export function useResponsive(): ResponsiveState {
   );
 }
 
-// Matches Tailwind's `md` breakpoint exactly: `md:` applies at >=768px, so
-// anything matching this query is the mobile (single-column) layout. The .98
-// fractional bound keeps sub-pixel widths (e.g. 767.5) on the mobile side.
-// eslint-disable-next-line lingui/no-unlocalized-strings -- CSS media query, not user-facing
-const MOBILE_MEDIA_QUERY = "(max-width: 767.98px)";
+// Below a Tailwind breakpoint: `md:` applies at >=768px, so anything matching
+// "(max-width: 767.98px)" is the layout without it. The .98 fractional bound
+// keeps sub-pixel widths (e.g. 767.5) on the narrow side.
+const belowQuery = (breakpoint: Breakpoint) =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS media query, not user-facing
+  `(max-width: ${breakpoints[breakpoint] - 0.02}px)`;
 
-function subscribeToMobile(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") {
-    return () => {};
-  }
-  const mql = window.matchMedia(MOBILE_MEDIA_QUERY);
-  mql.addEventListener("change", onStoreChange);
-  return () => mql.removeEventListener("change", onStoreChange);
-}
-
-function getMobileSnapshot(): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
+function useMediaQuery(query: string): boolean {
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (typeof window === "undefined") {
+        return () => {};
+      }
+      const mql = window.matchMedia(query);
+      mql.addEventListener("change", onStoreChange);
+      return () => mql.removeEventListener("change", onStoreChange);
+    },
+    [query],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+    () => false,
+  );
 }
 
 /**
- * Lean boolean selector for "is the viewport below the `md` breakpoint".
- * Prefer this over `useResponsive().isMobile` in components that only need the
- * flag: it re-renders only when the 768px boundary is crossed, not on every
- * resize pixel, and (like useResponsive) is first-paint-correct.
+ * Lean boolean selector for "is the viewport below this breakpoint". Prefer
+ * it over `useResponsive().isBelow` in components that only need the flag: it
+ * re-renders only when the boundary is crossed, not on every resize pixel,
+ * and (like useResponsive) is first-paint-correct.
  */
+export function useIsBelow(breakpoint: Breakpoint): boolean {
+  return useMediaQuery(belowQuery(breakpoint));
+}
+
+/**
+ * A finger is the main pointer. Unlike "no hovering pointer" it is false where
+ * no pointer is reported at all, as in a headless browser.
+ */
+export function useIsTouchPointer(): boolean {
+  return useMediaQuery(TOUCH_POINTER);
+}
+
+/** Below `sm` without a hovering pointer, as the `no-hover:` variant reads it. */
+export function useIsNarrowTouchScreen(): boolean {
+  const isNarrow = useIsBelow("sm");
+  const hasHoveringPointer = useMediaQuery(HOVERING_POINTER);
+  return isNarrow && !hasHoveringPointer;
+}
+
+/** Below the `md` breakpoint: the mobile (single-column) layout. */
 export function useIsMobile(): boolean {
-  return useSyncExternalStore(
-    subscribeToMobile,
-    getMobileSnapshot,
-    () => false,
-  );
+  return useIsBelow("md");
 }

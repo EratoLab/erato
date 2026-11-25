@@ -1667,13 +1667,9 @@ fn approval_tools(
                 && tool.approval != ClientToolApproval::None
         })
         .filter(|tool| {
-            let qualified = tool.qualified_name();
             let by_submission = tools.values().any(|submission| {
-                submission
-                    .submission
-                    .as_ref()
-                    .and_then(|config| config.apply.as_ref())
-                    .is_some_and(|apply| apply.tool == qualified)
+                submission.submission.is_some()
+                    && tool.follows_tool.as_ref() == Some(&submission.qualified_name())
                     && allowlists.iter().any(|allowlist| {
                         message_streaming::is_qualified_tool_allowed(
                             submission.namespace_or_default(),

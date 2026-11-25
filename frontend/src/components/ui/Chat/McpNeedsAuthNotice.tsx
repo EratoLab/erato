@@ -1,6 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 
 import { Button } from "@/components/ui/Controls/Button";
+import { useMcpServerDisplayName } from "@/hooks/chat/useMcpServerDisplayName";
 import { useOpenMcpServersSettings } from "@/hooks/ui/useOpenMcpServersSettings";
 
 import { InfoIcon } from "../icons";
@@ -28,21 +29,28 @@ interface McpNeedsAuthNoticeProps {
  * connecting is optional — so this renders as muted metadata with one inline
  * affordance into the settings dialog, costing nothing to ignore.
  *
- * A server's id doubles as its display name everywhere (settings pane,
- * assistant editor) — the listing API exposes no separate label to resolve.
+ * Servers are named as the listing names them, falling back to the id. With
+ * one server, Connect opens the settings on that server.
  */
 export const McpNeedsAuthNotice = ({
   serverIds,
   showConnect = true,
-}: McpNeedsAuthNoticeProps) => {
-  const openMcpServersSettings = useOpenMcpServersSettings();
+}: McpNeedsAuthNoticeProps) =>
+  // Every message mounts this; only one with servers to report subscribes.
+  serverIds.length === 0 ? null : (
+    <NeedsAuthNote serverIds={serverIds} showConnect={showConnect} />
+  );
 
-  if (serverIds.length === 0) {
-    return null;
-  }
+const NeedsAuthNote = ({
+  serverIds,
+  showConnect,
+}: Required<McpNeedsAuthNoticeProps>) => {
+  const openMcpServersSettings = useOpenMcpServersSettings();
+  const displayName = useMcpServerDisplayName();
 
   const serverCount = serverIds.length;
-  const serverList = serverIds.join(", ");
+  const serverList = serverIds.map(displayName).join(", ");
+  const connectServerId = serverCount === 1 ? serverIds[0] : undefined;
 
   return (
     <div
@@ -70,7 +78,7 @@ export const McpNeedsAuthNotice = ({
           type="button"
           variant="link"
           size="sm"
-          onClick={openMcpServersSettings}
+          onClick={() => openMcpServersSettings(connectServerId)}
           data-testid="mcp-needs-auth-connect"
         >
           {t({

@@ -1,8 +1,7 @@
 use axum::{
-    body::{Body, Bytes},
     extract::{Extension, Request},
-    http::{header, Response, StatusCode},
-    response::IntoResponse,
+    http::StatusCode,
+    response::{sse::Event, IntoResponse, Response, Sse},
     Json,
 };
 use futures::StreamExt;
@@ -22,7 +21,7 @@ enum VertexScenario {
 pub async fn vertex_generate_content(
     Extension(request_id): Extension<RequestId>,
     request: Request,
-) -> Result<Response<Body>, (StatusCode, Json<Value>)> {
+) -> Result<Response, (StatusCode, Json<Value>)> {
     let uri = request.uri().path().to_string();
     let bytes = axum::body::to_bytes(request.into_body(), usize::MAX)
         .await
@@ -48,7 +47,10 @@ pub async fn vertex_generate_content(
         &format!("Received Vertex request, matched scenario: {scenario:?}"),
     );
 
-    let actions = build_vertex_stream_actions(&request_json, scenario);
+    let actions = chunk_actions(
+        build_vertex_chunks(&request_json, scenario),
+        VERTEX_CHUNK_DELAY_MS,
+    );
     log::log_response_start(request_id.as_str(), "vertex chat completion");
 
     let total_actions = actions.len();
@@ -63,7 +65,9 @@ pub async fn vertex_generate_content(
                         if is_last {
                             log::log_response_complete(request_id.as_str());
                         }
-                        Some(Ok::<Bytes, std::convert::Infallible>(Bytes::from(data)))
+                        Some(Ok::<Event, std::convert::Infallible>(
+                            Event::default().data(data),
+                        ))
                     }
                     StreamAction::Delay(duration) => {
                         tokio::time::sleep(duration).await;
@@ -73,14 +77,9 @@ pub async fn vertex_generate_content(
             }
         });
 
-    let mut response = Response::new(Body::from_stream(stream));
-    *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static("application/json"),
-    );
-
-    Ok(response.into_response())
+    // genai's Gemini adapter always asks for `alt=sse`, which real Vertex
+    // answers with one `data:` event per chunk.
+    Ok(Sse::new(stream).into_response())
 }
 
 fn detect_vertex_scenario(request: &Value) -> VertexScenario {
@@ -99,220 +98,180 @@ fn detect_vertex_scenario(request: &Value) -> VertexScenario {
     VertexScenario::GenericText
 }
 
-fn build_vertex_stream_actions(request: &Value, scenario: VertexScenario) -> Vec<StreamAction> {
+fn build_vertex_chunks(request: &Value, scenario: VertexScenario) -> Vec<Value> {
     match scenario {
         VertexScenario::MixedTextThenFunctionCall => {
-            let chunks = vec![
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "text": "Foo",
-                                    "thoughtSignature": "mock-thought-signature"
-                                }]
-                            }
-                        }],
-                        "usageMetadata": {
-                            "trafficType": "ON_DEMAND"
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:14.385443Z",
-                        "responseId": "mock-mixed-turn"
-                    }),
-                    true,
-                ),
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "functionCall": {
-                                        "name": "list_files",
-                                        "args": {}
-                                    }
-                                }]
-                            },
-                            "finishReason": "STOP"
-                        }],
-                        "usageMetadata": {
-                            "promptTokenCount": 42,
-                            "candidatesTokenCount": 4,
-                            "totalTokenCount": 104,
-                            "trafficType": "ON_DEMAND",
-                            "promptTokensDetails": [{
-                                "modality": "TEXT",
-                                "tokenCount": 42
-                            }],
-                            "candidatesTokensDetails": [{
-                                "modality": "TEXT",
-                                "tokenCount": 4
-                            }],
-                            "thoughtsTokenCount": 58
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:14.385443Z",
-                        "responseId": "mock-mixed-turn"
-                    }),
-                    false,
-                ),
-            ];
-            chunked_json_actions(chunks, VERTEX_CHUNK_DELAY_MS)
-        }
-        VertexScenario::PostToolFollowupText => {
-            let chunks = vec![
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "text": "Bar\n\n"
-                                }]
-                            }
-                        }],
-                        "usageMetadata": {
-                            "trafficType": "ON_DEMAND"
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:15.111001Z",
-                        "responseId": "mock-post-tool-turn"
-                    }),
-                    true,
-                ),
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "text": "Okay, I've called the `list_files` tool. I'm not"
-                                }]
-                            }
-                        }],
-                        "usageMetadata": {
-                            "trafficType": "ON_DEMAND"
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:15.111001Z",
-                        "responseId": "mock-post-tool-turn"
-                    }),
-                    false,
-                ),
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "text": " sure why I was asked to output \"Foo\" *before* the tool call, but I will fulfill"
-                                }]
-                            }
-                        }],
-                        "usageMetadata": {
-                            "trafficType": "ON_DEMAND"
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:15.111001Z",
-                        "responseId": "mock-post-tool-turn"
-                    }),
-                    false,
-                ),
-                vertex_array_item(
-                    &json!({
-                        "candidates": [{
-                            "content": {
-                                "role": "model",
-                                "parts": [{
-                                    "text": " the request as specified.\n"
-                                }]
-                            },
-                            "finishReason": "STOP"
-                        }],
-                        "usageMetadata": {
-                            "promptTokenCount": 74,
-                            "candidatesTokenCount": 47,
-                            "totalTokenCount": 121,
-                            "trafficType": "ON_DEMAND",
-                            "promptTokensDetails": [{
-                                "modality": "TEXT",
-                                "tokenCount": 74
-                            }],
-                            "candidatesTokensDetails": [{
-                                "modality": "TEXT",
-                                "tokenCount": 47
-                            }]
-                        },
-                        "modelVersion": "gemini-2.5-flash",
-                        "createTime": "2026-04-01T13:57:15.111001Z",
-                        "responseId": "mock-post-tool-turn"
-                    }),
-                    false,
-                ),
-            ];
-            chunked_json_actions(chunks, VERTEX_CHUNK_DELAY_MS)
-        }
-        VertexScenario::GenericText => {
-            let fallback_text = extract_first_user_text(request)
-                .map(|text| format!("Mock Vertex response for: {text}"))
-                .unwrap_or_else(|| "Mock Vertex response".to_string());
-            let chunks = vec![vertex_array_item(
-                &json!({
+            vec![
+                json!({
                     "candidates": [{
                         "content": {
                             "role": "model",
                             "parts": [{
-                                "text": fallback_text
+                                "text": "Foo",
+                                "thoughtSignature": "mock-thought-signature"
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "trafficType": "ON_DEMAND"
+                    },
+                    "modelVersion": "gemini-2.5-flash",
+                    "createTime": "2026-04-01T13:57:14.385443Z",
+                    "responseId": "mock-mixed-turn"
+                }),
+                json!({
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "functionCall": {
+                                    "name": "list_files",
+                                    "args": {}
+                                }
                             }]
                         },
                         "finishReason": "STOP"
                     }],
                     "usageMetadata": {
-                        "promptTokenCount": 12,
-                        "candidatesTokenCount": 8,
-                        "totalTokenCount": 20,
+                        "promptTokenCount": 42,
+                        "candidatesTokenCount": 4,
+                        "totalTokenCount": 104,
+                        "trafficType": "ON_DEMAND",
+                        "promptTokensDetails": [{
+                            "modality": "TEXT",
+                            "tokenCount": 42
+                        }],
+                        "candidatesTokensDetails": [{
+                            "modality": "TEXT",
+                            "tokenCount": 4
+                        }],
+                        "thoughtsTokenCount": 58
+                    },
+                    "modelVersion": "gemini-2.5-flash",
+                    "createTime": "2026-04-01T13:57:14.385443Z",
+                    "responseId": "mock-mixed-turn"
+                }),
+            ]
+        }
+        VertexScenario::PostToolFollowupText => {
+            vec![
+                json!({
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "text": "Bar\n\n"
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
                         "trafficType": "ON_DEMAND"
                     },
                     "modelVersion": "gemini-2.5-flash",
                     "createTime": "2026-04-01T13:57:15.111001Z",
-                    "responseId": "mock-generic-turn"
+                    "responseId": "mock-post-tool-turn"
                 }),
-                true,
-            )];
-            chunked_json_actions(chunks, VERTEX_CHUNK_DELAY_MS)
+                json!({
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "text": "Okay, I've called the `list_files` tool. I'm not"
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "trafficType": "ON_DEMAND"
+                    },
+                    "modelVersion": "gemini-2.5-flash",
+                    "createTime": "2026-04-01T13:57:15.111001Z",
+                    "responseId": "mock-post-tool-turn"
+                }),
+                json!({
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "text": " sure why I was asked to output \"Foo\" *before* the tool call, but I will fulfill"
+                            }]
+                        }
+                    }],
+                    "usageMetadata": {
+                        "trafficType": "ON_DEMAND"
+                    },
+                    "modelVersion": "gemini-2.5-flash",
+                    "createTime": "2026-04-01T13:57:15.111001Z",
+                    "responseId": "mock-post-tool-turn"
+                }),
+                json!({
+                    "candidates": [{
+                        "content": {
+                            "role": "model",
+                            "parts": [{
+                                "text": " the request as specified.\n"
+                            }]
+                        },
+                        "finishReason": "STOP"
+                    }],
+                    "usageMetadata": {
+                        "promptTokenCount": 74,
+                        "candidatesTokenCount": 47,
+                        "totalTokenCount": 121,
+                        "trafficType": "ON_DEMAND",
+                        "promptTokensDetails": [{
+                            "modality": "TEXT",
+                            "tokenCount": 74
+                        }],
+                        "candidatesTokensDetails": [{
+                            "modality": "TEXT",
+                            "tokenCount": 47
+                        }]
+                    },
+                    "modelVersion": "gemini-2.5-flash",
+                    "createTime": "2026-04-01T13:57:15.111001Z",
+                    "responseId": "mock-post-tool-turn"
+                }),
+            ]
+        }
+        VertexScenario::GenericText => {
+            let fallback_text = extract_first_user_text(request)
+                .map(|text| format!("Mock Vertex response for: {text}"))
+                .unwrap_or_else(|| "Mock Vertex response".to_string());
+            vec![json!({
+                "candidates": [{
+                    "content": {
+                        "role": "model",
+                        "parts": [{
+                            "text": fallback_text
+                        }]
+                    },
+                    "finishReason": "STOP"
+                }],
+                "usageMetadata": {
+                    "promptTokenCount": 12,
+                    "candidatesTokenCount": 8,
+                    "totalTokenCount": 20,
+                    "trafficType": "ON_DEMAND"
+                },
+                "modelVersion": "gemini-2.5-flash",
+                "createTime": "2026-04-01T13:57:15.111001Z",
+                "responseId": "mock-generic-turn"
+            })]
         }
     }
 }
 
-fn chunked_json_actions(json_chunks: Vec<String>, delay_ms: u64) -> Vec<StreamAction> {
+fn chunk_actions(chunks: Vec<Value>, delay_ms: u64) -> Vec<StreamAction> {
     let mut actions = Vec::new();
-
-    for (index, chunk) in json_chunks.into_iter().enumerate() {
+    for (index, chunk) in chunks.into_iter().enumerate() {
         if index > 0 {
             actions.push(StreamAction::Delay(std::time::Duration::from_millis(
                 delay_ms,
             )));
         }
-        actions.push(StreamAction::Bytes(chunk));
+        actions.push(StreamAction::Bytes(chunk.to_string()));
     }
-
-    actions.push(StreamAction::Delay(std::time::Duration::from_millis(
-        delay_ms,
-    )));
-    actions.push(StreamAction::Bytes("]".to_string()));
-
     actions
-}
-
-fn vertex_array_item(payload: &Value, first: bool) -> String {
-    let pretty = serde_json::to_string_pretty(payload).expect("vertex payload should serialize");
-    if first {
-        format!("[{pretty}\n")
-    } else {
-        format!(",\r\n{pretty}\n")
-    }
 }
 
 fn request_contains_text(request: &Value, needle: &str) -> bool {
@@ -432,8 +391,15 @@ mod tests {
     }
 
     #[test]
-    fn chunked_json_actions_closes_array() {
-        let actions = chunked_json_actions(vec!["[{\"a\":1}\n".to_string()], 10);
-        assert!(matches!(actions.last(), Some(StreamAction::Bytes(bytes)) if bytes == "]"));
+    fn chunk_actions_send_one_compact_json_per_chunk() {
+        let actions = chunk_actions(vec![json!({"a": 1}), json!({"b": 2})], 10);
+        let sent: Vec<&str> = actions
+            .iter()
+            .filter_map(|action| match action {
+                StreamAction::Bytes(bytes) => Some(bytes.as_str()),
+                StreamAction::Delay(_) => None,
+            })
+            .collect();
+        assert_eq!(sent, vec![r#"{"a":1}"#, r#"{"b":2}"#]);
     }
 }

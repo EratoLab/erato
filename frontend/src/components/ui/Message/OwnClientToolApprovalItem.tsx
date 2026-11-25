@@ -20,9 +20,9 @@ import type { ReactNode } from "react";
  * tool's executor can make the change. Any other item can.
  */
 export const approvableHere = (
-  item: Pick<ApprovalItemPart, "chained" | "tool_name">,
+  item: Pick<ApprovalItemPart, "follows" | "tool_name">,
 ): boolean =>
-  item.chained == null || getClientToolExecutor(item.tool_name) !== undefined;
+  item.follows == null || getClientToolExecutor(item.tool_name) !== undefined;
 
 /**
  * Whether only the item's own card can approve it: a change that needs a tick
@@ -30,8 +30,8 @@ export const approvableHere = (
  * "Allow all" approve such an item.
  */
 export const onlyItsCardApproves = (
-  item: Pick<ApprovalItemPart, "chained" | "tool_name">,
-): boolean => item.chained?.decide_on_screen === true || !approvableHere(item);
+  item: Pick<ApprovalItemPart, "follows" | "tool_name">,
+): boolean => item.follows?.decide_on_screen === true || !approvableHere(item);
 
 /**
  * The turn's own client tool call in the decision place: the host's own card
@@ -72,7 +72,7 @@ export const OwnClientToolApprovalItem = memo(
     ) => void;
   }) {
     const approvalId = item.approval_id;
-    const chained = item.chained != null;
+    const chained = item.follows != null;
     const decide = useCallback(
       (decision: ToolApprovalDecision, extras?: ApprovalItemDecisionExtras) => {
         // The server refuses a confirmation on a call it did not chain.
@@ -87,7 +87,7 @@ export const OwnClientToolApprovalItem = memo(
     const runsHere = useClientToolRegistry(() => approvableHere(item));
     const renderDefault = useCallback(
       (options?: { note?: ReactNode }): ReactNode =>
-        item.chained ? (
+        item.follows ? (
           <ChainedApprovalItem
             item={item}
             runsHere={runsHere}

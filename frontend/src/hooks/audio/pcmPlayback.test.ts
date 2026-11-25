@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setPageVisibility } from "@/test/pageVisibility";
+
 import {
   DEFAULT_START_BUFFER_MS as START_BUFFER_MS,
   DEFAULT_START_WAIT_MS as START_WAIT_MS,
@@ -237,5 +239,222 @@ describe("streams as measured", () => {
     // The longest pause measured on 2026-11-18.
     const { gaps } = replay([[0, 171], [0, 29], ...rest(736)]);
     expect(gaps).toEqual([736 - START_WAIT_MS - 200]);
+  });
+});
+
+describe("the shared playback context after a phone lock", () => {
+  const SAFARI_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
+
+  /** Runs from creation; after `lock()` it says "running" with a standing clock. */
+  class LockableContext {
+    static last: LockableContext | undefined;
+    state: AudioContextState = "running";
+    private standsAt: number | null = null;
+    private offset = 0;
+    /** Suspend and resume leave the clock standing, as the phone did at times. */
+    wedged = false;
+    constructor() {
+      LockableContext.last = this;
+    }
+    get currentTime() {
+      return this.standsAt ?? Date.now() / 1000 - this.offset;
+    }
+    lock() {
+      this.standsAt = this.currentTime;
+    }
+    suspend = vi.fn(async () => {
+      this.state = "suspended";
+    });
+    resume = vi.fn(async () => {
+      if (
+        this.state === "suspended" &&
+        this.standsAt !== null &&
+        !this.wedged
+      ) {
+        this.offset = Date.now() / 1000 - this.standsAt;
+        this.standsAt = null;
+      }
+      this.state = "running";
+    });
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal("navigator", { userAgent: SAFARI_UA });
+    vi.stubGlobal("AudioContext", LockableContext);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("starts its standing clock again once the page is shown", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const before = playback.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(playback.currentTime).toBeGreaterThan(before);
+    expect(playback.state).toBe("running");
+  });
+
+  it("hands read aloud a moving clock when it is tapped right after unlocking", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+
+    let handed = false;
+    const tapped = resumePlaybackContext().then((context) => {
+      handed = true;
+      return context;
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    // `resume()` alone leaves the clock where it stands.
+    expect(handed).toBe(false);
+    await vi.advanceTimersByTimeAsync(2000);
+    const context = await tapped;
+
+    expect(playback.suspend).toHaveBeenCalledOnce();
+    const before = context.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(context.currentTime).toBeGreaterThan(before);
+  });
+
+  it("keeps taking a voice's audio during the moment the revival suspends it", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.resume.mockImplementation(() => new Promise<void>(() => {}));
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(playback.state).toBe("suspended");
+    expect(playbackPlays(playback as unknown as AudioContext)).toBe(true);
+  });
+
+  it("does not hold voices back for good when a resume never settles", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.resume.mockImplementationOnce(() => new Promise<void>(() => {}));
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+
+    let handed = false;
+    void resumePlaybackContext().then(() => {
+      handed = true;
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(handed).toBe(true);
+  });
+
+  it("tries again when a voice is about to play, after the revival on return did not take", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    const standing = playback.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(playback.currentTime).toBe(standing);
+
+    playback.wedged = false;
+    expect(playbackPlays(playback as unknown as AudioContext)).toBe(true);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const before = playback.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(playback.currentTime).toBeGreaterThan(before);
+  });
+
+  it("does not count a context that is not running as playing while a retry is due", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    vi.advanceTimersByTime(2500);
+
+    playback.state = "interrupted" as AudioContextState;
+    expect(playbackPlays(playback as unknown as AudioContext)).toBe(false);
+    expect(playback.suspend).toHaveBeenCalledTimes(3);
+  });
+
+  it("tries a clock that stays standing again at most every 2 s and five times per return", async () => {
+    const { resumePlaybackContext, playbackPlays } = await import(
+      "./pcmPlayback"
+    );
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(playback.suspend).toHaveBeenCalledTimes(3);
+
+    for (let chunk = 0; chunk < 40; chunk++) {
+      playbackPlays(playback as unknown as AudioContext);
+      await vi.advanceTimersByTimeAsync(500);
+    }
+
+    expect(playback.suspend).toHaveBeenCalledTimes(3 + 5 * 3);
+  });
+
+  it("tries again when read aloud is tapped, after the revival on return did not take", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+    playback.wedged = true;
+    setPageVisibility("hidden");
+    playback.lock();
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(3000);
+
+    playback.wedged = false;
+    const tapped = resumePlaybackContext();
+    await vi.advanceTimersByTimeAsync(2000);
+    const context = await tapped;
+
+    const before = context.currentTime;
+    vi.advanceTimersByTime(500);
+    expect(context.currentTime).toBeGreaterThan(before);
+  });
+
+  it("leaves a clock alone that moves on after the page is shown", async () => {
+    const { resumePlaybackContext } = await import("./pcmPlayback");
+    await resumePlaybackContext();
+    const playback = LockableContext.last!;
+
+    setPageVisibility("hidden");
+    setPageVisibility("visible");
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(playback.suspend).not.toHaveBeenCalled();
   });
 });

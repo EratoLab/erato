@@ -1,6 +1,7 @@
 import { I18nProvider } from "@lingui/react";
 import { skipToken } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -17,6 +18,7 @@ let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
 let mockedScheduledEnabled = false;
+let mockedNarrowScreen = false;
 const mockUseChatDetail = vi.fn();
 let mockedScheduledLists: Record<string, { data?: unknown; error?: unknown }> =
   {};
@@ -37,6 +39,7 @@ vi.mock("@/config/themeConfig", () => ({
 }));
 
 vi.mock("@/hooks/ui", () => ({
+  useIsNarrowScreen: () => mockedNarrowScreen,
   useResponsiveCollapsedMode: (mode: string) => mode,
   useThemedIcon: () => null,
 }));
@@ -78,6 +81,7 @@ const historyListProps = vi.hoisted(
     [] as {
       sessions: { id: string }[];
       hasMore?: boolean;
+      onSessionSelect?: (sessionId: string) => void;
       onSessionUnarchive?: (sessionId: string) => void;
     }[],
 );
@@ -85,6 +89,7 @@ vi.mock("./ChatHistoryList", () => ({
   ChatHistoryList: (props: {
     sessions: { id: string }[];
     hasMore?: boolean;
+    onSessionSelect?: (sessionId: string) => void;
     onSessionUnarchive?: (sessionId: string) => void;
   }) => {
     historyListProps.push(props);
@@ -183,6 +188,7 @@ describe("ChatHistorySidebar", () => {
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
     mockedScheduledEnabled = false;
+    mockedNarrowScreen = false;
     mockedScheduledLists = {};
     mockUseChatDetail.mockReset();
     mockUseChatDetail.mockReturnValue({ data: undefined });
@@ -1251,5 +1257,239 @@ describe("ChatHistorySidebar", () => {
     ).not.toBeInTheDocument();
     expect(screen.getAllByTestId("history-list")).toHaveLength(1);
     expect(historyListProps[0].sessions).toEqual([]);
+  });
+
+  describe("after a pick in the drawer", () => {
+    const renderOpenSidebar = async (collapsed = false) => {
+      mockedAssistantsEnabled = true;
+      mockedScheduledEnabled = true;
+      const onToggleCollapse = vi.fn();
+      const onSessionSelect = vi.fn();
+      const onNewChat = vi.fn();
+      const { i18n } = await import("@lingui/core");
+      render(
+        <MemoryRouter initialEntries={["/chat/chat-1"]}>
+          <I18nProvider i18n={i18n}>
+            <ChatHistorySidebar
+              sessions={sessions}
+              currentSessionId="chat-1"
+              collapsed={collapsed}
+              onToggleCollapse={onToggleCollapse}
+              onNewChat={onNewChat}
+              onSessionSelect={onSessionSelect}
+              onSessionArchive={vi.fn()}
+              onSessionUnarchive={vi.fn()}
+              isLoading={false}
+            />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+      const pickChat = () =>
+        historyListProps.at(-1)!.onSessionSelect!("chat-1");
+      return { onToggleCollapse, onSessionSelect, onNewChat, pickChat };
+    };
+    const navigationRows = ["New Chat", "Search", "Assistants", "Scheduled"];
+
+    it("closes on a narrow screen once the picked chat is opened", async () => {
+      mockedNarrowScreen = true;
+      const { onToggleCollapse, onSessionSelect, pickChat } =
+        await renderOpenSidebar();
+
+      pickChat();
+
+      expect(onSessionSelect).toHaveBeenCalledWith("chat-1");
+      expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(navigationRows)(
+      "closes on a narrow screen after %s",
+      async (label) => {
+        mockedNarrowScreen = true;
+        const { onToggleCollapse } = await renderOpenSidebar();
+
+        fireEvent.click(screen.getByRole("link", { name: label }));
+
+        expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("still starts the new chat on a narrow screen", async () => {
+      mockedNarrowScreen = true;
+      const { onNewChat } = await renderOpenSidebar();
+
+      fireEvent.click(screen.getByRole("link", { name: "New Chat" }));
+
+      expect(onNewChat).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays open on a wide screen", async () => {
+      const { onToggleCollapse, onSessionSelect, pickChat } =
+        await renderOpenSidebar();
+
+      pickChat();
+      for (const label of navigationRows) {
+        fireEvent.click(screen.getByRole("link", { name: label }));
+      }
+
+      expect(onSessionSelect).toHaveBeenCalledWith("chat-1");
+      expect(onToggleCollapse).not.toHaveBeenCalled();
+    });
+
+    it("does not reopen a closed drawer", async () => {
+      mockedNarrowScreen = true;
+      const { onToggleCollapse, pickChat } = await renderOpenSidebar(true);
+
+      pickChat();
+
+      expect(onToggleCollapse).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("beside the open drawer", () => {
+    const pageAction = vi.fn();
+    const ToggleHarness = ({ initiallyOpen }: { initiallyOpen: boolean }) => {
+      const [collapsed, setCollapsed] = useState(!initiallyOpen);
+      return (
+        <>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            collapsed={collapsed}
+            onToggleCollapse={() => setCollapsed((value) => !value)}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            isLoading={false}
+          />
+          <button type="button" onClick={pageAction}>
+            Page action
+          </button>
+        </>
+      );
+    };
+    const renderDrawer = async (initiallyOpen = true) => {
+      const { i18n } = await import("@lingui/core");
+      render(
+        <MemoryRouter initialEntries={["/chat/chat-1"]}>
+          <I18nProvider i18n={i18n}>
+            <ToggleHarness initiallyOpen={initiallyOpen} />
+          </I18nProvider>
+        </MemoryRouter>,
+      );
+    };
+    const sidebarMode = () =>
+      document
+        .querySelector('[data-ui="sidebar"]')
+        ?.getAttribute("data-sidebar-mode");
+
+    beforeEach(() => {
+      pageAction.mockReset();
+    });
+
+    it("closes on a tap beside it on a narrow screen", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+
+      fireEvent.click(screen.getByTestId("sidebar-scrim"));
+
+      expect(sidebarMode()).toBe("hidden");
+    });
+
+    it("lies over the whole page while open, so the tap stays off its controls", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+
+      const scrim = screen.getByTestId("sidebar-scrim");
+      const sidebar = document.querySelector('[data-ui="sidebar"]')!;
+      expect(scrim).toHaveClass("fixed", "inset-0", "z-40");
+      expect(scrim).not.toHaveClass("pointer-events-none");
+      // Same layer as the sidebar and earlier in the document: the sidebar
+      // paints over it, the page under it.
+      expect(sidebar).toHaveClass("z-40");
+      expect(
+        scrim.compareDocumentPosition(sidebar) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("lets taps through once the drawer is closed", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer(false);
+
+      expect(screen.getByTestId("sidebar-scrim")).toHaveClass(
+        "pointer-events-none",
+      );
+    });
+
+    it("closes on Escape and hands focus to the control that reopens it", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+      screen.getByRole("link", { name: "New Chat" }).focus();
+
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      expect(sidebarMode()).toBe("hidden");
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "expand sidebar" }),
+        ).toHaveFocus(),
+      );
+    });
+
+    it("hands focus that was in the drawer to the reopen control on a tap beside it", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+      screen.getByRole("link", { name: "New Chat" }).focus();
+      const scrim = screen.getByTestId("sidebar-scrim");
+
+      // A browser blurs on a press that is not prevented; jsdom does not.
+      expect(fireEvent.mouseDown(scrim)).toBe(false);
+      fireEvent.click(scrim);
+
+      expect(sidebarMode()).toBe("hidden");
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "expand sidebar" }),
+        ).toHaveFocus(),
+      );
+    });
+
+    it("leaves focus alone when it was not in the drawer", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+      const pageButton = screen.getByRole("button", { name: "Page action" });
+      pageButton.focus();
+
+      fireEvent.click(screen.getByTestId("sidebar-scrim"));
+
+      expect(sidebarMode()).toBe("hidden");
+      expect(pageButton).toHaveFocus();
+    });
+
+    it("leaves an Escape meant for a menu over the drawer to that menu", async () => {
+      mockedNarrowScreen = true;
+      await renderDrawer();
+      const menu = document.createElement("div");
+      menu.setAttribute("role", "menu");
+      menu.tabIndex = -1;
+      document.body.append(menu);
+      menu.focus();
+
+      fireEvent.keyDown(menu, { key: "Escape" });
+
+      expect(sidebarMode()).toBe("expanded");
+      menu.remove();
+    });
+
+    it("changes nothing on a wide screen", async () => {
+      await renderDrawer();
+
+      expect(screen.queryByTestId("sidebar-scrim")).not.toBeInTheDocument();
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      fireEvent.click(screen.getByRole("button", { name: "Page action" }));
+
+      expect(sidebarMode()).toBe("expanded");
+      expect(pageAction).toHaveBeenCalledTimes(1);
+    });
   });
 });

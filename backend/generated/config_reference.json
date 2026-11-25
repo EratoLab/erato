@@ -2055,9 +2055,21 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.follows_tool": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.host_context": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.invalidated_read_tools.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2076,6 +2088,12 @@
   "client_tools.tools.<key>.label.object_kind": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.max_calls_per_message": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2127,26 +2145,9 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
-  "client_tools.tools.<key>.submission.apply.consumed_reads.[]": {
+  "client_tools.tools.<key>.submission.apply": {
     "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
-    "security_relevance": "unreviewed",
-    "stability": "unreviewed"
-  },
-  "client_tools.tools.<key>.submission.apply.max_changes": {
-    "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
-    "security_relevance": "unreviewed",
-    "stability": "unreviewed"
-  },
-  "client_tools.tools.<key>.submission.apply.more_steps": {
-    "default_value_security": "unreviewed",
-    "introduced_in": "unreleased",
-    "security_relevance": "unreviewed",
-    "stability": "unreviewed"
-  },
-  "client_tools.tools.<key>.submission.apply.tool": {
-    "default_value_security": "unreviewed",
+    "hide_in_docs": true,
     "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
@@ -2172,6 +2173,12 @@
   "client_tools.tools.<key>.submission.max_row_tries": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.more_steps_key": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -3638,6 +3645,12 @@
     "introduced_in": "0.7.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
+  },
+  "frontend.show_usage_advisory": {
+    "default_value_security": "unknown_none",
+    "introduced_in": "unreleased",
+    "security_relevance": "none",
+    "stability": "beta"
   },
   "frontend.sidebar_chat_history_show_metadata": {
     "default_value_security": "unreviewed",

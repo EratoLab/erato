@@ -1,0 +1,724 @@
+{
+ "cards": {
+  "visit_en": {
+   "current_piece_id": "request",
+   "pieces": [
+    {
+     "id": "what",
+     "role": "what",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "item",
+     "role": "item",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "detail:Opportunity",
+     "role": "detail",
+     "state": "heard",
+     "field": "Opportunity"
+    },
+    {
+     "id": "detail:Account",
+     "role": "detail",
+     "state": "heard",
+     "field": "Account"
+    },
+    {
+     "id": "detail:Visitedon",
+     "role": "detail",
+     "state": "heard",
+     "field": "Visitedon"
+    },
+    {
+     "id": "more",
+     "role": "more",
+     "state": "heard"
+    },
+    {
+     "id": "consequence",
+     "role": "consequence",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "request",
+     "role": "request",
+     "state": "heard"
+    },
+    {
+     "id": "detail:Summary",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Summary",
+     "on_request": true
+    },
+    {
+     "id": "detail:Customerneed",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Customerneed",
+     "on_request": true
+    },
+    {
+     "id": "detail:Competitionnotes",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Competitionnotes",
+     "on_request": true
+    },
+    {
+     "id": "detail:Nextsteps",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Nextsteps",
+     "on_request": true
+    },
+    {
+     "id": "detail:Followupdate",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Followupdate",
+     "on_request": true
+    },
+    {
+     "id": "detail:Site ID",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Site ID",
+     "on_request": true
+    }
+   ]
+  },
+  "visit_de": {
+   "current_piece_id": "request",
+   "pieces": [
+    {
+     "id": "what",
+     "role": "what",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "item",
+     "role": "item",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "detail:Opportunity",
+     "role": "detail",
+     "state": "heard",
+     "field": "Opportunity"
+    },
+    {
+     "id": "detail:Account",
+     "role": "detail",
+     "state": "heard",
+     "field": "Account"
+    },
+    {
+     "id": "detail:Visitedon",
+     "role": "detail",
+     "state": "heard",
+     "field": "Visitedon"
+    },
+    {
+     "id": "more",
+     "role": "more",
+     "state": "heard"
+    },
+    {
+     "id": "consequence",
+     "role": "consequence",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "request",
+     "role": "request",
+     "state": "heard"
+    },
+    {
+     "id": "detail:Summary",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Summary",
+     "on_request": true
+    },
+    {
+     "id": "detail:Customerneed",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Customerneed",
+     "on_request": true
+    },
+    {
+     "id": "detail:Competitionnotes",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Competitionnotes",
+     "on_request": true
+    },
+    {
+     "id": "detail:Nextsteps",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Nextsteps",
+     "on_request": true
+    },
+    {
+     "id": "detail:Followupdate",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Followupdate",
+     "on_request": true
+    },
+    {
+     "id": "detail:Site ID",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Site ID",
+     "on_request": true
+    }
+   ]
+  },
+  "visit_de_vocab": {
+   "current_piece_id": "request",
+   "pieces": [
+    {
+     "id": "what",
+     "role": "what",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "item",
+     "role": "item",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "detail:Opportunity",
+     "role": "detail",
+     "state": "heard",
+     "field": "Opportunity"
+    },
+    {
+     "id": "detail:Account",
+     "role": "detail",
+     "state": "heard",
+     "field": "Account"
+    },
+    {
+     "id": "detail:Visitedon",
+     "role": "detail",
+     "state": "heard",
+     "field": "Visitedon",
+     "names": [
+      "Besuchsdatum"
+     ]
+    },
+    {
+     "id": "more",
+     "role": "more",
+     "state": "heard"
+    },
+    {
+     "id": "consequence",
+     "role": "consequence",
+     "state": "heard",
+     "must_say": true
+    },
+    {
+     "id": "request",
+     "role": "request",
+     "state": "heard"
+    },
+    {
+     "id": "detail:Summary",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Summary",
+     "names": [
+      "Zusammenfassung"
+     ],
+     "on_request": true
+    },
+    {
+     "id": "detail:Customerneed",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Customerneed",
+     "names": [
+      "Kundenbedarf"
+     ],
+     "on_request": true
+    },
+    {
+     "id": "detail:Competitionnotes",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Competitionnotes",
+     "names": [
+      "Wettbewerb"
+     ],
+     "on_request": true
+    },
+    {
+     "id": "detail:Nextsteps",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Nextsteps",
+     "names": [
+      "Nächste Schritte"
+     ],
+     "on_request": true
+    },
+    {
+     "id": "detail:Followupdate",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Followupdate",
+     "names": [
+      "Nachfassdatum"
+     ],
+     "on_request": true
+    },
+    {
+     "id": "detail:Site ID",
+     "role": "detail",
+     "state": "not_said",
+     "field": "Site ID",
+     "names": [
+      "Standort"
+     ],
+     "on_request": true
+    }
+   ]
+  }
+ },
+ "sentences": [
+  {
+   "id": "visit_en-01",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "what was the summary again?",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-02",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "What's the summary?",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-03",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "tell me the summary once more",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-04",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "can you tell me what the summary said",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-05",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "remind me what the customer need was",
+   "piece_id": "detail:Customerneed",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-06",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "what are the next steps?",
+   "piece_id": "detail:Nextsteps",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-07",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "what was in the next steps field",
+   "piece_id": "detail:Nextsteps",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-08",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "and the competition notes?",
+   "piece_id": "detail:Competitionnotes",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-09",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "what's the follow-up date",
+   "piece_id": "detail:Followupdate",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-10",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "what was the site again?",
+   "piece_id": "detail:Site ID",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-11",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "filler",
+   "text": "uh what did it say for the summary",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-12",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "read me the summary",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-13",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "who is the competitor again?",
+   "piece_id": "detail:Competitionnotes",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-14",
+   "language": "en",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "when do I follow up?",
+   "piece_id": "detail:Followupdate",
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-15",
+   "language": "en",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "what did you say about the decision date?",
+   "piece_id": null,
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-16",
+   "language": "en",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "what was that about the budget?",
+   "piece_id": null,
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_en-17",
+   "language": "en",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "the second one again",
+   "piece_id": null,
+   "tags": [
+    "card:visit_en"
+   ]
+  },
+  {
+   "id": "visit_de-18",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "was stand in der Zusammenfassung?",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-19",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "sag mir die Zusammenfassung nochmal",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-20",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "lies mir die Zusammenfassung vor",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-21",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "plain",
+   "text": "was steht bei Next steps?",
+   "piece_id": "detail:Nextsteps",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-22",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "was steht bei den nächsten Schritten?",
+   "piece_id": "detail:Nextsteps",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-23",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "wie war der Kundenbedarf?",
+   "piece_id": "detail:Customerneed",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-24",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "und das Nachfassdatum?",
+   "piece_id": "detail:Followupdate",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-25",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "was war nochmal mit dem Wettbewerber?",
+   "piece_id": "detail:Competitionnotes",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-26",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "filler",
+   "text": "äh, die Zusammenfassung bitte nochmal",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-27",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "welcher Standort war das nochmal?",
+   "piece_id": "detail:Site ID",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-28",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "wann soll ich nachfassen?",
+   "piece_id": "detail:Followupdate",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-29",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "mixed",
+   "text": "Summary nochmal",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-30",
+   "language": "de",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "was war mit dem Budget?",
+   "piece_id": null,
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-31",
+   "language": "de",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "das zweite nochmal",
+   "piece_id": null,
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de-32",
+   "language": "de",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "was hast du zur Entscheidung gesagt?",
+   "piece_id": null,
+   "tags": [
+    "card:visit_de"
+   ]
+  },
+  {
+   "id": "visit_de_vocab-33",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "was stand in der Zusammenfassung?",
+   "piece_id": "detail:Summary",
+   "tags": [
+    "card:visit_de_vocab"
+   ]
+  },
+  {
+   "id": "visit_de_vocab-34",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "die nächsten Schritte nochmal",
+   "piece_id": "detail:Nextsteps",
+   "tags": [
+    "card:visit_de_vocab"
+   ]
+  },
+  {
+   "id": "visit_de_vocab-35",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "was war der Kundenbedarf?",
+   "piece_id": "detail:Customerneed",
+   "tags": [
+    "card:visit_de_vocab"
+   ]
+  },
+  {
+   "id": "visit_de_vocab-36",
+   "language": "de",
+   "meaning": "repeat",
+   "way": "free",
+   "text": "lies mir den Wettbewerb vor",
+   "piece_id": "detail:Competitionnotes",
+   "tags": [
+    "card:visit_de_vocab"
+   ]
+  },
+  {
+   "id": "visit_de_vocab-37",
+   "language": "de",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "die Zusammenfassung passt",
+   "piece_id": null,
+   "tags": [
+    "card:visit_de_vocab"
+   ]
+  },
+  {
+   "id": "visit_en-38",
+   "language": "en",
+   "meaning": "unclear",
+   "way": "free",
+   "text": "the summary is fine",
+   "piece_id": null,
+   "tags": [
+    "card:visit_en"
+   ]
+  }
+ ]
+}

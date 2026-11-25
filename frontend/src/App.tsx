@@ -57,9 +57,9 @@ const AboutPage = () => (
 ); // Keep for now or remove if not used
 
 const NotFoundPage = () => (
-  <div className="flex h-screen items-center justify-center">
+  <div className="flex size-full items-center justify-center">
     <div className="text-center">
-      <h1 className="mb-4 text-4xl font-bold text-gray-800">
+      <h1 className="mb-4 text-4xl font-bold text-theme-fg-primary">
         <Trans id="error.404.title">404 - Page Not Found</Trans>
       </h1>
       <Link to="/" className="text-blue-500 underline hover:text-blue-700">
@@ -75,7 +75,7 @@ function App() {
     <ClientProviders>
       <Suspense
         fallback={
-          <div className="flex min-h-screen items-center justify-center">
+          <div className="flex size-full items-center justify-center">
             <SpinnerIcon size="lg" />
           </div>
         }
