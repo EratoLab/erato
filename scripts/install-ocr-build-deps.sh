@@ -27,11 +27,12 @@ retry() {
 }
 
 install_ocr_build_deps() {
+  # Called under "||" in retry, where set -e is off: every step returns itself.
   # The config file also covers the update add-apt-repository runs itself.
-  echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-ci-retries > /dev/null
-  sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5
+  echo 'Acquire::Retries "5";' | sudo tee /etc/apt/apt.conf.d/80-ci-retries > /dev/null || return
+  sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5 || return
   # Error-Mode=any makes a failed index download fail the update.
-  sudo apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update
+  sudo apt-get -o Acquire::Retries=5 -o APT::Update::Error-Mode=any update || return
   sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
     libtesseract-dev libleptonica-dev libclang-dev
 }
