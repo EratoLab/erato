@@ -1153,3 +1153,66 @@ async fn a_durable_deployment_default_keeps_word_document_calls_live(pool: Pool<
     assert_eq!(row_count(&state, "client_operation_attempts").await, 0);
     server.abort();
 }
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_draft_in_a_task_run_gets_no_server_proposal(pool: Pool<Postgres>) {
+    let row = &fake_host();
+    let (parent, research) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
+    let mut mocks = MockSet::new();
+    mock_parent(&mut mocks, &parent, vec![research_task(None)]);
+    let capture = research.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[RESEARCH_BRIEF], &[USER_MESSAGE]))
+            .matcher(capture);
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&["Draft:\n```host-draft\nHello\n```"]),
+        );
+    });
+    let (state, _llm) = delegated_state(row, pool, mocks, |config| {
+        config.client_tools.tools.insert(
+            "host_open_form".into(),
+            ClientToolConfig {
+                name: "open_form".into(),
+                namespace: Some(row.namespace.into()),
+                description: "Open a form".into(),
+                parameters: json!({"type":"object"}).to_string(),
+                called_by: erato::config::ClientToolCalledBy::Server,
+                requires_client_registration: true,
+                client_actions: vec!["host.open_form".into()],
+                ..Default::default()
+            },
+        );
+        let facet = config
+            .action_facets
+            .facets
+            .get_mut(PLAIN_ACTION_FACET)
+            .unwrap();
+        facet.client_actions = vec!["host.open_form".into()];
+        facet.draft_block_actions = [("host-draft".into(), "host.open_form".into())].into();
+    })
+    .await;
+    let (base, server) = serve(&state).await;
+    let chat_id = seed_origin_chat(&state.db).await;
+    let run = spawn_parent_registering(row, &base, chat_id, PLAIN_ACTION_FACET, None, "open_form");
+    assert!(finish(run).await.contains(PARENT_FINAL));
+    let research_child = child_chat(&state.db, chat_id, RESEARCH_FACET)
+        .await
+        .unwrap();
+    let child_answer = assistant_row(&state.db, research_child.id).await;
+    assert!(child_answer.raw_message.to_string().contains("host-draft"));
+    for answer in [child_answer, assistant_row(&state.db, chat_id).await] {
+        assert!(
+            !answer
+                .raw_message
+                .to_string()
+                .contains("propose_client_action"),
+            "{}",
+            answer.raw_message
+        );
+    }
+    assert_eq!(turn_bodies(&research).len(), 1);
+    server.abort();
+}
