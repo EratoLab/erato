@@ -403,13 +403,13 @@ describe("spoken approval card", () => {
     const changeOf = (decideOnScreen: boolean) =>
       spokenApprovalFor("client_tool", {
         tool_name: "apply_document_plan",
-        input: { submission_call_id: "call-plan", draft_id: "d-1" },
+        input: { proposal_call_id: "call-plan", draft_id: "d-1" },
         display: {
           title: "Change “Vertrag.docx”",
           description: "Updates 2 of 9 sections: § 3, § 5",
           label,
         },
-        chained: { decide_on_screen: decideOnScreen },
+        follows: { decide_on_screen: decideOnScreen },
       });
     const change = changeOf(false);
     expect(

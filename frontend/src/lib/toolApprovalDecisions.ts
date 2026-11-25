@@ -17,7 +17,7 @@ export interface DecidedApproval {
   /** For `approve` or `reject` said by voice: the endpoint's receipt. */
   voiceReceipt?: string;
   /**
-   * For `approve` or `approve_always` of an item the server chained: what the
+   * For `approve` or `approve_always` of an item with `follows` set: what the
    * user chose on the host's own card, sent as `client_confirmation`.
    */
   clientConfirmation?: unknown;

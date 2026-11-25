@@ -1658,7 +1658,7 @@ export const spokenApprovalFor = (
       label?: ToolCallLabel;
     } | null;
     child?: unknown;
-    chained?: { decide_on_screen?: boolean } | null;
+    follows?: { decide_on_screen?: boolean } | null;
   },
 ): SpokenApproval => {
   if (call.child == null && !DESCRIBED_KINDS.includes(approvalKind)) {
@@ -1671,14 +1671,14 @@ export const spokenApprovalFor = (
     input: call.input,
     toolTitle,
     server: call.display?.server_name ?? undefined,
-    ...(call.child == null && call.chained
+    ...(call.child == null && call.follows
       ? {
           summary: {
             title: toolTitle,
             ...(call.display?.description
               ? { description: call.display.description }
               : {}),
-            onScreen: call.chained.decide_on_screen === true,
+            onScreen: call.follows.decide_on_screen === true,
           },
         }
       : {}),

@@ -965,7 +965,7 @@ export const McpToolApprovalCard = ({
   const spokenApprovals = (
     isQueue
       ? spokenItems
-      : [{ ...request, chained: approvalItems.at(0)?.chained }]
+      : [{ ...request, follows: approvalItems.at(0)?.follows }]
   ).map((call) =>
     spokenApprovalFor(kind, {
       ...call,
