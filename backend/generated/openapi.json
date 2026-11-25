@@ -11809,6 +11809,10 @@
                 "type": "integer",
                 "format": "int64",
                 "minimum": 0
+              },
+              "text": {
+                "type": "string",
+                "description": "On the first chunk of each passage the voice speaks, the passage's\ntext: what the voice says from this chunk on."
               }
             }
           },

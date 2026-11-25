@@ -40,6 +40,8 @@ import {
   beginSpeechResponse,
   endSpeechResponse,
   moveSpeechStream,
+  noteApprovedAction,
+  noteToolCall,
   playSpeechChunk,
   readsBackContinuation,
   replyCallsTool,
@@ -1207,6 +1209,7 @@ export function useChatMessaging(
               responseData.audio,
               responseData.sample_rate,
               activeStreamKey,
+              responseData.text ?? undefined,
             );
             break;
           case "audio_error":
@@ -1496,6 +1499,11 @@ export function useChatMessaging(
               responseData,
             );
             replyCallsTool(activeStreamKey);
+            noteToolCall(
+              activeStreamKey,
+              responseData.tool_call_id,
+              "preparing",
+            );
             handleToolCallProposed(responseData, activeStreamKey);
             break;
 
@@ -1505,6 +1513,11 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            noteToolCall(
+              activeStreamKey,
+              responseData.tool_call_id,
+              responseData.status,
+            );
             waitTurnTool(
               activeStreamKey,
               responseData.message_id,
@@ -3243,6 +3256,13 @@ export function useChatMessaging(
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) {
         beginSpeechResponse(streamKey);
+        if (
+          settled.some(({ decision: given }) => isApprovalDecision(given)) ||
+          (itemDecisions ?? []).some((answer) =>
+            isApprovalDecision(answer.decision),
+          )
+        )
+          noteApprovedAction(streamKey);
         // A refusal said to the voice and a change request were answered
         // aloud before they went out. A tap was answered only on screen, and
         // an approval by voice is answered as the wait's first line, which

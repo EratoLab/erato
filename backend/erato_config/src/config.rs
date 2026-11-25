@@ -3726,7 +3726,7 @@ mod audio_config_tests {
             1800
         );
         assert!(!conversational.talk_over_voice);
-        assert_eq!(conversational.talk_over_voice_min_speech_ms, 500);
+        assert_eq!(conversational.talk_over_voice_min_speech_ms, 300);
     }
 
     fn load_conversational(toml: &str) -> AudioConversationalConfig {
@@ -3793,7 +3793,7 @@ mod audio_config_tests {
                 settings.voice_start_max_wait_ms,
                 settings.talk_over_voice_min_speech_ms,
             ),
-            (1800, 1000, 250, 64, 400, 350, 500)
+            (1800, 1000, 250, 64, 400, 350, 300)
         );
         assert!(settings.fall_back_out_of_range().is_empty());
         let words = settings.effective_hesitation_words();
@@ -3902,7 +3902,7 @@ mod audio_config_tests {
             ("card_min_speech_ms", 2001, 64),
             ("voice_start_buffer_ms", 2001, 400),
             ("voice_start_max_wait_ms", 5000, 350),
-            ("talk_over_voice_min_speech_ms", 199, 500),
+            ("talk_over_voice_min_speech_ms", 199, 300),
         ] {
             let mut settings = load_conversational(&format!("{key} = {rejected}"));
             let warnings = settings.fall_back_out_of_range();
@@ -9599,13 +9599,14 @@ pub struct AudioConversationalConfig {
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub hesitations: HashMap<String, Vec<String>>,
-    /// Whether the user can start speaking while the voice still talks, and
-    /// the voice yields. Defaults to `false`.
+    /// Whether the user can start speaking while the voice still reads a
+    /// reply, a wait line or an acknowledgement, and the voice yields. An
+    /// approval card is not talked over. Defaults to `false`.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub talk_over_voice: bool,
     /// How long, in milliseconds, speech over the voice must last before the
-    /// voice stops. Defaults to `500`; allowed from `200` to `2000`.
+    /// voice stops. Defaults to `300`; allowed from `200` to `2000`.
     #[serde(default = "default_talk_over_voice_min_speech_ms")]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub talk_over_voice_min_speech_ms: u32,
@@ -9686,7 +9687,7 @@ pub const HESITATION_BASE: &[&str] = &[
 pub const TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=2000;
 
 fn default_talk_over_voice_min_speech_ms() -> u32 {
-    500
+    300
 }
 
 impl Default for AudioConversationalConfig {

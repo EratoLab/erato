@@ -95,6 +95,8 @@ pub struct SpeechChunk {
     pub sequence: u64,
     pub sample_rate: u32,
     pub pcm: Vec<u8>,
+    /// On a passage's first chunk, the passage's text.
+    pub text: Option<String>,
 }
 
 /// What a [`PassageSpeaker`] yields: audio, or the end of a spoken part
@@ -117,6 +119,8 @@ pub struct PassageSpeaker {
     sequence: u64,
     sample_rate: u32,
     segments: Vec<String>,
+    /// The current passage's text until its first chunk is yielded.
+    passage_text: Option<String>,
     finished: bool,
 }
 impl PassageSpeaker {
@@ -135,6 +139,7 @@ impl PassageSpeaker {
             sequence: 0,
             sample_rate: 0,
             segments: Vec::new(),
+            passage_text: None,
             finished: false,
         })
     }
@@ -191,6 +196,7 @@ impl PassageSpeaker {
                     sequence,
                     sample_rate: self.sample_rate,
                     pcm,
+                    text: self.passage_text.take(),
                 })));
             }
             if self.finished {
@@ -213,6 +219,7 @@ impl PassageSpeaker {
                 return Err(eyre!("Speech sample rate changed between sentences"));
             }
             self.sample_rate = audio.sample_rate;
+            self.passage_text = Some(text.clone());
             self.segments.push(text);
             self.passage_bytes = 0;
             self.audio = Some(audio.chunks);
@@ -270,6 +277,7 @@ impl SpeechSession {
                         sequence: chunk.sequence,
                         audio: STANDARD.encode(&chunk.pcm),
                         sample_rate: chunk.sample_rate,
+                        text: chunk.text,
                     };
                     pcm.extend(chunk.pcm);
                     let json = serde_json::to_string(&event)?;
@@ -543,6 +551,13 @@ mod tests {
             .unwrap();
         assert_eq!((chunk.sequence, chunk.sample_rate), (0, 24000));
         assert_eq!(chunk.pcm, [1, 2, 3, 4]);
+        // The passage's first chunk says what the voice speaks from here.
+        assert!(
+            chunk
+                .text
+                .as_deref()
+                .is_some_and(|text| text.starts_with("Intro sentence."))
+        );
         assert!(
             tokio::time::timeout(std::time::Duration::from_millis(300), speaker.next_chunk())
                 .await

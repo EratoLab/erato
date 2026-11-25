@@ -476,8 +476,8 @@ chat_provider_ids = ["test-token-limit"]
 # voice_start_max_wait_ms = 350 # The longest it waits; what has come by then plays (0 to 2000)
 # hesitation_words = [] # Hesitation sounds added to the German and English base (one word of letters each); a turn of only these does not end
 # hesitation_words_replace_base = false # true: hesitation_words replaces the base; an empty list then holds nothing back
-# talk_over_voice = false # Let the user start speaking while the voice talks; the voice yields
-# talk_over_voice_min_speech_ms = 500 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner but stops on more coughs and "mhm"
+# talk_over_voice = false # Let the user start speaking while the voice reads a reply: what they say stops the reply and is sent as their next message; the voice's own echo and wordless sounds are ignored; approval cards are not talked over
+# talk_over_voice_min_speech_ms = 300 # Speech over the voice that stops it (200 to 2000); shorter reacts sooner, but also catches coughs (the voice goes on) and a listener's "mhm" (sent as a message)
 # reply_speech = { spoken = true, wording = "natural", user_choice = true, show_in_chat = false } # spoken: replies are spoken (users may turn it off where user_choice allows); natural: a short spoken answer, the full written answer in the chat; precise: the written answer read as it is; show_in_chat: show what the voice said in the chat
 # spoken_language = { follow_speaker = true, languages = [], user_choice = true } # The voice speaks the language the user speaks; languages: the allowed ones (empty: any), also sent to the recognizer
 # keep_reply_audio = false # Store each reply's voice so it can be played again; off streams it only

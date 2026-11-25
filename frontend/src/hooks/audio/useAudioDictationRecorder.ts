@@ -55,13 +55,18 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import { playbackContext } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
   overVoiceStep,
   resolveOverVoiceMinSpeechMs,
+  spokeOn,
+  spokeOnStart,
+  spokeOnStep,
   type OverVoiceGate,
+  type SpokeOn,
 } from "./talkOverVoice";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
@@ -453,6 +458,8 @@ export function useAudioDictationRecorder({
   const onVoiceLoweredRef = useRef(onVoiceLowered);
   /** The current recording's wait over the voice, from its start. */
   const holdRef = useRef<OverVoiceHold | null>(null);
+  /** Speech after the voice paused for the current recording, once it has. */
+  const spokeOnRef = useRef<SpokeOn | null>(null);
   const recordingSignalsRef = useRef<RecordingSignals | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
@@ -1150,6 +1157,15 @@ export function useAudioDictationRecorder({
   );
 
   /**
+   * The current recording paused the voice, and the user's speech went on
+   * once it was quiet: what it holds is the user's, not the voice's echo.
+   */
+  const spokeOnAfterVoice = useCallback(
+    (): boolean => spokeOn(spokeOnRef.current),
+    [],
+  );
+
+  /**
    * Ends the recording and drops what it heard: nothing more is sent for
    * transcription and no words arrive. For a recording whose words are no
    * longer wanted, such as one for a card that was decided.
@@ -1205,6 +1221,7 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      spokeOnRef.current = null;
       // Frames are timed from the microphone's first sample once it comes.
       recordingSignalsRef.current = recordingSignals(Date.now(), hold !== null);
       if (hold === null) microphoneOpened();
@@ -1593,8 +1610,11 @@ export function useAudioDictationRecorder({
                 void checkTurn();
                 return;
               }
-              // The person went on, or only hesitated: the turn goes on.
-              if (nothingSaid || now.heard) return;
+              // The person went on, or only hesitated: the turn goes on;
+              // but a sound that paused the voice ends with its silence, so
+              // the voice can go on.
+              if (now.heard) return;
+              if (nothingSaid && spokeOnRef.current === null) return;
               // The turn ends with the words checked. What came after them
               // is not sent: speech there would have reopened the gate, and
               // a piece of room sound alone can come back as a word.
@@ -1626,6 +1646,12 @@ export function useAudioDictationRecorder({
                     event.probabilities.isSpeech,
                   );
                 if (gate.heard) cutAtPause(gate);
+                if (spokeOnRef.current)
+                  spokeOnRef.current = spokeOnStep(
+                    spokeOnRef.current,
+                    event.probabilities.isSpeech,
+                    frameMs,
+                  );
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
@@ -1636,6 +1662,15 @@ export function useAudioDictationRecorder({
                 );
                 current.gate = step.gate;
                 if (step.confirmed) {
+                  // Safari reports no `outputLatency`.
+                  const output = playbackContext();
+                  spokeOnRef.current = spokeOnStart(
+                    output
+                      ? ((Number(output.outputLatency) || 0) +
+                          (Number(output.baseLatency) || 0)) *
+                          1000
+                      : 0,
+                  );
                   onSpeechOverVoiceRef.current?.();
                   releaseHold("speech");
                   return;
@@ -2065,6 +2100,7 @@ export function useAudioDictationRecorder({
     toggleDictation,
     cancelDictation,
     readRecordingSignals,
+    spokeOnAfterVoice,
   };
 }
 

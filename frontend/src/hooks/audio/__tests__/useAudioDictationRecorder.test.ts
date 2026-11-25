@@ -1024,6 +1024,77 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.onVadAutoStop).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["", true],
+    ["Äh.", true],
+    ["Hm.", true],
+    ["Okay.", true],
+  ])(
+    "ends a turn that paused the voice on silence, even with no words: %j (review 4)",
+    async (transcript) => {
+      const onVadAutoStop = vi.fn();
+      const hook = renderHook(() =>
+        useAudioDictationRecorder({
+          enabled: true,
+          mode: "conversational",
+          maxRecordingDurationSeconds: 1200,
+          onTranscriptChunk: vi.fn(),
+          vadAutoStopEnabled: true,
+          onVadAutoStop,
+          voiceSpeaking: true,
+          overVoiceMinSpeechMs: 300,
+          onSpeechOverVoice: vi.fn(),
+          onVoiceLowered: vi.fn(),
+          isHesitationOnly: hesitationMatcher(undefined),
+        }),
+      );
+      await act(async () => {
+        hook.result.current.toggleDictation();
+      });
+      await waitFor(() =>
+        expect(hook.result.current.isListeningOverVoice).toBe(true),
+      );
+      act(() => {
+        emitAudioSamples(new Float32Array(SAMPLES_PER_SECOND).fill(0.2));
+        vadMock.engines[0].emit({ type: "speech_start", timestampMs: 0 });
+        vadMock.engines[0].emit({ type: "speech_real_start", timestampMs: 0 });
+        emitFrames(0.95, 352);
+      });
+      await openSession();
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+      act(() => {
+        emitFrames(0.05, 320);
+        vadMock.engines[0].emit({
+          type: "speech_end",
+          timestampMs: 0,
+          audio: new Float32Array(1),
+        });
+      });
+      await waitFor(() =>
+        expect(
+          MockWebSocket.instances[0].sentBinaryFrames.length,
+        ).toBeGreaterThan(0),
+      );
+      // The turn's last piece is sent once the end of speech is checked.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+      const sent = MockWebSocket.instances[0].sentBinaryFrames.length;
+      for (let index = 0; index < sent; index += 1)
+        act(() =>
+          MockWebSocket.instances[0].emitJson({
+            type: "chunk_transcribed",
+            chunk_index: index,
+            transcript: index === sent - 1 ? transcript : "",
+          }),
+        );
+      await waitFor(() => expect(onVadAutoStop).toHaveBeenCalledTimes(1), {
+        timeout: 4000,
+      });
+    },
+    10000,
+  );
+
   it("drops what was heard over the voice when the voice ends on its own with nobody speaking, and starts fresh", async () => {
     const hook = renderOverVoice();
     await startHeld(hook);
@@ -1096,11 +1167,11 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.onVadAutoStop).toHaveBeenCalledTimes(1);
   });
 
-  it("stops the voice at the default 500 ms when the configured minimum is malformed", async () => {
+  it("stops the voice at the default 300 ms when the configured minimum is malformed", async () => {
     const hook = renderOverVoice(true, Number.NaN);
     await startHeld(hook);
     act(() => {
-      emitFrames(0.95, 448);
+      emitFrames(0.95, 256);
     });
     expect(hook.onSpeechOverVoice).not.toHaveBeenCalled();
     act(() => {

@@ -1579,6 +1579,11 @@ pub enum MessageSubmitStreamingResponseMessage {
         sequence: u64,
         audio: String,
         sample_rate: u32,
+        /// On the first chunk of each passage the voice speaks, the passage's
+        /// text: what the voice says from this chunk on.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schema(nullable = false)]
+        text: Option<String>,
     },
     #[serde(rename = "audio_error")]
     AudioError { message_id: Uuid },
@@ -2072,6 +2077,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             sequence,
             audio,
             sample_rate,
+            text,
         } => (
             "audio_delta",
             serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioDelta {
@@ -2079,6 +2085,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
                 sequence: *sequence,
                 audio: audio.clone(),
                 sample_rate: *sample_rate,
+                text: text.clone(),
             })?,
         ),
         StreamingEvent::AudioError { message_id } => (
@@ -12799,6 +12806,11 @@ async fn stream_generate_chat_completion<'a>(
                     content.insert(at, pointer);
                 }
                 Ok(None) => {}
+                // Stopped while the audio was still being made: the user cut
+                // the voice short, and the text is kept as it is.
+                Err(error) if streaming_task.is_some_and(|t| t.is_abort_requested()) => {
+                    tracing::debug!(%error, "Speech ended by a stop; keeping text response");
+                }
                 Err(error) => {
                     tracing::warn!(%error, "Speech synthesis failed; keeping text response");
                     let event = StreamingEvent::AudioError {
