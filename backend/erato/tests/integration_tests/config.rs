@@ -4077,6 +4077,45 @@ fn invalidated_read_tools_are_reads_of_the_followed_namespace() {
     ));
 }
 
+const OTHER_NAMESPACE_FOLLOWER: (&str, &str) = (
+    "name = \"apply_draft\"\nnamespace = \"editor\"",
+    "name = \"apply_draft\"\nnamespace = \"ops\"",
+);
+
+#[test]
+fn invalidated_read_tools_follow_the_submission_namespace_not_the_followers() {
+    let (from, to) = OTHER_NAMESPACE_FOLLOWER;
+    let config = migrate_config_with_action_facets(&CHAINED_APPLY.replace(from, to).replace(
+        "follows_tool = \"editor/submit_draft\"",
+        "follows_tool = \"editor/submit_draft\"\ninvalidated_read_tools = [\"editor/read_context\"]",
+    ));
+    assert_eq!(
+        config.client_tools.tools["apply"].qualified_name(),
+        "ops/apply_draft"
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "invalidated_read_tools entry 'ops/read_ops' must name a configured model-called client tool of the namespace 'editor'"
+)]
+fn invalidated_read_tools_refuse_a_read_of_the_followers_namespace() {
+    let (from, to) = OTHER_NAMESPACE_FOLLOWER;
+    migrate_config_with_action_facets(&format!(
+        r#"{}
+[client_tools.tools.read_ops]
+name = "read_ops"
+namespace = "ops"
+description = "Read ops"
+parameters = '{{"type":"object"}}'
+"#,
+        CHAINED_APPLY.replace(from, to).replace(
+            "follows_tool = \"editor/submit_draft\"",
+            "follows_tool = \"editor/submit_draft\"\ninvalidated_read_tools = [\"ops/read_ops\"]",
+        )
+    ));
+}
+
 #[test]
 #[should_panic(expected = "is listed by the server-called tools")]
 fn a_client_action_belongs_to_one_server_called_tool() {
