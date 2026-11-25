@@ -1648,6 +1648,18 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
       expect((await track(0)).stop).toHaveBeenCalled();
     });
 
+    it("gives the microphone back on a hidden page when nobody spoke for the listening limit", async () => {
+      const hook = render(true, 1);
+      await listen(hook);
+      act(() => setPageVisibility("hidden"));
+
+      await waitFor(
+        () => expect(hook.result.current.dictationError).not.toBeNull(),
+        { timeout: 2000 },
+      );
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+
     it("keeps an idle microphone when the page is shown again in time", async () => {
       const hook = render(true, 0.2);
       await listen(hook);

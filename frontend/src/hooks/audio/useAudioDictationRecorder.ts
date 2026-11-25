@@ -1935,6 +1935,9 @@ export function useAudioDictationRecorder({
             setDictationError(
               t`Dictation stopped automatically after the configured maximum duration.`,
             );
+            // The conversation listens no more; a hidden page that kept its
+            // microphone between turns gives it back now.
+            if (document.visibilityState === "hidden") closeMicrophone();
           }, recordingLimitMs * 1000);
         };
 
