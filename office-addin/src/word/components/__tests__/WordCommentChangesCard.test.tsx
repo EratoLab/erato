@@ -184,7 +184,7 @@ function decisionFor(
       if (choice === "approve" || choice === "approve_always")
         void apply(
           {
-            submission_call_id: draftId,
+            proposal_call_id: draftId,
             draft_id: draftId,
             confirmation: extras?.clientConfirmation ?? null,
           },
