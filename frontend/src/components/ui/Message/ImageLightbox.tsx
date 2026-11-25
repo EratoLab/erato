@@ -1,6 +1,8 @@
 import { t, msg } from "@lingui/core/macro";
 import { createPortal } from "react-dom";
 
+import { downloadFile } from "@/lib/fileDownload";
+
 import { Button } from "../Controls/Button";
 import { ModalBase } from "../Modal/ModalBase";
 
@@ -19,7 +21,7 @@ export const ImageLightbox = ({
 }: ImageLightboxProps) => {
   if (!image || !isOpen) return null;
 
-  const handleDownload = () => {
+  const browserDownload = () => {
     if (image.src.startsWith("data:")) {
       // Handle base64 download - open in new tab/trigger download
       const link = document.createElement("a");
@@ -33,6 +35,15 @@ export const ImageLightbox = ({
       // Handle URL download - open in new tab
       window.open(image.src, "_blank", "noopener,noreferrer"); // eslint-disable-line lingui/no-unlocalized-strings
     }
+  };
+
+  const handleDownload = (anchor: Element) => {
+    // A host app adds the extension of the image's type.
+    downloadFile(
+      { name: `image-${image.id}`, content: image.src },
+      browserDownload,
+      anchor,
+    );
   };
 
   return createPortal(
@@ -54,7 +65,10 @@ export const ImageLightbox = ({
           className="max-h-[70vh] w-full object-contain"
         />
         <div className="flex justify-end gap-2">
-          <Button onClick={handleDownload} variant="secondary">
+          <Button
+            onClick={(event) => handleDownload(event.currentTarget)}
+            variant="secondary"
+          >
             {t(msg({ id: "ui.download", message: "Download" }))}
           </Button>
           <Button onClick={onClose} variant="primary">

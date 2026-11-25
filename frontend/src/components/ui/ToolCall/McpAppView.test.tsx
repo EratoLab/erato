@@ -33,6 +33,7 @@ import {
   VIEW_TEARDOWN_TIMEOUT_MS,
 } from "@/lib/mcpApps/viewHost";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import {
   McpAppView,
@@ -1003,6 +1004,39 @@ describe("McpAppView", () => {
     expect(view.blobs).toHaveLength(1);
     expect(view.blobs[0].size).toBe(8);
     expect(screen.queryByText("Save Revenue by region.png?")).toBeNull();
+  });
+
+  it("hands a file the view asks to save to a host app that offers files", async () => {
+    const request = installHostShell({ files: 1 });
+    try {
+      renderView(call());
+      const view = await startedView();
+
+      view.fromFrame(
+        downloadRequest(22, {
+          uri: "ui://charts/Revenue%20by%20region.png",
+          mimeType: "image/png",
+          blob: PNG_BASE64,
+        }),
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+      await waitFor(() => {
+        expect(request).toHaveBeenCalledExactlyOnceWith(
+          "files.share",
+          expect.objectContaining({
+            fileName: "Revenue by region.png",
+            data: PNG_BASE64,
+          }),
+        );
+      });
+      expect(view.saved).toEqual([]);
+      await waitFor(() => {
+        expect(view.answer(22)).toMatchObject({ result: {} });
+      });
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("saves nothing and tells the view so when the user cancels", async () => {

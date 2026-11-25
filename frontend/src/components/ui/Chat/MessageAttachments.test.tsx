@@ -15,6 +15,11 @@ import { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
 import { server } from "@/lib/mocks/server";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import {
+  fileFetch,
+  installHostShell,
+  removeHostShell,
+} from "@/test/hostShellStub";
+import {
   teamsIndex,
   teamsMessage,
   teamsSection,
@@ -159,6 +164,47 @@ describe("MessageAttachments", () => {
       expect(onFilePreview).toHaveBeenCalledExactlyOnceWith(output, files);
     } finally {
       open.mockRestore();
+    }
+  });
+
+  it("hands a downloaded output to a host app that offers files", async () => {
+    const output = file("1", "report.csv", "https://example.invalid/preview/1");
+    vi.stubGlobal("fetch", fileFetch("a,b\n", "text/csv"));
+    const request = installHostShell({ files: 1 });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+
+    try {
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={[output.id]}
+          filesById={byId(output)}
+          relatedFiles={[output]}
+          showDownload
+        />,
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Download report.csv" }),
+      );
+
+      await waitFor(() => {
+        expect(request).toHaveBeenCalledExactlyOnceWith(
+          "files.share",
+          expect.objectContaining({
+            fileName: "report.csv",
+            contentType: "text/csv",
+            data: globalThis.btoa("a,b\n"),
+          }),
+        );
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        "https://example.invalid/preview/1",
+        expect.anything(),
+      );
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      open.mockRestore();
+      removeHostShell();
+      vi.unstubAllGlobals();
     }
   });
 
