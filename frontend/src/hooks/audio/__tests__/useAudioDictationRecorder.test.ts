@@ -1565,6 +1565,7 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
     });
     afterEach(() => {
       delete window.ERATO_SHELL;
+      Reflect.deleteProperty(navigator, "audioSession");
     });
 
     it("keeps the microphone between turns while the page is hidden", async () => {
@@ -1617,21 +1618,58 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
 
       hook.rerender({ conversation: false });
       expect(audioSession.type).toBe("auto");
-      Reflect.deleteProperty(navigator, "audioSession");
     });
 
-    it("gives the microphone back on a hidden page once the listening limit stopped the conversation", async () => {
-      const hook = render(true, 1);
+    it("leaves a session type that something else set meanwhile", () => {
+      const audioSession = { type: "auto" };
+      Object.defineProperty(navigator, "audioSession", {
+        configurable: true,
+        value: audioSession,
+      });
+      const hook = render();
+      audioSession.type = "playback";
+
+      hook.unmount();
+      expect(audioSession.type).toBe("playback");
+    });
+
+    const pause = (ms: number) =>
+      act(() => new Promise((resolve) => setTimeout(resolve, ms)));
+
+    it("gives an idle microphone back on a hidden page after as long as a turn may listen", async () => {
+      const hook = render(true, 0.2);
+      await listen(hook);
+      await cancel(hook);
+      act(() => setPageVisibility("hidden"));
+      await pause(100);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+
+      await pause(250);
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+
+    it("keeps an idle microphone when the page is shown again in time", async () => {
+      const hook = render(true, 0.2);
+      await listen(hook);
+      await cancel(hook);
+      act(() => setPageVisibility("hidden"));
+      act(() => setPageVisibility("visible"));
+
+      await pause(350);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+    });
+
+    it("waits the whole time again after each turn on a hidden page", async () => {
+      const hook = render(true, 0.2);
       await listen(hook);
       act(() => setPageVisibility("hidden"));
+      await pause(150);
+      await cancel(hook);
+      await pause(150);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
 
-      await waitFor(
-        () => expect(hook.result.current.dictationError).not.toBeNull(),
-        { timeout: 3000 },
-      );
-      await waitFor(async () =>
-        expect((await track(0)).stop).toHaveBeenCalled(),
-      );
+      await pause(200);
+      expect((await track(0)).stop).toHaveBeenCalled();
     });
 
     it("closes the microphone when the conversation ends, hidden or not", async () => {
@@ -1651,9 +1689,12 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
       configurable: true,
       value: audioSession,
     });
-    render();
-    expect(audioSession.type).toBe("auto");
-    Reflect.deleteProperty(navigator, "audioSession");
+    try {
+      render();
+      expect(audioSession.type).toBe("auto");
+    } finally {
+      Reflect.deleteProperty(navigator, "audioSession");
+    }
   });
 
   it("closes the microphone when a turn fails", async () => {
