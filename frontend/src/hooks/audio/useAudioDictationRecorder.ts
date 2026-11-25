@@ -52,6 +52,10 @@ import {
   SILENT_FRAME_PROBABILITY,
 } from "./audioTuning";
 import {
+  audioContinuesWhileHidden,
+  holdPlayAndRecordSession,
+} from "./audioWhileHidden";
+import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
@@ -605,16 +609,28 @@ export function useAudioDictationRecorder({
     [isMounted, setDictationBarsThrottled],
   );
 
+  const dictationErrorRef = useRef(dictationError);
+  /**
+   * A hidden page keeps its microphone only where the host keeps audio going,
+   * and only while the conversation goes on: one that an error or the
+   * listening limit stopped does not listen again until the page is shown.
+   */
+  const keepsHiddenMicrophone = useCallback(
+    () => audioContinuesWhileHidden() && dictationErrorRef.current === null,
+    [],
+  );
+
   /**
    * The conversation keeps this microphone for its next turn: live, heard,
-   * the page shown, and cancelling the voice's echo, which plays into it.
+   * usable while the page is hidden, and cancelling the voice's echo, which
+   * plays into it.
    */
   const keepsMicrophone = useCallback(
     (stream: MediaStream) =>
       keepMicrophoneRef.current &&
       microphoneEchoCancelledRef.current &&
-      microphoneUsable(stream),
-    [],
+      microphoneUsable(stream, keepsHiddenMicrophone()),
+    [keepsHiddenMicrophone],
   );
 
   const tearDownCaptureGraph = useCallback(() => {
@@ -651,20 +667,32 @@ export function useAudioDictationRecorder({
     closeMicrophone();
   }, [closeMicrophone]);
 
+  const conversing = enabled && mode === "conversational" && vadAutoStopEnabled;
   useEffect(() => {
-    const keep = enabled && mode === "conversational" && vadAutoStopEnabled;
-    keepMicrophoneRef.current = keep;
-    if (!keep) closeIdleMicrophone();
-  }, [closeIdleMicrophone, enabled, mode, vadAutoStopEnabled]);
+    keepMicrophoneRef.current = conversing;
+    if (!conversing) closeIdleMicrophone();
+  }, [closeIdleMicrophone, conversing]);
+
+  useEffect(() => {
+    if (!conversing || !audioContinuesWhileHidden()) return;
+    return holdPlayAndRecordSession();
+  }, [conversing]);
 
   useEffect(() => {
     const closeWhenHidden = () => {
-      if (document.visibilityState === "hidden") closeIdleMicrophone();
+      if (document.visibilityState === "hidden" && !keepsHiddenMicrophone())
+        closeIdleMicrophone();
     };
     document.addEventListener("visibilitychange", closeWhenHidden);
     return () =>
       document.removeEventListener("visibilitychange", closeWhenHidden);
-  }, [closeIdleMicrophone]);
+  }, [closeIdleMicrophone, keepsHiddenMicrophone]);
+
+  useEffect(() => {
+    dictationErrorRef.current = dictationError;
+    if (dictationError !== null && document.visibilityState === "hidden")
+      closeIdleMicrophone();
+  }, [closeIdleMicrophone, dictationError]);
 
   const closeQuietly = useCallback((socket: WebSocket | undefined | null) => {
     if (!socket) return;
@@ -2120,9 +2148,16 @@ function inputLatencyMs(settings: MediaTrackSettings): number {
     : MIN_INPUT_LATENCY_MS;
 }
 
-/** The microphone is live, heard, cancels echo, and the page is shown. */
-function microphoneUsable(stream: MediaStream): boolean {
-  if (typeof document !== "undefined" && document.visibilityState === "hidden")
+/** The microphone is live, heard, cancels echo, and may be kept while hidden. */
+function microphoneUsable(
+  stream: MediaStream,
+  keptWhileHidden: boolean,
+): boolean {
+  if (
+    typeof document !== "undefined" &&
+    document.visibilityState === "hidden" &&
+    !keptWhileHidden
+  )
     return false;
   const tracks = stream.getAudioTracks();
   return (
