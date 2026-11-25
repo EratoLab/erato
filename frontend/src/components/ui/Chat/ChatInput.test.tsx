@@ -106,7 +106,7 @@ const mockUseAudioDictationRecorder = vi.fn();
 const mockUseAudioTranscriptionRecorder = vi.fn();
 const mockUseIsMobile = vi.fn();
 const mockUseIsNarrowTouchScreen = vi.fn();
-const mockUseHasHoveringPointer = vi.fn();
+const mockUseIsTouchPointer = vi.fn();
 const mockChatInputAddControls = vi.fn();
 
 vi.mock("@/providers/ChatProvider", async () =>
@@ -299,7 +299,7 @@ vi.mock("./ChatInputTokenUsage", () => ({
 vi.mock("@/hooks/useResponsive", () => ({
   useIsMobile: () => mockUseIsMobile(),
   useIsNarrowTouchScreen: () => mockUseIsNarrowTouchScreen(),
-  useHasHoveringPointer: () => mockUseHasHoveringPointer(),
+  useIsTouchPointer: () => mockUseIsTouchPointer(),
 }));
 
 // The "+" menu's own rendering of the section is covered against the real
@@ -484,7 +484,7 @@ describe("ChatInput", () => {
 
     mockUseIsMobile.mockReturnValue(false);
     mockUseIsNarrowTouchScreen.mockReturnValue(false);
-    mockUseHasHoveringPointer.mockReturnValue(true);
+    mockUseIsTouchPointer.mockReturnValue(false);
     mockUseUploadFeature.mockReturnValue({ enabled: false });
     mockUseAssistantsFeature.mockReturnValue({
       enabled: false,
@@ -1467,7 +1467,7 @@ describe("ChatInput", () => {
         "%s when audio mode ends %s",
         async (_, __, narrowTouch, hoveringPointer) => {
           mockUseChatInputFeature.mockReturnValue({ autofocus: true });
-          mockUseHasHoveringPointer.mockReturnValue(hoveringPointer);
+          mockUseIsTouchPointer.mockReturnValue(!hoveringPointer);
           microphone(true);
           const { setAudioMode } = await renderPhoneComposer({
             touch: narrowTouch,

@@ -99,9 +99,9 @@ import { useChatInputHandlers } from "@/hooks/ui";
 import { usePendingCaret } from "@/hooks/ui/usePendingCaret";
 import { useDocumentHidden } from "@/hooks/useDocumentHidden";
 import {
-  useHasHoveringPointer,
   useIsMobile,
   useIsNarrowTouchScreen,
+  useIsTouchPointer,
 } from "@/hooks/useResponsive";
 import {
   fetchGetFile,
@@ -2478,7 +2478,7 @@ export const ChatInput = ({
       canBrowseMcpTools);
 
   const isNarrowTouchScreen = useIsNarrowTouchScreen();
-  const hasHoveringPointer = useHasHoveringPointer();
+  const isTouchPointer = useIsTouchPointer();
   const oneLineComposer =
     showControls && useUnifiedMobileMenu && isNarrowTouchScreen;
   // The layout changes the field's width and padding under a kept draft.
@@ -3521,10 +3521,9 @@ export const ChatInput = ({
         rows={1}
         disabled={composeLocked}
         tabIndex={0}
-        // Without a mouse or trackpad focus opens the on-screen keyboard, and
-        // the field mounts again when audio mode ends, inside the tap that
-        // ended it.
-        autoFocus={shouldAutofocus && hasHoveringPointer} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
+        // Under a finger focus opens the on-screen keyboard, and the field
+        // mounts again when audio mode ends, inside the tap that ended it.
+        autoFocus={shouldAutofocus && !isTouchPointer} // eslint-disable-line jsx-a11y/no-autofocus -- Controlled by feature config to prevent unwanted scrolling
         className={clsx(
           "w-full resize-none overflow-y-auto",
           "chat-input-textarea-geometry",

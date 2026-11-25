@@ -2,7 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
-import { HOVERING_POINTER } from "@/styles/pointerQueries";
+import { HOVERING_POINTER, TOUCH_POINTER } from "@/styles/pointerQueries";
 
 // Define breakpoints based on Tailwind's default breakpoints
 export const breakpoints = {
@@ -130,15 +130,18 @@ export function useIsBelow(breakpoint: Breakpoint): boolean {
   return useMediaQuery(belowQuery(breakpoint));
 }
 
-/** A mouse or trackpad, as the `hover:` variant reads it. */
-export function useHasHoveringPointer(): boolean {
-  return useMediaQuery(HOVERING_POINTER);
+/**
+ * A finger is the main pointer. Unlike "no hovering pointer" it is false where
+ * no pointer is reported at all, as in a headless browser.
+ */
+export function useIsTouchPointer(): boolean {
+  return useMediaQuery(TOUCH_POINTER);
 }
 
 /** Below `sm` without a hovering pointer, as the `no-hover:` variant reads it. */
 export function useIsNarrowTouchScreen(): boolean {
   const isNarrow = useIsBelow("sm");
-  const hasHoveringPointer = useHasHoveringPointer();
+  const hasHoveringPointer = useMediaQuery(HOVERING_POINTER);
   return isNarrow && !hasHoveringPointer;
 }
 
