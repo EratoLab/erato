@@ -331,18 +331,19 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
     render(<OutlookEratoEmailRenderer content={block} isHtml={false} />);
   };
 
-  it("says the reply waits for the decision, and offers no second way to make it", () => {
+  it("says the reply waits for the decision, which stays the one primary action", () => {
     show(proposed());
 
     expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
       "Waiting for your decision",
     );
-    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Reply All" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "secondary",
+    );
   });
 
-  it("speaks only for the draft the proposal opens", () => {
+  it("speaks only for the draft the proposal opens, and fills no button beside it", () => {
     show(
       [
         { content_type: "text", text: "```text\nAn aside\n```\n" },
@@ -354,7 +355,7 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
     expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
     expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
       "variant",
-      "primary",
+      "secondary",
     );
   });
 

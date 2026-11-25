@@ -142,8 +142,13 @@ describe("a card's own buttons in a slim pane", () => {
 
     expect(compact.length).toBeGreaterThan(0);
     for (const rule of compact) {
-      expect(mediaOf(rule), rule.selector).toContain(HOVERING);
-      expect(mediaOf(rule), rule.selector).toContain("max-width");
+      expect(mediaOf(rule), rule.selector).toMatch(
+        /^\(max-width: [\d.]+px\) and \(hover: hover\) and \(pointer: fine\)$/,
+      );
+      expect(declarations(rule)).toContain("min-height:0");
+      expect(declarations(rule)).toContain(
+        "font-size:var(--theme-font-size-xs)",
+      );
     }
   });
 });

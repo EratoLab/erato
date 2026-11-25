@@ -141,7 +141,7 @@ export function markOutlookFormOpened(
   if (messageId) openedForms.add(`${messageId}:${action}`);
 }
 
-/** Whether the card in this answer opened this action's form on the user's click. */
+/** Whether this action's form was opened for this answer in this pane session. */
 export const outlookFormOpened = (
   messageId: string | undefined,
   action: string,

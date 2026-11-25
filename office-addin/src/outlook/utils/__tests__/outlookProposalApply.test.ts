@@ -276,6 +276,19 @@ describe("the email draft", () => {
     });
   });
 
+  it("reads HTML as the card that shows the draft does", () => {
+    const html = { ...artifact, bodyFormat: "html" as const };
+    const draft = (body: string) =>
+      outlookEmailDraft([text("```erato-email\n" + body + "\n```")], html);
+
+    expect(draft("<blockquote>Quoted</blockquote>")).toMatchObject({
+      isHtml: true,
+    });
+    expect(draft("Write to <b.mueller@example.com>")).toMatchObject({
+      isHtml: false,
+    });
+  });
+
   it("does not guess between two drafts", () => {
     expect(
       outlookEmailDraft(

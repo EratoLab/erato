@@ -212,7 +212,7 @@ describe("OutlookEratoAppointmentRenderer — click semantics", () => {
     ).toBeEnabled();
   });
 
-  it("leaves the decision to the chat while it waits, and offers the button again after it", () => {
+  it("says the appointment waits for the decision and then that it was denied, keeping its own button", () => {
     const proposal = {
       content_type: "tool_use",
       tool_call_id: "call-propose",
@@ -239,8 +239,8 @@ describe("OutlookEratoAppointmentRenderer — click semantics", () => {
       "Waiting for your decision",
     );
     expect(
-      screen.queryByRole("button", { name: "Open appointment" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Open appointment" }),
+    ).toHaveAttribute("variant", "secondary");
 
     prime({
       artifact,

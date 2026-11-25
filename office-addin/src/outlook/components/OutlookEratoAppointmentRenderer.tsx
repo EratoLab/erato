@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   OutlookProposalStatus,
-  outlookProposalPending,
   useOutlookProposalState,
 } from "./OutlookProposalStatus";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
@@ -199,7 +198,7 @@ export function OutlookEratoAppointmentRenderer({
           </div>
         )}
       </dl>
-      {offeredActions.length > 0 && !outlookProposalPending(proposal) && (
+      {offeredActions.length > 0 && (
         <div className="card-actions flex flex-wrap gap-2">
           {offeredActions.map((action) => (
             <Button

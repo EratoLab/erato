@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   OutlookProposalStatus,
-  outlookProposalPending,
   useOutlookProposalState,
 } from "./OutlookProposalStatus";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
@@ -129,13 +128,20 @@ export function OutlookEratoEmailRenderer({
     EMAIL_CLIENT_ACTIONS,
     (answer) => {
       const draft = outlookEmailDraft(answer, artifact ?? undefined);
-      // Only the block the proposal opens speaks for it.
+      return "missing" in draft && draft.missing === "ambiguous";
+    },
+  );
+  // Only the block the proposal opens says where it stands.
+  const ownProposal = useOutlookProposalState(
+    artifact?.messageId,
+    EMAIL_CLIENT_ACTIONS,
+    (answer) => {
+      const draft = outlookEmailDraft(answer, artifact ?? undefined);
       return "missing" in draft
         ? draft.missing === "ambiguous"
         : draft.content.trim() !== content.trim();
     },
   );
-  const proposalPending = outlookProposalPending(proposal);
 
   const [status, setStatus] = useState<
     "idle" | "inserting" | "done" | "copied" | "error"
@@ -317,8 +323,7 @@ export function OutlookEratoEmailRenderer({
       )}
       <div className="card-actions flex flex-wrap gap-2">
         {showReadReplyActions
-          ? !proposalPending &&
-            orderedReadActions.map((action, index) => (
+          ? orderedReadActions.map((action, index) => (
               <Button
                 key={action}
                 variant={
@@ -364,9 +369,9 @@ export function OutlookEratoEmailRenderer({
               })}
         </Button>
       </div>
-      {proposal && (
+      {ownProposal && (
         <OutlookProposalStatus
-          state={proposal}
+          state={ownProposal}
           kind="reply"
           openedHere={EMAIL_CLIENT_ACTIONS.some((action) =>
             outlookFormOpened(artifact?.messageId, action),

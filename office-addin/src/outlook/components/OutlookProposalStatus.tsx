@@ -1,4 +1,5 @@
 import { t } from "@lingui/core/macro";
+import { useState } from "react";
 
 import {
   chainedProposalState,
@@ -26,11 +27,6 @@ export function useOutlookProposalState(
   );
 }
 
-/** The decision waits in the chat, so the draft offers no second way to make it. */
-export const outlookProposalPending = (
-  state: OutlookProposalState | undefined,
-): boolean => state?.kind === "waiting" || state?.kind === "applying";
-
 /** One line under the draft: where the proposed reply or appointment stands. */
 export function OutlookProposalStatus({
   state,
@@ -39,9 +35,13 @@ export function OutlookProposalStatus({
 }: {
   state: OutlookProposalState;
   kind: "reply" | "appointment";
-  /** The draft's own button opened the form, so "nothing was opened" would be untrue. */
+  /** A form for this answer was opened in this pane, so "nothing was opened" could be untrue. */
   openedHere?: boolean;
 }) {
+  const text = outlookProposalStatusText(state, kind);
+  // Announced only when it changes, so past answers stay silent; the decision card that would
+  // have said the outcome is gone once decided.
+  const [shownFirst] = useState(text);
   const nothingOpened =
     state.kind === "cancelled" ||
     (state.kind === "done" &&
@@ -49,12 +49,17 @@ export function OutlookProposalStatus({
         state.result.status === "unavailable"));
   if (openedHere && nothingOpened) return null;
   return (
-    <p
-      className="mt-1 text-xs text-theme-fg-secondary"
-      data-testid="outlook-proposal-status"
-    >
-      {outlookProposalStatusText(state, kind)}
-    </p>
+    <>
+      <p
+        className="mt-1 text-xs text-theme-fg-secondary"
+        data-testid="outlook-proposal-status"
+      >
+        {text}
+      </p>
+      <p role="status" className="sr-only">
+        {text === shownFirst ? "" : text}
+      </p>
+    </>
   );
 }
 

@@ -96,6 +96,11 @@
 .word-review--flush .word-review__row--open {
   background: none;
 }
+.word-review--flush
+  :where(.card-skin, .word-parts__changes)
+  .word-review__row--open {
+  background: var(--theme-bg-secondary);
+}
 /* Row variant="list" owns no padding or type scale; the card's inset and
    text size come from here so rows line up with the header above them. */
 .word-review__row-toggle {
