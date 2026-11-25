@@ -1682,7 +1682,7 @@ async fn a_proposed_action_asks_and_approve_carries_it_out_without_another_reque
     assert_eq!(stop["display"]["title"], "Open a reply to the email");
     let item = &stop["approvals"][0];
     assert!(
-        item["chained"]["submission_call_id"]
+        item["follows"]["proposal_call_id"]
             .as_str()
             .unwrap()
             .ends_with(":call_p")

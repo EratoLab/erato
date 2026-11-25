@@ -44,7 +44,7 @@ export function WordApprovalItemCard(props: ApprovalItemCardProps) {
   const { item, serverId } = props;
   if (
     serverId === WORD_NAMESPACE &&
-    item.chained &&
+    item.follows &&
     wordProposalActionOf(item.tool_name)
   )
     return <WordProposalApprovalCard {...props} />;
