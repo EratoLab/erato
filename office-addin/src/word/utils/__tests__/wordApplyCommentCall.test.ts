@@ -58,7 +58,7 @@ const context = {
   chatId: "chat-A",
 };
 const input = (confirmation: Record<string, unknown> | null = null) => ({
-  submission_call_id: "submit-C",
+  proposal_call_id: "submit-C",
   draft_id: "submit-C",
   confirmation,
 });

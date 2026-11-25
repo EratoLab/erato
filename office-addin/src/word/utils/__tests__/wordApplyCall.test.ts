@@ -81,7 +81,7 @@ const applyContext = (
   ...overrides,
 });
 const applyInput = (confirmation: Record<string, unknown> | null = null) => ({
-  submission_call_id: "submit-A",
+  proposal_call_id: "submit-A",
   draft_id: "submit-A",
   confirmation,
 });
