@@ -3206,6 +3206,11 @@ msgstr "Udostępniony czat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.share.aria"
+msgstr "Udostępnij link do czatu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.aria"
 msgstr "Przełącz udostępnianie czatu"
 
