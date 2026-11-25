@@ -3,11 +3,16 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  OutlookProposalStatus,
+  useOutlookProposalState,
+} from "./OutlookProposalStatus";
+import {
   ACTION_BUTTON_CLASS,
   PRIMARY_ACTION_BUTTON_CLASS,
 } from "../../core/clientActions/clientActionButtonStyles";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import {
+  APPOINTMENT_CLIENT_ACTIONS,
   offerableAppointmentClientActions,
   type OutlookAppointmentClientAction,
 } from "../utils/outlookClientActions";
@@ -18,7 +23,10 @@ import {
   appointmentAttendeesText,
   appointmentWhenText,
 } from "../utils/outlookCreateAppointment";
-import { markOutlookFormOpened } from "../utils/outlookProposalApply";
+import {
+  markOutlookFormOpened,
+  outlookAppointmentDraft,
+} from "../utils/outlookProposalApply";
 
 import type { EratoAppointmentCodeBlockProps } from "@erato/frontend/library";
 
@@ -69,6 +77,14 @@ export function OutlookEratoAppointmentRenderer({
     (offeredActions as string[]).includes(artifact.proposedClientAction)
       ? (artifact.proposedClientAction as OutlookAppointmentClientAction)
       : undefined;
+  const proposal = useOutlookProposalState(
+    artifact?.messageId,
+    APPOINTMENT_CLIENT_ACTIONS,
+    (answer) => {
+      const draft = outlookAppointmentDraft(answer);
+      return "missing" in draft && draft.missing === "ambiguous";
+    },
+  );
 
   const [status, setStatus] = useState<"idle" | "opening" | "done" | "error">(
     "idle",
@@ -194,7 +210,7 @@ export function OutlookEratoAppointmentRenderer({
               onClick={() => void handleActionClick()}
               disabled={isBusy}
               className={
-                action === proposedAction
+                action === proposedAction && !proposal
                   ? PRIMARY_ACTION_BUTTON_CLASS
                   : ACTION_BUTTON_CLASS
               }
@@ -216,6 +232,9 @@ export function OutlookEratoAppointmentRenderer({
             </button>
           ))}
         </div>
+      )}
+      {proposal && (
+        <OutlookProposalStatus state={proposal} kind="appointment" />
       )}
       {status === "error" && (
         <p role="alert" className="mt-1 text-xs text-theme-error-fg">

@@ -1371,6 +1371,66 @@ msgid "officeAddin.outlook.context.thread.spoken"
 msgstr "Email thread"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentMaybeOpen"
+msgstr "The appointment may already be open in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentNotOpened"
+msgstr "No appointment was opened."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentOpened"
+msgstr "Appointment opened in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedAppointment"
+msgstr "Denied. No appointment was opened."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedReply"
+msgstr "Denied. No reply was opened."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingAppointment"
+msgstr "Opening the appointment…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingReply"
+msgstr "Opening the reply…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.otherEmail"
+msgstr "No reply was opened: another email is open than the one this reply was written for."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyMaybeOpen"
+msgstr "The reply may already be open in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyNotOpened"
+msgstr "No reply was opened."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyOpened"
+msgstr "Reply opened in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.waiting"
+msgstr "Waiting for your decision"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {To {first}} other {To {first} +#}}"
@@ -1582,13 +1642,23 @@ msgstr "{missing} of {total} slide pictures couldn't be uploaded. The others are
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.appointmentNotSent"
-msgstr "This opens a prefilled appointment. Nothing is saved or sent until you do it in Outlook."
+msgid "officeAddin.proposal.appointmentFromDraft"
+msgstr "This opens the appointment above in Outlook. Nothing is saved or sent until you do it there."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.replyNotSent"
-msgstr "This opens a prefilled reply. Nothing is sent until you press Send in Outlook."
+#~ msgid "officeAddin.proposal.appointmentNotSent"
+#~ msgstr "This opens a prefilled appointment. Nothing is saved or sent until you do it in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyFromDraft"
+msgstr "This opens the draft above as a reply. Nothing is sent until you press Send in Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+#~ msgid "officeAddin.proposal.replyNotSent"
+#~ msgstr "This opens a prefilled reply. Nothing is sent until you press Send in Outlook."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx

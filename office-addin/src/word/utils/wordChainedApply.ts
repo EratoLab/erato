@@ -1,29 +1,13 @@
 import { t } from "@lingui/core/macro";
 
-import type { WordApplyCallResult } from "./wordApplyCall";
+import { chainedCallId } from "../../core/clientActions/chainedCall";
+
+import type { WordApplyCallResult, WordApplyStatus } from "./wordApplyCall";
+import type { ChainedCallState } from "../../core/clientActions/chainedCall";
 import type { ContentPart } from "@erato/frontend/library";
 
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** The server's apply call for an accepted submission, when the server chained one. */
-export function wordChainedApplyCallId(
-  content: readonly ContentPart[] | undefined,
-  submissionCallId: string | undefined,
-): string | undefined {
-  if (!submissionCallId) return undefined;
-  const part = (content ?? []).find(
-    (candidate) =>
-      candidate.content_type === "tool_use" &&
-      candidate.tool_call_id === submissionCallId,
-  );
-  if (part?.content_type !== "tool_use" || !object(part.output))
-    return undefined;
-  const apply = part.output.apply;
-  return object(apply) && typeof apply.call_id === "string"
-    ? apply.call_id
-    : undefined;
-}
 
 /**
  * Whether the user cancelled the server's apply call for an accepted submission or asked for a
@@ -33,7 +17,7 @@ export function wordChainedApplyDeclined(
   content: readonly ContentPart[] | undefined,
   submissionCallId: string | undefined,
 ): boolean {
-  const applyCallId = wordChainedApplyCallId(content, submissionCallId);
+  const applyCallId = chainedCallId(content, submissionCallId);
   const part = applyCallId
     ? (content ?? []).find(
         (candidate) =>
@@ -48,57 +32,7 @@ export function wordChainedApplyDeclined(
   return status === "rejected" || status === "change_requested";
 }
 
-export type WordChainedApplyState =
-  | { kind: "waiting" }
-  | { kind: "applying" }
-  | { kind: "cancelled" }
-  | { kind: "done"; result: WordApplyCallResult };
-
-/** Where the server's apply call stands, as the stored answer has it. */
-export function wordChainedApplyState(
-  content: readonly ContentPart[] | undefined,
-  applyCallId: string,
-): WordChainedApplyState {
-  const part = (content ?? []).find(
-    (candidate) =>
-      candidate.content_type === "tool_use" &&
-      candidate.tool_call_id === applyCallId,
-  );
-  if (part?.content_type !== "tool_use") return { kind: "waiting" };
-  const raw: unknown = part.output;
-  const output = object(raw) ? raw : undefined;
-  if (output?.status === "rejected") return { kind: "cancelled" };
-  const result = output?.result;
-  if (part.status === "success" && object(result))
-    return { kind: "done", result: result as unknown as WordApplyCallResult };
-  if (part.status === "error")
-    return {
-      kind: "done",
-      result:
-        output?.status === "cancelled"
-          ? cancelledResult(output.reason)
-          : { status: "failed", reason: "host_error" },
-    };
-  return { kind: "applying" };
-}
-
-// Reasons the server ends a call with before the pane could have written anything.
-const NEVER_WRITTEN = new Set([
-  "context_unavailable",
-  "withdrawn",
-  "expired",
-  "scope_changed",
-]);
-
-/** The server's own end of the call, as it reports it: a pane that did not answer in time may
- * still have written. */
-function cancelledResult(reason: unknown): WordApplyCallResult {
-  const why = typeof reason === "string" ? reason : undefined;
-  if (why === "pane_gone") return { status: "unavailable", reason: why };
-  if (why === "aborted") return { status: "failed", reason: "stopped" };
-  if (why && NEVER_WRITTEN.has(why)) return { status: "failed", reason: why };
-  return { status: "unconfirmed", reason: why };
-}
+export type WordChainedApplyState = ChainedCallState<WordApplyCallResult>;
 
 /** One line for a chained change in the answer, where the pane holds no review of it. */
 export function wordChainedApplyText(state: WordChainedApplyState): string {
@@ -123,7 +57,10 @@ export function wordChainedApplyText(state: WordChainedApplyState): string {
   }
 }
 
-function wordChainedResultText(result: WordApplyCallResult): string {
+function wordChainedResultText(result: {
+  status: WordApplyStatus;
+  reason?: string;
+}): string {
   switch (result.status) {
     case "applied":
       return t({ id: "officeAddin.word.chained.applied", message: "Applied." });

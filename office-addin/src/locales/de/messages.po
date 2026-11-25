@@ -1371,6 +1371,66 @@ msgid "officeAddin.outlook.context.thread.spoken"
 msgstr "E-Mail-Verlauf"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentMaybeOpen"
+msgstr "Der Termin ist in Outlook möglicherweise schon geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentNotOpened"
+msgstr "Es wurde kein Termin geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentOpened"
+msgstr "Termin in Outlook geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedAppointment"
+msgstr "Abgelehnt. Es wurde kein Termin geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedReply"
+msgstr "Abgelehnt. Es wurde keine Antwort geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingAppointment"
+msgstr "Der Termin wird geöffnet…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingReply"
+msgstr "Die Antwort wird geöffnet…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.otherEmail"
+msgstr "Es wurde keine Antwort geöffnet: Eine andere E-Mail ist geöffnet als die, für die diese Antwort verfasst wurde."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyMaybeOpen"
+msgstr "Die Antwort ist in Outlook möglicherweise schon geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyNotOpened"
+msgstr "Es wurde keine Antwort geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyOpened"
+msgstr "Antwort in Outlook geöffnet."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.waiting"
+msgstr "Wartet auf Ihre Entscheidung"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {An {first}} other {An {first} +#}}"
@@ -1582,13 +1642,23 @@ msgstr "{missing} von {total} Folienbildern konnten nicht hochgeladen werden. Di
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.appointmentNotSent"
-msgstr "Dies öffnet einen vorausgefüllten Termin. Nichts wird gespeichert oder gesendet, bis Sie es in Outlook tun."
+msgid "officeAddin.proposal.appointmentFromDraft"
+msgstr "Dies öffnet den Termin oben in Outlook. Nichts wird gespeichert oder gesendet, bis Sie es dort tun."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.replyNotSent"
-msgstr "Dies öffnet eine vorausgefüllte Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
+#~ msgid "officeAddin.proposal.appointmentNotSent"
+#~ msgstr "Dies öffnet einen vorausgefüllten Termin. Nichts wird gespeichert oder gesendet, bis Sie es in Outlook tun."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyFromDraft"
+msgstr "Dies öffnet den Entwurf oben als Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+#~ msgid "officeAddin.proposal.replyNotSent"
+#~ msgstr "Dies öffnet eine vorausgefüllte Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx

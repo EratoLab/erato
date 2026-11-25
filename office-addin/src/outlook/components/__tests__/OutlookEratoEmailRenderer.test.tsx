@@ -8,6 +8,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import {
+  ACTION_BUTTON_CLASS,
+  PRIMARY_ACTION_BUTTON_CLASS,
+} from "../../../core/clientActions/clientActionButtonStyles";
 import { createMockAsyncResult } from "../../../test/helpers/asyncResult";
 import { createMockMessageCompose } from "../../../test/mocks/outlook/composeMail";
 import {
@@ -107,6 +111,8 @@ function prime(options: {
   currentItemIdentity: string | null;
   /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
+  /** The stored answer's parts. */
+  content?: unknown[];
 }) {
   mockUseOutlookArtifact.mockReturnValue(options.artifact);
   mockUseOutlookMailItem.mockReturnValue({
@@ -119,6 +125,7 @@ function prime(options: {
       [options.artifact.messageId]: {
         id: options.artifact.messageId,
         role: "assistant",
+        content: options.content,
       },
     },
     messageOrder: [options.artifact.messageId],
@@ -281,6 +288,104 @@ describe("OutlookEratoEmailRenderer — the user's decisions", () => {
     );
     expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+  });
+});
+
+describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", () => {
+  const APPLY_ID = "call-propose.apply";
+  const proposed = (apply?: Record<string, unknown>) => [
+    { content_type: "text", text: "```erato-email\nDraft body\n```\n" },
+    {
+      content_type: "tool_use",
+      tool_call_id: "call-propose",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: REPLY },
+      output: {
+        apply: { call_id: APPLY_ID },
+        action: REPLY,
+        status: "proposed",
+      },
+    },
+    ...(apply
+      ? [
+          {
+            content_type: "tool_use",
+            tool_call_id: APPLY_ID,
+            tool_name: "open_reply",
+            input: {},
+            ...apply,
+          },
+        ]
+      : []),
+  ];
+  const show = (content: unknown[]) => {
+    prime({
+      artifact: makeArtifact({ proposedClientAction: REPLY }),
+      currentItemIdentity: "item-a",
+      content,
+    });
+    render(<OutlookEratoEmailRenderer content="Draft body" isHtml={false} />);
+  };
+
+  it("says the reply waits for the decision, which stays the one primary action", () => {
+    show(proposed());
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(screen.getByRole("button", { name: "Reply" }).className).toBe(
+      ACTION_BUTTON_CLASS,
+    );
+  });
+
+  it("says no reply was opened after the user denied it", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Denied. No reply was opened.",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("says the reply opened once the server's call did", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "applied" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Reply opened in Outlook.",
+    );
+  });
+
+  it("names another open email as why no reply opened", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "unavailable", reason: "other_item" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "another email is open",
+    );
+  });
+
+  it("adds no line and keeps the proposed button primary without a call of the server", () => {
+    show([{ content_type: "text", text: "```erato-email\nDraft body\n```\n" }]);
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" }).className).toBe(
+      PRIMARY_ACTION_BUTTON_CLASS,
+    );
   });
 });
 

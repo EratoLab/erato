@@ -7,6 +7,10 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  OutlookProposalStatus,
+  useOutlookProposalState,
+} from "./OutlookProposalStatus";
+import {
   ACTION_BUTTON_CLASS,
   PRIMARY_ACTION_BUTTON_CLASS,
 } from "../../core/clientActions/clientActionButtonStyles";
@@ -14,6 +18,7 @@ import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowed
 import { useComposeSelectionSnapshot } from "../hooks/composeSelectionStore";
 import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
+  EMAIL_CLIENT_ACTIONS,
   offerableEmailClientActions,
   type OutlookEmailClientAction,
   type OutlookHostArtifact,
@@ -23,7 +28,10 @@ import {
   replaceComposeSelection,
   replaceComposeSubjectText,
 } from "../utils/outlookComposeWrite";
-import { markOutlookFormOpened } from "../utils/outlookProposalApply";
+import {
+  markOutlookFormOpened,
+  outlookEmailDraft,
+} from "../utils/outlookProposalApply";
 import {
   ReplyBodyTooLargeError,
   isReplyFormHostSupported,
@@ -117,6 +125,14 @@ export function OutlookEratoEmailRenderer({
     (readActions as string[]).includes(artifact.proposedClientAction)
       ? (artifact.proposedClientAction as OutlookEmailClientAction)
       : undefined;
+  const proposal = useOutlookProposalState(
+    artifact?.messageId,
+    EMAIL_CLIENT_ACTIONS,
+    (answer) => {
+      const draft = outlookEmailDraft(answer, artifact ?? undefined);
+      return "missing" in draft && draft.missing === "ambiguous";
+    },
+  );
 
   const [status, setStatus] = useState<
     "idle" | "inserting" | "done" | "copied" | "error"
@@ -305,7 +321,9 @@ export function OutlookEratoEmailRenderer({
                 onClick={() => void handleReplyAction(action)}
                 disabled={isBusy}
                 className={
-                  index === 0 && proposedAction
+                  // A proposal the user decides in the chat keeps the decision the one
+                  // primary action.
+                  index === 0 && proposedAction && !proposal
                     ? PRIMARY_ACTION_BUTTON_CLASS
                     : ACTION_BUTTON_CLASS
                 }
@@ -350,6 +368,7 @@ export function OutlookEratoEmailRenderer({
               })}
         </button>
       </div>
+      {proposal && <OutlookProposalStatus state={proposal} kind="reply" />}
       {isSelectionChanged && !isReadMode && (
         <p className="mt-1 text-xs text-theme-fg-secondary">
           {t({
