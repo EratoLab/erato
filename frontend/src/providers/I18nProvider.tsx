@@ -7,6 +7,8 @@ import type React from "react";
 
 interface I18nProviderProps {
   children: React.ReactNode;
+  /** Shown until the catalog has loaded; it cannot use translated text. */
+  fallback?: React.ReactNode;
 }
 
 // Screen readers pick their voice from <html lang>, not from the catalog.
@@ -16,7 +18,7 @@ function syncDocumentLanguage() {
   }
 }
 
-export function I18nProvider({ children }: I18nProviderProps) {
+export function I18nProvider({ children, fallback }: I18nProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -30,9 +32,11 @@ export function I18nProvider({ children }: I18nProviderProps) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-lg text-gray-600">Loading translations...</div>
-      </div>
+      fallback ?? (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-lg text-gray-600">Loading translations...</div>
+        </div>
+      )
     );
   }
 

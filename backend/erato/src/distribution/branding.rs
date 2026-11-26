@@ -225,6 +225,94 @@ impl BrandingAssets {
         }
         None
     }
+
+    /// The `theme.json` locations the web app tries, in its order
+    /// (`getThemePaths` in `themeConfig.ts`; both sides test against
+    /// `frontend/src/config/__tests__/theme-lookup-order.json`). `None` when
+    /// `THEME_CONFIG_PATH` names the file, which may be served from anywhere.
+    pub fn web_theme_json_candidates(&self) -> Option<Vec<String>> {
+        let env = |key| {
+            self.frontend
+                .additional_environment
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+        };
+        if env("THEME_CONFIG_PATH").is_some() {
+            return None;
+        }
+        let named = self
+            .frontend
+            .theme
+            .as_deref()
+            .map(|theme| format!("/public/common/custom-theme/{theme}/theme.json"));
+        let overridden = env("THEME_PATH").map(|path| format!("{path}/theme.json"));
+        Some(
+            [named, overridden]
+                .into_iter()
+                .flatten()
+                .chain(["/public/common/custom-theme/theme.json".to_string()])
+                .collect(),
+        )
+    }
+
+    /// The page colour of the web app's theme for light and dark, so the
+    /// first HTML already shows it: from the first `theme.json` the web app
+    /// would load. A mode the theme leaves alone is missing, and the page keeps
+    /// its default for it.
+    pub fn start_page_colors(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
+        let path = self
+            .web_theme_json_candidates()?
+            .iter()
+            .find_map(|source| self.resolve_source(source, false).ok())?;
+        let theme: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+        let colors: serde_json::Map<_, _> = ["light", "dark"]
+            .into_iter()
+            .filter_map(|mode| {
+                let colors = &theme["theme"][mode]["colors"];
+                // The web app falls back the same way when `shell.page` is unset
+                // (`withLegacyColorCompatibility` in `themeUtils.ts`).
+                [&colors["shell"]["page"], &colors["background"]["secondary"]]
+                    .into_iter()
+                    .find_map(serde_json::Value::as_str)
+                    .map(|color| (mode.to_string(), color.into()))
+            })
+            .collect();
+        (!colors.is_empty()).then_some(colors)
+    }
+
+    /// Languages the selected theme ships a catalog for, so the web app asks
+    /// only for those. `None` without a theme, or when this server cannot see
+    /// the theme's folder (served by another service): the web app then asks
+    /// for every catalog as before.
+    pub fn theme_translation_locales(&self) -> Option<Vec<String>> {
+        self.frontend.theme.as_ref()?;
+        let roots: Vec<PathBuf> = self
+            .theme_roots(false)
+            .into_iter()
+            .filter(|root| root.is_dir())
+            .collect();
+        if roots.is_empty() {
+            return None;
+        }
+        let mut locales: Vec<String> = roots
+            .iter()
+            .filter_map(|root| std::fs::read_dir(root.join("locales")).ok())
+            .flatten()
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter(|locale| {
+                safe_relative_path(locale)
+                    && ["messages.po", "messages.json"].iter().any(|file| {
+                        roots.iter().any(|root| {
+                            contained_file(root, &format!("locales/{locale}/{file}")).is_some()
+                        })
+                    })
+            })
+            .collect();
+        locales.sort();
+        locales.dedup();
+        Some(locales)
+    }
 }
 
 pub(crate) fn safe_relative_path(path: &str) -> bool {
@@ -258,6 +346,114 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("web/custom-theme/acme")).unwrap();
         std::fs::create_dir_all(dir.path().join("office/assets")).unwrap();
         (dir, config)
+    }
+
+    #[test]
+    fn start_page_colors_follow_the_web_apps_theme_lookup() {
+        let (dir, mut config) = fixture();
+        let write = |path: &str, json: &str| {
+            let path = dir.path().join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, json).unwrap();
+        };
+        // Missing theme.json: no colours, the page keeps its defaults.
+        assert_eq!(
+            BrandingAssets::from_config(&config).start_page_colors(),
+            None
+        );
+
+        write(
+            "web/custom-theme/acme/theme.json",
+            r##"{"theme":{"light":{"colors":{"shell":{"page":"#fafafa"},"background":{"secondary":"#eee"}}},
+                "dark":{"colors":{"background":{"secondary":"rgb(1, 2, 3)"}}}}}"##,
+        );
+        let colors = BrandingAssets::from_config(&config)
+            .start_page_colors()
+            .unwrap();
+        assert_eq!(colors["light"], "#fafafa");
+        assert_eq!(colors["dark"], "rgb(1, 2, 3)");
+
+        // The web app loads another theme.json then; the server does not guess it.
+        config
+            .frontend
+            .additional_environment
+            .insert("THEME_CONFIG_PATH".into(), "/brand/theme.json".into());
+        assert_eq!(
+            BrandingAssets::from_config(&config).start_page_colors(),
+            None
+        );
+        config.frontend.additional_environment.clear();
+
+        // Without a selected theme, the unnamed theme beside the themes counts.
+        config.frontend.theme = None;
+        write(
+            "web/custom-theme/theme.json",
+            r##"{"theme":{"dark":{"colors":{"shell":{"page":"#000"}}}}}"##,
+        );
+        let colors = BrandingAssets::from_config(&config)
+            .start_page_colors()
+            .unwrap();
+        assert_eq!(colors.get("light"), None);
+        assert_eq!(colors["dark"], "#000");
+    }
+
+    #[test]
+    fn theme_translation_locales_list_the_catalogs_a_theme_ships() {
+        let (dir, mut config) = fixture();
+        let runtime = dir.path().join("web/custom-theme/acme/locales");
+        let built = dir
+            .path()
+            .join("web/public/common/custom-theme/acme/locales");
+        for (root, locale, file) in [
+            (&runtime, "de", Some("messages.po")),
+            (&built, "fr", Some("messages.json")),
+            (&built, "de", Some("messages.json")),
+            (&runtime, "es", None),
+        ] {
+            std::fs::create_dir_all(root.join(locale)).unwrap();
+            if let Some(file) = file {
+                std::fs::write(root.join(locale).join(file), "").unwrap();
+            }
+        }
+        assert_eq!(
+            BrandingAssets::from_config(&config).theme_translation_locales(),
+            Some(vec!["de".to_string(), "fr".to_string()])
+        );
+        config.frontend.theme = None;
+        assert_eq!(
+            BrandingAssets::from_config(&config).theme_translation_locales(),
+            None
+        );
+        // A theme folder this server cannot see may still have catalogs.
+        config.frontend.theme = Some("served-elsewhere".into());
+        assert_eq!(
+            BrandingAssets::from_config(&config).theme_translation_locales(),
+            None
+        );
+    }
+
+    #[test]
+    fn web_theme_lookup_follows_the_web_apps_order() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../../frontend/src/config/__tests__/theme-lookup-order.json"
+        ))
+        .unwrap();
+        for case in cases {
+            let (_dir, mut config) = fixture();
+            config.frontend.theme = case["theme"].as_str().map(Into::into);
+            if let Some(path) = case["themePath"].as_str() {
+                config
+                    .frontend
+                    .additional_environment
+                    .insert("THEME_PATH".into(), path.into());
+            }
+            let expected: Vec<String> = serde_json::from_value(case["paths"].clone()).unwrap();
+            assert_eq!(
+                BrandingAssets::from_config(&config).web_theme_json_candidates(),
+                Some(expected),
+                "{case}"
+            );
+        }
     }
 
     #[test]

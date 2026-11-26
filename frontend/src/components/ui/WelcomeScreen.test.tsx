@@ -11,22 +11,22 @@ import {
   WelcomeScreenUpper,
 } from "./WelcomeScreen";
 
+import type { CustomThemeConfig } from "@/utils/themeUtils";
+
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
 
-const themeState = vi.hoisted(() => ({ isCustomTheme: false }));
-const mockLoadThemeFromPath = vi.hoisted(() => vi.fn());
+const themeState: {
+  isCustomTheme: boolean;
+  customThemeConfig: Pick<CustomThemeConfig, "branding"> | null;
+} = vi.hoisted(() => ({ isCustomTheme: false, customThemeConfig: null }));
 
 vi.mock("@/components/providers/ThemeProvider", () => ({
-  useTheme: () => ({ isCustomTheme: themeState.isCustomTheme }),
+  useTheme: () => themeState,
 }));
 
 vi.mock("@/app/env", () => ({
   env: () => ({ themeCustomerName: "acme", commonPublicBasePath: "" }),
-}));
-
-vi.mock("@/utils/themeUtils", () => ({
-  loadThemeFromPath: (...args: unknown[]) => mockLoadThemeFromPath(...args),
 }));
 
 vi.mock("@/components/ui/Logo", () => ({
@@ -56,7 +56,7 @@ const renderWithI18n = (ui: React.ReactElement) =>
 describe("WelcomeScreen", () => {
   beforeEach(() => {
     themeState.isCustomTheme = false;
-    mockLoadThemeFromPath.mockReset();
+    themeState.customThemeConfig = null;
   });
 
   it("stacks the upper part before the lower part", () => {
@@ -88,15 +88,15 @@ describe("WelcomeScreen", () => {
     expect(screen.queryByTestId("welcome-logo")).toBeNull();
   });
 
-  it("shows the customer logo above the heading once branding loads", async () => {
+  it("shows the customer logo above the heading from the loaded theme", () => {
     themeState.isCustomTheme = true;
-    mockLoadThemeFromPath.mockResolvedValue({
+    themeState.customThemeConfig = {
       branding: { welcomeScreen: { enabled: true, logoSize: "small" } },
-    });
+    };
 
     renderWithI18n(<WelcomeScreenUpper />);
 
-    const logo = await screen.findByTestId("welcome-logo");
+    const logo = screen.getByTestId("welcome-logo");
     expect(logo).toHaveAttribute("width", "150");
     expect(logo).toHaveAttribute("height", "50");
     expect(logo.parentElement).toHaveClass("mb-4");
@@ -104,20 +104,16 @@ describe("WelcomeScreen", () => {
       logo.compareDocumentPosition(screen.getByRole("heading", { level: 1 })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(mockLoadThemeFromPath).toHaveBeenCalledWith(
-      "/custom-theme/acme/theme.json",
-    );
   });
 
-  it("leaves the logo out when branding is disabled", async () => {
+  it("leaves the logo out when branding is disabled", () => {
     themeState.isCustomTheme = true;
-    mockLoadThemeFromPath.mockResolvedValue({
+    themeState.customThemeConfig = {
       branding: { welcomeScreen: { enabled: false, logoSize: "large" } },
-    });
+    };
 
     renderWithI18n(<WelcomeScreenUpper />);
 
-    await vi.waitFor(() => expect(mockLoadThemeFromPath).toHaveBeenCalled());
     expect(screen.queryByTestId("welcome-logo")).toBeNull();
   });
 

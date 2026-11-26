@@ -3,7 +3,6 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import clsx from "clsx";
-import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 
 import { env } from "@/app/env";
@@ -11,16 +10,16 @@ import { useTheme } from "@/components/providers/ThemeProvider";
 import { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSection";
 import { Logo } from "@/components/ui/Logo";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
-import { loadThemeFromPath } from "@/utils/themeUtils";
+
+import type { CustomThemeConfig } from "@/utils/themeUtils";
 
 export interface WelcomeScreenProps {
   className?: string;
 }
 
-type WelcomeBranding = {
-  enabled: boolean;
-  logoSize: "small" | "medium" | "large";
-};
+type WelcomeBranding = NonNullable<
+  NonNullable<CustomThemeConfig["branding"]>["welcomeScreen"]
+>;
 
 const logoSizes: Record<
   WelcomeBranding["logoSize"],
@@ -32,29 +31,13 @@ const logoSizes: Record<
 };
 
 function useWelcomeBranding() {
-  const { isCustomTheme } = useTheme();
-  const [branding, setBranding] = useState<WelcomeBranding | null>(null);
-
-  useEffect(() => {
-    if (!isCustomTheme) return;
-
-    const customerName = env().themeCustomerName;
-    if (!customerName) return;
-
-    const loadBranding = async () => {
-      try {
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        const themePath = `${env().commonPublicBasePath}/custom-theme/${customerName}/theme.json`;
-        const themeData = await loadThemeFromPath(themePath);
-        setBranding(themeData?.branding?.welcomeScreen ?? null);
-      } catch (error) {
-        console.error("Error loading welcome screen branding:", error);
-        setBranding(null);
-      }
-    };
-
-    void loadBranding();
-  }, [isCustomTheme]);
+  // The theme the provider already loaded: a second request for the same
+  // theme.json made the logo appear last on every start.
+  const { isCustomTheme, customThemeConfig } = useTheme();
+  const branding =
+    isCustomTheme && env().themeCustomerName
+      ? (customThemeConfig?.branding?.welcomeScreen ?? null)
+      : null;
 
   // theme.json is customer-authored, so an unknown size still needs a fallback.
   const logoSize = branding?.enabled
