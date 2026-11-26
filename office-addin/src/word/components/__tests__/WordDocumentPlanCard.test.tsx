@@ -401,6 +401,8 @@ function renderRealisticCard(
   snapshot: ReturnType<typeof readySnapshot>,
   content: string,
   ordinalMap: WordDocumentCapture["ordinalMap"] = new Map(),
+  /** The card in the answer instead of the one in the decision place. */
+  answer = false,
 ) {
   const messageId = String(mock.artifact.messageId);
   const capture: WordDocumentCapture = {
@@ -418,10 +420,17 @@ function renderRealisticCard(
       capturesByAssistantMessageId={captures}
       restoreRequest={mock.restoreRequest}
     >
-      <DecidedCard content={content} />
+      {answer ? (
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={content}
+        />
+      ) : (
+        <DecidedCard content={content} />
+      )}
     </WordWriteProvider>
   );
-  const view = render(card(), { wrapper: TestTheme });
+  const view = render(card(), { wrapper: answer ? Conversation : TestTheme });
   return { ...view, refresh: () => view.rerender(card()) };
 }
 beforeEach(() => {
@@ -781,23 +790,6 @@ describe("structural document review", () => {
     expect(
       screen.getByRole("button", { name: "Download original body" }),
     ).toBeInTheDocument();
-  });
-  it("shows in the answer which stage the server's call is at, offering no Apply there", async () => {
-    const state = setup();
-    state.answer();
-    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
-    const release = holdWord();
-    onTestFinished(release);
-    let applied!: Promise<void>;
-    act(() => {
-      applied = serverApply(JSON.stringify(state.plan), {});
-    });
-    expect(await screen.findByText("Saving backup…")).toBeVisible();
-    release();
-    await act(() => applied);
-    await screen.findByText(APPLIED);
-    expect(state.insert).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
   it("releases the busy Apply button after a failed write", async () => {
     const state = setup();
@@ -1455,6 +1447,8 @@ async function mountRealistic(
     platform?: "Mac";
     /** Number the blocks by the live paragraphs, as a capture of a live document does. */
     paragraphOrdinals?: boolean;
+    /** The card in the answer, where the server makes no apply call. */
+    answer?: boolean;
   } = {},
 ) {
   const {
@@ -1464,6 +1458,7 @@ async function mountRealistic(
     pendingUpdates = false,
     platform,
     paragraphOrdinals = false,
+    answer = false,
     ...host
   } = options;
   const word = installWordOoxmlHost(xml, {
@@ -1524,6 +1519,7 @@ async function mountRealistic(
     snapshot,
     JSON.stringify(makePlan(snapshot)),
     ordinalMap,
+    answer,
   );
   return { word, snapshot, coauthoringRead, refresh };
 }
@@ -2921,6 +2917,217 @@ describe("whole-document imports of documents with comments", () => {
   });
 });
 
+describe("a change no server call applies", () => {
+  it("offers Apply in the answer and writes once on the user's click", async () => {
+    const state = setup();
+    state.answer();
+    expect(
+      screen.getByRole("heading", { name: "Change 5 items" }),
+    ).toBeVisible();
+    expect(screen.queryByTestId("word-chained-status")).toBeNull();
+    expect(state.insert).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(mock.decided).toEqual([]);
+  });
+
+  it("keeps Apply busy with the current stage and locks every other card while it writes", async () => {
+    const state = setup();
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={
+          new Map([[String(mock.artifact.messageId), state.capture]])
+        }
+      >
+        {[0, 2].map((indent) => (
+          <WordHostCardRenderer
+            key={indent}
+            language="erato-word-document-plan"
+            content={JSON.stringify(state.plan, null, indent)}
+          />
+        ))}
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    const release = holdWord();
+    onTestFinished(release);
+    const [first, second] = screen.getAllByRole("button", {
+      name: "Apply changes",
+    });
+    fireEvent.click(first);
+    const busy = await screen.findByRole("button", { name: "Saving backup…" });
+    expect(busy).toBe(first);
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(second).toBeDisabled();
+    fireEvent.click(busy);
+    fireEvent.click(second);
+    release();
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no Apply once the copy it was checked against is no longer the newest", async () => {
+    const { snapshot, refresh } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { answer: true },
+    );
+    await act(async () => {});
+    expect(applyButton()).toBeEnabled();
+    snapshot.revoked = true;
+    refresh();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+  });
+
+  it("offers no Apply for a change the host's policy refuses", async () => {
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      answer: true,
+    });
+    await act(async () => {});
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("replaces the whole document only with its box ticked, and has nothing to cancel", async () => {
+    setWordWebImport("confirm");
+    onTestFinished(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      answer: true,
+    });
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(applyButton());
+    expect(execute).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0][0]).toMatchObject({ importConfirmed: true });
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(mock.decided).toEqual([]);
+  });
+
+  it("shows a co-author who joined since the card was read before replacing anything", async () => {
+    const { word } = await mountRealistic(sectionsPlan, {
+      coauthors: 1,
+      answer: true,
+    });
+    await act(async () => {});
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    (
+      word.document as unknown as {
+        coauthoring: { authors: { items: { id: string }[] } };
+      }
+    ).coauthoring.authors.items.push({ id: "author-joined" });
+    apply();
+    expect(await screen.findByTestId("word-plan-coauthors")).toBeVisible();
+    expect(word.insert).not.toHaveBeenCalled();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  describe("with comment threads the plan deletes", () => {
+    afterEach(() => {
+      vi.mocked(readWordCommentStates).mockImplementation(
+        ooxmlHostCommentStates,
+      );
+    });
+    const xml = () =>
+      withComments(packageXml(chapterCommentsBody()), CHAPTER_COMMENTS);
+    /** Replaces the blocks `from`..`to`; chapter 3's four paragraphs hold two comment threads. */
+    const replaceBlocks =
+      (from: number, to: number) =>
+      (s: WordAuthoringSnapshot): WordDocumentPlan => {
+        const refs = s.blocks.map((b) => b.ref);
+        return {
+          version: 1,
+          snapshot: s.token,
+          readToken: "read-proof",
+          scope: "document",
+          entries: [
+            { kind: "keep", source: refs.slice(0, from) },
+            {
+              kind: "replace",
+              source: refs.slice(from, to),
+              blocks: [{ id: "short", type: "paragraph", text: "In short." }],
+            },
+            ...(to < refs.length
+              ? [{ kind: "keep" as const, source: refs.slice(to) }]
+              : []),
+          ],
+          deleted: [],
+        };
+      };
+
+    it("applies only with their box ticked", async () => {
+      const execute = spyOnApply();
+      const { word } = await mountRealistic(replaceBlocks(5, 9), {
+        xml: xml(),
+        answer: true,
+      });
+      const tickBox = screen.getByRole("checkbox", {
+        name: "Also delete 2 comment threads",
+      });
+      expect(tickBox).not.toBeChecked();
+      expect(applyButton()).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+      fireEvent.click(applyButton());
+      expect(execute).not.toHaveBeenCalled();
+
+      fireEvent.click(tickBox);
+      apply();
+      await screen.findByText(/^Applied: /);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(word.insert).toHaveBeenCalledOnce();
+    });
+
+    it("says why nothing ran when Apply asks for a tick the card could not show", async () => {
+      spyOnApply().mockResolvedValue({
+        ok: false,
+        outcomes: [],
+        snapshotOoxml: null,
+        documentPlanResult: {
+          status: "blocked",
+          diagnostic: {
+            stage: "validate",
+            reason: "comment-removals-need-confirmation",
+            details: { commentThreads: 1 },
+          },
+        },
+      });
+      await mountRealistic(replaceBlocks(10, 11), { xml: xml(), answer: true });
+      apply();
+      expect(
+        await screen.findByText(
+          "This change deletes comment threads, which needs your confirmation first. Nothing was applied.",
+        ),
+      ).toBeVisible();
+      expect(applyButton()).toBeEnabled();
+    });
+  });
+});
+
 describe("a change the server applies", () => {
   const chainedTurn = (
     plan: WordDocumentPlan,
@@ -2971,6 +3178,25 @@ describe("a change the server applies", () => {
     expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
       "Waiting for your decision",
     );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+  });
+
+  it("shows in the answer which stage the server's call is at, offering no Apply there", async () => {
+    const state = setup();
+    chainedTurn(state.plan);
+    state.answer();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    const release = holdWord();
+    onTestFinished(release);
+    let applied!: Promise<void>;
+    act(() => {
+      applied = serverApply(JSON.stringify(state.plan), {});
+    });
+    expect(await screen.findByText("Saving backup…")).toBeVisible();
+    release();
+    await act(() => applied);
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
 
