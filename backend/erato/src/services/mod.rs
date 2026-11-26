@@ -4,6 +4,7 @@ pub mod approval_scope;
 pub mod approval_voice_commands;
 pub(crate) mod audio_transcription;
 pub mod background_tasks;
+pub(crate) mod budget;
 pub mod chained_apply;
 pub mod chat_history_compaction;
 pub mod client_actions;

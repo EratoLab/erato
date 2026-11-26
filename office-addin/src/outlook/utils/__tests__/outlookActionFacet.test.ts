@@ -5,6 +5,7 @@ import {
   outlookDraftFingerprint,
   previewOutlookSend,
   resolveOutlookActionFacet,
+  withOutlookItemIdentity,
   type OutlookActionFacetInput,
   type OutlookSendPreviewInput,
 } from "../outlookActionFacet";
@@ -970,5 +971,27 @@ describe("previewOutlookSend", () => {
         outlookAppointmentFingerprint(snapshot),
       );
     });
+  });
+});
+
+describe("withOutlookItemIdentity", () => {
+  const facet = {
+    id: "outlook_reply_from_read",
+    args: { body_format: "html" },
+  };
+  const advertised = new Map([
+    ["outlook_reply_from_read", new Set(["body_format", "item_identity"])],
+  ]);
+
+  it("adds the open item where the facet takes it", () => {
+    expect(withOutlookItemIdentity(facet, "item-A", advertised)).toEqual({
+      id: "outlook_reply_from_read",
+      args: { body_format: "html", item_identity: "item-A" },
+    });
+  });
+
+  it("leaves a facet that does not take it, or no item, alone", () => {
+    expect(withOutlookItemIdentity(facet, "item-A", new Map())).toBe(facet);
+    expect(withOutlookItemIdentity(facet, null, advertised)).toBe(facet);
   });
 });

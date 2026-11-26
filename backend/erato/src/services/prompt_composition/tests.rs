@@ -2766,6 +2766,7 @@ mod test_cases {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: Default::default(),
+                draft_block_actions: Default::default(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             },
@@ -3041,6 +3042,7 @@ mod test_cases {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: Default::default(),
+                draft_block_actions: Default::default(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             },
@@ -3690,6 +3692,7 @@ mod test_cases {
                 output: Some(output),
                 result_details: None,
                 allowed_by: None,
+                budget_usage: None,
                 started_at: None,
                 ended_at: None,
             })

@@ -138,7 +138,7 @@ async fn compact_checkpoint_is_idempotent_and_next_provider_request_uses_only_re
         "compaction-provider"
     );
     assert_eq!(
-        row.generation_metadata.as_ref().unwrap()["used_total_tokens"],
+        row.generation_metadata.as_ref().unwrap()["budget_usage"]["compaction-provider"]["total_tokens"],
         120
     );
     let snapshot = row.generation_input_messages.unwrap().to_string();

@@ -1132,6 +1132,31 @@ body {
   .progress-geometry[data-size="sm"] {
     block-size: 0.25rem;
   }
+
+  /* The page beside the sidebar and the scrim that dims it. On a narrow
+     screen the open sidebar pushes both aside by its own width, and the part
+     of the page still in view becomes a card; [data-sidebar-moving] keeps
+     that shape while they follow a finger or slide back. */
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-page-geometry[data-sidebar-moving] {
+    overflow: clip;
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  }
+
+  /* The pushed page reaches past the screen's right edge. Clipped there, it
+     gives a scrollIntoView inside it nothing to scroll sideways. */
+  :has(
+    > .sidebar-page-geometry[data-sidebar-pushed],
+    > .sidebar-page-geometry[data-sidebar-moving]
+  ) {
+    overflow-x: clip;
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushed] {
+    transform: translateX(
+      var(--sidebar-width-override, var(--theme-layout-sidebar-width))
+    );
+  }
 }
 
 .theme-transition {
@@ -2030,6 +2055,17 @@ body:has(.app-viewport) {
 
 :root[data-text-size="x-large"] {
   font-size: 125%;
+}
+
+/* Inside an app the device's text size setting decides (ThemeProvider). */
+:root[data-text-size="system"] {
+  font-size: calc(100% * var(--system-text-scale, 1));
+}
+
+/* A smaller device text size would take the composer's field below 16px,
+   where iOS zooms the page into a field that gets focus. */
+:root[data-text-size="system"] [data-ui="chat-input-shell"] textarea {
+  font-size: max(16px, 1rem);
 }
 
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).

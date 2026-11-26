@@ -1,9 +1,11 @@
 import {
   UploadUnknownError,
+  addUnsetClientToolDecisions,
   holdComposeReload,
   useConversationDropzone,
   useFileUploadStore,
   usePersistedState,
+  useApprovalTools,
   useUploadFeature,
   type FileUploadItem,
   type HostArtifact,
@@ -26,6 +28,8 @@ import { AddinSettingsDialog } from "./components/AddinSettingsDialog";
 import { dismissSessionToasts } from "./components/sessionAskToast";
 import { useDropPipeline } from "./hooks/useDropPipeline";
 import { useEmailDedupSet } from "./hooks/useEmailDedupSet";
+import { useOutlookMailListDrag } from "./hooks/useOutlookMailListDrag";
+import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
 import { holdSessionPolicy, releaseSessionPolicy } from "./sessionPolicy";
 import {
   AddinChatCore,
@@ -35,10 +39,10 @@ import {
 } from "../core/AddinChatCore";
 import { useOfficeDragAndDrop } from "../hooks/useOfficeDragAndDrop";
 import { useOutlookClientTools } from "./hooks/useOutlookClientTools";
-import { useOutlookMailListDrag } from "./hooks/useOutlookMailListDrag";
-import { useOutlookMessageFetcher } from "./hooks/useOutlookMessageFetcher";
+import { useOutlookProposalTools } from "./hooks/useOutlookProposalTools";
 import { useOutlookEmailSource } from "./providers/OutlookEmailSourceProvider";
 import { useOutlookMailItem } from "./providers/OutlookMailItemProvider";
+import { outlookClientActionDecisionStore } from "./utils/clientActionPolicy";
 import { resolveEditExchangeItemIdentity } from "./utils/exchangeItemIdentity";
 import {
   OUTLOOK_GRAPH_MESSAGE_TIMEOUT_MS,
@@ -51,6 +55,11 @@ import {
   parseDroppedFiles,
 } from "./utils/parseDroppedFiles";
 import { parseEmlBytes } from "./utils/parsedEmail";
+import { carryOverClientDecisions } from "../core/clientActions/carryOverDecisions";
+import {
+  carryOverMappingsFor,
+  isLatestAssistantMessage,
+} from "../core/clientActions/proposalApply";
 import { useOffice } from "../providers/OfficeProvider";
 import { resolveMailListRowFetcher } from "./utils/resolveMailListRowFetcher";
 import { FreshCompletionTracker } from "../core/clientActions/freshCompletionTracker";
@@ -139,7 +148,8 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
 
   const { fetcher: messageFetcher, ownMailboxFetcher } =
     useOutlookMessageFetcher();
-  const { mailItem, hasItemChangedFired, sharedContext } = useOutlookMailItem();
+  const { mailItem, hasItemChangedFired, sharedContext, itemIdentity } =
+    useOutlookMailItem();
   // Addresses the selected item's store is known under; empty for the user's
   // own mailbox. Dragged rows are matched against these, never the profile
   // address, which flips to the shared mailbox in some OWA modes.
@@ -544,6 +554,25 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
   };
 
   const clientActionsByFacetId = useActionFacetClientActions();
+  const approvalTools = useApprovalTools();
+  const outlookMappings = useMemo(
+    () => carryOverMappingsFor(approvalTools, "outlook"),
+    [approvalTools],
+  );
+  // Once the server decides an action, the pane's own Ask, Always and Never for it move there once.
+  useEffect(() => {
+    if (outlookMappings.length === 0) return;
+    void carryOverClientDecisions({
+      host: "outlook",
+      storageKey: outlookClientActionDecisionStore.storageKey,
+      mappings: outlookMappings,
+      offered: new Set(outlookMappings.map((mapping) => mapping.serverKey)),
+      sessionOnly: (facetId, action) =>
+        clientActionsByFacetId.get(facetId)?.grantScope[action] ===
+        "session_document",
+      save: addUnsetClientToolDecisions,
+    });
+  }, [outlookMappings, clientActionsByFacetId]);
   const stampsRef = useRef(new Map<string, HostArtifactStamp<PaneMessage>>());
   const messagesWithArtifact = useMemo(() => {
     const stamps = new Map<string, HostArtifactStamp<PaneMessage>>();
@@ -594,6 +623,44 @@ function OutlookAddinChatHost({ controller }: AddinChatHostProps) {
     controller.messages,
     freshMessageIds,
   ]);
+
+  // The server's calls for proposed actions read the answer and the open item from here.
+  const proposalStateRef = useRef({
+    messages: messagesWithArtifact,
+    messageOrder: controller.messageOrder,
+    itemIdentity,
+  });
+  proposalStateRef.current = {
+    messages: messagesWithArtifact,
+    messageOrder: controller.messageOrder,
+    itemIdentity,
+  };
+  useOutlookProposalTools(() => {
+    const state = proposalStateRef.current;
+    return {
+      itemIdentity: () => proposalStateRef.current.itemIdentity,
+      message: (messageId) => {
+        const message = state.messages[messageId];
+        if (!message || message.role !== "assistant") return undefined;
+        const latest = isLatestAssistantMessage(
+          state.messages,
+          state.messageOrder,
+          messageId,
+        );
+        return {
+          content: message.content,
+          artifact: message.hostArtifact,
+          // The answer is still running: the request's send-time item is the one still pending.
+          sendItemIdentity:
+            freshItemIdentityRef.current.get(messageId) ??
+            (latest
+              ? (pendingSendItemIdentityRef.current ?? undefined)
+              : undefined),
+          latest,
+        };
+      },
+    };
+  });
 
   return (
     <AddinChatCoreView

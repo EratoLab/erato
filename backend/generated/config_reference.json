@@ -95,6 +95,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "action_facets.facets.<facet-id>.draft_block_actions.<key>": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "action_facets.facets.<facet-id>.grant_scope.<key>": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
@@ -496,6 +502,12 @@
     "introduced_in": "0.6.2",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
+  },
+  "assistant_hub.validate_version_semver_format": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "stable"
   },
   "assistants.context_file_contributor_threshold": {
     "default_value_security": "unreviewed",
@@ -1199,9 +1211,27 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "budget.frontend_tab.enabled": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "budget.max_budget": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "budget.model_rates.<model-identifier>.cost_input_tokens_per_1m": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "budget.model_rates.<model-identifier>.cost_output_tokens_per_1m": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

@@ -1376,6 +1376,11 @@ msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {Do: {first}} other {Do: {first} +#}}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.outlook.settings.serverActions"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Dopóki nie zostanie przypięty, ten dodatek pozostaje przy wiadomości, z której go otwarto. Wybierz ikonę pinezki, aby był zsynchronizowany podczas czytania."
@@ -1574,6 +1579,21 @@ msgstr "{total, plural, one {Nie udało się przesłać obrazu slajdu, więc nie
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
 msgstr "Nie udało się przesłać {missing} z {total} obrazów slajdów. Pozostałe są dołączone."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.appointmentNotSent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyNotSent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyTo"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
@@ -3909,6 +3929,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordApprovalItemCard.tsx
+#: src/word/components/WordProposalApprovalCard.tsx
 msgid "officeAddin.word.chained.consent"
 msgstr ""
 
@@ -5307,6 +5328,11 @@ msgstr "Każda zmiana komentarzy, także nowe komentarze:"
 #: src/word/components/WordDecisionChoices.tsx
 msgid "officeAddin.word.decision.standing.plan"
 msgstr "Każda zmiana w dokumencie:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordProposalApprovalCard.tsx
+msgid "officeAddin.word.decision.standing.proposal"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx

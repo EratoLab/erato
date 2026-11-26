@@ -75,6 +75,43 @@ describe("useWordDocumentCaptures", () => {
     );
   });
 
+  it("gives a call made while the answer streams the copy staged at Send", () => {
+    const { result, rerender } = renderHook(
+      (snapshot: Snapshot) => useWordDocumentCaptures(controllerFor(snapshot)),
+      { initialProps: empty },
+    );
+
+    act(() => result.current.stagePendingCapture(capture("doc-a")));
+    rerender(streaming);
+    expect(result.current.captureFor("a1")).toEqual(capture("doc-a"));
+    expect(result.current.captureFor("u1")).toBeUndefined();
+
+    rerender(complete);
+    expect(result.current.captureFor("a1")).toEqual(capture("doc-a"));
+  });
+
+  it("gives an earlier or finished answer no copy it was not bound to", () => {
+    const { result, rerender } = renderHook(
+      (snapshot: Snapshot) => useWordDocumentCaptures(controllerFor(snapshot)),
+      { initialProps: complete },
+    );
+
+    act(() => result.current.stagePendingCapture(capture("doc-b")));
+    expect(result.current.captureFor("a1")).toBeUndefined();
+
+    rerender({
+      currentChatId: "chat-1",
+      messages: {
+        ...complete.messages,
+        u2: message("user", "complete"),
+        a2: message("assistant", "sending", "u2"),
+      },
+      messageOrder: ["u1", "a1", "u2", "a2"],
+    });
+    expect(result.current.captureFor("a1")).toBeUndefined();
+    expect(result.current.captureFor("a2")).toEqual(capture("doc-b"));
+  });
+
   it("promotes nothing when no capture was staged", () => {
     const { result, rerender } = renderHook(
       (snapshot: Snapshot) => useWordDocumentCaptures(controllerFor(snapshot)),

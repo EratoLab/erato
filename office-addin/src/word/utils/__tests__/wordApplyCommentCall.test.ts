@@ -50,6 +50,9 @@ const bridge: WordWriteBridge = {
   setRevertSlot: vi.fn(),
   invalidateLocations: vi.fn(),
   messageContext: () => ({}),
+  captureFor: () => undefined,
+  reviewFor: () => undefined,
+  locationGeneration: () => 0,
 };
 
 const context = {

@@ -150,3 +150,36 @@ export async function openNewAppointmentForm(
     throw new AppointmentFormError(error);
   }
 }
+
+const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  weekday: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
+/**
+ * The appointment's time range for the summary and the confirmation card,
+ * rendered in the runtime's local zone — which is the zone the facet template
+ * instructed the model to emit (`{{timezone}}` is captured from the same
+ * runtime at send time).
+ */
+export function appointmentWhenText(details: AppointmentDetails): string {
+  const start = new Date(details.start);
+  const end = new Date(details.end);
+  const startText = start.toLocaleString(undefined, DATE_TIME_FORMAT);
+  const sameDay = start.toDateString() === end.toDateString();
+  const endText = sameDay
+    ? end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    : end.toLocaleString(undefined, DATE_TIME_FORMAT);
+  return `${startText} – ${endText}`;
+}
+
+/** Combined required + optional attendees as a comma-separated string. */
+export function appointmentAttendeesText(details: AppointmentDetails): string {
+  return [...details.attendees, ...(details.optionalAttendees ?? [])].join(
+    ", ",
+  );
+}

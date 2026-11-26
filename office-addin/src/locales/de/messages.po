@@ -1376,6 +1376,11 @@ msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {An {first}} other {An {first} +#}}"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/AddinSettingsDialog.tsx
+msgid "officeAddin.outlook.settings.serverActions"
+msgstr "Aktionen"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinPinHintBanner.tsx
 msgid "officeAddin.pinHint.description"
 msgstr "Solange es nicht angeheftet ist, bleibt dieses Add-in bei der E-Mail, aus der du es geöffnet hast. Hefte es über das Stecknadelsymbol an, damit es beim Lesen synchron bleibt."
@@ -1574,6 +1579,21 @@ msgstr "{total, plural, one {Das Folienbild konnte nicht hochgeladen werden und 
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
 msgstr "{missing} von {total} Folienbildern konnten nicht hochgeladen werden. Die anderen sind angehängt."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.appointmentNotSent"
+msgstr "Dies öffnet einen vorausgefüllten Termin. Nichts wird gespeichert oder gesendet, bis Sie es in Outlook tun."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyNotSent"
+msgstr "Dies öffnet eine vorausgefüllte Antwort. Nichts wird gesendet, bis Sie in Outlook auf Senden klicken."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyTo"
+msgstr "An:"
 
 #. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
@@ -3909,6 +3929,7 @@ msgstr "Abgebrochen. Es wurde nichts geändert."
 
 #. js-lingui-explicit-id
 #: src/word/components/WordApprovalItemCard.tsx
+#: src/word/components/WordProposalApprovalCard.tsx
 msgid "officeAddin.word.chained.consent"
 msgstr "Diese Änderung anwenden?"
 
@@ -5307,6 +5328,11 @@ msgstr "Jede Kommentaränderung, auch neue Kommentare:"
 #: src/word/components/WordDecisionChoices.tsx
 msgid "officeAddin.word.decision.standing.plan"
 msgstr "Jede Änderung am Dokument:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordProposalApprovalCard.tsx
+msgid "officeAddin.word.decision.standing.proposal"
+msgstr "Jedes Mal, wenn Erato das vorschlägt:"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx

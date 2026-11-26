@@ -21,6 +21,11 @@ declare global {
 /** The shape this page reads; a host raises it only when the shape changes. */
 const CONTRACT = 1;
 
+/** Whether a native app shows this page through the shell contract. */
+export function inHostShell(): boolean {
+  return typeof window !== "undefined" && isHostShell(window.ERATO_SHELL);
+}
+
 /** The shell, when it offers `capability` at `minVersion` or later. */
 export function hostShellWithCapability(
   capability: string,

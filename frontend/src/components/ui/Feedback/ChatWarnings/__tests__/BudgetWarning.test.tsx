@@ -19,6 +19,7 @@ const approaching: BudgetStatusResponse = {
   warn_threshold: 0.7,
   budget_limit: 1000,
   budget_currency: "USD",
+  user_settings: null,
 };
 const limitReached = { ...approaching, current_spending: 1000 };
 const belowThreshold = { ...approaching, current_spending: 500 };
@@ -84,16 +85,16 @@ describe("BudgetWarning", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("shows the current percentage, amounts and period in the warning", () => {
+  it("shows the current percentage, amounts and rolling window in the warning", () => {
     render(banner());
     const alert = screen.getByRole("alert");
     expect(alert).toHaveClass("custom-class-name");
     expect(alert).toHaveTextContent("Approaching Budget Limit");
     expect(alert).toHaveTextContent(/75%.*\$750\.00 of \$1,000\.00/);
-    expect(alert).toHaveTextContent(/30-day budget period/);
+    expect(alert).toHaveTextContent(/spending over the last 30 days/);
   });
 
-  it("formats the configured currency and omits an unspecified period", () => {
+  it("formats the configured currency and omits an unspecified window", () => {
     mockBudget({
       ...approaching,
       budget_currency: "EUR",
@@ -102,7 +103,7 @@ describe("BudgetWarning", () => {
     render(banner());
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/€750\.00 of €1,000\.00/);
-    expect(alert).not.toHaveTextContent(/budget period/);
+    expect(alert).not.toHaveTextContent(/spending over the last/);
   });
 
   it.each([
@@ -185,6 +186,21 @@ describe("BudgetWarning", () => {
     mockBudget(approaching);
     rerender(banner(userId));
 
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("offers retry for a stale warning while keeping a dismissed warning hidden", () => {
+    const refetch = vi.fn();
+    const { rerender } = render(banner());
+    mockBudget(approaching, { isSuccess: false, isError: true, refetch });
+    rerender(banner());
+
+    const alert = within(screen.getByRole("alert"));
+    expect(alert.getByText(/figures may be out of date/)).toBeVisible();
+    fireEvent.click(alert.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalledOnce();
+
+    dismiss();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

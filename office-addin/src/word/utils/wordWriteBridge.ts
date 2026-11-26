@@ -1,6 +1,7 @@
 import type { WordReviewState } from "./wordReviewState";
 import type { WordRevertSlot } from "../providers/WordWriteProvider";
 import type { ContentPart } from "@erato/frontend/library";
+import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 /** What the pane knows about an assistant message of the open chat, read from its stored turn. */
 export interface WordMessageContext {
@@ -14,6 +15,8 @@ export interface WordMessageContext {
   fileIds?: string[];
   /** The message's parts as the pane has them now. */
   content?: readonly ContentPart[];
+  /** The message is the chat's latest answer. */
+  latest?: boolean;
 }
 
 /**
@@ -30,6 +33,12 @@ export interface WordWriteBridge {
   setRevertSlot: (slot: WordRevertSlot | null) => void;
   invalidateLocations: () => void;
   messageContext: (messageId: string) => WordMessageContext;
+  /** The copy of the document taken when the request of this answer was sent. */
+  captureFor: (messageId: string) => WordDocumentCapture | undefined;
+  /** Where a card's review stands. */
+  reviewFor: (key: string) => WordReviewState | undefined;
+  /** The generation a card's result anchors must carry to be shown in the document. */
+  locationGeneration: () => number;
 }
 
 let current: WordWriteBridge | null = null;

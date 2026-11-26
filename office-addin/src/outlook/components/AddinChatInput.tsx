@@ -65,6 +65,7 @@ import {
   outlookAppointmentFingerprint,
   previewOutlookSend,
   resolveOutlookActionFacet,
+  withOutlookItemIdentity,
   type OutlookSentDraft,
 } from "../utils/outlookActionFacet";
 import { OUTLOOK_REPLY_FROM_READ_FACET_ID } from "../utils/outlookClientActions";
@@ -1142,7 +1143,7 @@ export const AddinChatInput = forwardRef<
       const draftContextFingerprint = appointmentSnapshot
         ? outlookAppointmentFingerprint(appointmentSnapshot)
         : undefined;
-      const { facet: actionFacet, sentDraftFingerprint } =
+      const { facet: resolvedFacet, sentDraftFingerprint } =
         resolveOutlookActionFacet({
           itemKind: mailItem?.itemKind ?? null,
           hasActiveSelection,
@@ -1198,6 +1199,11 @@ export const AddinChatInput = forwardRef<
           nowIso: toLocalOffsetIso(new Date().toISOString()),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         });
+      const actionFacet = withOutlookItemIdentity(
+        resolvedFacet,
+        itemIdentity,
+        availableFacetArgs,
+      );
       // Rolled back on a declined send: the marker means "already sent".
       const previousSentDraft = lastSentDraftRef.current;
       if (sentDraftFingerprint !== null) {

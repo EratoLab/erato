@@ -99,12 +99,15 @@ const WordWriteContext = createContext<WordWriteContextValue>({
 export function WordWriteProvider({
   documentIdentity,
   capturesByAssistantMessageId,
+  captureFor,
   restoreRequest = () => {},
   messageContext = NO_MESSAGE_CONTEXT,
   children,
 }: {
   documentIdentity: string | null;
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
+  /** The copy a server call writes with; without it, only the bound copies. */
+  captureFor?: (messageId: string) => WordDocumentCapture | undefined;
   restoreRequest?: (message: string) => void;
   /** The stored turn of an assistant message, for a change applied after the pane reloaded. */
   messageContext?: (messageId: string) => WordMessageContext;
@@ -179,6 +182,14 @@ export function WordWriteProvider({
   identityRef.current = documentIdentity;
   const messageContextRef = useRef(messageContext);
   messageContextRef.current = messageContext;
+  const capturesRef = useRef(capturesByAssistantMessageId);
+  capturesRef.current = capturesByAssistantMessageId;
+  const captureForRef = useRef(captureFor);
+  captureForRef.current = captureFor;
+  const reviewsRef = useRef(reviews);
+  reviewsRef.current = reviews;
+  const locationGenerationRef = useRef(locationGeneration);
+  locationGenerationRef.current = locationGeneration;
   useEffect(() => {
     setWordWriteBridge({
       documentIdentity: () => identityRef.current,
@@ -189,6 +200,12 @@ export function WordWriteProvider({
       setRevertSlot,
       invalidateLocations,
       messageContext: (messageId) => messageContextRef.current(messageId),
+      captureFor: (messageId) =>
+        captureForRef.current
+          ? captureForRef.current(messageId)
+          : capturesRef.current.get(messageId),
+      reviewFor: (key) => reviewsRef.current.get(key),
+      locationGeneration: () => locationGenerationRef.current,
     });
     return () => setWordWriteBridge(null);
   }, [

@@ -4,6 +4,7 @@ import {
 } from "@erato/frontend/library";
 
 import { AddinChatAddMenuExtraContent } from "./components/AddinChatAddMenuExtraContent";
+import { OutlookApprovalItemCard } from "./components/OutlookApprovalItemCard";
 import { OutlookEratoAppointmentRenderer } from "./components/OutlookEratoAppointmentRenderer";
 import { OutlookEratoEmailRenderer } from "./components/OutlookEratoEmailRenderer";
 import { outlookSentWithDescriptors } from "./utils/outlookSentWith";
@@ -13,5 +14,6 @@ export function installOutlookComponentRegistrations() {
   componentRegistry.ChatAddMenuExtraContent = AddinChatAddMenuExtraContent;
   componentRegistry.EratoEmailCodeBlock = OutlookEratoEmailRenderer;
   componentRegistry.EratoAppointmentCodeBlock = OutlookEratoAppointmentRenderer;
+  componentRegistry.ApprovalItemCard = OutlookApprovalItemCard;
   registerSentWithDescriptors(outlookSentWithDescriptors);
 }

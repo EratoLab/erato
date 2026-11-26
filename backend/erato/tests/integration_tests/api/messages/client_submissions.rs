@@ -1139,10 +1139,15 @@ async fn run_scenario(
             .filter(|body| body.contains("\"tools\""))
             .count();
         let metadata = saved.generation_metadata.as_ref().unwrap();
-        assert_eq!(metadata["used_prompt_tokens"], json!(11 * requests));
-        assert_eq!(metadata["used_completion_tokens"], json!(7 * requests));
-        assert_eq!(metadata["used_total_tokens"], json!(18 * requests));
-        assert_eq!(metadata["used_reasoning_tokens"], json!(3 * requests));
+        let provider_id =
+            saved.generation_parameters.as_ref().unwrap()["generation_chat_provider_id"]
+                .as_str()
+                .unwrap();
+        let usage = &metadata["budget_usage"][provider_id];
+        assert_eq!(usage["prompt_tokens"], json!(11 * requests));
+        assert_eq!(usage["completion_tokens"], json!(7 * requests));
+        assert_eq!(usage["total_tokens"], json!(18 * requests));
+        assert_eq!(usage["reasoning_tokens"], json!(3 * requests));
         assert!(!metadata["langfuse_trace_id"].as_str().unwrap().is_empty());
     }
     let saved_outcome =
