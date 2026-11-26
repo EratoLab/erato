@@ -1,10 +1,10 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
-pub use self::axum::serve_files_with_script;
+pub use self::axum::{frontend_files_service, serve_files_with_script};
 use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, VoiceSwitches};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
 use crate::distribution::frontend_bundles::{
-    FrontendRewrite, MAIN_FRONTEND_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH,
+    FingerprintedFiles, FrontendRewrite, MAIN_FRONTEND_MOUNT_PATH, OFFICE_ADDIN_LEGACY_MOUNT_PATH,
     OFFICE_ADDIN_MOUNT_PATH,
 };
 use crate::distribution::translations::TranslationCatalogs;
@@ -185,6 +185,7 @@ pub struct ServedFrontend {
     /// component kits resolve shared bare specifiers to app-bundle chunks.
     /// Set for host frontends that expose component-kit shared modules.
     pub import_map_json: Option<String>,
+    pub fingerprinted_files: FingerprintedFiles,
 }
 
 #[derive(Debug, erato_memory::HeapSize)]
@@ -192,6 +193,8 @@ pub struct FrontendRegistry {
     frontends: Vec<ServedFrontend>,
     configured_voices: ConfiguredVoices,
     branding: crate::distribution::branding::BrandingAssets,
+    #[heap_size(skip)]
+    file_etags: crate::frontend_static_files::FileEtags,
 }
 
 impl FrontendRegistry {
@@ -246,6 +249,7 @@ pub fn build_frontend_registry(
         rewrites: bundles.office_addin.rewrites().to_vec(),
         content_security_policy: content_security_policy.clone(),
         import_map_json: addin_import_map_json,
+        fingerprinted_files: bundles.office_addin.fingerprinted_files().clone(),
     }];
 
     if bundles.office_addin.serve_legacy_path() {
@@ -260,6 +264,7 @@ pub fn build_frontend_registry(
             rewrites: bundles.office_addin.rewrites().to_vec(),
             content_security_policy: content_security_policy.clone(),
             import_map_json: addin_legacy_import_map_json,
+            fingerprinted_files: bundles.office_addin.fingerprinted_files().clone(),
         });
     }
 
@@ -274,6 +279,7 @@ pub fn build_frontend_registry(
         rewrites: bundles.main.rewrites().to_vec(),
         content_security_policy: content_security_policy.clone(),
         import_map_json: bundles.main.import_map_json().map(ToOwned::to_owned),
+        fingerprinted_files: bundles.main.fingerprinted_files().clone(),
     });
 
     for component_kit in component_kits {
@@ -288,6 +294,9 @@ pub fn build_frontend_registry(
             rewrites: Vec::new(),
             content_security_policy: content_security_policy.clone(),
             import_map_json: None,
+            // Kits can change without a server update; none of their files
+            // count as fingerprinted.
+            fingerprinted_files: FingerprintedFiles::default(),
         });
     }
 
@@ -295,6 +304,7 @@ pub fn build_frontend_registry(
         frontends,
         configured_voices: ConfiguredVoices::of(config),
         branding: distribution.branding.clone(),
+        file_etags: crate::frontend_static_files::FileEtags::default(),
     }
 }
 
@@ -1045,10 +1055,6 @@ impl DeploymentVersion {
     pub fn from_env() -> Self {
         Self(std::env::var("ERATO_DEPLOYMENT_VERSION").ok())
     }
-
-    fn etag_value(&self) -> Option<String> {
-        self.0.as_ref().map(|version| format!("\"{version}\""))
-    }
 }
 
 fn matches_mount_path(request_path: &str, mount_path: &str) -> bool {
@@ -1200,6 +1206,11 @@ pub mod axum {
     use super::*;
     use ::axum::body::{Body, Bytes};
 
+    use crate::frontend_static_files::{
+        CompressibleFile, IMMUTABLE_CACHE_CONTROL, ensure_vary_accept_encoding,
+        finish_encoded_response, matching_entity_tag, prepare_file_request, resolve_bundle_file,
+    };
+    use ::axum::handler::HandlerWithoutStateExt;
     use ::axum::http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode, Uri};
     use ::axum::response::Response;
     use ::axum::{BoxError, Extension, http};
@@ -1208,6 +1219,7 @@ pub mod axum {
     use std::convert::Infallible;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tower_http::compression::{CompressionBody, CompressionLayer};
     use tower_http::services::{ServeDir, ServeFile};
 
     fn insert_content_security_policy(
@@ -1299,47 +1311,87 @@ pub mod axum {
                     .boxed_unsync(),
             )
             .unwrap();
+        ensure_vary_accept_encoding(response.headers_mut());
         insert_content_security_policy(response.headers_mut(), content_security_policy);
         response
     }
 
-    fn cache_control_for_path(request_path: &str) -> &'static str {
+    /// Cache rule for a file that is neither HTML nor a just-in-time
+    /// translation catalog. Only names the build declared as content-hashed
+    /// may be kept without asking; everything else is revalidated against its
+    /// per-file entity tag.
+    fn cache_control_for_file(
+        request_path: &str,
+        fingerprinted: bool,
+        deployment_version: &DeploymentVersion,
+    ) -> &'static str {
         if TranslationCatalogs::is_messages_json_path(request_path) {
+            "no-cache"
+        } else if fingerprinted {
+            IMMUTABLE_CACHE_CONTROL
+        } else if deployment_version.0.is_none() {
+            // Without a deployment version this is a development setup, where
+            // files change without a release.
             "no-cache"
         } else {
             "public, max-age=3600, stale-while-revalidate=604800"
         }
     }
 
-    fn client_etag_matches(client_etag: Option<&HeaderValue>, etag_value: &str) -> bool {
-        client_etag.and_then(|etag| etag.to_str().ok()) == Some(etag_value)
-    }
-
-    fn apply_non_html_cache_headers(
-        res: &mut Response<UnsyncBoxBody<Bytes, BoxError>>,
+    fn apply_file_cache_headers<B>(
+        res: &mut Response<B>,
         etag_value: Option<&str>,
         cache_control: &'static str,
     ) {
-        if let Some(etag_value) = etag_value {
-            res.headers_mut().insert(
-                http::header::ETAG,
-                HeaderValue::from_str(etag_value).unwrap(),
-            );
-            res.headers_mut().insert(
+        let status = res.status();
+        let headers = res.headers_mut();
+        if status.is_success() || status == StatusCode::NOT_MODIFIED {
+            if let Some(etag_value) = etag_value
+                && let Ok(etag_value) = HeaderValue::from_str(etag_value)
+            {
+                headers.insert(http::header::ETAG, etag_value);
+            }
+            headers.insert(
                 http::header::CACHE_CONTROL,
                 HeaderValue::from_static(cache_control),
             );
         } else {
-            // No deployment version - use no-cache as a safe fallback
-            res.headers_mut().insert(
+            headers.remove(http::header::ETAG);
+            headers.insert(
                 http::header::CACHE_CONTROL,
                 HeaderValue::from_static("no-cache"),
             );
         }
     }
 
+    fn box_file_response<B>(response: Response<B>) -> Response<UnsyncBoxBody<Bytes, BoxError>>
+    where
+        B: ::axum::body::HttpBody<Data = Bytes> + Send + 'static,
+        B::Error: Into<BoxError>,
+    {
+        response.map(|body| body.map_err(Into::into).boxed_unsync())
+    }
+
+    /// The service the router falls back to: the file handler below, with
+    /// on-the-fly compression for responses that have no precompressed copy.
+    /// Only frontend files pass through here; `/api/` routes never do.
+    pub fn frontend_files_service() -> impl tower::Service<
+        Request<Body>,
+        Response = Response<CompressionBody<Body>>,
+        Error = Infallible,
+        Future: Send + 'static,
+    > + Clone
+    + Send
+    + Sync
+    + 'static {
+        tower::ServiceBuilder::new()
+            .map_response(finish_encoded_response)
+            .layer(CompressionLayer::new().compress_when(CompressibleFile))
+            .service(serve_files_with_script.into_service())
+    }
+
     /// Static file handler that injects a script tag with environment variables into HTML files.
-    /// Also handles cache headers for static files based on deployment version.
+    /// Also sets cache validators and cache rules for every other file.
     pub async fn serve_files_with_script(
         Extension(frontend_registry): Extension<Arc<FrontendRegistry>>,
         Extension(deployment_version): Extension<DeploymentVersion>,
@@ -1352,6 +1404,7 @@ pub mod axum {
         let Some(frontend) = frontend_registry.resolve(&request_path) else {
             return Ok(not_found_response());
         };
+        let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
 
         let translation_catalogs = if TranslationCatalogs::is_messages_json_path(&request_path) {
             Some(reloadable.read().await.translation_catalogs.clone())
@@ -1369,9 +1422,13 @@ pub mod axum {
             let Ok(compiled) = compiled else {
                 return Ok(internal_server_error_response());
             };
+            if let Some(matched) = matching_entity_tag(client_etag.as_ref(), &compiled.etag) {
+                return Ok(not_modified_response(matched, "no-cache", None));
+            }
             return Ok(Response::builder()
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .header(http::header::CACHE_CONTROL, "no-cache")
+                .header(http::header::ETAG, compiled.etag)
                 .body(full_body(Bytes::from(compiled.body)))
                 .unwrap());
         }
@@ -1380,18 +1437,19 @@ pub mod axum {
             let Ok(source) = source else {
                 return Ok(not_found_response());
             };
-            let mut response = ServeFile::new(source)
-                .try_call(req)
-                .await
-                .unwrap()
-                .map(|body| {
-                    body.map_err(|error| -> BoxError { Box::new(error) })
-                        .boxed_unsync()
-                });
-            response.headers_mut().insert(
-                http::header::CACHE_CONTROL,
-                HeaderValue::from_static("no-cache"),
+            let etag_value = frontend_registry.file_etags.etag_for(&source).await;
+            if let Some(etag_value) = &etag_value
+                && let Some(matched) = matching_entity_tag(client_etag.as_ref(), etag_value)
+            {
+                return Ok(not_modified_response(matched, "no-cache", None));
+            }
+            let mut response = box_file_response(
+                ServeFile::new(source)
+                    .try_call(prepare_file_request(req))
+                    .await
+                    .unwrap(),
             );
+            apply_file_cache_headers(&mut response, etag_value.as_deref(), "no-cache");
             return Ok(response);
         }
 
@@ -1415,9 +1473,6 @@ pub mod axum {
             })
         });
 
-        // Check if the client sent an If-None-Match header for ETag validation
-        let client_etag = req.headers().get(http::header::IF_NONE_MATCH).cloned();
-
         // Check if we have any rewrite rules that match
         let stripped_path = frontend_relative_path(req.uri().path(), &frontend.mount_path);
         let req = rewrite_request_path(req, &frontend.mount_path);
@@ -1429,10 +1484,11 @@ pub mod axum {
         {
             match compilation {
                 Ok(compiled) => {
-                    let cache_control = cache_control_for_path(&request_path);
-                    if client_etag_matches(client_etag.as_ref(), &compiled.etag) {
+                    let cache_control = "no-cache";
+                    if let Some(matched) = matching_entity_tag(client_etag.as_ref(), &compiled.etag)
+                    {
                         return Ok(not_modified_response(
-                            compiled.etag,
+                            matched,
                             cache_control,
                             content_security_policy.as_ref(),
                         ));
@@ -1443,7 +1499,7 @@ pub mod axum {
                         .header(http::header::CONTENT_TYPE, "application/json")
                         .body(full_body(Bytes::from(compiled.body)))
                         .unwrap();
-                    apply_non_html_cache_headers(&mut res, Some(&compiled.etag), cache_control);
+                    apply_file_cache_headers(&mut res, Some(&compiled.etag), cache_control);
                     insert_content_security_policy(
                         res.headers_mut(),
                         content_security_policy.as_ref(),
@@ -1471,6 +1527,37 @@ pub mod axum {
             })
             .flatten();
 
+        // A file the request names directly. HTML is rewritten per request and
+        // carries no validator; SPA routes and directories resolve to HTML.
+        let named_file = rewritten_path
+            .is_none()
+            .then(|| resolve_bundle_file(&bundle_dir_path, &rewritten_request_path))
+            .flatten()
+            .filter(|(path, _)| {
+                !path
+                    .extension()
+                    .is_some_and(|extension| extension == "html" || extension == "htm")
+            });
+        let etag_value = match &named_file {
+            Some((path, _)) => frontend_registry.file_etags.etag_for(path).await,
+            None => None,
+        };
+        let fingerprinted = named_file
+            .as_ref()
+            .is_some_and(|(_, relative)| frontend.fingerprinted_files.contains(relative));
+        let cache_control =
+            cache_control_for_file(&request_path, fingerprinted, &deployment_version);
+        if let Some(etag_value) = &etag_value
+            && let Some(matched) = matching_entity_tag(client_etag.as_ref(), etag_value)
+        {
+            return Ok(not_modified_response(
+                matched,
+                cache_control,
+                content_security_policy.as_ref(),
+            ));
+        }
+        let req = prepare_file_request(req);
+
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
             let rewritten_file_path = crate::latency::sync_span("frontend.canonicalize_rewrite")
@@ -1485,13 +1572,22 @@ pub mod axum {
                 .await
                 .unwrap()
         } else if let Some(fallback_path) = fallback_path {
+            // HTML never has a precompressed copy (the build skips it), so the
+            // environment injection below always sees plain bytes.
             ServeDir::new(bundle_dir_path)
+                .precompressed_br()
+                .precompressed_gzip()
                 .not_found_service(ServeFile::new(fallback_path))
                 .try_call(req)
                 .await
                 .unwrap()
         } else {
-            ServeDir::new(bundle_dir_path).try_call(req).await.unwrap()
+            ServeDir::new(bundle_dir_path)
+                .precompressed_br()
+                .precompressed_gzip()
+                .try_call(req)
+                .await
+                .unwrap()
         };
 
         let headers = res.headers().clone();
@@ -1549,23 +1645,8 @@ pub mod axum {
 
             Ok(res)
         } else {
-            // Non-HTML files (theme files, locales, etc.): add cache headers based on deployment version
-            let mut res = res.map(|body| body.map_err(Into::into).boxed_unsync());
-            let cache_control = cache_control_for_path(&request_path);
-            let etag_value = deployment_version.etag_value();
-
-            if let Some(etag_value) = &etag_value {
-                // Check if the client's ETag matches our current version
-                if client_etag_matches(client_etag.as_ref(), etag_value) {
-                    // ETag matches - return 304 Not Modified
-                    return Ok(not_modified_response(
-                        etag_value.clone(),
-                        cache_control,
-                        content_security_policy.as_ref(),
-                    ));
-                }
-            }
-            apply_non_html_cache_headers(&mut res, etag_value.as_deref(), cache_control);
+            let mut res = box_file_response(res);
+            apply_file_cache_headers(&mut res, etag_value.as_deref(), cache_control);
             insert_content_security_policy(res.headers_mut(), content_security_policy.as_ref());
 
             Ok(res)
@@ -2452,6 +2533,7 @@ mod tests {
             rewrites: Vec::new(),
             content_security_policy: Some(HeaderValue::from_static("frame-ancestors 'self'")),
             import_map_json: None,
+            fingerprinted_files: FingerprintedFiles::default(),
         }
     }
 
@@ -2783,6 +2865,7 @@ mod tests {
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
+            file_etags: crate::frontend_static_files::FileEtags::default(),
         };
 
         let frontend = registry
@@ -2802,6 +2885,7 @@ mod tests {
             branding: crate::distribution::branding::BrandingAssets::from_config(
                 &AppConfig::default(),
             ),
+            file_etags: crate::frontend_static_files::FileEtags::default(),
         };
 
         assert!(registry.resolve("/office-addin").is_none());
@@ -3071,5 +3155,362 @@ mod tests {
             body["messages"]["common.close"],
             serde_json::json!(["Schließen"])
         );
+    }
+
+    /// Serves the requests the way the router does, through the compression
+    /// layer, with a web bundle and an add-in bundle laid out as the build
+    /// writes them.
+    struct FileServingFixture {
+        _dir: tempfile::TempDir,
+        web: std::path::PathBuf,
+        registry: std::sync::Arc<FrontendRegistry>,
+        reloadable:
+            std::sync::Arc<tokio::sync::RwLock<crate::distribution::runtime::ReloadableAppState>>,
+    }
+
+    const FINGERPRINTED_SCRIPT: &str = "public/common/assets/app-Cf4s1aiG.js";
+
+    impl FileServingFixture {
+        fn new() -> Self {
+            let dir = tempfile::tempdir().unwrap();
+            let web = dir.path().join("web");
+            let office = dir.path().join("office");
+            let script_body = "console.log('erato');\n".repeat(100);
+            for (root, files) in [
+                (
+                    &web,
+                    vec![
+                        ("index.html", format!("<html><head></head><body>{}</body></html>", "<p>x</p>".repeat(200))),
+                        ("404.html", "<html><head></head><body>missing</body></html>".to_string()),
+                        (
+                            ".vite/manifest.json",
+                            serde_json::json!({ "index.html": { "file": FINGERPRINTED_SCRIPT } }).to_string(),
+                        ),
+                        (FINGERPRINTED_SCRIPT, script_body.clone()),
+                        ("public/common/assets/app-Cf4s1aiG.js.br", "br-copy".to_string()),
+                        ("public/common/assets/app-Cf4s1aiG.js.gz", "gz-copy".to_string()),
+                        ("public/common/assets/unlisted-Zz9Yy8Xx.js", script_body.clone()),
+                        ("public/common/voice-runtime/manifest.json", format!("{{\"files\":\"{}\"}}", "a".repeat(2000))),
+                        ("custom-theme/acme/theme.json", r#"{"name":"Acme","theme":{}}"#.to_string()),
+                    ],
+                ),
+                (
+                    &office,
+                    vec![
+                        ("index.html", "<html><head></head><body>pane</body></html>".to_string()),
+                        ("404.html", "<html><head></head><body>missing</body></html>".to_string()),
+                        (
+                            ".vite/manifest.json",
+                            serde_json::json!({ "index.html": { "file": "assets/main-AbCdEf12.js" } }).to_string(),
+                        ),
+                        ("assets/main-AbCdEf12.js", script_body.clone()),
+                        ("assets/ribbon-icon-16.png", "png".to_string()),
+                    ],
+                ),
+            ] {
+                for (path, content) in files {
+                    let path = root.join(path);
+                    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+                    std::fs::write(path, content).unwrap();
+                }
+            }
+            let mut config = AppConfig::default();
+            config.frontend.theme = Some("acme".into());
+            config.frontend.web_frontend_bundle_path = web.display().to_string();
+            config.integrations.ms_office.addin.enabled = true;
+            config.integrations.ms_office.addin.frontend_bundle_path = office.display().to_string();
+            let distribution = Distribution::load(&config);
+            let registry = std::sync::Arc::new(build_frontend_registry(
+                &config,
+                &distribution,
+                &Default::default(),
+            ));
+            let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+                crate::distribution::runtime::ReloadableAppState::new(
+                    &config,
+                    &distribution,
+                    crate::services::mcp_manager::McpServers::new(&config),
+                ),
+            ));
+            Self {
+                _dir: dir,
+                web,
+                registry,
+                reloadable,
+            }
+        }
+
+        async fn get(
+            &self,
+            path: &str,
+            deployment_version: Option<&str>,
+            headers: &[(&str, &str)],
+        ) -> (::axum::http::Response<()>, Vec<u8>) {
+            use http_body_util::BodyExt;
+            use tower::ServiceExt;
+            let mut request = ::axum::http::Request::builder().uri(path);
+            for (name, value) in headers {
+                request = request.header(*name, *value);
+            }
+            let mut request = request.body(::axum::body::Body::empty()).unwrap();
+            request.extensions_mut().insert(self.registry.clone());
+            request
+                .extensions_mut()
+                .insert(DeploymentVersion(deployment_version.map(ToOwned::to_owned)));
+            request.extensions_mut().insert(self.reloadable.clone());
+            let response = frontend_files_service().oneshot(request).await.unwrap();
+            let (parts, body) = response.into_parts();
+            let body = body.collect().await.unwrap().to_bytes().to_vec();
+            (::axum::http::Response::from_parts(parts, ()), body)
+        }
+    }
+
+    fn header<'a>(response: &'a ::axum::http::Response<()>, name: &str) -> Option<&'a str> {
+        response
+            .headers()
+            .get(name)
+            .map(|value| value.to_str().unwrap())
+    }
+
+    #[tokio::test]
+    async fn fingerprinted_files_are_kept_for_a_year_and_sent_precompressed() {
+        let fixture = FileServingFixture::new();
+        let path = format!("/{FINGERPRINTED_SCRIPT}");
+
+        let (response, body) = fixture
+            .get(&path, Some("v1"), &[("accept-encoding", "gzip, br")])
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some(crate::frontend_static_files::IMMUTABLE_CACHE_CONTROL)
+        );
+        assert_eq!(header(&response, "content-encoding"), Some("br"));
+        assert_eq!(body, b"br-copy");
+        assert!(
+            header(&response, "vary")
+                .unwrap()
+                .contains("accept-encoding")
+        );
+        let weak_etag = header(&response, "etag").unwrap().to_string();
+        assert!(weak_etag.starts_with("W/\""), "{weak_etag}");
+
+        let (response, body) = fixture
+            .get(&path, Some("v1"), &[("accept-encoding", "gzip")])
+            .await;
+        assert_eq!(header(&response, "content-encoding"), Some("gzip"));
+        assert_eq!(body, b"gz-copy");
+
+        let (response, body) = fixture.get(&path, Some("v1"), &[]).await;
+        assert_eq!(header(&response, "content-encoding"), None);
+        assert_eq!(body.len(), "console.log('erato');\n".len() * 100);
+        let strong_etag = header(&response, "etag").unwrap().to_string();
+        assert_eq!(format!("W/{strong_etag}"), weak_etag);
+        assert!(
+            header(&response, "vary")
+                .unwrap()
+                .contains("accept-encoding")
+        );
+
+        let (response, _) = fixture
+            .get(
+                &path,
+                Some("v2"),
+                &[("if-none-match", &weak_etag), ("accept-encoding", "br")],
+            )
+            .await;
+        assert_eq!(response.status(), 304);
+        assert_eq!(header(&response, "etag"), Some(weak_etag.as_str()));
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some(crate::frontend_static_files::IMMUTABLE_CACHE_CONTROL)
+        );
+    }
+
+    #[tokio::test]
+    async fn byte_ranges_come_from_the_uncompressed_file() {
+        let fixture = FileServingFixture::new();
+
+        let (response, body) = fixture
+            .get(
+                &format!("/{FINGERPRINTED_SCRIPT}"),
+                Some("v1"),
+                &[("accept-encoding", "br, gzip"), ("range", "bytes=0-6")],
+            )
+            .await;
+
+        assert_eq!(response.status(), 206);
+        assert_eq!(header(&response, "content-encoding"), None);
+        assert_eq!(body, b"console");
+        assert!(!header(&response, "etag").unwrap().starts_with("W/"));
+    }
+
+    #[tokio::test]
+    async fn other_bundle_files_keep_their_rule_with_a_per_file_etag_across_versions() {
+        let fixture = FileServingFixture::new();
+        let path = "/public/common/assets/unlisted-Zz9Yy8Xx.js";
+
+        let (response, _) = fixture.get(path, Some("v1"), &[]).await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some("public, max-age=3600, stale-while-revalidate=604800")
+        );
+        let etag = header(&response, "etag").unwrap().to_string();
+        assert_ne!(etag, "\"v1\"");
+
+        let (response, _) = fixture
+            .get(path, Some("v2"), &[("if-none-match", &etag)])
+            .await;
+        assert_eq!(
+            response.status(),
+            304,
+            "unchanged file after a server update"
+        );
+
+        std::fs::write(
+            fixture
+                .web
+                .join("public/common/assets/unlisted-Zz9Yy8Xx.js"),
+            "changed();",
+        )
+        .unwrap();
+        let (response, body) = fixture
+            .get(
+                path,
+                Some("v2"),
+                &[
+                    ("if-none-match", &etag),
+                    ("if-modified-since", "Fri, 01 Jan 2100 00:00:00 GMT"),
+                ],
+            )
+            .await;
+        assert_eq!(
+            response.status(),
+            200,
+            "If-None-Match outranks If-Modified-Since"
+        );
+        assert_eq!(body, b"changed();");
+
+        let (response, _) = fixture.get(path, None, &[]).await;
+        assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+        assert!(header(&response, "etag").is_some());
+        let (response, _) = fixture
+            .get(&format!("/{FINGERPRINTED_SCRIPT}"), None, &[])
+            .await;
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some(crate::frontend_static_files::IMMUTABLE_CACHE_CONTROL)
+        );
+    }
+
+    #[tokio::test]
+    async fn files_without_a_precompressed_copy_are_compressed_on_the_fly() {
+        use std::io::Read;
+        let fixture = FileServingFixture::new();
+        let path = "/public/common/voice-runtime/manifest.json";
+
+        let (plain_response, plain) = fixture.get(path, Some("v1"), &[]).await;
+        let (response, body) = fixture
+            .get(path, Some("v1"), &[("accept-encoding", "gzip")])
+            .await;
+
+        assert_eq!(header(&response, "content-encoding"), Some("gzip"));
+        assert!(
+            header(&response, "vary")
+                .unwrap()
+                .contains("accept-encoding")
+        );
+        assert_eq!(
+            header(&response, "etag").unwrap(),
+            format!("W/{}", header(&plain_response, "etag").unwrap())
+        );
+        let mut decoded = Vec::new();
+        flate2::read::GzDecoder::new(body.as_slice())
+            .read_to_end(&mut decoded)
+            .unwrap();
+        assert_eq!(decoded, plain);
+    }
+
+    #[tokio::test]
+    async fn pages_stay_never_kept_and_are_compressed() {
+        let fixture = FileServingFixture::new();
+
+        for path in ["/", "/public/platform-office-addin/"] {
+            let (response, _) = fixture
+                .get(path, Some("v1"), &[("accept-encoding", "br")])
+                .await;
+            assert_eq!(response.status(), 200, "{path}");
+            assert_eq!(
+                header(&response, "cache-control"),
+                Some("no-cache, no-store, must-revalidate, private"),
+                "{path}"
+            );
+            assert_eq!(header(&response, "etag"), None, "{path}");
+        }
+        let (response, _) = fixture
+            .get("/", Some("v1"), &[("accept-encoding", "br")])
+            .await;
+        assert_eq!(header(&response, "content-encoding"), Some("br"));
+    }
+
+    #[tokio::test]
+    async fn office_addin_files_follow_the_addin_build_manifest() {
+        let fixture = FileServingFixture::new();
+
+        let (response, _) = fixture
+            .get(
+                "/public/platform-office-addin/assets/main-AbCdEf12.js",
+                Some("v1"),
+                &[],
+            )
+            .await;
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some(crate::frontend_static_files::IMMUTABLE_CACHE_CONTROL)
+        );
+
+        let (response, _) = fixture
+            .get(
+                "/public/platform-office-addin/assets/ribbon-icon-16.png",
+                Some("v1"),
+                &[("accept-encoding", "br")],
+            )
+            .await;
+        // Manifest icons are branding files: always revalidated.
+        assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+        assert_eq!(header(&response, "content-encoding"), None);
+    }
+
+    #[tokio::test]
+    async fn theme_files_are_always_revalidated_by_content() {
+        let fixture = FileServingFixture::new();
+        let path = "/public/common/custom-theme/acme/theme.json";
+
+        let (response, _) = fixture.get(path, Some("v1"), &[]).await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+        let etag = header(&response, "etag").unwrap().to_string();
+
+        let (response, _) = fixture
+            .get(path, Some("v2"), &[("if-none-match", &etag)])
+            .await;
+        assert_eq!(response.status(), 304);
+        assert_eq!(header(&response, "cache-control"), Some("no-cache"));
+    }
+
+    #[tokio::test]
+    async fn missing_files_are_not_cached() {
+        let fixture = FileServingFixture::new();
+
+        let (response, _) = fixture
+            .get("/public/common/assets/gone-Aa1Bb2Cc.js", Some("v1"), &[])
+            .await;
+        assert_eq!(response.status(), 404);
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some("no-cache, no-store, must-revalidate, private")
+        );
+        assert_eq!(header(&response, "etag"), None);
     }
 }
