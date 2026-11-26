@@ -1896,6 +1896,11 @@ msgid "officeAddin.settings.audio.unsupported"
 msgstr "La entrada de audio no es compatible con esta plataforma"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.backToList"
+msgstr "Volver a Configuración"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Configura cómo se asigna el cambio entre correos de Outlook a los chats."
