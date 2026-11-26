@@ -354,7 +354,10 @@ function classifyEratoEmailBlock(
   ) {
     return {
       isEmail: true,
-      isHtml: isEmailDraftHtml(content, { bodyFormat: artifact.bodyFormat }),
+      isHtml: isEmailDraftHtml(content, {
+        language: language.toLowerCase(),
+        bodyFormat: artifact.bodyFormat,
+      }),
     };
   }
   return { isEmail: false, isHtml: false };

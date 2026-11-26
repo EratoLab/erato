@@ -102,6 +102,25 @@ describe("sanitizeHtmlPreview", () => {
     });
   });
 
+  describe("newlines in a draft without block tags", () => {
+    it.each([
+      [
+        "Hi Anna,\n\nthanks for the <strong>quick</strong> reply.\n\nBest regards\nSam\n",
+        "Hi Anna,<br><br>thanks for the <strong>quick</strong> reply.<br><br>Best regards<br>Sam",
+      ],
+      ["a\r\nb", "a<br>b"],
+      [
+        '<a\nhref="https://example.com/">x</a>\ny',
+        '<a href="https://example.com/">x</a><br>y',
+      ],
+      ["<p>a</p>\n<p>b</p>", "<p>a</p>\n<p>b</p>"],
+      ["a<br>\nb", "a<br>\nb"],
+      ["one line\n", "one line\n"],
+    ])("%j", (input, expected) => {
+      expect(sanitizeHtmlPreview(input)).toBe(expected);
+    });
+  });
+
   describe("links", () => {
     it.each([
       ['<a href="javascript:alert(1)">Click</a>', "<a>Click</a>"],
@@ -145,6 +164,39 @@ describe("sanitizeHtmlPreview", () => {
           '<a href="mailto:thief@evil.example">help@bank.example</a>',
         ),
       ).toBe('<a href="mailto:thief@evil.example">thief@evil.example</a>');
+    });
+
+    it.each([
+      ["\u200bhttps://bank.example/login", "https://evil.example/login"],
+      ["&lt;https://bank.example&gt;", "https://evil.example/login"],
+      ["(https://bank.example)", "https://evil.example/login"],
+      ["Visit https://bank.example now", "https://evil.example/login"],
+      ["Click <b>https://bank.example</b>", "https://evil.example/login"],
+      ["\u202ewww.bank.example", "https://evil.example/login"],
+      ["login.bank.example", "https://bank.example.evil.example/"],
+      ["https://bank.example", "tel:+491234"],
+      ["team@bank.example", "mailto:thief@bank.example"],
+    ])("shows the real target behind %j", (text, href) => {
+      const doc = new DOMParser().parseFromString(
+        sanitizeHtmlPreview(`<a href="${href}">${text}</a>`),
+        "text/html",
+      );
+      expect(doc.body.textContent).toBe(href.replace(/^(?:mailto|tel):/, ""));
+    });
+
+    it.each([
+      ["Bericht.pdf", "https://files.example.com/s/abc/Bericht.pdf"],
+      ["Q3.xlsx", "https://files.example.com/q3"],
+      ["example.com", "https://example.com/contact"],
+      ["example.com", "https://www.example.com/"],
+      ["www.example.com", "https://example.com/"],
+      ["Write to team@example.com", "https://example.com/contact"],
+      ["example.com", "mailto:team@example.com"],
+      ["+49 89 123456", "tel:+4989123456"],
+      ["z.B. hier", "https://example.com/"],
+    ])("keeps %j linking to %s", (text, href) => {
+      const html = `<a href="${href}">${text}</a>`;
+      expect(sanitizeHtmlPreview(html)).toBe(html);
     });
 
     it("keeps link text that names the same address", () => {

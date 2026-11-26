@@ -141,11 +141,14 @@ const STARTS_WITH_ELEMENT_RE = new RegExp(
   "i",
 );
 
+const HTML_CHARACTER_REFERENCE_RE = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/i;
+
 /**
  * Whether an email draft block holds HTML. A body that starts with an element
- * tag is HTML whatever the fence tag or the facet's body_format say (models
- * keep dropping the `-html` suffix); otherwise markup counts only when the
- * fence or the facet asked for HTML.
+ * tag is HTML whatever the context. Every Outlook draft facet asks for HTML
+ * and models keep dropping the `-html` suffix, so for an HTML fence or any
+ * block of an email-bodied facet (bodyFormat present, whatever its value) a
+ * known tag or a character reference anywhere counts too.
  */
 export function isEmailDraftHtml(
   content: string,
@@ -154,10 +157,14 @@ export function isEmailDraftHtml(
   if (STARTS_WITH_ELEMENT_RE.test(content)) {
     return true;
   }
+  const askedForHtml =
+    options.language === "erato-email-html" ||
+    options.language === "html" ||
+    !!options.bodyFormat;
   return (
-    (options.language === "erato-email-html" ||
-      options.bodyFormat === "html") &&
-    HTML_FRAGMENT_TAG_RE.test(content)
+    askedForHtml &&
+    (HTML_FRAGMENT_TAG_RE.test(content) ||
+      HTML_CHARACTER_REFERENCE_RE.test(content))
   );
 }
 
@@ -271,6 +278,10 @@ export function emailDraftHtmlToText(html: string): string {
   function visitElement(element: Element): void {
     const tag = element.tagName;
     if (tag === "BR") {
+      if (cellDepth > 0) {
+        lineBreak(false);
+        return;
+      }
       if (line === null) {
         pushBlank();
       }
@@ -339,7 +350,10 @@ export function emailDraftHtmlToText(html: string): string {
   while (lines.at(-1)?.blank) {
     lines.pop();
   }
-  return lines.map((entry) => entry.text.trimEnd()).join("\n");
+  return lines
+    .map((entry) => entry.text.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 const EMAIL_FENCE_RE =

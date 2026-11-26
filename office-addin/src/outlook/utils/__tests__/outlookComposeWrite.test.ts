@@ -426,6 +426,40 @@ describe("outlookComposeWrite", () => {
       },
     );
 
+    it.each([
+      [
+        "a tagless fragment with a character reference",
+        "Terms &amp; Conditions apply",
+        "Terms & Conditions apply",
+      ],
+      [
+        "inline tags with newline paragraphs",
+        "Hi Anna,\n\nthanks for the <strong>quick</strong> reply.\n\nBest\nSam\n",
+        "Hi Anna,\n\nthanks for the quick reply.\n\nBest\nSam",
+      ],
+    ])(
+      "writes %s into a text body as clean text",
+      async (_name, draft, text) => {
+        const setSelectedDataAsync = installBody(Office.CoercionType.Text);
+
+        await replaceComposeSelection(draft, true);
+
+        expect(written(setSelectedDataAsync)).toEqual([
+          [Office.CoercionType.Text, text],
+        ]);
+      },
+    );
+
+    it("keeps the paragraphs of inline tags with newline paragraphs in an html body", async () => {
+      const setSelectedDataAsync = installBody(Office.CoercionType.Html);
+
+      await replaceComposeSelection("Hi,\n\nthe <b>new</b> date", true);
+
+      expect(written(setSelectedDataAsync)).toEqual([
+        [Office.CoercionType.Html, "Hi,<br><br>the <b>new</b> date"],
+      ]);
+    });
+
     it("writes nothing raw when the host refuses both coercions", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(

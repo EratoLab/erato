@@ -1176,6 +1176,29 @@ describe("MessageContent", () => {
     },
   );
 
+  it.each(["```erato-email\n", "```html\n", "```email\n", ""])(
+    "renders a draft that opens with text and has tags further in as HTML (%j, body_format text)",
+    (fenceStart) => {
+      const draft =
+        "Hi Sam,<br><br>thanks for the <strong>signed</strong> copy.";
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(
+            fenceStart ? `${fenceStart}${draft}\n\`\`\`` : draft,
+          )}
+          outlookArtifact={{
+            facetId: "outlook_review_draft",
+            bodyFormat: "text",
+            renderMode: fenceStart ? "suggestions" : "body",
+          }}
+        />,
+      );
+
+      expect(container.querySelector("strong")).toHaveTextContent("signed");
+      expect(container).not.toHaveTextContent("<br>");
+    },
+  );
+
   it("renders an unfenced reply that starts with a tag as HTML when the facet says text", () => {
     const { container } = renderWithTheme(
       <MessageContent

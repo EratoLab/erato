@@ -315,7 +315,7 @@ FOR THIS MESSAGE ONLY: The user is composing an email and has selected the follo
 
 {{selected_text}}
 
-Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>.
 
 Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, lists, <strong>/<em>, <a href> - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
