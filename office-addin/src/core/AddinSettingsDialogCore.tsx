@@ -294,12 +294,15 @@ function AddinSettingsDialog({
               className="h-full space-y-4 overflow-y-auto"
             >
               <div className="space-y-1">
-                <h2 className="text-sm font-medium text-theme-fg-primary">
-                  {t({
-                    id: "officeAddin.settings.audio.heading",
-                    message: "Microphone",
-                  })}
-                </h2>
+                {/* On a narrow pane the page title already says it. */}
+                {pages.isNarrow ? null : (
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "officeAddin.settings.audio.heading",
+                      message: "Microphone",
+                    })}
+                  </h2>
+                )}
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
                     id: "officeAddin.settings.audio.description",
@@ -332,12 +335,15 @@ function AddinSettingsDialog({
               className="h-full space-y-4 overflow-y-auto"
             >
               <div className="space-y-1">
-                <h2 className="text-sm font-medium text-theme-fg-primary">
-                  {t({
-                    id: "officeAddin.settings.serversTools.heading",
-                    message: "MCP & Apps",
-                  })}
-                </h2>
+                {/* On a narrow pane the page title already says it. */}
+                {pages.isNarrow ? null : (
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "officeAddin.settings.serversTools.heading",
+                      message: "MCP & Apps",
+                    })}
+                  </h2>
+                )}
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
                     id: "officeAddin.settings.serversTools.description",

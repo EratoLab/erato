@@ -20,6 +20,11 @@ export function useIsSettingsPageScreen(): boolean {
 const fromKeyboard = (event?: React.MouseEvent) =>
   event === undefined || event.detail === 0;
 
+const dialogOf = (event?: React.MouseEvent) =>
+  event?.currentTarget instanceof Element
+    ? event.currentTarget.closest<HTMLElement>('[data-ui="modal-shell"]')
+    : null;
+
 interface UseSettingsPagesOptions<T extends string> {
   isOpen: boolean;
   /** The dialog's visible tabs, in order. */
@@ -98,16 +103,24 @@ export function useSettingsPages<T extends string>({
 
   const backButtonRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
-  // Only keyboard navigation moves focus: after a tap iOS draws the focus ring
-  // on the back button. Opening leaves focus to ModalBase, which must see it
-  // outside the dialog to remember what to return it to.
-  const pendingFocusRef = useRef<{ to: "back" } | { to: "row"; tab: T } | null>(
-    null,
-  );
+  // The button that was pressed goes away, so focus has to move or it falls
+  // out of the dialog. From the keyboard it goes to the next control; after a
+  // tap or click to the dialog itself, which reads out the new title and
+  // shows no ring (iOS rings a button focused after a tap). Opening leaves
+  // focus to ModalBase, which must see it outside the dialog to remember what
+  // to return it to.
+  const pendingFocusRef = useRef<
+    | { to: "back" }
+    | { to: "row"; tab: T }
+    | { to: "dialog"; dialog: HTMLElement | null }
+    | null
+  >(null);
   useEffect(() => {
     const pending = pendingFocusRef.current;
     pendingFocusRef.current = null;
-    if (pending?.to === "back") {
+    if (pending?.to === "dialog") {
+      pending.dialog?.focus({ preventScroll: true });
+    } else if (pending?.to === "back") {
       backButtonRef.current?.focus();
     } else if (pending?.to === "row") {
       listRef.current
@@ -133,9 +146,9 @@ export function useSettingsPages<T extends string>({
           : {
               label: backLabel,
               onBack: (event) => {
-                if (fromKeyboard(event)) {
-                  pendingFocusRef.current = { to: "row", tab: activeTab };
-                }
+                pendingFocusRef.current = fromKeyboard(event)
+                  ? { to: "row", tab: activeTab }
+                  : { to: "dialog", dialog: dialogOf(event) };
                 setOnList(true);
               },
               ref: backButtonRef,
@@ -148,9 +161,9 @@ export function useSettingsPages<T extends string>({
       listRef,
       onOpen: (tab, event) => {
         onActiveTabChange(tab);
-        if (fromKeyboard(event)) {
-          pendingFocusRef.current = { to: "back" };
-        }
+        pendingFocusRef.current = fromKeyboard(event)
+          ? { to: "back" }
+          : { to: "dialog", dialog: dialogOf(event) };
         setOnList(false);
       },
     },

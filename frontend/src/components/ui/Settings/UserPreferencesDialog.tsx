@@ -821,12 +821,15 @@ export function UserPreferencesDialog({
               className="space-y-4"
             >
               <div className="space-y-1">
-                <h2 className="text-sm font-medium text-theme-fg-primary">
-                  {t({
-                    id: "preferences.dialog.serversTools.heading",
-                    message: "MCP & Apps",
-                  })}
-                </h2>
+                {/* On a narrow screen the page title already says it. */}
+                {pages.isNarrow ? null : (
+                  <h2 className="text-sm font-medium text-theme-fg-primary">
+                    {t({
+                      id: "preferences.dialog.serversTools.heading",
+                      message: "MCP & Apps",
+                    })}
+                  </h2>
+                )}
                 <p className="text-sm text-theme-fg-secondary">
                   {t({
                     id: "preferences.dialog.serversTools.description",

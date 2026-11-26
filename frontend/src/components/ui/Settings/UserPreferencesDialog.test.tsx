@@ -1523,15 +1523,22 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     expect(screen.queryByRole("heading", { name: "Color mode" })).toBeNull();
   });
 
-  it("leaves focus alone after a tap, where iOS would ring the back button", () => {
+  it("keeps focus in the dialog after a tap, on the dialog rather than a button", () => {
     renderDialog();
-    const row = screen.getByRole("button", { name: "Appearance" });
 
-    fireEvent.click(row, { detail: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }), {
+      detail: 1,
+    });
 
-    expect(
+    const page = screen.getByRole("dialog", { name: "Appearance" });
+    expect(page).toHaveFocus();
+
+    fireEvent.click(
       screen.getByRole("button", { name: "Back to Preferences" }),
-    ).not.toHaveFocus();
+      { detail: 1 },
+    );
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toHaveFocus();
   });
 
   it("keeps unsaved edits across the list and shows Save on their page only", () => {
@@ -1550,6 +1557,16 @@ describe("UserPreferencesDialog on a narrow screen", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
     expect(screen.getByLabelText("Nickname")).toHaveValue("Max");
+  });
+
+  it("names a page once, in the title", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP & Apps" }));
+
+    expect(screen.getAllByRole("heading", { name: "MCP & Apps" })).toHaveLength(
+      1,
+    );
   });
 
   it("opens on the page a link asks for, with the list one step back", () => {
