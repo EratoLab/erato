@@ -2032,6 +2032,11 @@ body:has(.app-viewport) {
   font-size: 125%;
 }
 
+/* Inside an app the device's text size setting decides (ThemeProvider). */
+:root[data-text-size="system"] {
+  font-size: calc(100% * var(--system-text-scale, 1));
+}
+
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).
    Deliberately declared here, after @tailwind utilities and outside
    @layer components: the surface must outrank any utility a caller puts on the

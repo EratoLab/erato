@@ -12,8 +12,14 @@ vi.mock("@/app/env", () => ({
   env: vi.fn(),
 }));
 
+const mockSystemTextScale = vi.fn<() => number | null>(() => null);
+vi.mock("@/lib/systemTextSize", () => ({
+  systemTextScale: () => mockSystemTextScale(),
+}));
+
 import { env } from "@/app/env";
 import { Logo } from "@/components/ui/Logo";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import {
   __resetThemeAssetProbeCache,
@@ -870,6 +876,46 @@ describe("ThemeProvider", () => {
     );
 
     expect(document.documentElement).toHaveAttribute("data-text-size", "large");
+  });
+
+  it("follows the device's text size inside an app, whatever size was chosen", () => {
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+    installHostShell({});
+    mockSystemTextScale.mockReturnValue(21 / 17);
+    const Probe = () => {
+      const { followsSystemTextSize } = useTheme();
+      return <span>{followsSystemTextSize ? "follows" : "own"}</span>;
+    };
+
+    try {
+      const { unmount } = render(
+        <ThemeProvider>
+          <Probe />
+        </ThemeProvider>,
+      );
+      const root = document.documentElement;
+      expect(screen.getByText("follows")).toBeInTheDocument();
+      expect(root).toHaveAttribute("data-text-size", "system");
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe(
+        String(21 / 17),
+      );
+
+      // Changed in the device's settings while the app was in the background.
+      mockSystemTextScale.mockReturnValue(19 / 17);
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe(
+        String(19 / 17),
+      );
+
+      unmount();
+      expect(root).not.toHaveAttribute("data-text-size");
+      expect(root.style.getPropertyValue("--system-text-scale")).toBe("");
+    } finally {
+      removeHostShell();
+      mockSystemTextScale.mockReturnValue(null);
+    }
   });
 
   it("sets no text-size attribute for the default or an unknown stored size", () => {

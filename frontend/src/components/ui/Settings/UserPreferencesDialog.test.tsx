@@ -22,6 +22,7 @@ import {
 import { getMcpOauthServerId } from "@/lib/mcpOauthCallback";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 import { toast, Toaster } from "../Toast";
@@ -340,6 +341,20 @@ describe("UserPreferencesDialog", () => {
     expect(
       within(control).getByRole("tab", { name: "Default" }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("leaves the text size to the device inside an app", () => {
+    installHostShell({});
+    try {
+      renderDialog();
+      fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+
+      expect(
+        screen.queryByRole("tablist", { name: "Text size" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("renders accessible vertical tabs and linked tabpanels", () => {
