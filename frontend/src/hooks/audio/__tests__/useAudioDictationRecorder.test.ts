@@ -1,5 +1,5 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 import { setPageVisibility } from "@/test/pageVisibility";
@@ -1024,6 +1024,77 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.onVadAutoStop).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["", true],
+    ["Äh.", true],
+    ["Hm.", true],
+    ["Okay.", true],
+  ])(
+    "ends a turn that paused the voice on silence, even with no words: %j (review 4)",
+    async (transcript) => {
+      const onVadAutoStop = vi.fn();
+      const hook = renderHook(() =>
+        useAudioDictationRecorder({
+          enabled: true,
+          mode: "conversational",
+          maxRecordingDurationSeconds: 1200,
+          onTranscriptChunk: vi.fn(),
+          vadAutoStopEnabled: true,
+          onVadAutoStop,
+          voiceSpeaking: true,
+          overVoiceMinSpeechMs: 300,
+          onSpeechOverVoice: vi.fn(),
+          onVoiceLowered: vi.fn(),
+          isHesitationOnly: hesitationMatcher(undefined),
+        }),
+      );
+      await act(async () => {
+        hook.result.current.toggleDictation();
+      });
+      await waitFor(() =>
+        expect(hook.result.current.isListeningOverVoice).toBe(true),
+      );
+      act(() => {
+        emitAudioSamples(new Float32Array(SAMPLES_PER_SECOND).fill(0.2));
+        vadMock.engines[0].emit({ type: "speech_start", timestampMs: 0 });
+        vadMock.engines[0].emit({ type: "speech_real_start", timestampMs: 0 });
+        emitFrames(0.95, 352);
+      });
+      await openSession();
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+      act(() => {
+        emitFrames(0.05, 320);
+        vadMock.engines[0].emit({
+          type: "speech_end",
+          timestampMs: 0,
+          audio: new Float32Array(1),
+        });
+      });
+      await waitFor(() =>
+        expect(
+          MockWebSocket.instances[0].sentBinaryFrames.length,
+        ).toBeGreaterThan(0),
+      );
+      // The turn's last piece is sent once the end of speech is checked.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      });
+      const sent = MockWebSocket.instances[0].sentBinaryFrames.length;
+      for (let index = 0; index < sent; index += 1)
+        act(() =>
+          MockWebSocket.instances[0].emitJson({
+            type: "chunk_transcribed",
+            chunk_index: index,
+            transcript: index === sent - 1 ? transcript : "",
+          }),
+        );
+      await waitFor(() => expect(onVadAutoStop).toHaveBeenCalledTimes(1), {
+        timeout: 4000,
+      });
+    },
+    10000,
+  );
+
   it("drops what was heard over the voice when the voice ends on its own with nobody speaking, and starts fresh", async () => {
     const hook = renderOverVoice();
     await startHeld(hook);
@@ -1096,11 +1167,11 @@ describe("useAudioDictationRecorder over the voice", () => {
     expect(hook.onVadAutoStop).toHaveBeenCalledTimes(1);
   });
 
-  it("stops the voice at the default 500 ms when the configured minimum is malformed", async () => {
+  it("stops the voice at the default 300 ms when the configured minimum is malformed", async () => {
     const hook = renderOverVoice(true, Number.NaN);
     await startHeld(hook);
     act(() => {
-      emitFrames(0.95, 448);
+      emitFrames(0.95, 256);
     });
     expect(hook.onSpeechOverVoice).not.toHaveBeenCalled();
     act(() => {
@@ -1180,13 +1251,13 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
   });
 
   const stoppedByHiddenPage = vi.fn();
-  const render = (conversation = true) =>
+  const render = (conversation = true, maxRecordingDurationSeconds = 1200) =>
     renderHook(
       ({ conversation }: { conversation: boolean }) =>
         useAudioDictationRecorder({
           enabled: true,
           mode: conversation ? "conversational" : "dictation",
-          maxRecordingDurationSeconds: 1200,
+          maxRecordingDurationSeconds,
           onTranscriptChunk: vi.fn(),
           vadAutoStopEnabled: conversation,
           onStoppedByHiddenPage: stoppedByHiddenPage,
@@ -1481,6 +1552,161 @@ describe("useAudioDictationRecorder: a conversation keeps its microphone open", 
 
     await finishConnecting(hook);
     expect((await track(0)).stop).toHaveBeenCalled();
+  });
+
+  describe("in a host that keeps audio going while the page is hidden", () => {
+    beforeEach(() => {
+      window.ERATO_SHELL = {
+        contract: 1,
+        capabilities: { audioWhileHidden: 1 },
+        request: () => Promise.resolve(null),
+        on: () => () => {},
+      };
+    });
+    afterEach(() => {
+      delete window.ERATO_SHELL;
+      Reflect.deleteProperty(navigator, "audioSession");
+    });
+
+    it("keeps the microphone between turns while the page is hidden", async () => {
+      const hook = render();
+      await listen(hook);
+      await cancel(hook);
+
+      act(() => setPageVisibility("hidden"));
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+
+      await listen(hook);
+      expect(getUserMedia).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the microphone a hidden page's turn used for the next turn", async () => {
+      const hook = render();
+      await listen(hook);
+      act(() => setPageVisibility("hidden"));
+      await cancel(hook);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+
+      await listen(hook);
+      expect(getUserMedia).toHaveBeenCalledOnce();
+    });
+
+    it("still ends the turn without an error when the hidden page's microphone is muted after all", async () => {
+      stoppedByHiddenPage.mockClear();
+      const hook = render();
+      await listen(hook);
+      const muted = await track(0);
+      act(() => {
+        setPageVisibility("hidden");
+        mute(muted);
+      });
+
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+      expect(hook.result.current.dictationError).toBeNull();
+      expect(muted.stop).toHaveBeenCalled();
+      expect(stoppedByHiddenPage).toHaveBeenCalledOnce();
+    });
+
+    it("says the page plays and records while the conversation runs", () => {
+      const audioSession = { type: "auto" };
+      Object.defineProperty(navigator, "audioSession", {
+        configurable: true,
+        value: audioSession,
+      });
+      const hook = render();
+      expect(audioSession.type).toBe("play-and-record");
+
+      hook.rerender({ conversation: false });
+      expect(audioSession.type).toBe("auto");
+    });
+
+    it("leaves a session type that something else set meanwhile", () => {
+      const audioSession = { type: "auto" };
+      Object.defineProperty(navigator, "audioSession", {
+        configurable: true,
+        value: audioSession,
+      });
+      const hook = render();
+      audioSession.type = "playback";
+
+      hook.unmount();
+      expect(audioSession.type).toBe("playback");
+    });
+
+    const pause = (ms: number) =>
+      act(() => new Promise((resolve) => setTimeout(resolve, ms)));
+
+    it("gives an idle microphone back on a hidden page after as long as a turn may listen", async () => {
+      const hook = render(true, 0.2);
+      await listen(hook);
+      await cancel(hook);
+      act(() => setPageVisibility("hidden"));
+      await pause(100);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+
+      await pause(250);
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+
+    it("gives the microphone back on a hidden page when nobody spoke for the listening limit", async () => {
+      const hook = render(true, 1);
+      await listen(hook);
+      act(() => setPageVisibility("hidden"));
+
+      await waitFor(
+        () => expect(hook.result.current.dictationError).not.toBeNull(),
+        { timeout: 2000 },
+      );
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+
+    it("keeps an idle microphone when the page is shown again in time", async () => {
+      const hook = render(true, 0.2);
+      await listen(hook);
+      await cancel(hook);
+      act(() => setPageVisibility("hidden"));
+      act(() => setPageVisibility("visible"));
+
+      await pause(350);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+    });
+
+    it("waits the whole time again after each turn on a hidden page", async () => {
+      const hook = render(true, 0.2);
+      await listen(hook);
+      act(() => setPageVisibility("hidden"));
+      await pause(150);
+      await cancel(hook);
+      await pause(150);
+      expect((await track(0)).stop).not.toHaveBeenCalled();
+
+      await pause(200);
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+
+    it("closes the microphone when the conversation ends, hidden or not", async () => {
+      const hook = render();
+      await listen(hook);
+      await cancel(hook);
+      act(() => setPageVisibility("hidden"));
+
+      hook.rerender({ conversation: false });
+      expect((await track(0)).stop).toHaveBeenCalled();
+    });
+  });
+
+  it("leaves the page's audio session alone without the host's capability", () => {
+    const audioSession = { type: "auto" };
+    Object.defineProperty(navigator, "audioSession", {
+      configurable: true,
+      value: audioSession,
+    });
+    try {
+      render();
+      expect(audioSession.type).toBe("auto");
+    } finally {
+      Reflect.deleteProperty(navigator, "audioSession");
+    }
   });
 
   it("closes the microphone when a turn fails", async () => {

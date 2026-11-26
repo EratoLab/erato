@@ -6,11 +6,9 @@ import { useApprovalSpeech } from "./approvalSpeech";
 import { useApprovalCardListening } from "./useApprovalCardListening";
 
 const heardApprovalWords = vi.fn();
-const resumeTalkedOverCard = vi.fn();
 vi.mock("./approvalListening", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./approvalListening")>()),
   heardApprovalWords: (...args: unknown[]) => heardApprovalWords(...args),
-  resumeTalkedOverCard: (...args: unknown[]) => resumeTalkedOverCard(...args),
 }));
 
 const KEY = "message-1:stop-1";
@@ -20,8 +18,6 @@ const recorder = () => {
   const state = {
     open: false,
     idle: true,
-    /** Transcribes; while it waits over the voice it does not. */
-    live: false,
     turn: { ended: false, words: "" },
   };
   return {
@@ -29,13 +25,11 @@ const recorder = () => {
     open: vi.fn(() => {
       state.open = true;
       state.idle = false;
-      state.live = false;
       state.turn = { ended: false, words: "" };
     }),
     close: vi.fn(() => {
       state.open = false;
       state.idle = true;
-      state.live = false;
     }),
     readTurn: () => state.turn,
   };
@@ -52,18 +46,12 @@ const cardSaid = (speaking: boolean, language = "de") =>
     });
   });
 
-const render = (
-  mic: ReturnType<typeof recorder>,
-  enabled = true,
-  overVoice = false,
-) =>
+const render = (mic: ReturnType<typeof recorder>, enabled = true) =>
   renderHook(
     ({ on }: { on: boolean }) =>
       useApprovalCardListening({
         enabled: on,
-        overVoice,
         recorderOpen: mic.state.open,
-        recorderLive: mic.state.live,
         recorderIdle: mic.state.idle,
         open: mic.open,
         close: mic.close,
@@ -74,7 +62,6 @@ const render = (
 
 beforeEach(() => {
   heardApprovalWords.mockReset();
-  resumeTalkedOverCard.mockReset();
   // As the real one: the card waits for the answer before it listens again.
   heardApprovalWords.mockImplementation((key: string) =>
     useApprovalListening.setState({ pending: key }),
@@ -246,81 +233,6 @@ describe("ERMAIN-1259: what deciding by voice needs from the turn", () => {
       recording,
     );
     expect(useApprovalListening.getState().listening).toBeNull();
-  });
-});
-
-describe("listening over the voice of a spoken card", () => {
-  it("opens while the voice speaks, and keeps waiting there", () => {
-    const mic = recorder();
-    cardSaid(true);
-    const { rerender } = render(mic, true, true);
-    expect(mic.open).toHaveBeenCalledWith(KEY);
-    cardSaid(true);
-    rerender({ on: true });
-    expect(mic.close).not.toHaveBeenCalled();
-  });
-
-  it("hands the words said over the voice to the card once the turn ends", () => {
-    const mic = recorder();
-    cardSaid(true);
-    const { rerender } = render(mic, true, true);
-    // Speech over the voice: it is cut, and the recorder transcribes.
-    mic.state.live = true;
-    cardSaid(false);
-    rerender({ on: true });
-    expect(mic.close).not.toHaveBeenCalled();
-    mic.state.turn = { ended: true, words: "hab ich, was noch?" };
-    mic.state.open = false;
-    mic.state.live = false;
-    mic.state.idle = true;
-    rerender({ on: true });
-    expect(heardApprovalWords).toHaveBeenCalledWith(
-      KEY,
-      "hab ich, was noch?",
-      undefined,
-    );
-    expect(resumeTalkedOverCard).not.toHaveBeenCalled();
-  });
-
-  it("a turn over the voice with no words lets the voice go on", () => {
-    const mic = recorder();
-    cardSaid(true);
-    const { rerender } = render(mic, true, true);
-    mic.state.live = true;
-    cardSaid(false);
-    rerender({ on: true });
-    mic.state.turn = { ended: true, words: "" };
-    mic.state.open = false;
-    mic.state.live = false;
-    mic.state.idle = true;
-    rerender({ on: true });
-    expect(heardApprovalWords).not.toHaveBeenCalled();
-    expect(resumeTalkedOverCard).toHaveBeenCalledWith(KEY);
-  });
-
-  it("a recording that already transcribes closes when the voice starts, and opens again to wait over it", () => {
-    const mic = recorder();
-    cardSaid(false);
-    const { rerender } = render(mic, true, true);
-    expect(mic.open).toHaveBeenCalledTimes(1);
-    mic.state.live = true;
-    mic.state.turn.words = "ja";
-    rerender({ on: true });
-    cardSaid(true);
-    rerender({ on: true });
-    expect(mic.close).toHaveBeenCalledTimes(1);
-    expect(heardApprovalWords).not.toHaveBeenCalled();
-    rerender({ on: true });
-    expect(mic.open).toHaveBeenCalledTimes(2);
-  });
-
-  it("still closes when the card is decided while the voice speaks", () => {
-    const mic = recorder();
-    cardSaid(true);
-    const { rerender } = render(mic, true, true);
-    act(() => useApprovalSpeech.setState({ closed: true, speaking: false }));
-    rerender({ on: true });
-    expect(mic.close).toHaveBeenCalledTimes(1);
   });
 });
 

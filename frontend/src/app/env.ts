@@ -123,7 +123,7 @@ export type Env = {
    * user whose interface is in it; any other uses the list above.
    */
   audioConversationalHesitations?: Partial<Record<string, string[]>>;
-  /** The user can speak over the voice, and the voice yields. */
+  /** The user can speak over a reply's voice, and the voice yields. */
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
   audioConversationalTalkOverVoiceMinSpeechMs?: number;

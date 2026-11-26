@@ -26,7 +26,8 @@ lingua = { version = "=1.8.0", default-features = false, features = ["english", 
 axum = { version = "0.8.4", features = ["macros", "ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header", "multipart"] }
 headers = "0.4.0"
-tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "set-header", "trace"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.6.2",  features = ["fs", "cors", "limit", "set-header", "trace", "compression-br", "compression-gzip"] }
 http-body-util = "0.1.2"
 lol_html = "2.2.0"
 ordered-multimap = { version = "0.7.3",  features = ["serde"]}

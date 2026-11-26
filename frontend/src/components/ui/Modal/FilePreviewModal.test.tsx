@@ -1,8 +1,13 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { OutlookSourceNavigationProvider } from "@/providers/OutlookSourceNavigationProvider";
+import {
+  fileFetch,
+  installHostShell,
+  removeHostShell,
+} from "@/test/hostShellStub";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { FilePreviewModal } from "./FilePreviewModal";
@@ -297,6 +302,64 @@ describe("FilePreviewModal", () => {
       "data-src",
       "https://files.example.com/preview/budget",
     );
+  });
+
+  describe("Download File", () => {
+    const csv = () =>
+      makeFile({
+        filename: "cities.csv",
+        download_url: "https://storage.example.com/cities.csv?sig=1",
+        preview_url: "/api/v1beta/files/file_123/preview",
+        file_capability: FileTypeUtil.createMockFileCapability("cities.csv"),
+      });
+
+    afterEach(() => {
+      removeHostShell();
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it("opens the download link in a browser", () => {
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      renderWithTheme(
+        <FilePreviewModal isOpen onClose={vi.fn()} file={csv()} />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Download File" }));
+
+      expect(open).toHaveBeenCalledExactlyOnceWith(
+        "https://storage.example.com/cities.csv?sig=1",
+        "_blank",
+      );
+    });
+
+    it("hands the file, read from the server's preview, to a host app", async () => {
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const fetchSpy = fileFetch("city\nBern\n", "text/csv");
+      vi.stubGlobal("fetch", fetchSpy);
+      const request = installHostShell({ files: 1 });
+      renderWithTheme(
+        <FilePreviewModal isOpen onClose={vi.fn()} file={csv()} />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Download File" }));
+
+      await waitFor(() => {
+        expect(request).toHaveBeenCalledExactlyOnceWith(
+          "files.save",
+          expect.objectContaining({
+            fileName: "cities.csv",
+            contentType: "text/csv",
+            data: globalThis.btoa("city\nBern\n"),
+          }),
+        );
+      });
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/v1beta/files/file_123/preview",
+        expect.anything(),
+      );
+      expect(open).not.toHaveBeenCalled();
+    });
   });
 
   it("shows a permission warning instead of preview actions for inaccessible files", () => {

@@ -36,6 +36,8 @@ import {
   useAssistantHubConfig,
   useChatDetail,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { claimLeftEdge, LEFT_EDGE_SWIPE_CAPABILITY } from "@/lib/hostLeftEdge";
+import { hostShellWithCapability } from "@/lib/hostShell";
 import {
   useAssistantsFeature,
   useScheduledFeature,
@@ -64,6 +66,7 @@ import {
   useApplySidebarWidth,
 } from "./SidebarResizeHandle";
 import { SidebarToggle } from "./SidebarToggle";
+import { useSidebarDrawerSwipe } from "./useSidebarDrawerSwipe";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import {
@@ -538,6 +541,33 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       );
       onToggleCollapse?.();
     }, [onToggleCollapse]);
+    // Phone browsers keep the left edge for their own back swipe; a host app
+    // can hand it to the page, and then a drag from it opens the drawer.
+    const [edgeShell] = useState(() =>
+      hostShellWithCapability(LEFT_EDGE_SWIPE_CAPABILITY, 1),
+    );
+    const drawerEdgeShell =
+      isNarrowScreen && onToggleCollapse ? edgeShell : null;
+    const edgeOpensDrawer = drawerEdgeShell !== null;
+    useEffect(
+      () => (drawerEdgeShell ? claimLeftEdge(drawerEdgeShell) : undefined),
+      [drawerEdgeShell],
+    );
+    const scrimRef = useRef<HTMLDivElement>(null);
+    const edgeRef = useRef<HTMLDivElement>(null);
+    const openDrawer = useCallback(
+      () => onToggleCollapse?.(),
+      [onToggleCollapse],
+    );
+    useSidebarDrawerSwipe({
+      enabled: isNarrowScreen && Boolean(onToggleCollapse),
+      isOpen: isDrawerOpen,
+      drawerRef: ref,
+      scrimRef,
+      edgeRef,
+      onOpen: openDrawer,
+      onClose: dismissDrawer,
+    });
     useEffect(() => {
       if (isHiddenMode && returnFocusOnHideRef.current) {
         returnFocusOnHideRef.current = false;
@@ -868,6 +898,18 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
           >
             {generationAnnouncement}
           </div>
+          {edgeOpensDrawer && (
+            <div
+              ref={edgeRef}
+              aria-hidden="true"
+              className={clsx(
+                "viewport-layer fixed inset-y-0 left-0 z-30 w-[calc(var(--safe-area-left,0px)+20px)] touch-none",
+                !isHiddenMode && "pointer-events-none",
+              )}
+              data-ui="sidebar-edge"
+              data-testid="sidebar-edge"
+            />
+          )}
           {/* Placement stays here: the add-in's floating trigger disagrees
               about the z-index. */}
           {isHiddenMode && (
@@ -884,6 +926,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               never gets that tap. */}
           {isNarrowScreen && (
             <div
+              ref={scrimRef}
               role="presentation"
               // A press here would otherwise blur the focused control before
               // the click, and dismissDrawer could no longer see that focus
@@ -891,7 +934,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
-                "drawer-overlay-skin viewport-layer fixed inset-0 z-40",
+                "drawer-overlay-skin viewport-layer fixed inset-0 z-40 touch-pan-y",
                 "transition-opacity duration-300 ease-in-out motion-reduce:transition-none",
                 isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
               )}
@@ -908,6 +951,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               // starts beside the left inset, where the page's margin for it
               // starts too.
               "viewport-layer fixed inset-y-0 left-[var(--safe-area-left)] z-40",
+              // A sideways drag stays the drawer's to cancel; see
+              // useSidebarDrawerSwipe.
+              isNarrowScreen && "touch-pan-y",
               "pb-[var(--safe-area-bottom)] pt-[var(--safe-area-top)]",
               "transition-[width,transform,opacity] duration-300 ease-in-out motion-reduce:transition-none",
               // Hidden mode: slide completely off-screen

@@ -2001,6 +2001,8 @@ pub enum StreamingEvent {
         sequence: u64,
         audio: String,
         sample_rate: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
     },
     AudioError {
         message_id: Uuid,

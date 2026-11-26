@@ -66,6 +66,7 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
 export function OutlookEratoEmailRenderer({
   content,
   isHtml,
+  isStreaming,
 }: EratoEmailCodeBlockProps) {
   // Subscribe to the shared snapshot instead of running an own poll loop —
   // a second poller would fight the input's over the host's serialized
@@ -161,8 +162,8 @@ export function OutlookEratoEmailRenderer({
     useState<OutlookEmailClientAction | null>(null);
   const isBusy = status === "inserting";
   const previewHtml = useMemo(
-    () => (isHtml ? sanitizeHtmlPreview(content) : null),
-    [content, isHtml],
+    () => (isHtml ? sanitizeHtmlPreview(content, { isStreaming }) : null),
+    [content, isHtml, isStreaming],
   );
 
   // Single pending status-reset timer: a new schedule cancels the previous
@@ -383,7 +384,7 @@ export function OutlookEratoEmailRenderer({
     <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
       {isHtml ? (
         <div
-          className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          className="mb-2 text-sm [&_a]:text-theme-fg-accent [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
           // Sanitized with DOMPurify before rendering.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: previewHtml ?? "" }}

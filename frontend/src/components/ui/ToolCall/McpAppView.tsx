@@ -8,6 +8,7 @@ import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
 import { CONTENT_RESIZED_EVENT } from "@/hooks/useScrollToBottom";
 import { getClientPlatform } from "@/lib/clientPlatform";
+import { downloadFile } from "@/lib/fileDownload";
 import { useGetMcpServerAppView } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { saveViewDownload } from "@/lib/mcpApps/download";
 import { viewHostContext } from "@/lib/mcpApps/hostContext";
@@ -327,7 +328,14 @@ const McpAppFrame = ({
     pendingDownload.current = undefined;
     setDownload(undefined);
     // In the click's own handler, which lets the browser start a download.
-    if (save) saveViewDownload(pending.file);
+    if (save) {
+      const { file } = pending;
+      downloadFile(
+        { name: file.name, content: file.blob },
+        () => saveViewDownload(file),
+        boxRef.current,
+      );
+    }
     pending.resolve(save);
   };
 

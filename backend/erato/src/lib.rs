@@ -13,6 +13,8 @@ pub mod db;
 pub mod deployment_identity;
 pub mod distribution;
 pub mod frontend_environment;
+pub mod frontend_static_files;
+pub mod http_validators;
 pub mod latency;
 pub mod metrics;
 pub mod metrics_constants;
