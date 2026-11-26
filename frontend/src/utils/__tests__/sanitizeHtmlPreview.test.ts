@@ -119,6 +119,12 @@ describe("sanitizeHtmlPreview", () => {
     ])("%j", (input, expected) => {
       expect(sanitizeHtmlPreview(input)).toBe(expected);
     });
+
+    it("stays linear on many unclosed tag starts", () => {
+      const started = performance.now();
+      sanitizeHtmlPreview(`${"<".repeat(100_000)}\na`);
+      expect(performance.now() - started).toBeLessThan(3000);
+    });
   });
 
   describe("links", () => {

@@ -131,7 +131,7 @@ function newlinesToBreaks(html: string): string {
     return html;
   }
   return trimmed
-    .split(/(<[^>]*>)/)
+    .split(/(<[^<>]*>)/)
     .map((part, index) =>
       index % 2 === 1
         ? part
