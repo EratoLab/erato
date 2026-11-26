@@ -162,6 +162,11 @@ fn generation_tool_call_id(assistant_message_id: Uuid, turn: usize, call_id: &st
 }
 
 fn provider_tool_call_id(tool_call_id: &str) -> String {
+    let provider_call_id = stored_provider_tool_call_id(tool_call_id);
+    crate::services::chained_apply::provider_call_id(&provider_call_id).unwrap_or(provider_call_id)
+}
+
+fn stored_provider_tool_call_id(tool_call_id: &str) -> String {
     let mut parts = tool_call_id.splitn(3, ':');
     let Some(message_id) = parts.next() else {
         return tool_call_id.to_string();
@@ -663,6 +668,7 @@ fn ask_for_tool_call(
             input: tool_call.fn_arguments.clone(),
             child: None,
             replaces_approval_id: None,
+            follows: None,
         }],
         // The rest of the parked batch is recorded by the caller that owns the
         // queue, not by this per-call gate.
@@ -757,6 +763,78 @@ fn gate_client_tool_call(
             // switch for standing grants does not apply.
             true,
         ),
+    }
+}
+
+/// The card of a call the chained / every-call gate asks about. A chained
+/// apply's card shows the change from the client's receipt and names the
+/// submission it applies.
+fn chained_or_every_call_ask(
+    policy: &crate::services::client_tools::OfferedClientTool,
+    tool_call: &genai::chat::ToolCall,
+    chained: Option<&crate::services::chained_apply::ChainedApplyState>,
+    allow_always: bool,
+) -> ToolCallGate {
+    let display = chained.map(|state| {
+        crate::services::chained_apply::card_display(&policy.config, &tool_call.fn_arguments, state)
+    });
+    match ask_for_tool_call(
+        tool_call,
+        &tool_call.fn_name,
+        ToolApprovalKind::ClientTool,
+        policy.config.namespace_or_default(),
+        display,
+        client_tool_annotations(),
+        "",
+        allow_always,
+    ) {
+        ToolCallGate::Ask(mut request) => {
+            if let Some(state) = chained {
+                for item in &mut request.approvals {
+                    item.follows = Some(crate::models::message::ChainedApprovalRef {
+                        proposal_call_id: state.submission_call_id.clone(),
+                        decide_on_screen: state.decide_on_screen,
+                        reason: state.reason.clone(),
+                    });
+                }
+            }
+            ToolCallGate::Ask(request)
+        }
+        gate => gate,
+    }
+}
+
+/// Rewrites the content of tool responses already in the request, by call id.
+fn replace_tool_responses(request: &mut ChatRequest, replacements: &HashMap<String, JsonValue>) {
+    if replacements.is_empty() {
+        return;
+    }
+    for message in &mut request.messages {
+        if message.role != ChatRole::Tool
+            || !message
+                .content
+                .tool_responses()
+                .iter()
+                .any(|response| replacements.contains_key(&response.call_id))
+        {
+            continue;
+        }
+        let parts: Vec<GenAiContentPart> = message
+            .content
+            .clone()
+            .into_parts()
+            .into_iter()
+            .map(|part| match part {
+                GenAiContentPart::ToolResponse(mut response) => {
+                    if let Some(replacement) = replacements.get(&response.call_id) {
+                        response.content = replacement.to_string();
+                    }
+                    GenAiContentPart::ToolResponse(response)
+                }
+                other => other,
+            })
+            .collect();
+        message.content = MessageContent::from_parts(parts);
     }
 }
 
@@ -2684,6 +2762,13 @@ pub struct ApprovalDecisionItem {
     #[serde(default)]
     #[schema(nullable = false)]
     pub voice_receipt: Option<String>,
+    /// What the user chose on a host's own card, such as a tick, for
+    /// `approve` or `approve_always` of an item with `follows` set. Opaque to
+    /// the server, at most 4 KiB of JSON; the operation carries it to the
+    /// client as `confirmation`.
+    #[serde(default)]
+    #[schema(nullable = false, value_type = Object)]
+    pub client_confirmation: Option<Value>,
     /// For a delegated task's item: the `child_tool_call_id` of the question
     /// the card showed. A task that asks again keeps its `approval_id`, so this
     /// is what tells its questions apart.
@@ -2779,6 +2864,7 @@ impl ContinueStreamRequest {
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    client_confirmation: None,
                     child_tool_call_id: None,
                 })
                 .collect(),
@@ -5355,11 +5441,20 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         crate::services::client_tools::OfferedClientTool,
     > = std::collections::HashMap::new();
     if !client_tool_allowlist.is_empty() && !is_delegated_run {
+        // Changes turned off by the user: the tools that make them are not offered.
+        let turned_off = crate::services::chained_apply::turned_off(
+            &app_state.config.client_tools.tools,
+            me_profile_input.client_tool_decisions,
+        );
         let allowlist_matched: Vec<&crate::config::ClientToolConfig> = app_state
             .config
             .client_tools
             .tools
             .values()
+            .filter(|client_tool| {
+                client_tool.called_by == crate::config::ClientToolCalledBy::Model
+                    && !turned_off.contains(&client_tool.qualified_name())
+            })
             .filter(|client_tool| {
                 crate::services::client_tools::client_tool_is_available(
                     client_tool,
@@ -5462,6 +5557,19 @@ async fn prepare_chat_request_with_adapters_memory_inner(
                 native_strict,
             ));
         }
+        crate::services::chained_apply::offer_apply_tools(
+            &app_state.config.client_tools.tools,
+            &mut offered_client_tools,
+            &generation_request_context.registered_client_tools,
+            me_profile_input.client_tool_decisions,
+            user_input
+                .action_facet
+                .as_ref()
+                .and_then(|facet| app_state.config.action_facets.facets.get(&facet.id))
+                .map_or(&[][..], |facet| facet.client_actions_always_ask.as_slice()),
+            |name| mcp_claimed_names.contains(name),
+            |tool| generation_request_context.executor_for_tool(tool).cloned(),
+        );
     } else if is_delegated_run {
         append_granted_client_tools(
             app_state,
@@ -6667,6 +6775,7 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
         input: child.tool_call.fn_arguments.clone(),
         child: Some(child_ref),
         replaces_approval_id: None,
+        follows: None,
     }
 }
 
@@ -6748,6 +6857,7 @@ fn task_plan_approval_part(
             input: call.fn_arguments.clone(),
             child: None,
             replaces_approval_id: None,
+            follows: None,
         })
         .collect();
     let head = &gated[0];
@@ -7551,6 +7661,11 @@ async fn stream_generate_chat_completion<'a>(
     let mut offered_client_tools = offered_client_tools;
     crate::services::client_tools::link_part_tools(&mut offered_client_tools)
         .map_err(|error| eyre!(error))?;
+    allowed_tool_names.extend(
+        crate::services::chained_apply::server_called_names(&offered_client_tools).cloned(),
+    );
+    let answer_cuts =
+        crate::services::chained_apply::AnswerCuts::from_config(&app_state.config.client_tools);
     // Default time the loop holds a turn open awaiting a client tool's result
     // before giving up (the backstop that prevents a never-answering client
     // from leaking the parked turn). A client tool counts as one normal
@@ -7679,6 +7794,9 @@ async fn stream_generate_chat_completion<'a>(
     }
     let mut submission_attempts = consumption.submission_attempts;
     let mut tool_charges = consumption.tool_charges;
+    let mut chained_applies = consumption.chained_applies;
+    let mut chained_applies_run = consumption.chained_applies_run;
+    let mut ask_next_chained_apply = consumption.ask_next_chained_apply;
 
     // At most one successful client-action proposal per generation: the
     // client needs a single authoritative proposal, so duplicate or
@@ -7821,6 +7939,40 @@ async fn stream_generate_chat_completion<'a>(
     let mut tool_call_parent_observation_ids: HashMap<String, String> = HashMap::new();
     let mut tool_call_started_at: HashMap<String, String> = HashMap::new();
 
+    macro_rules! turn_consumption {
+        () => {
+            crate::services::client_operations::TurnConsumption {
+                model_turns: current_turn,
+                tool_calls: current_tool_call_count,
+                server_tool_calls: task_server_tool_calls,
+                client_tool_calls: task_client_tool_calls,
+                submission_attempts: submission_attempts.clone(),
+                submission_correction: submission_correction.clone(),
+                tool_charges: tool_charges.clone(),
+                client_action_proposed: client_action_already_proposed,
+                chained_applies: chained_applies.clone(),
+                chained_applies_run,
+                ask_next_chained_apply,
+            }
+        };
+    }
+
+    // Saved where the chain changes, not only at a park: `persist_correction!`
+    // saves only while an editing step is open.
+    macro_rules! save_chain {
+        () => {
+            if let Some(task) = streaming_task {
+                crate::services::client_operations::store::save_consumption(
+                    &app_state.db,
+                    assistant_message_id,
+                    task.generation_id,
+                    &turn_consumption!(),
+                )
+                .await?;
+            }
+        };
+    }
+
     macro_rules! persist_operation_turn {
         () => {
             persist_operation_turn!(None::<&genai::chat::ToolCall>)
@@ -7854,16 +8006,7 @@ async fn stream_generate_chat_completion<'a>(
                     attempt_id,
                     task.generation_id,
                     &without_preparing_tools(&current_message_content),
-                    &crate::services::client_operations::TurnConsumption {
-                        model_turns: current_turn,
-                        tool_calls: current_tool_call_count,
-                        server_tool_calls: task_server_tool_calls,
-                        client_tool_calls: task_client_tool_calls,
-                        submission_attempts: submission_attempts.clone(),
-                        submission_correction: submission_correction.clone(),
-                        tool_charges: tool_charges.clone(),
-                        client_action_proposed: client_action_already_proposed,
-                    },
+                    &turn_consumption!(),
                 )
                 .await?;
             }
@@ -7885,16 +8028,7 @@ async fn stream_generate_chat_completion<'a>(
                     &app_state.db,
                     assistant_message_id,
                     task.generation_id,
-                    &crate::services::client_operations::TurnConsumption {
-                        model_turns: current_turn,
-                        tool_calls: current_tool_call_count,
-                        server_tool_calls: task_server_tool_calls,
-                        client_tool_calls: task_client_tool_calls,
-                        submission_attempts: submission_attempts.clone(),
-                        submission_correction: submission_correction.clone(),
-                        tool_charges: tool_charges.clone(),
-                        client_action_proposed: client_action_already_proposed,
-                    },
+                    &turn_consumption!(),
                 )
                 .await?;
             }
@@ -7952,7 +8086,7 @@ async fn stream_generate_chat_completion<'a>(
         // of order, and the model is answered in the order it asked.
         let batch_call_count = unfinished_tool_calls.len();
         // Reserve semantic attempts before either ordinary budgets or task approval can park a batch.
-        for call in &unfinished_tool_calls {
+        for call in unfinished_tool_calls.iter_mut() {
             let Some(tool) = offered_client_tools
                 .get(&call.fn_name)
                 .filter(|_| allowed_tool_names.contains(&call.fn_name))
@@ -7960,6 +8094,34 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             };
             if tool.submission.is_some() {
+                // The host's parser refuses unknown fields, so the argument
+                // never reaches it, nor the stored call; the charge keeps it.
+                if let Some(pointer) = tool
+                    .config
+                    .submission
+                    .as_ref()
+                    .and_then(|submission| submission.more_steps_key.as_deref())
+                    && let Some((value, position)) = crate::services::chained_apply::take_more_steps(
+                        &mut call.fn_arguments,
+                        pointer,
+                    )
+                {
+                    let charge = tool_charges.entry(call.call_id.clone()).or_default();
+                    if charge.more_steps.is_none() {
+                        charge.more_steps = Some(value);
+                        charge.more_steps_at = u32::try_from(position).ok();
+                    }
+                }
+                if !is_delegated_run
+                    && crate::services::chained_apply::offered_follower(tool, &offered_client_tools)
+                        .is_some_and(|follower| {
+                            chained_applies_run >= follower.config.max_calls_per_message()
+                        })
+                {
+                    // Refused before dispatch, as an ordinary call that opens
+                    // no editing step and counts toward the tool-call limit.
+                    continue;
+                }
                 let correction = submission_correction.get_or_insert_with(|| {
                     crate::services::submission_correction::SubmissionCorrection::new(tool)
                 });
@@ -7996,6 +8158,12 @@ async fn stream_generate_chat_completion<'a>(
         }
         persist_correction!();
         let mut current_turn_tool_responses: Vec<(usize, genai::chat::ToolResponse)> = vec![];
+        // Chained applies the model never emitted, each answered as its own
+        // call and response after the batch's responses.
+        let mut chained_pairs: Vec<(genai::chat::ToolCall, genai::chat::ToolResponse)> = vec![];
+        // The apply tools whose chained applies ran in this batch with the
+        // answer going on.
+        let mut chained_continues: HashSet<String> = HashSet::new();
         let mut retrieved_images = Vec::new();
         let mut retrieved_files = Vec::new();
         let mut pending_waits = Vec::new();
@@ -8228,7 +8396,9 @@ async fn stream_generate_chat_completion<'a>(
                     .recovery_read = true;
             }
             let reserved = is_submission || is_recovery_read;
-            let already_charged = tool_charges.get(&unfinished_tool_call.call_id);
+            let already_charged = tool_charges
+                .get(&unfinished_tool_call.call_id)
+                .filter(|charge| charge.is_charged());
             let budget_refusal = if let Some(charge) = already_charged {
                 charge.budget_refusal.clone()
             } else {
@@ -8343,13 +8513,11 @@ async fn stream_generate_chat_completion<'a>(
             }
             if already_charged.is_none() {
                 current_tool_call_count += 1;
-                tool_charges.insert(
-                    unfinished_tool_call.call_id.clone(),
-                    crate::services::client_operations::ToolCallCharge {
-                        budget_refusal: budget_refusal.clone(),
-                        ..Default::default()
-                    },
-                );
+                let charge = tool_charges
+                    .entry(unfinished_tool_call.call_id.clone())
+                    .or_default();
+                charge.budget_refusal = budget_refusal.clone();
+                charge.charged = true;
             }
             persist_operation_turn!(Some(&unfinished_tool_call));
             let tool_index =
@@ -8499,7 +8667,17 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
 
-            if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str()) {
+            // A tool the server calls runs only as the chained apply of an
+            // accepted submission, never because the model named it.
+            let server_called_by_model = offered_client_tools
+                .get(&unfinished_tool_call.fn_name)
+                .is_some_and(|tool| {
+                    tool.config.called_by == crate::config::ClientToolCalledBy::Server
+                })
+                && !chained_applies.contains_key(&unfinished_tool_call.call_id);
+            if !allowed_tool_names.contains(unfinished_tool_call.fn_name.as_str())
+                || server_called_by_model
+            {
                 // Refuse the CALL, never the TURN — a `return Err` here kills
                 // the generation (user sees an empty message); an error
                 // response lets the model recover in prose.
@@ -9294,6 +9472,22 @@ async fn stream_generate_chat_completion<'a>(
                         &tool_input,
                     )
                 });
+                // A server-chained apply of an accepted submission.
+                let chained_state = chained_applies.get(&call_id).cloned();
+                // A chained call the model never emitted answers in a pair of
+                // its own; one re-seeded by a continuation already has its call.
+                let own_pair = chained_state.is_some() && !seeded_call_ids.contains(&call_id);
+                let chain_capped = !is_delegated_run
+                    && tool_policy.is_some_and(|policy| {
+                        policy.submission.is_some()
+                            && crate::services::chained_apply::offered_follower(
+                                policy,
+                                &offered_client_tools,
+                            )
+                            .is_some_and(|follower| {
+                                chained_applies_run >= follower.config.max_calls_per_message()
+                            })
+                    });
                 // Set when a context approval covers the call: the lineage a
                 // host that checks the scope gets, and whether the call needs
                 // a stream that checks it.
@@ -9305,6 +9499,9 @@ async fn stream_generate_chat_completion<'a>(
                 // through its own consent policy instead; a configured durable
                 // tool keeps the user's decision.
                 let gate = match tool_policy {
+                    Some(_) if chain_capped => ToolCallGate::Refuse(format!(
+                        "This answer already tried {chained_applies_run} changes, the most allowed. Do not submit more changes; tell the user what is left."
+                    )),
                     Some(policy) if !approved_task_call_ids.contains(&call_id) => {
                         let qualified_name = policy.config.qualified_name();
                         let decision = match Uuid::parse_str(&user_id) {
@@ -9335,51 +9532,99 @@ async fn stream_generate_chat_completion<'a>(
                             }
                             decision => decision,
                         };
-                        let gate = gate_client_tool_call(
-                            policy.config.namespace_or_default(),
-                            &unfinished_tool_call,
+                        let after_change_request =
+                            chained_state.is_some() && std::mem::take(&mut ask_next_chained_apply);
+                        let reasons = crate::services::chained_apply::AskReasons {
+                            facet_always_asks: crate::services::chained_apply::facet_always_asks(
+                                policy,
+                                chained_state
+                                    .as_ref()
+                                    .map_or(&[][..], |state| state.actions.as_slice()),
+                            ),
+                            after_change_request,
+                            decide_on_screen: chained_state
+                                .as_ref()
+                                .is_some_and(|state| state.decide_on_screen),
+                        };
+                        let forced = crate::services::chained_apply::gate(
+                            policy.config.approval,
                             decision,
-                            policy.reviewed_on_device(),
+                            chained_state.is_some(),
+                            reasons,
                         );
-                        let gate = match (gate, scope_key) {
-                            (ToolCallGate::Ask(request), Some((grant, key)))
-                                if !registered_kind =>
-                            {
-                                match context_scope_gate(
-                                    &app_state.db,
-                                    &user_id,
-                                    policy.executor.as_ref(),
-                                    &tool_name,
-                                    grant.owner_chat_id,
-                                    key,
-                                    context_approved_calls.get(&call_id).copied(),
-                                )
-                                .await?
-                                {
-                                    ContextScopeGate::Covered { lineage, scoped } => {
-                                        scope_lineage = lineage;
-                                        scoped_call = scoped;
-                                        ToolCallGate::Run(None)
-                                    }
-                                    ContextScopeGate::Ask(scope) => {
-                                        let mut request = request;
-                                        request.approval_scope = scope;
-                                        ToolCallGate::Ask(request)
-                                    }
+                        if forced != crate::services::chained_apply::Gate::Ordinary {
+                            // Decided here alone: an ask this table forces wins
+                            // over the device's own review, a covering scope and
+                            // a registered operation's consent.
+                            match forced {
+                                crate::services::chained_apply::Gate::Run => {
+                                    ToolCallGate::Run(None)
+                                }
+                                crate::services::chained_apply::Gate::Refuse => {
+                                    refuse_denied_tool_call(&unfinished_tool_call)
+                                }
+                                _ if is_delegated_run && !child_may_park => ToolCallGate::Refuse(
+                                    approval_unavailable_in_delegated_run(&tool_name),
+                                ),
+                                crate::services::chained_apply::Gate::Ask { allow_always } => {
+                                    chained_or_every_call_ask(
+                                        policy,
+                                        &unfinished_tool_call,
+                                        chained_state.as_ref(),
+                                        allow_always,
+                                    )
+                                }
+                                crate::services::chained_apply::Gate::Ordinary => {
+                                    unreachable!("handled above")
                                 }
                             }
-                            (gate, _) => gate,
-                        };
-                        match gate {
-                            ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run(None),
-                            // The MCP arm's rule: a child with nowhere to ask
-                            // finishes without the call instead of parking.
-                            ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
-                                ToolCallGate::Refuse(approval_unavailable_in_delegated_run(
-                                    &tool_name,
-                                ))
+                        } else {
+                            let gate = gate_client_tool_call(
+                                policy.config.namespace_or_default(),
+                                &unfinished_tool_call,
+                                decision,
+                                policy.reviewed_on_device(),
+                            );
+                            let gate = match (gate, scope_key) {
+                                (ToolCallGate::Ask(request), Some((grant, key)))
+                                    if !registered_kind =>
+                                {
+                                    match context_scope_gate(
+                                        &app_state.db,
+                                        &user_id,
+                                        policy.executor.as_ref(),
+                                        &tool_name,
+                                        grant.owner_chat_id,
+                                        key,
+                                        context_approved_calls.get(&call_id).copied(),
+                                    )
+                                    .await?
+                                    {
+                                        ContextScopeGate::Covered { lineage, scoped } => {
+                                            scope_lineage = lineage;
+                                            scoped_call = scoped;
+                                            ToolCallGate::Run(None)
+                                        }
+                                        ContextScopeGate::Ask(scope) => {
+                                            let mut request = request;
+                                            request.approval_scope = scope;
+                                            ToolCallGate::Ask(request)
+                                        }
+                                    }
+                                }
+                                (gate, _) => gate,
+                            };
+                            match gate {
+                                ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run(None),
+                                // The MCP arm's rule: a child with nowhere to ask
+                                // finishes without the call instead of parking.
+                                ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
+                                    ToolCallGate::Refuse(approval_unavailable_in_delegated_run(
+                                        &tool_name,
+                                    ))
+                                }
+                                gate => gate,
                             }
-                            gate => gate,
                         }
                     }
                     _ => ToolCallGate::Run(None),
@@ -9434,7 +9679,15 @@ async fn stream_generate_chat_completion<'a>(
                     )),
                     _ => None,
                 };
+                // Every chained apply counts toward `max_calls_per_message` whatever its
+                // outcome, so a refusal cannot loop; the run after a tick is the
+                // same change.
+                let counts_as_change = chained_state.as_ref().is_some_and(|state| !state.reparked);
                 let (Some(task), None) = (streaming_task, &refusal) else {
+                    if counts_as_change {
+                        chained_applies_run += 1;
+                        save_chain!();
+                    }
                     let (status, response_text) = refusal.unwrap_or_else(|| {
                         (
                             "error",
@@ -9483,14 +9736,16 @@ async fn stream_generate_chat_completion<'a>(
                         persist_correction!();
                         exit_after_join = true;
                     }
-                    current_turn_tool_responses.push((
-                        batch_position,
-                        genai::chat::ToolResponse {
-                            fn_name: Some(unfinished_tool_call.fn_name.clone()),
-                            call_id,
-                            content: response_text,
-                        },
-                    ));
+                    let response = genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
+                        call_id,
+                        content: response_text,
+                    };
+                    if own_pair {
+                        chained_pairs.push((unfinished_tool_call.clone(), response));
+                    } else {
+                        current_turn_tool_responses.push((batch_position, response));
+                    }
                     if exit_after_join {
                         break 'pop_calls;
                     }
@@ -9559,7 +9814,17 @@ async fn stream_generate_chat_completion<'a>(
                                 message: "Call the submission tool alone after completing other tool calls.".into(),
                             }
                         ], None))
-                    } else { submission.validate(&tool_input) }
+                    } else {
+                        let pointer = tool_policy
+                            .and_then(|policy| policy.config.submission.as_ref())
+                            .and_then(|config| config.more_steps_key.as_deref());
+                        match (pointer, tool_charges.get(&call_id).and_then(|charge| charge.more_steps.as_ref())) {
+                            (Some(pointer), Some(value)) => submission.validate(
+                                &crate::services::chained_apply::with_more_steps(&tool_input, pointer, value, None),
+                            ),
+                            _ => submission.validate(&tool_input),
+                        }
+                    }
                 });
                 if let Some((part, (number, try_number))) = part
                     && let Some(correction) = submission_correction.as_ref()
@@ -9650,16 +9915,23 @@ async fn stream_generate_chat_completion<'a>(
                 if let Some(request) = &durable_request {
                     task.register_client_operation(request.clone()).await?;
                 }
-                // Parts go where the submission that finishes their draft goes.
-                let live_submission = (submission.is_some() || part.is_some())
-                    && durable_request.is_none()
-                    && task.uses_shared_client_transport();
+                // Parts go where the submission that finishes their draft goes,
+                // and so does the apply of an accepted one: only the pane that
+                // checked the change may write it.
+                let live_submission =
+                    (submission.is_some() || part.is_some() || chained_state.is_some())
+                        && durable_request.is_none()
+                        && task.uses_shared_client_transport();
                 if validation_failure.is_none()
                     && live_submission
                     && !task.client_transport_connected().await
                 {
                     validation_failure = Some(ClientToolOutcome::Cancelled {
-                        reason: "context_unavailable".into(),
+                        reason: if chained_state.is_some() {
+                            crate::services::chained_apply::PANE_GONE.into()
+                        } else {
+                            "context_unavailable".into()
+                        },
                     });
                 }
                 let mut executor_target = None;
@@ -9704,6 +9976,7 @@ async fn stream_generate_chat_completion<'a>(
                             && durable_request.is_none()
                             && submission.is_none()
                             && part.is_none()
+                            && chained_state.is_none()
                             && !policy.inbox_only
                     })
                     .and_then(|policy| policy.executor.as_ref())
@@ -9733,6 +10006,9 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 }
                 let server_refused = validation_failure.is_some();
+                if counts_as_change {
+                    chained_applies_run += 1;
+                }
                 let outcome = if let Some(failure) = validation_failure {
                     failure
                 } else {
@@ -9851,7 +10127,9 @@ async fn stream_generate_chat_completion<'a>(
                                 // Sender dropped without delivering (e.g. task replaced).
                                 Err(_) => Park::TimedOut,
                             },
-                            _ = task.wait_for_abort() => Park::Aborted,
+                            // A Stop never cuts a write short: the apply's result
+                            // is awaited, and the answer ends after it.
+                            _ = task.wait_for_abort(), if chained_state.is_none() => Park::Aborted,
                             _ = task.wait_for_client_disconnect(), if durable_request.is_some() => Park::TimedOut,
                             // The client asked to park the call because it now
                             // waits on the user on the device, such as a review
@@ -9912,7 +10190,11 @@ async fn stream_generate_chat_completion<'a>(
                         Park::Delivered(outcome) => outcome,
                         Park::TransportUnavailable => {
                             raced_in.unwrap_or_else(|| ClientToolOutcome::Cancelled {
-                                reason: "context_unavailable".into(),
+                                reason: if chained_state.is_some() {
+                                    crate::services::chained_apply::PANE_GONE.into()
+                                } else {
+                                    "context_unavailable".into()
+                                },
                             })
                         }
                         Park::TimedOut if withdrawn => ClientToolOutcome::Cancelled {
@@ -10138,6 +10420,77 @@ async fn stream_generate_chat_completion<'a>(
                     output_value = output;
                     response_text = output_value.to_string();
                 }
+                // What follows the apply. A Stop that came while it ran ends the
+                // answer once its result is in.
+                let mut after_apply = None;
+                if let Some(state) = chained_state.as_ref() {
+                    let report = crate::services::chained_apply::report(&outcome);
+                    let next = if task.is_abort_requested() {
+                        crate::services::chained_apply::AfterApply::End
+                    } else {
+                        crate::services::chained_apply::after_apply(&report, state)
+                    };
+                    if let crate::services::chained_apply::AfterApply::Repark { reason } = &next
+                        && let Some(policy) = tool_policy
+                    {
+                        // Nothing was written: the same call asks again, on
+                        // screen. No row is kept for it, so the continuation
+                        // runs it again with the user's tick.
+                        let state = chained_applies.get_mut(&call_id).expect("chained state");
+                        state.reparked = true;
+                        state.decide_on_screen = true;
+                        state.reason =
+                            crate::services::chained_apply::bounded_reason(reason.as_deref());
+                        let state = state.clone();
+                        current_message_content.retain(|part| {
+                            !matches!(part, ContentPart::ToolUse(tool_use) if tool_use.tool_call_id == call_id)
+                        });
+                        if let ToolCallGate::Ask(request) = chained_or_every_call_ask(
+                            policy,
+                            &unfinished_tool_call,
+                            Some(&state),
+                            false,
+                        ) {
+                            let mut request = *request;
+                            request.pending_tool_calls = unfinished_tool_calls
+                                .drain(..)
+                                .map(|call| crate::models::message::PendingToolCall {
+                                    call_id: call.call_id,
+                                    fn_name: call.fn_name,
+                                    fn_arguments: call.fn_arguments,
+                                })
+                                .collect();
+                            pending_approval_part = Some(request);
+                            exit_metadata = build_generation_metadata(
+                                total_prompt_tokens,
+                                total_completion_tokens,
+                                total_total_tokens,
+                                total_reasoning_tokens,
+                                langfuse_trace_id.clone(),
+                                false,
+                                None,
+                                non_empty_string(&captured_reasoning_summary),
+                                non_empty_vec(&captured_reasoning_items),
+                                non_empty_vec(&captured_reasoning_item_encrypted_content),
+                            );
+                            exit_after_join = true;
+                            break 'pop_calls;
+                        }
+                    }
+                    if report.status == crate::services::chained_apply::ApplyStatus::NeedsDecision {
+                        crate::services::chained_apply::mark_needs_decision_again(
+                            &mut output_value,
+                        );
+                    }
+                    let max_changes = tool_policy
+                        .filter(|policy| policy.config.follows_tool.is_some())
+                        .map(|policy| policy.config.max_calls_per_message())
+                        .unwrap_or(chained_applies_run);
+                    output_value["changes_left"] =
+                        json!(max_changes.saturating_sub(chained_applies_run));
+                    response_text = output_value.to_string();
+                    after_apply = Some(next);
+                }
                 if tool_charges
                     .get(&call_id)
                     .is_some_and(|charge| charge.recovery_read)
@@ -10193,6 +10546,85 @@ async fn stream_generate_chat_completion<'a>(
                         );
                     }
                     response_text = output_value.to_string();
+                }
+                // Accepted, and its apply tool is on this pane: the server
+                // applies it next, through the apply tool's approval, instead
+                // of ending the answer.
+                let chain = match (&outcome, tool_policy, submission_correction.as_ref()) {
+                    (ClientToolOutcome::Result(result, _), Some(policy), Some(correction))
+                        if submission.is_some()
+                            && !is_delegated_run
+                            && correction.outcome.status
+                                == crate::services::submission_correction::SubmissionStatus::Accepted =>
+                    {
+                        crate::services::chained_apply::offered_follower(policy, &offered_client_tools)
+                            .filter(|follower| chained_applies_run < follower.config.max_calls_per_message())
+                            .map(|follower| {
+                                (result.clone(), follower.config.qualified_name(), follower.config.clone(), correction.outcome.clone())
+                            })
+                    }
+                    _ => None,
+                };
+                if let Some((result, apply_qualified, apply_config, accepted)) = chain {
+                    let chained_id = format!(
+                        "{call_id}{}",
+                        crate::services::chained_apply::CALL_ID_SUFFIX
+                    );
+                    let preview =
+                        crate::services::chained_apply::read_preview(&result, &apply_config);
+                    let more_steps = tool_charges
+                        .get(&call_id)
+                        .and_then(|charge| charge.more_steps.as_ref())
+                        == Some(&JsonValue::Bool(true));
+                    let order = chained_applies.len() as u32;
+                    chained_applies.insert(
+                        chained_id.clone(),
+                        crate::services::chained_apply::ChainedApplyState {
+                            submission_call_id: call_id.clone(),
+                            submission_tool: tool_policy
+                                .map(|policy| policy.config.qualified_name())
+                                .unwrap_or_default(),
+                            apply_tool: apply_qualified,
+                            more_steps,
+                            actions: preview.actions,
+                            decide_on_screen: preview.decide_on_screen,
+                            reason: None,
+                            reparked: false,
+                            title: preview.title,
+                            summary: preview.summary,
+                            order,
+                            submission_outcome: Some(accepted),
+                        },
+                    );
+                    // Reserved like a submission attempt: never an ordinary charge.
+                    tool_charges.insert(
+                        chained_id.clone(),
+                        crate::services::client_operations::ToolCallCharge {
+                            charged: true,
+                            ..Default::default()
+                        },
+                    );
+                    output_value["apply"] = json!({ "call_id": chained_id });
+                    response_text = crate::services::chained_apply::submission_model_output(
+                        &output_value,
+                        &tool_name,
+                        &answer_cuts.replay,
+                    )
+                    .to_string();
+                    unfinished_tool_calls.push_front(genai::chat::ToolCall {
+                        call_id: chained_id,
+                        fn_name: apply_config.name.clone(),
+                        fn_arguments: crate::services::chained_apply::apply_input(
+                            &call_id, &result,
+                        ),
+                        thought_signatures: None,
+                    });
+                    persist_correction!();
+                    // The editing step is over; the next change opens its own.
+                    submission_correction = None;
+                    exit_after_join = false;
+                    exit_metadata = None;
+                    save_chain!();
                 }
                 persist_correction!();
                 let tool_error =
@@ -10282,14 +10714,40 @@ async fn stream_generate_chat_completion<'a>(
                     tool_error.as_deref(),
                 )
                 .await;
-                current_turn_tool_responses.push((
-                    batch_position,
-                    genai::chat::ToolResponse {
-                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
-                        call_id,
-                        content: response_text,
-                    },
-                ));
+                let response = genai::chat::ToolResponse {
+                    fn_name: Some(unfinished_tool_call.fn_name.clone()),
+                    call_id,
+                    content: response_text,
+                };
+                if own_pair {
+                    chained_pairs.push((unfinished_tool_call.clone(), response));
+                } else {
+                    current_turn_tool_responses.push((batch_position, response));
+                }
+                match after_apply {
+                    Some(crate::services::chained_apply::AfterApply::End) => {
+                        exit_after_join = true;
+                        exit_metadata = build_generation_metadata(
+                            total_prompt_tokens,
+                            total_completion_tokens,
+                            total_total_tokens,
+                            total_reasoning_tokens,
+                            langfuse_trace_id.clone(),
+                            task.is_abort_requested(),
+                            None,
+                            non_empty_string(&captured_reasoning_summary),
+                            non_empty_vec(&captured_reasoning_items),
+                            non_empty_vec(&captured_reasoning_item_encrypted_content),
+                        );
+                    }
+                    Some(_) => {
+                        chained_continues.insert(tool_name.clone());
+                    }
+                    None => {}
+                }
+                if chained_state.is_some() {
+                    save_chain!();
+                }
                 if exit_after_join {
                     break 'pop_calls;
                 }
@@ -11241,16 +11699,7 @@ async fn stream_generate_chat_completion<'a>(
                     &app_state.db,
                     assistant_message_id,
                     task.generation_id,
-                    &crate::services::client_operations::TurnConsumption {
-                        model_turns: current_turn,
-                        tool_calls: current_tool_call_count,
-                        server_tool_calls: task_server_tool_calls,
-                        client_tool_calls: task_client_tool_calls,
-                        submission_attempts: submission_attempts.clone(),
-                        submission_correction: submission_correction.clone(),
-                        tool_charges: tool_charges.clone(),
-                        client_action_proposed: client_action_already_proposed,
-                    },
+                    &turn_consumption!(),
                 )
                 .await?;
             }
@@ -11297,16 +11746,7 @@ async fn stream_generate_chat_completion<'a>(
                 &request,
                 task.generation_id,
                 &current_message_content,
-                &crate::services::client_operations::TurnConsumption {
-                    model_turns: current_turn,
-                    tool_calls: current_tool_call_count,
-                    server_tool_calls: task_server_tool_calls,
-                    client_tool_calls: task_client_tool_calls,
-                    submission_attempts: submission_attempts.clone(),
-                    submission_correction: submission_correction.clone(),
-                    tool_charges: tool_charges.clone(),
-                    client_action_proposed: client_action_already_proposed,
-                },
+                &turn_consumption!(),
             )
             .await?;
             if app_state.config.client_tools.executor_stream_enabled
@@ -11530,6 +11970,27 @@ async fn stream_generate_chat_completion<'a>(
                 ),
                 options: None,
             });
+        }
+        for (call, response) in chained_pairs {
+            current_turn_chat_request.messages.push(GenAiChatMessage {
+                role: ChatRole::Assistant,
+                content: MessageContent::from_tool_calls(vec![call]),
+                options: None,
+            });
+            current_turn_chat_request.messages.push(GenAiChatMessage {
+                role: ChatRole::Tool,
+                content: MessageContent::from_parts(vec![genai::chat::ContentPart::ToolResponse(
+                    response,
+                )]),
+                options: None,
+            });
+        }
+        if !chained_continues.is_empty() {
+            // The copy the earlier reads described was replaced by the apply.
+            replace_tool_responses(
+                &mut current_turn_chat_request,
+                &answer_cuts.consumed_reads_in(&current_message_content, &chained_continues),
+            );
         }
 
         let new_pointers: Vec<_> = current_message_content
@@ -12828,6 +13289,7 @@ async fn stream_generate_chat_completion<'a>(
         if let Some(outcome) = submission_correction
             .as_ref()
             .and_then(|correction| correction.shown_outcome())
+            .or_else(|| crate::services::chained_apply::latest_outcome(&chained_applies))
         {
             metadata
                 .get_or_insert_with(GenerationMetadata::default)
@@ -14967,6 +15429,7 @@ mod tests {
             input: json!({}),
             child: None,
             replaces_approval_id: None,
+            follows: None,
         }
     }
 
@@ -14999,6 +15462,7 @@ mod tests {
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    client_confirmation: None,
                     child_tool_call_id: None,
                 })
                 .collect(),
@@ -15436,11 +15900,18 @@ mod tests {
         };
         let mut client = gated_request("own", "2026-10-20T10:00:01Z");
         client.kind = ToolApprovalKind::ClientTool;
+        client.allow_always = true;
         let open = [open_approval("own"), child_item("task-a")];
 
         assert!(
             !super::approve_always_refused(&client, &open, &always("own"), false),
             "a client tool's own standing answer is not the MCP policy's to forbid"
+        );
+        let mut asks_every_time = client.clone();
+        asks_every_time.allow_always = false;
+        assert!(
+            super::approve_always_refused(&asks_every_time, &open, &always("own"), true),
+            "a client tool's card that offers no Always takes none"
         );
         assert!(
             super::approve_always_refused(&client, &open, &always("task-a"), false),
@@ -15598,6 +16069,7 @@ mod tests {
             scope_position: None,
             change_request: None,
             voice_receipt: None,
+            client_confirmation: None,
             child_tool_call_id: None,
         };
         let request = |decisions| super::ContinueStreamRequest {
@@ -15986,6 +16458,7 @@ mod tests {
             input: json!({}),
             child,
             replaces_approval_id: None,
+            follows: None,
         };
         let open = vec![
             item("own", None),
@@ -16340,6 +16813,7 @@ mod tests {
             scope_position: None,
             change_request: Some("nimm den 22.".to_string()),
             voice_receipt: None,
+            client_confirmation: None,
             child_tool_call_id: None,
         };
         let refused = |stop: &super::ContentPartToolApprovalRequest, decisions| {
@@ -22367,10 +22841,54 @@ fn approve_always_refused(
             Some(child) => child.kind.unwrap_or_default(),
             None => request.kind,
         };
+        let own_item = open
+            .iter()
+            .find(|item| &item.approval_id == approval_id)
+            .is_some_and(|item| item.child.is_none());
         matches!(decision, ToolApprovalDecision::ApproveAlways)
-            && asked_about != ToolApprovalKind::ClientTool
-            && !mcp_allows_always
+            && ((asked_about != ToolApprovalKind::ClientTool && !mcp_allows_always)
+                // A client tool's card that offers no Always takes none.
+                || (asked_about == ToolApprovalKind::ClientTool
+                    && own_item
+                    && !request.allow_always))
     })
+}
+
+/// Why the `client_confirmation`s of a body cannot apply, if they cannot.
+fn client_confirmation_refused(
+    open: &[ApprovalItem],
+    request: &ContinueStreamRequest,
+) -> Option<String> {
+    for item in &request.decisions {
+        let Some(confirmation) = &item.client_confirmation else {
+            continue;
+        };
+        if !matches!(
+            item.decision,
+            ToolApprovalDecision::Approve | ToolApprovalDecision::ApproveAlways
+        ) {
+            return Some(
+                "`client_confirmation` belongs to `approve` or `approve_always` only".to_string(),
+            );
+        }
+        if !open
+            .iter()
+            .any(|open| open.approval_id == item.approval_id && open.follows.is_some())
+        {
+            return Some(
+                "`client_confirmation` belongs to a change the server applies only".to_string(),
+            );
+        }
+        if serde_json::to_string(confirmation).map_or(true, |json| {
+            json.len() > crate::services::chained_apply::MAX_CLIENT_CONFIRMATION_BYTES
+        }) {
+            return Some(format!(
+                "`client_confirmation` is limited to {} bytes of JSON",
+                crate::services::chained_apply::MAX_CLIENT_CONFIRMATION_BYTES
+            ));
+        }
+    }
+    None
 }
 
 /// The records of the decisions said by voice, once each receipt is
@@ -22412,15 +22930,17 @@ async fn voice_receipts_taken(
             .inspect_err(|error| tracing::error!(%error, "Reading a voice receipt failed"))
             .ok()
             .flatten();
-        let checked = open
+        let open_item = open
             .iter()
-            .find(|open| open.approval_id == item.approval_id)
-            .zip(user_id)
-            .map(|(open, user_id)| {
-                check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
-            });
+            .find(|open| open.approval_id == item.approval_id);
+        let on_screen = open_item
+            .and_then(|open| open.follows.as_ref())
+            .is_some_and(|follows| follows.decide_on_screen);
+        let checked = open_item.zip(user_id).map(|(open, user_id)| {
+            check_receipt(taken.as_ref(), user_id, message_id, open, outcome)
+        });
         match (checked, taken) {
-            (Some(Ok(())), Some(taken)) if deciding => {
+            (Some(Ok(())), Some(taken)) if deciding && !on_screen => {
                 records.insert(item.approval_id.clone(), taken.receipt.record);
             }
             (checked, _) => {
@@ -22881,6 +23401,9 @@ pub(crate) async fn start_continuation(
             ) {
                 return Err((axum::http::StatusCode::BAD_REQUEST, refusal).into());
             }
+            if let Some(refusal) = client_confirmation_refused(&decidable, &request) {
+                return Err((axum::http::StatusCode::BAD_REQUEST, refusal).into());
+            }
             voice_records =
                 voice_receipts_taken(app_state, me_user, message.id, &decidable, &request).await?;
             if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
@@ -23338,6 +23861,7 @@ async fn resume_parked_child(
                     scope_position: None,
                     change_request: None,
                     voice_receipt: None,
+                    client_confirmation: None,
                     child_tool_call_id: None,
                 })
                 .collect(),
@@ -24191,7 +24715,7 @@ pub(crate) async fn run_continuation(
 
     mark_continuation_in_flight(app_state, policy, me_user, &message).await?;
 
-    let generation_parameters: GenerationParameters = serde_json::from_value(
+    let mut generation_parameters: GenerationParameters = serde_json::from_value(
         message
             .generation_parameters
             .clone()
@@ -24843,10 +25367,21 @@ pub(crate) async fn run_continuation(
                     scope_approval_id: scope_approval.map(|(approval, _)| approval),
                     voice: request.voice_records.get(&item.approval_id).cloned(),
                 }));
+            let mut fn_arguments = item.input.clone();
+            if item.follows.is_some()
+                && let Some(confirmation) = request
+                    .decisions
+                    .iter()
+                    .find(|decision| &decision.approval_id == approval_id)
+                    .and_then(|decision| decision.client_confirmation.clone())
+                && let Some(arguments) = fn_arguments.as_object_mut()
+            {
+                arguments.insert("confirmation".into(), confirmation);
+            }
             approved_plan_calls.push(crate::models::message::PendingToolCall {
                 call_id: item.tool_call_id.clone(),
                 fn_name: item.tool_name.clone(),
-                fn_arguments: item.input.clone(),
+                fn_arguments,
             });
             continue;
         }
@@ -25022,11 +25557,13 @@ pub(crate) async fn run_continuation(
     let (mut approved_calls, pending_from_park) =
         previously_approved_pending(&parsed.content, &approval_request);
     for call in approved_plan_calls {
-        if !approved_calls
-            .iter()
-            .any(|approved| approved.call_id == call.call_id)
+        match approved_calls
+            .iter_mut()
+            .find(|approved| approved.call_id == call.call_id)
         {
-            approved_calls.push(call);
+            // This decision's own copy: it carries the card's confirmation.
+            Some(approved) => *approved = call,
+            None => approved_calls.push(call),
         }
     }
 
@@ -25183,6 +25720,81 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
+    // A change the server was to apply, cancelled or withdrawn, ends the
+    // answer without asking the model: there is nothing to explain, unless
+    // the change was one step of several and the user cancelled it.
+    let chained_items: Vec<&ApprovalItem> = plan_decisions
+        .iter()
+        .filter_map(|(approval_id, _)| {
+            state
+                .open
+                .iter()
+                .find(|item| &item.approval_id == approval_id)
+                .filter(|item| item.follows.is_some())
+        })
+        .collect();
+    let only_chained = !plan_decisions.is_empty()
+        && chained_items.len() == plan_decisions.len()
+        && mcp_decisions.is_empty()
+        && child_decisions.is_empty();
+    let declined_one_of_several = plan_decisions.iter().any(|(approval_id, decision)| {
+        matches!(
+            decision,
+            ToolApprovalDecision::Reject | ToolApprovalDecision::RejectAlways
+        ) && chained_items.iter().any(|item| {
+            &item.approval_id == approval_id
+                && generation_parameters
+                    .turn_consumption
+                    .chained_applies
+                    .get(&item.tool_call_id)
+                    .is_some_and(|state| state.more_steps)
+        })
+    });
+    let only_chained_declines =
+        only_chained && approved_calls.is_empty() && change_requests.is_empty();
+    if only_chained_declines && !declined_one_of_several {
+        let mut metadata = message
+            .generation_metadata
+            .as_ref()
+            .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+            .unwrap_or_default();
+        metadata.continuation_in_flight = None;
+        metadata.was_aborted = plan_decisions
+            .iter()
+            .all(|(_, decision)| *decision == ToolApprovalDecision::Withdraw)
+            .then_some(true)
+            .or(metadata.was_aborted);
+        update_message_generation_metadata(
+            &app_state.db,
+            policy,
+            &me_user.to_subject(),
+            &message.id,
+            metadata,
+        )
+        .await?;
+        return stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+            tx,
+            task,
+            app_state,
+            policy,
+            parsed.content,
+            me_user,
+            message.id,
+        )
+        .await;
+    }
+    // The user asked for the chained change to be different: the model plans
+    // it again, and the next chained apply asks even under Always. The reads
+    // before it run as usual.
+    let change_on_chained = chained_items
+        .iter()
+        .any(|item| change_requests.contains_key(&item.approval_id));
+    if change_on_chained {
+        generation_parameters
+            .turn_consumption
+            .ask_next_chained_apply = true;
+    }
+
     // Generate answer now while a client submission still waits for its
     // correction asks the model nothing: the submission stays unresolved. It
     // ends here once the tasks answered on the limit's stop have settled, on
@@ -25236,6 +25848,10 @@ pub(crate) async fn run_continuation(
         &request.strict_mode_executors,
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
         !change_requests.is_empty(),
+        change_on_chained,
+        // One step of several cancelled: the model only reports what was
+        // and was not done, so it is given no tools to go on with the rest.
+        only_chained_declines && declined_one_of_several,
     )
     .await
 }
@@ -25419,6 +26035,9 @@ async fn resume_parked_generation(
     assistant_mcp_server_ids: Option<Vec<String>>,
     // The continuation carried a change request.
     change_requested: bool,
+    // That change request was on a chained apply's card.
+    change_on_chained: bool,
+    declined_remaining_changes: bool,
 ) -> Result<(), Report> {
     // A change request past the turn's limit ends the turn the way the
     // budget's "answer now" does, so a misunderstanding cannot loop.
@@ -25485,12 +26104,17 @@ async fn resume_parked_generation(
     }
     let replayed_content_len = parsed.content.len();
     let mut retrieval_source = generation_input_messages.clone();
-    retrieval_source.messages.extend(
-        crate::services::prompt_composition::transforms::replay_assistant_content(
-            &parsed.role,
-            parsed.content.clone(),
-        ),
+    let mut replayed = crate::services::prompt_composition::transforms::replay_assistant_content(
+        &parsed.role,
+        parsed.content.clone(),
     );
+    // The model read these shortened before the answer stopped.
+    crate::services::chained_apply::AnswerCuts::from_config(&app_state.config.client_tools)
+        .apply_to_replay(
+            &mut replayed,
+            &generation_parameters.turn_consumption.tool_charges,
+        );
+    retrieval_source.messages.extend(replayed);
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
         policy,
@@ -25579,6 +26203,10 @@ async fn resume_parked_generation(
     let is_delegated_run = crate::models::chat::chat_is_delegated_run(&chat);
     let mut offered_client_tools = HashMap::new();
     if !is_delegated_run {
+        let turned_off = crate::services::chained_apply::turned_off(
+            &app_state.config.client_tools.tools,
+            me_profile_input.client_tool_decisions,
+        );
         for (name, saved) in &generation_parameters.client_tools {
             let Some(current) = app_state
                 .config
@@ -25586,6 +26214,12 @@ async fn resume_parked_generation(
                 .tools
                 .values()
                 .find(|current| current.qualified_name() == saved.qualified_name())
+                // A server-called tool is in no allowlist; it is offered again
+                // below, with its submission.
+                .filter(|current| {
+                    current.called_by == crate::config::ClientToolCalledBy::Model
+                        && !turned_off.contains(&current.qualified_name())
+                })
             else {
                 continue;
             };
@@ -25639,6 +26273,29 @@ async fn resume_parked_generation(
             ));
             offered_client_tools.insert(name.clone(), policy);
         }
+        let registered = generation_parameters
+            .request_context
+            .as_ref()
+            .map(|context| context.registered_client_tools.clone())
+            .unwrap_or_default();
+        crate::services::chained_apply::offer_apply_tools(
+            &app_state.config.client_tools.tools,
+            &mut offered_client_tools,
+            &registered,
+            me_profile_input.client_tool_decisions,
+            generation_parameters
+                .action_facet_id
+                .as_deref()
+                .and_then(|id| app_state.config.action_facets.facets.get(id))
+                .map_or(&[][..], |facet| facet.client_actions_always_ask.as_slice()),
+            |name| mcp_claimed_names.contains(name),
+            |tool| {
+                generation_parameters
+                    .request_context
+                    .as_ref()
+                    .and_then(|context| context.executor_for_tool(tool).cloned())
+            },
+        );
     } else {
         // The run's own persisted binding, which it inherited at launch: a
         // resume or an approval from another client must not move the grant.
@@ -25760,6 +26417,7 @@ async fn resume_parked_generation(
     )
     .await?;
     let answer_without_tools = change_limit_reached
+        || declined_remaining_changes
         || crate::services::tool_call_budget::choices(&parsed.content)
             .last()
             .is_some_and(|(_, choice)| {
@@ -25770,11 +26428,16 @@ async fn resume_parked_generation(
     } else {
         (!continuation_tools.is_empty()).then_some(continuation_tools)
     };
-    let allowed_tool_names: HashSet<String> = chat_request
+    let mut allowed_tool_names: HashSet<String> = chat_request
         .tools
         .as_ref()
         .map(|tools| tools.iter().map(|tool| tool.name.to_string()).collect())
         .unwrap_or_default();
+    // An approved chained apply is in no facet allowlist and was never offered
+    // to the model; it runs as the submission it applies was offered.
+    allowed_tool_names.extend(
+        crate::services::chained_apply::server_called_names(&offered_client_tools).cloned(),
+    );
 
     // A crash retry can find some of the abandoned calls already dispatched, and
     // their `ToolUse` on the row is the record of it: re-seeding one would run
@@ -25794,6 +26457,11 @@ async fn resume_parked_generation(
         if change_limit_reached {
             format!(
                 "The turn ended after repeated change requests, so the tool '{}' was not run.",
+                tool_name
+            )
+        } else if declined_remaining_changes {
+            format!(
+                "The user declined the remaining changes, so the tool '{}' was not run.",
                 tool_name
             )
         } else if denied_mcp_tools
@@ -25892,6 +26560,10 @@ async fn resume_parked_generation(
         chat_request.messages.push(GenAiChatMessage::user(
             app_state.config.approval_change_requests.limit_note.clone(),
         ));
+    } else if declined_remaining_changes {
+        chat_request.messages.push(GenAiChatMessage::user(
+            crate::services::chained_apply::DECLINED_REMAINING_CHANGES_NOTE,
+        ));
     } else if answer_without_tools {
         chat_request.messages.push(GenAiChatMessage::user(
             "The tool-call budget has been reached. Please provide your final answer now using the information already available. No more tools are available.",
@@ -25919,7 +26591,7 @@ async fn resume_parked_generation(
         continuing_client_tools,
         continuing_executors,
         context_approved_calls,
-        ask_first_new_call: change_requested,
+        ask_first_new_call: change_requested && !change_on_chained,
     });
 
     let chat_options =
@@ -26322,6 +26994,8 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map_or(&[], |context| context.strict_mode_executors.as_slice()),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
+        false,
+        false,
         false,
     )
     .await

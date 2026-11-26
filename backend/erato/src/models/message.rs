@@ -1707,6 +1707,26 @@ pub struct ApprovalItem {
     /// corrected call of the same tool on the same server.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces_approval_id: Option<String>,
+    /// Set when the server itself made this call (the operation) after a
+    /// proposal the client checked and accepted: the card is the host's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub follows: Option<ChainedApprovalRef>,
+}
+
+/// The accepted proposal a server-called operation follows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ChainedApprovalRef {
+    pub proposal_call_id: String,
+    /// The user decides on screen: the card needs a tick or a row choice, so
+    /// it offers no Always and takes no decision by voice.
+    pub decide_on_screen: bool,
+    /// The host's short code for why it asks again after it found, while
+    /// writing, that the user must confirm something, such as
+    /// `whole_document`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub reason: Option<String>,
 }
 
 /// A call of the parked batch that was never popped. The parked part is the
@@ -1768,6 +1788,7 @@ impl ContentPartToolApprovalRequest {
             input: self.input.clone(),
             child: None,
             replaces_approval_id: None,
+            follows: None,
         }]
     }
 }

@@ -9,8 +9,12 @@
 //! validate/stage a draft and finish the turn on success, without applying it.
 //!
 //! Returning client tools MUST be read-only / idempotent: a backend restart
-//! drops the parked turn, so a client may re-execute on recovery. Mutations
-//! must use the terminal `client_actions` path.
+//! drops the parked turn, so a client may re-execute on recovery. The one
+//! exception are writes the user approves through the server: an apply tool
+//! the server calls after an accepted submission (`called_by = "server"`, see
+//! `chained_apply`), or a tool with `approval = "every_call"` or `"none"`.
+//! Their executors must run a call at most once per call id. Other mutations
+//! use the terminal `client_actions` path.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,6 +45,9 @@ pub struct OfferedClientTool {
     /// request that offers the tool, or, for a delegated run, in the one that
     /// launched it (the grant's `strict_mode`).
     pub executor_strict_mode: bool,
+    /// The active action facet's `client_actions_always_ask` entries that
+    /// this tool carries out.
+    pub always_ask_actions: Vec<String>,
 }
 
 /// The desktop sidecar tools whose results the Erato desktop app shows for
@@ -172,6 +179,7 @@ impl OfferedClientTool {
             part: None,
             grant: None,
             executor_strict_mode: false,
+            always_ask_actions: Vec::new(),
         })
     }
 
@@ -2250,6 +2258,12 @@ mod tests {
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         }
     }
 

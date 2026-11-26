@@ -3,6 +3,7 @@
 mod approval_change_requests;
 mod approval_decided_once;
 mod approval_voice_commands;
+mod chained_apply;
 mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;
@@ -8696,6 +8697,12 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -9481,6 +9488,12 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -10036,6 +10049,12 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -10630,6 +10649,12 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -12306,6 +12331,12 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                follows_tool: None,
+                max_calls_per_message: None,
+                invalidated_read_tools: None,
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
     }
@@ -12377,6 +12408,12 @@ async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                follows_tool: None,
+                max_calls_per_message: None,
+                invalidated_read_tools: None,
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
     }

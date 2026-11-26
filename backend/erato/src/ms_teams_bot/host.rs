@@ -1818,6 +1818,7 @@ mod tests {
                     approval_scope: None,
                 }),
                 replaces_approval_id: None,
+                follows: None,
             });
         ContentPart::ToolApprovalRequest(request)
     }

@@ -683,6 +683,7 @@ mod tests {
             input: json!({"status": "Rejected"}),
             child,
             replaces_approval_id: None,
+            follows: None,
         };
         ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
             tool_call_id: call_id.into(),

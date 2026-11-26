@@ -3838,6 +3838,271 @@ recovery_read_tools = ["client/write_part"]
     ));
 }
 
+const CHAINED_APPLY: &str = r#"
+[client_tools.tools.read]
+name = "read_context"
+namespace = "editor"
+description = "Read"
+parameters = '{"type":"object"}'
+
+[client_tools.tools.apply]
+name = "apply_draft"
+namespace = "editor"
+description = "Apply the draft"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+follows_tool = "editor/submit_draft"
+client_actions = ["editor.apply_draft"]
+
+[client_tools.tools.submit]
+name = "submit_draft"
+namespace = "editor"
+description = "Check a draft"
+parameters = '{"type":"object"}'
+[client_tools.tools.submit.submission]
+recovery_read_tools = ["editor/read_context"]
+more_steps_key = "/more_changes"
+"#;
+
+#[test]
+fn a_server_called_tool_follows_the_submission_it_applies() {
+    let config = migrate_config_with_action_facets(CHAINED_APPLY);
+    let submission = config.client_tools.tools["submit"]
+        .submission
+        .as_ref()
+        .unwrap();
+    assert_eq!(submission.more_steps_key.as_deref(), Some("/more_changes"));
+    let tool = &config.client_tools.tools["apply"];
+    assert_eq!(tool.follows_tool.as_deref(), Some("editor/submit_draft"));
+    assert_eq!(tool.max_calls_per_message(), 5);
+    assert_eq!(
+        tool.invalidated_read_tools(submission),
+        ["editor/read_context"]
+    );
+    assert_eq!(tool.called_by, erato::config::ClientToolCalledBy::Server);
+    assert_eq!(
+        tool.approval,
+        erato::config::ClientToolApproval::UserDecision
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "sets called_by = \"server\" and requires requires_client_registration = true"
+)]
+fn a_server_called_tool_needs_a_registered_executor() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("requires_client_registration = true\n", ""),
+    );
+}
+
+#[test]
+#[should_panic(expected = "sets called_by = \"server\" and cannot set approval = \"none\"")]
+fn a_server_called_tool_always_has_a_decision() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "called_by = \"server\"",
+        "called_by = \"server\"\napproval = \"none\"",
+    ));
+}
+
+#[test]
+#[should_panic(expected = "sets called_by = \"server\" and needs follows_tool")]
+fn a_server_called_tool_needs_follows_tool() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("follows_tool = \"editor/submit_draft\"\n", ""),
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "follows_tool 'editor/read_context' must name a configured submission tool"
+)]
+fn follows_tool_must_name_a_submission() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "follows_tool = \"editor/submit_draft\"",
+        "follows_tool = \"editor/read_context\"",
+    ));
+}
+
+#[test]
+#[should_panic(expected = "sets follows_tool, which is only for called_by = \"server\"")]
+fn follows_tool_is_only_for_server_called_tools() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "description = \"Read\"",
+        "description = \"Read\"\nfollows_tool = \"editor/submit_draft\"",
+    ));
+}
+
+#[test]
+fn follower_keys_need_follows_tool() {
+    for key in [
+        "max_calls_per_message = 3",
+        "invalidated_read_tools = [\"editor/read_context\"]",
+    ] {
+        let config = CHAINED_APPLY.replace(
+            "description = \"Read\"",
+            &format!("description = \"Read\"\n{key}"),
+        );
+        let panic =
+            std::panic::catch_unwind(|| migrate_config_with_action_facets(&config)).expect_err(key);
+        let message = panic.downcast_ref::<String>().cloned().unwrap_or_default();
+        assert!(
+            message.contains("which apply only together with follows_tool"),
+            "{key}: {message}"
+        );
+    }
+}
+
+#[test]
+#[should_panic(
+    expected = "Submission 'editor/submit_draft' is followed by more than one server-called tool: 'editor/apply_again' and 'editor/apply_draft'"
+)]
+fn a_submission_has_at_most_one_follower() {
+    migrate_config_with_action_facets(&format!(
+        r#"{CHAINED_APPLY}
+[client_tools.tools.apply_again]
+name = "apply_again"
+namespace = "editor"
+description = "Apply the draft again"
+parameters = '{{"type":"object"}}'
+called_by = "server"
+requires_client_registration = true
+follows_tool = "editor/submit_draft"
+"#
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "Client tool 'editor/submit_draft' has a [submission.apply] table, which this version does not read: set follows_tool = \"editor/submit_draft\""
+)]
+fn a_leftover_submission_apply_table_is_refused() {
+    migrate_config_with_action_facets(&format!(
+        "{CHAINED_APPLY}[client_tools.tools.submit.submission.apply]\ntool = \"editor/apply_draft\"\nmax_changes = 5\nconsumed_reads = [\"editor/read_context\"]\n"
+    ));
+}
+
+#[test]
+fn more_steps_key_without_a_follower_loads() {
+    let config = migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("[client_tools.tools.apply]", "[client_tools.tools.unused]")
+            .replace("called_by = \"server\"\nrequires_client_registration = true\nfollows_tool = \"editor/submit_draft\"\nclient_actions = [\"editor.apply_draft\"]\n", ""),
+    );
+    assert_eq!(
+        config.client_tools.tools["submit"]
+            .submission
+            .as_ref()
+            .unwrap()
+            .more_steps_key
+            .as_deref(),
+        Some("/more_changes")
+    );
+}
+
+#[test]
+#[should_panic(expected = "submission.more_steps_key must point to a top-level argument")]
+fn more_steps_key_points_to_a_top_level_argument() {
+    migrate_config_with_action_facets(
+        &CHAINED_APPLY.replace("\"/more_changes\"", "\"/plan/more_changes\""),
+    );
+}
+
+#[test]
+#[should_panic(expected = "max_calls_per_message must be 1–20")]
+fn max_calls_per_message_is_bounded() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "follows_tool = \"editor/submit_draft\"",
+        "follows_tool = \"editor/submit_draft\"\nmax_calls_per_message = 21",
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "invalidated_read_tools entry 'outlook/read' must name a configured model-called client tool of the namespace 'editor'"
+)]
+fn invalidated_read_tools_are_reads_of_the_followed_namespace() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "follows_tool = \"editor/submit_draft\"",
+        "follows_tool = \"editor/submit_draft\"\ninvalidated_read_tools = [\"outlook/read\"]",
+    ));
+}
+
+const OTHER_NAMESPACE_FOLLOWER: (&str, &str) = (
+    "name = \"apply_draft\"\nnamespace = \"editor\"",
+    "name = \"apply_draft\"\nnamespace = \"ops\"",
+);
+
+#[test]
+fn invalidated_read_tools_follow_the_submission_namespace_not_the_followers() {
+    let (from, to) = OTHER_NAMESPACE_FOLLOWER;
+    let config = migrate_config_with_action_facets(&CHAINED_APPLY.replace(from, to).replace(
+        "follows_tool = \"editor/submit_draft\"",
+        "follows_tool = \"editor/submit_draft\"\ninvalidated_read_tools = [\"editor/read_context\"]",
+    ));
+    assert_eq!(
+        config.client_tools.tools["apply"].qualified_name(),
+        "ops/apply_draft"
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "invalidated_read_tools entry 'ops/read_ops' must name a configured model-called client tool of the namespace 'editor'"
+)]
+fn invalidated_read_tools_refuse_a_read_of_the_followers_namespace() {
+    let (from, to) = OTHER_NAMESPACE_FOLLOWER;
+    migrate_config_with_action_facets(&format!(
+        r#"{}
+[client_tools.tools.read_ops]
+name = "read_ops"
+namespace = "ops"
+description = "Read ops"
+parameters = '{{"type":"object"}}'
+"#,
+        CHAINED_APPLY.replace(from, to).replace(
+            "follows_tool = \"editor/submit_draft\"",
+            "follows_tool = \"editor/submit_draft\"\ninvalidated_read_tools = [\"ops/read_ops\"]",
+        )
+    ));
+}
+
+#[test]
+#[should_panic(expected = "is listed by the server-called tools")]
+fn a_client_action_belongs_to_one_server_called_tool() {
+    migrate_config_with_action_facets(&format!(
+        r#"{CHAINED_APPLY}
+[client_tools.tools.apply_comments]
+name = "apply_comments"
+namespace = "editor"
+description = "Change comments"
+parameters = '{{"type":"object"}}'
+called_by = "server"
+requires_client_registration = true
+follows_tool = "editor/submit_comments"
+client_actions = ["editor.apply_draft"]
+
+[client_tools.tools.submit_comments]
+name = "submit_comments"
+namespace = "editor"
+description = "Check comment changes"
+parameters = '{{"type":"object"}}'
+[client_tools.tools.submit_comments.submission]
+"#
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "cannot combine approval = \"every_call\" or \"none\" with child_access = \"read\""
+)]
+fn a_task_read_never_asks_every_time() {
+    migrate_config_with_action_facets(&CHAINED_APPLY.replace(
+        "description = \"Read\"",
+        "description = \"Read\"\napproval = \"every_call\"\nchild_access = \"read\"\nhost_context = \"word_document\"",
+    ));
+}
+
 fn migrate_durable_tool(durable_toml: &str) -> AppConfig {
     migrate_config_with_action_facets(&format!(
         r#"

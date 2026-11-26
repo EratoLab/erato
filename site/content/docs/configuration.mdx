@@ -8407,11 +8407,59 @@ unresolved outcome.
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_part_calls */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.max_row_tries */}
 {/* erato_toml_config_key: client_tools.tools.<key>.submission.part_key */}
+{/* erato_toml_config_key: client_tools.tools.<key>.submission.more_steps_key */}
 
 - **`part_tools`** _(default: `[]`)_ - Qualified names of configured non-submission client tools whose calls stage parts of this submission's draft. A part tool belongs to one submission, cannot be durable, cannot be a recovery read of any submission and cannot set `child_access = "read"`. Without part tools, the other part settings have no effect.
 - **`max_part_calls`** _(default: 40, range: 1–200)_ - Part calls per request across all part tools. The calls past the limit in the model turn that reached it are refused and ask for the submission call; a part call in a later turn ends with the unresolved reason `part_calls_exhausted`.
 - **`max_row_tries`** _(default: 3, range: 1–10)_ - Calls per part, including accepted calls and calls the schema or the client rejected. A part past its tries is refused without reaching the client, and the other parts go on.
 - **`part_key`** _(default: `"/row"`)_ - JSON Pointer to the argument that names the part a call writes; `2`, `2.0` and `"2"` name the same part. The calls of a part tool without that argument count as one part, such as a section plan.
+- **`more_steps_key`** _(default: none)_ - JSON Pointer to a top-level boolean argument of the submission that says another change follows. The server keeps its value and removes the argument before the client sees the call, whether or not a tool follows the submission. When it is true, the answer goes on after the followed operation; otherwise it ends after a change that applied cleanly.
+
+#### Applying an accepted submission
+
+The model hands in a proposal: a submission the client checks. A server-called
+tool can follow that submission. Once the client accepts the submission, the
+server itself calls the following tool (the operation) with the accepted
+submission's call id, through the tool's approval: the change the user approves
+is always the change the client checked, and the model never has to ask for it.
+
+```toml
+[client_tools.tools.submit_draft.submission]
+more_steps_key = "/more_changes"
+
+[client_tools.tools.apply_draft]
+name = "apply_draft"
+namespace = "editor"
+description = "Change the open document"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+timeout_ms = 120000
+follows_tool = "editor/submit_draft"
+max_calls_per_message = 5
+client_actions = ["editor.apply_draft"]
+```
+
+{/* erato_toml_config_key: client_tools.tools.<key>.called_by */}
+{/* erato_toml_config_key: client_tools.tools.<key>.approval */}
+{/* erato_toml_config_key: client_tools.tools.<key>.client_actions.[] */}
+{/* erato_toml_config_key: client_tools.tools.<key>.follows_tool */}
+{/* erato_toml_config_key: client_tools.tools.<key>.max_calls_per_message */}
+{/* erato_toml_config_key: client_tools.tools.<key>.invalidated_read_tools.[] */}
+
+- **`called_by`** _(default: `"model"`)_ - `server` makes a tool follow the submission named in `follows_tool`. It is never offered to the model and needs `requires_client_registration = true`; it cannot be a submission, durable, a part tool, read by tasks or set `approval_scope = "context"`. It is offered only to a client that registered it and only when the user did not set it to Never; Never also hides the submission and its part tools.
+- **`approval`** _(default: `"user_decision"`)_ - `user_decision` follows the user's Ask, Always or Never for the tool; a server-called tool asks while the user has stored none. `every_call` asks on every call and never offers Always. `none` runs without asking and is left out of the user's settings; a server-called tool cannot use it. `every_call` and `none` cannot be combined with `child_access = "read"`.
+- **`client_actions`** _(default: `[]`)_ - The action facet action ids the tool carries out. An action facet whose `client_actions_always_ask` lists one the call uses makes that call ask every time in that facet. An id belongs to at most one server-called tool.
+- **`follows_tool`** _(default: none)_ - Qualified name of a configured submission tool. The server calls this tool once for each accepted call of that submission, through this tool's approval. At most one tool follows a submission; only a `called_by = "server"` tool can set it. Without a tool that follows it, acceptance ends generation as before. A config that still has a `submission.apply` table does not load.
+- **`max_calls_per_message`** _(default: 5, range: 1–20)_ - Calls of the following tool per answer, whatever their outcome. A submission after the last one is refused before it reaches the client, and the model is told to say what is left. Only with `follows_tool`.
+- **`invalidated_read_tools`** _(default: the followed submission's `recovery_read_tools`)_ - Read tools of the submission's namespace whose results describe the state an applied change replaced. When the answer goes on after a call, their earlier results in it reach the model shortened to their `replay` receipt; the stored results stay complete. Tools without a `replay` table are never shortened. Only with `follows_tool`.
+
+After the apply's result the answer ends without another model request, unless
+the result says it did not fully apply or asks for a follow-up, or the
+submission said more changes follow. A result that asks the user to decide
+something on screen first parks the same call again once, as a question that
+takes no standing Always and no decision by voice. `GET /me/facets` lists the
+apply tools the facets reach in `approval_tools`.
 
 ### Compact replay of earlier client tool calls
 

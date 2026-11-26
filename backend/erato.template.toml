@@ -980,6 +980,30 @@ chat_provider_ids = ["test-token-limit"]
 # # object_kind = "comment"
 # # fields = ["$.changes[*].op"]
 #
+# # Optional, for a submission the client checks before it is applied (the
+# # proposal): once the client accepts it, the server calls the tool whose
+# # `follows_tool` names the submission (the operation) itself, through that
+# # tool's approval (Ask by default, or the user's Always / Never). The
+# # operation is never offered to the model. The submission's `more_steps_key`
+# # names a top-level boolean argument the server removes before the client
+# # sees the call; when true the answer goes on after the operation. At most
+# # `max_calls_per_message` operations per answer (1-20, default 5).
+# # [client_tools.tools.editor_apply_draft]
+# # name = "apply_draft"
+# # namespace = "editor"
+# # description = "Apply the checked draft"
+# # parameters = '{"type":"object"}'
+# # called_by = "server"              # "model" (default) | "server"
+# # approval = "user_decision"        # "user_decision" (default) | "every_call" | "none"
+# # requires_client_registration = true
+# # timeout_ms = 120000
+# # follows_tool = "editor/submit_draft"
+# # max_calls_per_message = 5
+# # invalidated_read_tools = ["editor/read_context"]   # default: the submission's recovery_read_tools
+# # client_actions = ["editor.apply_draft"]
+# # [client_tools.tools.editor_submit_draft.submission]
+# # more_steps_key = "/more_changes"
+#
 # # Optional: with durable_operations_enabled, a call whose stream drops or
 # # times out parks durably for the same device and Outlook mailbox instead of
 # # ending as a timeout; the turn resumes when that add-in answers. Not allowed
