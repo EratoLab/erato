@@ -26,43 +26,13 @@ import {
   isCreateAppointmentSupported,
   openNewAppointmentForm,
   parseAppointmentDetails,
-  type AppointmentDetails,
+  appointmentAttendeesText,
+  appointmentWhenText,
 } from "../utils/outlookCreateAppointment";
+import { markOutlookFormOpened } from "../utils/outlookProposalApply";
 
+import type { AppointmentDetails } from "../utils/outlookCreateAppointment";
 import type { EratoAppointmentCodeBlockProps } from "@erato/frontend/library";
-
-const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
-  weekday: "short",
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-};
-
-/**
- * The appointment's time range for the summary and the confirmation card,
- * rendered in the runtime's local zone — which is the zone the facet template
- * instructed the model to emit (`{{timezone}}` is captured from the same
- * runtime at send time).
- */
-function formatAppointmentWhen(details: AppointmentDetails): string {
-  const start = new Date(details.start);
-  const end = new Date(details.end);
-  const startText = start.toLocaleString(undefined, DATE_TIME_FORMAT);
-  const sameDay = start.toDateString() === end.toDateString();
-  const endText = sameDay
-    ? end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
-    : end.toLocaleString(undefined, DATE_TIME_FORMAT);
-  return `${startText} – ${endText}`;
-}
-
-/** Combined required + optional attendees as a comma-separated string. */
-function formatAttendees(details: AppointmentDetails): string {
-  return [...details.attendees, ...(details.optionalAttendees ?? [])].join(
-    ", ",
-  );
-}
 
 /**
  * Office-aware renderer for erato-appointment code blocks (the JSON payload
@@ -161,6 +131,7 @@ export function OutlookEratoAppointmentRenderer({
     setStatus("opening");
     try {
       await openNewAppointmentForm(details);
+      markOutlookFormOpened(artifact?.messageId, "outlook.create_appointment");
       setStatus("done");
       scheduleStatusReset(2000);
       return true;
@@ -170,7 +141,7 @@ export function OutlookEratoAppointmentRenderer({
       scheduleStatusReset(4000);
       return false;
     }
-  }, [details, scheduleStatusReset]);
+  }, [artifact?.messageId, details, scheduleStatusReset]);
 
   const buildSummary = useCallback(() => details, [details]);
 
@@ -223,8 +194,8 @@ export function OutlookEratoAppointmentRenderer({
     );
   }
 
-  const when = formatAppointmentWhen(details);
-  const attendeesText = formatAttendees(details);
+  const when = appointmentWhenText(details);
+  const attendeesText = appointmentAttendeesText(details);
 
   return (
     <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
@@ -341,10 +312,10 @@ export function OutlookEratoAppointmentRenderer({
                 })}
               </p>
               <p className="break-words text-xs">
-                {formatAppointmentWhen(confirmCard.summary)}
+                {appointmentWhenText(confirmCard.summary)}
                 {confirmCard.summary.attendees.length > 0 ||
                 (confirmCard.summary.optionalAttendees?.length ?? 0) > 0
-                  ? ` · ${formatAttendees(confirmCard.summary)}`
+                  ? ` · ${appointmentAttendeesText(confirmCard.summary)}`
                   : ""}
               </p>
             </div>

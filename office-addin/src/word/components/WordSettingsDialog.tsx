@@ -14,7 +14,10 @@ import {
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
-import { WORD_CARRY_OVER } from "../../core/clientActions/carryOverDecisions";
+import {
+  carryOverMappingsFor,
+  serverDecidedActions,
+} from "../../core/clientActions/proposalApply";
 import {
   useActionFacetClientActions,
   useAvailableActionFacetArgs,
@@ -40,33 +43,26 @@ import {
 import type { WordCommentPrecedence } from "../utils/wordCommentSend";
 import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
-/** The pane actions the server decides once the facets list the tool that carries them out. */
-function serverDecidedActions(offered: ReadonlySet<string>): Set<string> {
-  return new Set(
-    WORD_CARRY_OVER.filter((mapping) => offered.has(mapping.serverKey)).flatMap(
-      (mapping) => mapping.actions,
-    ),
-  );
-}
-
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
   const approvalTools = useApprovalTools();
+  // The pane's actions whose decision the server keeps, as the tools that carry them out list them.
+  const wordMappings = useMemo(
+    () => carryOverMappingsFor(approvalTools, "word"),
+    [approvalTools],
+  );
   const wordTools = useMemo(
     () =>
       approvalTools.filter((tool) =>
-        WORD_CARRY_OVER.some(
+        wordMappings.some(
           (mapping) => mapping.serverKey === tool.qualified_name,
         ),
       ),
-    [approvalTools],
+    [approvalTools, wordMappings],
   );
   const serverDecided = useMemo(
-    () =>
-      serverDecidedActions(
-        new Set(wordTools.map((tool) => tool.qualified_name)),
-      ),
-    [wordTools],
+    () => serverDecidedActions(wordMappings),
+    [wordMappings],
   );
   const paneActions = useCallback(
     (allowed: readonly string[]) =>

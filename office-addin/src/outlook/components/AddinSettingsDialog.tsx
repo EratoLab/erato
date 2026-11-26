@@ -1,5 +1,12 @@
-import { EntityRow, MailIcon } from "@erato/frontend/library";
+import {
+  approvalToolRows,
+  ClientToolDecisionList,
+  EntityRow,
+  MailIcon,
+  useApprovalTools,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
+import { useCallback, useMemo } from "react";
 
 import { BehaviorTabContent } from "./BehaviorTabContent";
 import {
@@ -7,6 +14,10 @@ import {
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import {
+  carryOverMappingsFor,
+  serverDecidedActions,
+} from "../../core/clientActions/proposalApply";
 import { useOffice } from "../../providers/OfficeProvider";
 import { outlookClientActionDecisionStore } from "../utils/clientActionPolicy";
 import {
@@ -16,6 +27,32 @@ import {
 
 export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
+  const approvalTools = useApprovalTools();
+  // Actions whose tool the server lists are decided there, so the choice holds on every device.
+  const outlookMappings = useMemo(
+    () => carryOverMappingsFor(approvalTools, "outlook"),
+    [approvalTools],
+  );
+  const outlookTools = useMemo(
+    () =>
+      approvalTools.filter((tool) =>
+        outlookMappings.some(
+          (mapping) => mapping.serverKey === tool.qualified_name,
+        ),
+      ),
+    [approvalTools, outlookMappings],
+  );
+  const serverDecided = useMemo(
+    () => serverDecidedActions(outlookMappings),
+    [outlookMappings],
+  );
+  const paneActions = useCallback(
+    (allowed: readonly string[]) =>
+      offerableClientActions(allowed).filter(
+        (action) => !serverDecided.has(action),
+      ),
+    [serverDecided],
+  );
   return (
     <AddinSettingsDialogCore
       {...props}
@@ -61,9 +98,20 @@ export function AddinSettingsDialog(props: AddinSettingsDialogCoreProps) {
             })}
             data-testid="servers-tools-outlook-actions-row"
           >
+            {outlookTools.length > 0 && (
+              <ClientToolDecisionList
+                tools={approvalToolRows(outlookTools)}
+                defaultDecision="ask"
+                heading={t({
+                  id: "officeAddin.outlook.settings.serverActions",
+                  message: "Actions",
+                })}
+                data-testid="outlook-server-tool-decisions"
+              />
+            )}
             <ClientActionsSettings
               store={outlookClientActionDecisionStore}
-              offerableActions={offerableClientActions}
+              offerableActions={paneActions}
               displayLabel={clientActionDisplayLabel}
               copy={{
                 intro: t({

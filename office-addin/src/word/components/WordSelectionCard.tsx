@@ -38,6 +38,10 @@ import {
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
 import {
+  wordProposalReviewKey,
+  wordSelectionReviewStatus,
+} from "../utils/wordProposalApply";
+import {
   isWordRevertOffered,
   revertWordSelection,
   WORD_WEB_REVERT_MAX_PARAGRAPHS,
@@ -201,7 +205,7 @@ const formatSpans = (selection: WordSelectionSnapshot) =>
  * What the card shows for each kept item's marker and each format span's, so the comparison reads
  * as text: a span's text as [bold]…[/bold].
  */
-function wordKeptMarkersShown(
+export function wordKeptMarkersShown(
   text: string,
   selection: WordSelectionSnapshot,
 ): string {
@@ -526,20 +530,6 @@ function resultText(
   }
 }
 
-function statusOf(
-  result: WordReplaceSelectionResult,
-): WordReviewState["status"] {
-  switch (result.status) {
-    case "applied":
-    case "unchanged":
-      return "done";
-    case "unverified":
-      return "write-failed";
-    default:
-      return "error";
-  }
-}
-
 /** A Replace whose text is, or may be, in the document. */
 const holdsPassage = (review: WordReviewState) =>
   (review.status === "done" && review.selection?.status === "applied") ||
@@ -612,7 +602,11 @@ export function WordSelectionCard({
   const isGenerating = message?.status === "sending";
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
-  const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
+  const batchKey = wordProposalReviewKey(
+    messageId ?? "",
+    entry.action,
+    content,
+  );
   const review = useWordReview(batchKey);
   const reviews = useWordReviews();
   const result = review.selection;
@@ -792,7 +786,7 @@ export function WordSelectionCard({
           wordSelectionStore.requestRefresh();
         }
         updateReview(batchKey, {
-          status: statusOf(outcome),
+          status: wordSelectionReviewStatus(outcome),
           applyStage: undefined,
           detailsExpanded: false,
           selection: outcome,

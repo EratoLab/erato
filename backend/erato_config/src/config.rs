@@ -2344,6 +2344,30 @@ impl AppConfig {
                     );
                 }
             }
+            for (language, action) in &action_facet.draft_block_actions {
+                if language.is_empty() || language.contains(char::is_whitespace) {
+                    panic!(
+                        "Action facet '{}' has an empty block language or one with spaces in draft_block_actions.",
+                        id
+                    );
+                }
+                if !action_facet.client_actions.contains(action) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which is not in client_actions.",
+                        id, language, action
+                    );
+                }
+                if !config.client_tools.tools.values().any(|tool| {
+                    tool.called_by == ClientToolCalledBy::Server
+                        && tool.follows_tool.is_none()
+                        && tool.client_actions.contains(action)
+                }) {
+                    panic!(
+                        "Action facet '{}' maps block '{}' to '{}', which no server-called client tool without follows_tool carries out.",
+                        id, language, action
+                    );
+                }
+            }
         }
 
         // Validate top-level `client_tools` (client-executed returning tools).
@@ -7950,6 +7974,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -7969,6 +7994,7 @@ impl ActionFacetsConfig {
                 presentation: None,
                 client_actions_always_ask: vec![],
                 grant_scope: HashMap::new(),
+                draft_block_actions: HashMap::new(),
                 tool_call_allowlist: vec![],
                 delegation: None,
             });
@@ -8101,6 +8127,13 @@ pub struct ActionFacetConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub grant_scope: HashMap<String, String>,
+
+    // Fenced code block languages mapped to one of `client_actions`: when an
+    // answer holds exactly one such block and the model proposed nothing, the
+    // server proposes the mapped action.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub draft_block_actions: HashMap<String, String>,
 
     // Allowlist of tools the model may call when this action facet is active,
     // using the same `namespace/*` / `server/tool` pattern syntax as regular
@@ -8307,7 +8340,9 @@ pub struct ClientToolConfig {
 
     /// Who calls the tool. `server`: never offered to a model; the server
     /// calls it after the submission named in `follows_tool` was accepted, so
-    /// the change the client checked is the change it applies. Requires
+    /// the change the client checked is the change it applies, or, without
+    /// `follows_tool`, after the model proposed one of its `client_actions`
+    /// through `propose_client_action`. Requires
     /// `requires_client_registration`. Default: `model`.
     #[serde(default, skip_serializing_if = "ClientToolCalledBy::is_model")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
@@ -9041,9 +9076,9 @@ fn validate_submission_parts(
 }
 
 /// Panics unless every server-called tool follows a submission that no other
-/// tool follows and can be dispatched like one, the follower's settings are
-/// usable, and each facet action id belongs to at most one server-called
-/// tool.
+/// tool follows, or follows none and lists client actions, and can be
+/// dispatched like one, the follower's settings are usable, and each facet
+/// action id belongs to at most one server-called tool.
 fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
     let mut followers: HashMap<&str, String> = HashMap::new();
     for tool in tools.values() {
@@ -9154,8 +9189,12 @@ fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
         if let Some(refusal) = refusal {
             panic!("Client tool '{qualified}' sets called_by = \"server\" and {refusal}.");
         }
-        if tool.follows_tool.is_none() {
-            panic!("Client tool '{qualified}' sets called_by = \"server\" and needs follows_tool.");
+        // Without follows_tool it carries out the client actions a facet lets
+        // the model propose, and `propose_client_action` is its caller.
+        if tool.follows_tool.is_none() && tool.client_actions.is_empty() {
+            panic!(
+                "Client tool '{qualified}' sets called_by = \"server\" and needs follows_tool or the client_actions it carries out."
+            );
         }
         for action in &tool.client_actions {
             if let Some(previous) = action_owners.insert(action, qualified.clone()) {

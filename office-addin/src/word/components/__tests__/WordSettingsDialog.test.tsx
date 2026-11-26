@@ -52,7 +52,12 @@ const mockSetCommentAuthor = vi.fn();
 
 const mockUseActionFacetClientActions = vi.fn();
 const mockApprovalTools: {
-  tools: { qualified_name: string; title: string; approval: string }[];
+  tools: {
+    qualified_name: string;
+    title: string;
+    approval: string;
+    client_actions?: string[];
+  }[];
 } = { tools: [] };
 const mockFacets = {
   ids: new Set<string>(),
@@ -294,6 +299,7 @@ describe("WordSettingsDialog", () => {
         qualified_name: "word/apply_document_plan",
         title: "Change the document",
         approval: "user_decision",
+        client_actions: ["word.apply_document_plan"],
       },
     ];
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);

@@ -4,13 +4,29 @@ import {
   carriedOverDecisions,
   carryOverClientDecisions,
   CLIENT_DECISIONS_CARRIED_OVER_KEY,
-  WORD_CARRY_OVER,
 } from "../carryOverDecisions";
+
+import type { CarryOverMapping } from "../carryOverDecisions";
 
 const STORE = "erato.addin.word.clientActionDecisions";
 const PLAN = "word/apply_document_plan";
 const COMMENTS = "word/apply_comment_changes";
 const deviceWide = () => false;
+
+const WORD_CARRY_OVER: readonly CarryOverMapping[] = [
+  {
+    serverKey: PLAN,
+    actions: ["word.apply_document_plan"],
+  },
+  {
+    serverKey: COMMENTS,
+    actions: [
+      "word.add_comments",
+      "word.respond_to_comments",
+      "word.modify_comments",
+    ],
+  },
+];
 
 describe("carrying the pane's choices over to the server", () => {
   it("keeps Always and Never for a change of the document", () => {

@@ -6276,6 +6276,13 @@
             "type": "string",
             "description": "`user_decision` (Ask, Always or Never) or `every_call`, which asks\nevery time and offers no Always."
           },
+          "client_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The action facet action ids the tool carries out, such as\n`outlook.reply`: a client's own decisions for these actions now follow\nthe tool's decision."
+          },
           "label": {
             "$ref": "#/components/schemas/ToolCallLabel",
             "description": "The change in the same terms as a tool call's label (`action` and\n`object_kind`), when the tool has one."

@@ -37,21 +37,84 @@ const PROVIDER_CALL_ID_CHARS: usize = 9;
 /// `[A-Za-z0-9]`. Derived from the chained id, so every request of the answer
 /// and every later replay sends the same one.
 pub fn provider_call_id(call_id: &str) -> Option<String> {
-    use sha2::{Digest, Sha256};
     call_id.strip_suffix(CALL_ID_SUFFIX)?;
+    Some(short_call_id(call_id))
+}
+
+fn short_call_id(seed: &str) -> String {
+    use sha2::{Digest, Sha256};
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    let digest = Sha256::digest(call_id.as_bytes());
-    Some(
-        digest
-            .iter()
-            .take(PROVIDER_CALL_ID_CHARS)
-            .map(|byte| ALPHABET[usize::from(*byte) % ALPHABET.len()] as char)
-            .collect(),
-    )
+    Sha256::digest(seed.as_bytes())
+        .iter()
+        .take(PROVIDER_CALL_ID_CHARS)
+        .map(|byte| ALPHABET[usize::from(*byte) % ALPHABET.len()] as char)
+        .collect()
+}
+
+/// The provider call id of a proposal the server makes for a model turn, in
+/// the same form as a chained call's.
+pub fn server_proposal_call_id(turn_seed: &str) -> String {
+    short_call_id(&format!("{turn_seed}:proposal"))
+}
+
+fn closed_block_languages(markdown: &str) -> Vec<&str> {
+    use crate::services::speech::sentences::{closes_fence, opens_fence};
+    let mut languages = Vec::new();
+    let mut open: Option<((char, usize), &str)> = None;
+    for line in markdown.lines() {
+        open = match open {
+            Some((fence, language)) if closes_fence(line, fence) => {
+                languages.push(language);
+                None
+            }
+            Some(open) => Some(open),
+            None => opens_fence(line).map(|fence| {
+                let info = &line.trim_start()[fence.1..];
+                (fence, info.split_whitespace().next().unwrap_or_default())
+            }),
+        };
+    }
+    languages
+}
+
+/// The action the answer's one draft block stands for, when the facet maps
+/// its language to an action an offered proposal tool carries out. None for
+/// no such block or several, which leave the choice to the user.
+pub fn drafted_action(
+    offered: &HashMap<String, OfferedClientTool>,
+    content: &[ContentPart],
+) -> Option<String> {
+    let actions: HashMap<&str, &str> = offered
+        .values()
+        .filter(|tool| tool.proposal)
+        .flat_map(|tool| tool.draft_block_actions.iter())
+        .map(|(language, action)| (language.as_str(), action.as_str()))
+        .collect();
+    if actions.is_empty() {
+        return None;
+    }
+    let mut found = None;
+    let mut count = 0;
+    for part in content {
+        let ContentPart::Text(text) = part else {
+            continue;
+        };
+        for language in closed_block_languages(&text.text) {
+            if let Some(action) = actions.get(language) {
+                count += 1;
+                found = Some(*action);
+            }
+        }
+    }
+    (count == 1).then(|| found.map(str::to_owned)).flatten()
 }
 
 /// The reason of a chained call whose client went away before it answered.
 pub const PANE_GONE: &str = "pane_gone";
+/// The reason of a proposed action whose answer offers several versions: the
+/// user picks one with its own button, so there is nothing to carry out or
+/// explain.
+pub const USER_PICKS: &str = "user_picks";
 /// Largest `client_confirmation` a decision may carry, as JSON.
 pub const MAX_CLIENT_CONFIRMATION_BYTES: usize = 4096;
 const MAX_REASON_CHARS: usize = 64;
@@ -102,6 +165,7 @@ pub struct ChainedApplyState {
 pub fn latest_outcome(chained: &BTreeMap<String, ChainedApplyState>) -> Option<&SubmissionOutcome> {
     chained
         .values()
+        .filter(|state| state.submission_outcome.is_some())
         .max_by_key(|state| state.order)
         .and_then(|state| state.submission_outcome.as_ref())
 }
@@ -283,34 +347,179 @@ pub fn offer_apply_tools(
         })
         .collect();
     for apply in wanted {
-        let qualified = apply.qualified_name();
-        if !crate::services::client_tools::client_tool_is_available(apply, registered)
-            || decisions.get(&qualified) == Some(&ClientToolDecision::NeverAllow)
+        offer_server_tool(
+            apply,
+            offered,
+            registered,
+            decisions,
+            facet_always_ask,
+            &mcp_has_tool,
+            &executor_for,
+        );
+    }
+}
+
+/// Offers one server-called tool, when the client registered it, the user did
+/// not set it to Never and no other tool takes its name. Returns the policy.
+fn offer_server_tool<'a>(
+    apply: &ClientToolConfig,
+    offered: &'a mut HashMap<String, OfferedClientTool>,
+    registered: &[String],
+    decisions: &BTreeMap<String, ClientToolDecision>,
+    facet_always_ask: &[String],
+    mcp_has_tool: &impl Fn(&str) -> bool,
+    executor_for: &impl Fn(
+        &ClientToolConfig,
+    ) -> Option<crate::services::client_operations::ExecutorBinding>,
+) -> Option<&'a mut OfferedClientTool> {
+    let qualified = apply.qualified_name();
+    if !crate::services::client_tools::client_tool_is_available(apply, registered)
+        || decisions.get(&qualified) == Some(&ClientToolDecision::NeverAllow)
+    {
+        return None;
+    }
+    // The offer's own name rule: an MCP tool of the same name would take
+    // the chained call.
+    let selection =
+        crate::services::client_tools::select_client_tools(vec![apply], &[], mcp_has_tool);
+    if selection.offered.is_empty() || offered.contains_key(&apply.name) {
+        tracing::warn!(
+            "Not chaining the apply tool '{qualified}': another tool already uses the name '{}'",
+            apply.name
+        );
+        return None;
+    }
+    let mut policy = OfferedClientTool::prepare(apply, &json!({"type": "object"})).ok()?;
+    policy.executor = executor_for(apply);
+    policy.always_ask_actions = facet_always_ask
+        .iter()
+        .filter(|action| apply.client_actions.contains(action))
+        .cloned()
+        .collect();
+    offered.insert(apply.name.clone(), policy);
+    offered.get_mut(&apply.name)
+}
+
+/// Whether a server-called tool carries out proposed client actions: it
+/// follows no submission, so `propose_client_action` is its only caller.
+pub fn is_proposal_tool(tool: &ClientToolConfig) -> bool {
+    tool.called_by == ClientToolCalledBy::Server
+        && tool.follows_tool.is_none()
+        && !tool.client_actions.is_empty()
+}
+
+/// The configured tool that carries out a proposed client action.
+pub fn proposal_tool<'a>(
+    tools: &'a HashMap<String, ClientToolConfig>,
+    action: &str,
+) -> Option<&'a ClientToolConfig> {
+    tools.values().find(|tool| {
+        tool.client_actions.iter().any(|known| known == action) && is_proposal_tool(tool)
+    })
+}
+
+/// The request's facet argument that names the open item, which a chained
+/// proposal carries so the client acts only on the item the answer was made
+/// for.
+pub const ITEM_IDENTITY_ARGS: [&str; 2] = ["item_identity", "document_identity"];
+const MAX_ITEM_IDENTITY_CHARS: usize = 512;
+
+pub fn item_identity(args: Option<&HashMap<String, String>>) -> Option<String> {
+    let args = args?;
+    ITEM_IDENTITY_ARGS
+        .iter()
+        .find_map(|key| args.get(*key))
+        .filter(|identity| {
+            !identity.is_empty() && identity.chars().count() <= MAX_ITEM_IDENTITY_CHARS
+        })
+        .cloned()
+}
+
+/// Adds the tool of every action the facet lets the model propose, when the
+/// client registered it and the user did not set it to Never. Like an apply
+/// tool, it is never offered to the model.
+#[allow(clippy::too_many_arguments)]
+pub fn offer_proposal_tools(
+    tools: &HashMap<String, ClientToolConfig>,
+    offered: &mut HashMap<String, OfferedClientTool>,
+    facet_actions: &[String],
+    registered: &[String],
+    decisions: &BTreeMap<String, ClientToolDecision>,
+    facet_always_ask: &[String],
+    item_identity: Option<&str>,
+    draft_block_actions: &HashMap<String, String>,
+    mcp_has_tool: impl Fn(&str) -> bool,
+    executor_for: impl Fn(
+        &ClientToolConfig,
+    ) -> Option<crate::services::client_operations::ExecutorBinding>,
+) {
+    for action in facet_actions {
+        let Some(tool) = proposal_tool(tools, action) else {
+            continue;
+        };
+        if offered
+            .values()
+            .any(|policy| policy.config.qualified_name() == tool.qualified_name())
         {
             continue;
         }
-        // The offer's own name rule: an MCP tool of the same name would take
-        // the chained call.
-        let selection =
-            crate::services::client_tools::select_client_tools(vec![apply], &[], &mcp_has_tool);
-        if selection.offered.is_empty() || offered.contains_key(&apply.name) {
-            tracing::warn!(
-                "Not chaining the apply tool '{qualified}': another tool already uses the name '{}'",
-                apply.name
-            );
-            continue;
+        if let Some(policy) = offer_server_tool(
+            tool,
+            offered,
+            registered,
+            decisions,
+            facet_always_ask,
+            &mcp_has_tool,
+            &executor_for,
+        ) {
+            policy.proposal = true;
+            policy.item_identity = item_identity.map(str::to_owned);
+            policy.draft_block_actions = draft_block_actions
+                .iter()
+                .filter(|(_, action)| tool.client_actions.contains(action))
+                .map(|(language, action)| (language.clone(), action.clone()))
+                .collect();
         }
-        let Ok(mut policy) = OfferedClientTool::prepare(apply, &json!({"type": "object"})) else {
-            continue;
-        };
-        policy.executor = executor_for(apply);
-        policy.always_ask_actions = facet_always_ask
-            .iter()
-            .filter(|action| apply.client_actions.contains(action))
-            .cloned()
-            .collect();
-        offered.insert(apply.name.clone(), policy);
     }
+}
+
+/// The offered tool that carries out a proposed action.
+pub fn offered_proposal_tool<'a>(
+    offered: &'a HashMap<String, OfferedClientTool>,
+    action: &str,
+) -> Option<&'a OfferedClientTool> {
+    offered.values().find(|policy| {
+        policy.proposal
+            && policy
+                .config
+                .client_actions
+                .iter()
+                .any(|known| known == action)
+    })
+}
+
+/// The chained call's input for a proposed action: which proposal, which
+/// action, and the item the answer was made for.
+pub fn proposal_input(proposal_call_id: &str, action: &str, item_identity: Option<&str>) -> Value {
+    json!({
+        "proposal_call_id": proposal_call_id,
+        "action": action,
+        "item_identity": item_identity,
+    })
+}
+
+/// The model reads this for a proposed action the user turned off.
+pub fn turned_off_proposal_text(action: &str) -> String {
+    format!(
+        "The user turned off the client action '{action}' in the settings, so it was not proposed. Tell the user in one short sentence that this action is turned off; what you wrote stays in the answer for them to use. Do not propose another action."
+    )
+}
+
+/// The model reads this for a proposal the server carries out next.
+pub fn chained_proposal_text(action: &str) -> String {
+    format!(
+        "Proposed client action '{action}'. The user decides in the chat; the result of carrying it out follows. Do not call this tool again for this request unless that result says the user asked for a change, and do not claim the action has been carried out before its result says so."
+    )
 }
 
 /// The names of the offered tools the server calls, which the dispatch loop
@@ -497,7 +706,10 @@ pub fn after_apply(report: &ApplyReport, state: &ChainedApplyState) -> AfterAppl
             }
         };
     }
-    if report.status == ApplyStatus::Unavailable && report.reason.as_deref() == Some(PANE_GONE) {
+    if is_pane_gone(report)
+        || (report.status == ApplyStatus::Unavailable
+            && report.reason.as_deref() == Some(USER_PICKS))
+    {
         return AfterApply::End;
     }
     if report.status.outcome() != Some(OperationOutcome::Succeeded)
@@ -507,6 +719,10 @@ pub fn after_apply(report: &ApplyReport, state: &ChainedApplyState) -> AfterAppl
         return AfterApply::Continue;
     }
     AfterApply::End
+}
+
+pub fn is_pane_gone(report: &ApplyReport) -> bool {
+    report.status == ApplyStatus::Unavailable && report.reason.as_deref() == Some(PANE_GONE)
 }
 
 /// A second `needs_decision` for the same call is recorded as a failure.
@@ -897,6 +1113,13 @@ mod tests {
             reason: PANE_GONE.into(),
         });
         assert_eq!(after_apply(&gone, &more), AfterApply::End);
+        assert_eq!(
+            after_apply(
+                &result(json!({"status":"unavailable","reason":USER_PICKS})),
+                &state
+            ),
+            AfterApply::End
+        );
         let timed_out = report(&ClientToolOutcome::Cancelled {
             reason: "timeout".into(),
         });
@@ -1148,5 +1371,78 @@ mod tests {
                 );
             }
         }
+    }
+
+    fn drafting(proposal: bool) -> HashMap<String, OfferedClientTool> {
+        let config = ClientToolConfig {
+            name: "open_form".into(),
+            namespace: Some("editor".into()),
+            called_by: ClientToolCalledBy::Server,
+            client_actions: vec!["editor.open_form".into()],
+            ..Default::default()
+        };
+        let mut tool = OfferedClientTool::prepare(&config, &json!({"type": "object"})).unwrap();
+        tool.proposal = proposal;
+        tool.draft_block_actions = [
+            ("editor-draft".to_string(), "editor.open_form".to_string()),
+            (
+                "editor-draft-rich".to_string(),
+                "editor.open_form".to_string(),
+            ),
+        ]
+        .into();
+        HashMap::from([("open_form".to_string(), tool)])
+    }
+
+    fn answer(texts: &[&str]) -> Vec<ContentPart> {
+        texts
+            .iter()
+            .map(|text| {
+                ContentPart::Text(crate::models::message::ContentPartText {
+                    text: text.to_string(),
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn one_closed_draft_block_names_its_action() {
+        let offered = drafting(true);
+        let drafted = |texts: &[&str]| drafted_action(&offered, &answer(texts));
+        let action = Some("editor.open_form".to_string());
+        assert_eq!(
+            drafted(&["Here:\n```editor-draft\nHello\n```\nDone."]),
+            action
+        );
+        assert_eq!(
+            drafted(&["~~~~ editor-draft-rich x\n<p>Hi</p>\n~~~~\n"]),
+            action
+        );
+        assert_eq!(
+            drafted(&["```text\n```editor-draft\n```\n", "```editor-draft\nA\n```"]),
+            action,
+            "a block inside another block is not a draft"
+        );
+        assert_eq!(drafted(&["No draft, just `editor-draft` in prose."]), None);
+        assert_eq!(drafted(&["```editor-draft\ncut off"]), None);
+        assert_eq!(drafted(&["```python\nprint()\n```"]), None);
+        assert_eq!(
+            drafted(&["```editor-draft\nA\n```", "```editor-draft-rich\nB\n```"]),
+            None,
+            "several versions leave the pick to the user"
+        );
+        assert_eq!(
+            drafted_action(&drafting(false), &answer(&["```editor-draft\nA\n```"])),
+            None
+        );
+    }
+
+    #[test]
+    fn a_server_proposal_id_is_a_short_provider_id() {
+        let id = server_proposal_call_id("message:2");
+        assert_eq!(id.len(), PROVIDER_CALL_ID_CHARS);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert_eq!(id, server_proposal_call_id("message:2"));
+        assert_ne!(id, server_proposal_call_id("message:3"));
     }
 }

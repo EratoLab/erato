@@ -2,27 +2,12 @@ import { isClientActionDecision, parseDecisionKey } from "./clientActionPolicy";
 
 import type { ClientActionDecision } from "./clientActionPolicy";
 
-/** Which pane actions a server-applied tool carries out; a host lists its own. */
+/** Which pane actions a server-applied tool carries out, as the server lists them. */
 export interface CarryOverMapping {
   /** The tool's qualified name, the key of its server decision. */
   serverKey: string;
   actions: readonly string[];
 }
-
-export const WORD_CARRY_OVER: readonly CarryOverMapping[] = [
-  {
-    serverKey: "word/apply_document_plan",
-    actions: ["word.apply_document_plan"],
-  },
-  {
-    serverKey: "word/apply_comment_changes",
-    actions: [
-      "word.add_comments",
-      "word.respond_to_comments",
-      "word.modify_comments",
-    ],
-  },
-];
 
 export const CLIENT_DECISIONS_CARRIED_OVER_KEY =
   "erato.addin.clientDecisionsCarriedOver";

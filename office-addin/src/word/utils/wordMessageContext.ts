@@ -1,5 +1,7 @@
 import { extractTextFromContent } from "@erato/frontend/library";
 
+import { isLatestAssistantMessage } from "../../core/clientActions/proposalApply";
+
 import type { WordMessageContext } from "./wordWriteBridge";
 import type { Message } from "@erato/frontend/library";
 
@@ -39,6 +41,11 @@ export function wordMessageContext(
     ...(requestText ? { requestText } : {}),
     ...(modelId ? { modelId } : {}),
     ...(fileIds?.length ? { fileIds } : {}),
-    ...(message ? { content: message.content } : {}),
+    ...(message
+      ? {
+          content: message.content,
+          latest: isLatestAssistantMessage(messages, order, messageId),
+        }
+      : {}),
   };
 }

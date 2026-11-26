@@ -1,7 +1,8 @@
 import { resolveEditWordCapture } from "@erato/frontend/word-review";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FreshCompletionTracker } from "../../core/clientActions/freshCompletionTracker";
+import { isLatestAssistantMessage } from "../../core/clientActions/proposalApply";
 
 import type {
   AddinChatController,
@@ -14,6 +15,11 @@ export interface WordDocumentCaptures {
   stagePendingCapture: (capture: WordDocumentCapture | null) => void;
   hostCallbacks: AddinChatHostCallbacks;
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
+  /**
+   * The copy an answer may write with. A call the server makes while the answer still streams
+   * comes before the copy is bound, so the latest unfinished answer uses the one staged for it.
+   */
+  captureFor: (messageId: string) => WordDocumentCapture | undefined;
 }
 
 /** The reply ID is unknown at send time; bind only an unambiguous fresh completion. */
@@ -29,6 +35,21 @@ export function useWordDocumentCaptures(
   >(() => new Map());
 
   const { currentChatId, messageOrder, messages } = controller;
+  const snapshotRef = useRef({ messages, messageOrder });
+  snapshotRef.current = { messages, messageOrder };
+  const captureFor = useCallback((messageId: string) => {
+    const bound = capturesRef.current.get(messageId);
+    if (bound) return bound;
+    const { messages, messageOrder } = snapshotRef.current;
+    const message = messages[messageId];
+    if (
+      !message ||
+      message.status === "complete" ||
+      !isLatestAssistantMessage(messages, messageOrder, messageId)
+    )
+      return undefined;
+    return pendingCaptureRef.current ?? undefined;
+  }, []);
   useEffect(() => {
     if (freshTrackerChatIdRef.current !== currentChatId) {
       // A new chat receiving its server ID must retain its pending capture.
@@ -75,5 +96,6 @@ export function useWordDocumentCaptures(
       },
     },
     capturesByAssistantMessageId,
+    captureFor,
   };
 }
