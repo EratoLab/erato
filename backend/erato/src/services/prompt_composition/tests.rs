@@ -3692,6 +3692,7 @@ mod test_cases {
                 output: Some(output),
                 result_details: None,
                 allowed_by: None,
+                budget_usage: None,
                 started_at: None,
                 ended_at: None,
             })

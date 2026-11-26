@@ -70,6 +70,7 @@ export type Env = {
   userPreferencesEnabled: boolean;
   userPreferencesDataTabEnabled: boolean;
   disclaimersTabEnabled?: boolean;
+  budgetTabEnabled?: boolean;
   mcpServersTabEnabled: boolean;
   mcpServersInChatInputEnabled?: boolean;
   mcpServersInAssistantEditorEnabled?: boolean;
@@ -203,6 +204,7 @@ declare global {
     USER_PREFERENCES_ENABLED?: boolean;
     USER_PREFERENCES_DATA_TAB_ENABLED?: boolean;
     DISCLAIMERS_TAB_ENABLED?: boolean;
+    BUDGET_TAB_ENABLED?: boolean;
     MCP_SERVERS_TAB_ENABLED?: boolean;
     MCP_SERVERS_IN_CHAT_INPUT_ENABLED?: boolean;
     MCP_SERVERS_IN_ASSISTANT_EDITOR_ENABLED?: boolean;
@@ -728,6 +730,7 @@ export const env = (): Env => {
     userPreferencesEnabled,
     userPreferencesDataTabEnabled,
     disclaimersTabEnabled: window.DISCLAIMERS_TAB_ENABLED ?? false,
+    budgetTabEnabled: window.BUDGET_TAB_ENABLED ?? false,
     mcpServersTabEnabled,
     mcpServersInChatInputEnabled,
     mcpServersInAssistantEditorEnabled,

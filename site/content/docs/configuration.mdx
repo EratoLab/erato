@@ -1755,8 +1755,8 @@ cost_output_tokens_per_1m = 15.0
 - **`supports_encrypted_reasoning_content`** _(default: true)_ - Whether the model supports requesting encrypted reasoning content for stateless reasoning replay
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
 - **`supports_strict_tool_calling`** _(default: false)_ - Opt this model/endpoint into native strict arguments for configured client submissions. Currently supported by the OpenAI-compatible Chat Completions and Responses adapters. Other adapters retain local schema validation and bounded corrections. Set this only after verifying the endpoint's support; it is not inferred from the model name.
-- **`cost_input_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million input tokens (unit-less, for cost estimation)
-- **`cost_output_tokens_per_1m`** _(default: 0.0)_ - Price per 1 million output tokens (unit-less, for cost estimation)
+- **`cost_input_tokens_per_1m`** _(optional)_ - Price per 1 million input tokens. Set to `0.0` for free input tokens.
+- **`cost_output_tokens_per_1m`** _(optional)_ - Price per 1 million output tokens. Set to `0.0` for free output tokens.
 
 If not explicitly configured, all capabilities default to conservative values (large context window, no special features, no cost tracking).
 
@@ -8648,7 +8648,7 @@ Whether budget tracking and display is enabled. When disabled, no budget informa
 
 {/* erato_toml_config_key: budget.max_budget */}
 
-The maximum budget amount per budget period (unit-less). This value is used for calculating budget usage percentages and determining when warning thresholds are exceeded.
+The maximum budget amount for the rolling window (unit-less). This value determines the budget usage percentage and when warnings appear.
 
 The budget amount is treated as unit-less for flexibility - the actual monetary value depends on your model pricing configuration and the configured display currency.
 
@@ -8692,13 +8692,49 @@ For example, a value of `0.7` means users will be warned when they've used 70% o
 
 {/* erato_toml_config_key: budget.budget_period_days */}
 
-Number of days that counts as one budget period. Budget usage is calculated and reset based on this period length.
+The number of preceding 24-hour days to include in the rolling budget window. Each contribution expires when it reaches that age. The same window applies to composer warnings and the optional Budget tab.
+
+On upgrade, Erato recalculates spending from stored usage in the rolling window. This can immediately change displayed spending and whether a user has reached their limit.
 
 **Type:** `number`
 
 **Default value:** `30`
 
-**Example:** `7` (for weekly budgets), `30` (for monthly budgets)
+**Example:** `7` to count the last seven days, or `30` to count the last thirty days.
+
+#### `budget.frontend_tab`
+
+{/* erato_toml_config_key: budget.frontend_tab */}
+
+Configuration for the read-only Budget tab in web Settings. The tab shows each signed-in user their spending, remaining allowance, spending by model, and the additional allowance expected to become available in the next 24 hours.
+
+#### `budget.frontend_tab.enabled`
+
+{/* erato_toml_config_key: budget.frontend_tab.enabled */}
+
+Show the Budget tab when `budget.enabled = true`. Defaults to `false`.
+
+```toml
+[budget.frontend_tab]
+enabled = true
+```
+
+#### `budget.model_rates`
+
+{/* erato_toml_config_key: budget.model_rates */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_output_tokens_per_1m */}
+
+Set `cost_input_tokens_per_1m` and `cost_output_tokens_per_1m` for a model or
+deployment, in the budget currency. The key must match the chat provider ID
+or the exact `model_identifier` reported by the MCP server. A chat provider ID
+and an MCP model identifier that match share a rate. Use distinct identifiers
+for deployments with different rates.
+
+Chat provider IDs fall back to their rates in `model_capabilities` when no
+explicit budget rate exists. Erato records reported usage even when it has no
+rate. The Budget tab marks the spending total as partial when usage in the
+window is missing prices. Adding a rate applies it to existing usage in the window.
 
 #### Complete Budget Configuration Example
 
@@ -8709,6 +8745,9 @@ max_budget = 50.0
 budget_currency = "EUR"
 warn_threshold = 0.75
 budget_period_days = 7
+
+[budget.frontend_tab]
+enabled = true
 
 # You also need to configure model pricing for accurate cost calculations
 [chat_providers]
@@ -8722,9 +8761,11 @@ api_key = "sk-your-key"
 [chat_providers.providers.main.model_capabilities]
 cost_input_tokens_per_1m = 5.0
 cost_output_tokens_per_1m = 15.0
-```
 
-**Note:** Budget tracking requires that you configure accurate pricing information in your chat provider's `model_capabilities` section. The budget calculations are based on actual token usage multiplied by the configured token prices.
+[budget.model_rates."image-generation/v1"]
+cost_input_tokens_per_1m = 5.0
+cost_output_tokens_per_1m = 15.0
+```
 
 ### `caches`
 

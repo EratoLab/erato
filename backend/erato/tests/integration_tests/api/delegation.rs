@@ -5240,6 +5240,7 @@ fn answer_metadata(
     was_aborted: bool,
 ) -> erato::models::message::GenerationMetadata {
     erato::models::message::GenerationMetadata {
+        budget_usage: None,
         used_prompt_tokens: None,
         used_completion_tokens: None,
         used_total_tokens: None,

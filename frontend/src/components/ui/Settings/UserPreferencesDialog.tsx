@@ -30,6 +30,7 @@ import {
   useUserPreferencesFeature,
 } from "@/providers/FeatureConfigProvider";
 
+import { BudgetPane } from "./BudgetPane";
 import { DisclaimersPane } from "./DisclaimersPane";
 import {
   OfficeAppsToolDecisions,
@@ -78,6 +79,7 @@ type PreferencesTab =
   | "appearance"
   | "audio"
   | "serversTools"
+  | "budget"
   | "data"
   | "disclaimers";
 
@@ -101,6 +103,7 @@ export function UserPreferencesDialog({
   const queryClient = useQueryClient();
   const {
     enabled: personalizationEnabled,
+    budgetTabEnabled,
     dataTabEnabled,
     disclaimersTabEnabled,
     desktopSidecarTabEnabled,
@@ -226,11 +229,13 @@ export function UserPreferencesDialog({
           ? // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal preferences tab id
             (["serversTools"] as const)
           : []),
+        ...(budgetTabEnabled ? (["budget"] as const) : []),
         ...(dataTabEnabled ? (["data"] as const) : []),
         ...(disclaimersTabEnabled ? (["disclaimers"] as const) : []),
       ] satisfies PreferencesTab[],
     [
       audioInputSettingsEnabled,
+      budgetTabEnabled,
       dataTabEnabled,
       desktopSidecarTabEnabled,
       disclaimersTabEnabled,
@@ -388,6 +393,7 @@ export function UserPreferencesDialog({
       id: "preferences.dialog.tabs.serversTools",
       message: "MCP & Apps",
     }),
+    budget: t({ id: "preferences.dialog.tabs.budget", message: "Budget" }),
     data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
     disclaimers: t({
       id: "preferences.dialog.tabs.disclaimers",
@@ -400,6 +406,7 @@ export function UserPreferencesDialog({
     appearance: <MediaImageIcon className="size-4" />,
     audio: <VoiceIcon className="size-4" />,
     serversTools: <ResolvedIcon iconId="tools" className="size-4" />,
+    budget: <ResolvedIcon iconId="wallet" className="size-4" />,
     data: <LockIcon className="size-4" />,
     disclaimers: <DocumentIcon className="size-4" />,
   } satisfies Record<PreferencesTab, ReactNode>;
@@ -410,6 +417,7 @@ export function UserPreferencesDialog({
     appearance: `${tabGroupId}-tab-appearance`,
     audio: `${tabGroupId}-tab-audio`,
     serversTools: `${tabGroupId}-tab-servers-tools`,
+    budget: `${tabGroupId}-tab-budget`,
     data: `${tabGroupId}-tab-data`,
     disclaimers: `${tabGroupId}-tab-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
@@ -419,6 +427,7 @@ export function UserPreferencesDialog({
     appearance: `${tabGroupId}-panel-appearance`,
     audio: `${tabGroupId}-panel-audio`,
     serversTools: `${tabGroupId}-panel-servers-tools`,
+    budget: `${tabGroupId}-panel-budget`,
     data: `${tabGroupId}-panel-data`,
     disclaimers: `${tabGroupId}-panel-disclaimers`,
   } satisfies Record<PreferencesTab, string>;
@@ -826,6 +835,18 @@ export function UserPreferencesDialog({
                 </ServersToolsPane>
               ) : null}
             </section>
+
+            {budgetTabEnabled ? (
+              <section
+                id={panelIds.budget}
+                role="tabpanel"
+                aria-labelledby={tabIds.budget}
+                hidden={activeTab !== "budget"}
+                tabIndex={0}
+              >
+                {isOpen && activeTab === "budget" ? <BudgetPane /> : null}
+              </section>
+            ) : null}
 
             <section
               id={panelIds.data}
