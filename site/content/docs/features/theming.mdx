@@ -189,6 +189,10 @@ The `theme.json` file defines the color scheme for both light and dark modes:
 }
 ```
 
+### The first screen's colour
+
+The server writes each mode's page colour into the page itself, so a start shows the theme's colour before any code or `theme.json` loads. It takes `colors.shell.page`, or `colors.background.secondary` when that is unset, from `theme.light` and `theme.dark`. Write that value as a plain colour (`#f5f5f5`, `rgb(…)`): a `var(…)` reference has nothing to resolve against at that point, so the start falls back to the default theme's colour until the theme has loaded. The same holds for a page colour set only in `theme.css`.
+
 ## Typed Theme Tokens
 
 The typed theme contract is grouped semantically so starter themes can express shell styling without immediately falling back to `theme.css` or custom components.

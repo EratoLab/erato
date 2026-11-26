@@ -31,6 +31,41 @@
     </style>
   </head>
   <body class="antialiased" id="root">
+    <!-- Paints the theme's page colour before the app loads: the light or dark
+         choice as ThemeProvider makes it, the colour from the server
+         (THEME_START_COLORS) or the default theme's. ThemeProvider removes the
+         style once the loaded theme is applied. -->
+    <script>
+      (function () {
+        var defaults = { light: "#f3f4f6", dark: "#1f2937" };
+        try {
+          var mode = localStorage.getItem("theme-mode");
+          var dark =
+            mode === "dark" ||
+            (mode !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var key = dark ? "dark" : "light";
+          var given =
+            window.THEME_START_COLORS && window.THEME_START_COLORS[key];
+          var color =
+            typeof given === "string" &&
+            given.indexOf("var(") < 0 &&
+            CSS.supports("color", given)
+              ? given
+              : defaults[key];
+          document.documentElement.setAttribute("data-theme", key);
+          var style = document.createElement("style");
+          style.id = "erato-start-colors";
+          style.textContent =
+            ":root:root{--theme-bg-primary:" +
+            color +
+            ";--theme-shell-page:" +
+            color +
+            "}";
+          document.head.appendChild(style);
+        } catch (e) {}
+      })();
+    </script>
     <script
       type="module"
       src="/src/componentKitReactRuntime.ts"

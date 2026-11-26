@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { Trans } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { StartScreen } from "@/components/ui/Feedback/StartScreen";
 import { useStartingAssistant } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 /**
@@ -55,13 +55,7 @@ export default function HomePage() {
       message: "LLM Chat",
     });
   }, []);
-  return (
-    <>
-      <div className="flex size-full items-center justify-center">
-        <div className="animate-pulse text-lg">
-          <Trans id="home.redirecting">Redirecting to chat...</Trans>
-        </div>
-      </div>
-    </>
-  );
+  // The answer is usually fetched during the start already (StartPreload),
+  // so this shows for a frame at most, looking like the start before it.
+  return <StartScreen />;
 }

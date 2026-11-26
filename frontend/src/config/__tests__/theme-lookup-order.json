@@ -1,0 +1,32 @@
+[
+  {
+    "theme": "acme",
+    "themePath": null,
+    "paths": [
+      "/public/common/custom-theme/acme/theme.json",
+      "/public/common/custom-theme/theme.json"
+    ]
+  },
+  {
+    "theme": "acme",
+    "themePath": "/public/common/custom-theme/brand",
+    "paths": [
+      "/public/common/custom-theme/acme/theme.json",
+      "/public/common/custom-theme/brand/theme.json",
+      "/public/common/custom-theme/theme.json"
+    ]
+  },
+  {
+    "theme": null,
+    "themePath": "/public/common/custom-theme/brand",
+    "paths": [
+      "/public/common/custom-theme/brand/theme.json",
+      "/public/common/custom-theme/theme.json"
+    ]
+  },
+  {
+    "theme": null,
+    "themePath": null,
+    "paths": ["/public/common/custom-theme/theme.json"]
+  }
+]
