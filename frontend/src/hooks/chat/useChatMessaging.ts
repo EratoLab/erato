@@ -626,8 +626,13 @@ export function useChatMessaging(
 
   // --- Define handleRefetchAndClear callback ---
   const handleRefetchAndClear = useCallback(
-    async (options: { invalidate?: boolean; logContext: string }) => {
-      const { invalidate = false, logContext } = options;
+    async (options: {
+      invalidate?: boolean;
+      logContext: string;
+      /** The chat a stream belongs to, which can differ from the one shown. */
+      forChatId?: string;
+    }) => {
+      const { invalidate = false, logContext, forChatId } = options;
       let refetchedApiMessages: Message[] | null = null;
       const storeSnapshot = useMessagingStore.getState();
       const aliasResolvedNewChatKey = resolveStreamAlias(
@@ -645,6 +650,7 @@ export function useChatMessaging(
       const activeDerivedChatId =
         activeResolvedKey !== NEW_CHAT_STREAM_KEY ? activeResolvedKey : null;
       const effectiveChatId =
+        forChatId ??
         chatId ??
         newlyCreatedChatId ??
         storeSnapshot.newlyCreatedChatId ??
@@ -885,16 +891,23 @@ export function useChatMessaging(
    * turn in its finalizing state.
    */
   const finishTurnFromServer = useCallback(
-    (finishedKey: string, logContext: string) => {
+    (finishedKey: string, logContext: string, saved = true) => {
+      const resolvedKey = resolveStreamAlias(
+        useMessagingStore.getState().streamKeyAliases,
+        finishedKey,
+      );
+      // The user may have moved to another chat meanwhile.
+      const forChatId =
+        resolvedKey !== NEW_CHAT_STREAM_KEY ? resolvedKey : undefined;
       // The logContext must say "completed": that is what makes
       // handleRefetchAndClear end the finalizing state.
-      void handleRefetchAndClear({ invalidate: true, logContext })
+      void handleRefetchAndClear({ invalidate: true, logContext, forChatId })
         .catch((error: unknown) => {
           logger.warn("Completion refetch failed", error);
           // Before the store write below, which is what re-renders.
           setSubmittingForKey(finishedKey, false);
           const messaging = useMessagingStore.getState();
-          messaging.keepStreamedAnswer(finishedKey, { saved: true });
+          messaging.keepStreamedAnswer(finishedKey, { saved });
           messaging.setStreaming(
             { isStreaming: false, isFinalizing: false },
             finishedKey,
@@ -909,6 +922,7 @@ export function useChatMessaging(
               if (newerTurn) return;
               return handleRefetchAndClear({
                 logContext: "Refetch after a failed completion refetch",
+                forChatId,
               });
             })
             .catch((retryError: unknown) => {
@@ -1841,7 +1855,7 @@ export function useChatMessaging(
           { isStreaming: false, isFinalizing: true },
           resumeStreamKey,
         );
-        finishTurnFromServer(resumeStreamKey, logContext);
+        finishTurnFromServer(resumeStreamKey, logContext, saved);
       };
       const cleanup = createSSEConnection(
         "/api/v1beta/me/messages/resumestream",

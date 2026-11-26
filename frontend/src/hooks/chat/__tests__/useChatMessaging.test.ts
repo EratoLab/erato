@@ -2326,6 +2326,88 @@ describe("useChatMessaging", () => {
         }
       });
 
+      it("reads the answer's own chat when the user moved to another one meanwhile", async () => {
+        let networkBack: () => void = () => {};
+        const waitUntilOnline = vi
+          .spyOn(connectivity, "waitUntilOnline")
+          .mockImplementation(
+            () =>
+              new Promise<void>((resolve) => {
+                networkBack = resolve;
+              }),
+          );
+        try {
+          const resumeCalls: ResumeOptions[] = [];
+          mockCreateSSEConnection.mockImplementation((url, callbacks) => {
+            if (url.includes("/resumestream")) {
+              // Entering each chat opens one too; only chat1's matter here.
+              if (callbacks.body === JSON.stringify({ chat_id: "chat1" })) {
+                resumeCalls.push(callbacks);
+              }
+              return vi.fn();
+            }
+            sseCallbacks = callbacks;
+            return vi.fn();
+          });
+          const { result, rerender } = renderHook<
+            ReturnType<typeof useChatMessaging>,
+            { chatId: string }
+          >(({ chatId }) => useChatMessaging(chatId), {
+            wrapper: TestWrapper,
+            initialProps: { chatId: "chat1" },
+          });
+          await act(async () => {
+            await result.current.sendMessage("Test message");
+          });
+          await act(async () => {
+            sseCallbacks.onMessage?.(
+              streamEvent({
+                message_type: "assistant_message_started",
+                message_id: "assistant-dropped",
+              }),
+            );
+            sseCallbacks.onError?.(
+              markNetworkFailure(new Error("Load failed")),
+            );
+          });
+          await failLastResume(
+            resumeCalls,
+            markNetworkFailure(new Error("Load failed")),
+          );
+          const reattachesBefore = resumeCalls.length;
+          rerender({ chatId: "chat2" });
+          await act(async () => {
+            networkBack();
+          });
+          await waitFor(() =>
+            expect(resumeCalls).toHaveLength(reattachesBefore + 1),
+          );
+
+          mockFetchChatMessages.mockClear();
+          mockFetchChatMessages.mockResolvedValue({
+            messages: [...mockMessages, storedAnswer],
+          });
+          await failLastResume(resumeCalls, generationGone());
+
+          await waitFor(() =>
+            expect(
+              (
+                useMessagingStore.getState().getRenderableMessages("chat1")[
+                  "assistant-dropped"
+                ] as Message | undefined
+              )?.content,
+            ).toEqual(stored),
+          );
+          expect(mockFetchChatMessages).toHaveBeenCalledWith({
+            pathParams: { chatId: "chat1" },
+          });
+          rerender({ chatId: "chat1" });
+          expect(result.current.isPendingResponse).toBe(false);
+        } finally {
+          waitUntilOnline.mockRestore();
+        }
+      });
+
       it("keeps the half answer when the stored one cannot be read yet", async () => {
         const { result, resumeCalls, restore } =
           await reconnectAfterTheAnswerFinished();
