@@ -308,6 +308,22 @@ export function isAcceptedWordCommentSubmission(part: ContentPart): boolean {
   );
 }
 
+/** Every accepted comment submission of a message, in call order. */
+export function acceptedWordCommentSubmissions(
+  content: readonly ContentPart[] | undefined,
+): { toolCallId: string; action: WordCommentAction }[] {
+  return (content ?? []).filter(isAcceptedWordCommentSubmission).map((part) => {
+    const accepted = part as ContentPart & {
+      tool_call_id: string;
+      output: { result: { action: WordCommentAction } };
+    };
+    return {
+      toolCallId: accepted.tool_call_id,
+      action: accepted.output.result.action,
+    };
+  });
+}
+
 /** The one accepted submission of a message, if exactly one. */
 export function acceptedWordCommentSubmission(
   content: readonly ContentPart[] | undefined,

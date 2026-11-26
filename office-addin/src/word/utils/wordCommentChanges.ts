@@ -1,8 +1,9 @@
 import {
+  isWordCommentEntryRef,
   WORD_COMMENT_OP_ACTION,
   WORD_COMMENT_OPS,
   WORD_COMMENT_TEXT_MAX,
-  isWordCommentEntryRef,
+  WORD_MORE_CHANGES_ARGUMENT,
 } from "@erato/frontend/word-review";
 
 import { normalizeParagraphText } from "./buildWordDocumentArgs";
@@ -184,7 +185,9 @@ export function parseWordCommentChanges(
         ),
       ],
     };
-  const extra = Object.keys(input).find((key) => key !== "changes");
+  const extra = Object.keys(input).find(
+    (key) => key !== "changes" && key !== WORD_MORE_CHANGES_ARGUMENT,
+  );
   if (extra)
     return {
       ok: false,

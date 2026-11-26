@@ -3231,6 +3231,16 @@ msgid "officeAddin.teams.signInToLoad.title"
 msgstr "Inicia sesión para cargar los chats de Teams"
 
 #. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordApprovalPreview.ts
+msgid "officeAddin.word.apply.previewTitleUnnamed"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/word/utils/wordAuthoringMessages.ts
 msgid "officeAddin.word.apply.stage.backup"
 msgstr ""
@@ -3876,6 +3886,81 @@ msgstr "Insertado en el documento."
 #: src/word/components/WordHostCardRenderer.tsx
 #~ msgid "officeAddin.word.card.writeFailed"
 #~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.apply"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.applying"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.consent"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.notChanged"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.onScreen"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.otherDocument"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.paneGone"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.partial"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/components/WordApprovalItemCard.tsx
+msgid "officeAddin.word.chained.readAgain"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stale"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.stopped"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.unconfirmed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/word/utils/wordChainedApply.ts
+msgid "officeAddin.word.chained.waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordReviewCardParts.tsx
@@ -4635,17 +4720,17 @@ msgid "officeAddin.word.comments.thread.unknown"
 msgstr "Comentario elegido"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.add"
 msgstr "{n, plural, one {Añadir un comentario} other {Añadir # comentarios}}"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.modify"
 msgstr "Editar o eliminar comentarios"
 
 #. js-lingui-explicit-id
-#: src/word/components/WordCommentChangesCard.tsx
+#: src/word/utils/wordApprovalPreview.ts
 msgid "officeAddin.word.comments.title.respond"
 msgstr "Responder, resolver o reabrir comentarios"
 
@@ -5212,6 +5297,16 @@ msgstr "Pasaje seleccionado por Erato"
 #: src/word/hooks/useWordContextItems.tsx
 msgid "officeAddin.word.context.sendInstead"
 msgstr "Enviar esto en su lugar"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.comments"
+msgstr "Cualquier cambio en comentarios, incluidos los comentarios nuevos:"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordDecisionChoices.tsx
+msgid "officeAddin.word.decision.standing.plan"
+msgstr "Cualquier cambio en el documento:"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordImportConfirm.tsx
@@ -6022,6 +6117,7 @@ msgstr "Se aplica cada cambio propuesto, incluidas las filas ocultas por filtros
 
 #. js-lingui-explicit-id
 #: src/word/components/WordCommentChangesCard.tsx
+#: src/word/components/WordDecisionChoices.tsx
 #: src/word/components/WordImportConfirm.tsx
 #: src/word/components/WordPlanCommentRemovals.tsx
 #: src/word/components/WordReviewCardParts.tsx
@@ -7149,6 +7245,11 @@ msgstr "Incluir el documento abierto en los chats nuevos"
 #: src/word/components/WordSettingsDialog.tsx
 msgid "officeAddin.word.settings.includeDocument.helper"
 msgstr "Erato lee el documento cuando envía un mensaje. Puede quitarlo de cualquier chat."
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.word.settings.serverChanges"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

@@ -74,6 +74,7 @@ export {
   type MessageEditorTokenContext,
 } from "@/components/ui/MessageList/MessageEditor";
 export {
+  HostArtifactProvider,
   MessageContent,
   useHostArtifact,
   useOutlookArtifact,
@@ -128,6 +129,18 @@ export {
   approvalToolRows,
   useApprovalTools,
 } from "@/components/ui/Settings/OfficeAppsToolDecisions";
+export {
+  addUnsetClientToolDecisions,
+  controlDecisionOf,
+  clientToolDecisionOf,
+  saveClientToolDecision,
+} from "@/lib/clientToolDecisions";
+export { alwaysAllowLockedLine } from "@/lib/toolCallGist/decisionLabels";
+export {
+  spokenApprovalFor,
+  spokenApprovalPieces,
+  voiceApprovalOffered,
+} from "@/lib/toolCallGist/spokenCard";
 export { DisclaimersPane } from "@/components/ui/Settings/DisclaimersPane";
 export {
   disclaimersSettingsHref,

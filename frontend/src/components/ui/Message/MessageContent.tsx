@@ -405,6 +405,13 @@ export function useHostArtifact(): HostArtifact | null {
 }
 
 /**
+ * Provides a message's host artifact to host code drawn outside the message
+ * body, such as a host's card in the decision place, so it reads the same
+ * artifact through {@link useHostArtifact}.
+ */
+export const HostArtifactProvider = HostArtifactContext.Provider;
+
+/**
  * @deprecated Use {@link useHostArtifact}; same context, same value. Kept for
  * one release so existing host renderers keep working.
  */

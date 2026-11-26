@@ -8,6 +8,7 @@ import {
   useConversationMessage,
   useHostArtifact,
   useProfile,
+  submittedCardsOf,
   WordReviewCard,
   WordReviewGenerating,
   WordReviewHeader,
@@ -18,14 +19,25 @@ import { plural, t } from "@lingui/core/macro";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
+  WordDecisionChoices,
+  wordCommentsStandingLabel,
+} from "./WordDecisionChoices";
+import {
   wordBlockedReasonText,
   wordCommentTaintText,
 } from "./WordReviewCardParts";
 import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
+import { useWordChainedApply } from "../hooks/useWordChainedApply";
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
-import { useWordWrite } from "../providers/WordWriteProvider";
+import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
+import { wordCommentChangesTitle } from "../utils/wordApprovalPreview";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
+import {
+  runWordCommentApply,
+  wordDraftCapture,
+} from "../utils/wordCommentApply";
 import {
   recordWordCommentOutcome,
   wordCommentAlwaysBlock,
@@ -43,9 +55,9 @@ import {
 import { wordCommentDraft } from "../utils/wordCommentSubmission";
 import { revertWordCommentRows } from "../utils/wordCommentWrites";
 import { readWordTrackingMode } from "../utils/wordReviewLocation";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
+import type { WordCardDecision } from "./WordDecisionChoices";
 import type {
   WordClientAction,
   WordClientActionEntry,
@@ -72,26 +84,7 @@ const EXCERPT = 80;
 const excerpt = (text: string) =>
   text.length > EXCERPT ? `${text.slice(0, EXCERPT - 1)}…` : text;
 
-function titleOf(draft: WordCommentDraft): string {
-  const n = draft.rows.length;
-  switch (draft.action) {
-    case "word.add_comments":
-      return t({
-        id: "officeAddin.word.comments.title.add",
-        message: plural(n, { one: "Add a comment", other: "Add # comments" }),
-      });
-    case "word.respond_to_comments":
-      return t({
-        id: "officeAddin.word.comments.title.respond",
-        message: "Reply to, resolve or reopen comments",
-      });
-    case "word.modify_comments":
-      return t({
-        id: "officeAddin.word.comments.title.modify",
-        message: "Edit or delete comments",
-      });
-  }
-}
+const titleOf = wordCommentChangesTitle;
 
 function verbOf(row: WordCommentDraftRow): string {
   switch (row.op) {
@@ -378,15 +371,17 @@ const isOwn = (email: string | null, principal: string | null) =>
 export function WordCommentChangesCard({
   entry,
   content,
+  decision,
 }: {
   entry: WordClientActionEntry;
   content: string;
+  /** Drawn in the decision place: Apply approves the server's call, which writes. */
+  decision?: WordCardDecision;
 }) {
   const artifact = useHostArtifact();
   const {
     documentIdentity,
     capturesByAssistantMessageId,
-    reviews,
     updateReview,
     operationInProgress,
     beginOperation,
@@ -403,18 +398,27 @@ export function WordCommentChangesCard({
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
   const message = useConversationMessage(messageId);
-  const isGenerating = message?.status === "sending";
+  const chainedState = useWordChainedApply(
+    decision ? undefined : messageId,
+    content,
+  );
+  // The decision place shows a parked call, and an answer goes on after a change it applied.
+  const isGenerating =
+    message?.status === "sending" && !decision && !chainedState;
   const draft = wordCommentDraft(content);
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
+  const review = useWordReview(batchKey);
   const cardRef = useWordReviewFocus(review.status);
   const detailsId = useId();
   const capture: WordCommentsCapture | undefined =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
+    review.capture ??
+    (decision && draft ? wordDraftCapture(draft.identity) : undefined);
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    // A parked answer's artifact may not name its document yet; the checked draft does.
+    expectedIdentity:
+      artifact?.itemIdentity ?? (decision ? draft?.identity : undefined),
     currentIdentity: documentIdentity,
   });
   const [tracking, setTracking] = useState<WordTrackingMode>("unknown");
@@ -468,12 +472,13 @@ export function WordCommentChangesCard({
     !!draft &&
     mode === "post" &&
     (artifact?.allowedClientActions ?? []).includes(entry.action) &&
-    !isActionDenied({
-      facetId,
-      action: entry.action,
-      decisions,
-      enforcedAskActions,
-    });
+    (!!decision ||
+      !isActionDenied({
+        facetId,
+        action: entry.action,
+        decisions,
+        enforcedAskActions,
+      }));
   const proposedAction =
     offered && artifact?.proposedClientAction === entry.action
       ? entry.action
@@ -528,63 +533,23 @@ export function WordCommentChangesCard({
         return false;
       }
       if (isGenerating || !offered || !beginOperation()) return false;
-      let held = false;
-      updateReview(batchKey, { status: "applying", capture: live.capture });
-      try {
-        const run = await entry.execute({
-          fenceContent: content,
-          capture: live.capture,
-          comments: {
-            selected: new Set(rows),
-            assistantAuthor: userModeOnly ? null : plan.authorName,
-            userModeRows: new Set(plan.userModeRows.keys()),
-          },
-        });
-        const result = run.commentResult;
-        if (result?.timedOut) {
-          // Word may still be writing: every card waits until the run has really ended.
-          holdOperationUntil(result.settled, batchKey);
-          held = true;
-        }
-        if (!result) {
-          updateReview(batchKey, { status: "no-capture", comments: lapse() });
-          return false;
-        }
-        const touched = new Map(
-          result.rows
-            .filter((row) => rows.includes(row.i))
-            .map((row) => [row.i, row]),
-        );
-        const merged = draft.rows.map(
-          (row) =>
-            touched.get(row.i) ??
-            cardState.rows.find((r) => r.i === row.i) ?? {
-              i: row.i,
-              op: row.op,
-              ...(row.ref ? { ref: row.ref } : {}),
-              status: "refused" as const,
-              code: "DESELECTED",
-            },
-        );
-        const state: WordCommentCardState = {
-          ...cardState,
-          rows: merged,
-          consent: "approved",
-          consentKind: cardState.consentKind ?? consentKind,
-        };
-        updateReview(batchKey, {
-          status: "done",
-          comments: state,
-          automatic: consentKind === "standing_grant",
-        });
-        recordOf(state);
-        return run.ok;
-      } catch {
-        updateReview(batchKey, { status: "write-failed" });
-        return false;
-      } finally {
-        if (!held) endOperation();
-      }
+      const outcome = await runWordCommentApply({
+        key: batchKey,
+        draft,
+        entry,
+        fenceContent: content,
+        capture: live.capture,
+        reviewCapture: live.capture,
+        rows,
+        assistantAuthor: userModeOnly ? null : plan.authorName,
+        userModeRows: new Set(plan.userModeRows.keys()),
+        previous: cardState,
+        consentKind,
+        host: { updateReview, holdOperationUntil, endOperation },
+      });
+      if (outcome.kind === "no-result")
+        updateReview(batchKey, { status: "no-capture", comments: lapse() });
+      return outcome.kind === "ran" && outcome.ok;
     },
     [
       capture,
@@ -614,9 +579,13 @@ export function WordCommentChangesCard({
       ),
     [runRows, cardState.selected],
   );
+  // The server asks for a change it applies itself.
   const buildSummary = useCallback(
-    () => (idle && !isGenerating && draft ? draft : null),
-    [idle, isGenerating, draft],
+    () =>
+      idle && !isGenerating && draft && !decision && !chainedState
+        ? draft
+        : null,
+    [idle, isGenerating, draft, decision, chainedState],
   );
   const { confirmCard, isConfirmPending, allowCard, denyCard } =
     useClientActionConfirmFlow<WordCommentDraft, WordClientAction>({
@@ -739,7 +708,17 @@ export function WordCommentChangesCard({
       />
     );
   // Only this message's accepted submission is its card; a fence naming another draft is not.
-  if (artifact?.submittedCard?.toolCallId !== content) return null;
+  if (
+    !decision &&
+    !submittedCardsOf(artifact).some((card) => card.toolCallId === content)
+  )
+    return null;
+  if (chainedState && review.status === "idle")
+    return (
+      <p className="word-review__hint" data-testid="word-chained-status">
+        {wordChainedApplyText(chainedState)}
+      </p>
+    );
   if (!draft)
     return (
       <Alert type="info" role="status">
@@ -837,22 +816,40 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {!ran && idle && offered && !confirmCard && (
-            <Button
-              type="button"
-              variant="primary"
-              busy={applying}
-              disabled={
-                operationInProgress ||
-                isConfirmPending ||
-                !gate.allowed ||
-                count === 0
+          {decision && !ran && idle && (
+            <WordDecisionChoices
+              decision={decision}
+              title={titleOf(draft)}
+              applyLabel={applyLabel}
+              canApply={offered && gate.allowed && count > 0}
+              standingLabel={wordCommentsStandingLabel()}
+              alwaysLockedReason={
+                lockedReason ? alwaysBlockText(lockedReason) : undefined
               }
-              onClick={() => void runRows(cardState.selected, "click")}
-            >
-              {applyLabel}
-            </Button>
+              confirmation={{ selected: cardState.selected }}
+            />
           )}
+          {!decision &&
+            !chainedState &&
+            !ran &&
+            idle &&
+            offered &&
+            !confirmCard && (
+              <Button
+                type="button"
+                variant="primary"
+                busy={applying}
+                disabled={
+                  operationInProgress ||
+                  isConfirmPending ||
+                  !gate.allowed ||
+                  count === 0
+                }
+                onClick={() => void runRows(cardState.selected, "click")}
+              >
+                {applyLabel}
+              </Button>
+            )}
           {confirmCard && (
             <ActionConfirmationCard
               key={confirmCard.requestId}

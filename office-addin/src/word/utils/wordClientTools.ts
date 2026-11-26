@@ -4,6 +4,12 @@ import {
   WORD_WRITE_SECTION_TOOL,
 } from "@erato/frontend/word-review";
 
+import {
+  createWordApplyPlanExecutor,
+  WORD_APPLY_COMMENTS_TOOL,
+  WORD_APPLY_PLAN_TOOL,
+} from "./wordApplyCall";
+import { createWordApplyCommentsExecutor } from "./wordApplyCommentCall";
 import { wordApprovalScopeOptions } from "./wordApprovalScope";
 import {
   wordCommentReadSession,
@@ -34,7 +40,8 @@ const inclusionOff = (): Promise<ClientToolExecutionResult> =>
 
 /**
  * The Word pane's client tools. Only the document read takes delegated tasks' calls (contract §7);
- * the writes and the comment read stay with the coordinator. With inclusion off a task's call is
+ * the writes and the comment read stay with the coordinator. The two apply tools are the server's
+ * own calls after an accepted submission; they are offered only while the document is included. With inclusion off a task's call is
  * capture-unavailable at once: the pane clears the capture only after the render commits.
  */
 export function registerWordClientTools({
@@ -54,6 +61,9 @@ export function registerWordClientTools({
       : inclusionOff();
   };
   const unregister = [
+    wordDocumentReadSession.followCopies((owner, ordinalMap) =>
+      wordCommentReadSession.followDocument(owner, ordinalMap),
+    ),
     registerClientToolExecutor(
       WORD_READ_COMMENTS_TOOL,
       wordCommentReadSession.execute,
@@ -70,6 +80,16 @@ export function registerWordClientTools({
     ),
     registerClientToolExecutor(WORD_WRITE_SECTION_TOOL, (input, context) =>
       readEnabled() ? parts.write(input, context) : inclusionOff(),
+    ),
+    registerClientToolExecutor(
+      WORD_APPLY_PLAN_TOOL,
+      createWordApplyPlanExecutor({ readEnabled }),
+      readEnabled,
+    ),
+    registerClientToolExecutor(
+      WORD_APPLY_COMMENTS_TOOL,
+      createWordApplyCommentsExecutor({ readEnabled }),
+      readEnabled,
     ),
     registerClientToolExecutor(WORD_READ_TOOL, read, undefined, {
       acceptsGrantCalls: true,
