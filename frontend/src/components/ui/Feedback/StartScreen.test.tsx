@@ -24,9 +24,7 @@ describe("StartScreen", () => {
       vi.advanceTimersByTime(600);
     });
     expect(
-      screen.getByTestId("start-screen").querySelector(
-        '[data-ui="spinner"]',
-      ),
+      screen.getByTestId("start-screen").querySelector('[data-ui="spinner"]'),
     ).not.toBeNull();
   });
 
@@ -35,9 +33,7 @@ describe("StartScreen", () => {
     render(<StartScreen />);
 
     expect(
-      screen.getByTestId("start-screen").querySelector(
-        '[data-ui="spinner"]',
-      ),
+      screen.getByTestId("start-screen").querySelector('[data-ui="spinner"]'),
     ).not.toBeNull();
   });
 });

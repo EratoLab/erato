@@ -235,10 +235,11 @@ const THEME_FONTS_MARKER = 'link[data-theme-fonts="true"]';
 const THEME_STYLES_MARKER = 'link[data-theme-styles="true"]';
 const THEME_VARS_MARKER = 'style[data-theme-vars="true"]';
 /** Written by index.html from the colour the server put into the page. */
-const START_COLORS_MARKER = "style#erato-start-colors";
+export const START_COLORS_STYLE_ID = "erato-start-colors";
+const START_COLORS_MARKER = `style#${START_COLORS_STYLE_ID}`;
 
-/** A theme style sheet or font slower than this no longer holds back the page. */
-const THEME_LOOK_WAIT_MS = 3000;
+/** After this long the page shows, whatever of the theme is still loading. */
+const THEME_START_WAIT_MS = 3000;
 
 /**
  * Loads the fonts the applied theme sets for text and headings. A font loads
@@ -726,10 +727,8 @@ export function ThemeProvider({
       link.addEventListener("error", settleOne, { once: true });
     }
     if (pending === 0) settle();
-    const timer = setTimeout(settle, THEME_LOOK_WAIT_MS);
 
     return () => {
-      clearTimeout(timer);
       removeThemeStylesheets();
     };
   }, [customThemeConfig, enableCustomTheme, resolvedThemeConfigPath]);
@@ -867,24 +866,28 @@ export function ThemeProvider({
   }, [theme]);
 
   const expectsStylesheets =
-    enableCustomTheme && customThemeConfig !== null && !!resolvedThemeConfigPath;
+    enableCustomTheme &&
+    customThemeConfig !== null &&
+    !!resolvedThemeConfigPath;
   const stylesheetsSettled =
     !expectsStylesheets || stylesheetsSettledFor === customThemeConfig;
   const [isThemeReady, setIsThemeReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsThemeReady(true), THEME_START_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // After the theme's variables are applied (the merge effect above), so the
   // fonts read here are the loaded theme's.
   useEffect(() => {
     if (isThemeReady || !isThemeLoadSettled || !stylesheetsSettled) return;
     let cancelled = false;
-    const ready = () => {
+    void loadThemeFonts().then(() => {
       if (!cancelled) setIsThemeReady(true);
-    };
-    const timer = setTimeout(ready, THEME_LOOK_WAIT_MS);
-    void loadThemeFonts().then(ready);
+    });
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
   }, [isThemeReady, isThemeLoadSettled, stylesheetsSettled]);
 
@@ -915,7 +918,6 @@ export function ThemeProvider({
     }
     setTextSizeState(size);
   };
-
 
   const contextValue: ThemeContextType = {
     theme,

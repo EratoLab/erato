@@ -1104,8 +1104,10 @@ pub fn inject_environment_script_tag(
         script_tag.write_str("window.").unwrap();
         script_tag.write_str(key).unwrap();
         script_tag.write_str(" = ").unwrap();
+        // `<` only occurs inside JSON strings, where `\u003c` reads the same;
+        // a value holding `</script>` would otherwise end the tag.
         script_tag
-            .write_str(&serde_json::to_string(&value)?)
+            .write_str(&serde_json::to_string(&value)?.replace('<', "\\u003c"))
             .unwrap();
         script_tag.write_str(";\n").unwrap();
     }
@@ -1968,94 +1970,52 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn the_web_page_carries_the_theme_colour_and_the_translation_files_that_exist() {
-        use ::axum::{Extension, body::Body, http::Request};
-        use http_body_util::BodyExt;
+    #[test]
+    fn the_start_environment_gives_the_page_colour_to_the_web_app_only() {
+        use serde_json::json;
+        use std::collections::HashMap;
         let dir = tempfile::tempdir().unwrap();
-        let web = dir.path().join("web");
-        let theme = web.join("custom-theme/acme");
+        let theme = dir.path().join("web/custom-theme/acme");
         std::fs::create_dir_all(theme.join("locales/de")).unwrap();
-        std::fs::create_dir_all(theme.join("locales/fr")).unwrap();
         std::fs::write(theme.join("locales/de/messages.po"), "").unwrap();
         std::fs::write(
             theme.join("theme.json"),
-            br##"{"name":"Acme","theme":{"light":{"colors":{"shell":{"page":"#F7F6F3"}}},"dark":{"colors":{"background":{"secondary":"#0B202C"}}}}}"##,
+            r##"{"theme":{"light":{"colors":{"shell":{"page":"#fafafa"}}}}}"##,
         )
         .unwrap();
-        std::fs::write(
-            web.join("index.html"),
-            "<html><head></head><body></body></html>",
-        )
-        .unwrap();
-        std::fs::write(web.join("404.html"), "Not Found").unwrap();
-        let office = dir.path().join("office");
-        std::fs::create_dir_all(&office).unwrap();
-        std::fs::write(
-            office.join("index.html"),
-            "<html><head></head><body></body></html>",
-        )
-        .unwrap();
-        std::fs::write(office.join("404.html"), "Not Found").unwrap();
         let mut config = AppConfig::default();
-        config.frontend.web_frontend_bundle_path = web.display().to_string();
-        config.integrations.ms_office.addin.enabled = true;
-        config.integrations.ms_office.addin.frontend_bundle_path = office.display().to_string();
+        config.frontend.web_frontend_bundle_path = dir.path().join("web").display().to_string();
         config.frontend.theme = Some("acme".into());
-        let distribution = Distribution::load(&config);
-        let registry = std::sync::Arc::new(build_frontend_registry(
-            &config,
-            &distribution,
-            &Default::default(),
-        ));
-        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
-            crate::distribution::runtime::ReloadableAppState::new(
-                &config,
-                &distribution,
-                crate::services::mcp_manager::McpServers::new(&config),
-            ),
-        ));
-        let page = |uri: &'static str| {
-            let registry = registry.clone();
-            let reloadable = reloadable.clone();
-            async move {
-                let response = serve_files_with_script(
-                    Extension(registry),
-                    Extension(DeploymentVersion(None)),
-                    Extension(reloadable),
-                    Request::builder().uri(uri).body(Body::empty()).unwrap(),
-                )
-                .await
-                .unwrap();
-                String::from_utf8(
-                    response
-                        .into_body()
-                        .collect()
-                        .await
-                        .unwrap()
-                        .to_bytes()
-                        .to_vec(),
-                )
-                .unwrap()
-            }
-        };
+        let branding = crate::distribution::branding::BrandingAssets::from_config(&config);
 
-        let web_page = page("/index.html").await;
-        assert!(
-            web_page
-                .contains(r##"window.THEME_START_COLORS = {"light":"#F7F6F3","dark":"#0B202C"};"##),
-            "{web_page}"
-        );
-        assert!(web_page.contains(r#"window.THEME_TRANSLATION_LOCALES = ["de"];"#));
-        assert!(web_page.contains("window.TRANSLATION_OVERRIDE_LOCALES = [];"));
+        let web: HashMap<_, _> = start_environment(&branding, vec!["fr"], true)
+            .into_iter()
+            .collect();
+        assert_eq!(web["THEME_START_COLORS"], json!({ "light": "#fafafa" }));
+        assert_eq!(web["THEME_TRANSLATION_LOCALES"], json!(["de"]));
+        assert_eq!(web["TRANSLATION_OVERRIDE_LOCALES"], json!(["fr"]));
 
-        // The add-in panes keep their host's colours.
-        let pane = page("/public/platform-office-addin/index.html").await;
+        let pane: HashMap<_, _> = start_environment(&branding, vec![], false)
+            .into_iter()
+            .collect();
+        assert!(!pane.contains_key("THEME_START_COLORS"));
+        assert_eq!(pane["THEME_TRANSLATION_LOCALES"], json!(["de"]));
+    }
+
+    #[test]
+    fn injected_values_cannot_end_the_script_tag() {
+        use serde_json::json;
+        let mut env = FrontedEnvironment::default();
+        env.additional_environment
+            .insert("TEXT".into(), json!("</script><script>alert(1)</script>"));
+        let mut output = Vec::new();
+        inject_environment_script_tag(b"<html><head></head></html>", &mut output, &env, &[], None)
+            .unwrap();
+        let html = String::from_utf8(output).unwrap();
         assert!(
-            pane.contains(r#"window.THEME_TRANSLATION_LOCALES = ["de"];"#),
-            "{pane}"
+            html.contains(r#"window.TEXT = "\u003c/script>\u003cscript>alert(1)\u003c/script>";"#),
+            "{html}"
         );
-        assert!(!pane.contains("THEME_START_COLORS"));
     }
 
     #[test]

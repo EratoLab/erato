@@ -227,10 +227,21 @@ impl BrandingAssets {
     }
 
     /// The page colour of the web app's theme for light and dark, so the
-    /// first HTML already shows it. Mirrors the web app's lookup: the selected
-    /// theme's `theme.json`, else the unnamed one beside the themes. A mode the
-    /// theme leaves alone is missing, and the page keeps its default for it.
+    /// first HTML already shows it. Mirrors the web app's lookup
+    /// (`themeConfig.ts`): the selected theme's `theme.json`, else the unnamed
+    /// one beside the themes; none when the deployment points the web app at
+    /// another file. A mode the theme leaves alone is missing, and the page
+    /// keeps its default for it.
     pub fn start_page_colors(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
+        let overridden = |key| {
+            self.frontend
+                .additional_environment
+                .get(key)
+                .is_some_and(|value| value.as_str() != Some(""))
+        };
+        if overridden("THEME_CONFIG_PATH") || overridden("THEME_PATH") {
+            return None;
+        }
         let named = self
             .frontend
             .theme
@@ -246,10 +257,11 @@ impl BrandingAssets {
             .into_iter()
             .filter_map(|mode| {
                 let colors = &theme["theme"][mode]["colors"];
-                // The web app falls back the same way when `shell.page` is unset.
+                // The web app falls back the same way when `shell.page` is unset
+                // (`withLegacyColorCompatibility` in `themeUtils.ts`).
                 [&colors["shell"]["page"], &colors["background"]["secondary"]]
                     .into_iter()
-                    .find_map(|value| value.as_str().filter(|color| is_css_color(color)))
+                    .find_map(serde_json::Value::as_str)
                     .map(|color| (mode.to_string(), color.into()))
             })
             .collect();
@@ -279,17 +291,6 @@ impl BrandingAssets {
         locales.dedup();
         Some(locales)
     }
-}
-
-/// Goes into a `<script>` and from there into a style sheet, so only the
-/// characters of colour notations pass (`#hex`, names, `rgb(…)`, `hsl(…)`).
-fn is_css_color(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || matches!(c, '#' | '(' | ')' | ',' | '.' | '%' | ' ' | '-' | '/')
-        })
 }
 
 fn safe_relative_path(path: &str) -> bool {
@@ -350,15 +351,16 @@ mod tests {
         assert_eq!(colors["light"], "#fafafa");
         assert_eq!(colors["dark"], "rgb(1, 2, 3)");
 
-        // A value that could leave the style sheet is dropped, not passed on.
-        write(
-            "web/custom-theme/acme/theme.json",
-            r##"{"theme":{"light":{"colors":{"shell":{"page":"red;}</style><script>"}}}}}"##,
-        );
+        // The web app loads another theme.json then; the server does not guess it.
+        config
+            .frontend
+            .additional_environment
+            .insert("THEME_CONFIG_PATH".into(), "/brand/theme.json".into());
         assert_eq!(
             BrandingAssets::from_config(&config).start_page_colors(),
             None
         );
+        config.frontend.additional_environment.clear();
 
         // Without a selected theme, the unnamed theme beside the themes counts.
         config.frontend.theme = None;

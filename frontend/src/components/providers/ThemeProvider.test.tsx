@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -369,7 +370,9 @@ describe("ThemeProvider", () => {
       ok: true,
       json: async () => mockTheme,
     });
-    const Ready = () => <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>;
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
 
     render(
       <ThemeProvider>
@@ -404,7 +407,9 @@ describe("ThemeProvider", () => {
       ok: false,
       status: 404,
     });
-    const Ready = () => <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>;
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
 
     try {
       render(
@@ -423,6 +428,30 @@ describe("ThemeProvider", () => {
       expect(await screen.findByText("ready")).toBeInTheDocument();
     } finally {
       delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
+  it("shows the page after three seconds when the theme never answers", () => {
+    vi.useFakeTimers();
+    try {
+      (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(
+        new Promise(() => {}),
+      );
+      const Ready = () => (
+        <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+      );
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+
+      act(() => vi.advanceTimersByTime(2900));
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(100));
+      expect(screen.getByText("ready")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
     }
   });
 

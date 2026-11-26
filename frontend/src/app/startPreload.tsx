@@ -13,7 +13,9 @@ import type { ComponentType } from "react";
  * directly: `lazy` alone would suspend once anyway, and React then holds the
  * page back for its fallback's minimum time (about 300 ms).
  */
-const preloadableRoute = (load: () => Promise<{ default: ComponentType }>) => {
+export const preloadableRoute = (
+  load: () => Promise<{ default: ComponentType }>,
+) => {
   let loaded: ComponentType | undefined;
   let loading: Promise<{ default: ComponentType }> | undefined;
   const preload = () =>
@@ -59,15 +61,13 @@ export function StartPreload() {
     if (path === "/") {
       void chatLayout.preload();
       const query = startingAssistantQuery(fetcherOptions);
-      void queryClient
-        .prefetchQuery({ ...query, retry: false })
-        .then(() => {
-          const answer = queryClient.getQueryData<StartingAssistantResponse>(
-            query.queryKey,
-          );
-          if (answer?.starting_assistant?.assistant_id) preloadAssistantSpace();
-        });
-    } else if (path.startsWith("/chat")) {
+      void queryClient.prefetchQuery({ ...query, retry: false }).then(() => {
+        const answer = queryClient.getQueryData<StartingAssistantResponse>(
+          query.queryKey,
+        );
+        if (answer?.starting_assistant?.assistant_id) preloadAssistantSpace();
+      });
+    } else if (path === "/chat" || path.startsWith("/chat/")) {
       void chatLayout.preload();
     } else if (path.startsWith("/a/")) {
       preloadAssistantSpace();

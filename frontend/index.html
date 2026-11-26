@@ -45,7 +45,8 @@
             (mode !== "light" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           var key = dark ? "dark" : "light";
-          var given = window.THEME_START_COLORS && window.THEME_START_COLORS[key];
+          var given =
+            window.THEME_START_COLORS && window.THEME_START_COLORS[key];
           var color =
             typeof given === "string" && CSS.supports("color", given)
               ? given

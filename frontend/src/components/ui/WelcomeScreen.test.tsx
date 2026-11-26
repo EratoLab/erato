@@ -13,7 +13,6 @@ import {
 
 import type { CustomThemeConfig } from "@/utils/themeUtils";
 
-
 i18n.load("en", enMessages as unknown as Messages);
 i18n.activate("en");
 
