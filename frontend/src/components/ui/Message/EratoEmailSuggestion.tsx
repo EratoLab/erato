@@ -17,11 +17,12 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
 export function DefaultEratoEmailCodeBlock({
   content,
   isHtml,
+  isStreaming,
 }: EratoEmailCodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const previewHtml = useMemo(
-    () => (isHtml ? sanitizeHtmlPreview(content) : ""),
-    [content, isHtml],
+    () => (isHtml ? sanitizeHtmlPreview(content, { isStreaming }) : ""),
+    [content, isHtml, isStreaming],
   );
 
   const handleCopy = useCallback(() => {
@@ -62,15 +63,8 @@ export function DefaultEratoEmailCodeBlock({
   );
 }
 
-export function EratoEmailSuggestion({
-  content,
-  isHtml,
-}: EratoEmailCodeBlockProps) {
-  const CustomRenderer = componentRegistry.EratoEmailCodeBlock;
-
-  if (CustomRenderer) {
-    return <CustomRenderer content={content} isHtml={isHtml} />;
-  }
-
-  return <DefaultEratoEmailCodeBlock content={content} isHtml={isHtml} />;
+export function EratoEmailSuggestion(props: EratoEmailCodeBlockProps) {
+  const Renderer =
+    componentRegistry.EratoEmailCodeBlock ?? DefaultEratoEmailCodeBlock;
+  return <Renderer {...props} />;
 }

@@ -52,6 +52,8 @@ export interface EratoEmailCodeBlockProps {
   content: string;
   /** Whether the draft is HTML, as read from the block itself. */
   isHtml?: boolean;
+  /** Whether the answer holding the draft is still being written. */
+  isStreaming?: boolean;
 }
 
 export interface EratoAppointmentCodeBlockProps {

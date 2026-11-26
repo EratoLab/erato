@@ -1,6 +1,5 @@
 import { mapOutsideCodeFences } from "./codeFences";
 import {
-  EMAIL_DRAFT_PLAIN_BLOCK_TAGS,
   EMAIL_DRAFT_TAGS,
   linkTargetDisplay,
   linkTextNamesTarget,
@@ -128,10 +127,7 @@ function isCell(element: Element | null): boolean {
   return element?.tagName === "TD" || element?.tagName === "TH";
 }
 
-const HTML_FRAGMENT_TAG_NAMES = [
-  ...EMAIL_DRAFT_TAGS,
-  ...EMAIL_DRAFT_PLAIN_BLOCK_TAGS,
-].join("|");
+const HTML_FRAGMENT_TAG_NAMES = EMAIL_DRAFT_TAGS.join("|");
 
 // Plain business text with `<Name>`, `<mail@example.com>` or `<30` must not
 // match.
@@ -146,16 +142,17 @@ const STARTS_WITH_ELEMENT_RE = new RegExp(
 
 const CHARACTER_REFERENCE_RE = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/gi;
 
-/** "R&D;" has the shape of a character reference; only a real one decodes. */
+/**
+ * "R&D;" has the shape of a character reference; only a real one decodes,
+ * and decodes whole ("&notes;" would leave "es;").
+ */
 function holdsCharacterReference(content: string): boolean {
-  const candidates = [
-    ...new Set(content.match(CHARACTER_REFERENCE_RE) ?? []),
-  ].join(" ");
-  return (
-    candidates !== "" &&
-    new DOMParser().parseFromString(candidates, "text/html").body
-      .textContent !== candidates
-  );
+  const probe = document.createElement("textarea");
+  const candidates = new Set(content.match(CHARACTER_REFERENCE_RE) ?? []);
+  return [...candidates].slice(0, 50).some((candidate) => {
+    probe.innerHTML = candidate;
+    return probe.value !== candidate && !probe.value.endsWith(";");
+  });
 }
 
 /**
@@ -266,7 +263,13 @@ export function emailDraftHtmlToText(html: string): string {
       return;
     }
     const text = raw.replace(/\s+/g, " ");
-    if (line === null && text === " " && raw.includes(NON_BREAKING_SPACE)) {
+    if (
+      line === null &&
+      text === " " &&
+      raw.includes(NON_BREAKING_SPACE) &&
+      cellDepth === 0 &&
+      listDepth === 0
+    ) {
       pushBlank();
       return;
     }
@@ -318,9 +321,12 @@ export function emailDraftHtmlToText(html: string): string {
     }
     if (tag === "S" || tag === "DEL") {
       // Struck-through words are deleted words; text cannot show the strike.
+      if (element.children.length > 0 || /\s/.test(element.textContent ?? "")) {
+        appendText(" ");
+      }
       return;
     }
-    if (tag === "SUP" && element.textContent?.trim()) {
+    if (tag === "SUP" && /^\s*\d+\s*$/.test(element.textContent ?? "")) {
       append("^");
     }
     if (tag === "TD" || tag === "TH") {
@@ -341,8 +347,8 @@ export function emailDraftHtmlToText(html: string): string {
     }
     if (tag === "UL" || tag === "OL") {
       listDepth += 1;
-      let index = Number.parseInt(element.getAttribute("start") ?? "", 10);
-      index = (tag === "OL" && index ? index : 1) - 1;
+      const start = Number.parseInt(element.getAttribute("start") ?? "", 10);
+      let index = (tag === "OL" && !Number.isNaN(start) ? start : 1) - 1;
       element.childNodes.forEach((child) => {
         if (child.nodeName !== "LI") {
           visit(child);

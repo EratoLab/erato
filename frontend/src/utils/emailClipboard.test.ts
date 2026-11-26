@@ -191,8 +191,28 @@ describe("emailDraftHtmlToText", () => {
     ],
     [
       "superscript and struck-through words",
-      "<p>10<sup>6</sup> units for <del>100</del> <ins>80</ins> EUR</p>",
-      "10^6 units for 80 EUR",
+      "<p>10<sup>6</sup> units on the 1<sup>st</sup> for <del>100</del> <ins>80</ins> EUR</p>",
+      "10^6 units on the 1st for 80 EUR",
+    ],
+    [
+      "a struck-through gap between words",
+      "<p>do not<s> </s>pay 1<s><br></s>000</p>",
+      "do not pay 1 000",
+    ],
+    [
+      "numbering that starts at zero",
+      '<ol start="0"><li>zero</li><li>one</li></ol>',
+      "0. zero\n1. one",
+    ],
+    [
+      "an empty cell and an empty list item",
+      "<table><tr><td>a</td><td>b</td></tr><tr><td>&nbsp;</td><td>c</td></tr></table><ul><li>x</li><li>&nbsp;</li><li>y</li></ul>",
+      "a | b\n| c\n\n- x\n- y",
+    ],
+    [
+      "a website behind a phone number",
+      '<p>Call <a href="https://3232235777/">+32 322 357 77</a></p>',
+      "Call +32 322 357 77 (https://3232235777/)",
     ],
     ["spaces around inline tags", "<p>a <strong> b </strong> c</p>", "a b c"],
     [
@@ -319,6 +339,8 @@ describe("isEmailDraftHtml", () => {
       true,
     ],
     ["R&D; reports on Friday", { bodyFormat: "text" }, false],
+    ["terms&notes; here", { bodyFormat: "text" }, false],
+    ["Hello <Name>,\nsend it to <address>.", { bodyFormat: "text" }, false],
     ["Tom &amp; Anna", { bodyFormat: "text" }, true],
     ["Hi <b>there</b>", { language: "text", bodyFormat: "text" }, true],
     ["Hi <b>there</b>", { bodyFormat: "text" }, true],

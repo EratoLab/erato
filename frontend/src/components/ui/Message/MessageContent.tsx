@@ -581,7 +581,11 @@ function MarkdownCode({
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
-      <EratoEmailSuggestion content={codeContent} isHtml={emailBlock.isHtml} />
+      <EratoEmailSuggestion
+        content={codeContent}
+        isHtml={emailBlock.isHtml}
+        isStreaming={isStreaming}
+      />
     );
   }
 
@@ -2268,6 +2272,7 @@ export const MessageContent = memo(function MessageContent({
                   isHtml={isEmailDraftHtml(textForArtifact, {
                     bodyFormat: wholeBodyArtifact.bodyFormat,
                   })}
+                  isStreaming={!!isStreaming}
                 />
               </HostArtifactContext.Provider>
             );

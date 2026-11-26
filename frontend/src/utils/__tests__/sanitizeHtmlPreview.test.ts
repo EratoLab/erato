@@ -59,6 +59,11 @@ describe("sanitizeHtmlPreview", () => {
     ],
     ["Dear <First Name>,", "Dear &lt;First Name&gt;,"],
     ["<p>a < b and c > d</p>", "<p>a &lt; b and c &gt; d</p>"],
+    [
+      "<p>Dear <Title> <Name>, at <Time></p><p>Regards</p>",
+      "<p>Dear &lt;Title&gt; &lt;Name&gt;, at &lt;Time&gt;</p><p>Regards</p>",
+    ],
+    ["<p>Hello<o:p></o:p></p>", "<p>Hello</p>"],
   ])("keeps angle-bracket text that is no tag: %s", (input, expected) => {
     expect(sanitizeHtmlPreview(input)).toBe(expected);
   });
@@ -258,12 +263,91 @@ describe("sanitizeHtmlPreview", () => {
       );
     });
 
-    it("leaves a link that is still being written alone", () => {
+    it("leaves the last link alone only while the draft streams", () => {
+      const growing = '<a href="https://docs.example.com/guide">https://d';
+      expect(sanitizeHtmlPreview(growing, { isStreaming: true })).toBe(
+        link("https://docs.example.com/guide", "https://d"),
+      );
+      expect(sanitizeHtmlPreview(growing)).toContain(
+        "https://d (https://docs.example.com/guide)",
+      );
+    });
+
+    it.each([
+      '<p><a href="https://evil.example/">https://bank.example</p>',
+      '<a href="https://evil.example/">https://bank.example</a><!--<a>-->',
+      '<a href="https://evil.example/">https://bank.example</a><p title="<a>">x</p>',
+      '<a href="https://evil.example/">http://192.168.1.10/login</a>',
+      '<a href="https://evil.example/">https://intranet/hr</a>',
+      '<a href="https://evil.example/">https:\\\\www.bank.example\\login</a>',
+      '<a href="https://evil.example/">https:www.bank.example</a>',
+      '<a href="https://evil.example/">ftp://bank.example</a>',
+      '<a href="https://evil.example/">bank.example:99999</a>',
+      '<a href="https://evil.example/">https://www.bank.example[1]</a>',
+      `<a href="https://evil.example/">www${String.fromCodePoint(0x200a)}.bank.example</a>`,
+      `<a href="https://evil.example/">bank.example${String.fromCodePoint(0x3164)}</a>`,
+      '<a href="https://evil.example/">https://www.bank.example@evil.example/</a>',
+      '<a href="https://evil.example/"><div>https://www.bank.example</div><div>[safe]</div></a>',
+    ])("adds the real target in %s", (draft) => {
+      expect(sanitizeHtmlPreview(draft)).toContain(" (https://evil.example/)");
+    });
+
+    it.each([
+      [
+        '<a href="h&#9;ttps://www.bank.example@x.example/">Pay</a>',
+        "https://x.example/",
+      ],
+      [
+        '<a href="&#1;https://www.bank.example@x.example/">Pay</a>',
+        "https://x.example/",
+      ],
+      [
+        '<a href="mai&#10;lto:anna@example.com?bcc=spy@x.example">Anna</a>',
+        "mailto:anna@example.com",
+      ],
+    ])("reads the address as the browser follows it: %s", (draft, href) => {
+      expect(sanitizeHtmlPreview(draft)).toContain(`href="${href}"`);
+    });
+
+    it('drops an address that names nobody: <a href="mailto:?to=spy@x.example">', () => {
+      expect(
+        sanitizeHtmlPreview('<a href="mailto:?to=spy@x.example">Anna</a>'),
+      ).toBe("<a>Anna</a>");
+    });
+
+    it.each([
+      ["Offer.pdf", "https://files.example.com/s/Offer.pdf"],
+      ["README.md", "https://code.example.com/tool/README.md"],
+      ["Prices_2026.xlsx", "https://files.example.com/p"],
+      ["030 123456", "tel:+4930123456"],
+      ["+49 (0)30 123456", "tel:+4930123456"],
+      ["0800 / 123 456", "tel:0800123456"],
+    ])("keeps %j linking to %s", (text, href) => {
+      expect(sanitizeHtmlPreview(`<a href="${href}">${text}</a>`)).toBe(
+        link(href, text),
+      );
+    });
+
+    it("adds the target of a website behind a phone number", () => {
+      expect(
+        sanitizeHtmlPreview('<a href="https://3232235777/">+32 322 357 77</a>'),
+      ).toContain("(https://3232235777/)");
+    });
+
+    it("adds the real target once, also when cleaned twice", () => {
+      const once = sanitizeHtmlPreview(
+        '<a href="https://evil.example/">https://bank.example</a>',
+      );
+      expect(sanitizeHtmlPreview(once)).toBe(once);
+    });
+
+    it("shows no hidden character in an added target", () => {
+      const override = String.fromCodePoint(0x202e);
       expect(
         sanitizeHtmlPreview(
-          '<a href="https://docs.example.com/guide">https://d',
+          '<a href="mailto:%E2%80%AEmoc.knab@evil.example">anna@bank.example</a>',
         ),
-      ).toBe(link("https://docs.example.com/guide", "https://d"));
+      ).not.toContain(override);
     });
   });
 });

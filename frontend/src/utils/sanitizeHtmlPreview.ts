@@ -29,17 +29,27 @@ const ALLOWED_ATTRIBUTES = Object.values(ATTRIBUTES_BY_TAG).flatMap(
 
 const ALLOWED_URI_REGEXP = /^(?:https?|mailto|tel):/i;
 
-// Zero-width, direction-override and Unicode tag characters: text nobody sees.
+// Zero-width, direction-override, filler and tag characters: text nobody sees.
+/* eslint-disable no-misleading-character-class -- single code points, none meant to combine */
 const HIDDEN_CHARACTERS_RE =
-  /[\u200B\u2060\uFEFF\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
-const UNSEEN_IN_ADDRESS_RE = /[\p{Cf}\u034F\uFE00-\uFE0F]/gu;
+  /[\u034F\u115F\u1160\u17B4\u17B5\u180E\u200B\u2060-\u2064\u206A-\u206F\u202A-\u202E\u2066-\u2069\u3164\uFE00-\uFE0E\uFEFF\uFFA0\u{1D173}-\u{1D17A}\u{E0000}-\u{E01EF}]/gu;
+// In an address, also format characters and the spaces thinner than a space.
+const UNSEEN_IN_ADDRESS_RE =
+  /[\p{Cf}\u034F\u115F\u1160\u2000-\u200A\u202F\u205F\u3164\uFE00-\uFE0F\uFFA0]/gu;
+/* eslint-enable no-misleading-character-class */
+// A bare "name.ext" with one of these endings is a file, not a site.
+const FILE_ENDING_RE =
+  /\.(?:pdf|docx?|xlsx?|pptx?|csv|txt|md|zip|png|jpe?g|gif|msg|eml|ics|json|xml|html?|js|ts)$/i;
 const EDGE_CHARACTER_RE = /[\p{P}\p{S}\s]/u;
 
 function isHtmlElementName(name: string): boolean {
   try {
     return (
       /^(?:svg|math)$/i.test(name) ||
+      name.includes(":") ||
       (!name.includes("-") &&
+        // "<Title>" or "<Time>" is a placeholder; tags are not written so.
+        !/^[A-Z][a-z]/.test(name) &&
         !(document.createElement(name) instanceof HTMLUnknownElement))
     );
   } catch {
@@ -70,19 +80,21 @@ function decoded(value: string): string {
 /** The address a link points to, as a reader would compare it. */
 export function linkTargetDisplay(href: string): string {
   const mail = /^mailto:(.*)$/i.exec(href);
+  let shown = href;
   if (mail) {
-    return decoded(mail[1]);
+    shown = decoded(mail[1]);
+  } else if (/^tel:/i.test(href)) {
+    shown = href.slice(4);
+  } else {
+    try {
+      // A look-alike host is shown in its encoded form.
+      const url = new URL(href);
+      shown = url.hostname.includes("xn--") ? url.href : href;
+    } catch {
+      // Shown as written.
+    }
   }
-  if (/^tel:/i.test(href)) {
-    return href.slice(4);
-  }
-  try {
-    // A look-alike host is shown in its encoded form.
-    const url = new URL(href);
-    return url.hostname.includes("xn--") ? url.href : href;
-  } catch {
-    return href;
-  }
+  return shown.replace(HIDDEN_CHARACTERS_RE, "");
 }
 
 function trimEdgePunctuation(word: string): string {
@@ -97,19 +109,30 @@ function trimEdgePunctuation(word: string): string {
   return word.slice(start, end);
 }
 
+/** National and international spellings of one number end in the same digits. */
+function isSamePhoneNumber(a: string, b: string): boolean {
+  const digits = (value: string) =>
+    value.replace(/\(0\)/g, "").replace(/\D/g, "").replace(/^0+/, "");
+  const [short, long] = [digits(a), digits(b)].sort(
+    (x, y) => x.length - y.length,
+  );
+  return short.length >= 5 && long.endsWith(short);
+}
+
 function comparableAddress(value: string): string {
-  const address = trimEdgePunctuation(value.replace(UNSEEN_IN_ADDRESS_RE, ""))
-    .toLowerCase()
-    .replace(/^(?:https?:\/\/|mailto:|tel:)/, "")
-    .replace(/^www\./, "");
-  return /^[+\d\s().-]+$/.test(address)
-    ? address.replace(/\D/g, "")
-    : decoded(address);
+  return decoded(
+    trimEdgePunctuation(value.replace(UNSEEN_IN_ADDRESS_RE, ""))
+      .toLowerCase()
+      .replace(/^(?:https?:\/\/|mailto:)/, "")
+      .replace(/^www\./, ""),
+  );
 }
 
 /** Whether a link's text names its own target, so the target adds nothing. */
 export function linkTextNamesTarget(text: string, href: string): boolean {
-  return comparableAddress(text) === comparableAddress(href);
+  return /^tel:/i.test(href)
+    ? isSamePhoneNumber(text, href)
+    : comparableAddress(text) === comparableAddress(href);
 }
 
 interface Address {
@@ -119,7 +142,10 @@ interface Address {
 
 function hostOf(url: string): string | null {
   try {
-    return new URL(url).hostname.replace(/^www\./, "").replace(/\.$/, "");
+    const { hostname, username } = new URL(url);
+    // "good.example@evil.example" reads as the part before the "@".
+    const shown = username ? decoded(username) : hostname;
+    return shown.replace(/^www\./, "").replace(/\.$/, "");
   } catch {
     return null;
   }
@@ -131,28 +157,38 @@ function emailAddress(value: string): Address | null {
   return host ? { host, mailbox: value.toLowerCase() } : null;
 }
 
+const WRITTEN_SCHEME_RE = /(?:https?|ftp):[\\/\u2215\u2044]*/i;
+
 /**
  * The address a word of link text names, if a reader would take it for one.
  * A bare "name.tld" counts only when it is the whole text: inside a sentence
- * it is as often a file name or an abbreviation.
+ * it is as often an abbreviation.
  */
 function addressNamedBy(word: string, isWholeText: boolean): Address | null {
-  const schemeAt = word.search(/https?:\/\//i);
-  const url = schemeAt >= 0 ? word.slice(schemeAt) : word;
-  const email =
-    schemeAt < 0 ? emailAddress(word.replace(/^mailto:/i, "")) : null;
+  const scheme = WRITTEN_SCHEME_RE.exec(word);
+  const rest = scheme ? word.slice(scheme.index + scheme[0].length) : word;
+  const email = scheme ? null : emailAddress(word.replace(/^mailto:/i, ""));
   if (email) {
     return email;
   }
-  if (schemeAt < 0 && !/^www\./i.test(word) && !isWholeText) {
+  if (!scheme && !/^www\./i.test(word) && !isWholeText) {
     return null;
   }
-  const host = hostOf(schemeAt >= 0 ? url : `https://${word}`);
-  const isHost =
-    host !== null &&
-    (/\.(?:[a-z]{2,}|xn--[a-z0-9-]+)$/.test(host) ||
-      /^\d{1,3}(?:\.\d{1,3}){3}(?:[:/]|$)/.test(word));
-  return isHost ? { host } : null;
+  // What the parser refuses (a wrong port, stray brackets) still reads as a host.
+  const host =
+    hostOf(`https://${rest}`) ??
+    hostOf(`https://${/^[\p{L}\p{N}.-]*/u.exec(rest)?.[0] ?? ""}`);
+  if (!host) {
+    return null;
+  }
+  if (scheme) {
+    return { host };
+  }
+  const isFile = !/[/:?#]/.test(rest) && FILE_ENDING_RE.test(rest);
+  const isSite =
+    /\.(?:[a-z]{2,}|xn--[a-z0-9-]+)$/.test(host) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+  return isSite && !isFile ? { host } : null;
 }
 
 function hrefAddress(href: string): Address | null {
@@ -169,15 +205,21 @@ function isSameSite(a: string, b: string): boolean {
 
 function linkTextNamesOtherAddress(link: Element, href: string): boolean {
   const copy = link.cloneNode(true) as Element;
-  copy.querySelectorAll("br").forEach((br) => br.replaceWith(" "));
+  copy.querySelectorAll("*").forEach((element) => {
+    if (!INLINE_TAGS.has(element.tagName)) {
+      element.before(" ");
+      element.after(" ");
+    }
+  });
   const text = (copy.textContent ?? "").replace(UNSEEN_IN_ADDRESS_RE, "");
   const words = text.split(/\s+/).map(trimEdgePunctuation).filter(Boolean);
+  if (/^(?:\+|0|\()[\d\s()./-]{4,}$/.test(text.trim())) {
+    // A phone number as text promises a call to that number.
+    return !/^tel:/i.test(href) || !isSamePhoneNumber(text, href);
+  }
   const target = hrefAddress(href);
   if (target === null) {
-    const isPhoneNumber = /^[+\d\s()./-]{5,}$/.test(text.trim());
-    return isPhoneNumber
-      ? !linkTextNamesTarget(text, href)
-      : words.some((word) => addressNamedBy(word, words.length === 1));
+    return words.some((word) => addressNamedBy(word, words.length === 1));
   }
   return words.some((word) => {
     const named = addressNamedBy(word, words.length === 1);
@@ -193,38 +235,38 @@ function linkTextNamesOtherAddress(link: Element, href: string): boolean {
   });
 }
 
+/**
+ * The address as the browser will follow it: it ignores tabs, newlines and
+ * leading control characters, so the written form cannot be trusted.
+ */
 function cleanHref(link: Element): string | null {
-  const href = link.getAttribute("href")?.trim() ?? "";
-  if (/^mailto:/i.test(href)) {
-    // A query can add recipients or a prefilled text the reader never sees.
-    return href.split("?")[0];
-  }
-  if (!/^https?:/i.test(href)) {
-    return href || null;
-  }
+  const written = link.getAttribute("href") ?? "";
+  let url: URL;
   try {
-    const url = new URL(href);
-    if (!url.username && !url.password) {
-      return href;
-    }
-    url.username = "";
-    url.password = "";
-    return url.href;
+    url = new URL(written);
   } catch {
     return null;
   }
+  if (url.protocol === "mailto:" || url.protocol === "tel:") {
+    // A mailto query can add recipients or a text the reader never sees.
+    return url.pathname ? url.protocol + url.pathname : null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return null;
+  }
+  const isAsWritten =
+    !url.username &&
+    !url.password &&
+    /^https?:\/\/[^\s\p{Cc}]*$/iu.test(written);
+  url.username = "";
+  url.password = "";
+  return isAsWritten ? written : url.href;
 }
 
-/** While a draft streams, its last link can still be growing. */
-function endsInsideLink(html: string): boolean {
-  const lastOpen =
-    Array.from(html.matchAll(/<a(?:\s[^<>]*)?>/gi)).at(-1)?.index ?? -1;
-  return lastOpen > html.toLowerCase().lastIndexOf("</a");
-}
-
-function cleanLinks(body: HTMLElement, html: string): void {
+function cleanLinks(body: HTMLElement, isGrowing: boolean): void {
   const links = Array.from(body.querySelectorAll("a"));
-  const growing = endsInsideLink(html) ? links.at(-1) : undefined;
+  // While a draft streams, its last link can still be growing.
+  const growing = isGrowing ? links.at(-1) : undefined;
   links.forEach((link) => {
     if (!link.textContent?.trim()) {
       link.remove();
@@ -238,8 +280,13 @@ function cleanLinks(body: HTMLElement, html: string): void {
     link.setAttribute("href", href);
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");
-    if (link !== growing && linkTextNamesOtherAddress(link, href)) {
-      link.append(` (${linkTargetDisplay(href)})`);
+    const target = ` (${linkTargetDisplay(href)})`;
+    if (
+      link !== growing &&
+      !link.textContent.endsWith(target) &&
+      linkTextNamesOtherAddress(link, href)
+    ) {
+      link.append(target);
     }
   });
 }
@@ -294,7 +341,10 @@ function breakTopLevelNewlines(body: HTMLElement): void {
     if ((parts.length > 0 || !atBlockStart) && !breaksLine(node.nextSibling)) {
       addBreaks();
     }
-    (node as Text).replaceWith(...parts);
+    // Not spread into one call: a long draft has more lines than a call takes.
+    const fragment = body.ownerDocument.createDocumentFragment();
+    parts.forEach((part) => fragment.append(part));
+    (node as Text).replaceWith(fragment);
   });
 }
 
@@ -306,7 +356,10 @@ function breakTopLevelNewlines(body: HTMLElement): void {
  * resource, nothing that styles or hides text. A link whose text reads as an
  * address other than its target also shows the target.
  */
-export function sanitizeHtmlPreview(html: string): string {
+export function sanitizeHtmlPreview(
+  html: string,
+  options: { isStreaming?: boolean } = {},
+): string {
   const body = DOMPurify.sanitize(escapeNonHtmlTags(html), {
     ALLOWED_TAGS: [...EMAIL_DRAFT_TAGS, ...EMAIL_DRAFT_PLAIN_BLOCK_TAGS],
     ALLOWED_ATTR: ALLOWED_ATTRIBUTES,
@@ -316,14 +369,19 @@ export function sanitizeHtmlPreview(html: string): string {
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
     RETURN_DOM: true,
-  }) as HTMLElement;
+  }) as HTMLElement | null;
+  if (body === null) {
+    return "";
+  }
   const doc = body.ownerDocument;
 
   body
     .querySelectorAll(EMAIL_DRAFT_PLAIN_BLOCK_TAGS.join(","))
     .forEach((element) => {
       const block = doc.createElement("div");
-      block.append(...Array.from(element.childNodes));
+      while (element.firstChild) {
+        block.append(element.firstChild);
+      }
       element.replaceWith(block);
     });
   body.querySelectorAll("*").forEach((element) => {
@@ -333,6 +391,7 @@ export function sanitizeHtmlPreview(html: string): string {
       .filter((name) => !kept.includes(name))
       .forEach((name) => element.removeAttribute(name));
   });
+  cleanLinks(body, options.isStreaming === true);
   const texts = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
   while (texts.nextNode()) {
     const text = texts.currentNode.textContent ?? "";
@@ -341,7 +400,6 @@ export function sanitizeHtmlPreview(html: string): string {
       texts.currentNode.textContent = visible;
     }
   }
-  cleanLinks(body, html);
   breakTopLevelNewlines(body);
   return body.innerHTML;
 }

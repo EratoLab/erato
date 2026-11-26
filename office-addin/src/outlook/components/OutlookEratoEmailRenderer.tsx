@@ -65,6 +65,7 @@ import type { EratoEmailCodeBlockProps } from "@erato/frontend/library";
 export function OutlookEratoEmailRenderer({
   content,
   isHtml,
+  isStreaming,
 }: EratoEmailCodeBlockProps) {
   // Subscribe to the shared snapshot instead of running an own poll loop —
   // a second poller would fight the input's over the host's serialized
@@ -160,8 +161,8 @@ export function OutlookEratoEmailRenderer({
     useState<OutlookEmailClientAction | null>(null);
   const isBusy = status === "inserting";
   const previewHtml = useMemo(
-    () => (isHtml ? sanitizeHtmlPreview(content) : null),
-    [content, isHtml],
+    () => (isHtml ? sanitizeHtmlPreview(content, { isStreaming }) : null),
+    [content, isHtml, isStreaming],
   );
 
   // Single pending status-reset timer: a new schedule cancels the previous
