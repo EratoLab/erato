@@ -134,21 +134,58 @@ function loadingImages(): HTMLImageElement[] {
   );
 }
 
-/** The body's background as `#rrggbb`, when it is an opaque sRGB colour. */
+/**
+ * The body's background as `#rrggbb`, for any CSS colour form (`oklch()`,
+ * `color()`, what `color-mix()` computes to). Nothing for a see-through
+ * colour or a gradient or image over it: the host then forgets the colour it
+ * had, rather than showing a customer's old one.
+ */
 export function pageBackground(): string | undefined {
-  const value = window.getComputedStyle(document.body).backgroundColor;
+  const style = window.getComputedStyle(document.body);
+  if (style.backgroundImage && style.backgroundImage !== "none") {
+    return undefined;
+  }
+  return toHex(style.backgroundColor);
+}
+
+/** An opaque CSS colour as sRGB `#rrggbb`, painted into one canvas pixel. */
+export function toHex(color: string): string | undefined {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  // eslint-disable-next-line lingui/no-unlocalized-strings
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return rgbToHex(color);
+  // An unknown colour leaves the fill style as it was: transparent.
+  context.fillStyle = "rgba(0, 0, 0, 0)";
+  context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+  if (alpha < 255) return undefined;
+  return hex([red, green, blue]);
+}
+
+/** Without a canvas: the `rgb()` forms a computed style gives for sRGB. */
+function rgbToHex(color: string): string | undefined {
   const match =
-    /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)\s*(?:[,/]\s*([\d.]+)(%?)\s*)?\)$/.exec(
-      value,
+    /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,/]\s*([\d.]+)(%?)\s*)?\)$/.exec(
+      color,
     );
   if (!match) return undefined;
-  const [, red, green, blue] = match;
   // Absent when the colour has no alpha part.
   const alpha = match[4] as string | undefined;
   if (alpha !== undefined && Number(alpha) < (match[5] ? 100 : 1)) {
     return undefined;
   }
-  return `#${[red, green, blue]
-    .map((part) => Number(part).toString(16).padStart(2, "0"))
+  return hex([match[1], match[2], match[3]].map(Number));
+}
+
+function hex(channels: number[]): string {
+  return `#${channels
+    .map((channel) =>
+      Math.min(255, Math.max(0, Math.round(channel)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
     .join("")}`;
 }
