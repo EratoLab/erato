@@ -40,6 +40,11 @@ import type {
 } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
 
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
   const { ooxmlHostCommentStates } = await import(
     "../../../test/mocks/word/commentStates"

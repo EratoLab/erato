@@ -31,6 +31,11 @@ import type {
 } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   const { chatHooksFrom } = await import(
     "../../../test/helpers/eratoLibraryMock"

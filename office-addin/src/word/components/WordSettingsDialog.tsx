@@ -81,10 +81,18 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
               id: "officeAddin.settings.serversTools.wordActions",
               message: "Word actions",
             })}
-            caption={t({
-              id: "officeAddin.settings.serversTools.wordActions.everyDevice",
-              message: "Built into Word · every device",
-            })}
+            // Without a server tool the row holds only this pane's own switch.
+            caption={
+              wordTools.length > 0
+                ? t({
+                    id: "officeAddin.settings.serversTools.wordActions.everyDevice",
+                    message: "Built into Word · every device",
+                  })
+                : t({
+                    id: "officeAddin.settings.serversTools.wordActions.builtIn",
+                    message: "Built into Word",
+                  })
+            }
             data-testid="servers-tools-word-actions-row"
           >
             {/* Kept with the account, so every device has the same choice. */}

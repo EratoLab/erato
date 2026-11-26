@@ -1947,8 +1947,8 @@ msgstr "Word-Aktionen"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-#~ msgid "officeAddin.settings.serversTools.wordActions.builtIn"
-#~ msgstr "In Word integriert"
+msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+msgstr "In Word integriert"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

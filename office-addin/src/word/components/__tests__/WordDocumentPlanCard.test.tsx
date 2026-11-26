@@ -102,6 +102,11 @@ import type {
 } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
 
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
   const { ooxmlHostCommentStates } = await import(
     "../../../test/mocks/word/commentStates"
@@ -2933,6 +2938,20 @@ describe("a change no server call applies", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(mock.decided).toEqual([]);
+  });
+
+  it("offers no Apply for a change the user set to Never on the server", () => {
+    never.actions = new Set(["word.apply_document_plan"]);
+    try {
+      const state = setup();
+      state.answer();
+      expect(
+        screen.queryByRole("button", { name: "Apply changes" }),
+      ).toBeNull();
+      expect(state.insert).not.toHaveBeenCalled();
+    } finally {
+      never.actions = new Set();
+    }
   });
 
   it("keeps Apply busy with the current stage and locks every other card while it writes", async () => {

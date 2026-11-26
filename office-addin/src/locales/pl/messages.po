@@ -1947,8 +1947,8 @@ msgstr "Czynności w Wordzie"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-#~ msgid "officeAddin.settings.serversTools.wordActions.builtIn"
-#~ msgstr "Wbudowane w Worda"
+msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+msgstr "Wbudowane w Worda"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

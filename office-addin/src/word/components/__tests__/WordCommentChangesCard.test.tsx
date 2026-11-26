@@ -45,6 +45,11 @@ const mockProfile = vi.fn();
 /** What the decision place sent the server, in order. */
 const decided: string[] = [];
 
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
   ActionConfirmationCard: (props: {
@@ -448,6 +453,17 @@ describe("WordCommentChangesCard", () => {
       });
       expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
       expect(decided).toEqual([]);
+    });
+
+    it("offers no Add for comments the user set to Never on the server", async () => {
+      never.actions = new Set(["word.add_comments"]);
+      try {
+        own(await twoAdds());
+        expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+        expect(host.commentStates()).toHaveLength(1);
+      } finally {
+        never.actions = new Set();
+      }
     });
 
     it("writes nothing with every row left out", async () => {

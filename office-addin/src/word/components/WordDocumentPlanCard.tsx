@@ -47,6 +47,7 @@ import {
   WordStatusAlert,
 } from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import {
   useWordChainedApply,
   useWordPlanCapture,
@@ -234,10 +235,12 @@ export function WordDocumentPlanCard({
     hasCopy: !!snapshot,
     revoked: !ownsCapture || issue === "expired",
   });
-  const offered = offerableWordClientActionsForFacet(
-    facetId,
-    artifact?.allowedClientActions,
-  ).includes(entry.action);
+  const neverAllowed = useNeverAllowedActions("word");
+  const offered =
+    offerableWordClientActionsForFacet(
+      facetId,
+      artifact?.allowedClientActions,
+    ).includes(entry.action) && !neverAllowed.has(entry.action);
   const ready =
     !chained &&
     idle &&
