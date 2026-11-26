@@ -911,7 +911,11 @@ export function ThemeProvider({
     if (isThemeReady) document.querySelector(START_COLORS_MARKER)?.remove();
   }, [isThemeReady]);
 
-  const [followsSystemTextSize] = useState(inHostShell);
+  // Where the engine cannot report the device's size, Erato's own setting
+  // stays the way to change it.
+  const [followsSystemTextSize] = useState(
+    () => inHostShell() && systemTextScale() !== null,
+  );
 
   // Layout effect: the attribute changes the root font-size, and a passive
   // effect would paint one frame at the old scale first.

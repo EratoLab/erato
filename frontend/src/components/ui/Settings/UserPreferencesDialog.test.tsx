@@ -31,6 +31,10 @@ import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 import type { ReactNode } from "react";
 
+vi.mock("@/lib/systemTextSize", () => ({
+  systemTextScale: () => 1,
+}));
+
 const mockNavigate = vi.fn();
 const localStorageValues = new Map<string, string>();
 

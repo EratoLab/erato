@@ -918,6 +918,24 @@ describe("ThemeProvider", () => {
     }
   });
 
+  it("keeps Erato's own text size in an app whose engine cannot report the device's", () => {
+    localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+    installHostShell({});
+    try {
+      render(
+        <ThemeProvider>
+          <div>content</div>
+        </ThemeProvider>,
+      );
+      expect(document.documentElement).toHaveAttribute(
+        "data-text-size",
+        "large",
+      );
+    } finally {
+      removeHostShell();
+    }
+  });
+
   it("sets no text-size attribute for the default or an unknown stored size", () => {
     const { unmount } = render(
       <ThemeProvider>

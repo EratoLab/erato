@@ -28,6 +28,8 @@ describe("systemTextScale", () => {
 
     try {
       expect(systemTextScale()).toBe(21 / 17);
+      computed.mockReturnValue({ fontSize: "53px" } as CSSStyleDeclaration);
+      expect(systemTextScale()).toBe(23 / 17);
     } finally {
       computed.mockRestore();
       if (descriptor) {
