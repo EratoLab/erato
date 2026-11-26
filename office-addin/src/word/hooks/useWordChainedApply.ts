@@ -1,3 +1,4 @@
+import { useConversationSelector } from "@erato/frontend/library";
 import { useCallback, useSyncExternalStore } from "react";
 
 import {
@@ -7,6 +8,8 @@ import {
   useChainedState,
 } from "../../core/clientActions/chainedCall";
 import { answerFences } from "../../core/clientActions/proposalApply";
+import { useWordWrite } from "../providers/WordWriteProvider";
+import { wordChainedHoldsAction } from "../utils/wordChainedApply";
 import { WORD_CLIENT_ACTIONS } from "../utils/wordClientActions";
 import { wordDocumentReadSession } from "../utils/wordDocumentReadTool";
 
@@ -57,6 +60,40 @@ export function useWordChainedProposal(
   return useChainedState<WordApplyCallResult>(messageId, (content) =>
     wordChainedProposalState(content, action),
   );
+}
+
+/**
+ * What the server's call for a proposed action means for its card in the answer. The call comes
+ * while the answer is still being written, so the card is drawn by then, on the copy staged for
+ * its request, and offers its own button only once the answer has ended and the call left the
+ * action to the user.
+ */
+export function useWordProposalCall(
+  messageId: string | undefined,
+  action: WordClientAction,
+): {
+  state: WordChainedApplyState | undefined;
+  /** The answer is being written and the server has made no call yet. */
+  preparing: boolean;
+  streaming: boolean;
+  holdsAction: boolean;
+  stagedCapture: WordDocumentCapture | undefined;
+} {
+  const streaming = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.status === "sending",
+    Object.is,
+  );
+  const state = useWordChainedProposal(messageId, action);
+  const { captureFor } = useWordWrite();
+  return {
+    state,
+    preparing: streaming && !state,
+    streaming,
+    holdsAction: streaming || wordChainedHoldsAction(state),
+    stagedCapture:
+      streaming && state && messageId ? captureFor(messageId) : undefined,
+  };
 }
 
 /** The pane's live copy with this token, redrawn when the answer's copy changes. */

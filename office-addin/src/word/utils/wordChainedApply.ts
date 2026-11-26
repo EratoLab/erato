@@ -27,6 +27,28 @@ export function wordChainedApplyDeclined(
 
 export type WordChainedApplyState = ChainedCallState<WordApplyCallResult>;
 
+const WROTE: ReadonlySet<WordApplyCallResult["status"]> = new Set([
+  "applied",
+  "partial",
+  "unconfirmed",
+]);
+
+/**
+ * Whether the server's call holds the action, so the card in the answer offers no button for it:
+ * while the call waits or runs, and once it wrote or may have written. A call that ended without
+ * a write gives the action back to the card, where the user's own click is the consent.
+ */
+export function wordChainedHoldsAction(
+  state: WordChainedApplyState | undefined,
+): boolean {
+  if (!state || state.kind === "cancelled") return false;
+  return (
+    state.kind !== "done" ||
+    state.result.status === "needs_decision" ||
+    WROTE.has(state.result.status)
+  );
+}
+
 /** One line for a chained change in the answer, where the pane holds no review of it. */
 export function wordChainedApplyText(state: WordChainedApplyState): string {
   switch (state.kind) {

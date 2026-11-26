@@ -7,9 +7,11 @@ import {
 import { t } from "@lingui/core/macro";
 
 import { wordApplyStageLabel } from "../utils/wordAuthoringMessages";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
 
 import type { WordDocumentDiagnostic } from "../utils/wordApplyDocumentPlan";
 import type { WordApplyStage } from "../utils/wordApplyProgress";
+import type { WordChainedApplyState } from "../utils/wordChainedApply";
 import type { WordReviewStatus } from "../utils/wordReviewState";
 import type { WordWriteBlockReason } from "../utils/wordWriteGate";
 import type { ReactNode } from "react";
@@ -39,6 +41,30 @@ export function WordApplyButton({
     >
       {applying ? wordApplyStageLabel(applyStage) : label}
     </Button>
+  );
+}
+
+/**
+ * Where the server's call for the card's change stands, where the card's own review does not say
+ * it. While that call writes, the stage it is at.
+ */
+export function WordChainedStatus({
+  state,
+  applying,
+  applyStage,
+}: {
+  state: WordChainedApplyState;
+  applying: boolean;
+  applyStage: WordApplyStage | undefined;
+}) {
+  return (
+    <p
+      className="word-review__hint"
+      role="status"
+      data-testid="word-chained-status"
+    >
+      {applying ? wordApplyStageLabel(applyStage) : wordChainedApplyText(state)}
+    </p>
   );
 }
 

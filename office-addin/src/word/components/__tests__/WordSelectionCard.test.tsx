@@ -228,26 +228,133 @@ describe("WordSelectionCard", () => {
     expect(screen.getByTestId("word-selection-undo")).toBeInTheDocument();
   });
 
-  it("offers no Replace of its own while the server's call waits for the user's decision", async () => {
-    const capture = await captureOf(host, { p: "PL1" });
-    renderCard({
-      capture,
-      calls: [
-        {
-          content_type: "tool_use",
-          tool_call_id: "proposal-1",
-          tool_name: "propose_client_action",
-          status: "success",
-          input: { action: REPLACE },
-          output: { apply: { call_id: "call-1" } },
-        },
-      ],
+  describe("a Replace the server carries out", () => {
+    const proposal = (id = "proposal-1", call = "call-1") => ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: REPLACE },
+      output: { apply: { call_id: call } },
+    });
+    const call = (output: unknown, status = "success") => ({
+      content_type: "tool_use",
+      tool_call_id: "call-1",
+      tool_name: "replace_selection",
+      status,
+      output,
+    });
+    const cancelled = call({ status: "rejected" }, "error");
+    const status = () => screen.getByTestId("word-chained-status");
+    const proposed = () => {
+      fireEvent.click(card(0).getByRole("tab", { name: "Proposed" }));
+      return card(0).getByText(PROPOSAL);
+    };
+
+    it("shows the comparison and Copy while the decision waits, with no Replace of its own", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, calls: [proposal()] });
+
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(
+        card(0).getByText("Selection when requested → proposed replacement"),
+      ).toBeInTheDocument();
+      expect(proposed()).toBeInTheDocument();
+      expect(
+        card(0).getByRole("button", { name: "Copy proposal" }),
+      ).toBeInTheDocument();
+      expect(replaceButton()).not.toBeInTheDocument();
+      expect(host.writeSyncs()).toEqual([]);
     });
 
-    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
-      "Waiting for your decision",
+    it("gives Replace back after the user cancelled, and the click writes onto the passage", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({ capture, calls: [proposal(), cancelled] });
+
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(proposed()).toBeInTheDocument();
+      expect(
+        card(0).getByRole("button", { name: "Copy proposal" }),
+      ).toBeInTheDocument();
+      fireEvent.click(replaceButton()!);
+
+      await screen.findByText("Replaced the selected passage.");
+      expect(host.paragraphs()[2].text).toBe(PROPOSAL);
+      expect(screen.queryByTestId("word-chained-status")).toBeNull();
+    });
+
+    it("keeps the given-back Replace behind the write gate and Never", async () => {
+      const capture = await captureOf(host, { p: "PL1" });
+      renderCard({
+        capture,
+        calls: [proposal(), cancelled],
+        identity: "https://contoso.sharepoint.com/other.docx",
+      });
+      expect(replaceButton()).toBeDisabled();
+      cleanup();
+
+      renderCard({
+        capture,
+        calls: [proposal(), cancelled],
+        decisions: { "word/replace_selection": "never_allow" },
+      });
+      expect(replaceButton()).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [{ status: "applied" }, "Applied."],
+      [{ status: "unconfirmed", reason: "timed_out" }, /may already be in/],
+    ])(
+      "offers no Replace after a call that wrote: %j",
+      async (result, text) => {
+        const capture = await captureOf(host, { p: "PL1" });
+        renderCard({ capture, calls: [proposal(), call({ result })] });
+
+        expect(status()).toHaveTextContent(text);
+        expect(proposed()).toBeInTheDocument();
+        expect(replaceButton()).not.toBeInTheDocument();
+      },
     );
-    expect(replaceButton()).not.toBeInTheDocument();
+
+    it("lets no click replace while a later call for the proposal waits", async () => {
+      uninstallWordSelectionHost();
+      host = installWordSelectionHost(SV2_MAIN_DOCUMENT, {
+        nullParagraphIds: true,
+      });
+      const capture = await captureOf(host, { p: "PL1" });
+      host.insertParagraphs({ p: "PL1" }, [host.paragraphs()[2].text], "After");
+      const view = renderCard({ capture, calls: [proposal(), cancelled] });
+      fireEvent.click(replaceButton()!);
+      await screen.findByText(AMBIGUOUS);
+      const pick = () =>
+        screen.getByRole("button", { name: "Replace selected passage" });
+      expect(pick()).toBeEnabled();
+
+      const context = mockUseChatContext() as {
+        messages: Record<string, { content: unknown[] }>;
+      };
+      const [id] = Object.keys(context.messages).filter((k) => k !== "user");
+      mockUseChatContext.mockReturnValue({
+        ...context,
+        messages: {
+          ...context.messages,
+          [id]: {
+            ...context.messages[id],
+            content: [
+              ...context.messages[id].content,
+              proposal("proposal-2", "call-2"),
+            ],
+          },
+        },
+      });
+      view.rerenderFor(IDENTITY);
+
+      expect(pick()).toBeDisabled();
+      host.select({ paragraph: 3 });
+      fireEvent.click(pick());
+      await act(() => Promise.resolve());
+      expect(host.writeSyncs()).toEqual([]);
+    });
   });
 
   it("says the passage changed and puts the request back for the current selection", async () => {

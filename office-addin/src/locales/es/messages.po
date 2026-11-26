@@ -2039,13 +2039,18 @@ msgstr "Acciones de Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.settings.serversTools.wordActions.builtIn"
-msgstr "Integrado en Word"
+#~ msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+#~ msgstr "Integrado en Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
 #~ msgid "officeAddin.settings.serversTools.wordActions.caption"
 #~ msgstr "Integrado en Word · este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.wordActions.everyDevice"
+msgstr "Integrado en Word · todos los dispositivos"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

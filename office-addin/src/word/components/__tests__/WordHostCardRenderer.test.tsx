@@ -110,6 +110,10 @@ function renderCard(options: {
   decisions?: Record<string, string>;
   /** The stored answer's parts. */
   messageContent?: unknown[];
+  /** The answer is still being written. */
+  sending?: boolean;
+  /** The copy staged for an answer still being written. */
+  captureFor?: (messageId: string) => WordDocumentCapture | undefined;
 }) {
   const artifact = options.artifact;
   mockUseHostArtifact.mockReturnValue(artifact);
@@ -120,6 +124,7 @@ function renderCard(options: {
         id: messageId,
         role: "assistant",
         content: options.messageContent,
+        ...(options.sending ? { status: "sending" } : {}),
       },
     },
     messageOrder: [messageId],
@@ -139,6 +144,7 @@ function renderCard(options: {
           : options.currentIdentity
       }
       capturesByAssistantMessageId={captures}
+      captureFor={options.captureFor}
     >
       <WordHostCardRenderer
         language={options.language ?? "erato-word-edits"}
@@ -801,19 +807,40 @@ describe("WordHostCardRenderer", () => {
   });
 
   describe("a change the server carries out", () => {
-    const insertFence = (text: string) => ({
+    const fence = (language: string, body: string) => ({
       content_type: "text",
-      text: `\`\`\`erato-word-insert\n${text}\n\`\`\``,
+      text: `\`\`\`${language}\n${body}\n\`\`\``,
     });
-    const proposal = {
+    const insertFence = (text: string) => fence("erato-word-insert", text);
+    const proposalOf = (
+      action: string,
+      id = "proposal-1",
+      call = "call-1",
+    ) => ({
       content_type: "tool_use",
-      tool_call_id: "proposal-1",
+      tool_call_id: id,
       tool_name: "propose_client_action",
       status: "success",
-      input: { action: INSERT },
-      output: { apply: { call_id: "call-1" } },
-    };
-    const renderChained = (messageContent: unknown[]) =>
+      input: { action },
+      output: { apply: { call_id: call } },
+    });
+    const proposal = proposalOf(INSERT);
+    const callOf = (
+      output: unknown,
+      status: "success" | "error" = "success",
+      id = "call-1",
+    ) => ({
+      content_type: "tool_use",
+      tool_call_id: id,
+      tool_name: "apply",
+      status,
+      output,
+    });
+    const cancelled = callOf({ status: "rejected" }, "error");
+    const renderChained = (
+      messageContent: unknown[],
+      options: Partial<Parameters<typeof renderCard>[0]> = {},
+    ) =>
       renderCard({
         artifact: makeArtifact({
           facetId: COMPOSE_FACET,
@@ -822,38 +849,190 @@ describe("WordHostCardRenderer", () => {
         language: "erato-word-insert",
         content: "A drafted paragraph.",
         messageContent,
+        ...options,
       });
+    const renderChainedEdits = (
+      calls: unknown[],
+      options: Partial<Parameters<typeof renderCard>[0]> = {},
+    ) =>
+      renderCard({
+        artifact: makeArtifact(),
+        messageContent: [
+          fence("erato-word-edits", EDITS_FENCE),
+          proposalOf(APPLY),
+          ...calls,
+        ],
+        ...options,
+      });
+    const insertButton = () =>
+      screen.queryByRole("button", { name: "Insert the text at the cursor" });
+    const applyButton = () =>
+      screen.queryByRole("button", { name: "Apply edit" });
+    const status = () => screen.getByTestId("word-chained-status");
 
-    it("offers no button of its own while the decision waits", () => {
-      renderChained([insertFence("A drafted paragraph."), proposal]);
+    it("shows the edits in full while the decision waits, with no button of its own", () => {
+      renderChainedEdits([]);
 
-      expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
-        "Waiting for your decision",
-      );
+      const card = within(screen.getByTestId("word-edits-card"));
+      expect(card.getByText("Paragraph 2")).toBeInTheDocument();
+      fireEvent.click(card.getByRole("tab", { name: "Proposed" }));
+      expect(card.getByText("Bravo, revised.")).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Insert the text at the cursor" }),
-      ).not.toBeInTheDocument();
+        within(card.getByTestId("word-chained-status")).getByText(
+          "Waiting for your decision",
+        ),
+      ).toBeInTheDocument();
+      expect(applyButton()).not.toBeInTheDocument();
     });
 
-    it("says nothing was changed after the user cancelled", () => {
+    it("shows them on the copy staged for the request while the answer is still being written", () => {
+      const staged = capture();
+      const artifact = makeArtifact({ itemIdentity: undefined });
+      renderChainedEdits([], {
+        artifact,
+        sending: true,
+        captures: new Map(),
+        captureFor: (id) => (id === artifact.messageId ? staged : undefined),
+      });
+
+      const card = within(screen.getByTestId("word-edits-card"));
+      expect(card.getAllByText("Bravo.")).not.toHaveLength(0);
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(
+        screen.queryByText(/no longer has the document snapshot/),
+      ).not.toBeInTheDocument();
+      expect(applyButton()).not.toBeInTheDocument();
+    });
+
+    it("shows the text to insert while the decision waits, with no button of its own", () => {
+      renderChained([insertFence("A drafted paragraph."), proposal]);
+
+      expect(
+        within(screen.getByTestId("word-insert-card")).getByText(
+          "A drafted paragraph.",
+        ),
+      ).toBeInTheDocument();
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("offers no button of its own while the server's call runs", () => {
       renderChained([
         insertFence("A drafted paragraph."),
         proposal,
-        {
-          content_type: "tool_use",
-          tool_call_id: "call-1",
-          tool_name: "insert_at_cursor",
-          status: "error",
-          output: { status: "rejected" },
-        },
+        callOf(undefined),
       ]);
 
-      expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
-        "Cancelled. Nothing was changed.",
-      );
+      expect(status()).toHaveTextContent("Applying the change…");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("gives the button back after the user cancelled, and the click writes", async () => {
+      word.word.setSelection("");
+      renderChained([insertFence("A drafted paragraph."), proposal, cancelled]);
+
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(screen.getByText("A drafted paragraph.")).toBeInTheDocument();
+      fireEvent.click(insertButton()!);
+
       expect(
-        screen.queryByRole("button", { name: "Insert the text at the cursor" }),
-      ).not.toBeInTheDocument();
+        await screen.findByText("Inserted into the document."),
+      ).toBeInTheDocument();
+      expect(word.word.writes()).toHaveLength(1);
+      expect(screen.queryByTestId("word-chained-status")).toBeNull();
+    });
+
+    it("keeps the given-back button behind the write gate", () => {
+      renderChained(
+        [insertFence("A drafted paragraph."), proposal, cancelled],
+        {
+          currentIdentity: "https://contoso.sharepoint.com/other.docx",
+        },
+      );
+
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(insertButton()).toBeDisabled();
+    });
+
+    it("keeps the given-back button away under Never and under Track Changes", async () => {
+      renderChained(
+        [insertFence("A drafted paragraph."), proposal, cancelled],
+        {
+          decisions: { "word/insert_at_cursor": "never_allow" },
+        },
+      );
+      expect(insertButton()).not.toBeInTheDocument();
+      cleanup();
+
+      word.word.setTrackingMode("TrackAll");
+      renderChainedEdits([callOf({ status: "rejected" }, "error")]);
+      await flush();
+      expect(status()).toHaveTextContent("Cancelled. Nothing was changed.");
+      expect(applyButton()).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [{ status: "stale" }, /^Not changed: the document has to be read again/],
+      [{ status: "unavailable", reason: "capture_lost" }, "Not changed."],
+      [{ status: "failed", reason: "track_changes" }, "Not changed."],
+    ])(
+      "gives the button back after a call that wrote nothing: %j",
+      (result, text) => {
+        renderChained([
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result }),
+        ]);
+
+        expect(status()).toHaveTextContent(text);
+        expect(insertButton()).toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      [{ status: "applied" }, "Applied."],
+      [{ status: "partial" }, /^Partly applied/],
+      [{ status: "unconfirmed" }, /may already be in the document/],
+      [{ status: "needs_decision" }, "Waiting for your decision on screen"],
+    ])(
+      "offers no button after a call that wrote or still asks: %j",
+      (result, text) => {
+        renderChained([
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result }),
+        ]);
+
+        expect(screen.getByText("A drafted paragraph.")).toBeInTheDocument();
+        expect(status()).toHaveTextContent(text);
+        expect(insertButton()).not.toBeInTheDocument();
+      },
+    );
+
+    it("offers no button while the answer goes on after a call that wrote nothing", () => {
+      renderChained(
+        [
+          insertFence("A drafted paragraph."),
+          proposal,
+          callOf({ result: { status: "failed", reason: "busy" } }),
+        ],
+        { sending: true },
+      );
+
+      expect(status()).toHaveTextContent("Not changed.");
+      expect(insertButton()).not.toBeInTheDocument();
+    });
+
+    it("follows the call of a second proposal after a change request", () => {
+      renderChained([
+        insertFence("A drafted paragraph."),
+        proposal,
+        callOf({ status: "change_requested" }, "error"),
+        proposalOf(INSERT, "proposal-2", "call-2"),
+      ]);
+
+      expect(status()).toHaveTextContent("Waiting for your decision");
+      expect(insertButton()).not.toBeInTheDocument();
     });
 
     it("keeps each version's button when the answer offers several", () => {
@@ -866,27 +1045,17 @@ describe("WordHostCardRenderer", () => {
       expect(
         screen.queryByTestId("word-chained-status"),
       ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Insert the text at the cursor" }),
-      ).toBeInTheDocument();
+      expect(insertButton()).toBeInTheDocument();
     });
 
     it("keeps the button for the user's pick after the server left it to them", () => {
       renderChained([
         insertFence("A drafted paragraph."),
         proposal,
-        {
-          content_type: "tool_use",
-          tool_call_id: "call-1",
-          tool_name: "insert_at_cursor",
-          status: "success",
-          output: { result: { status: "unavailable", reason: "user_picks" } },
-        },
+        callOf({ result: { status: "unavailable", reason: "user_picks" } }),
       ]);
 
-      expect(
-        screen.getByRole("button", { name: "Insert the text at the cursor" }),
-      ).toBeInTheDocument();
+      expect(insertButton()).toBeInTheDocument();
     });
   });
 

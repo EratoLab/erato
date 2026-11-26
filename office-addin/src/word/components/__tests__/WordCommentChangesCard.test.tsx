@@ -204,6 +204,8 @@ function renderCard(options: {
   allowAlways?: boolean;
   /** The accepted submission of this message, when it is not the draft the fence names. */
   submitted?: string;
+  /** The server makes an apply call for the accepted submission. */
+  chained?: boolean;
 }) {
   nextMessage += 1;
   const messageId = `assistant-${nextMessage}`;
@@ -236,7 +238,17 @@ function renderCard(options: {
         id: messageId,
         role: "assistant",
         previous_message_id: "user",
-        content: [],
+        content: options.chained
+          ? [
+              {
+                content_type: "tool_use",
+                tool_call_id: options.draftId,
+                tool_name: "submit_comment_changes",
+                status: "success",
+                output: { apply: { call_id: `${options.draftId}.apply` } },
+              },
+            ]
+          : [],
       },
     },
     messageOrder: ["user", messageId],
@@ -378,7 +390,7 @@ describe("WordCommentChangesCard", () => {
     expect(host.commentStates()[0].resolved).toBe(false);
   });
 
-  it("offers no Add in the answer, where nothing is decided", async () => {
+  it("offers no Add in the answer where the server makes the apply call", async () => {
     const capture = await submit(
       [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "x" }],
       "call-answer",
@@ -388,10 +400,80 @@ describe("WordCommentChangesCard", () => {
       draftId: "call-answer",
       capture,
       inAnswer: true,
+      chained: true,
     });
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
     expect(screen.queryByRole("button", { name: "Add 1 comment" })).toBeNull();
-    expect(within(rows()[0]).getByRole("checkbox")).toBeDisabled();
     expect(host.commentStates()).toHaveLength(1);
+  });
+
+  describe("in the answer, where the server makes no apply call", () => {
+    const twoAdds = () =>
+      submit(
+        [
+          { op: "add", anchor: { para: 3, quote: "alpha" }, text: "First." },
+          { op: "add", anchor: { para: 3, quote: "gamma" }, text: "Second." },
+        ],
+        "call-own",
+      );
+    const own = (capture: WordCommentsCapture | null) =>
+      renderCard({
+        action: "word.add_comments",
+        draftId: "call-own",
+        capture,
+        inAnswer: true,
+      });
+
+    it("offers Add, and the click posts only the ticked rows", async () => {
+      own(await twoAdds());
+      expect(screen.queryByTestId("word-chained-status")).toBeNull();
+      expect(host.commentStates()).toHaveLength(1);
+      fireEvent.click(within(rows()[1]).getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Add 1 comment" }));
+      await waitFor(() =>
+        expect(
+          within(rows()[0]).getByTestId("word-comments-row-status"),
+        ).toHaveTextContent("Done"),
+      );
+      expect(host.commentStates().map((c) => c.content)).toEqual([
+        "T1 root",
+        "Erato AI: First.",
+      ]);
+      expect(wordCommentReceipts().at(-1)).toMatchObject({
+        draftId: "call-own",
+        consent: "approved",
+        consentKind: "click",
+      });
+      expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+      expect(decided).toEqual([]);
+    });
+
+    it("writes nothing with every row left out", async () => {
+      own(await twoAdds());
+      for (const row of rows())
+        fireEvent.click(within(row).getByRole("checkbox"));
+      expect(screen.getByRole("button", { name: /^Add 0/ })).toBeDisabled();
+    });
+
+    it("writes nothing into another open document", async () => {
+      const view = own(await twoAdds());
+      view.openDocument("another-document");
+      const add = screen.getByRole("button", { name: "Add 2 comments" });
+      expect(add).toBeDisabled();
+      fireEvent.click(add);
+      expect(host.commentStates()).toHaveLength(1);
+    });
+
+    it("offers no Add where the deployment set copy", async () => {
+      window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+        comment_writes: { add: "copy" },
+      };
+      own(await twoAdds());
+      expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+      expect(within(rows()[0]).getByRole("checkbox")).toBeDisabled();
+    });
   });
 
   it("does not honour Always for adds when the request carried other people's comments", async () => {

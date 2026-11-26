@@ -41,6 +41,7 @@ import {
   WordPlanCommentRemovals,
 } from "./WordPlanCommentRemovals";
 import {
+  WordApplyButton,
   wordBlockedReasonText,
   WordDiagnosticDetails,
   WordStatusAlert,
@@ -95,6 +96,7 @@ import { WORD_VISIBLE_ADJUSTMENTS } from "../utils/wordFullDocumentComparison";
 import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { wordPlanPassages } from "../utils/wordInPlaceRoute";
 import {
+  runWordPlanApply,
   wordCoauthorNotice,
   wordPlanChecksCoauthors,
   wordPlanRouting,
@@ -163,6 +165,7 @@ export function WordDocumentPlanCard({
     )?.toolCallId,
   );
   // The server applies this change: the card in the answer shows where it stands, never Apply.
+  // Where the server makes no such call, the card applies on the user's own click.
   const chained = chainedState !== undefined;
   // The decision place shows a parked call, and an answer goes on after a change it applied.
   const generating = streaming && !decision && !chained;
@@ -235,9 +238,8 @@ export function WordDocumentPlanCard({
     facetId,
     artifact?.allowedClientActions,
   ).includes(entry.action);
-  // Only the card in the decision place approves; the server's call then writes.
   const ready =
-    !!decision &&
+    !chained &&
     idle &&
     !generating &&
     !issue &&
@@ -306,33 +308,65 @@ export function WordDocumentPlanCard({
       setCoauthors(wordCoauthorNotice(state)),
     );
   }, [checkCoauthors]);
-  const approve = useCallback(
+  const apply = useCallback(
     (importConfirmed: boolean, commentRemovalsConfirmed?: string) => {
       // Only the card's own ticks confirm.
       if (
-        !decision ||
         !ready ||
+        !capture ||
         refusal ||
         (confirmImport && !importConfirmed) ||
         (needsCommentTick &&
           commentRemovalsConfirmed !== commentPlan?.fingerprint)
       )
         return;
-      const confirmation: WordPlanConfirmation = {
-        ...(importConfirmed ? { importConfirmed } : {}),
-        ...(commentRemovalsConfirmed ? { commentRemovalsConfirmed } : {}),
-        ...(coauthors ? { coauthors } : {}),
-      };
-      decision.onDecide("approve", { clientConfirmation: confirmation });
+      if (decision) {
+        // The server's call writes once the user approved; the card sends what they ticked.
+        const confirmation: WordPlanConfirmation = {
+          ...(importConfirmed ? { importConfirmed } : {}),
+          ...(commentRemovalsConfirmed ? { commentRemovalsConfirmed } : {}),
+          ...(coauthors ? { coauthors } : {}),
+        };
+        decision.onDecide("approve", { clientConfirmation: confirmation });
+        return;
+      }
+      void runWordPlanApply({
+        key,
+        content,
+        capture,
+        messageId,
+        entry,
+        host,
+        importConfirmed,
+        commentRemovalsConfirmed,
+        coauthors: checkCoauthors ? { shown: coauthors } : undefined,
+      }).then((outcome) => {
+        // Someone who joined since the card was read is shown before anything is replaced.
+        if (outcome.kind === "coauthors") setCoauthors(outcome.now);
+        if (outcome.kind !== "comment-tick") return;
+        setCommentsTicked(undefined);
+        // Without the card's own rows, the diagnostic tells the user why nothing ran.
+        if (!needsCommentTick)
+          host.updateReview(key, {
+            documentPlanDiagnostic: outcome.diagnostic,
+          });
+      });
     },
     [
-      decision,
       ready,
+      capture,
       refusal,
       confirmImport,
       needsCommentTick,
       commentPlan,
+      decision,
       coauthors,
+      checkCoauthors,
+      host,
+      key,
+      content,
+      messageId,
+      entry,
     ],
   );
   const recoverySlot =
@@ -517,13 +551,13 @@ export function WordDocumentPlanCard({
       }),
     );
   };
-  const deny = () => decision?.onDecide("reject");
+  const deny = decision && (() => decision.onDecide("reject"));
   const completed = ["done", "reverted"].includes(review.status);
-  // Nothing is decided in the answer, so a card there folds until a change ran; a parked change
-  // stays open, as its answer waits for a decision.
+  // An Apply Word refused wrote nothing; once a later request took a new copy, its card folds too.
+  // A parked change stays open: its answer waits for a decision.
   const folds =
     completed ||
-    (idle && !generating && !decision) ||
+    (idle && !generating && copyGone && !decision) ||
     (review.status === "error" && !!snapshot?.revoked);
   const collapsed = folds && !review.detailsExpanded;
   const outcomeState = wordPlanOutcomeState(review);
@@ -699,7 +733,7 @@ export function WordDocumentPlanCard({
       standingLabel={wordPlanStandingLabel()}
     />
   );
-  const applyControl = !decision ? (
+  const applyControl = chained ? (
     applying && (
       <p className="word-review__hint" role="status">
         {wordApplyStageLabel(review.applyStage)}
@@ -751,9 +785,7 @@ export function WordDocumentPlanCard({
       canApply={ready && !host.operationInProgress}
       applying={applying}
       applyStage={review.applyStage}
-      onApply={() =>
-        approve(true, needsCommentTick ? commentsTicked : undefined)
-      }
+      onApply={() => apply(true, needsCommentTick ? commentsTicked : undefined)}
       onAskAgain={askAgainInPlace}
       onCancel={deny}
     />
@@ -770,7 +802,7 @@ export function WordDocumentPlanCard({
       canApply={ready && !host.operationInProgress}
       applying={applying}
       applyStage={review.applyStage}
-      onApply={() => approve(false, commentsTicked)}
+      onApply={() => apply(false, commentsTicked)}
       onKeepPassages={keepCommentedPassages}
       onCopyThreads={() => copyThreads(removals.map((r) => r.thread))}
       onCancel={deny}
@@ -794,6 +826,15 @@ export function WordDocumentPlanCard({
         />
       )}
       {!offered && declineOnly}
+      {!decision && (idle || applying) && offered && (
+        <WordApplyButton
+          applying={applying}
+          applyStage={review.applyStage}
+          disabled={!ready || host.operationInProgress}
+          label={applyLabel}
+          onApply={() => apply(false)}
+        />
+      )}
     </>
   );
   const statusAlert = status ? (

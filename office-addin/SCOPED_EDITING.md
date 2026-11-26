@@ -315,8 +315,9 @@ also counts: it holds paragraph-mark and paragraph-format revisions.
   when every difference lies in its own paragraphs and is refused otherwise
   (`wordRevertImportRefusal`), and the card points to Word's Undo and the
   downloadable original instead of offering Restore.
-  The plan card in the chat's decision place (`WordImportConfirm`) asks for that
-  confirmation in place of the usual choices: it names the costs, and Apply
+  The plan card (`WordImportConfirm`) asks for that confirmation in place of the
+  usual choices in the chat's decision place, and in place of its own Apply in
+  the answer where the server makes no apply call: it names the costs, and Apply
   stays disabled until an unticked box is ticked. Always allow never passes it,
   and a live in-place fallback that needs it turns the card back into this
   choice.

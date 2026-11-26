@@ -141,7 +141,8 @@ export function WordPlanCommentConfirm({
   onApply: () => void;
   onKeepPassages: () => void;
   onCopyThreads: () => void;
-  onCancel: () => void;
+  /** Declines the server's call; a card that applies on the user's own click has none. */
+  onCancel?: () => void;
 }) {
   return (
     <div className="grid gap-2">
@@ -169,14 +170,16 @@ export function WordPlanCommentConfirm({
             if (confirmed) onApply();
           }}
         />
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={applying}
-          onClick={onCancel}
-        >
-          {t({ id: "officeAddin.word.review.cancel", message: "Cancel" })}
-        </Button>
+        {onCancel && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={applying}
+            onClick={onCancel}
+          >
+            {t({ id: "officeAddin.word.review.cancel", message: "Cancel" })}
+          </Button>
+        )}
       </div>
     </div>
   );

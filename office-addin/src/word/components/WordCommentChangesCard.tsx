@@ -385,6 +385,8 @@ export function WordCommentChangesCard({
   // The decision place shows a parked call, and an answer goes on after a change it applied.
   const isGenerating =
     message?.status === "sending" && !decision && !chainedState;
+  // Without a server call for this change, the card applies it on the user's own click.
+  const ownApply = !decision && !chainedState;
   const draft = wordCommentDraft(content);
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = useWordReview(batchKey);
@@ -752,6 +754,16 @@ export function WordCommentChangesCard({
               confirmation={{ selected: cardState.selected }}
             />
           )}
+          {ownApply && !ran && idle && offered && (
+            <Button
+              type="button"
+              variant="primary"
+              disabled={operationInProgress || !gate.allowed || count === 0}
+              onClick={() => void runRows(cardState.selected, "click")}
+            >
+              {applyLabel}
+            </Button>
+          )}
           {ran && (
             <div className="word-review__actions">
               {failedRows.length > 0 && (
@@ -892,7 +904,9 @@ export function WordCommentChangesCard({
                     type="checkbox"
                     className="mt-1 size-4 accent-[var(--theme-fg-accent)]"
                     checked={cardState.selected.includes(row.i)}
-                    disabled={ran || !idle || mode === "copy" || !decision}
+                    disabled={
+                      ran || !idle || mode === "copy" || !(decision || ownApply)
+                    }
                     onChange={() => toggle(row.i)}
                   />
                   <span>
