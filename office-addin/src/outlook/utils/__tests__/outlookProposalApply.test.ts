@@ -276,6 +276,21 @@ describe("the email draft", () => {
     });
   });
 
+  it("reads a draft as HTML by the card's rule, whatever the fence or the facet says", () => {
+    expect(
+      outlookEmailDraft([text("```erato-email\n<p>Hello Ana</p>\n```")], {
+        ...artifact,
+        bodyFormat: "text",
+      }),
+    ).toEqual({ content: "<p>Hello Ana</p>", isHtml: true });
+    expect(
+      outlookEmailDraft([text("Hello <Name>, R&D; will call")], {
+        ...artifact,
+        bodyFormat: "text",
+      }),
+    ).toMatchObject({ isHtml: false });
+  });
+
   it("does not guess between two drafts", () => {
     expect(
       outlookEmailDraft(
