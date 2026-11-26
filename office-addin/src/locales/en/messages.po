@@ -1947,13 +1947,18 @@ msgstr "Word actions"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-msgid "officeAddin.settings.serversTools.wordActions.builtIn"
-msgstr "Built into Word"
+#~ msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+#~ msgstr "Built into Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
 #~ msgid "officeAddin.settings.serversTools.wordActions.caption"
 #~ msgstr "Built into Word · this device"
+
+#. js-lingui-explicit-id
+#: src/word/components/WordSettingsDialog.tsx
+msgid "officeAddin.settings.serversTools.wordActions.everyDevice"
+msgstr "Built into Word · every device"
 
 #. js-lingui-explicit-id
 #: src/components/AddinSettingsDialog.tsx

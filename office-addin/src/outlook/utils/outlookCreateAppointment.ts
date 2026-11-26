@@ -117,8 +117,8 @@ export function isCreateAppointmentSupported(): boolean {
  * details. This never sends or saves anything — the user reviews and Saves or
  * Sends in Outlook's own appointment window.
  *
- * Throws {@link AppointmentFormError} when the host refuses to open the form
- * so the confirm card can resolve into its failure record.
+ * Throws {@link AppointmentFormError} when the host refuses to open the form,
+ * so the caller can say that it did not open.
  */
 export async function openNewAppointmentForm(
   details: AppointmentDetails,
@@ -161,10 +161,10 @@ const DATE_TIME_FORMAT: Intl.DateTimeFormatOptions = {
 };
 
 /**
- * The appointment's time range for the summary and the confirmation card,
- * rendered in the runtime's local zone — which is the zone the facet template
- * instructed the model to emit (`{{timezone}}` is captured from the same
- * runtime at send time).
+ * The appointment's time range for the summary and the card in the decision
+ * place, rendered in the runtime's local zone — which is the zone the facet
+ * template instructed the model to emit (`{{timezone}}` is captured from the
+ * same runtime at send time).
  */
 export function appointmentWhenText(details: AppointmentDetails): string {
   const start = new Date(details.start);

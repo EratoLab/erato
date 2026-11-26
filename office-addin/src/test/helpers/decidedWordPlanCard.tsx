@@ -21,8 +21,10 @@ type Decision = Parameters<WordCardDecision["onDecide"]>[0];
 const PLAN_ENTRY = WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!;
 
 /**
- * The write the server's apply call makes once the user approved: the pipeline of
- * `createWordApplyPlanExecutor`, on the copy the message's request took.
+ * Stands in for the server's apply call once the user approved: the same `runWordPlanApply` that
+ * `createWordApplyPlanExecutor` ends in, on the copy the message's request took. The executor's
+ * own steps before it (call markers, the accepted submission, its copy and identity checks, the
+ * ticks it asks for on screen) are not run here.
  */
 export async function serverPlanApply(
   messageId: string,

@@ -74,13 +74,16 @@ vi.mock("@erato/frontend/library", () => ({
   DocumentIcon: () => <svg />,
   EntityRow: ({
     name,
+    caption,
     children,
   }: {
     name: string;
+    caption: string;
     children: React.ReactNode;
   }) => (
     <div>
       <span>{name}</span>
+      <span>{caption}</span>
       {children}
     </div>
   ),
@@ -278,6 +281,9 @@ describe("WordSettingsDialog", () => {
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
 
     expect(screen.getByText("Word actions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Built into Word · every device"),
+    ).toBeInTheDocument();
     const list = screen.getByTestId("word-server-tool-decisions");
     expect(list).toHaveTextContent("Change the document");
     expect(list).not.toHaveTextContent("Open a reply");

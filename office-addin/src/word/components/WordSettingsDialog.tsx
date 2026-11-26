@@ -82,8 +82,8 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
               message: "Word actions",
             })}
             caption={t({
-              id: "officeAddin.settings.serversTools.wordActions.builtIn",
-              message: "Built into Word",
+              id: "officeAddin.settings.serversTools.wordActions.everyDevice",
+              message: "Built into Word · every device",
             })}
             data-testid="servers-tools-word-actions-row"
           >
