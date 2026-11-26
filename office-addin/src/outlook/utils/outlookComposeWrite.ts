@@ -1,4 +1,7 @@
-import { htmlToPlainText } from "@erato/frontend/library";
+import {
+  emailDraftHtmlToText,
+  sanitizeHtmlPreview,
+} from "@erato/frontend/library";
 
 import { plainTextToHtml } from "./htmlConvert";
 import { callOfficeAsync } from "../../utils/officeAsync";
@@ -36,6 +39,22 @@ export type BodyFormat = "html" | "text";
 interface ComposeWriteAttempt {
   coercionType: Office.CoercionType;
   data: string;
+}
+
+/** An HTML draft in the body's own format first, the other one if the host refuses. */
+function htmlDraftWriteAttempts(
+  draft: string,
+  bodyFormat: BodyFormat,
+): ComposeWriteAttempt[] {
+  const html = {
+    coercionType: Office.CoercionType.Html,
+    data: sanitizeHtmlPreview(draft),
+  };
+  const text = {
+    coercionType: Office.CoercionType.Text,
+    data: emailDraftHtmlToText(draft),
+  };
+  return bodyFormat === "html" ? [html, text] : [text, html];
 }
 
 async function tryReadComposeBody(
@@ -138,13 +157,14 @@ export async function getComposeBodyType(): Promise<BodyFormat> {
  *
  * Automatically detects the body format and adapts:
  * - HTML body + plain text content → converts newlines to `<br>`, inserts as HTML
- * - HTML body + HTML content → inserts as HTML
- * - Plain text body + HTML content → strips tags before inserting
+ * - HTML body + HTML content → cleans the draft, inserts as HTML
+ * - Plain text body + HTML content → converts the draft to text (line breaks,
+ *   list markers, link addresses) before inserting
  * - Plain text body + plain text content → inserts as-is
  *
  * @param data The content to insert.
  * @param isHtml Whether `data` contains HTML markup. When true and the body
- *               is plain text, HTML tags are stripped automatically.
+ *               is plain text, it is converted to text automatically.
  */
 export async function replaceComposeSelection(
   data: string,
@@ -154,21 +174,7 @@ export async function replaceComposeSelection(
 
   const bodyFormat = await getComposeBodyType();
   const writeAttempts: ComposeWriteAttempt[] = isHtml
-    ? bodyFormat === "text"
-      ? [
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-          { coercionType: Office.CoercionType.Html, data },
-        ]
-      : [
-          { coercionType: Office.CoercionType.Html, data },
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-        ]
+    ? htmlDraftWriteAttempts(data, bodyFormat)
     : bodyFormat === "html"
       ? [
           {
@@ -225,7 +231,7 @@ export async function replaceComposeSubjectText(
   const words = normalizeSelectionText(selectedText).split(" ");
   const pattern = new RegExp(words.map(escapeRegExp).join("\\s+"), "g");
   const replacement = normalizeSelectionText(
-    isHtml ? htmlToPlainText(data) : data,
+    isHtml ? emailDraftHtmlToText(data) : data,
   );
 
   await withPausedSelectionPolling(async () => {
@@ -258,22 +264,7 @@ export async function prependComposeBody(data: string): Promise<void> {
   const item = getActiveComposeItem();
 
   const bodyFormat = await getComposeBodyType();
-  const writeAttempts: ComposeWriteAttempt[] =
-    bodyFormat === "html"
-      ? [
-          { coercionType: Office.CoercionType.Html, data },
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-        ]
-      : [
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-          { coercionType: Office.CoercionType.Html, data },
-        ];
+  const writeAttempts = htmlDraftWriteAttempts(data, bodyFormat);
 
   await withPausedSelectionPolling(() =>
     tryComposeWrite(writeAttempts, (attempt) =>

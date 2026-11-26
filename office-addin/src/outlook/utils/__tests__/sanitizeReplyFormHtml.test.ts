@@ -26,7 +26,7 @@ describe("sanitizeReplyFormHtml", () => {
     );
   });
 
-  it("strips style tags/attributes, images, and tables (outbound is stricter than preview)", () => {
+  it("strips style tags/attributes and images, keeps tables without attributes", () => {
     expect(sanitizeReplyFormHtml('<p style="color:red">hi</p>')).toBe(
       "<p>hi</p>",
     );
@@ -36,11 +36,21 @@ describe("sanitizeReplyFormHtml", () => {
     expect(sanitizeReplyFormHtml('<p><img src="https://x/y.png">hi</p>')).toBe(
       "<p>hi</p>",
     );
-    expect(sanitizeReplyFormHtml("<table><tr><td>cell</td></tr></table>")).toBe(
-      "cell",
-    );
+    expect(
+      sanitizeReplyFormHtml('<table width="1"><tr><td>cell</td></tr></table>'),
+    ).toBe("<table><tbody><tr><td>cell</td></tr></tbody></table>");
     expect(sanitizeReplyFormHtml('<a href="data:text/html,x">hi</a>')).toBe(
       "<a>hi</a>",
+    );
+  });
+
+  it("removes hidden text tricks and shows a spoofed link's real target", () => {
+    expect(
+      sanitizeReplyFormHtml(
+        '<font color="white">secret</font><p hidden class="hidden">x</p><a href="https://evil.example">https://bank.example</a>',
+      ),
+    ).toBe(
+      'secret<p>x</p><a href="https://evil.example">https://evil.example</a>',
     );
   });
 });

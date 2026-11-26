@@ -1150,6 +1150,62 @@ describe("MessageContent", () => {
     expect(container.querySelector("b")).toHaveTextContent("Bold reply");
   });
 
+  it.each([
+    ["erato-email", "text"],
+    ["erato-email", undefined],
+    ["email", "text"],
+    ["erato-email-html", "text"],
+  ] as const)(
+    "renders a %s fence whose body starts with a tag as HTML (body_format %s)",
+    (language, bodyFormat) => {
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(
+            `\`\`\`${language}\n<p>Hi,</p><ul><li>one</li></ul>\n\`\`\``,
+          )}
+          outlookArtifact={{
+            facetId: "outlook_reply_from_read",
+            bodyFormat,
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(container.querySelector("li")).toHaveTextContent("one");
+      expect(container.querySelector(".whitespace-pre-wrap")).toBeNull();
+    },
+  );
+
+  it("renders an unfenced reply that starts with a tag as HTML when the facet says text", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("<p>Hi,</p><p>thanks.</p>")}
+        outlookArtifact={{
+          facetId: "outlook_review_draft",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+    expect(container.querySelector(".whitespace-pre-wrap")).toBeNull();
+  });
+
+  it("shows an HTML draft without remote images or hidden text", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          '```erato-email-html\n<p>Hi<img src="https://tracker.example/p.gif"></p><p style="display:none">secret</p>\n```',
+        )}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("[style]")).toBeNull();
+    expect(container).toHaveTextContent("secret");
+  });
+
   it("keeps a plain-text draft under the canonical tag as text even when the facet says html", () => {
     const { container } = renderWithTheme(
       <MessageContent

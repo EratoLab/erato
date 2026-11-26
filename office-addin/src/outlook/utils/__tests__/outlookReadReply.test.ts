@@ -85,6 +85,17 @@ describe("buildReplyFormBody", () => {
   it("escapes plain text content", () => {
     expect(buildReplyFormBody("a < b\nc", false)).toBe("a &lt; b<br>c");
   });
+
+  it("prefills the same cleaned draft the card shows", () => {
+    expect(
+      buildReplyFormBody(
+        '<p style="display:none">Hi</p><img src="https://x.example/p.gif"><ul><li><a href="https://example.com/a">agenda</a></li></ul>',
+        true,
+      ),
+    ).toBe(
+      '<p>Hi</p><ul><li><a href="https://example.com/a">agenda</a></li></ul>',
+    );
+  });
 });
 
 describe("isReplyFormBodyTooLarge", () => {
