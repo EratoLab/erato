@@ -2,6 +2,7 @@
 // It exposes registry component roots and their transitive component dependencies.
 // Do not edit it by hand.
 
+export { START_COLORS_STYLE_ID } from "@/components/providers/ThemeProvider";
 export { TEXT_SIZE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvider";
 export { TEXT_SIZE_OPTIONS } from "@/components/providers/ThemeProvider";
 export { THEME_MODE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvider";

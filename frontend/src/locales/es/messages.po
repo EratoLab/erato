@@ -4684,8 +4684,8 @@ msgstr "Subir archivos"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Redirigiendo al chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Redirigiendo al chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx

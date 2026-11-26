@@ -4684,8 +4684,8 @@ msgstr "Dateien hochladen"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Weiterleitung zum Chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Weiterleitung zum Chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx
