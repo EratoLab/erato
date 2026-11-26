@@ -1199,9 +1199,27 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "budget.frontend_tab.enabled": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "budget.max_budget": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "budget.model_rates.<model-identifier>.cost_input_tokens_per_1m": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "budget.model_rates.<model-identifier>.cost_output_tokens_per_1m": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

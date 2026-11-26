@@ -168,7 +168,7 @@ export const BudgetWarning: Story = {
     type: "warning",
     title: "Approaching Budget Limit",
     children:
-      "You are using 75% of your budget ($750.00 of $1,000.00). This is for your 30-day budget period.",
+      "You are using 75% of your budget ($750.00 of $1,000.00). This covers spending over the last 30 days.",
   },
 };
 
@@ -180,7 +180,7 @@ export const BudgetError: Story = {
     type: "error",
     title: "Budget Limit Reached",
     children:
-      "You have reached or exceeded your budget limit of $1,000.00. Current spending: $1,050.00. This is for your 30-day budget period.",
+      "You have reached or exceeded your budget limit of $1,000.00. Current spending: $1,050.00. This covers spending over the last 30 days.",
   },
 };
 
@@ -339,8 +339,8 @@ export const ChatExamples: Story = {
             dismissible
             onDismiss={() => setAlerts({ ...alerts, budget: false })}
           >
-            You are using 72% of your budget ($720.00 of $1,000.00). This is for
-            your 30-day budget period.
+            You are using 72% of your budget ($720.00 of $1,000.00). This covers
+            spending over the last 30 days.
           </Alert>
         )}
 

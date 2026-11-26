@@ -3306,8 +3306,18 @@ msgstr "Osiągnięto lub przekroczono osobisty limit budżetowy {formattedLimit}
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
-msgid "chat.warning.budget.period_suffix"
-msgstr " Dotyczy to Twojego {days}-dniowego okresu budżetowego."
+#~ msgid "chat.warning.budget.period_suffix"
+#~ msgstr " Dotyczy to Twojego {days}-dniowego okresu budżetowego."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.rolling_window"
+msgstr "{days, plural, one {Obejmuje wydatki z ostatniego dnia.} other {Obejmuje wydatki z ostatnich # dni.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+msgid "chat.warning.budget.stale"
+msgstr "Nie udało się odświeżyć budżetu. Te dane mogą być nieaktualne."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -5966,6 +5976,97 @@ msgid "parkedTaskNotice.text"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.error"
+msgstr "Nie udało się wczytać budżetu."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.freeingUp"
+msgstr "Budżet, który zwolni się w ciągu najbliższych 24 godzin"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.incompletePricing"
+msgstr "Dla części użycia nie skonfigurowano ceny."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.limit"
+msgstr "Limit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.loading"
+msgstr "Wczytywanie budżetu…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.model"
+msgstr "Model lub wdrożenie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.modelBreakdown"
+msgstr "Wydatki według modelu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noNewSpend"
+msgstr "Przy założeniu braku nowych wydatków."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.noUsage"
+msgstr "Brak użycia w tym okresie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.partial"
+msgstr "Częściowe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.remaining"
+msgstr "Pozostały budżet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/ChatWarnings/BudgetWarning.tsx
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.retry"
+msgstr "Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.spent"
+msgstr "Wydatki"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.stale"
+msgstr "Nie udało się odświeżyć budżetu. Te dane mogą być nieaktualne."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.unavailable"
+msgstr "Niedostępne"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.used"
+msgstr "Wykorzystana część budżetu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.window"
+msgstr "{days, plural, one {Wydatki z ostatniego dnia} other {Wydatki z ostatnich # dni}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/BudgetPane.tsx
+msgid "preferences.budget.windowDates"
+msgstr "Od {start} do {end}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.actions.cancel"
 msgstr "Anuluj"
@@ -7295,6 +7396,11 @@ msgstr "Wygląd"
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
 msgid "preferences.dialog.tabs.audio"
 msgstr "Audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.tabs.budget"
+msgstr "Budżet"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

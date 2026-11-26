@@ -8,6 +8,9 @@ budget_currency = "USD"
 warn_threshold = 0.7
 budget_period_days = 30
 
+[budget.frontend_tab]
+enabled = true
+
 [chat_providers.providers.main.model_capabilities]
 cost_input_tokens_per_1m = 1000000.0
 cost_output_tokens_per_1m = 1000000.0

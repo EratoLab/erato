@@ -6,7 +6,7 @@ pub use attempts::AttemptState;
 use eyre::{Report, eyre};
 use sea_orm::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, DatabaseTransaction, EntityTrait,
-    FromQueryResult, TransactionTrait,
+    FromQueryResult, QuerySelect, TransactionTrait,
 };
 
 fn statement(id: &'static str, sql: &str, values: Vec<sea_orm::Value>) -> sea_orm::Statement {
@@ -804,6 +804,16 @@ pub async fn complete_continuation(
         .await?
         .ok_or_else(|| eyre!("Operation not found"))?;
     lock_chat(&tx, row.chat_id, row.account_id).await?;
+    let message = messages::Entity::find_by_id(row.message_id)
+        .lock_exclusive()
+        .one(&tx)
+        .await?
+        .ok_or_else(|| eyre!("Operation message not found"))?;
+    let mut metadata = serde_json::to_value(metadata)?;
+    crate::models::message::preserve_budget_metadata(
+        &mut metadata,
+        message.generation_metadata.as_ref(),
+    );
     let changed = tx.query_one_raw(statement("client_operations.complete", r#"
         UPDATE messages m SET raw_message = jsonb_set(m.raw_message, '{content}', $3), generation_metadata = $4
         FROM chats c WHERE m.id = $1 AND c.id = m.chat_id AND c.active_generation_id = $2
@@ -814,7 +824,7 @@ pub async fn complete_continuation(
                 AND active.state <> 'completed'
           )
         RETURNING m.*
-    "#, vec![row.message_id.into(), generation_id.into(), serde_json::to_value(content)?.into(), serde_json::to_value(metadata)?.into()])).await?.ok_or_else(|| eyre!("Generation ownership changed"))?;
+    "#, vec![row.message_id.into(), generation_id.into(), serde_json::to_value(content)?.into(), metadata.into()])).await?.ok_or_else(|| eyre!("Generation ownership changed"))?;
     tx.execute_raw(statement("client_operations.complete", "UPDATE client_operation_attempts SET state = 'completed' WHERE attempt_id = $1 AND generation_id = $2", vec![attempt_id.into(), generation_id.into()])).await?;
     let message = messages::Model::from_query_result(&changed, "")?;
     tx.commit().await?;

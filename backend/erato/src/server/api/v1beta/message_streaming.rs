@@ -11,14 +11,15 @@ use crate::models::chat::{
     get_or_create_chat_by_previous_message_id,
 };
 use crate::models::message::{
-    ApprovalItem, ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText,
-    ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
-    DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
-    GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolAllowedBy,
-    ToolApprovalKind, ToolCallFailure, ToolCallStatus as MessageToolCallStatus, ToolResultDetails,
-    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
-    get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
-    update_message_content, update_message_generation_metadata,
+    ApprovalItem, BudgetTokenUsage, BudgetUsage, ContentPart, ContentPartImage,
+    ContentPartReasoning, ContentPartText, ContentPartToolApproval, ContentPartToolApprovalRequest,
+    ContentPartToolRejection, DelegationRunMode, GenerationErrorType, GenerationInputMessages,
+    GenerationMetadata, GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema,
+    ToolAllowedBy, ToolApprovalKind, ToolCallFailure, ToolCallStatus as MessageToolCallStatus,
+    ToolResultDetails, ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
+    get_generation_chat_provider_id_from_message, get_message_by_id, record_chat_budget_usage,
+    settle_metered_tool_call, submit_message, update_message_content,
+    update_message_generation_metadata,
 };
 use crate::models::user_tool_approval_setting::UserToolDecision;
 use crate::policy::engine::{PolicyEngine, authorize};
@@ -525,6 +526,33 @@ mod generation_tool_call_id_tests {
 
 /// Trace annotation for a result the MCP server itself flagged as failed.
 const MCP_TOOL_REPORTED_ERROR: &str = "MCP tool reported an error";
+
+fn mcp_budget_usage(result: &rmcp::model::CallToolResult) -> Option<BudgetUsage> {
+    #[derive(Deserialize)]
+    struct ReportedUsage {
+        model_identifier: String,
+        total_prompt_tokens: u64,
+        total_completion_tokens: u64,
+        total_tokens: u64,
+        #[serde(alias = "reasoning_tokens")]
+        total_reasoning_tokens: Option<u64>,
+    }
+
+    let payload = result.meta.as_ref()?.0.get("chat.erato/token_usage")?;
+    let usage = ReportedUsage::deserialize(payload).ok()?;
+    if usage.model_identifier.trim().is_empty() || usage.model_identifier.contains('\0') {
+        return None;
+    }
+    Some(BudgetUsage::from([(
+        usage.model_identifier,
+        BudgetTokenUsage {
+            prompt_tokens: usage.total_prompt_tokens,
+            completion_tokens: usage.total_completion_tokens,
+            total_tokens: usage.total_tokens,
+            reasoning_tokens: usage.total_reasoning_tokens,
+        },
+    )]))
+}
 
 /// What the approval gate does with one MCP or client tool call once the
 /// policy and the user's own decision are combined.
@@ -6596,6 +6624,7 @@ async fn settle_delegation_slot<
         output: Some(output_value.clone()),
         result_details: None,
         allowed_by: None,
+        budget_usage: None,
         started_at: Some(tool_call_started),
         ended_at: Some(now_timestamp()),
     });
@@ -6955,6 +6984,7 @@ async fn settle_or_park_delegation_slot<
                         output: Some(output.clone()),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(meta.tool_call_started.clone()),
                         ended_at: None,
                     }));
@@ -7852,31 +7882,18 @@ async fn stream_generate_chat_completion<'a>(
         crate::services::mcp_session_manager::ManagedTool,
     > = crate::services::mcp_tool_names::by_model_name(available_mcp_tools);
 
-    // Track cumulative usage statistics across all turns
-    let mut total_prompt_tokens = 0u32;
-    let mut total_completion_tokens = 0u32;
-    let mut total_total_tokens = 0u32;
-    let mut total_reasoning_tokens = 0u32;
     let mut captured_reasoning_summary = String::new();
     let mut captured_reasoning_items: Vec<genai::chat::ReasoningItem> = vec![];
     let mut captured_reasoning_item_encrypted_content: Vec<String> = vec![];
 
     let build_generation_metadata =
-        |total_prompt_tokens: u32,
-         total_completion_tokens: u32,
-         total_total_tokens: u32,
-         total_reasoning_tokens: u32,
-         langfuse_trace_id: Option<String>,
+        |langfuse_trace_id: Option<String>,
          was_aborted: bool,
          error: Option<GenerationErrorType>,
          reasoning_summary: Option<String>,
          reasoning_items: Option<Vec<genai::chat::ReasoningItem>>,
          reasoning_item_encrypted_content: Option<Vec<String>>| {
-            if total_prompt_tokens > 0
-                || total_completion_tokens > 0
-                || total_total_tokens > 0
-                || total_reasoning_tokens > 0
-                || reasoning_summary.is_some()
+            if reasoning_summary.is_some()
                 || reasoning_items.is_some()
                 || reasoning_item_encrypted_content.is_some()
                 || langfuse_trace_id.is_some()
@@ -7888,26 +7905,6 @@ async fn stream_generate_chat_completion<'a>(
                 || !mcp_tools_disabled_by_user.is_empty()
             {
                 Some(GenerationMetadata {
-                    used_prompt_tokens: if total_prompt_tokens > 0 {
-                        Some(total_prompt_tokens)
-                    } else {
-                        None
-                    },
-                    used_completion_tokens: if total_completion_tokens > 0 {
-                        Some(total_completion_tokens)
-                    } else {
-                        None
-                    },
-                    used_total_tokens: if total_total_tokens > 0 {
-                        Some(total_total_tokens)
-                    } else {
-                        None
-                    },
-                    used_reasoning_tokens: if total_reasoning_tokens > 0 {
-                        Some(total_reasoning_tokens)
-                    } else {
-                        None
-                    },
                     reasoning_summary,
                     reasoning_items,
                     reasoning_item_encrypted_content,
@@ -7926,7 +7923,7 @@ async fn stream_generate_chat_completion<'a>(
                     // whatever a continuation owed this message it no longer
                     // does.
                     continuation_in_flight: None,
-                    submission_outcome: None,
+                    ..Default::default()
                 })
             } else {
                 None
@@ -8253,10 +8250,6 @@ async fn stream_generate_chat_completion<'a>(
                     pending_tool_calls,
                 ));
                 exit_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     None,
@@ -8340,10 +8333,6 @@ async fn stream_generate_chat_completion<'a>(
                 .map(|_| SystemTime::now());
             if streaming_task.is_some_and(|task| task.is_abort_requested()) {
                 let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     true,
                     None,
@@ -8458,10 +8447,6 @@ async fn stream_generate_chat_completion<'a>(
                     );
                     task.mark_tool_budget_exhausted();
                     let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         None,
@@ -8497,10 +8482,6 @@ async fn stream_generate_chat_completion<'a>(
                     pending_tool_calls,
                 ));
                 exit_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     None,
@@ -8652,6 +8633,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(json!({ "status": "rejected", "error": error_message })),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -8714,6 +8696,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(json!({ "status": "error", "error": error_message })),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -8969,10 +8952,6 @@ async fn stream_generate_chat_completion<'a>(
                         .collect();
                     pending_approval_part = Some(approval_request);
                     exit_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         None,
@@ -9228,6 +9207,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(output_value.clone()),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -9345,6 +9325,7 @@ async fn stream_generate_chat_completion<'a>(
                             output: Some(crate::services::delegation::queued_placeholder_output()),
                             result_details: None,
                             allowed_by: None,
+                            budget_usage: None,
                             started_at: Some(tool_call_started),
                             ended_at: None,
                         },
@@ -9641,10 +9622,6 @@ async fn stream_generate_chat_completion<'a>(
                         .collect();
                     pending_approval_part = Some(approval_request);
                     exit_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         None,
@@ -9710,6 +9687,7 @@ async fn stream_generate_chat_completion<'a>(
                                 ToolCallFailure::NotRun,
                             )),
                             allowed_by: None,
+                            budget_usage: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -10215,6 +10193,7 @@ async fn stream_generate_chat_completion<'a>(
                                     progress_message: None,
                                     progress: None,
                                     total: None,
+                                    budget_usage: None,
                                     started_at: Some(tool_call_started),
                                     ended_at: None,
                                 },
@@ -10245,10 +10224,6 @@ async fn stream_generate_chat_completion<'a>(
                             )
                             .await;
                             let generation_metadata = build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 true,
                                 None,
@@ -10337,10 +10312,6 @@ async fn stream_generate_chat_completion<'a>(
                             .await;
                             pending_approval_part = Some(request);
                             exit_metadata = build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 false,
                                 None,
@@ -10462,10 +10433,6 @@ async fn stream_generate_chat_completion<'a>(
                                 .collect();
                             pending_approval_part = Some(request);
                             exit_metadata = build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 false,
                                 None,
@@ -10533,10 +10500,6 @@ async fn stream_generate_chat_completion<'a>(
                         }
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
                             langfuse_trace_id.clone(),
                             false,
                             None,
@@ -10690,6 +10653,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(output_value.clone()),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -10728,10 +10692,6 @@ async fn stream_generate_chat_completion<'a>(
                     Some(crate::services::chained_apply::AfterApply::End) => {
                         exit_after_join = true;
                         exit_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
                             langfuse_trace_id.clone(),
                             task.is_abort_requested(),
                             None,
@@ -10871,10 +10831,6 @@ async fn stream_generate_chat_completion<'a>(
                     // It goes on after the join, still last.
                     pending_approval_part = Some(approval_request);
                     let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         None,
@@ -10907,6 +10863,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(json!({ "status": "rejected", "error": error_message })),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -11006,6 +10963,23 @@ async fn stream_generate_chat_completion<'a>(
             }
             match tool_call_result {
                 Ok(tool_call_result) => {
+                    let budget_usage = mcp_budget_usage(&tool_call_result);
+                    macro_rules! persist_metered_result {
+                        () => {
+                            if budget_usage.is_some() {
+                                settle_metered_tool_call(
+                                    &app_state.db,
+                                    policy,
+                                    subject,
+                                    assistant_message_id,
+                                    &unfinished_tool_call.call_id,
+                                    without_preparing_tools(&current_message_content),
+                                )
+                                .await?;
+                            }
+                        };
+                    }
+
                     let tool_call_started = tool_call_started_at
                         .remove(&unfinished_tool_call.call_id)
                         .unwrap_or_else(|| {
@@ -11042,6 +11016,25 @@ async fn stream_generate_chat_completion<'a>(
                             Some(&tool_error),
                         )
                         .await;
+                        if budget_usage.is_some() {
+                            upsert_tool_use(
+                                &mut current_message_content,
+                                ToolUse {
+                                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                                    status: MessageToolCallStatus::Error,
+                                    tool_name: unfinished_tool_call.fn_name.clone(),
+                                    display: Some(row_display.clone()),
+                                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                    output: Some(serde_json::to_value(&content_filter_error)?),
+                                    allowed_by,
+                                    budget_usage: budget_usage.clone(),
+                                    started_at: Some(tool_call_started),
+                                    ended_at: Some(now_timestamp()),
+                                    ..Default::default()
+                                },
+                            );
+                            persist_metered_result!();
+                        }
                         let error_payload = Some(content_filter_error.clone());
                         let error_event = MessageSubmitStreamingResponseError {
                             message_id: Some(assistant_message_id),
@@ -11086,10 +11079,6 @@ async fn stream_generate_chat_completion<'a>(
                         let message: GenerationStreamingMessage = error_event.into();
                         send_generation_event(&message, tx.clone()).await?;
                         let generation_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
                             langfuse_trace_id.clone(),
                             false,
                             error_payload,
@@ -11155,6 +11144,28 @@ async fn stream_generate_chat_completion<'a>(
                                 )),
                                 allowed_by,
                             };
+                            upsert_tool_use(
+                                &mut current_message_content,
+                                ToolUse {
+                                    tool_call_id: unfinished_tool_call.call_id.clone(),
+                                    status: MessageToolCallStatus::Error,
+                                    tool_name: unfinished_tool_call.fn_name.clone(),
+                                    display: Some(row_display.clone()),
+                                    input: Some(unfinished_tool_call.fn_arguments.clone()),
+                                    progress_message: None,
+                                    progress: None,
+                                    total: None,
+                                    output: Some(output_value.clone()),
+                                    result_details: Some(ToolResultDetails::failed(
+                                        ToolCallFailure::AnswerUnreadable,
+                                    )),
+                                    allowed_by,
+                                    budget_usage: budget_usage.clone(),
+                                    started_at: Some(tool_call_started),
+                                    ended_at: Some(now_timestamp()),
+                                },
+                            );
+                            persist_metered_result!();
                             if let Some(task) = streaming_task {
                                 send_background_event(
                                     task,
@@ -11181,29 +11192,6 @@ async fn stream_generate_chat_completion<'a>(
                             }
                             let message: GenerationStreamingMessage = update_event.into();
                             send_generation_event(&message, tx.clone()).await?;
-                            let tool_call_started = tool_call_started_at
-                                .remove(&unfinished_tool_call.call_id)
-                                .unwrap_or_else(now_timestamp);
-                            upsert_tool_use(
-                                &mut current_message_content,
-                                ToolUse {
-                                    tool_call_id: unfinished_tool_call.call_id.clone(),
-                                    status: MessageToolCallStatus::Error,
-                                    tool_name: unfinished_tool_call.fn_name.clone(),
-                                    display: Some(row_display.clone()),
-                                    input: Some(unfinished_tool_call.fn_arguments.clone()),
-                                    progress_message: None,
-                                    progress: None,
-                                    total: None,
-                                    output: Some(output_value),
-                                    result_details: Some(ToolResultDetails::failed(
-                                        ToolCallFailure::AnswerUnreadable,
-                                    )),
-                                    allowed_by,
-                                    started_at: Some(tool_call_started),
-                                    ended_at: Some(now_timestamp()),
-                                },
-                            );
                             current_turn_tool_responses.push((
                                 batch_position,
                                 genai::chat::ToolResponse {
@@ -11252,6 +11240,39 @@ async fn stream_generate_chat_completion<'a>(
                         tool_failed.then_some(MCP_TOOL_REPORTED_ERROR),
                     )
                     .await;
+
+                    // Add to current message content
+                    {
+                        let finished_tool_call = unfinished_tool_call.clone();
+                        upsert_tool_use(
+                            &mut current_message_content,
+                            ToolUse {
+                                tool_call_id: finished_tool_call.call_id,
+                                status: if tool_failed {
+                                    MessageToolCallStatus::Error
+                                } else {
+                                    MessageToolCallStatus::Success
+                                },
+                                tool_name: finished_tool_call.fn_name,
+                                display: Some(row_display.clone()),
+                                input: Some(finished_tool_call.fn_arguments),
+                                progress_message: None,
+                                progress: None,
+                                total: None,
+                                output: output_value.clone(),
+                                result_details: result_details.clone(),
+                                allowed_by,
+                                budget_usage: budget_usage.clone(),
+                                started_at: Some(tool_call_started.clone()),
+                                ended_at: Some(now_timestamp()),
+                            },
+                        );
+                        if !file_content_parts.is_empty() {
+                            current_message_content.extend(file_content_parts);
+                        }
+                    }
+
+                    persist_metered_result!();
 
                     // Emit event for tool call update
                     {
@@ -11306,36 +11327,6 @@ async fn stream_generate_chat_completion<'a>(
                         let message: GenerationStreamingMessage = proposed_call.into();
                         send_generation_event(&message, tx.clone()).await?;
                     }
-                    // Add to current message content
-                    {
-                        let finished_tool_call = unfinished_tool_call.clone();
-                        upsert_tool_use(
-                            &mut current_message_content,
-                            ToolUse {
-                                tool_call_id: finished_tool_call.call_id,
-                                status: if tool_failed {
-                                    MessageToolCallStatus::Error
-                                } else {
-                                    MessageToolCallStatus::Success
-                                },
-                                tool_name: finished_tool_call.fn_name,
-                                display: Some(row_display.clone()),
-                                input: Some(finished_tool_call.fn_arguments),
-                                progress_message: None,
-                                progress: None,
-                                total: None,
-                                output: output_value.clone(),
-                                result_details,
-                                allowed_by,
-                                started_at: Some(tool_call_started.clone()),
-                                ended_at: Some(now_timestamp()),
-                            },
-                        );
-                        if !file_content_parts.is_empty() {
-                            current_message_content.extend(file_content_parts);
-                        }
-                    }
-
                     current_turn_tool_responses.push((batch_position, tool_response))
                 }
                 Err(err) => {
@@ -11409,6 +11400,7 @@ async fn stream_generate_chat_completion<'a>(
                             output: Some(output_value),
                             result_details: Some(failure_details.clone()),
                             allowed_by,
+                            budget_usage: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -11451,10 +11443,6 @@ async fn stream_generate_chat_completion<'a>(
                 if !exit_after_join && exit_error.is_none() {
                     exit_after_join = true;
                     exit_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         true,
                         None,
@@ -11614,10 +11602,6 @@ async fn stream_generate_chat_completion<'a>(
         // well: the turn ends stopped, not on a card nobody asked to see.
         if aborted && exit_error.is_none() && pending_approval_part.take().is_some() {
             exit_metadata = build_generation_metadata(
-                total_prompt_tokens,
-                total_completion_tokens,
-                total_total_tokens,
-                total_reasoning_tokens,
                 langfuse_trace_id.clone(),
                 true,
                 None,
@@ -11665,10 +11649,6 @@ async fn stream_generate_chat_completion<'a>(
                     mcp.config.mcp_servers_global.approval.allow_always,
                 ));
                 exit_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     None,
@@ -11772,10 +11752,6 @@ async fn stream_generate_chat_completion<'a>(
             }
             task.mark_awaiting_approval();
             exit_metadata = build_generation_metadata(
-                total_prompt_tokens,
-                total_completion_tokens,
-                total_total_tokens,
-                total_reasoning_tokens,
                 langfuse_trace_id.clone(),
                 false,
                 None,
@@ -11787,10 +11763,6 @@ async fn stream_generate_chat_completion<'a>(
         if exit_after_join {
             let metadata = exit_metadata.or_else(|| {
                 build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     None,
@@ -11825,10 +11797,6 @@ async fn stream_generate_chat_completion<'a>(
                         _ = tokio::time::sleep_until(latest_wait_deadline) => {}
                         _ = task.wait_for_abort() => {
                             let generation_metadata = build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 true,
                                 None,
@@ -11926,6 +11894,7 @@ async fn stream_generate_chat_completion<'a>(
                         output: Some(output_value.clone()),
                         result_details: None,
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(pending_wait.tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -12109,10 +12078,6 @@ async fn stream_generate_chat_completion<'a>(
                 let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     error_payload,
@@ -12212,10 +12177,6 @@ async fn stream_generate_chat_completion<'a>(
                 let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     error_payload,
@@ -12345,10 +12306,6 @@ async fn stream_generate_chat_completion<'a>(
                         }
 
                         let generation_metadata = build_generation_metadata(
-                            total_prompt_tokens,
-                            total_completion_tokens,
-                            total_total_tokens,
-                            total_reasoning_tokens,
                             langfuse_trace_id.clone(),
                             true,
                             None,
@@ -12436,10 +12393,6 @@ async fn stream_generate_chat_completion<'a>(
                                 store_reply_pieces(split.finish(), &mut current_message_content);
                             }
                             let generation_metadata = build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 true,
                                 error_payload,
@@ -12653,10 +12606,6 @@ async fn stream_generate_chat_completion<'a>(
                         store_reply_pieces(split.finish(), &mut current_message_content);
                     }
                     let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         error_payload,
@@ -12785,23 +12734,20 @@ async fn stream_generate_chat_completion<'a>(
                 // Text chunks have already been appended to current_message_content.
             }
 
-            // Accumulate usage statistics from this turn
-            if let Some(usage) = stream_end.captured_usage.as_ref() {
-                if let Some(prompt_tokens) = usage.prompt_tokens {
-                    total_prompt_tokens += prompt_tokens as u32;
-                }
-                if let Some(completion_tokens) = usage.completion_tokens {
-                    total_completion_tokens += completion_tokens as u32;
-                }
-                if let Some(total_tokens) = usage.total_tokens {
-                    total_total_tokens += total_tokens as u32;
-                }
-                // Extract reasoning tokens from completion_tokens_details
-                if let Some(details) = &usage.completion_tokens_details
-                    && let Some(reasoning_tokens) = details.reasoning_tokens
-                {
-                    total_reasoning_tokens += reasoning_tokens as u32;
-                }
+            if let Some(usage) = stream_end
+                .captured_usage
+                .as_ref()
+                .and_then(BudgetTokenUsage::from_chat)
+            {
+                record_chat_budget_usage(
+                    &app_state.db,
+                    policy,
+                    subject,
+                    assistant_message_id,
+                    chat_provider_metric_label,
+                    usage,
+                )
+                .await?;
             }
 
             // Send Langfuse tracing for this turn if enabled
@@ -12928,10 +12874,6 @@ async fn stream_generate_chat_completion<'a>(
                         break 'loop_call_turns Ok((
                             current_message_content,
                             build_generation_metadata(
-                                total_prompt_tokens,
-                                total_completion_tokens,
-                                total_total_tokens,
-                                total_reasoning_tokens,
                                 langfuse_trace_id.clone(),
                                 false,
                                 None,
@@ -13064,10 +13006,6 @@ async fn stream_generate_chat_completion<'a>(
                     }
 
                     let generation_metadata = build_generation_metadata(
-                        total_prompt_tokens,
-                        total_completion_tokens,
-                        total_total_tokens,
-                        total_reasoning_tokens,
                         langfuse_trace_id.clone(),
                         false,
                         None,
@@ -13131,10 +13069,6 @@ async fn stream_generate_chat_completion<'a>(
                 }
 
                 let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     None,
@@ -13199,10 +13133,6 @@ async fn stream_generate_chat_completion<'a>(
                 let message: GenerationStreamingMessage = error_event.into();
                 send_generation_event(&message, tx.clone()).await?;
                 let generation_metadata = build_generation_metadata(
-                    total_prompt_tokens,
-                    total_completion_tokens,
-                    total_total_tokens,
-                    total_reasoning_tokens,
                     langfuse_trace_id.clone(),
                     false,
                     error_payload,
@@ -18479,6 +18409,7 @@ mod reasoning_replay_tests {
         reasoning_item_encrypted_content: Option<Vec<String>>,
     ) -> GenerationMetadata {
         GenerationMetadata {
+            budget_usage: None,
             used_prompt_tokens: None,
             used_completion_tokens: None,
             used_total_tokens: None,
@@ -19144,6 +19075,7 @@ fn internal_generation_error(error: &Report) -> GenerationErrorType {
 
 fn generation_metadata_for_error(error: GenerationErrorType) -> GenerationMetadata {
     GenerationMetadata {
+        budget_usage: None,
         used_prompt_tokens: None,
         used_completion_tokens: None,
         used_total_tokens: None,
@@ -25040,6 +24972,7 @@ pub(crate) async fn run_continuation(
                 }),
                 result_details: None,
                 allowed_by: None,
+                budget_usage: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -25177,6 +25110,7 @@ pub(crate) async fn run_continuation(
                         output,
                         result_details,
                         allowed_by: None,
+                        budget_usage: mcp_budget_usage(&result),
                         started_at: Some(started_at),
                         ended_at: Some(now_timestamp()),
                     }
@@ -25195,6 +25129,7 @@ pub(crate) async fn run_continuation(
                         output: Some(output),
                         result_details: Some(details),
                         allowed_by: None,
+                        budget_usage: None,
                         started_at: Some(now_timestamp()),
                         ended_at: Some(now_timestamp()),
                     }
@@ -25224,6 +25159,7 @@ pub(crate) async fn run_continuation(
                 output: Some(json!({ "status": "rejected", "error": error_message })),
                 result_details: None,
                 allowed_by: None,
+                budget_usage: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -25234,9 +25170,36 @@ pub(crate) async fn run_continuation(
         // history) sees its status and output while the answer streams. Mirrors
         // the terminal update the main loop emits after every tool it runs.
         let succeeded = matches!(tool_use.status, MessageToolCallStatus::Success);
+        let budget_usage = tool_use.budget_usage.is_some();
+        let tool_call_id = tool_use.tool_call_id.clone();
+        let content_index = parsed.content.len();
+        parsed.content.push(ContentPart::ToolUse(tool_use.clone()));
+        parsed.content.extend(file_content_parts);
+
+        // Persist each call before delivering its terminal update or running the next item.
+        if budget_usage {
+            settle_metered_tool_call(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                message.id,
+                &tool_call_id,
+                parsed.content.clone(),
+            )
+            .await?;
+        } else {
+            update_message_content(
+                &app_state.db,
+                policy,
+                &me_user.to_subject(),
+                &message.id,
+                parsed.content.clone(),
+            )
+            .await?;
+        }
         let update = MessageSubmitStreamingResponseToolCallUpdate {
             message_id: message.id,
-            content_index: parsed.content.len(),
+            content_index,
             tool_call_id: tool_use.tool_call_id.clone(),
             tool_name: tool_use.tool_name.clone(),
             display: tool_use.display.clone(),
@@ -25257,7 +25220,7 @@ pub(crate) async fn run_continuation(
             task,
             StreamingEvent::ToolCallUpdate {
                 message_id: message.id,
-                content_index: parsed.content.len(),
+                content_index,
                 tool_call_id: tool_use.tool_call_id.clone(),
                 tool_name: tool_use.tool_name.clone(),
                 display: tool_use.display.clone(),
@@ -25279,20 +25242,6 @@ pub(crate) async fn run_continuation(
         .await;
         let event: MessageSubmitStreamingResponseMessage = update.into();
         send_generation_event(&event, tx.clone()).await?;
-        parsed.content.push(ContentPart::ToolUse(tool_use));
-        parsed.content.extend(file_content_parts);
-
-        // Per item, not once after the loop: a tool that ran must leave a record
-        // even if the next item bails, or its side effect happened on a row that
-        // still reads as undecided.
-        update_message_content(
-            &app_state.db,
-            policy,
-            &me_user.to_subject(),
-            &message.id,
-            parsed.content.clone(),
-        )
-        .await?;
     }
 
     // A plan item names a call that was never made, so there is nothing to
@@ -25437,6 +25386,7 @@ pub(crate) async fn run_continuation(
             ),
             result_details: None,
             allowed_by: None,
+            budget_usage: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         };
@@ -26536,6 +26486,7 @@ async fn resume_parked_generation(
             })),
             result_details: None,
             allowed_by: None,
+            budget_usage: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         }));

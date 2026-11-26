@@ -74,9 +74,17 @@ type Enabled<
 
 `;
 
-// --- Fix nullable string fields that the generator incorrectly narrows to null | undefined ---
+// --- Fix fields whose OpenAPI 3.1 nullable types are narrowed by the generator ---
 const schemaFile = path.join(targetDir, "v1betaApiSchemas.ts");
 const schemaStringFieldFixes = [
+  {
+    from: "  allowance_freed_next_24h: void;",
+    to: "  allowance_freed_next_24h: number | null;",
+  },
+  {
+    from: "  spending: void;",
+    to: "  spending: number | null;",
+  },
   {
     from: "starter_prompts?: null | undefined;",
     to: "starter_prompts?: AssistantStarterPrompt[] | null | undefined;",
