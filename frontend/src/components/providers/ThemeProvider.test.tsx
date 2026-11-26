@@ -33,6 +33,8 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   frontendPublicBasePath: "/public/common",
   commonPublicBasePath: "/public/common",
   themeCustomerName: null,
+  themeTranslationLocales: null,
+  translationOverrideLocales: null,
   faviconPath: "/favicon.svg",
   themePath: null,
   themeConfigPath: null,
@@ -357,6 +359,106 @@ describe("ThemeProvider", () => {
     expect(document.querySelector('link[data-theme-fonts="true"]')).toBeNull();
     expect(document.querySelector('link[data-theme-styles="true"]')).toBeNull();
     expect(document.querySelector('style[data-theme-vars="true"]')).toBeNull();
+  });
+
+  it("is ready only once the theme's style sheets have loaded", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({ themeConfigPath: "/custom/brand/theme.json" }),
+    );
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockTheme,
+    });
+    const Ready = () => <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>;
+
+    render(
+      <ThemeProvider>
+        <Ready />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(
+        document.querySelector('link[data-theme-styles="true"]'),
+      ).not.toBeNull();
+    });
+    expect(screen.getByText("waiting")).toBeInTheDocument();
+
+    fireEvent.load(document.querySelector('link[data-theme-fonts="true"]')!);
+    expect(screen.getByText("waiting")).toBeInTheDocument();
+    fireEvent.error(document.querySelector('link[data-theme-styles="true"]')!);
+    expect(await screen.findByText("ready")).toBeInTheDocument();
+  });
+
+  it("is ready only once the theme's text fonts have loaded", async () => {
+    const pending: Array<(value: FontFace[]) => void> = [];
+    const load = vi.fn(
+      (_font: string) =>
+        new Promise<FontFace[]>((resolve) => pending.push(resolve)),
+    );
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load },
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+    const Ready = () => <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>;
+
+    try {
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+
+      await waitFor(() => expect(load).toHaveBeenCalled());
+      expect(load.mock.calls.map(([font]) => font)).toEqual([
+        "400 1em Geist Variable",
+        "600 1em Geist Variable",
+      ]);
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+      pending.forEach((resolve) => resolve([]));
+      expect(await screen.findByText("ready")).toBeInTheDocument();
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
+    }
+  });
+
+  it("keeps the page's start colour until the loaded theme replaces it", async () => {
+    const start = document.createElement("style");
+    start.id = "erato-start-colors";
+    document.head.appendChild(start);
+    let answer: (value: unknown) => void = () => {};
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise((resolve) => (answer = resolve)),
+    );
+
+    render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+    await waitFor(() => {
+      expect(
+        document.querySelector('style[data-theme-vars="true"]'),
+      ).not.toBeNull();
+    });
+    expect(start.isConnected).toBe(true);
+
+    answer({
+      ok: true,
+      json: async () => ({
+        name: "Brand",
+        theme: { light: { colors: { shell: { page: "#123456" } } } },
+      }),
+    });
+
+    await waitFor(() => expect(start.isConnected).toBe(false));
+    expect(
+      document.querySelector('style[data-theme-vars="true"]')?.textContent,
+    ).toContain("--theme-shell-page: #123456;");
   });
 
   it("derives stylesheet paths from the theme.json path that actually loaded after fallback", async () => {

@@ -225,6 +225,71 @@ impl BrandingAssets {
         }
         None
     }
+
+    /// The page colour of the web app's theme for light and dark, so the
+    /// first HTML already shows it. Mirrors the web app's lookup: the selected
+    /// theme's `theme.json`, else the unnamed one beside the themes. A mode the
+    /// theme leaves alone is missing, and the page keeps its default for it.
+    pub fn start_page_colors(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
+        let named = self
+            .frontend
+            .theme
+            .as_deref()
+            .map(|theme| format!("/public/common/custom-theme/{theme}/theme.json"));
+        let path = named
+            .iter()
+            .map(String::as_str)
+            .chain(["/public/common/custom-theme/theme.json"])
+            .find_map(|source| self.resolve_source(source, false).ok())?;
+        let theme: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+        let colors: serde_json::Map<_, _> = ["light", "dark"]
+            .into_iter()
+            .filter_map(|mode| {
+                let colors = &theme["theme"][mode]["colors"];
+                // The web app falls back the same way when `shell.page` is unset.
+                [&colors["shell"]["page"], &colors["background"]["secondary"]]
+                    .into_iter()
+                    .find_map(|value| value.as_str().filter(|color| is_css_color(color)))
+                    .map(|color| (mode.to_string(), color.into()))
+            })
+            .collect();
+        (!colors.is_empty()).then_some(colors)
+    }
+
+    /// Languages the selected theme ships a catalog for, so the web app asks
+    /// only for those. `None` without a theme.
+    pub fn theme_translation_locales(&self) -> Option<Vec<String>> {
+        self.frontend.theme.as_ref()?;
+        let mut locales: Vec<String> = self
+            .theme_roots(false)
+            .iter()
+            .filter_map(|root| std::fs::read_dir(root.join("locales")).ok())
+            .flatten()
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter(|locale| {
+                safe_relative_path(locale)
+                    && ["messages.po", "messages.json"].iter().any(|file| {
+                        self.theme_roots(false).iter().any(|root| {
+                            contained_file(root, &format!("locales/{locale}/{file}")).is_some()
+                        })
+                    })
+            })
+            .collect();
+        locales.sort();
+        locales.dedup();
+        Some(locales)
+    }
+}
+
+/// Goes into a `<script>` and from there into a style sheet, so only the
+/// characters of colour notations pass (`#hex`, names, `rgb(…)`, `hsl(…)`).
+fn is_css_color(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(c, '#' | '(' | ')' | ',' | '.' | '%' | ' ' | '-' | '/')
+        })
 }
 
 fn safe_relative_path(path: &str) -> bool {
@@ -258,6 +323,83 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("web/custom-theme/acme")).unwrap();
         std::fs::create_dir_all(dir.path().join("office/assets")).unwrap();
         (dir, config)
+    }
+
+    #[test]
+    fn start_page_colors_follow_the_web_apps_theme_lookup() {
+        let (dir, mut config) = fixture();
+        let write = |path: &str, json: &str| {
+            let path = dir.path().join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, json).unwrap();
+        };
+        // Missing theme.json: no colours, the page keeps its defaults.
+        assert_eq!(
+            BrandingAssets::from_config(&config).start_page_colors(),
+            None
+        );
+
+        write(
+            "web/custom-theme/acme/theme.json",
+            r##"{"theme":{"light":{"colors":{"shell":{"page":"#fafafa"},"background":{"secondary":"#eee"}}},
+                "dark":{"colors":{"background":{"secondary":"rgb(1, 2, 3)"}}}}}"##,
+        );
+        let colors = BrandingAssets::from_config(&config)
+            .start_page_colors()
+            .unwrap();
+        assert_eq!(colors["light"], "#fafafa");
+        assert_eq!(colors["dark"], "rgb(1, 2, 3)");
+
+        // A value that could leave the style sheet is dropped, not passed on.
+        write(
+            "web/custom-theme/acme/theme.json",
+            r##"{"theme":{"light":{"colors":{"shell":{"page":"red;}</style><script>"}}}}}"##,
+        );
+        assert_eq!(
+            BrandingAssets::from_config(&config).start_page_colors(),
+            None
+        );
+
+        // Without a selected theme, the unnamed theme beside the themes counts.
+        config.frontend.theme = None;
+        write(
+            "web/custom-theme/theme.json",
+            r##"{"theme":{"dark":{"colors":{"shell":{"page":"#000"}}}}}"##,
+        );
+        let colors = BrandingAssets::from_config(&config)
+            .start_page_colors()
+            .unwrap();
+        assert_eq!(colors.get("light"), None);
+        assert_eq!(colors["dark"], "#000");
+    }
+
+    #[test]
+    fn theme_translation_locales_list_the_catalogs_a_theme_ships() {
+        let (dir, mut config) = fixture();
+        let runtime = dir.path().join("web/custom-theme/acme/locales");
+        let built = dir
+            .path()
+            .join("web/public/common/custom-theme/acme/locales");
+        for (root, locale, file) in [
+            (&runtime, "de", Some("messages.po")),
+            (&built, "fr", Some("messages.json")),
+            (&built, "de", Some("messages.json")),
+            (&runtime, "es", None),
+        ] {
+            std::fs::create_dir_all(root.join(locale)).unwrap();
+            if let Some(file) = file {
+                std::fs::write(root.join(locale).join(file), "").unwrap();
+            }
+        }
+        assert_eq!(
+            BrandingAssets::from_config(&config).theme_translation_locales(),
+            Some(vec!["de".to_string(), "fr".to_string()])
+        );
+        config.frontend.theme = None;
+        assert_eq!(
+            BrandingAssets::from_config(&config).theme_translation_locales(),
+            None
+        );
     }
 
     #[test]

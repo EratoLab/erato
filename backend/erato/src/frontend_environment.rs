@@ -378,6 +378,29 @@ fn voice_switch_environment(
     ]
 }
 
+/// What the page needs before it can draw: the theme's page colour (web app
+/// only; the add-in panes keep their host's look) and which optional
+/// translation files exist, so it asks for nothing that would answer "not
+/// found". Read per request: theme files and translation overrides change
+/// without a restart.
+fn start_environment(
+    branding: &crate::distribution::branding::BrandingAssets,
+    override_locales: Vec<&str>,
+    web: bool,
+) -> Vec<(&'static str, Value)> {
+    let mut entries = vec![(
+        "TRANSLATION_OVERRIDE_LOCALES",
+        Value::from(override_locales),
+    )];
+    if let Some(locales) = branding.theme_translation_locales() {
+        entries.push(("THEME_TRANSLATION_LOCALES", Value::from(locales)));
+    }
+    if web && let Some(colors) = branding.start_page_colors() {
+        entries.push(("THEME_START_COLORS", Value::Object(colors)));
+    }
+    entries
+}
+
 /// The confirmation phrase each language approves with, as shown, once a
 /// deployment configures one; the web app ships the built-in ones.
 fn approval_voice_phrases(
@@ -1499,14 +1522,24 @@ pub mod axum {
             headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
 
         if is_html && should_inject_environment {
-            let switches = reloadable.read().await.voice_switches;
-            for (key, value) in
-                voice_switch_environment(frontend_registry.configured_voices, switches)
+            let reloadable = reloadable.read().await;
+            let start = start_environment(
+                &frontend_registry.branding,
+                reloadable.distribution_bundle.translation_locales(),
+                frontend.mount_path == MAIN_FRONTEND_MOUNT_PATH,
+            );
+            for (key, value) in voice_switch_environment(
+                frontend_registry.configured_voices,
+                reloadable.voice_switches,
+            )
+            .into_iter()
+            .chain(start)
             {
                 frontend_environment
                     .additional_environment
                     .insert(key.to_string(), value);
             }
+            drop(reloadable);
             // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
@@ -1933,6 +1966,96 @@ mod tests {
             served.contains("window.APPROVAL_VOICE_DECISIONS_ENABLED = true;"),
             "{served}"
         );
+    }
+
+    #[tokio::test]
+    async fn the_web_page_carries_the_theme_colour_and_the_translation_files_that_exist() {
+        use ::axum::{Extension, body::Body, http::Request};
+        use http_body_util::BodyExt;
+        let dir = tempfile::tempdir().unwrap();
+        let web = dir.path().join("web");
+        let theme = web.join("custom-theme/acme");
+        std::fs::create_dir_all(theme.join("locales/de")).unwrap();
+        std::fs::create_dir_all(theme.join("locales/fr")).unwrap();
+        std::fs::write(theme.join("locales/de/messages.po"), "").unwrap();
+        std::fs::write(
+            theme.join("theme.json"),
+            br##"{"name":"Acme","theme":{"light":{"colors":{"shell":{"page":"#F7F6F3"}}},"dark":{"colors":{"background":{"secondary":"#0B202C"}}}}}"##,
+        )
+        .unwrap();
+        std::fs::write(
+            web.join("index.html"),
+            "<html><head></head><body></body></html>",
+        )
+        .unwrap();
+        std::fs::write(web.join("404.html"), "Not Found").unwrap();
+        let office = dir.path().join("office");
+        std::fs::create_dir_all(&office).unwrap();
+        std::fs::write(
+            office.join("index.html"),
+            "<html><head></head><body></body></html>",
+        )
+        .unwrap();
+        std::fs::write(office.join("404.html"), "Not Found").unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = web.display().to_string();
+        config.integrations.ms_office.addin.enabled = true;
+        config.integrations.ms_office.addin.frontend_bundle_path = office.display().to_string();
+        config.frontend.theme = Some("acme".into());
+        let distribution = Distribution::load(&config);
+        let registry = std::sync::Arc::new(build_frontend_registry(
+            &config,
+            &distribution,
+            &Default::default(),
+        ));
+        let reloadable = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::distribution::runtime::ReloadableAppState::new(
+                &config,
+                &distribution,
+                crate::services::mcp_manager::McpServers::new(&config),
+            ),
+        ));
+        let page = |uri: &'static str| {
+            let registry = registry.clone();
+            let reloadable = reloadable.clone();
+            async move {
+                let response = serve_files_with_script(
+                    Extension(registry),
+                    Extension(DeploymentVersion(None)),
+                    Extension(reloadable),
+                    Request::builder().uri(uri).body(Body::empty()).unwrap(),
+                )
+                .await
+                .unwrap();
+                String::from_utf8(
+                    response
+                        .into_body()
+                        .collect()
+                        .await
+                        .unwrap()
+                        .to_bytes()
+                        .to_vec(),
+                )
+                .unwrap()
+            }
+        };
+
+        let web_page = page("/index.html").await;
+        assert!(
+            web_page
+                .contains(r##"window.THEME_START_COLORS = {"light":"#F7F6F3","dark":"#0B202C"};"##),
+            "{web_page}"
+        );
+        assert!(web_page.contains(r#"window.THEME_TRANSLATION_LOCALES = ["de"];"#));
+        assert!(web_page.contains("window.TRANSLATION_OVERRIDE_LOCALES = [];"));
+
+        // The add-in panes keep their host's colours.
+        let pane = page("/public/platform-office-addin/index.html").await;
+        assert!(
+            pane.contains(r#"window.THEME_TRANSLATION_LOCALES = ["de"];"#),
+            "{pane}"
+        );
+        assert!(!pane.contains("THEME_START_COLORS"));
     }
 
     #[test]

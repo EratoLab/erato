@@ -4674,8 +4674,8 @@ msgstr "Prześlij pliki"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Przekierowanie do czatu..."
+#~ msgid "home.redirecting"
+#~ msgstr "Przekierowanie do czatu..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx
