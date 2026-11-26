@@ -503,8 +503,10 @@ export type PreviewAssistantHubSubmissionDiffPathParams = {
   sourceAssistantId: string;
 };
 
-export type PreviewAssistantHubSubmissionDiffError =
-  Fetcher.ErrorWrapper<undefined>;
+export type PreviewAssistantHubSubmissionDiffError = Fetcher.ErrorWrapper<{
+  status: 400;
+  payload: Schemas.AssistantHubVersionErrorResponse;
+}>;
 
 export type PreviewAssistantHubSubmissionDiffVariables = {
   body: Schemas.AssistantHubSubmissionRequest;
@@ -557,7 +559,10 @@ export type SubmitAssistantHubVersionPathParams = {
   sourceAssistantId: string;
 };
 
-export type SubmitAssistantHubVersionError = Fetcher.ErrorWrapper<undefined>;
+export type SubmitAssistantHubVersionError = Fetcher.ErrorWrapper<{
+  status: 400;
+  payload: Schemas.AssistantHubVersionErrorResponse;
+}>;
 
 export type SubmitAssistantHubVersionVariables = {
   body: Schemas.AssistantHubSubmissionRequest;

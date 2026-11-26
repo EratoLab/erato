@@ -1370,6 +1370,16 @@ msgstr "Füge vor dem Einreichen eine Versionsnummer hinzu."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionFormat"
+msgstr "Gib eine Version im Format MAJOR.MINOR.PATCH ein."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionNotIncreasing"
+msgstr "Gib eine Version ein, die größer als {version} ist."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Versionskommentar"
 
@@ -1377,6 +1387,11 @@ msgstr "Versionskommentar"
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionCommentHelp"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionFormatHelp"
+msgstr "Verwende das Format MAJOR.MINOR.PATCH ohne führende Nullen, zum Beispiel 1.0.0."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx

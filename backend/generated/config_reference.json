@@ -497,6 +497,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "assistant_hub.validate_version_semver_format": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "stable"
+  },
   "assistants.context_file_contributor_threshold": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.2",
