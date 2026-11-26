@@ -5,6 +5,7 @@ import {
   NEW_CHAT_STREAM_KEY,
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
+import { markNetworkFailure } from "@/lib/connectivity/connectivity";
 import {
   useUploadFile,
   useCreateChat,
@@ -458,6 +459,32 @@ describe("useFileDropzone", () => {
         queryParams: { chat_id: "silent-chat-id" },
       }),
     );
+    expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
+  });
+
+  it("tries creating the chat again when the network dropped, then uploads", async () => {
+    mockCreateChatMutateAsync
+      .mockRejectedValueOnce(
+        markNetworkFailure({
+          name: "unknown",
+          message: "Network error (Load failed)",
+        }),
+      )
+      .mockResolvedValueOnce({ chat_id: "silent-chat-id" });
+    vi.mocked(fetchUploadFile).mockResolvedValue({
+      files: [createMockUploadedFile("file1", "test1.pdf")],
+    });
+
+    const { result } = renderHook(() => useFileDropzone({ chatId: null }));
+
+    await act(async () => {
+      await result.current.uploadFiles([
+        new File(["test content"], "test1.pdf", { type: "application/pdf" }),
+      ]);
+    });
+
+    expect(mockCreateChatMutateAsync).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
     expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
   });
 

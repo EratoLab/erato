@@ -224,17 +224,8 @@ export function useFileDropzone({
     latestChatProviderIdRef.current = chatProviderId;
   }, [chatProviderId]);
 
-  // Add create chat mutation for silent chat creation
-  const createChatMutation = useCreateChat({
-    onError: (error) => {
-      logger.error("Failed to create chat for file upload:", error);
-      setError(
-        // eslint-disable-next-line lingui/no-unlocalized-strings
-        new UploadUnknownError("Failed to prepare chat for file upload"),
-      );
-      setUploading(false);
-    },
-  });
+  // Silent chat creation; its errors reach the upload's own catch.
+  const createChatMutation = useCreateChat();
 
   // Function to upload files
   const uploadFiles = useCallback(
@@ -283,15 +274,19 @@ export function useFileDropzone({
         // No chat yet — create one silently.
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
-          const createChatResult = await createChatMutation.mutateAsync({
-            body: {
-              ...(assistantId ? { assistant_id: assistantId } : {}),
-              ...(latestChatProviderIdRef.current
-                ? { chat_provider_id: latestChatProviderIdRef.current }
-                : {}),
-            },
-            headers: clientPlatformHeaders(),
-          });
+          const createChatResult = await uploadWithNetworkRetry(
+            () =>
+              createChatMutation.mutateAsync({
+                body: {
+                  ...(assistantId ? { assistant_id: assistantId } : {}),
+                  ...(latestChatProviderIdRef.current
+                    ? { chat_provider_id: latestChatProviderIdRef.current }
+                    : {}),
+                },
+                headers: clientPlatformHeaders(),
+              }),
+            { onWaitingForNetwork: setWaitingForNetwork },
+          );
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
           // Set the silentChatId in the store
