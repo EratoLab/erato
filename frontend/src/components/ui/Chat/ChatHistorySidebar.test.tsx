@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
+import { useSidebarPageProps } from "./sidebarPage";
 
 import type { ChatSession } from "@/types/chat";
 import type { I18n, Messages } from "@lingui/core";
@@ -1508,19 +1509,25 @@ describe("ChatHistorySidebar", () => {
 
   describe("dragging the drawer", () => {
     const DRAWER_WIDTH = 280;
+    const Page = ({ collapsed }: { collapsed: boolean }) => (
+      <div {...useSidebarPageProps(collapsed, "hidden")} data-testid="page" />
+    );
     const ToggleHarness = ({ initiallyOpen }: { initiallyOpen: boolean }) => {
       const [collapsed, setCollapsed] = useState(!initiallyOpen);
       return (
-        <ChatHistorySidebar
-          sessions={sessions}
-          currentSessionId="chat-1"
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((value) => !value)}
-          onSessionSelect={vi.fn()}
-          onSessionArchive={vi.fn()}
-          onSessionUnarchive={vi.fn()}
-          isLoading={false}
-        />
+        <>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            collapsed={collapsed}
+            onToggleCollapse={() => setCollapsed((value) => !value)}
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            isLoading={false}
+          />
+          <Page collapsed={collapsed} />
+        </>
       );
     };
     const renderDrawer = async (initiallyOpen: boolean) => {
@@ -1536,6 +1543,7 @@ describe("ChatHistorySidebar", () => {
     const drawer = () =>
       document.querySelector<HTMLElement>('[data-ui="sidebar"]')!;
     const sidebarMode = () => drawer().getAttribute("data-sidebar-mode");
+    const page = () => screen.getByTestId("page");
 
     // A finger: one touch per event, at a given time in ms.
     const touch = (
@@ -1640,6 +1648,75 @@ describe("ChatHistorySidebar", () => {
       await waitFor(() => expect(drawer().style.transform).toBe(""));
     });
 
+    it("pushes the page aside with the finger and keeps it there once open", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+      const scrim = screen.getByTestId("sidebar-scrim");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 145, 400, 400);
+
+      expect(page().style.transform).toBe("translateX(140px)");
+      expect(scrim.style.transform).toBe("translateX(140px)");
+      expect(page()).toHaveAttribute("data-sidebar-moving");
+
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+      expect(page().style.transform).toBe(`translateX(${DRAWER_WIDTH}px)`);
+      runFrames(2);
+
+      expect(page()).toHaveAttribute("data-sidebar-pushed");
+      expect(scrim).toHaveAttribute("data-sidebar-pushed");
+      await waitFor(() => {
+        expect(page().style.transform).toBe("");
+        expect(page().style.transition).toBe("");
+        expect(page()).not.toHaveAttribute("data-sidebar-moving");
+        expect(scrim.style.transform).toBe("");
+      });
+    });
+
+    it("brings the page back when the dimmed page is dragged left", async () => {
+      await renderDrawer(true);
+      expect(page()).toHaveAttribute("data-sidebar-pushed");
+
+      const scrim = screen.getByTestId("sidebar-scrim");
+      touch(scrim, "touchstart", 350, 400, 0);
+      touch(scrim, "touchmove", 210, 400, 400);
+      expect(page().style.transform).toBe("translateX(140px)");
+
+      touch(scrim, "touchmove", 60, 400, 600);
+      touch(scrim, "touchend", 60, 400, 800);
+      runFrames(2);
+
+      expect(sidebarMode()).toBe("hidden");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      await waitFor(() => {
+        expect(page().style.transform).toBe("");
+        expect(page()).not.toHaveAttribute("data-sidebar-moving");
+      });
+    });
+
+    it("brings the page back on a tap on it", async () => {
+      await renderDrawer(true);
+
+      fireEvent.click(screen.getByTestId("sidebar-scrim"));
+
+      expect(sidebarMode()).toBe("hidden");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      expect(screen.getByTestId("sidebar-scrim")).not.toHaveAttribute(
+        "data-sidebar-pushed",
+      );
+    });
+
+    it("keeps the page in place on a wide screen", async () => {
+      mockedNarrowScreen = false;
+      await renderDrawer(true);
+
+      expect(sidebarMode()).toBe("expanded");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+    });
+
     it("starts the slide before the page switches", async () => {
       await renderDrawer(false);
       const edge = screen.getByTestId("sidebar-edge");
@@ -1721,6 +1798,10 @@ describe("ChatHistorySidebar", () => {
         expect(drawer().style.pointerEvents).toBe("");
         expect(scrim.style.opacity).toBe("");
         expect(scrim.style.pointerEvents).toBe("");
+        expect(scrim.style.transform).toBe("");
+        expect(page().style.transform).toBe("");
+        expect(page().style.transition).toBe("");
+        expect(page()).not.toHaveAttribute("data-sidebar-moving");
       });
       // A later touch elsewhere does not switch the page again.
       fireEvent.click(screen.getByRole("button", { name: "expand sidebar" }));

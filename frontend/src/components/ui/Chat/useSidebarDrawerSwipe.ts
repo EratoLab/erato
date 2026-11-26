@@ -53,6 +53,7 @@ type Gesture = {
   startY: number;
   startProgress: number;
   width: number;
+  page: HTMLElement | null;
   progress: number;
   dragging: boolean;
   samples: Sample[];
@@ -63,6 +64,12 @@ export interface DrawerSwipeElements {
   scrim: HTMLElement;
   /** The strip along the left edge; absent when the host keeps that edge. */
   edge: HTMLElement | null;
+  /**
+   * The page beside the drawer, which the open drawer pushes aside by its
+   * width. Looked up when a drag starts: the page can be replaced while the
+   * drawer stays (an error screen, for one).
+   */
+  page: () => HTMLElement | null;
 }
 
 export interface DrawerSwipeHost {
@@ -78,15 +85,16 @@ export interface DrawerSwipe {
 }
 
 /**
- * Touch drags move the drawer with the finger: in from the edge strip, out
- * from the drawer or the scrim beside it. On release it settles open or
- * closed by distance and speed. Mouse input never starts one.
+ * Touch drags move the drawer and the page it pushes aside with the finger:
+ * in from the edge strip, out from the drawer or the scrim over the page. On
+ * release they settle open or closed by distance and speed. Mouse input never
+ * starts one.
  *
  * Listeners sit only on these elements, not on the document, so touches
  * elsewhere keep the browser's fast scrolling path.
  */
 export function attachDrawerSwipe(
-  { drawer, scrim, edge }: DrawerSwipeElements,
+  { drawer, scrim, edge, page }: DrawerSwipeElements,
   host: DrawerSwipeHost,
 ): DrawerSwipe {
   let gesture: Gesture | null = null;
@@ -100,17 +108,32 @@ export function attachDrawerSwipe(
   let switchFrame: number | undefined;
   let pendingSwitch: (() => void) | null = null;
   let settleTimer: number | undefined;
+  let movedPage: HTMLElement | null = null;
 
   const clearPosition = () => {
     drawer.style.transform = "";
     drawer.style.opacity = "";
     drawer.style.pointerEvents = "";
+    scrim.style.transform = "";
     scrim.style.opacity = "";
     scrim.style.pointerEvents = "";
+    if (movedPage) {
+      movedPage.style.transform = "";
+    }
+  };
+  const releasePage = () => {
+    if (movedPage) {
+      movedPage.style.transform = "";
+      movedPage.style.transition = "";
+      // Kept until here so the page keeps its pushed shape while it slides.
+      delete movedPage.dataset.sidebarMoving;
+      movedPage = null;
+    }
   };
   const clearTransition = () => {
     drawer.style.transition = "";
     scrim.style.transition = "";
+    releasePage();
   };
   const tidy = () => {
     if (!sliding && !waitingForPage && !pendingSwitch) {
@@ -131,7 +154,13 @@ export function attachDrawerSwipe(
   const place = (progress: number, width: number) => {
     // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
     drawer.style.transform = `translateX(${(progress - 1) * width}px)`;
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
+    const pushed = `translateX(${progress * width}px)`;
+    scrim.style.transform = pushed;
     scrim.style.opacity = String(progress);
+    if (movedPage) {
+      movedPage.style.transform = pushed;
+    }
   };
 
   const settle = (open: boolean, ended: Gesture) => {
@@ -142,10 +171,15 @@ export function attachDrawerSwipe(
     const ms = reduceMotion
       ? 0
       : Math.round(SETTLE_MIN_MS + (SETTLE_MAX_MS - SETTLE_MIN_MS) * remaining);
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
-    drawer.style.transition = `transform ${ms}ms ${SETTLE_EASING}, opacity ${ms}ms ${SETTLE_EASING}`;
 
-    scrim.style.transition = `opacity ${ms}ms ${SETTLE_EASING}`;
+    const slide = `transform ${ms}ms ${SETTLE_EASING}`;
+
+    const fade = `opacity ${ms}ms ${SETTLE_EASING}`;
+    drawer.style.transition = `${slide}, ${fade}`;
+    scrim.style.transition = `${slide}, ${fade}`;
+    if (movedPage) {
+      movedPage.style.transition = slide;
+    }
     cancelSwitch();
     waitingForPage = false;
     slideTarget = null;
@@ -211,6 +245,7 @@ export function attachDrawerSwipe(
       startY: touch.clientY,
       startProgress,
       width: drawer.getBoundingClientRect().width,
+      page: page(),
       progress: startProgress,
       dragging: false,
       samples: [{ x: touch.clientX, t: event.timeStamp }],
@@ -238,9 +273,17 @@ export function attachDrawerSwipe(
       window.clearTimeout(settleTimer);
       sliding = false;
       slideTarget = null;
+      if (movedPage !== gesture.page) {
+        releasePage();
+        movedPage = gesture.page;
+      }
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
+      if (movedPage) {
+        movedPage.style.transition = "none";
+        movedPage.dataset.sidebarMoving = "";
+      }
     }
     event.preventDefault();
     gesture.progress = Math.min(
@@ -324,12 +367,13 @@ export function attachDrawerSwipe(
 }
 
 interface SidebarDrawerSwipeOptions {
-  /** A narrow screen, where the open sidebar is a drawer over the page. */
+  /** A narrow screen, where the open sidebar pushes the page aside. */
   enabled: boolean;
   isOpen: boolean;
   drawerRef: RefObject<HTMLElement | null>;
   scrimRef: RefObject<HTMLElement | null>;
   edgeRef: RefObject<HTMLElement | null>;
+  findPage: () => HTMLElement | null;
   onOpen: () => void;
   onClose: () => void;
 }
@@ -340,11 +384,12 @@ export function useSidebarDrawerSwipe({
   drawerRef,
   scrimRef,
   edgeRef,
+  findPage,
   onOpen,
   onClose,
 }: SidebarDrawerSwipeOptions) {
-  const latest = useRef({ isOpen, onOpen, onClose });
-  latest.current = { isOpen, onOpen, onClose };
+  const latest = useRef({ isOpen, findPage, onOpen, onClose });
+  latest.current = { isOpen, findPage, onOpen, onClose };
   const swipeRef = useRef<DrawerSwipe | null>(null);
 
   useLayoutEffect(() => {
@@ -358,7 +403,12 @@ export function useSidebarDrawerSwipe({
       return;
     }
     const swipe = attachDrawerSwipe(
-      { drawer, scrim, edge: edgeRef.current },
+      {
+        drawer,
+        scrim,
+        edge: edgeRef.current,
+        page: () => latest.current.findPage(),
+      },
       {
         isOpen: () => latest.current.isOpen,
         onOpen: () => latest.current.onOpen(),

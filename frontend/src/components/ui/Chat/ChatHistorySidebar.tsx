@@ -66,6 +66,7 @@ import {
   useApplySidebarWidth,
 } from "./SidebarResizeHandle";
 import { SidebarToggle } from "./SidebarToggle";
+import { findSidebarPage } from "./sidebarPage";
 import { useSidebarDrawerSwipe } from "./useSidebarDrawerSwipe";
 import { UserProfileThemeDropdown } from "../Controls/UserProfileThemeDropdown";
 import { CopyErrorButton } from "../Feedback/CopyErrorButton";
@@ -553,8 +554,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       () => (drawerEdgeShell ? claimLeftEdge(drawerEdgeShell) : undefined),
       [drawerEdgeShell],
     );
+    const rootRef = useRef<HTMLDivElement>(null);
     const scrimRef = useRef<HTMLDivElement>(null);
     const edgeRef = useRef<HTMLDivElement>(null);
+    const findPage = useCallback(() => findSidebarPage(rootRef.current), []);
     const openDrawer = useCallback(
       () => onToggleCollapse?.(),
       [onToggleCollapse],
@@ -565,6 +568,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       drawerRef: ref,
       scrimRef,
       edgeRef,
+      findPage,
       onOpen: openDrawer,
       onClose: dismissDrawer,
     });
@@ -890,7 +894,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
     return (
       <ErrorBoundary FallbackComponent={ErrorDisplay}>
-        <div className="relative h-auto">
+        <div ref={rootRef} className="relative h-auto">
           <div
             role="status"
             className="sr-only"
@@ -921,9 +925,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             />
           )}
 
-          {/* On a narrow screen the open sidebar lies over the page. A tap
-              beside it lands here and only closes it; the control underneath
-              never gets that tap. */}
+          {/* On a narrow screen the open sidebar pushes the page aside, and
+              this dims what stays in view of it. A tap there lands here and
+              only closes the sidebar; the control underneath never gets that
+              tap. */}
           {isNarrowScreen && (
             <div
               ref={scrimRef}
@@ -934,10 +939,11 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
-                "drawer-overlay-skin viewport-layer fixed inset-0 z-40 touch-pan-y",
-                "transition-opacity duration-300 ease-in-out motion-reduce:transition-none",
+                "drawer-overlay-skin sidebar-page-geometry viewport-layer fixed inset-0 z-40 touch-pan-y",
+                "transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
                 isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
               )}
+              data-sidebar-pushed={isDrawerOpen ? "" : undefined}
               data-ui="sidebar-scrim"
               data-testid="sidebar-scrim"
             />
