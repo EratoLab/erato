@@ -121,9 +121,9 @@ describe("sanitizeHtmlPreview", () => {
     });
 
     it("stays linear on many unclosed tag starts", () => {
-      const started = performance.now();
+      const started = Date.now();
       sanitizeHtmlPreview(`${"<".repeat(100_000)}\na`);
-      expect(performance.now() - started).toBeLessThan(3000);
+      expect(Date.now() - started).toBeLessThan(3000);
     });
   });
 
