@@ -5,7 +5,9 @@ use crate::models::assistant_hub;
 use crate::policy::prelude::*;
 use eyre::{ContextCompat, Report, WrapErr, eyre};
 use sea_orm::prelude::*;
-use sea_orm::{ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+};
 use serde::Serialize;
 use sqlx::types::Uuid;
 
@@ -137,8 +139,32 @@ pub async fn create_share_grant_with_config(
         }
     }
 
-    // Validate role
-    if role != "viewer" && (role != "editor" || !config.assistants.enable_edit_sharing) {
+    insert_share_grant(
+        conn,
+        config.assistants.enable_edit_sharing,
+        resource_type,
+        resource_id,
+        subject_type,
+        subject_id_type,
+        subject_id_value,
+        role,
+    )
+    .await
+}
+
+/// Validate and insert a grant after the caller has authorized sharing.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn insert_share_grant(
+    conn: &impl ConnectionTrait,
+    enable_edit_sharing: bool,
+    resource_type: String,
+    resource_id: String,
+    subject_type: String,
+    subject_id_type: String,
+    subject_id_value: String,
+    role: String,
+) -> Result<share_grants::Model, Report> {
+    if role != "viewer" && (role != "editor" || !enable_edit_sharing) {
         return Err(eyre!(
             "Invalid role: {}. Only 'viewer' role is supported, and 'editor' requires assistant edit sharing to be enabled",
             role

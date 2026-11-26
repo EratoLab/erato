@@ -721,6 +721,7 @@ export type AssistantHubConfigResponse = {
   enabled: boolean;
   force_whole_organization_audience: boolean;
   rating_mode: string;
+  validate_version_semver_format: boolean;
 };
 
 export type AssistantHubCreator = {
@@ -856,6 +857,18 @@ export type AssistantHubVersion = {
    * @format date-time
    */
   withdrawn_at?: string | null | undefined;
+};
+
+export type AssistantHubVersionErrorCode =
+  | "invalid_version_format"
+  | "version_not_increasing";
+
+export type AssistantHubVersionErrorResponse = {
+  code: AssistantHubVersionErrorCode;
+  /**
+   * The highest comparable version already submitted for this assistant.
+   */
+  current_version?: string;
 };
 
 export type AssistantHubVersionResponse = {
