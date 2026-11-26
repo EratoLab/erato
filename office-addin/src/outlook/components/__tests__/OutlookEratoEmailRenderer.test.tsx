@@ -45,6 +45,7 @@ vi.mock("@erato/frontend/library", async () => ({
   Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
     <button type="button" {...props} />
   ),
+  isEmailDraftHtml: realLibrary.isEmailDraftHtml,
   sanitizeHtmlPreview: realLibrary.sanitizeHtmlPreview,
   emailDraftHtmlToText: realLibrary.emailDraftHtmlToText,
   copyEmailToClipboard: (...args: unknown[]) =>
