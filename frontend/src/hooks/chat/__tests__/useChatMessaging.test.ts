@@ -144,7 +144,10 @@ import { useChatHistoryStore } from "../useChatHistory";
 import { useChatMessaging } from "../useChatMessaging";
 import { resetReactAttemptsForTest } from "../useReactToTaskResult";
 
-import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ContentPart,
+  ToolApprovalDecision,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Message } from "@/types/chat";
 import type { ReactNode } from "react";
 import type { StateCreator } from "zustand";
@@ -2200,6 +2203,226 @@ describe("useChatMessaging", () => {
 
       expect(result.current.isStreaming).toBe(false);
       expect(result.current.error).toBeNull();
+    });
+
+    describe("a break that outlasts the answer", () => {
+      const generationGone = () =>
+        new FrontendRequestError(
+          "SSE request failed: No active generation task found for this chat",
+          { method: "POST", url: "/api/v1beta/me/messages/resumestream" },
+          { status: 404, statusText: "Not Found" },
+        );
+      const stored: ContentPart[] = [
+        { content_type: "text", text: "read so far, and the end" },
+      ];
+      const storedAnswer = {
+        id: "assistant-dropped",
+        content: stored,
+        role: "assistant",
+        created_at: "2023-01-01T12:02:00.000Z",
+        chat_id: "chat1",
+        updated_at: "2023-01-01T12:02:30.000Z",
+        is_message_in_active_thread: true,
+      };
+
+      // The network comes back after the server finished: the reattach the
+      // reconnect opens finds nothing running.
+      const reconnectAfterTheAnswerFinished = async () => {
+        let networkBack: () => void = () => {};
+        const waitUntilOnline = vi
+          .spyOn(connectivity, "waitUntilOnline")
+          .mockImplementation(
+            () =>
+              new Promise<void>((resolve) => {
+                networkBack = resolve;
+              }),
+          );
+        const harness = await startDroppedAnswer(
+          markNetworkFailure(new Error("Load failed")),
+        );
+        await failLastResume(
+          harness.resumeCalls,
+          markNetworkFailure(new Error("Load failed")),
+        );
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() => expect(harness.resumeCalls).toHaveLength(2));
+        return { ...harness, restore: () => waitUntilOnline.mockRestore() };
+      };
+
+      it("shows the stored answer by itself", async () => {
+        const { result, resumeCalls, restore } =
+          await reconnectAfterTheAnswerFinished();
+        try {
+          const readsBefore = mockFetchChatMessages.mock.calls.length;
+          mockFetchChatMessages.mockResolvedValue({
+            messages: [...mockMessages, storedAnswer],
+          });
+          await failLastResume(resumeCalls, generationGone());
+
+          await waitFor(() =>
+            expect(
+              result.current.messages["assistant-dropped"].content,
+            ).toEqual(stored),
+          );
+          expect(mockFetchChatMessages.mock.calls.length).toBe(readsBefore + 1);
+          expect(result.current.isPendingResponse).toBe(false);
+          expect(result.current.error).toBeNull();
+        } finally {
+          restore();
+        }
+      });
+
+      it("keeps the half answer on screen until the stored one replaces it", async () => {
+        const { resumeCalls, restore } =
+          await reconnectAfterTheAnswerFinished();
+        try {
+          let deliver: (value: unknown) => void = () => {};
+          mockFetchChatMessages.mockReturnValue(
+            new Promise((resolve) => {
+              deliver = resolve;
+            }),
+          );
+          const answer = watchAnswer("assistant-dropped");
+          await failLastResume(resumeCalls, generationGone());
+          await act(async () => {
+            deliver({ messages: [...mockMessages, storedAnswer] });
+          });
+          answer.stop();
+
+          expect(answer.sizes).not.toContain(-1);
+          expect(answer.neverShrank()).toBe(true);
+          expect(answer.sizes.at(-1)).toBe(contentSize(stored));
+        } finally {
+          restore();
+        }
+      });
+
+      it("reads the chat when the reattached stream ends without a completion", async () => {
+        const { result, resumeCalls, restore } =
+          await reconnectAfterTheAnswerFinished();
+        try {
+          const readsBefore = mockFetchChatMessages.mock.calls.length;
+          mockFetchChatMessages.mockResolvedValue({
+            messages: [...mockMessages, storedAnswer],
+          });
+          const answer = watchAnswer("assistant-dropped");
+          await act(async () => {
+            resumeCalls[1].onClose?.();
+          });
+
+          await waitFor(() =>
+            expect(
+              result.current.messages["assistant-dropped"].content,
+            ).toEqual(stored),
+          );
+          answer.stop();
+          expect(mockFetchChatMessages.mock.calls.length).toBe(readsBefore + 1);
+          expect(answer.sizes).not.toContain(-1);
+          expect(result.current.isPendingResponse).toBe(false);
+        } finally {
+          restore();
+        }
+      });
+
+      it("keeps the half answer when the stored one cannot be read yet", async () => {
+        const { result, resumeCalls, restore } =
+          await reconnectAfterTheAnswerFinished();
+        try {
+          mockFetchChatMessages.mockRejectedValue(offlineFailure());
+          await failLastResume(resumeCalls, generationGone());
+
+          await waitFor(() =>
+            expect(result.current.isPendingResponse).toBe(false),
+          );
+          expect(result.current.messages["assistant-dropped"].content).toEqual([
+            { content_type: "text", text: "read so far" },
+          ]);
+        } finally {
+          restore();
+        }
+      });
+    });
+
+    it("continues a short break's answer on the reattached stream", async () => {
+      let networkBack: () => void = () => {};
+      const waitUntilOnline = vi
+        .spyOn(connectivity, "waitUntilOnline")
+        .mockImplementation(
+          () =>
+            new Promise<void>((resolve) => {
+              networkBack = resolve;
+            }),
+        );
+      try {
+        const { result, resumeCalls } = await startDroppedAnswer(
+          markNetworkFailure(new Error("Load failed")),
+        );
+        await failLastResume(
+          resumeCalls,
+          markNetworkFailure(new Error("Load failed")),
+        );
+        await act(async () => {
+          networkBack();
+        });
+        await waitFor(() => expect(resumeCalls).toHaveLength(2));
+        const answer = watchAnswer("assistant-dropped");
+        const finished = [
+          { content_type: "text", text: "read so far, and the rest" },
+        ];
+        mockFetchChatMessages.mockResolvedValue({
+          messages: [
+            ...mockMessages,
+            {
+              id: "assistant-dropped",
+              content: finished,
+              role: "assistant",
+              created_at: "2023-01-01T12:02:00.000Z",
+              chat_id: "chat1",
+              updated_at: "2023-01-01T12:02:30.000Z",
+              is_message_in_active_thread: true,
+            },
+          ],
+        });
+        for (const data of [
+          {
+            message_type: "assistant_message_started",
+            message_id: "assistant-dropped",
+          },
+          {
+            message_type: "text_delta",
+            message_id: "assistant-dropped",
+            content_index: 0,
+            new_text: "read so far, and the rest",
+          },
+          {
+            message_type: "assistant_message_completed",
+            message_id: "assistant-dropped",
+            content: finished,
+          },
+        ]) {
+          await act(async () => {
+            resumeCalls[1].onMessage?.(streamEvent(data));
+          });
+        }
+        await act(async () => {
+          resumeCalls[1].onClose?.();
+        });
+        answer.stop();
+
+        await waitFor(() =>
+          expect(result.current.isPendingResponse).toBe(false),
+        );
+        expect(result.current.messages["assistant-dropped"].content).toEqual(
+          finished,
+        );
+        expect(answer.sizes).not.toContain(-1);
+        expect(answer.neverShrank()).toBe(true);
+        expect(result.current.error).toBeNull();
+      } finally {
+        waitUntilOnline.mockRestore();
+      }
     });
 
     it("reattaches a dropped answer even after earlier resumes in the chat failed", async () => {
