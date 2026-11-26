@@ -4,6 +4,7 @@ use crate::distribution::desktop_sidecar::{
     EMBEDDED_BOOTSTRAP_SLOT_CAPACITY, encode_executable_bootstrap_slot,
 };
 use crate::distribution::desktop_ui::{DesktopUiPackage, PackageTokenKey};
+use crate::http_validators::matching_entity_tag;
 use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -544,10 +545,10 @@ fn build_ui_package_response(
     let package = package.ok_or(StatusCode::NOT_FOUND)?;
     let etag = HeaderValue::from_str(&format!("\"{}\"", package.digest))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut response = if headers
-        .get(IF_NONE_MATCH)
-        .is_some_and(|value| if_none_match_names(value, &etag))
-    {
+    let mut response = if headers.get(IF_NONE_MATCH).is_some_and(|value| {
+        etag.to_str()
+            .is_ok_and(|etag| matching_entity_tag(Some(value), etag).is_some())
+    }) {
         Response::new(Body::empty())
     } else {
         let (body, content_type) = match part {
@@ -571,16 +572,6 @@ fn build_ui_package_response(
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
-}
-
-fn if_none_match_names(value: &HeaderValue, etag: &HeaderValue) -> bool {
-    let (Ok(value), Ok(etag)) = (value.to_str(), etag.to_str()) else {
-        return false;
-    };
-    value
-        .split(',')
-        .map(str::trim)
-        .any(|entry| entry == "*" || entry.strip_prefix("W/").unwrap_or(entry) == etag)
 }
 
 #[cfg(test)]

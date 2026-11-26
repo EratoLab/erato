@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   copyEmailToClipboard,
+  emailDraftHtmlToText,
   htmlToPlainText,
+  isEmailDraftHtml,
   transformEmailFencesForCopy,
 } from "./emailClipboard";
 
@@ -112,6 +114,253 @@ describe("htmlToPlainText", () => {
   });
 });
 
+describe("emailDraftHtmlToText", () => {
+  it.each([
+    [
+      "paragraphs",
+      "<p>Hi Anna,</p><p>Thanks for the update.</p>",
+      "Hi Anna,\n\nThanks for the update.",
+    ],
+    ["line breaks", "<p>Best regards,<br>Sam</p>", "Best regards,\nSam"],
+    ["two line breaks", "<p>one<br><br>two</p>", "one\n\ntwo"],
+    ["divs as lines", "<div>one</div><div>two</div>", "one\ntwo"],
+    [
+      "unordered list",
+      "<p>Points:</p><ul><li>one</li><li>two</li></ul><p>End</p>",
+      "Points:\n\n- one\n- two\n\nEnd",
+    ],
+    [
+      "ordered list",
+      "<ol><li>first</li><li>second</li><li>third</li></ol>",
+      "1. first\n2. second\n3. third",
+    ],
+    [
+      "nested list",
+      "<ul><li>a<ul><li>a1</li><li>a2</li></ul></li><li>b</li></ul>",
+      "- a\n  - a1\n  - a2\n- b",
+    ],
+    [
+      "ordered inside unordered",
+      "<ul><li>a<ol><li>x</li><li>y</li></ol></li></ul>",
+      "- a\n  1. x\n  2. y",
+    ],
+    [
+      "list item paragraphs",
+      "<ol><li><p>first</p></li><li><p>second</p><p>more</p></li></ol>",
+      "1. first\n2. second\n   more",
+    ],
+    [
+      "link",
+      '<p>See <a href="https://example.com/a">the agenda</a>.</p>',
+      "See the agenda (https://example.com/a).",
+    ],
+    [
+      "link named by its url",
+      '<p><a href="https://example.com/">https://example.com</a></p>',
+      "https://example.com",
+    ],
+    [
+      "link text ending in a space",
+      '<p>See <a href="https://example.com/a">our page </a>now</p>',
+      "See our page (https://example.com/a) now",
+    ],
+    [
+      "link with an encoded address",
+      '<p><a href="mailto:anna%40example.com?subject=Hi">anna@example.com</a></p>',
+      "anna@example.com",
+    ],
+    [
+      "newline paragraphs around a list",
+      "Hi Anna,\n\nthe points:\n<ul><li>one</li><li>two</li></ul>\n\nBest regards\nSam",
+      "Hi Anna,\n\nthe points:\n\n- one\n- two\n\nBest regards\nSam",
+    ],
+    [
+      "angle-bracket text that is no tag",
+      "<p>Ask Max <max@example.com> or <Name> today</p>",
+      "Ask Max <max@example.com> or <Name> today",
+    ],
+    [
+      "a blank line written as a line with a non-breaking space",
+      "<div>Hi Anna,</div><div>&nbsp;</div><div>Thanks.</div>",
+      "Hi Anna,\n\nThanks.",
+    ],
+    [
+      "numbering that starts later",
+      '<ol start="4"><li>four</li><li>five</li></ol>',
+      "4. four\n5. five",
+    ],
+    [
+      "superscript and struck-through words",
+      "<p>10<sup>6</sup> units on the 1<sup>st</sup> for <del>100</del> <ins>80</ins> EUR</p>",
+      "10^6 units on the 1st for 80 EUR",
+    ],
+    [
+      "a struck-through gap between words",
+      "<p>do not<s> </s>pay 1<s><br></s>000</p>",
+      "do not pay 1 000",
+    ],
+    [
+      "numbering that starts at zero",
+      '<ol start="0"><li>zero</li><li>one</li></ol>',
+      "0. zero\n1. one",
+    ],
+    [
+      "an empty cell and an empty list item",
+      "<table><tr><td>a</td><td>b</td></tr><tr><td>&nbsp;</td><td>c</td></tr></table><ul><li>x</li><li>&nbsp;</li><li>y</li></ul>",
+      "a | b\n| c\n\n- x\n- y",
+    ],
+    [
+      "a website behind a phone number",
+      '<p>Call <a href="https://3232235777/">+32 322 357 77</a></p>',
+      "Call +32 322 357 77 (https://3232235777/)",
+    ],
+    ["spaces around inline tags", "<p>a <strong> b </strong> c</p>", "a b c"],
+    [
+      "sections and definition lists",
+      "<section>one</section><dl><dt>Term</dt><dd>Meaning</dd></dl>",
+      "one\nTerm\nMeaning",
+    ],
+    [
+      "mail link",
+      '<p><a href="mailto:team@example.com">Write to us</a></p>',
+      "Write to us (team@example.com)",
+    ],
+    [
+      "mail link named by its address",
+      '<p><a href="mailto:team@example.com">team@example.com</a></p>',
+      "team@example.com",
+    ],
+    [
+      "phone link",
+      '<p><a href="tel:+491234">Call us</a></p>',
+      "Call us (+491234)",
+    ],
+    [
+      "quote",
+      "<p>You wrote:</p><blockquote><p>one</p><p>two</p></blockquote>",
+      "You wrote:\n\n> one\n>\n> two",
+    ],
+    [
+      "nested quote",
+      "<blockquote>a<blockquote>b</blockquote></blockquote>",
+      "> a\n>\n> > b",
+    ],
+    ["heading", "<h2>Agenda</h2><p>Text</p>", "Agenda\n\nText"],
+    [
+      "inline heading neighbours",
+      "intro<h3>Title</h3>outro",
+      "intro\n\nTitle\n\noutro",
+    ],
+    [
+      "table",
+      "<table><tr><th>Item</th><th>Qty</th></tr><tr><td><p>Bolt</p></td><td>7</td></tr></table>",
+      "Item | Qty\nBolt | 7",
+    ],
+    [
+      "bold and italic",
+      "<p><strong>Note:</strong> <em>today</em> <b>only</b> <i>here</i></p>",
+      "Note: today only here",
+    ],
+    ["non-breaking spaces", "<p>a&nbsp;b\u00a0c</p>", "a b c"],
+    [
+      "entities",
+      "<p>&amp; &lt;tag&gt; &quot;q&quot; &#39;s&#39; &euro;</p>",
+      "& <tag> \"q\" 's' \u20ac",
+    ],
+    ["blank-line runs", "<p>a</p><p></p><br><br><p>b</p>", "a\n\nb"],
+    ["trailing spaces", "<p>a   </p><p>b &nbsp;</p>", "a\n\nb"],
+    [
+      "pretty-printed markup",
+      "<ul>\n  <li>one</li>\n  <li>two</li>\n</ul>\n",
+      "- one\n- two",
+    ],
+    ["preformatted text", "<pre>a\n  b</pre>", "a\n  b"],
+    ["preformatted blank-line runs", "<pre>a\n\n\n\nb</pre>", "a\n\nb"],
+    [
+      "line break inside a table cell",
+      "<table><tr><td>Name<br>Street</td><td>x</td></tr></table>",
+      "Name Street | x",
+    ],
+    [
+      "phone link named by its number",
+      '<p><a href="tel:+4989123456">+49 (89) 123-456</a></p>',
+      "+49 (89) 123-456",
+    ],
+    [
+      "inline tags with newline paragraphs",
+      "Hi Anna,\n\nthanks for the <strong>quick</strong> reply.\n\nBest regards\nSam",
+      "Hi Anna,\n\nthanks for the quick reply.\n\nBest regards\nSam",
+    ],
+    ["entities without tags", "Terms &amp; Conditions", "Terms & Conditions"],
+    ["plain text input", "no tags here", "no tags here"],
+    ["empty input", "", ""],
+  ])("%s", (_name, html, expected) => {
+    expect(emailDraftHtmlToText(html)).toBe(expected);
+  });
+
+  it("drops what the cleaner drops and shows hidden text", () => {
+    expect(
+      emailDraftHtmlToText(
+        '<style>p{display:none}</style><p>Hi</p><script>x()</script><p style="display:none">secret</p><img src="https://x.example/p.gif" alt="pixel">',
+      ),
+    ).toBe("Hi\n\nsecret");
+  });
+
+  it("shows the real target of a misleading link once", () => {
+    expect(
+      emailDraftHtmlToText(
+        '<p><a href="https://evil.example">https://bank.example</a></p>',
+      ),
+    ).toBe("https://bank.example (https://evil.example)");
+  });
+
+  it("drops an unsafe link target", () => {
+    expect(
+      emailDraftHtmlToText('<p><a href="javascript:x()">Click</a></p>'),
+    ).toBe("Click");
+  });
+});
+
+describe("isEmailDraftHtml", () => {
+  it.each<[string, Parameters<typeof isEmailDraftHtml>[1], boolean]>([
+    ["<p>Hi</p>", { language: "erato-email" }, true],
+    ["<p>Hi</p>", { language: "erato-email", bodyFormat: "text" }, true],
+    ["  \n<div>Hi</div>", {}, true],
+    ["<ul><li>a</li></ul>", { bodyFormat: "text" }, true],
+    ['<a href="https://example.com">x</a> more', {}, true],
+    ["<br>", {}, true],
+    ["Hi <b>there</b>", { language: "erato-email-html" }, true],
+    ["Hi <b>there</b>", { bodyFormat: "html" }, true],
+    ["Hi <b>there</b>", { language: "erato-email" }, false],
+    ["Hi <b>there</b>", { language: "erato-email", bodyFormat: "text" }, true],
+    [
+      "Hi Ms. Lee,<br><br>thanks a lot.<br><br>Regards<br>Sam",
+      { language: "erato-email", bodyFormat: "text" },
+      true,
+    ],
+    ["R&D; reports on Friday", { bodyFormat: "text" }, false],
+    ["terms&notes; here", { bodyFormat: "text" }, false],
+    ["Hello <Name>,\nsend it to <address>.", { bodyFormat: "text" }, false],
+    ["Tom &amp; Anna", { bodyFormat: "text" }, true],
+    ["Hi <b>there</b>", { language: "text", bodyFormat: "text" }, true],
+    ["Hi <b>there</b>", { bodyFormat: "text" }, true],
+    ["Terms &amp; Conditions", { language: "erato-email-html" }, true],
+    ["Q&#38;A", { language: "erato-email-html" }, true],
+    ["Terms &amp; Conditions", { bodyFormat: "text" }, true],
+    ["Terms &amp; Conditions", { language: "erato-email" }, false],
+    ["Tom & Jerry", { language: "erato-email-html" }, false],
+    ["<Name> please call me", { bodyFormat: "text" }, false],
+    ["Hi there", { language: "erato-email-html" }, false],
+    ["Hi there", { bodyFormat: "html" }, false],
+    ["<Name> please call me", { bodyFormat: "html" }, false],
+    ["<team@example.com> wrote", { language: "erato-email-html" }, false],
+    ["<30 units left", {}, false],
+    ["<paragraph> is a word", {}, false],
+  ])("%j %j", (content, options, expected) => {
+    expect(isEmailDraftHtml(content, options)).toBe(expected);
+  });
+});
+
 describe("transformEmailFencesForCopy", () => {
   it("unwraps a plain erato-email fence to its body", () => {
     expect(
@@ -129,6 +378,20 @@ describe("transformEmailFencesForCopy", () => {
         "```erato-email-html\n<p>Hi Anna,</p><p>Thanks</p>\n```",
       ),
     ).toBe("Hi Anna,\n\nThanks");
+  });
+
+  it("converts lists and links in an erato-email-html fence", () => {
+    expect(
+      transformEmailFencesForCopy(
+        '```erato-email-html\n<ul><li>one</li><li><a href="https://example.com/a">two</a></li></ul>\n```',
+      ),
+    ).toBe("- one\n- two (https://example.com/a)");
+  });
+
+  it("converts an erato-email fence whose body starts with a tag", () => {
+    expect(
+      transformEmailFencesForCopy("```erato-email\n<p>Hi</p><p>Bye</p>\n```"),
+    ).toBe("Hi\n\nBye");
   });
 
   it("leaves messages without email fences unchanged", () => {
@@ -194,6 +457,27 @@ describe("copyEmailToClipboard", () => {
     expect(item.data["text/html"].type).toBe("text/html");
     expect(item.data["text/plain"].type).toBe("text/plain");
     expect(await readBlob(item.data["text/plain"])).toBe("Hi Anna,\n\nThanks");
+  });
+
+  it("writes lists and links into the plain-text flavor", async () => {
+    await copyEmailToClipboard(
+      '<ol><li>one</li><li><a href="https://example.com/a">two</a></li></ol>',
+      true,
+    );
+    const item = write.mock.calls[0][0][0] as ClipboardItemStub;
+    expect(await readBlob(item.data["text/plain"])).toBe(
+      "1. one\n2. two (https://example.com/a)",
+    );
+  });
+
+  it("copies the same cleaned html the card shows", async () => {
+    const draft =
+      '<p style="color:#fff">Hi</p><img src="https://x.example/p.gif"><a href="https://evil.example">https://bank.example</a>';
+    await copyEmailToClipboard(draft, true);
+    const item = write.mock.calls[0][0][0] as ClipboardItemStub;
+    expect(await readBlob(item.data["text/html"])).toBe(
+      '<p>Hi</p><a href="https://evil.example" target="_blank" rel="noopener noreferrer">https://bank.example (https://evil.example)</a>',
+    );
   });
 
   it("sanitizes the text/html flavor like the preview", async () => {

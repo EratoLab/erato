@@ -100,7 +100,7 @@ interface AudioConversationalFeatureConfig {
   hesitationsByLanguage?: Partial<Record<string, string[]>>;
   /** The user can speak over the voice, and the voice yields. */
   talkOverVoice?: boolean;
-  /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
+  /** Speech over the voice that stops it, in milliseconds; 300 when omitted. */
   talkOverVoiceMinSpeechMs?: number;
 }
 

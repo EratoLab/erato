@@ -17,6 +17,7 @@ import {
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
 
 import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
+import type * as EratoLibrary from "@erato/frontend/library";
 
 // The renderer's collaborators are mocked at the seams the tests steer:
 // the artifact + chat snapshot (what AddinChat stamps), the current Outlook
@@ -35,12 +36,15 @@ const mockComposeSelection = vi.fn(() => ({
   sourceProperty: "body",
 }));
 
+const realLibrary = await vi.hoisted(() =>
+  vi.importActual<typeof EratoLibrary>("@erato/frontend/library"),
+);
+
 vi.mock("@erato/frontend/library", async () => ({
-  sanitizeHtmlPreview: (html: string) => html,
+  sanitizeHtmlPreview: realLibrary.sanitizeHtmlPreview,
+  emailDraftHtmlToText: realLibrary.emailDraftHtmlToText,
   copyEmailToClipboard: (...args: unknown[]) =>
     Promise.resolve(mockCopyEmailToClipboard(...args)),
-  htmlToPlainText: (html: string) =>
-    new DOMParser().parseFromString(html, "text/html").body.textContent ?? "",
   useChatContext: () => mockUseChatContext(),
   ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
     () => mockUseChatContext(),
@@ -531,6 +535,33 @@ describe("OutlookEratoEmailRenderer — selection rewrite target", () => {
       await screen.findByRole("button", { name: "Done!" }),
     ).toBeInTheDocument();
     expect(setSelectedDataAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an HTML draft formatted and inserts it as clean text into a plain-text body", async () => {
+    const { setSelectedDataAsync } = primeCompose({
+      liveSelection: { data: "", sourceProperty: "body" },
+    });
+    const { container } = render(
+      <OutlookEratoEmailRenderer
+        content={
+          '<p>Hi <b>Anna</b>,</p><ul><li>one</li></ul><img src="https://x.example/p.gif">'
+        }
+        isHtml
+      />,
+    );
+
+    expect(container.querySelector("b")).toHaveTextContent("Anna");
+    expect(container.querySelector("img")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Insert at Cursor" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Done!" }),
+    ).toBeInTheDocument();
+    expect(setSelectedDataAsync).toHaveBeenCalledWith(
+      "Hi Anna,\n\n- one",
+      { coercionType: Office.CoercionType.Text },
+      expect.any(Function),
+    );
   });
 
   it("keeps Replace Selection for results that carry no rewrite target", async () => {

@@ -44,3 +44,16 @@ function isHostShell(value: unknown): value is HostShell {
     typeof shell.on === "function"
   );
 }
+
+/** Where a sheet points on a wide screen: the element, in CSS pixels. */
+export interface ShellAnchor {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function shellAnchor(element: Element): ShellAnchor {
+  const { x, y, width, height } = element.getBoundingClientRect();
+  return { x, y, width, height };
+}

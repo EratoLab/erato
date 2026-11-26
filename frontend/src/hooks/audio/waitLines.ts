@@ -9,6 +9,7 @@ import { onMicrophoneOpened, takeSpeechEnd } from "./speechEnd";
 import {
   afterReplyAudio,
   holdReplyAudio,
+  noteVoiceChunk,
   onSpeechInterrupted,
   releaseReplyAudio,
   useSpeechPlayback,
@@ -100,7 +101,7 @@ let aside: SaidLine | null = null;
 let busy = false;
 let idleWaiters: (() => void)[] = [];
 
-const queue = createPcmQueue(() => lineEnded());
+const queue = createPcmQueue(() => lineEnded(), noteVoiceChunk);
 
 const now = () => Date.now();
 
@@ -579,8 +580,18 @@ function playLine(
     }, AFTER_LINE_MS);
     if (current && turn === current) plan();
   };
-  for (const clip of clips) {
-    if (!queue.enqueue(context, clip.audio, clip.sampleRate)) {
+  // A tool line's chunks all carry its text: it is said from the first.
+  for (let at = 0; at < clips.length; at += 1) {
+    const clip = clips[at];
+    const says = at === 0 || clip.text !== clips[at - 1].text;
+    if (
+      !queue.enqueue(
+        context,
+        clip.audio,
+        clip.sampleRate,
+        says ? clip.text : undefined,
+      )
+    ) {
       queue.stop();
       lineEnded();
       return;

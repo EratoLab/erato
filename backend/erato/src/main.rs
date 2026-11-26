@@ -1,5 +1,4 @@
 use axum::Extension;
-use axum::handler::HandlerWithoutStateExt;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use eyre::{Report, WrapErr};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
@@ -8,7 +7,7 @@ use erato::config::AppConfig;
 use erato::deployment_identity::DeploymentIdentity;
 use erato::distribution::runtime::ReloadableAppState;
 use erato::frontend_environment::{
-    DeploymentVersion, build_frontend_registry, serve_files_with_script,
+    DeploymentVersion, build_frontend_registry, frontend_files_service,
 };
 use erato::models;
 use erato::services::configuration_reload_listener::ConfigurationReloadListener;
@@ -222,7 +221,7 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
                         ))
                     }),
                 )
-                .fallback_service(serve_files_with_script.into_service())
+                .fallback_service(frontend_files_service())
                 .layer(axum::middleware::from_fn_with_state(
                     state.clone(),
                     server::mcp_apps_sandbox_page::on_sandbox_hosts_only,

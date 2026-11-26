@@ -246,6 +246,36 @@ describe("sseClient fetch parser", () => {
     });
   });
 
+  it.each([
+    [
+      "text/html; charset=utf-8",
+      "<!DOCTYPE html><html><body>Bad gateway</body></html>",
+    ],
+    ["text/plain", "<html><body>Sign in</body></html>"],
+  ])(
+    "names the status, not the page, when a %s error page comes back",
+    async (contentType, page) => {
+      const onError = vi.fn();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 502,
+          statusText: "Bad Gateway",
+          headers: new Headers({ "content-type": contentType }),
+          text: vi.fn().mockResolvedValue(page),
+        }),
+      );
+
+      createSSEConnection("/api/test", { method: "POST", onError });
+      await waitForAsyncWork();
+
+      const error = onError.mock.calls[0][0] as FrontendRequestError;
+      expect(error.message).toBe("SSE request failed: 502 Bad Gateway");
+      expect(error.response?.body).toBe(page);
+    },
+  );
+
   it("uses the fetch-based SSE path for GET when auth headers are required", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

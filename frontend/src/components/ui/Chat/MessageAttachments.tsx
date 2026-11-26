@@ -13,6 +13,7 @@ import {
 import { GroupedFileAttachmentsPreview } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
 import { useResolvedFiles } from "@/hooks/files/useResolvedFiles";
 import { useStoredTeamsTranscriptIndexes } from "@/hooks/teams/useStoredTeamsTranscriptIndexes";
+import { downloadFile } from "@/lib/fileDownload";
 import { buildTeamsMessageAttachmentGroups } from "@/utils/teams/teamsAttachmentGroups";
 import { groupTeamsSentAttachments } from "@/utils/teams/teamsSentAttachmentGroups";
 import { teamsUploadDisplayName } from "@/utils/teams/teamsUploadName";
@@ -178,8 +179,17 @@ const renderDownloadableAttachment = (props: AttachmentTileProps) => {
         icon={<Download className="size-5" aria-hidden="true" />}
         aria-label={label}
         title={label}
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- window.open options
-        onClick={() => window.open(downloadUrl, "_blank", "noopener")}
+        onClick={(event) => {
+          downloadFile(
+            {
+              name: filename,
+              content: getFilePreviewUrl(file) ?? downloadUrl,
+            },
+            // eslint-disable-next-line lingui/no-unlocalized-strings -- window.open options
+            () => window.open(downloadUrl, "_blank", "noopener"),
+            event.currentTarget,
+          );
+        }}
       />
     </div>
   );

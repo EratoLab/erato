@@ -357,7 +357,7 @@ export function resolveOutlookActionFacet(
   // model to draft a reply (in an erato-email fence) and to propose
   // reply-vs-reply-all via the backend's `propose_client_action` tool when —
   // and only when — the user actually asks for a reply; other requests are
-  // answered normally. The reply form prefill is HTML, so request html output.
+  // answered normally. `body_format` marks the answer as an email draft.
   if (
     input.replyFromReadAvailable &&
     itemKind === "message" &&
