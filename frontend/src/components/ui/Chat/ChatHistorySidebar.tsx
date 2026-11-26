@@ -884,6 +884,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
         width: isSlimMode
           ? "var(--theme-layout-sidebar-slim-width)"
           : "var(--sidebar-width-override, var(--theme-layout-sidebar-width))",
+        // A large text size scales the rem width past a narrow screen; a
+        // strip beside the drawer stays to tap it closed.
+        maxWidth: "calc(100vw - 3rem)",
       }),
       [isSlimMode],
     );

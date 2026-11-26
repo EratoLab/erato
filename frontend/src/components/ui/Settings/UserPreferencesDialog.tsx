@@ -3,6 +3,7 @@ import { skipToken, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useTheme } from "@/components/providers/ThemeProvider";
 import {
   chatDetailQuery,
   fetchUpdateProfilePreferences,
@@ -99,6 +100,7 @@ export function UserPreferencesDialog({
   userProfile,
 }: UserPreferencesDialogProps) {
   const navigate = useNavigate();
+  const { followsSystemTextSize } = useTheme();
   const tabGroupId = useId();
   const queryClient = useQueryClient();
   const {
@@ -748,7 +750,7 @@ export function UserPreferencesDialog({
 
               <AppearanceTabContent />
 
-              <TextSizeSetting />
+              {followsSystemTextSize ? null : <TextSizeSetting />}
             </section>
 
             {audioInputSettingsEnabled ? (

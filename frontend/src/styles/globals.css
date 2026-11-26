@@ -2057,6 +2057,17 @@ body:has(.app-viewport) {
   font-size: 125%;
 }
 
+/* Inside an app the device's text size setting decides (ThemeProvider). */
+:root[data-text-size="system"] {
+  font-size: calc(100% * var(--system-text-scale, 1));
+}
+
+/* A smaller device text size would take the composer's field below 16px,
+   where iOS zooms the page into a field that gets focus. */
+:root[data-text-size="system"] [data-ui="chat-input-shell"] textarea {
+  font-size: max(16px, 1rem);
+}
+
 /* Surface for AnchoredPopover panels (dropdown menus, the chat "+" menu).
    Deliberately declared here, after @tailwind utilities and outside
    @layer components: the surface must outrank any utility a caller puts on the
