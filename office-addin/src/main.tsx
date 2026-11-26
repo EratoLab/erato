@@ -13,6 +13,7 @@ import {
   applyComponentKitRegistrations,
   installChunkLoadRecovery,
   installComposeDraftReloadKeeper,
+  showUpdateAvailableNotice,
 } from "@erato/frontend/library";
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
@@ -28,7 +29,7 @@ const TeamsApp = lazy(() => import("./teams/TeamsApp"));
 const WordApp = lazy(() => import("./word/WordApp"));
 
 injectFrontendEnv();
-installChunkLoadRecovery();
+installChunkLoadRecovery({ updateWaiting: showUpdateAvailableNotice });
 // Before the first render, so the composer mounts with the kept draft.
 installComposeDraftReloadKeeper();
 

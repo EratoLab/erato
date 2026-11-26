@@ -1,8 +1,11 @@
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
+
 import {
   EMPTY_COMPOSE_DRAFT,
   useComposeSessionStore,
 } from "./store/composeSessionStore";
 import { useMessageQueueStore } from "./store/messageQueueStore";
+import { NEW_CHAT_KEY } from "./useComposeSession";
 
 type ComposeReloadOptions = {
   selectedFacetIds: string[];
@@ -42,6 +45,8 @@ export function takeComposeReloadOptions(sessionId: string) {
 export function hasPendingComposeUploads(): boolean {
   return reloadHolds.size > 0;
 }
+
+registerWorkInProgress(hasPendingComposeUploads);
 
 type ComposeSessionState = ReturnType<typeof useComposeSessionStore.getState>;
 
@@ -88,16 +93,19 @@ export function buildComposeReloadSnapshot(
       ],
     };
   }
+  // A new chat's files belong to the chat created for its upload, which the
+  // page forgets on reload; sending them from a fresh chat would fail.
+  const newChatSessionId = sessionIdByChatKey[NEW_CHAT_KEY];
   // A download link opens the file without a session; the snapshot can
   // outlive the session, so it keeps only the proxied preview.
   for (const [sessionId, draft] of Object.entries(drafts)) {
     if (!draft?.attachedFiles.length) continue;
     drafts[sessionId] = {
       ...draft,
-      attachedFiles: draft.attachedFiles.map((file) => ({
-        ...file,
-        download_url: "",
-      })),
+      attachedFiles:
+        sessionId === newChatSessionId
+          ? []
+          : draft.attachedFiles.map((file) => ({ ...file, download_url: "" })),
     };
   }
   return {

@@ -4396,6 +4396,7 @@ msgstr "This page could not be shown. Reload to continue."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
 msgid "error.app.reload"
 msgstr "Reload"
 
@@ -11812,6 +11813,16 @@ msgstr "Preview at full size"
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Image Preview"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Reload when you are ready. Your unsent text is kept."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "A new version is available."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

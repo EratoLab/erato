@@ -1,8 +1,10 @@
+import { useEffect } from "react";
+
 import {
   isChunkLoadError,
-  isChunkReloadPending,
-  reloadOnceForChunkError,
+  recoverFromChunkLoadFailure,
 } from "@/lib/chunkLoadRecovery";
+import { reportDrawnWhenSettled } from "@/lib/shellStartScreen";
 
 import { Button } from "../Controls/Button";
 import { ErrorIcon } from "../icons";
@@ -13,7 +15,8 @@ export interface ErrorPanelProps {
   body: string;
   actionLabel: string;
   onAction: () => void;
-  error: unknown;
+  /** Offers to copy an error report; needs the feature config provider. */
+  error?: unknown;
 }
 
 /** What a catch shows in place of the part that failed. */
@@ -24,6 +27,8 @@ export function ErrorPanel({
   onAction,
   error,
 }: ErrorPanelProps) {
+  // A host app covering the start waits for this before it shows the page.
+  useEffect(() => reportDrawnWhenSettled(), []);
   return (
     <div
       className="flex size-full flex-col items-center justify-center space-y-4 p-8"
@@ -41,7 +46,7 @@ export function ErrorPanel({
       <Button onClick={onAction} variant="primary" className="mt-4">
         {actionLabel}
       </Button>
-      <CopyErrorButton error={error} />
+      {error !== undefined && <CopyErrorButton error={error} />}
     </div>
   );
 }
@@ -49,31 +54,19 @@ export function ErrorPanel({
 export interface CatchState {
   didCatch: boolean;
   error: unknown;
-  /** The page is reloading for a newer build; show no error meanwhile. */
-  reloading: boolean;
 }
 
-export const NOTHING_CAUGHT: CatchState = {
-  didCatch: false,
-  error: null,
-  reloading: false,
-};
+export const NOTHING_CAUGHT: CatchState = { didCatch: false, error: null };
 
 /** `getDerivedStateFromError` of the catches; free of side effects. */
 export function catchError(error: unknown): CatchState {
-  return {
-    didCatch: true,
-    error,
-    // A cancelled `vite:preloadError` leaves a lazy part without its module,
-    // which throws a technical error while the reload already runs.
-    reloading: isChunkLoadError(error) || isChunkReloadPending(),
-  };
+  return { didCatch: true, error };
 }
 
 /**
- * `componentDidCatch` of the catches: a code file that failed to load reloads
- * the page once; when the guard refuses, the error shows after all.
+ * `componentDidCatch` of the catches: a code file that failed to load checks
+ * for a newer build, which reloads the page when nothing is in progress.
  */
-export function reloadAfterCatch(error: unknown, showError: () => void): void {
-  if (isChunkLoadError(error) && !reloadOnceForChunkError()) showError();
+export function recoverAfterCatch(error: unknown): void {
+  if (isChunkLoadError(error)) void recoverFromChunkLoadFailure();
 }

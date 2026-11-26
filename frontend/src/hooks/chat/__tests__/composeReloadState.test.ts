@@ -90,6 +90,24 @@ describe("composer reload snapshot", () => {
     expect(raw).toContain("/preview/f");
   });
 
+  it("drops a new chat's files, which belong to a chat the reload forgets", () => {
+    const state = useComposeSessionStore.getState();
+    state.saveDraft(state.resolveSessionId("__new-chat__"), {
+      message: "With a file",
+      attachedFiles: [{ id: "f", filename: "a.pdf", download_url: "" }],
+      mentionedAssistants: [],
+    } as unknown as ComposeDraftState);
+
+    applyComposeReloadSnapshot(overReload());
+
+    const restored = useComposeSessionStore.getState();
+    const draft = restored.getDraft(
+      restored.sessionIdByChatKey["__new-chat__"]!,
+    );
+    expect(draft.message).toBe("With a file");
+    expect(draft.attachedFiles).toEqual([]);
+  });
+
   it("returns queued messages to drafts without enabling automatic submission", () => {
     const id = useComposeSessionStore.getState().resolveSessionId("chat-1");
     useComposeSessionStore.getState().saveDraft(id, {

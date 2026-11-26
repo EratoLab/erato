@@ -4396,6 +4396,7 @@ msgstr "Diese Seite konnte nicht angezeigt werden. Laden Sie neu, um fortzufahre
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
 msgid "error.app.reload"
 msgstr "Neu laden"
 
@@ -11812,6 +11813,16 @@ msgstr "Vorschau in voller Größe"
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Bildvorschau"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Laden Sie neu, wenn es passt. Ihr noch nicht gesendeter Text bleibt erhalten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Eine neue Version ist verfügbar."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

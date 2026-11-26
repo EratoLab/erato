@@ -1,14 +1,16 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  isChunkReloadPending,
-  resetChunkLoadRecoveryForTests,
-} from "@/lib/chunkLoadRecovery";
-import { connectivity } from "@/lib/connectivity/connectivity";
+import { recoverFromChunkLoadFailure } from "@/lib/chunkLoadRecovery";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { AppErrorBoundary } from "./AppErrorBoundary";
+
+vi.mock("@/lib/chunkLoadRecovery", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/chunkLoadRecovery")>()),
+  recoverFromChunkLoadFailure: vi.fn().mockResolvedValue("no-update"),
+}));
+const recover = vi.mocked(recoverFromChunkLoadFailure);
 
 function Thrower({ error }: { error: Error }): never {
   throw error;
@@ -18,17 +20,14 @@ const reload = vi.fn();
 
 describe("AppErrorBoundary", () => {
   beforeEach(() => {
-    sessionStorage.clear();
-    resetChunkLoadRecoveryForTests();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("location", { ...window.location, reload });
-    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
-    vi.spyOn(connectivity, "waitUntilOnline").mockResolvedValue(undefined);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    vi.mocked(console.error).mockRestore();
     reload.mockReset();
+    recover.mockClear();
   });
 
   it("shows a plain message with a reload button instead of a blank page", () => {
@@ -44,13 +43,14 @@ describe("AppErrorBoundary", () => {
     expect(
       screen.queryByText("Cannot read properties of undefined"),
     ).not.toBeInTheDocument();
+    expect(recover).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads once for a code file that failed to load and shows the start screen meanwhile", async () => {
+  it("checks for a newer build when a code file failed to load, and still shows the way out", () => {
     render(
-      <AppErrorBoundary reloadingFallback={<p>Starting</p>}>
+      <AppErrorBoundary>
         <Thrower
           error={
             new TypeError(
@@ -61,9 +61,7 @@ describe("AppErrorBoundary", () => {
       </AppErrorBoundary>,
     );
 
-    expect(isChunkReloadPending()).toBe(true);
-    expect(screen.getByText("Starting")).toBeInTheDocument();
-    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
+    expect(recover).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
   });
 });

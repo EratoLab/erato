@@ -1,9 +1,8 @@
 /**
- * Time limit for one upload request. Generous, because fetch reports no
- * progress: two minutes plus the time the files take at 20 KB/s, so a slow
- * but moving upload finishes while one on a connection that died silently
- * ends.
+ * Time limit for one upload request, to end one on a connection that died
+ * silently. Fetch reports no upload progress, so the limit has to allow the
+ * slowest line that still moves: five minutes plus the files at 4 KB/s.
  */
 export function uploadTimeLimitMs(totalBytes: number): number {
-  return 120_000 + Math.ceil(totalBytes / 20);
+  return 5 * 60_000 + Math.ceil(totalBytes / 4);
 }

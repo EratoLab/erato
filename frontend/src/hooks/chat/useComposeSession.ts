@@ -16,7 +16,7 @@ export interface ComposeDraftState {
 }
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- internal sentinel key, never user-facing
-const NEW_CHAT_KEY = "__new-chat__";
+export const NEW_CHAT_KEY = "__new-chat__";
 
 function chatIdKey(chatId: string | null | undefined): string {
   return chatId ?? NEW_CHAT_KEY;

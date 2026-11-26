@@ -205,7 +205,8 @@ describe("upload error texts", () => {
   });
 
   it("scales the upload time limit with the size", () => {
-    expect(uploadTimeLimitMs(0)).toBe(120_000);
-    expect(uploadTimeLimitMs(10 * 1024 * 1024)).toBeGreaterThan(600_000);
+    expect(uploadTimeLimitMs(0)).toBe(300_000);
+    // 10 MB at 4 KB/s: about 43 minutes on top.
+    expect(uploadTimeLimitMs(10 * 1024 * 1024)).toBeGreaterThan(2_900_000);
   });
 });

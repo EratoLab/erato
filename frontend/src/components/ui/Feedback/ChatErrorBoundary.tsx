@@ -10,7 +10,7 @@ import {
   catchError,
   ErrorPanel,
   NOTHING_CAUGHT,
-  reloadAfterCatch,
+  recoverAfterCatch,
   type CatchState,
 } from "./ErrorPanel";
 
@@ -65,7 +65,7 @@ export class ChatErrorBoundary extends Component<
   static getDerivedStateFromError = catchError;
 
   componentDidCatch(error: unknown) {
-    reloadAfterCatch(error, () => this.setState({ reloading: false }));
+    recoverAfterCatch(error);
   }
 
   private readonly resetErrorBoundary = () => {
@@ -75,7 +75,6 @@ export class ChatErrorBoundary extends Component<
 
   render() {
     if (this.state.didCatch) {
-      if (this.state.reloading) return null;
       return (
         <ChatErrorFallback
           error={this.state.error as Error}

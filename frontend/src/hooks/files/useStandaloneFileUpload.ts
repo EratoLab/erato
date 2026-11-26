@@ -15,6 +15,7 @@ import {
   UploadTooLargeError,
   UploadUnknownError,
   type UploadError,
+  isUploadTooLarge,
   toUploadError,
 } from "./errors";
 import { uploadTimeLimitMs } from "./uploadTimeLimit";
@@ -102,13 +103,15 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
         let result;
         try {
-          result = await sendWhenOnline(() =>
-            fetchUploadFile({
-              ...(variables as UploadFileVariables),
-              requestTimeoutMs: uploadTimeLimitMs(
-                files.reduce((sum, file) => sum + file.size, 0),
-              ),
-            }),
+          result = await sendWhenOnline(
+            () =>
+              fetchUploadFile({
+                ...(variables as UploadFileVariables),
+                requestTimeoutMs: uploadTimeLimitMs(
+                  files.reduce((sum, file) => sum + file.size, 0),
+                ),
+              }),
+            { mayResend: (error) => !isUploadTooLarge(error) },
           );
           logger.log("Standalone file upload successful, result:", result);
         } catch (uploadError) {

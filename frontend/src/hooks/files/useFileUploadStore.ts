@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 
+import { registerWorkInProgress } from "@/lib/chunkLoadRecovery";
 import { mergeUniqueFilesById } from "@/utils/file/mergeUniqueFilesById";
 
 import type { UploadError } from "./errors";
@@ -110,3 +111,5 @@ export const useFileUploadStore = create<FileUploadState>()(
     },
   ),
 );
+
+registerWorkInProgress(() => useFileUploadStore.getState().isUploading);

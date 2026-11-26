@@ -30,6 +30,7 @@ import {
   UploadUnknownError,
   UnsupportedFileTypeError,
   type UploadError,
+  isUploadTooLarge,
   toUploadError,
 } from "./errors";
 import { uploadTimeLimitMs } from "./uploadTimeLimit";
@@ -337,7 +338,12 @@ export function useFileDropzone({
                   filesToUpload.reduce((sum, file) => sum + file.size, 0),
                 ),
               }),
-            { signal, onWaitingForNetwork: setWaitingForNetwork },
+            {
+              signal,
+              onWaitingForNetwork: setWaitingForNetwork,
+              // A proxy that cuts off a too-large upload looks like a drop.
+              mayResend: (error) => !isUploadTooLarge(error),
+            },
           );
           logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {

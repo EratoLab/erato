@@ -4396,6 +4396,7 @@ msgstr "Cette page n’a pas pu être affichée. Rechargez pour continuer."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
 msgid "error.app.reload"
 msgstr "Recharger"
 
@@ -11812,6 +11813,16 @@ msgstr "Aperçu en taille réelle"
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Aperçu de l'image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Rechargez quand vous le souhaitez. Votre texte non envoyé est conservé."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Une nouvelle version est disponible."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

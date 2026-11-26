@@ -5,7 +5,7 @@ import {
   catchError,
   ErrorPanel,
   NOTHING_CAUGHT,
-  reloadAfterCatch,
+  recoverAfterCatch,
   type CatchState,
 } from "./ErrorPanel";
 
@@ -13,14 +13,12 @@ import type { ReactNode } from "react";
 
 export interface AppErrorBoundaryProps {
   children: ReactNode;
-  /** Shown while the page reloads to fetch a newer build. */
-  reloadingFallback?: ReactNode;
 }
 
 /**
- * The one catch above every page. A code file that fails to load after a
- * server update reloads the page once; anything else shows a plain message
- * with a reload button instead of a blank page.
+ * The one catch above every page: a plain message with a reload button
+ * instead of a blank page. A code file that failed to load also checks for a
+ * newer build, which reloads the page by itself.
  */
 export class AppErrorBoundary extends Component<
   AppErrorBoundaryProps,
@@ -31,19 +29,16 @@ export class AppErrorBoundary extends Component<
   static getDerivedStateFromError = catchError;
 
   componentDidCatch(error: unknown) {
-    reloadAfterCatch(error, () => this.setState({ reloading: false }));
+    recoverAfterCatch(error);
   }
 
   render() {
     if (!this.state.didCatch) {
       return this.props.children;
     }
-    if (this.state.reloading) {
-      return this.props.reloadingFallback ?? null;
-    }
     // `i18n._` with the English text, not the `t` macro: production builds
     // strip the macro's text, and an Office pane can fail before its
-    // translations load.
+    // translations load. No error report: it sits outside the providers.
     return (
       <ErrorPanel
         title={i18n._({
@@ -56,7 +51,6 @@ export class AppErrorBoundary extends Component<
         })}
         actionLabel={i18n._({ id: "error.app.reload", message: "Reload" })}
         onAction={() => window.location.reload()}
-        error={this.state.error}
       />
     );
   }

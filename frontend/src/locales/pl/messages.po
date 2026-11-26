@@ -4396,6 +4396,7 @@ msgstr "Nie udało się wyświetlić tej strony. Odśwież, aby kontynuować."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
+#: src/components/ui/Feedback/updateAvailableNotice.ts
 msgid "error.app.reload"
 msgstr "Odśwież"
 
@@ -11812,6 +11813,16 @@ msgstr "Podgląd w pełnym rozmiarze"
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Podgląd obrazu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.description"
+msgstr "Odśwież, gdy będzie Ci wygodnie. Niewysłany tekst zostanie zachowany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/updateAvailableNotice.ts
+msgid "update.available.title"
+msgstr "Dostępna jest nowa wersja."
 
 #. js-lingui-explicit-id
 #: src/hooks/files/errors.ts

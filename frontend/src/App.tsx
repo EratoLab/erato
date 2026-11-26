@@ -76,7 +76,7 @@ const NotFoundPage = () => (
 // Main App Shell (Global Layout - for things outside ChatLayout or other specific layouts)
 function App() {
   return (
-    <AppErrorBoundary reloadingFallback={<StartScreen />}>
+    <AppErrorBoundary>
       <ClientProviders>
         <Suspense fallback={<StartScreen />}>
           <Outlet />

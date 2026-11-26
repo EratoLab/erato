@@ -6,62 +6,118 @@ import {
 } from "@/lib/connectivity/connectivity";
 
 import {
-  CHUNK_RELOAD_GUARD_MS,
-  claimChunkReload,
+  claimReloadInto,
+  findNewerBuild,
   installChunkLoadRecovery,
   isChunkLoadError,
-  isChunkReloadPending,
-  resetChunkLoadRecoveryForTests,
+  recoverFromChunkLoadFailure,
+  registerWorkInProgress,
 } from "../chunkLoadRecovery";
 
-function fakeWindow(path = "/chat/abc") {
-  const target = new EventTarget();
+const RUNNING = `<html><head><script type="module" crossorigin src="/assets/app-old.js"></script></head><body></body></html>`;
+const NEWER = `<!doctype html><html><head><script type="module" crossorigin src="/assets/app-new.js"></script></head></html>`;
+
+function fakeWindow(running = RUNNING) {
   const reload = vi.fn();
+  const target = new EventTarget();
+  const doc = new DOMParser().parseFromString(running, "text/html");
   const win = Object.assign(target, {
-    location: { pathname: path, search: "?x=1", reload },
+    location: {
+      href: "https://erato.example/chat/abc?code=secret",
+      pathname: "/chat/abc",
+      reload,
+    },
+    document: doc,
     sessionStorage,
   }) as unknown as Window;
   return { win, reload };
 }
 
-function reachableMonitor(): ConnectivityMonitor {
+function servesPage(html: string) {
+  return vi.fn().mockResolvedValue(
+    new Response(html, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  );
+}
+
+function reachable(): ConnectivityMonitor {
   return createConnectivityMonitor({
     fetchImpl: vi.fn().mockResolvedValue(new Response(null)),
   });
 }
 
-function firePreloadError(win: Window) {
-  const event = new Event("vite:preloadError", { cancelable: true });
-  win.dispatchEvent(event);
-  return event;
-}
+const unregister: (() => void)[] = [];
 
 beforeEach(() => {
   sessionStorage.clear();
-  resetChunkLoadRecoveryForTests();
 });
 afterEach(() => {
-  vi.useRealTimers();
+  unregister.splice(0).forEach((stop) => stop());
 });
 
-describe("chunk load recovery", () => {
-  it("reloads once at the same address and keeps the error from the page", async () => {
+describe("update recovery after a code file failed to load", () => {
+  it("reloads once at the same address when the server runs a newer build", async () => {
     const { win, reload } = fakeWindow();
-    const uninstall = installChunkLoadRecovery(win, reachableMonitor());
 
-    const event = firePreloadError(win);
-
-    expect(event.defaultPrevented).toBe(true);
-    expect(isChunkReloadPending()).toBe(true);
-    // The query can carry secrets; only the path is stored.
-    expect(sessionStorage.getItem("erato.chunkLoadReload")).not.toContain(
-      "x=1",
+    await expect(
+      recoverFromChunkLoadFailure(win, reachable(), servesPage(NEWER)),
+    ).resolves.toBe("reloading");
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem("erato.updateReload")).not.toContain(
+      "secret",
     );
-    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-    uninstall();
   });
 
-  it("waits for the network before reloading, so the page does not land on the offline page", async () => {
+  it("leaves the page alone when the server still runs the same build", async () => {
+    const { win, reload } = fakeWindow();
+
+    await expect(
+      recoverFromChunkLoadFailure(win, reachable(), servesPage(RUNNING)),
+    ).resolves.toBe("no-update");
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("leaves the page alone when it cannot tell (sign-in page, no answer)", async () => {
+    const { win, reload } = fakeWindow();
+    const signIn = vi.fn().mockResolvedValue(
+      new Response("<html>sign in</html>", {
+        headers: { "content-type": "text/html" },
+      }),
+    );
+
+    await expect(findNewerBuild(win, signIn)).resolves.toBeNull();
+    await expect(
+      findNewerBuild(
+        win,
+        vi.fn().mockRejectedValue(new TypeError("Load failed")),
+      ),
+    ).resolves.toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("only says a newer version waits while work is in progress", async () => {
+    const { win, reload } = fakeWindow();
+    const updateWaiting = vi.fn();
+    unregister.push(installChunkLoadRecovery({ win, updateWaiting }));
+    unregister.push(registerWorkInProgress(() => true));
+
+    await expect(
+      recoverFromChunkLoadFailure(win, reachable(), servesPage(NEWER)),
+    ).resolves.toBe("update-waiting");
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateWaiting).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads into a build only once per tab, so a file that never loads cannot loop", () => {
+    expect(claimReloadInto(sessionStorage, "/assets/app-new.js")).toBe(true);
+    expect(claimReloadInto(sessionStorage, "/assets/app-new.js")).toBe(false);
+    expect(claimReloadInto(sessionStorage, "/assets/app-newer.js")).toBe(true);
+    expect(claimReloadInto(null, "/assets/app-new.js")).toBe(false);
+  });
+
+  it("checks only once the server answers again", async () => {
     let online = false;
     const monitor = createConnectivityMonitor({
       fetchImpl: vi.fn(() =>
@@ -70,51 +126,29 @@ describe("chunk load recovery", () => {
           : Promise.reject(new TypeError("Load failed")),
       ),
     });
-    const { win, reload } = fakeWindow();
-    const uninstall = installChunkLoadRecovery(win, monitor);
-
-    firePreloadError(win);
+    monitor.reportNetworkFailure();
     await vi.waitFor(() => expect(monitor.getStatus()).toBe("offline"));
-    expect(reload).not.toHaveBeenCalled();
+    const { win, reload } = fakeWindow();
+    const page = servesPage(NEWER);
+
+    const recovery = recoverFromChunkLoadFailure(win, monitor, page);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(page).not.toHaveBeenCalled();
 
     online = true;
     monitor.reportNetworkSuccess();
-    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-    uninstall();
-  });
-
-  it("lets the error through when the same address already reloaded a moment ago", async () => {
-    const { win, reload } = fakeWindow();
-    const uninstall = installChunkLoadRecovery(win, reachableMonitor());
-    firePreloadError(win);
-    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-    // The reloaded page is a fresh module instance.
-    resetChunkLoadRecoveryForTests();
-
-    const second = firePreloadError(win);
-
+    await expect(recovery).resolves.toBe("reloading");
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(second.defaultPrevented).toBe(false);
-    uninstall();
   });
 
-  it("allows another reload at another address or after the guard window", () => {
-    expect(claimChunkReload(sessionStorage, "/a", 1_000)).toBe(true);
-    expect(claimChunkReload(sessionStorage, "/a", 2_000)).toBe(false);
-    expect(claimChunkReload(sessionStorage, "/b", 3_000)).toBe(true);
-    expect(
-      claimChunkReload(sessionStorage, "/b", 3_000 + CHUNK_RELOAD_GUARD_MS),
-    ).toBe(true);
-  });
+  it("does not cancel Vite's error, so the part shows its own fallback", () => {
+    const { win } = fakeWindow();
+    unregister.push(installChunkLoadRecovery({ win, monitor: reachable() }));
+    const event = new Event("vite:preloadError", { cancelable: true });
 
-  it("never reloads without storage, so a broken file cannot loop the page", () => {
-    expect(claimChunkReload(null, "/a", 1_000)).toBe(false);
-    const throwing = {
-      getItem: () => {
-        throw new Error("blocked");
-      },
-    } as unknown as Storage;
-    expect(claimChunkReload(throwing, "/a", 1_000)).toBe(false);
+    win.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it("recognises the browsers' failed-import messages", () => {
