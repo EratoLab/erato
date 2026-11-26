@@ -92,7 +92,7 @@ cron = "0.16.0"
 
 # Dependencies: LLM / GenAI
 # Upstream v0.7.0-rc.4 + retained fork patches and Gemini streaming/replay ID fixes.
-genai = { version = "0.7.0-rc.4", git = "https://github.com/EratoLab/rust-genai.git", branch = "fork-2026-10-09" }
+genai = { version = "0.7.0-rc.4", git = "https://github.com/EratoLab/rust-genai.git", rev = "566216ba76c1d22862eb2b1465dc8ea5c5e11076" }
 tiktoken-rs = "=0.12.0"
 
 # Dependencies: MCP

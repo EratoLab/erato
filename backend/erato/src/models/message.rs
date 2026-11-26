@@ -359,6 +359,10 @@ pub struct BudgetTokenUsage {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
     pub total_tokens: u64,
+    /// Reported cache reads included in `prompt_tokens`. Omitted when unreported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub cached_input_tokens: Option<u64>,
     /// Breakdown of the completion tokens.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -375,13 +379,23 @@ impl BudgetTokenUsage {
             .completion_tokens_details
             .as_ref()
             .and_then(|details| count(details.reasoning_tokens));
-        prompt.or(completion).or(total).or(reasoning)?;
         let prompt_tokens = prompt.unwrap_or_default();
+        let cached_input_tokens = usage
+            .prompt_tokens_details
+            .as_ref()
+            .and_then(|details| count(details.cached_tokens))
+            .filter(|&cached| cached <= prompt_tokens);
+        prompt
+            .or(completion)
+            .or(total)
+            .or(reasoning)
+            .or(cached_input_tokens)?;
         let completion_tokens = completion.or(reasoning).unwrap_or_default();
         Some(Self {
             prompt_tokens,
             completion_tokens,
             total_tokens: total.unwrap_or(prompt_tokens + completion_tokens),
+            cached_input_tokens,
             reasoning_tokens: reasoning,
         })
     }
@@ -392,6 +406,13 @@ impl BudgetTokenUsage {
             .completion_tokens
             .saturating_add(other.completion_tokens);
         self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+        if let Some(cached) = other.cached_input_tokens {
+            self.cached_input_tokens = Some(
+                self.cached_input_tokens
+                    .unwrap_or_default()
+                    .saturating_add(cached),
+            );
+        }
         if let Some(reasoning) = other.reasoning_tokens {
             self.reasoning_tokens = Some(
                 self.reasoning_tokens
@@ -3711,6 +3732,40 @@ pub async fn regenerate_image_urls_in_content(
     }
 
     Ok(updated_content)
+}
+
+#[cfg(test)]
+mod budget_usage_tests {
+    use super::BudgetTokenUsage;
+    use genai::chat::{PromptTokensDetails, Usage};
+
+    #[test]
+    fn cache_reads_are_optional_and_bounded_by_prompt_tokens() {
+        for (prompt, cached, expected) in [
+            (Some(10), None, None),
+            (Some(10), Some(0), Some(0)),
+            (Some(10), Some(4), Some(4)),
+            (Some(10), Some(-1), None),
+            (Some(10), Some(11), None),
+            (None, Some(4), None),
+            (None, Some(0), Some(0)),
+        ] {
+            let usage = BudgetTokenUsage::from_chat(&Usage {
+                prompt_tokens: prompt,
+                prompt_tokens_details: Some(PromptTokensDetails {
+                    cached_tokens: cached,
+                    ..Default::default()
+                }),
+                completion_tokens: Some(3),
+                ..Default::default()
+            })
+            .unwrap();
+            assert_eq!(usage.cached_input_tokens, expected);
+            assert_eq!(usage.prompt_tokens, prompt.unwrap_or_default() as u64);
+            assert_eq!(usage.completion_tokens, 3);
+            assert_eq!(usage.total_tokens, usage.prompt_tokens + 3);
+        }
+    }
 }
 
 #[cfg(test)]

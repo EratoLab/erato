@@ -4708,11 +4708,14 @@ enum ApprovalContinuationProbe {
     SubmissionLimit,
 }
 
-fn with_budget_usage(mut actions: Vec<BodyAction>) -> Vec<BodyAction> {
-    let usage = json!({
+fn with_budget_usage(mut actions: Vec<BodyAction>, cached_input: Option<u64>) -> Vec<BodyAction> {
+    let mut usage = json!({
         "choices": [],
         "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18}
     });
+    if let Some(cached) = cached_input {
+        usage["usage"]["prompt_tokens_details"] = json!({"cached_tokens": cached});
+    }
     actions.insert(
         actions.len() - 1,
         BodyAction::Bytes(format!("data: {usage}\n\n").into()),
@@ -4765,9 +4768,10 @@ async fn continuestream_resumes_a_parked_tool_approval(
             } else {
                 mock_llm_sse_response(
                     then,
-                    with_budget_usage(build_openai_text_streaming_response(&[
-                        "APPROVAL-CONTINUED-ANSWER",
-                    ])),
+                    with_budget_usage(
+                        build_openai_text_streaming_response(&["APPROVAL-CONTINUED-ANSWER"]),
+                        None,
+                    ),
                 );
             }
         });
@@ -4779,10 +4783,13 @@ async fn continuestream_resumes_a_parked_tool_approval(
             .matcher(BodyContainsMatcher::new(&[], &[TOOL_RESULT]));
         mock_llm_sse_response(
             then,
-            with_budget_usage(build_openai_tool_calls_streaming_response(&[
-                ("call_read", "read_approval_fixture", json!({})),
-                ("call_probe", "publish_approval_probe", json!({})),
-            ])),
+            with_budget_usage(
+                build_openai_tool_calls_streaming_response(&[
+                    ("call_read", "read_approval_fixture", json!({})),
+                    ("call_probe", "publish_approval_probe", json!({})),
+                ]),
+                Some(4),
+            ),
         );
     });
 
@@ -4799,6 +4806,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
         .unwrap()
         .model_capabilities;
     rates.cost_input_tokens_per_1m = Some(1_000_000.0);
+    rates.cost_cached_input_tokens_per_1m = Some(500_000.0);
     rates.cost_output_tokens_per_1m = Some(2_000_000.0);
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
@@ -4866,13 +4874,13 @@ async fn continuestream_resumes_a_parked_tool_approval(
         .expect("Expected the parked assistant message");
     assert_eq!(
         parked.generation_metadata.as_ref().unwrap()["budget_usage"]["mock-llm"],
-        json!({"prompt_tokens": 21, "completion_tokens": 7, "total_tokens": 28})
+        json!({"prompt_tokens": 21, "completion_tokens": 7, "total_tokens": 28, "cached_input_tokens": 4})
     );
     assert_eq!(
         parked.raw_message["content"][0]["budget_usage"]["mock-llm"],
-        json!({"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10})
+        json!({"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10, "cached_input_tokens": 0})
     );
-    assert_eq!(budget_spending(&server).await, 35.0);
+    assert_eq!(budget_spending(&server).await, 33.0);
     let approval_request = parked.raw_message["content"]
         .as_array()
         .unwrap()
@@ -5064,7 +5072,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
     // The decision names the approval it answered, whichever body carried it.
     assert_eq!(resumed_content[2]["approval_id"], probe_id);
     assert_eq!(resumed_content[3]["status"], "success");
-    let tool_usage = json!({"prompt_tokens": 25, "completion_tokens": 0, "total_tokens": 25});
+    let tool_usage = json!({"prompt_tokens": 25, "completion_tokens": 0, "total_tokens": 25, "cached_input_tokens": 6});
     assert_eq!(
         resumed_content[3]["budget_usage"],
         json!({"Mock/v1": tool_usage})
@@ -5081,12 +5089,12 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(
         metadata["budget_usage"],
         json!({
-            "mock-llm": {"prompt_tokens": 32, "completion_tokens": 14, "total_tokens": 46},
+            "mock-llm": {"prompt_tokens": 32, "completion_tokens": 14, "total_tokens": 46, "cached_input_tokens": 4},
             "Mock/v1": tool_usage
         })
     );
     assert_eq!(metadata["used_total_tokens"], 5);
-    assert_eq!(budget_spending(&server).await, 70.0);
+    assert_eq!(budget_spending(&server).await, 68.0);
     server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -5096,7 +5104,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
         }))
         .await
         .assert_status(http::StatusCode::CONFLICT);
-    assert_eq!(budget_spending(&server).await, 70.0);
+    assert_eq!(budget_spending(&server).await, 68.0);
 
     let copy = server
         .post("/api/v1beta/me/chats")
@@ -5114,27 +5122,45 @@ async fn continuestream_resumes_a_parked_tool_approval(
         .unwrap()
         .unwrap();
     assert_eq!(copied_message.raw_message, resumed.raw_message);
-    assert_eq!(budget_spending(&server).await, 70.0);
+    assert_eq!(budget_spending(&server).await, 68.0);
 
     app_state.config.budget.model_rates.insert(
         "Mock/v1".into(),
         erato::config::BudgetModelRate {
             cost_input_tokens_per_1m: 3_000_000.0,
+            cost_cached_input_tokens_per_1m: None,
             cost_output_tokens_per_1m: 4_000_000.0,
         },
     );
+    assert_eq!(budget_spending(&app_server(app_state.clone())).await, 143.0);
+    app_state
+        .config
+        .budget
+        .model_rates
+        .get_mut("Mock/v1")
+        .unwrap()
+        .cost_cached_input_tokens_per_1m = Some(0.0);
     let summary = budget_response(&app_server(app_state.clone())).await;
     assert!(summary.get("user_settings").is_none());
-    assert_eq!(summary["current_spending"], 145.0);
+    assert_eq!(summary["current_spending"], 125.0);
     app_state.config.budget.frontend_tab.enabled = true;
-    let details = budget_response(&app_server(app_state)).await;
+    let details = budget_response(&app_server(app_state.clone())).await;
     assert_eq!(details["current_spending"], summary["current_spending"]);
     let models = details["user_settings"]["models"].as_array().unwrap();
     let model_spend: f64 = models
         .iter()
         .filter_map(|model| model["spending"].as_f64())
         .sum();
-    assert_eq!(model_spend, 145.0);
+    assert_eq!(model_spend, 125.0);
+    app_state.config.budget.model_rates.insert(
+        "mock-llm".into(),
+        erato::config::BudgetModelRate {
+            cost_input_tokens_per_1m: 1_000_000.0,
+            cost_cached_input_tokens_per_1m: None,
+            cost_output_tokens_per_1m: 2_000_000.0,
+        },
+    );
+    assert_eq!(budget_spending(&app_server(app_state)).await, 127.0);
     let mut row_display = approval_request["display"].clone();
     assert!(row_display["description"].is_string());
     row_display.as_object_mut().unwrap().remove("description");

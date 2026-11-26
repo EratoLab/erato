@@ -13169,6 +13169,10 @@ pub struct ModelCapabilities {
     // Price per 1 million input tokens (unit-less)
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub cost_input_tokens_per_1m: Option<f64>,
+    /// Optional price per 1 million cache-read input tokens in the budget currency.
+    #[serde(default, deserialize_with = "deserialize_cached_input_rate")]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_cached_input_tokens_per_1m: Option<f64>,
     // Price per 1 million output tokens (unit-less)
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub cost_output_tokens_per_1m: Option<f64>,
@@ -13198,6 +13202,7 @@ impl Default for ModelCapabilities {
             supports_verbosity: false,
             supports_strict_tool_calling: false,
             cost_input_tokens_per_1m: None,
+            cost_cached_input_tokens_per_1m: None,
             cost_output_tokens_per_1m: None,
         }
     }
@@ -13318,6 +13323,9 @@ pub struct BudgetModelRate {
     /// Price per 1 million prompt tokens in the budget currency.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub cost_input_tokens_per_1m: f64,
+    /// Optional price per 1 million cache-read input tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_cached_input_tokens_per_1m: Option<f64>,
     /// Price per 1 million completion tokens in the budget currency.
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub cost_output_tokens_per_1m: f64,
@@ -13341,6 +13349,19 @@ fn default_warn_threshold() -> f64 {
 
 fn default_budget_period_days() -> u32 {
     30
+}
+
+fn deserialize_cached_input_rate<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let rate = Option::<f64>::deserialize(deserializer)?;
+    if rate.is_some_and(|cost| !cost.is_finite() || cost < 0.0) {
+        return Err(de::Error::custom(
+            "cost_cached_input_tokens_per_1m must be finite and nonnegative",
+        ));
+    }
+    Ok(rate)
 }
 
 impl BudgetConfig {
@@ -13383,8 +13404,9 @@ impl BudgetConfig {
                 rate.cost_input_tokens_per_1m,
                 rate.cost_output_tokens_per_1m,
             ]
-            .iter()
-            .any(|cost| !cost.is_finite() || *cost < 0.0)
+            .into_iter()
+            .chain(rate.cost_cached_input_tokens_per_1m)
+            .any(|cost| !cost.is_finite() || cost < 0.0)
             {
                 return Err(eyre!(
                     "Budget rates for '{identifier}' must be finite and nonnegative"
@@ -13425,6 +13447,7 @@ mod budget_config_tests {
                 r#"
                 [model_rates."Deployment/v1.2"]
                 cost_input_tokens_per_1m = 1.0
+                cost_cached_input_tokens_per_1m = 0.0
                 cost_output_tokens_per_1m = 2.0
                 "#,
                 FileFormat::Toml,
@@ -13437,7 +13460,41 @@ mod budget_config_tests {
             config.model_rates["Deployment/v1.2"].cost_output_tokens_per_1m,
             2.0
         );
+        assert_eq!(
+            config.model_rates["Deployment/v1.2"].cost_cached_input_tokens_per_1m,
+            Some(0.0)
+        );
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn invalid_cached_input_rates_are_rejected() {
+        for cost in [-1.0, f64::INFINITY, f64::NAN] {
+            let config = BudgetConfig {
+                model_rates: HashMap::from([(
+                    "deployment".into(),
+                    BudgetModelRate {
+                        cost_input_tokens_per_1m: 1.0,
+                        cost_output_tokens_per_1m: 2.0,
+                        cost_cached_input_tokens_per_1m: Some(cost),
+                    },
+                )]),
+                ..Default::default()
+            };
+            assert!(config.validate().is_err());
+        }
+
+        for literal in ["-1.0", "inf", "nan"] {
+            let config = Config::builder()
+                .add_source(File::from_str(
+                    &format!("cost_cached_input_tokens_per_1m = {literal}"),
+                    FileFormat::Toml,
+                ))
+                .build()
+                .unwrap();
+            let error = config.try_deserialize::<ModelCapabilities>().unwrap_err();
+            assert!(error.to_string().contains("finite and nonnegative"));
+        }
     }
 }
 

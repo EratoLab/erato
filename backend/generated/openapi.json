@@ -7623,6 +7623,12 @@
           "total_tokens"
         ],
         "properties": {
+          "cached_input_tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Reported cache reads included in `prompt_tokens`. Omitted when unreported.",
+            "minimum": 0
+          },
           "completion_tokens": {
             "type": "integer",
             "format": "int64",

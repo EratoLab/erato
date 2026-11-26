@@ -1732,6 +1732,7 @@ supports_audio_input = false
 supports_verbosity = false
 supports_strict_tool_calling = false
 cost_input_tokens_per_1m = 5.0
+cost_cached_input_tokens_per_1m = 1.0
 cost_output_tokens_per_1m = 15.0
 ```
 
@@ -1745,6 +1746,7 @@ cost_output_tokens_per_1m = 15.0
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_verbosity */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.supports_strict_tool_calling */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_cached_input_tokens_per_1m */}
 {/* erato_toml_config_key: chat_providers.providers.<provider-id>.model_capabilities.cost_output_tokens_per_1m */}
 
 - **`context_size_tokens`** _(default: 1000000)_ - Maximum number of tokens that may be provided to the model including input messages, system prompt, and files
@@ -1756,6 +1758,7 @@ cost_output_tokens_per_1m = 15.0
 - **`supports_verbosity`** _(default: false)_ - Whether the model supports providing a verbosity parameter (for future support of advanced models)
 - **`supports_strict_tool_calling`** _(default: false)_ - Opt this model/endpoint into native strict arguments for configured client submissions. Currently supported by the OpenAI-compatible Chat Completions and Responses adapters. Other adapters retain local schema validation and bounded corrections. Set this only after verifying the endpoint's support; it is not inferred from the model name.
 - **`cost_input_tokens_per_1m`** _(optional)_ - Price per 1 million input tokens. Set to `0.0` for free input tokens.
+- **`cost_cached_input_tokens_per_1m`** _(optional)_ - Price per 1 million input tokens the provider reports as cache reads. An omitted rate uses the regular input price. Set it to `0.0` for free cache reads.
 - **`cost_output_tokens_per_1m`** _(optional)_ - Price per 1 million output tokens. Set to `0.0` for free output tokens.
 
 If not explicitly configured, all capabilities default to conservative values (large context window, no special features, no cost tracking).
@@ -8690,6 +8693,7 @@ enabled = true
 
 {/* erato_toml_config_key: budget.model_rates */}
 {/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_input_tokens_per_1m */}
+{/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_cached_input_tokens_per_1m */}
 {/* erato_toml_config_key: budget.model_rates.<model-identifier>.cost_output_tokens_per_1m */}
 
 Set `cost_input_tokens_per_1m` and `cost_output_tokens_per_1m` for a model or
@@ -8698,10 +8702,20 @@ or the exact `model_identifier` reported by the MCP server. A chat provider ID
 and an MCP model identifier that match share a rate. Use distinct identifiers
 for deployments with different rates.
 
-Chat provider IDs fall back to their rates in `model_capabilities` when no
-explicit budget rate exists. Erato records reported usage even when it has no
-rate. The Budget tab marks the spending total as partial when usage in the
-window is missing prices. Adding a rate applies it to existing usage in the window.
+An exact `budget.model_rates` entry supplies all rates for that identifier.
+Without an entry, chat provider IDs use their rates in `model_capabilities`.
+In either table, set the optional `cost_cached_input_tokens_per_1m` rate to
+price reported cache reads separately. The rate must be finite and nonnegative.
+Use `0.0` for free cache reads. If the count or the rate is omitted, Erato
+charges the full input at the regular rate. Erato records reported usage even
+when it has no rate. The Budget tab marks the spending total as partial when
+usage in the window is missing prices. Adding a rate applies it to existing
+usage in the window.
+
+MCP servers can report `cached_input_tokens` in the `chat.erato/token_usage`
+metadata they return with a tool result. It is an optional nonnegative integer
+already included in `total_prompt_tokens`. Send `0` for a reported zero and
+omit the field when the model provider does not report a count.
 
 #### Complete Budget Configuration Example
 
@@ -8727,6 +8741,7 @@ api_key = "sk-your-key"
 
 [chat_providers.providers.main.model_capabilities]
 cost_input_tokens_per_1m = 5.0
+cost_cached_input_tokens_per_1m = 1.0
 cost_output_tokens_per_1m = 15.0
 
 [budget.model_rates."image-generation/v1"]
