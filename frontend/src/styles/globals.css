@@ -683,6 +683,28 @@ body {
         );
       }
 
+      .btn-geometry-icon-lg:where(:not([data-ui="chat-input-controls"] *)) {
+        width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+        height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+      }
+
+      .btn-geometry-lg:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+        min-width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+      }
+
       .modal-close-geometry {
         display: inline-flex;
         align-items: center;

@@ -78,7 +78,7 @@ export function AddinPinHintBanner({ onDismiss }: AddinPinHintBannerProps) {
       aria-live="polite"
       data-testid="addin-pin-hint-banner"
       data-ui="addin-pin-hint-banner"
-      className={`flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg py-2 ${clearsLeft ? "pl-10" : "pl-4"} ${clearsRight ? "pr-10" : "pr-4"} text-theme-warning-fg`}
+      className={`flex items-start gap-2 border-b border-theme-warning-border bg-theme-warning-bg py-2 ${clearsLeft ? "pl-10 touch-phone:pl-[calc(var(--touch-target-min)+0.75rem)]" : "pl-4"} ${clearsRight ? "pr-10 touch-phone:pr-[calc(var(--touch-target-min)+0.75rem)]" : "pr-4"} text-theme-warning-fg`}
     >
       <PinIcon className="mt-0.5 size-4 shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">

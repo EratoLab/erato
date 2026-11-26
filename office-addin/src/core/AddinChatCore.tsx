@@ -930,9 +930,10 @@ export function AddinChatCoreView({
           {TopLeftAccessory ? (
             // A kit accessory earns a header row and the trigger joins it in
             // flow, so neither can land on the other at any pane width.
-            // pr-12, not pr-10: the start-view toggle is 8px plus up to 36px.
+            // pr-12, not pr-10: the start-view toggle is 8px plus up to 36px,
+            // and up to the touch target on a phone-sized touch pane.
             <div
-              className={`flex min-w-0 items-center${hasStartViewToggle ? " pr-12" : ""}`}
+              className={`flex min-w-0 items-center${hasStartViewToggle ? " pr-12 touch-phone:pr-[calc(var(--touch-target-min)+0.75rem)]" : ""}`}
               data-ui="addin-chat-header"
             >
               {/* In flow beside the accessory, where the frame is all the
@@ -1013,7 +1014,7 @@ export function AddinChatCoreView({
                 // sits on the header's title; with a header row the trigger
                 // is in flow and needs no clearance.
                 <div
-                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10"}${hasStartViewToggle && !TopLeftAccessory ? " pr-10" : ""}`}
+                  className={`relative z-10 shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3${TopLeftAccessory ? "" : " pl-10 touch-phone:pl-[calc(var(--touch-target-min)+0.75rem)]"}${hasStartViewToggle && !TopLeftAccessory ? " pr-10 touch-phone:pr-[calc(var(--touch-target-min)+0.75rem)]" : ""}`}
                 >
                   {controller.chatHeader}
                 </div>

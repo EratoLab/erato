@@ -34,6 +34,8 @@ Typical "Notable changes" categories to copy & paste:
 
 **On a phone the composer is one line.** On a narrow touch screen "+", the text field and its buttons now share one line that floats as far from the screen's sides as from its bottom; the model is chosen in the "+" menu, which also shows how many tools are on. Its corners follow `radius.input` up to a capsule; a mouse, wider screens and desktop keep the current layout. [#1678](https://github.com/EratoLab/erato/pull/1678)
 
+**On a phone, controls, menus and text take iOS sizes.** On a narrow touch screen every button is at least 44 px, menu rows are 44 px with 17 px text, message text is 17 px, and form fields keep 16 px text so iOS does not zoom into them. Chat rows in the sidebar show the title and the time, and send is the composer's one filled button. Menus opened from a button keep clear of the status bar and the home bar on every screen. A theme's larger sizes still win; desktop and a mouse or trackpad are unchanged.
+
 #### Bug fixes
 
 **The app fits a phone screen.** On a phone the app was taller than what the browser shows, so the bottom of the composer was cut off; it now takes the visible height. The page declares `viewport-fit=cover` and keeps its own content clear of system bars and display cutouts, so no bands remain around it, and while an on-screen keyboard is open the app and its dialogs take the space above the keyboard instead of sliding out of view. Inside the app, the page background behind everything is now `colors.shell.page` (it was `colors.background.primary`); it shows only where a screen paints no surface of its own.
