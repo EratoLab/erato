@@ -3,22 +3,25 @@ import { Trans } from "@lingui/react/macro";
 import { lazy, Suspense } from "react";
 import { Routes, Route, Link, Outlet, Navigate } from "react-router-dom";
 
+import {
+  assistantChatLayout,
+  assistantChatSpacePage,
+  chatLayout,
+} from "./app/startPreload";
 import { ClientProviders } from "./components/providers/ClientProviders";
-import { SpinnerIcon } from "./components/ui/Feedback/SpinnerIcon";
+import { StartScreen } from "./components/ui/Feedback/StartScreen";
 // These logic-only route sentinels must not suspend while a newly created chat
 // switches from /chat/new to /chat/:id; doing so hides the optimistic messages.
 import ChatDetailPage from "./pages/ChatDetailPage";
 import HomePage from "./pages/HomePage";
 import NewChatPage from "./pages/NewChatPage";
 
-const AssistantChatLayout = lazy(() => import("./layouts/AssistantChatLayout"));
+const AssistantChatLayout = assistantChatLayout.Route;
 const AssistantsLayout = lazy(() => import("./layouts/AssistantsLayout"));
-const ChatLayout = lazy(() => import("./layouts/ChatLayout"));
+const ChatLayout = chatLayout.Route;
 const ScheduledLayout = lazy(() => import("./layouts/ScheduledLayout"));
 const SearchLayout = lazy(() => import("./layouts/SearchLayout"));
-const AssistantChatSpacePage = lazy(
-  () => import("./pages/AssistantChatSpacePage"),
-);
+const AssistantChatSpacePage = assistantChatSpacePage.Route;
 const AssistantCreatePage = lazy(() => import("./pages/AssistantCreatePage"));
 const AssistantUsagePage = lazy(() => import("./pages/AssistantUsagePage"));
 const AssistantEditPage = lazy(() => import("./pages/AssistantEditPage"));
@@ -73,13 +76,7 @@ const NotFoundPage = () => (
 function App() {
   return (
     <ClientProviders>
-      <Suspense
-        fallback={
-          <div className="flex size-full items-center justify-center">
-            <SpinnerIcon size="lg" />
-          </div>
-        }
-      >
+      <Suspense fallback={<StartScreen />}>
         <Outlet />
       </Suspense>
     </ClientProviders>

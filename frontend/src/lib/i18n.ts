@@ -215,40 +215,58 @@ async function loadMergedMessages({
   frontendPublicBasePath: string;
   locale: string;
 }): Promise<Messages> {
-  const themeCustomerName = env().themeCustomerName;
-  const messageLayers = [
-    await loadCommonLocaleMessages(commonPublicBasePath, locale),
+  const { themeCustomerName, themeTranslationLocales } = env();
+  // All layers load at once; the order below is only the order they merge in.
+  const messageLayers = await Promise.all([
+    loadCommonLocaleMessages(commonPublicBasePath, locale),
     frontendPlatform !== "common"
-      ? await loadOptionalMessages(
+      ? loadOptionalMessages(
           `${frontendPublicBasePath}/locales/${locale}/messages.json`,
         )
       : null,
-    ...(themeCustomerName
-      ? [
-          await loadOptionalMessages(
-            `${commonPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
-          ),
-          frontendPlatform !== "common"
-            ? await loadOptionalMessages(
-                `${frontendPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
-              )
-            : null,
-        ]
-      : []),
-    ...(await loadComponentKitMessages(locale)),
-    await loadRuntimeTranslationMessages(commonPublicBasePath, locale),
-  ];
+    themeCustomerName && listedOrUnknown(themeTranslationLocales, locale)
+      ? loadOptionalMessages(
+          `${commonPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
+        )
+      : null,
+    themeCustomerName && frontendPlatform !== "common"
+      ? loadOptionalMessages(
+          `${frontendPublicBasePath}/custom-theme/${themeCustomerName}/locales/${locale}/messages.json`,
+        )
+      : null,
+    loadComponentKitMessages(locale),
+    loadRuntimeTranslationMessages(commonPublicBasePath, locale),
+  ]);
 
-  return messageLayers.reduce<Messages>(
-    (merged, messages) => (messages ? { ...merged, ...messages } : merged),
-    {},
-  );
+  return messageLayers
+    .flat()
+    .reduce<Messages>(
+      (merged, messages) => (messages ? { ...merged, ...messages } : merged),
+      {},
+    );
+}
+
+/** A server that lists the files it has spares the requests for missing ones;
+ * without a list (an older server, the desktop package) every file is tried. */
+function listedOrUnknown(
+  locales: readonly string[] | null | undefined,
+  locale: string,
+): boolean {
+  return !locales || locales.includes(locale);
 }
 
 async function loadRuntimeTranslationMessages(
   commonPublicBasePath: string,
   locale: string,
 ): Promise<Messages | null> {
+  const listed = env().translationOverrideLocales;
+  if (listed) {
+    return listed.includes(locale)
+      ? loadOptionalMessages(
+          `${commonPublicBasePath}/overrides/${encodeURIComponent(locale)}.json`,
+        )
+      : null;
+  }
   try {
     const indexResponse = await fetch(
       `${commonPublicBasePath}/overrides/index.json`,
