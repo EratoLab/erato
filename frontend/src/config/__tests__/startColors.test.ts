@@ -48,8 +48,9 @@ describe("index.html start colours", () => {
         matches: options.systemDark ?? false,
       });
       vi.stubGlobal("CSS", {
+        // Like a browser: any value holding var() passes the check.
         supports: (_property: string, value: string) =>
-          /^#[0-9a-f]+$/i.test(value),
+          /^#[0-9a-f]+$/i.test(value) || value.includes("var("),
       });
       (window as { THEME_START_COLORS?: unknown }).THEME_START_COLORS =
         options.colors;
@@ -83,6 +84,9 @@ describe("index.html start colours", () => {
         darkTheme.colors.shell.page,
       );
       expect(run({ colors: { light: "red}body{display:none" } }).css).toContain(
+        defaultTheme.colors.shell.page,
+      );
+      expect(run({ colors: { light: "var(--brand-bg)" } }).css).toContain(
         defaultTheme.colors.shell.page,
       );
     });

@@ -48,7 +48,9 @@
           var given =
             window.THEME_START_COLORS && window.THEME_START_COLORS[key];
           var color =
-            typeof given === "string" && CSS.supports("color", given)
+            typeof given === "string" &&
+            given.indexOf("var(") < 0 &&
+            CSS.supports("color", given)
               ? given
               : defaults[key];
           document.documentElement.setAttribute("data-theme", key);

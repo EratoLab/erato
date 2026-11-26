@@ -242,6 +242,13 @@ const START_COLORS_MARKER = `style#${START_COLORS_STYLE_ID}`;
 const THEME_START_WAIT_MS = 3000;
 
 /**
+ * How long the start waits for the theme's text fonts once its style sheets
+ * have settled. Cached fonts arrive well within it; a large font on a slow
+ * network swaps in later (`font-display: swap`), which beats a later app.
+ */
+const THEME_FONT_WAIT_MS = 400;
+
+/**
  * Loads the fonts the applied theme sets for text and headings. A font loads
  * only once text uses it, and the start shows no text before the app: without
  * this the app's first frame would use the browser's stand-in font.
@@ -883,13 +890,22 @@ export function ThemeProvider({
   useEffect(() => {
     if (isThemeReady || !isThemeLoadSettled || !stylesheetsSettled) return;
     let cancelled = false;
-    void loadThemeFonts().then(() => {
+    const ready = () => {
       if (!cancelled) setIsThemeReady(true);
-    });
+    };
+    const timer = setTimeout(ready, THEME_FONT_WAIT_MS);
+    void loadThemeFonts().then(ready);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [isThemeReady, isThemeLoadSettled, stylesheetsSettled]);
+
+  // Shown before its theme arrived (the ceiling above), the app must not keep
+  // every surface in the page colour the start style forces.
+  useEffect(() => {
+    if (isThemeReady) document.querySelector(START_COLORS_MARKER)?.remove();
+  }, [isThemeReady]);
 
   // Layout effect: the attribute changes the root font-size, and a passive
   // effect would paint one frame at the old scale first.

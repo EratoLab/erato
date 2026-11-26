@@ -431,8 +431,11 @@ describe("ThemeProvider", () => {
     }
   });
 
-  it("shows the page after three seconds when the theme never answers", () => {
+  it("shows the page after three seconds when the theme never answers, without the start colour", () => {
     vi.useFakeTimers();
+    const start = document.createElement("style");
+    start.id = "erato-start-colors";
+    document.head.appendChild(start);
     try {
       (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(
         new Promise(() => {}),
@@ -448,10 +451,46 @@ describe("ThemeProvider", () => {
 
       act(() => vi.advanceTimersByTime(2900));
       expect(screen.getByText("waiting")).toBeInTheDocument();
+      expect(start.isConnected).toBe(true);
       act(() => vi.advanceTimersByTime(100));
       expect(screen.getByText("ready")).toBeInTheDocument();
+      expect(start.isConnected).toBe(false);
     } finally {
+      start.remove();
       vi.useRealTimers();
+    }
+  });
+
+  it("waits for slow theme fonts no longer than its font budget", async () => {
+    const load = vi.fn(() => new Promise<FontFace[]>(() => {}));
+    Object.defineProperty(document, "fonts", {
+      configurable: true,
+      value: { load },
+    });
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+    const Ready = () => (
+      <div>{useTheme().isThemeReady ? "ready" : "waiting"}</div>
+    );
+
+    try {
+      render(
+        <ThemeProvider>
+          <Ready />
+        </ThemeProvider>,
+      );
+      await waitFor(() => expect(load).toHaveBeenCalled());
+      const fontsAskedAt = Date.now();
+      expect(screen.getByText("waiting")).toBeInTheDocument();
+
+      expect(
+        await screen.findByText("ready", undefined, { timeout: 1500 }),
+      ).toBeInTheDocument();
+      expect(Date.now() - fontsAskedAt).toBeLessThan(1000);
+    } finally {
+      delete (document as { fonts?: unknown }).fonts;
     }
   });
 
