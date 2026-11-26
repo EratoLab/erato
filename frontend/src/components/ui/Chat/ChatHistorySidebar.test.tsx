@@ -1577,7 +1577,20 @@ describe("ChatHistorySidebar", () => {
       }
       // Holding still before lifting: a slow release, not a flick.
       touch(target, "touchend", toX, y, ms + 200);
+      runFrames(2);
       return last!;
+    };
+    // The page switches two frames after the release; frames run on demand.
+    let frameQueue = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    const runFrames = (count: number) => {
+      for (let frame = 0; frame < count; frame += 1) {
+        const due = [...frameQueue.values()];
+        frameQueue = new Map();
+        act(() => {
+          due.forEach((callback) => callback(0));
+        });
+      }
     };
 
     beforeEach(() => {
@@ -1591,6 +1604,17 @@ describe("ChatHistorySidebar", () => {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
         DOMRect.fromRect({ width: DRAWER_WIDTH, height: 800 }),
       );
+      frameQueue = new Map();
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation(
+        (callback) => {
+          frameId += 1;
+          frameQueue.set(frameId, callback);
+          return frameId;
+        },
+      );
+      vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+        frameQueue.delete(id);
+      });
     });
     afterEach(() => {
       delete window.ERATO_SHELL;
@@ -1610,9 +1634,110 @@ describe("ChatHistorySidebar", () => {
 
       touch(edge, "touchmove", 185, 400, 600);
       touch(edge, "touchend", 185, 400, 800);
+      runFrames(2);
+
+      expect(sidebarMode()).toBe("expanded");
+      await waitFor(() => expect(drawer().style.transform).toBe(""));
+    });
+
+    it("starts the slide before the page switches", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+      const scrim = screen.getByTestId("sidebar-scrim");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+
+      expect(drawer().style.transform).toBe("translateX(0px)");
+      expect(scrim.style.opacity).toBe("1");
+      expect(scrim.style.pointerEvents).toBe("auto");
+      expect(sidebarMode()).toBe("hidden");
+
+      runFrames(1);
+      expect(sidebarMode()).toBe("hidden");
+      runFrames(1);
+      expect(sidebarMode()).toBe("expanded");
+      // The slide finishes on its inline position, then hands over.
+      expect(drawer().style.transform).toBe("translateX(0px)");
+      await waitFor(() => {
+        expect(drawer().style.transform).toBe("");
+        expect(scrim.style.pointerEvents).toBe("");
+      });
+    });
+
+    it("switches at once when a finger comes down during the slide", async () => {
+      await renderDrawer(false);
+
+      const edge = screen.getByTestId("sidebar-edge");
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+      touch(screen.getByTestId("sidebar-scrim"), "touchstart", 350, 400, 820);
+
+      expect(sidebarMode()).toBe("expanded");
+    });
+
+    it("does not undo a switch the page made during the slide", async () => {
+      await renderDrawer(true);
+      const target = drawer();
+
+      touch(target, "touchstart", 250, 400, 0);
+      touch(target, "touchmove", 60, 400, 600);
+      touch(target, "touchend", 60, 400, 800);
+      fireEvent.click(screen.getByTestId("sidebar-scrim"));
+      expect(sidebarMode()).toBe("hidden");
+
+      runFrames(2);
+      expect(sidebarMode()).toBe("hidden");
+    });
+
+    it("hands the drawer back to the page when it is turned back during the slide", async () => {
+      await renderDrawer(true);
+      const scrim = screen.getByTestId("sidebar-scrim");
+
+      drag(drawer(), 250, 60, 600);
+      expect(sidebarMode()).toBe("hidden");
+      expect(drawer().style.opacity).toBe("0");
+
+      fireEvent.click(screen.getByRole("button", { name: "expand sidebar" }));
 
       expect(sidebarMode()).toBe("expanded");
       expect(drawer().style.transform).toBe("");
+      expect(drawer().style.opacity).toBe("");
+      expect(drawer().style.pointerEvents).toBe("");
+      expect(scrim.style.pointerEvents).toBe("");
+    });
+
+    it("leaves nothing behind once a close has slid out", async () => {
+      await renderDrawer(true);
+      const scrim = screen.getByTestId("sidebar-scrim");
+
+      drag(drawer(), 250, 60, 600);
+
+      await waitFor(() => {
+        expect(drawer().style.transform).toBe("");
+        expect(drawer().style.opacity).toBe("");
+        expect(drawer().style.pointerEvents).toBe("");
+        expect(scrim.style.opacity).toBe("");
+        expect(scrim.style.pointerEvents).toBe("");
+      });
+      // A later touch elsewhere does not switch the page again.
+      fireEvent.click(screen.getByRole("button", { name: "expand sidebar" }));
+      touch(document.body, "touchstart", 350, 400, 2000);
+      expect(sidebarMode()).toBe("expanded");
+    });
+
+    it("drops the pending switch when the drawer goes away", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+      cleanup();
+
+      expect(frameQueue.size).toBe(0);
     });
 
     it("springs back from a slow pull short of half", async () => {
@@ -1657,6 +1782,7 @@ describe("ChatHistorySidebar", () => {
       touch(edge, "touchmove", 40, 400, 40);
       touch(edge, "touchmove", 80, 400, 80);
       touch(edge, "touchend", 80, 400, 90);
+      runFrames(2);
 
       expect(sidebarMode()).toBe("expanded");
     });

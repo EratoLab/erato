@@ -90,19 +90,42 @@ export function attachDrawerSwipe(
   host: DrawerSwipeHost,
 ): DrawerSwipe {
   let gesture: Gesture | null = null;
-  // A drag that ended on the other side keeps its inline position until the
-  // page has switched state, so the stylesheet never pulls it back meanwhile.
-  let releasePending = false;
+  // A drag that ends on the other side slides the drawer with inline styles
+  // and switches the page's state a little later. The inline styles stay
+  // until both the slide and the switch are done: the stylesheet's transform
+  // is written differently, and handing over mid-slide would restart it.
+  let sliding = false;
+  let waitingForPage = false;
+  let slideTarget: boolean | null = null;
+  let switchFrame: number | undefined;
+  let pendingSwitch: (() => void) | null = null;
   let settleTimer: number | undefined;
 
   const clearPosition = () => {
     drawer.style.transform = "";
     drawer.style.opacity = "";
+    drawer.style.pointerEvents = "";
     scrim.style.opacity = "";
+    scrim.style.pointerEvents = "";
   };
   const clearTransition = () => {
     drawer.style.transition = "";
     scrim.style.transition = "";
+  };
+  const tidy = () => {
+    if (!sliding && !waitingForPage && !pendingSwitch) {
+      slideTarget = null;
+      clearPosition();
+      clearTransition();
+    }
+  };
+  const cancelSwitch = () => {
+    window.cancelAnimationFrame(switchFrame ?? 0);
+    switchFrame = undefined;
+    if (pendingSwitch) {
+      document.removeEventListener("touchstart", pendingSwitch, true);
+      pendingSwitch = null;
+    }
   };
 
   const place = (progress: number, width: number) => {
@@ -111,11 +134,11 @@ export function attachDrawerSwipe(
     scrim.style.opacity = String(progress);
   };
 
-  const settle = (open: boolean, progress: number) => {
+  const settle = (open: boolean, ended: Gesture) => {
     const reduceMotion =
       typeof window.matchMedia === "function" &&
       window.matchMedia(REDUCED_MOTION_QUERY).matches;
-    const remaining = Math.abs((open ? 1 : 0) - progress);
+    const remaining = Math.abs((open ? 1 : 0) - ended.progress);
     const ms = reduceMotion
       ? 0
       : Math.round(SETTLE_MIN_MS + (SETTLE_MAX_MS - SETTLE_MIN_MS) * remaining);
@@ -123,25 +146,57 @@ export function attachDrawerSwipe(
     drawer.style.transition = `transform ${ms}ms ${SETTLE_EASING}, opacity ${ms}ms ${SETTLE_EASING}`;
 
     scrim.style.transition = `opacity ${ms}ms ${SETTLE_EASING}`;
+    cancelSwitch();
+    waitingForPage = false;
+    slideTarget = null;
+    sliding = true;
     window.clearTimeout(settleTimer);
-    settleTimer = window.setTimeout(clearTransition, ms + 50);
+    settleTimer = window.setTimeout(() => {
+      sliding = false;
+      tidy();
+    }, ms + 50);
 
     if (open === host.isOpen()) {
       clearPosition();
       return;
     }
-    releasePending = true;
-    if (open) {
-      host.onOpen();
-    } else {
-      host.onClose();
-    }
+    // The slide starts now. The page's switch costs a frame or two of work,
+    // and doing it here would hold the slide's first frame back.
+    place(open ? 1 : 0, ended.width);
+    drawer.style.opacity = open ? "1" : "0";
+    const pointerEvents = open ? "auto" : "none";
+    drawer.style.pointerEvents = pointerEvents;
+    scrim.style.pointerEvents = pointerEvents;
+    waitingForPage = true;
+    slideTarget = open;
+    const switchNow = () => {
+      cancelSwitch();
+      if (open === host.isOpen()) {
+        waitingForPage = false;
+        tidy();
+      } else if (open) {
+        host.onOpen();
+      } else {
+        host.onClose();
+      }
+    };
+    pendingSwitch = switchNow;
+    // A touch meanwhile meets the page already switched.
+    document.addEventListener("touchstart", switchNow, {
+      capture: true,
+      passive: true,
+    });
+    // A callback of one frame request runs in the frame that starts the
+    // slide, before it is drawn; the second runs once it is on screen.
+    switchFrame = window.requestAnimationFrame(() => {
+      switchFrame = window.requestAnimationFrame(switchNow);
+    });
   };
 
   const start = (opensFromHere: boolean) => (event: TouchEvent) => {
     if (event.touches.length !== 1) {
       if (gesture?.dragging) {
-        settle(gesture.startProgress === 1, gesture.progress);
+        settle(gesture.startProgress === 1, gesture);
       }
       gesture = null;
       return;
@@ -181,6 +236,8 @@ export function attachDrawerSwipe(
       }
       gesture.dragging = true;
       window.clearTimeout(settleTimer);
+      sliding = false;
+      slideTarget = null;
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
@@ -204,7 +261,7 @@ export function attachDrawerSwipe(
       return;
     }
     if (event.type === "touchcancel") {
-      settle(ended.startProgress === 1, ended.progress);
+      settle(ended.startProgress === 1, ended);
       return;
     }
     // No click on the row or the scrim under the lifted finger.
@@ -214,10 +271,7 @@ export function attachDrawerSwipe(
     if (lift) {
       ended.samples.push({ x: lift.clientX, t: event.timeStamp });
     }
-    settle(
-      settlesOpen(ended.progress, releaseVelocity(ended.samples)),
-      ended.progress,
-    );
+    settle(settlesOpen(ended.progress, releaseVelocity(ended.samples)), ended);
   };
 
   const targets: [HTMLElement, boolean][] = [
@@ -244,13 +298,24 @@ export function attachDrawerSwipe(
 
   return {
     openStateChanged: () => {
-      if (releasePending) {
-        releasePending = false;
-        clearPosition();
+      if (slideTarget !== null && host.isOpen() !== slideTarget) {
+        // Turned back during the slide (the button, the scrim): the page's
+        // own transition carries on from where the drawer is.
+        cancelSwitch();
+        window.clearTimeout(settleTimer);
+        sliding = false;
+        waitingForPage = false;
+        tidy();
+        return;
+      }
+      if (waitingForPage) {
+        waitingForPage = false;
+        tidy();
       }
     },
     detach: () => {
       removers.forEach((remove) => remove());
+      cancelSwitch();
       window.clearTimeout(settleTimer);
       clearPosition();
       clearTransition();
