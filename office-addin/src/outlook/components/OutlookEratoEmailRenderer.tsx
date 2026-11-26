@@ -231,13 +231,16 @@ export function OutlookEratoEmailRenderer({
       }
       setBusyAction(action);
       setStatus("inserting");
+      // Recorded before the form is open: the server's call arriving meanwhile must not open a
+      // second one.
+      const unmark = markOutlookFormOpened(artifact?.messageId, action);
       try {
         await openReplyForm(action, content, !!isHtml);
-        markOutlookFormOpened(artifact?.messageId, action);
         setOpenedAction(action);
         setStatus("done");
         scheduleStatusReset(2000);
       } catch (err) {
+        unmark();
         console.warn("Failed to open reply form:", err);
         showError(
           err instanceof ReplyBodyTooLargeError ? "tooLarge" : "reply",
@@ -334,7 +337,8 @@ export function OutlookEratoEmailRenderer({
                     : "secondary"
                 }
                 onClick={() => void handleReplyAction(action)}
-                disabled={isBusy}
+                // The server's call is opening this draft's reply; a click would open a second.
+                disabled={isBusy || ownProposal?.kind === "applying"}
               >
                 {busyAction === action
                   ? t({

@@ -14,7 +14,11 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../../test/mocks/outlook/mailbox";
-import { markOutlookFormOpened } from "../../utils/outlookProposalApply";
+import {
+  createOutlookProposalExecutor,
+  markOutlookFormOpened,
+  outlookFormOpened,
+} from "../../utils/outlookProposalApply";
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
 
 import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
@@ -414,6 +418,105 @@ describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", ()
     expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
       "a different email is open now",
     );
+  });
+
+  it("gives the way forward when the draft was too large to prefill", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "failed", reason: "too_large" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
+    );
+  });
+
+  it("turns the draft's own reply buttons off while the server's call opens the reply", () => {
+    show(proposed({ status: "in_progress" }));
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Opening the reply…",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reply All" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("keeps the reply buttons of another draft in the answer usable meanwhile", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed({ status: "in_progress" }),
+      ],
+      "An aside",
+    );
+
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("opens one form when the server's call arrives while the draft's own button still opens it", async () => {
+    let finish!: () => void;
+    mockOpenReplyForm.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+
+    const execute = createOutlookProposalExecutor("open_reply", () => ({
+      itemIdentity: () => "item-a",
+      message: () => ({
+        content: proposed() as EratoLibrary.ContentPart[],
+        artifact,
+        sendItemIdentity: undefined,
+        latest: true,
+      }),
+    }));
+    const answer = await execute(
+      {
+        proposal_call_id: "call-propose",
+        action: REPLY,
+        item_identity: "item-a",
+      },
+      {
+        toolCallId: `${artifact.messageId}.apply`,
+        messageId: artifact.messageId,
+        chatId: "chat-1",
+      },
+    );
+
+    expect(answer).toMatchObject({
+      result: { status: "applied", reason: "already_applied" },
+    });
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+  });
+
+  it("lets the server's call open the reply after the draft's own button failed to", async () => {
+    mockOpenReplyForm.mockRejectedValueOnce(new Error("host"));
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Failed to open the reply form.",
+    );
+    expect(outlookFormOpened(artifact.messageId, REPLY)).toBe(false);
   });
 
   it("follows the newest proposal once a change was asked for on the card", () => {

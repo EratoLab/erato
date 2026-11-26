@@ -3,9 +3,16 @@ import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
 import {
+  parseProposalApplyInput,
+  sameItem,
+} from "../../core/clientActions/proposalApply";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
+import {
   OUTLOOK_PROPOSAL_TOOLS,
   outlookAppointmentDraft,
   outlookEmailDraft,
+  outlookProposalBridge,
+  outlookReplyItem,
 } from "../utils/outlookProposalApply";
 import { getReadModeRecipientSummary } from "../utils/outlookReadReply";
 
@@ -68,14 +75,43 @@ function OutlookProposalCard({
   ) : (
     <ReplyNote
       replyAll={item.tool_name === OUTLOOK_PROPOSAL_TOOLS["outlook.reply_all"]}
+      draftItem={outlookReplyItem(
+        parseProposalApplyInput(item.input)?.itemIdentity,
+        outlookProposalBridge()?.message(messageId),
+      )}
     />
   );
   return <>{renderDefault({ note })}</>;
 }
 
-function ReplyNote({ replyAll }: { replyAll: boolean }) {
-  // Read from the email open now: the reply form takes its recipients from it.
-  const summary = getReadModeRecipientSummary();
+function ReplyNote({
+  replyAll,
+  draftItem,
+}: {
+  replyAll: boolean;
+  /** The email the draft was written for, when known. */
+  draftItem: string | undefined;
+}) {
+  const { itemIdentity } = useOutlookMailItem();
+  // Approving is refused while another email is open, so the card promises no reply to it.
+  if (draftItem && itemIdentity && draftItem !== itemIdentity)
+    return (
+      <p
+        className="text-xs text-theme-fg-secondary"
+        data-testid="outlook-proposal-other-email"
+      >
+        {t({
+          id: "officeAddin.emailRenderer.replyStaleItem",
+          message:
+            "This draft was written for a different email. Open that email again, or use Copy.",
+        })}
+      </p>
+    );
+  // The reply form takes its recipients from the email open now, so they are named only when
+  // that is known to be the email the draft was written for.
+  const summary = sameItem(draftItem, itemIdentity)
+    ? getReadModeRecipientSummary()
+    : null;
   const entries = summary
     ? [
         ...(summary.sender ? [summary.sender] : []),

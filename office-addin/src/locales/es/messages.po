@@ -606,12 +606,14 @@ msgstr "No se pudo abrir el formulario de respuesta. Asegúrate de que el correo
 #~ msgstr "Se abrió el formulario de respuesta"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Este borrador se redactó para otro correo. Vuelve a abrir ese correo o usa Copiar."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "El borrador es demasiado grande para precompletar una respuesta. Usa Copiar y pégalo en una respuesta."
 

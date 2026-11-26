@@ -606,12 +606,14 @@ msgstr "Impossible d'ouvrir le formulaire de réponse. Vérifiez que l'e-mail re
 #~ msgstr "Formulaire de réponse ouvert"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Ce brouillon a été rédigé pour un autre e-mail. Rouvrez cet e-mail ou utilisez Copier."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Le brouillon est trop volumineux pour préremplir une réponse. Utilisez Copier et collez-le dans une réponse."
 

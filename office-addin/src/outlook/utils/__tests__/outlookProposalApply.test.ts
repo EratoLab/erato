@@ -4,8 +4,10 @@ import {
   createOutlookProposalExecutor,
   markOutlookFormOpened,
   outlookEmailDraft,
+  outlookFormOpened,
   resetOutlookOpenedForms,
 } from "../outlookProposalApply";
+import { ReplyBodyTooLargeError } from "../outlookReadReply";
 
 import type { OutlookHostArtifact } from "../outlookClientActions";
 import type { OutlookProposalBridge } from "../outlookProposalApply";
@@ -168,6 +170,48 @@ describe("open_reply", () => {
       reason: "already_applied",
     });
     expect(office.openReplyForm).not.toHaveBeenCalled();
+  });
+
+  it("counts a reply that is still opening, so a second call opens no other", async () => {
+    let finish!: () => void;
+    office.openReplyForm.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const execute = createOutlookProposalExecutor("open_reply", bridge({}));
+    const first = execute(input("outlook.reply"), context);
+    await Promise.resolve();
+
+    expect(outlookFormOpened("m1", "outlook.reply")).toBe(true);
+    expect(
+      result(
+        await execute(input("outlook.reply"), {
+          ...context,
+          toolCallId: "p2.apply",
+        }),
+      ),
+    ).toEqual({ status: "applied", reason: "already_applied" });
+    finish();
+    expect(result(await first)).toEqual({ status: "applied" });
+    expect(office.openReplyForm).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets a reply that failed to open, and says when the draft was too large", async () => {
+    office.openReplyForm.mockRejectedValueOnce(new ReplyBodyTooLargeError());
+    const execute = createOutlookProposalExecutor("open_reply", bridge({}));
+    expect(result(await execute(input("outlook.reply"), context))).toEqual({
+      status: "failed",
+      reason: "too_large",
+    });
+    expect(outlookFormOpened("m1", "outlook.reply")).toBe(false);
+  });
+
+  it("keeps the user's own earlier open recorded when a later open fails", () => {
+    markOutlookFormOpened("m1", "outlook.reply");
+    const unmark = markOutlookFormOpened("m1", "outlook.reply");
+    unmark();
+    expect(outlookFormOpened("m1", "outlook.reply")).toBe(true);
   });
 
   it("does not open the form again after a pane reload", async () => {

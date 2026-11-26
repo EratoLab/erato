@@ -606,12 +606,14 @@ msgstr "Das Antwortfenster konnte nicht geöffnet werden. Stellen Sie sicher, da
 #~ msgstr "Antwortfenster geöffnet"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Dieser Entwurf wurde für eine andere E-Mail verfasst. Öffnen Sie diese E-Mail erneut oder verwenden Sie Kopieren."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Der Entwurf ist zu groß zum Vorausfüllen einer Antwort. Verwenden Sie Kopieren und fügen Sie ihn in eine Antwort ein."
 

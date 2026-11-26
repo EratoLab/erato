@@ -606,12 +606,14 @@ msgstr "Nie udało się otworzyć formularza odpowiedzi. Upewnij się, że otrzy
 #~ msgstr "Otwarto formularz odpowiedzi"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Ten szkic został napisany dla innej wiadomości. Otwórz ponownie tę wiadomość lub użyj Kopiuj."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Szkic jest zbyt duży, aby wstępnie wypełnić odpowiedź. Użyj Kopiuj i wklej go do odpowiedzi."
 

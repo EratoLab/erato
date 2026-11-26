@@ -150,6 +150,12 @@ function outlookProposalStatusText(
           id: "officeAddin.outlook.proposal.otherEmail",
           message: "No reply was opened: a different email is open now.",
         });
+      if (reply && state.result.reason === "too_large")
+        return t({
+          id: "officeAddin.emailRenderer.replyTooLarge",
+          message:
+            "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
+        });
       return reply
         ? t({
             id: "officeAddin.outlook.proposal.replyNotOpened",
