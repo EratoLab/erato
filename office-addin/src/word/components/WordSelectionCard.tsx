@@ -16,11 +16,15 @@ import {
 import { t } from "@lingui/core/macro";
 import { useCallback, useId, useMemo, useState } from "react";
 
-import { WordApplyButton, WordStatusAlert } from "./WordReviewCardParts";
+import {
+  WordApplyButton,
+  WordChainedStatus,
+  WordStatusAlert,
+} from "./WordReviewCardParts";
 import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
-import { useWordChainedProposal } from "../hooks/useWordChainedApply";
+import { useWordProposalCall } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
@@ -29,7 +33,6 @@ import {
   useWordReviews,
   useWordWrite,
 } from "../providers/WordWriteProvider";
-import { wordChainedApplyText } from "../utils/wordChainedApply";
 import {
   wordProposalReviewKey,
   wordSelectionReviewStatus,
@@ -587,7 +590,8 @@ export function WordSelectionCard({
   const messageId = artifact?.messageId;
   const { getTranscript } = useChatSession();
   const message = useConversationMessage(messageId);
-  const isGenerating = message?.status === "sending";
+  const call = useWordProposalCall(messageId, entry.action);
+  const isGenerating = call.preparing;
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
   const batchKey = wordProposalReviewKey(
@@ -596,7 +600,9 @@ export function WordSelectionCard({
     content,
   );
   const review = useWordReview(batchKey);
-  const chainedState = useWordChainedProposal(messageId, entry.action);
+  // After an Undo of what the server's call wrote, the card is the user's again.
+  const held =
+    call.streaming || (call.holdsAction && review.status !== "reverted");
   const reviews = useWordReviews();
   const result = review.selection;
   const messageCapture = messageId
@@ -626,17 +632,18 @@ export function WordSelectionCard({
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
   const [actionNote, setActionNote] = useState("");
-  const capture = messageCapture ?? review.capture;
+  const capture = messageCapture ?? review.capture ?? call.stagedCapture;
   const selection = wordSelectionOf(capture);
   const rewritable = rewritableWordSelection(capture);
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    // An answer still being written does not name its document yet; its staged copy does.
+    expectedIdentity: artifact?.itemIdentity ?? call.stagedCapture?.identity,
     currentIdentity: documentIdentity,
   });
   // A capture rebuilt from history is no copy to write to either.
   const copyGone = useWordCopyGone({
-    generating: isGenerating,
+    generating: call.streaming,
     hasCopy: !!capture,
     revoked: !gate.allowed && gate.reason === "no-capture",
   });
@@ -764,6 +771,7 @@ export function WordSelectionCard({
     ],
   );
   const execute = useCallback(async (): Promise<boolean> => {
+    if (held) return false;
     const live = resolveWordWriteGate({
       capture,
       expectedIdentity: artifact?.itemIdentity,
@@ -782,6 +790,7 @@ export function WordSelectionCard({
       return false;
     return replaceOn(live.capture);
   }, [
+    held,
     capture,
     artifact,
     documentIdentity,
@@ -795,7 +804,8 @@ export function WordSelectionCard({
   ]);
   // The same reviewed proposal on the passage the user now selects, never a guess between copies.
   const replaceSelected = useCallback(async () => {
-    if (!rewritable || offeredActions.length === 0 || !beginOperation()) return;
+    if (held || !rewritable || offeredActions.length === 0 || !beginOperation())
+      return;
     setActionNote("");
     const unread = () =>
       t({
@@ -863,6 +873,7 @@ export function WordSelectionCard({
     endOperation();
     setActionNote(note);
   }, [
+    held,
     rewritable,
     offeredActions.length,
     beginOperation,
@@ -997,18 +1008,6 @@ export function WordSelectionCard({
     }
   };
 
-  // The user decides on the server's call in the decision place; after an Undo the card is theirs.
-  if (
-    chainedState &&
-    (review.status === "idle" ||
-      review.status === "no-capture" ||
-      review.status === "identity-mismatch")
-  )
-    return (
-      <p className="word-review__hint" data-testid="word-chained-status">
-        {wordChainedApplyText(chainedState)}
-      </p>
-    );
   if (isGenerating)
     return (
       <WordReviewGenerating
@@ -1060,6 +1059,7 @@ export function WordSelectionCard({
     !review.revertStale &&
     !review.revertFailed;
   const canReplace = gate.allowed && idle && offeredActions.length > 0;
+  const offersOwn = (idle || applying) && !held && offeredActions.length > 0;
   const ambiguous =
     result?.status === "refused" &&
     result.code === "AMBIGUOUS_TARGET" &&
@@ -1111,7 +1111,15 @@ export function WordSelectionCard({
       }
       footer={
         <>
-          {(idle || applying) && offeredActions.length > 0 && (
+          {call.state &&
+            ((idle && review.status !== "reverted") || (applying && held)) && (
+              <WordChainedStatus
+                state={call.state}
+                applying={applying}
+                applyStage={review.applyStage}
+              />
+            )}
+          {offersOwn && (
             <>
               <p className="word-review__hint">
                 {t({
@@ -1177,7 +1185,7 @@ export function WordSelectionCard({
               <Button
                 type="button"
                 variant="primary"
-                disabled={operationInProgress}
+                disabled={operationInProgress || held}
                 onClick={() => void replaceSelected()}
               >
                 {t({

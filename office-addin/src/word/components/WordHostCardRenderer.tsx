@@ -3,7 +3,6 @@ import {
   Card,
   Alert,
   SyntaxHighlightedCode,
-  useConversationSelector,
   useHostArtifact,
   WordReviewCard,
   WordReviewDetailsToggle,
@@ -28,18 +27,18 @@ import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
   WordApplyButton,
   wordBlockedReasonText,
+  WordChainedStatus,
   WordStatusAlert,
 } from "./WordReviewCardParts";
 import { WordReviewPanel } from "./WordReviewPanel";
 import { wordInsertedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSelectionCard } from "./WordSelectionCard";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
-import { useWordChainedProposal } from "../hooks/useWordChainedApply";
+import { useWordProposalCall } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { revertWordEdits } from "../utils/wordApplyEdits";
-import { wordChainedApplyText } from "../utils/wordChainedApply";
 import {
   offerableWordClientActionsForFacet,
   wordActionForFence,
@@ -147,32 +146,32 @@ function WordActionCard({
   const neverAllowed = useNeverAllowedActions("word");
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const isGenerating = useConversationSelector(
-    (messages) =>
-      messageId !== undefined && messages[messageId]?.status === "sending",
-    Object.is,
-  );
+  const call = useWordProposalCall(messageId, entry.action);
+  const isGenerating = call.preparing;
   const batchKey = wordProposalReviewKey(
     messageId ?? "",
     entry.action,
     content,
   );
   const review = useWordReview(batchKey);
-  const chainedState = useWordChainedProposal(messageId, entry.action);
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );
   const capture =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
+    review.capture ??
+    call.stagedCapture;
+  // An answer still being written does not name its document yet; its staged copy does.
+  const expectedIdentity =
+    artifact?.itemIdentity ?? call.stagedCapture?.identity;
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    expectedIdentity,
     currentIdentity: documentIdentity,
   });
   // A capture rebuilt from history is no copy to write to either.
   const copyGone = useWordCopyGone({
-    generating: isGenerating,
+    generating: call.streaming,
     hasCopy: !!capture,
     revoked: !gate.allowed && gate.reason === "no-capture",
   });
@@ -236,6 +235,7 @@ function WordActionCard({
     review.status === "identity-mismatch";
   const applying = review.status === "applying";
   const execute = useCallback(async (): Promise<boolean> => {
+    if (call.holdsAction) return false;
     const live = resolveWordWriteGate({
       capture,
       expectedIdentity: artifact?.itemIdentity,
@@ -316,6 +316,7 @@ function WordActionCard({
       endOperation();
     }
   }, [
+    call.holdsAction,
     capture,
     artifact,
     documentIdentity,
@@ -378,13 +379,6 @@ function WordActionCard({
     batchKey,
     endOperation,
   ]);
-  // The user decides on the server's call in the decision place, not with a button here.
-  if (chainedState && idle)
-    return (
-      <p className="word-review__hint" data-testid="word-chained-status">
-        {wordChainedApplyText(chainedState)}
-      </p>
-    );
   if (isGenerating)
     return (
       <WordReviewGenerating
@@ -420,6 +414,11 @@ function WordActionCard({
             message: `Apply all ${total} edits`,
           })
       : entry.displayLabel();
+  const offersOwn =
+    (idle || applying) &&
+    !copyGone &&
+    !call.holdsAction &&
+    offeredActions.length > 0;
   const outcome = (index: number) =>
     review.outcomes.find((item) => item.index === index);
   const anchor = (index: number) => {
@@ -517,7 +516,14 @@ function WordActionCard({
       }
       footer={
         <>
-          {(idle || applying) && !copyGone && offeredActions.length > 0 && (
+          {call.state && (idle || (applying && call.holdsAction)) && (
+            <WordChainedStatus
+              state={call.state}
+              applying={applying}
+              applyStage={review.applyStage}
+            />
+          )}
+          {offersOwn && (
             <>
               <p className="word-review__hint">
                 {payload.kind === "edits"

@@ -5,9 +5,11 @@ import {
   answerFences,
   USER_PICKS,
 } from "../../core/clientActions/proposalApply";
+import { useWordWrite } from "../providers/WordWriteProvider";
 import {
   wordChainedApplyCallId,
   wordChainedApplyState,
+  wordChainedHoldsAction,
 } from "../utils/wordChainedApply";
 import {
   CLIENT_ACTION_TOOL_NAME,
@@ -52,18 +54,18 @@ export function wordChainedProposalState(
   content: readonly ContentPart[] | undefined,
   action: WordClientAction,
 ): WordChainedApplyState | undefined {
-  const proposal = (content ?? []).find(
-    (part) =>
+  // After a change request the model proposes again, and that call is the one that stands.
+  const applyCallId = (content ?? [])
+    .flatMap((part) =>
       part.content_type === "tool_use" &&
       part.tool_name === CLIENT_ACTION_TOOL_NAME &&
       typeof part.input === "object" &&
       part.input !== null &&
-      (part.input as Record<string, unknown>).action === action,
-  );
-  const applyCallId =
-    proposal?.content_type === "tool_use"
-      ? wordChainedApplyCallId(content, proposal.tool_call_id)
-      : undefined;
+      (part.input as Record<string, unknown>).action === action
+        ? [wordChainedApplyCallId(content, part.tool_call_id)]
+        : [],
+    )
+    .findLast((callId) => callId !== undefined);
   if (!applyCallId) return undefined;
   const language = WORD_CLIENT_ACTIONS.get(action)?.fenceLanguage;
   const versions = answerFences(content).filter(
@@ -93,6 +95,40 @@ export function useWordChainedProposal(
       selected ? (JSON.parse(selected) as WordChainedApplyState) : undefined,
     [selected],
   );
+}
+
+/**
+ * What the server's call for a proposed action means for its card in the answer. The call comes
+ * while the answer is still being written, so the card is drawn by then, on the copy staged for
+ * its request, and offers its own button only once the answer has ended and the call left the
+ * action to the user.
+ */
+export function useWordProposalCall(
+  messageId: string | undefined,
+  action: WordClientAction,
+): {
+  state: WordChainedApplyState | undefined;
+  /** The answer is being written and the server has made no call yet. */
+  preparing: boolean;
+  streaming: boolean;
+  holdsAction: boolean;
+  stagedCapture: WordDocumentCapture | undefined;
+} {
+  const streaming = useConversationSelector(
+    (messages) =>
+      messageId !== undefined && messages[messageId]?.status === "sending",
+    Object.is,
+  );
+  const state = useWordChainedProposal(messageId, action);
+  const { captureFor } = useWordWrite();
+  return {
+    state,
+    preparing: streaming && !state,
+    streaming,
+    holdsAction: streaming || wordChainedHoldsAction(state),
+    stagedCapture:
+      streaming && state && messageId ? captureFor(messageId) : undefined,
+  };
 }
 
 /** The pane's live copy with this token, redrawn when the answer's copy changes. */
