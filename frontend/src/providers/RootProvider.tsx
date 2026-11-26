@@ -3,6 +3,7 @@
 import { ChatProvider } from "./ChatProvider";
 import { FileCapabilitiesProvider } from "./FileCapabilitiesProvider";
 import { ProfileProvider } from "./ProfileProvider";
+import { ShellStartScreenReady } from "./ShellStartScreenReady";
 
 import type { FileType } from "@/utils/fileTypes";
 import type { ReactNode } from "react";
@@ -35,6 +36,7 @@ export function RootProvider({
       <FileCapabilitiesProvider>
         <ChatProvider acceptedFileTypes={acceptedFileTypes}>
           {children}
+          <ShellStartScreenReady />
         </ChatProvider>
       </FileCapabilitiesProvider>
     </ProfileProvider>
