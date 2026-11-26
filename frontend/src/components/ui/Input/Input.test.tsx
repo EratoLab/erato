@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Input } from "./Input";
 import { Select } from "./Select";
 import { Textarea } from "./Textarea";
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
 
 const originalOffsetHeightDescriptor = Object.getOwnPropertyDescriptor(
   HTMLTextAreaElement.prototype,
@@ -96,7 +97,9 @@ describe("Input tokens", () => {
       expect(select.className.split(/\s+/)).toContain(cls);
     }
     expect(input.className).not.toContain("--theme-radius-input");
-    expect(input.className).not.toContain("text-base");
+    expect(input.className.split(/\s+/)).not.toContain("text-base");
+    expect(input.className.split(/\s+/)).toContain(PHONE_FIELD_TEXT);
+    expect(select.className.split(/\s+/)).toContain(PHONE_FIELD_TEXT);
   });
 
   it("keeps the roomy input geometry by default, also for a time field", () => {

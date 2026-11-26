@@ -635,6 +635,90 @@ body {
     padding: var(--theme-spacing-dropdown-chrome-padding);
   }
 
+  /* A phone held in the hand (narrow, no hovering pointer; the condition of
+     useIsNarrowTouchScreen): controls reach the 44 pt tap size iOS uses by
+     default, never below a larger theme size. The composer keeps its own
+     sizes: its bar is at least that tall, and a 44 pt row of buttons inside
+     it would make the one-line field taller than Messages' bar. */
+  @media (max-width: 639.98px) {
+    @media not all and (hover: hover) and (pointer: fine) {
+      :is(.btn-geometry-icon-sm, .btn-geometry-sm):where(
+          :not([data-ui="chat-input-controls"] *)
+        ) {
+        --touch-control-box: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) - 0.25rem
+        );
+      }
+
+      .btn-geometry-icon-sm:where(:not([data-ui="chat-input-controls"] *)) {
+        width: var(--touch-control-box);
+        height: var(--touch-control-box);
+      }
+
+      .btn-geometry-sm:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: var(--touch-control-box);
+        min-width: var(--touch-control-box);
+      }
+
+      .btn-geometry-icon-md:where(:not([data-ui="chat-input-controls"] *)) {
+        width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+        height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+      }
+
+      .btn-geometry-md:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+        min-width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+      }
+
+      .btn-geometry-icon-lg:where(:not([data-ui="chat-input-controls"] *)) {
+        width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+        height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+      }
+
+      .btn-geometry-lg:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+        min-width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) + 0.25rem
+        );
+      }
+
+      .modal-close-geometry {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--touch-target-min);
+        min-height: var(--touch-target-min);
+      }
+
+      .dropdown-item-geometry {
+        min-height: var(--touch-target-min);
+      }
+    }
+  }
+
   /* Popover panel shape, keyed on the two shape attributes rather than
      compounded onto .popover-panel-geometry, the class a panel carries
      alongside them: a bare attribute selector stays one specificity step below
@@ -1167,6 +1251,11 @@ body {
    reports what its bars and display cutouts cover. An embedding shell can
    re-declare these. */
 :root {
+  /* iOS's default tap size and the gap its bar buttons keep from the screen
+     edge, used by the phone rules below. px, so Erato's own smaller text size
+     cannot shrink a target. */
+  --touch-target-min: 44px;
+  --phone-edge-inset: 1rem;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -1791,12 +1880,71 @@ body:has(.app-viewport) {
   min-height: var(--sidebar-icon-col-content);
 }
 
+/* On a phone in the hand the small icon control is the tap target of the
+   phone block in @layer components, so the band and the rail column account
+   for that box instead. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    .sidebar-band-geometry {
+      min-height: calc(
+        max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem,
+            2rem
+          ) +
+          2 * var(--theme-spacing-shell-compact-padding-y) + 1px
+      );
+    }
+
+    .sidebar-icon-col-geometry {
+      margin-left: calc(
+        var(--theme-layout-sidebar-slim-width) / 2 -
+          var(--theme-spacing-shell-compact-padding-x) -
+          max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem,
+            var(--sidebar-icon-col-content)
+          ) /
+          2
+      );
+    }
+  }
+}
+
 /* The hidden-mode sidebar toggle floats at 0.5rem + a small icon button
    (control-min-height - 0.25rem) + a 0.25rem gap. */
 :root {
   --chat-top-bar-toggle-column: calc(
     var(--theme-spacing-control-min-height) + 0.5rem
   );
+}
+
+/* On a phone in the hand the toggle is a 44 pt control 1rem from the edge
+   (ChatHistorySidebar), which the column makes room for. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    :root {
+      --chat-top-bar-toggle-column: calc(
+        max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem
+          ) +
+          var(--phone-edge-inset) + 0.5rem
+      );
+    }
+
+    /* iOS reads body text at 17 pt and lists menu choices at the same size,
+       or larger where the theme sets larger text. After the utilities, at
+       hook weight, so a theme.css rule on the hook still wins. */
+    [data-ui="message-content"] {
+      font-size: max(1.0625rem, var(--theme-font-size-base));
+    }
+
+    [data-ui="menu-item"] {
+      font-size: max(1.0625rem, var(--theme-font-size-sm));
+      line-height: 1.3;
+    }
+  }
 }
 
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,

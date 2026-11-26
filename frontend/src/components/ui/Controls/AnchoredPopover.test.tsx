@@ -119,6 +119,81 @@ describe("AnchoredPopover", () => {
       tall.mockRestore();
     });
 
+    it("keeps clear of the status bar and the home bar on a phone", () => {
+      // The probe that resolves a length reports its own width; the panel
+      // measures 60 x 40 and the viewport padding resolves to 8.
+      const widths: Record<string, number> = {
+        "var(--safe-area-top)": 59,
+        "var(--safe-area-bottom)": 34,
+      };
+      const measure = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          const width = widths[this.style.width] ?? (this.style.width ? 8 : 60);
+          const height = this.style.width ? 0 : 40;
+          return {
+            width,
+            height,
+            top: 0,
+            bottom: height,
+            left: 0,
+            right: width,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          };
+        });
+      const nearTop = { top: 100, bottom: 120, left: 400, right: 500 };
+      render(
+        <AnchoredPopover
+          isOpen
+          onOpenChange={vi.fn()}
+          anchorRect={nearTop}
+          anchorGap={8}
+          width="content"
+          widthFloor={false}
+          manageFocus={false}
+          role="toolbar"
+          ariaLabel="Actions"
+          preferredOrientation={{ vertical: "top", horizontal: "center" }}
+        >
+          <button type="button">Action</button>
+        </AnchoredPopover>,
+      );
+      const panel = screen.getByRole("toolbar");
+
+      // 100 - 8 - 59 leaves 33 above, too little for 40 + 8 + 8: it goes below.
+      expect(panel.style.top).toBe("128px");
+      expect(panel.style.maxHeight).toBe(
+        `${window.innerHeight - 120 - 8 - 8 - 34}px`,
+      );
+      measure.mockRestore();
+    });
+
+    it("opens above when an on-screen keyboard covers the room below", () => {
+      const measure = panelSize(60, 200);
+      Object.defineProperty(window, "visualViewport", {
+        configurable: true,
+        value: {
+          offsetTop: 0,
+          height: 420,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        },
+      });
+      try {
+        render(ui("bottom"));
+
+        // 420 - 320 - 8 leaves 92 below the rectangle, too little for 200.
+        expect(screen.getByRole("toolbar").style.bottom).toBe(
+          `${window.innerHeight - 300 + 8}px`,
+        );
+      } finally {
+        Reflect.deleteProperty(window, "visualViewport");
+        measure.mockRestore();
+      }
+    });
+
     it("closes on a press elsewhere and on Escape", () => {
       const onOpenChange = vi.fn();
       render(ui("top", onOpenChange));
