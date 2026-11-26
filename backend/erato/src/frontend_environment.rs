@@ -1,5 +1,7 @@
 //! Inlined version of the frontend-environment crate (to simplify dependency version alignment)
-pub use self::axum::{frontend_files_service, serve_files_with_script};
+pub use self::axum::frontend_files_service;
+#[cfg(test)]
+use self::axum::serve_files_with_script;
 use crate::config::{AppConfig, MsOfficeAddinWordApplyPolicy, VoiceSwitches};
 use crate::distribution::Distribution;
 use crate::distribution::component_kits::ComponentKit;
@@ -1207,9 +1209,10 @@ pub mod axum {
     use ::axum::body::{Body, Bytes};
 
     use crate::frontend_static_files::{
-        CompressibleFile, IMMUTABLE_CACHE_CONTROL, ensure_vary_accept_encoding,
-        finish_encoded_response, matching_entity_tag, prepare_file_request, resolve_bundle_file,
+        CompressibleResponse, IMMUTABLE_CACHE_CONTROL, ensure_vary_accept_encoding,
+        finish_encoded_response, prepare_file_request, resolve_bundle_file,
     };
+    use crate::http_validators::matching_entity_tag;
     use ::axum::handler::HandlerWithoutStateExt;
     use ::axum::http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode, Uri};
     use ::axum::response::Response;
@@ -1386,7 +1389,7 @@ pub mod axum {
     + 'static {
         tower::ServiceBuilder::new()
             .map_response(finish_encoded_response)
-            .layer(CompressionLayer::new().compress_when(CompressibleFile))
+            .layer(CompressionLayer::new().compress_when(CompressibleResponse))
             .service(serve_files_with_script.into_service())
     }
 
@@ -1445,7 +1448,7 @@ pub mod axum {
             }
             let mut response = box_file_response(
                 ServeFile::new(source)
-                    .try_call(prepare_file_request(req))
+                    .try_call(prepare_file_request(req, etag_value.as_deref()))
                     .await
                     .unwrap(),
             );
@@ -1477,6 +1480,9 @@ pub mod axum {
         let stripped_path = frontend_relative_path(req.uri().path(), &frontend.mount_path);
         let req = rewrite_request_path(req, &frontend.mount_path);
         let rewritten_request_path = req.uri().path().to_string();
+        if rewritten_request_path.starts_with("/.vite/") {
+            return Ok(not_found_response());
+        }
 
         if let Some(catalogs) = &translation_catalogs
             && let Some((po_path, compilation)) = catalogs
@@ -1556,7 +1562,7 @@ pub mod axum {
                 content_security_policy.as_ref(),
             ));
         }
-        let req = prepare_file_request(req);
+        let req = prepare_file_request(req, etag_value.as_deref());
 
         // Create the static files service with the rewritten path if applicable
         let res = if let Some(rewritten_path) = rewritten_path {
@@ -1571,23 +1577,24 @@ pub mod axum {
                 .try_call(req)
                 .await
                 .unwrap()
-        } else if let Some(fallback_path) = fallback_path {
-            // HTML never has a precompressed copy (the build skips it), so the
-            // environment injection below always sees plain bytes.
-            ServeDir::new(bundle_dir_path)
-                .precompressed_br()
-                .precompressed_gzip()
-                .not_found_service(ServeFile::new(fallback_path))
-                .try_call(req)
-                .await
-                .unwrap()
         } else {
-            ServeDir::new(bundle_dir_path)
-                .precompressed_br()
-                .precompressed_gzip()
-                .try_call(req)
-                .await
-                .unwrap()
+            // Copies made at build time are used only where the name changes
+            // with the content, so a copy can never be older than its file.
+            // That also keeps HTML, which is rewritten below, uncompressed here.
+            let serve_dir = ServeDir::new(bundle_dir_path);
+            let mut serve_dir = if fingerprinted {
+                serve_dir.precompressed_br().precompressed_gzip()
+            } else {
+                serve_dir
+            };
+            match fallback_path {
+                Some(fallback_path) => serve_dir
+                    .not_found_service(ServeFile::new(fallback_path))
+                    .try_call(req)
+                    .await
+                    .unwrap(),
+                None => serve_dir.try_call(req).await.unwrap(),
+            }
         };
 
         let headers = res.headers().clone();
@@ -3190,6 +3197,10 @@ mod tests {
                         ("public/common/assets/app-Cf4s1aiG.js.br", "br-copy".to_string()),
                         ("public/common/assets/app-Cf4s1aiG.js.gz", "gz-copy".to_string()),
                         ("public/common/assets/unlisted-Zz9Yy8Xx.js", script_body.clone()),
+                        (
+                            "public/common/assets/unlisted-Zz9Yy8Xx.js.br",
+                            "stale-copy".to_string(),
+                        ),
                         ("public/common/voice-runtime/manifest.json", format!("{{\"files\":\"{}\"}}", "a".repeat(2000))),
                         ("custom-theme/acme/theme.json", r#"{"name":"Acme","theme":{}}"#.to_string()),
                     ],
@@ -3292,6 +3303,7 @@ mod tests {
                 .unwrap()
                 .contains("accept-encoding")
         );
+        assert_eq!(header(&response, "accept-ranges"), None);
         let weak_etag = header(&response, "etag").unwrap().to_string();
         assert!(weak_etag.starts_with("W/\""), "{weak_etag}");
 
@@ -3342,7 +3354,24 @@ mod tests {
         assert_eq!(response.status(), 206);
         assert_eq!(header(&response, "content-encoding"), None);
         assert_eq!(body, b"console");
-        assert!(!header(&response, "etag").unwrap().starts_with("W/"));
+        let etag = header(&response, "etag").unwrap().to_string();
+        assert!(!etag.starts_with("W/"));
+
+        for (if_range, expected_status) in [
+            (etag.clone(), 206),
+            (format!("W/{etag}"), 200),
+            ("\"older\"".to_string(), 200),
+            ("Fri, 01 Jan 2100 00:00:00 GMT".to_string(), 200),
+        ] {
+            let (response, _) = fixture
+                .get(
+                    &format!("/{FINGERPRINTED_SCRIPT}"),
+                    Some("v1"),
+                    &[("range", "bytes=0-6"), ("if-range", &if_range)],
+                )
+                .await;
+            assert_eq!(response.status(), expected_status, "If-Range {if_range}");
+        }
     }
 
     #[tokio::test]
@@ -3358,6 +3387,13 @@ mod tests {
         );
         let etag = header(&response, "etag").unwrap().to_string();
         assert_ne!(etag, "\"v1\"");
+        let (_, body) = fixture
+            .get(path, Some("v1"), &[("accept-encoding", "br")])
+            .await;
+        assert_ne!(
+            body, b"stale-copy",
+            "build-time copies are used only for fingerprinted files"
+        );
 
         let (response, _) = fixture
             .get(path, Some("v2"), &[("if-none-match", &etag)])
@@ -3448,10 +3484,46 @@ mod tests {
             );
             assert_eq!(header(&response, "etag"), None, "{path}");
         }
-        let (response, _) = fixture
-            .get("/", Some("v1"), &[("accept-encoding", "br")])
+        let (response, body) = fixture
+            .get("/", Some("v1"), &[("accept-encoding", "gzip")])
             .await;
-        assert_eq!(header(&response, "content-encoding"), Some("br"));
+        assert_eq!(header(&response, "content-encoding"), Some("gzip"));
+        let mut page = String::new();
+        std::io::Read::read_to_string(
+            &mut flate2::read::GzDecoder::new(body.as_slice()),
+            &mut page,
+        )
+        .unwrap();
+        assert!(
+            page.contains("<script"),
+            "environment injected before compression"
+        );
+
+        let (response, _) = fixture
+            .get(
+                "/",
+                Some("v1"),
+                &[("if-modified-since", "Fri, 01 Jan 2100 00:00:00 GMT")],
+            )
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            header(&response, "cache-control"),
+            Some("no-cache, no-store, must-revalidate, private")
+        );
+    }
+
+    #[tokio::test]
+    async fn build_manifests_are_not_served() {
+        let fixture = FileServingFixture::new();
+
+        for path in [
+            "/.vite/manifest.json",
+            "/public/platform-office-addin/.vite/manifest.json",
+        ] {
+            let (response, _) = fixture.get(path, Some("v1"), &[]).await;
+            assert_eq!(response.status(), 404, "{path}");
+        }
     }
 
     #[tokio::test]

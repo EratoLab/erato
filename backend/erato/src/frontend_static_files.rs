@@ -7,12 +7,15 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::SystemTime;
 
 use axum::body::HttpBody as Body;
 use axum::http::{HeaderMap, HeaderValue, Response, StatusCode, header};
 use sha2::{Digest, Sha256};
 use tower_http::compression::predicate::{Predicate, SizeAbove};
+
+use crate::distribution::branding::safe_relative_path;
+use crate::http_validators::content_etag;
+use crate::translation_po::SourceStamp;
 
 /// For files whose name changes whenever their content does.
 pub const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
@@ -21,36 +24,52 @@ pub const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
 const MIN_COMPRESSED_SIZE_BYTES: u16 = 1024;
 
 /// Content-derived entity tags of files on disk, recomputed whenever a file's
-/// size or modification time changes (theme and kit files can change while the
-/// server runs).
-#[derive(Debug, Default)]
+/// stamp changes (theme and kit files can change while the server runs).
+#[derive(Debug, Default, erato_memory::HeapSize)]
 pub struct FileEtags {
-    entries: Mutex<HashMap<PathBuf, CachedEtag>>,
+    entries: Mutex<HashMap<PathBuf, (FileStamp, String)>>,
 }
 
-#[derive(Debug, Clone)]
-struct CachedEtag {
-    len: u64,
-    modified: SystemTime,
-    etag: String,
+/// Size and modification time, plus inode and status-change time: copy tools
+/// can keep the first two across a content change, but not the last two.
+#[derive(Debug, PartialEq, Eq, erato_memory::HeapSize)]
+struct FileStamp {
+    source: SourceStamp,
+    changed: (u64, i64, i64),
+}
+
+impl FileStamp {
+    fn read(path: &Path) -> Option<Self> {
+        let metadata = std::fs::metadata(path).ok().filter(|meta| meta.is_file())?;
+        Some(Self {
+            source: SourceStamp::read(path).ok()?,
+            changed: change_stamp(&metadata),
+        })
+    }
+}
+
+#[cfg(unix)]
+fn change_stamp(metadata: &std::fs::Metadata) -> (u64, i64, i64) {
+    use std::os::unix::fs::MetadataExt;
+    (metadata.ino(), metadata.ctime(), metadata.ctime_nsec())
+}
+
+#[cfg(not(unix))]
+fn change_stamp(_metadata: &std::fs::Metadata) -> (u64, i64, i64) {
+    (0, 0, 0)
 }
 
 impl FileEtags {
     /// Returns `None` when the path is not a readable regular file.
     pub async fn etag_for(&self, path: &Path) -> Option<String> {
-        let metadata = tokio::fs::metadata(path).await.ok()?;
-        if !metadata.is_file() {
-            return None;
-        }
-        let len = metadata.len();
-        let modified = metadata.modified().ok();
-
-        if let Some(modified) = modified
-            && let Some(cached) = self.lock().get(path)
-            && cached.len == len
-            && cached.modified == modified
+        let owned_path = path.to_path_buf();
+        let stamp = tokio::task::spawn_blocking(move || FileStamp::read(&owned_path))
+            .await
+            .ok()??;
+        if let Some((cached_stamp, etag)) = self.lock().get(path)
+            && *cached_stamp == stamp
         {
-            return Some(cached.etag.clone());
+            return Some(etag.clone());
         }
 
         let owned_path = path.to_path_buf();
@@ -58,20 +77,12 @@ impl FileEtags {
             .await
             .ok()?
             .ok()?;
-        if let Some(modified) = modified {
-            self.lock().insert(
-                path.to_path_buf(),
-                CachedEtag {
-                    len,
-                    modified,
-                    etag: etag.clone(),
-                },
-            );
-        }
+        self.lock()
+            .insert(path.to_path_buf(), (stamp, etag.clone()));
         Some(etag)
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<PathBuf, CachedEtag>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<PathBuf, (FileStamp, String)>> {
         self.entries
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -89,12 +100,7 @@ fn hash_file(path: &Path) -> std::io::Result<String> {
         }
         hasher.update(&buffer[..read]);
     }
-    let digest = hasher.finalize();
-    let hex = digest[..16]
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    Ok(format!("\"{hex}\""))
+    Ok(content_etag(&hasher.finalize()))
 }
 
 /// Maps a request path below a bundle root to the file it names, refusing
@@ -103,46 +109,34 @@ pub fn resolve_bundle_file(bundle_root: &Path, request_path: &str) -> Option<(Pa
     let decoded = percent_encoding::percent_decode_str(request_path)
         .decode_utf8()
         .ok()?;
-    let mut segments = Vec::new();
-    for segment in decoded.split('/').filter(|segment| !segment.is_empty()) {
-        if segment == "." || segment == ".." || segment.contains(['\\', ':', '\0']) {
-            return None;
-        }
-        segments.push(segment);
-    }
-    if segments.is_empty() {
-        return None;
-    }
-    let relative = segments.join("/");
-    Some((bundle_root.join(&relative), relative))
+    let relative = decoded.trim_start_matches('/');
+    safe_relative_path(relative).then(|| (bundle_root.join(relative), relative.to_string()))
 }
 
-/// Weak comparison (RFC 9110 §8.8.3.2), as If-None-Match requires. Returns the
-/// tag exactly as the client sent it, so a 304 keeps the client's form of it.
-pub fn matching_entity_tag(if_none_match: Option<&HeaderValue>, etag: &str) -> Option<String> {
-    let header = if_none_match?.to_str().ok()?.trim();
-    if header == "*" {
-        return Some(etag.to_string());
-    }
-    let opaque = etag.strip_prefix("W/").unwrap_or(etag);
-    header
-        .split(',')
-        .map(str::trim)
-        .find(|candidate| candidate.strip_prefix("W/").unwrap_or(candidate) == opaque)
-        .map(ToOwned::to_owned)
-}
-
-/// Prepares a request for tower-http's file services:
+/// Prepares a request for tower-http's file services, which know only
+/// modification dates (`etag` is the content tag of the file the request
+/// names, `None` for pages):
 /// - If-None-Match takes precedence over If-Modified-Since (RFC 9110 §13.2.2);
 ///   without this, a file whose content changed but whose modification time
-///   did not move forward would be answered with 304.
+///   did not move forward would be answered with 304. Pages never answer 304.
+/// - A range is honoured only when If-Range, if sent, names the current
+///   content, so resumed bytes are never appended to an older version.
 /// - Byte ranges are served from the uncompressed file, so a range always
 ///   refers to the same bytes whatever encoding the client accepts.
-pub fn prepare_file_request<B>(mut req: axum::http::Request<B>) -> axum::http::Request<B> {
+pub fn prepare_file_request<B>(
+    mut req: axum::http::Request<B>,
+    etag: Option<&str>,
+) -> axum::http::Request<B> {
     let headers = req.headers_mut();
-    if headers.contains_key(header::IF_NONE_MATCH) {
+    if etag.is_none() || headers.contains_key(header::IF_NONE_MATCH) {
         headers.remove(header::IF_MODIFIED_SINCE);
     }
+    if let Some(if_range) = headers.get(header::IF_RANGE)
+        && etag.is_none_or(|etag| if_range.as_bytes() != etag.as_bytes())
+    {
+        headers.remove(header::RANGE);
+    }
+    headers.remove(header::IF_RANGE);
     if headers.contains_key(header::RANGE) {
         headers.remove(header::ACCEPT_ENCODING);
     }
@@ -153,9 +147,9 @@ pub fn prepare_file_request<B>(mut req: axum::http::Request<B>) -> axum::http::R
 /// text-like content without a precompressed copy (HTML, compiled translation
 /// catalogs, theme and kit files, bundles built without copies).
 #[derive(Clone, Copy, Debug, Default)]
-pub struct CompressibleFile;
+pub struct CompressibleResponse;
 
-impl Predicate for CompressibleFile {
+impl Predicate for CompressibleResponse {
     fn should_compress<B>(&self, response: &Response<B>) -> bool
     where
         B: Body,
@@ -208,6 +202,8 @@ pub fn finish_encoded_response<B>(mut response: Response<B>) -> Response<B> {
         return response;
     }
     let headers = response.headers_mut();
+    // Ranges are only served from the uncompressed file.
+    headers.remove(header::ACCEPT_RANGES);
     if let Some(etag) = headers.get(header::ETAG).cloned()
         && !etag.as_bytes().starts_with(b"W/")
         && let Ok(weak) = HeaderValue::from_bytes(&[b"W/".as_slice(), etag.as_bytes()].concat())
@@ -234,27 +230,6 @@ pub fn ensure_vary_accept_encoding(headers: &mut HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn if_none_match_uses_weak_comparison_and_echoes_the_client_tag() {
-        let etag = "\"abc\"";
-        let header = |value: &'static str| HeaderValue::from_static(value);
-
-        assert_eq!(
-            matching_entity_tag(Some(&header("\"abc\"")), etag).as_deref(),
-            Some("\"abc\"")
-        );
-        assert_eq!(
-            matching_entity_tag(Some(&header("\"x\", W/\"abc\"")), etag).as_deref(),
-            Some("W/\"abc\"")
-        );
-        assert_eq!(
-            matching_entity_tag(Some(&header("*")), etag).as_deref(),
-            Some("\"abc\"")
-        );
-        assert_eq!(matching_entity_tag(Some(&header("\"abd\"")), etag), None);
-        assert_eq!(matching_entity_tag(None, etag), None);
-    }
 
     #[test]
     fn bundle_paths_never_leave_the_root() {
@@ -287,9 +262,23 @@ mod tests {
         let changed = etags.etag_for(&path).await.unwrap();
         assert_ne!(changed, first);
 
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        std::fs::write(&path, "a{color:blu}").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        let same_size_and_time = etags.etag_for(&path).await.unwrap();
+        assert_ne!(same_size_and_time, changed);
+
         let same_content = dir.path().join("copy.css");
-        std::fs::write(&same_content, "a{color:red}").unwrap();
-        assert_eq!(etags.etag_for(&same_content).await.unwrap(), changed);
+        std::fs::write(&same_content, "a{color:blu}").unwrap();
+        assert_eq!(
+            etags.etag_for(&same_content).await.unwrap(),
+            same_size_and_time
+        );
         assert_eq!(etags.etag_for(dir.path()).await, None);
     }
 }

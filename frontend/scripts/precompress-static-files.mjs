@@ -1,7 +1,13 @@
 #!/usr/bin/env node
-// Writes `<file>.br` and `<file>.gz` next to every compressible file of a
-// built frontend, so the backend can send them compressed without spending
-// CPU per request. HTML is left out: the backend rewrites it while serving.
+// Image build step (frontend/Dockerfile): writes `<file>.br` / `<file>.gz`
+// next to every file the Vite build manifest lists, when the copy shrinks
+// enough. The backend sends these copies only for listed files: their names
+// change with their content, so a copy is never older than its file. Every
+// other file (pages, translations, fixed-name assets) is compressed by the
+// backend per response.
+//
+// Also checks the promise the backend relies on when it caches listed files
+// for a year: each of them has a content hash in its name.
 //
 // Usage: node scripts/precompress-static-files.mjs <dir> [<dir> ...]
 
@@ -13,46 +19,58 @@ import zlib from "node:zlib";
 const brotliCompress = promisify(zlib.brotliCompress);
 const gzip = promisify(zlib.gzip);
 
-const COMPRESSIBLE_EXTENSIONS = new Set([
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".css",
-  ".json",
-  ".svg",
-  ".wasm",
-  ".xml",
-  ".txt",
-  ".ico",
-  ".ttf",
-  ".otf",
-  ".onnx",
-  ".webmanifest",
-]);
+const BUILD_MANIFEST = path.join(".vite", "manifest.json");
+// Vite's `[name]-[hash]` file names: an 8-character hash before the extension.
+const HASHED_FILE_NAME = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
 const MIN_SIZE_BYTES = 1024;
-// Brotli's top quality takes about a minute for the 20 MB voice runtime; one
-// step lower is ~15x faster and ~15% larger, which only matters for files
-// that rarely change.
+// Brotli's top quality takes about a minute for a 20 MB file; one step lower
+// is ~15x faster and ~15% larger, which only matters for the few large ones.
 const MAX_QUALITY_UP_TO_BYTES = 4 * 1024 * 1024;
-// A copy that saves less than this is not worth a second file and a negotiation.
+// A copy that saves less than this is not worth a second file and a
+// negotiation; already compressed formats (images, woff2) end up here.
 const MAX_COMPRESSED_RATIO = 0.9;
 const CONCURRENCY = 4;
 
-async function* walk(dir) {
-  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-    const entryPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walk(entryPath);
-    } else if (entry.isFile()) {
-      yield entryPath;
+async function readFingerprintedFiles(dir) {
+  let manifest;
+  try {
+    manifest = JSON.parse(
+      await fs.readFile(path.join(dir, BUILD_MANIFEST), "utf8"),
+    );
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(`${dir}: no build manifest (${BUILD_MANIFEST})`);
     }
+    throw error;
   }
+  const files = [
+    ...new Set(
+      Object.values(manifest).flatMap((entry) => [
+        entry.file,
+        ...(entry.css ?? []),
+        ...(entry.assets ?? []),
+      ]),
+    ),
+  ];
+  const unhashed = files.filter((file) => !HASHED_FILE_NAME.test(file));
+  if (unhashed.length > 0) {
+    throw new Error(
+      `${dir}: the build manifest lists files without a content hash in their name, ` +
+        `which the backend would cache for a year: ${unhashed.join(", ")}`,
+    );
+  }
+  return files.map((file) => path.join(dir, file));
 }
 
 async function precompress(filePath) {
   const source = await fs.readFile(filePath);
+  const written = {
+    original: source.length,
+    br: source.length,
+    gz: source.length,
+  };
   if (source.length < MIN_SIZE_BYTES) {
-    return { original: source.length, br: source.length, gz: source.length };
+    return written;
   }
   const [br, gz] = await Promise.all([
     brotliCompress(source, {
@@ -66,7 +84,6 @@ async function precompress(filePath) {
     }),
     gzip(source, { level: zlib.constants.Z_BEST_COMPRESSION }),
   ]);
-  const written = { original: source.length, br: source.length, gz: source.length };
   if (br.length <= source.length * MAX_COMPRESSED_RATIO) {
     await fs.writeFile(`${filePath}.br`, br);
     written.br = br.length;
@@ -79,13 +96,7 @@ async function precompress(filePath) {
 }
 
 async function precompressDirectory(dir) {
-  const files = [];
-  for await (const filePath of walk(dir)) {
-    if (COMPRESSIBLE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
-      files.push(filePath);
-    }
-  }
-
+  const files = await readFingerprintedFiles(dir);
   const totals = { files: files.length, original: 0, br: 0, gz: 0 };
   let next = 0;
   await Promise.all(

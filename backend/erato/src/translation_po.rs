@@ -33,13 +33,9 @@ pub struct CompiledMessagesJson {
 
 impl CompiledMessagesJson {
     fn new(body: Vec<u8>) -> Self {
-        let content_hash: String = Sha256::digest(&body)[..16]
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
         Self {
+            etag: crate::http_validators::content_etag(&Sha256::digest(&body)),
             body,
-            etag: format!("\"{content_hash}\""),
         }
     }
 }
@@ -52,13 +48,13 @@ struct CatalogSources {
 }
 
 #[derive(Debug, PartialEq, Eq, erato_memory::HeapSize)]
-struct SourceStamp {
+pub(crate) struct SourceStamp {
     modified: SystemTime,
     len: u64,
 }
 
 impl SourceStamp {
-    fn read(path: &Path) -> io::Result<Self> {
+    pub(crate) fn read(path: &Path) -> io::Result<Self> {
         let metadata = fs::metadata(path)?;
         Ok(Self {
             modified: metadata.modified()?,

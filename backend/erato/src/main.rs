@@ -1,5 +1,4 @@
 use axum::Extension;
-use axum::handler::HandlerWithoutStateExt;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
 use eyre::{Report, WrapErr};
 use utoipa_scalar::{Scalar, Servable as ScalarServable};
