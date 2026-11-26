@@ -239,6 +239,7 @@ vi.mock("@/hooks/files/useFileUploadWithTokenCheck", () => ({
 
 vi.mock("@/hooks/ui", () => ({
   useSidebar: () => ({ ...testState.sidebar, toggle: vi.fn() }),
+  useIsNarrowScreen: () => false,
   useFilePreviewModal: () => ({
     isPreviewModalOpen: false,
     fileToPreview: null,
