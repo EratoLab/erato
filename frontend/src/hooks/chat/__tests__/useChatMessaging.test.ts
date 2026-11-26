@@ -25,6 +25,7 @@ import {
   useArchiveChatEndpoint,
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { setPageVisibility } from "@/test/pageVisibility";
 import { contentSize } from "@/utils/chat/messageUtils";
 import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
@@ -586,6 +587,42 @@ describe("useChatMessaging", () => {
       });
     });
 
+    it.each([
+      [
+        "an approval waiting",
+        {
+          kind: "action_required" as const,
+          startedAt: "2026-09-19T12:00:00Z",
+          localSeenAt: Date.now(),
+        },
+      ],
+      [
+        "an error",
+        { kind: "error" as const, startedAt: "2026-09-19T12:00:00Z" },
+      ],
+    ])(
+      "keeps %s when entering the chat finds nothing running",
+      async (_status, entry) => {
+        const byUrl = captureSse();
+        useGenerationStatusStore.setState({ statusByChatId: { chat1: entry } });
+        renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
+
+        await act(async () => {
+          byUrl["/api/v1beta/me/messages/resumestream"].onError(
+            new FrontendRequestError(
+              "SSE request failed: No active generation task found for this chat",
+              { method: "POST", url: "/api/v1beta/me/messages/resumestream" },
+              { status: 404, statusText: "Not Found" },
+            ),
+          );
+        });
+
+        expect(
+          useGenerationStatusStore.getState().statusByChatId.chat1,
+        ).toEqual(entry);
+      },
+    );
+
     it("attaches once when the open chat flips to running underneath this client", async () => {
       const byUrl = captureSse();
       renderHook(() => useChatMessaging("chat1"), { wrapper: TestWrapper });
@@ -977,6 +1014,81 @@ describe("useChatMessaging", () => {
         { content_type: "text", text: "Here is what the task found" },
       ]);
     });
+
+    it("keeps a reaction's half answer when its stream drops, until the stored one replaces it", async () => {
+      resetReactAttemptsForTest();
+      const byUrl = captureSse();
+      withMessages(mockMessages);
+
+      const { result, rerender } = renderHook(() => useChatMessaging("chat1"), {
+        wrapper: TestWrapper,
+      });
+      await act(async () => {
+        byUrl["/api/v1beta/me/messages/resumestream"].onClose();
+      });
+      withMessages([...mockMessages, deliveredTip]);
+      await act(async () => {
+        rerender();
+      });
+      const reactStream = byUrl["/api/v1beta/me/chats/chat1/react"];
+      await act(async () => {
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "assistant_message_started",
+            message_id: "reaction-1",
+          }),
+          type: "message",
+        });
+        reactStream.onMessage({
+          data: JSON.stringify({
+            message_type: "text_delta",
+            message_id: "reaction-1",
+            content_index: 0,
+            new_text: "Here is what",
+          }),
+          type: "message",
+        });
+      });
+      let deliver: (value: unknown) => void = () => {};
+      mockFetchChatMessages.mockReturnValue(
+        new Promise((resolve) => {
+          deliver = resolve;
+        }),
+      );
+
+      await act(async () => {
+        reactStream.onError(markNetworkFailure(new Error("Load failed")));
+      });
+      expect(result.current.messages["reaction-1"].content).toEqual([
+        { content_type: "text", text: "Here is what" },
+      ]);
+
+      const stored = [
+        { content_type: "text", text: "Here is what the task found" },
+      ];
+      await act(async () => {
+        deliver({
+          messages: [
+            ...mockMessages,
+            deliveredTip,
+            {
+              id: "reaction-1",
+              content: stored,
+              role: "assistant",
+              created_at: "2023-01-01T12:06:00.000Z",
+              chat_id: "chat1",
+              updated_at: "2023-01-01T12:06:30.000Z",
+              is_message_in_active_thread: true,
+            },
+          ],
+        });
+      });
+      await waitFor(() =>
+        expect(result.current.messages["reaction-1"].content).toEqual(stored),
+      );
+      expect(result.current.isPendingResponse).toBe(false);
+      expect(result.current.error).toBeNull();
+    });
   });
 
   // Skip this test for now
@@ -1349,6 +1461,7 @@ describe("useChatMessaging", () => {
       onMessage?: (event: { data: string; type: string }) => void;
       onError?: (error: Error) => void;
       onClose?: () => void;
+      onOpen?: () => void;
       idleTimeoutMs?: number;
     };
 
@@ -2269,6 +2382,11 @@ describe("useChatMessaging", () => {
           expect(mockFetchChatMessages.mock.calls.length).toBe(readsBefore + 1);
           expect(result.current.isPendingResponse).toBe(false);
           expect(result.current.error).toBeNull();
+          // Nothing is running, so nothing opens another reattach.
+          expect(resumeCalls).toHaveLength(2);
+          expect(
+            useGenerationStatusStore.getState().statusByChatId.chat1?.kind,
+          ).not.toBe("running");
         } finally {
           restore();
         }
@@ -2405,6 +2523,121 @@ describe("useChatMessaging", () => {
           expect(result.current.isPendingResponse).toBe(false);
         } finally {
           waitUntilOnline.mockRestore();
+        }
+      });
+
+      it.each([
+        ["closes", (call: ResumeOptions) => call.onClose?.()],
+        [
+          "fails with a 502",
+          (call: ResumeOptions) =>
+            call.onError?.(
+              new FrontendRequestError(
+                "SSE request failed: 502 Bad Gateway",
+                { method: "POST", url: "/api/v1beta/me/messages/resumestream" },
+                { status: 502, statusText: "Bad Gateway" },
+              ),
+            ),
+        ],
+      ])(
+        "keeps streaming an answer still running when the reattach %s and the next one takes over",
+        async (_ending, endReattach) => {
+          const { result, resumeCalls, restore } =
+            await reconnectAfterTheAnswerFinished();
+          try {
+            let deliver: (value: unknown) => void = () => {};
+            mockFetchChatMessages.mockReturnValue(
+              new Promise((resolve) => {
+                deliver = resolve;
+              }),
+            );
+            await act(async () => {
+              endReattach(resumeCalls[1]);
+            });
+            await waitFor(() => expect(resumeCalls).toHaveLength(3));
+            const live = resumeCalls[2];
+            await act(async () => {
+              live.onOpen?.();
+            });
+            const delta = (newText: string) =>
+              live.onMessage?.(
+                streamEvent({
+                  message_type: "text_delta",
+                  message_id: "assistant-dropped",
+                  content_index: 0,
+                  new_text: newText,
+                }),
+              );
+            await act(async () => {
+              live.onMessage?.(
+                streamEvent({
+                  message_type: "assistant_message_started",
+                  message_id: "assistant-dropped",
+                }),
+              );
+              delta("read so far, and more");
+            });
+            // The server made the answer's row when it started.
+            await act(async () => {
+              deliver({
+                messages: [...mockMessages, { ...storedAnswer, content: [] }],
+              });
+            });
+            await act(async () => {
+              delta(" and the live end");
+            });
+
+            expect(
+              result.current.messages["assistant-dropped"].content,
+            ).toEqual([
+              {
+                content_type: "text",
+                text: "read so far, and more and the live end",
+              },
+            ]);
+            expect(result.current.isStreaming).toBe(true);
+            expect(result.current.isPendingResponse).toBe(true);
+            expect(result.current.error).toBeNull();
+          } finally {
+            restore();
+          }
+        },
+      );
+
+      it("reads the stored answer again when the person comes back to the page", async () => {
+        const { result, resumeCalls, restore } =
+          await reconnectAfterTheAnswerFinished();
+        try {
+          mockFetchChatMessages.mockRejectedValue(
+            new FrontendRequestError(
+              "Bad Gateway",
+              { method: "GET", url: "/api/v1beta/me/chats/chat1/messages" },
+              { status: 502, statusText: "Bad Gateway" },
+            ),
+          );
+          await failLastResume(resumeCalls, generationGone());
+          await waitFor(() =>
+            expect(result.current.isPendingResponse).toBe(false),
+          );
+
+          mockFetchChatMessages.mockReset().mockResolvedValue({
+            messages: [...mockMessages, storedAnswer],
+          });
+          await act(async () => {
+            setPageVisibility("visible");
+          });
+          await waitFor(() =>
+            expect(
+              result.current.messages["assistant-dropped"].content,
+            ).toEqual(stored),
+          );
+          await act(async () => {
+            window.dispatchEvent(new Event("focus"));
+          });
+          expect(mockFetchChatMessages).toHaveBeenCalledTimes(1);
+        } finally {
+          vi.restoreAllMocks();
+          restore();
         }
       });
 

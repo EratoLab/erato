@@ -353,10 +353,16 @@ export function createSSEConnection(url: string, options: SSEOptions = {}) {
         } catch {
           // ignore — fall through to status text
         }
+        const trimmedBody = bodyText.trim();
+        // A sign-in gate or a proxy answers with a whole HTML page, which
+        // would otherwise show up as the error text.
+        const isPage =
+          trimmedBody.startsWith("<") ||
+          (response.headers.get("content-type") ?? "").includes("html");
         const detail =
-          bodyText.trim().length > 0
-            ? bodyText.trim()
-            : `${response.status} ${response.statusText}`;
+          trimmedBody.length > 0 && !isPage
+            ? trimmedBody
+            : `${response.status} ${response.statusText}`.trim();
         const errorMsg = `SSE request failed: ${detail}`;
         logger.log("Fetch error:", errorMsg);
         throw new FrontendRequestError(

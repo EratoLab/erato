@@ -2780,6 +2780,67 @@ async fn test_resume_stream_no_active_task(pool: Pool<Postgres>) {
     server_handle.abort();
 }
 
+/// A failed lookup of the shared lease answers 503: a client reads 404 as
+/// "the answer finished" and drops what it streamed for the stored copy.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_resume_stream_lookup_failure_is_not_a_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool.clone()).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let body = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Hello" }))
+        .await
+        .text();
+    let chat_id: Uuid = body
+        .split("\n\n")
+        .filter_map(|event| event.split("data:").nth(1))
+        .filter_map(|data| serde_json::from_str::<Value>(data.trim()).ok())
+        .find(|json| json["message_type"] == "chat_created")
+        .and_then(|json| json["chat_id"].as_str()?.parse().ok())
+        .expect("Expected a chat_created event");
+    if let Some(task) = app_state.background_tasks.get_task(&chat_id).await {
+        app_state
+            .background_tasks
+            .remove_task(
+                &chat_id,
+                task.generation_id,
+                erato::services::background_tasks::TaskOutcome::Completed,
+            )
+            .await;
+    }
+    let resume = || {
+        server
+            .post("/api/v1beta/me/messages/resumestream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "chat_id": chat_id }))
+    };
+
+    sqlx::query("ALTER TABLE temp_chat_generations RENAME TO temp_chat_generations_away")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let failed = resume().await;
+    sqlx::query("ALTER TABLE temp_chat_generations_away RENAME TO temp_chat_generations")
+        .execute(&pool)
+        .await
+        .unwrap();
+    failed.assert_status(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+
+    resume()
+        .await
+        .assert_status(axum::http::StatusCode::NOT_FOUND);
+}
+
 /// Test resume streaming with full event replay and continuation.
 ///
 /// # Test Categories

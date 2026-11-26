@@ -3566,6 +3566,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When it cannot be told whether a generation is running"
           }
         },
         "security": [
