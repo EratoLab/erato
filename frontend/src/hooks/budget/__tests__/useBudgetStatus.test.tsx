@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { render, renderHook, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+import { ProfileContext } from "@/providers/ProfileProvider";
 
 import { useBudgetStatus, BUDGET_QUERY_KEY } from "../useBudgetStatus";
 
+import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ReactNode } from "react";
 
 describe("useBudgetStatus", () => {
@@ -91,6 +94,45 @@ describe("useBudgetStatus", () => {
 
   it("should use the correct query key", () => {
     expect(BUDGET_QUERY_KEY).toEqual(["budget-status"]);
+  });
+
+  it("keeps cached budget data scoped to the signed-in profile", async () => {
+    function CurrentSpending() {
+      const { data } = useBudgetStatus();
+      return <output>{data?.current_spending ?? "Loading budget"}</output>;
+    }
+
+    const budgetFor = (id: string) => (
+      <QueryClientProvider client={queryClient}>
+        <ProfileContext.Provider
+          value={{
+            profile: { id } as UserProfile,
+            isLoading: false,
+            error: null,
+          }}
+        >
+          <CurrentSpending />
+        </ProfileContext.Provider>
+      </QueryClientProvider>
+    );
+    fetchMock
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 80 }),
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({ enabled: true, current_spending: 20 }),
+      );
+
+    const { rerender } = render(budgetFor("first-account"));
+    expect(await screen.findByText("80")).toBeInTheDocument();
+
+    rerender(budgetFor("second-account"));
+    expect(screen.getByText("Loading budget")).toBeInTheDocument();
+    expect(await screen.findByText("20")).toBeInTheDocument();
+
+    rerender(budgetFor("first-account"));
+    expect(screen.getByText("80")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("should handle disabled budget feature", async () => {
