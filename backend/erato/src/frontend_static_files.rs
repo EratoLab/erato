@@ -38,13 +38,27 @@ struct FileStamp {
     changed: (u64, i64, i64),
 }
 
+/// File system clocks tick coarsely (Linux moves the status-change time only
+/// every few milliseconds, some file systems by the second), so a second
+/// change within one tick leaves the stamp as it was. A file changed this
+/// recently is hashed on every request and its tag is not kept, as git does
+/// with "racily clean" index entries.
+const STAMP_SETTLE_TIME: std::time::Duration = std::time::Duration::from_secs(2);
+
 impl FileStamp {
-    fn read(path: &Path) -> Option<Self> {
+    /// The stamp, and whether it is old enough to stand for the content.
+    fn read(path: &Path) -> Option<(Self, bool)> {
         let metadata = std::fs::metadata(path).ok().filter(|meta| meta.is_file())?;
-        Some(Self {
-            source: SourceStamp::read(path).ok()?,
-            changed: change_stamp(&metadata),
-        })
+        let settled = last_change(&metadata)
+            .and_then(|changed| changed.elapsed().ok())
+            .is_some_and(|age| age >= STAMP_SETTLE_TIME);
+        Some((
+            Self {
+                source: SourceStamp::read(path).ok()?,
+                changed: change_stamp(&metadata),
+            },
+            settled,
+        ))
     }
 }
 
@@ -59,14 +73,30 @@ fn change_stamp(_metadata: &std::fs::Metadata) -> (u64, i64, i64) {
     (0, 0, 0)
 }
 
+#[cfg(unix)]
+fn last_change(metadata: &std::fs::Metadata) -> Option<std::time::SystemTime> {
+    use std::os::unix::fs::MetadataExt;
+    let changed = std::time::UNIX_EPOCH.checked_add(std::time::Duration::new(
+        u64::try_from(metadata.ctime()).ok()?,
+        u32::try_from(metadata.ctime_nsec()).ok()?,
+    ))?;
+    Some(changed.max(metadata.modified().ok()?))
+}
+
+#[cfg(not(unix))]
+fn last_change(metadata: &std::fs::Metadata) -> Option<std::time::SystemTime> {
+    metadata.modified().ok()
+}
+
 impl FileEtags {
     /// Returns `None` when the path is not a readable regular file.
     pub async fn etag_for(&self, path: &Path) -> Option<String> {
         let owned_path = path.to_path_buf();
-        let stamp = tokio::task::spawn_blocking(move || FileStamp::read(&owned_path))
+        let (stamp, settled) = tokio::task::spawn_blocking(move || FileStamp::read(&owned_path))
             .await
             .ok()??;
-        if let Some((cached_stamp, etag)) = self.lock().get(path)
+        if settled
+            && let Some((cached_stamp, etag)) = self.lock().get(path)
             && *cached_stamp == stamp
         {
             return Some(etag.clone());
@@ -77,8 +107,10 @@ impl FileEtags {
             .await
             .ok()?
             .ok()?;
-        self.lock()
-            .insert(path.to_path_buf(), (stamp, etag.clone()));
+        if settled {
+            self.lock()
+                .insert(path.to_path_buf(), (stamp, etag.clone()));
+        }
         Some(etag)
     }
 
@@ -289,6 +321,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn back_to_back_rewrites_of_the_same_size_get_different_tags() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kit.css");
+        let etags = FileEtags::default();
+
+        let mut seen = std::collections::HashSet::new();
+        for round in 0..50 {
+            std::fs::write(&path, format!("a{{color:#{round:06}}}")).unwrap();
+            let etag = etags.etag_for(&path).await.unwrap();
+            assert!(seen.insert(etag), "round {round} reused an earlier tag");
+        }
+    }
+
+    #[tokio::test]
     async fn entity_tags_follow_file_content_not_server_version() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("theme.css");
@@ -320,5 +366,9 @@ mod tests {
             same_size_and_time
         );
         assert_eq!(etags.etag_for(dir.path()).await, None);
+        assert!(
+            etags.lock().is_empty(),
+            "tags of files changed within the last clock tick are not kept"
+        );
     }
 }
