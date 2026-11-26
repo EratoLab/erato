@@ -4392,7 +4392,7 @@ msgstr "404 - Page Not Found"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
 msgid "error.app.body"
-msgstr "This page could not be shown. Reload the page to continue."
+msgstr "This page could not be shown. Reload to continue."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
@@ -4407,7 +4407,7 @@ msgstr "Something went wrong"
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
 msgid "error.plain.appUpdated"
-msgstr "Part of the app could not be loaded. Reload the page to continue."
+msgstr "Part of the app could not be loaded. Reload to continue."
 
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
@@ -11846,9 +11846,9 @@ msgid "upload.maxSizeHint"
 msgstr "Maximum file size: {maxSizeFormatted}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
 msgid "upload.waitingForNetwork"
-msgstr "Waiting for the network…"
+msgstr "Waiting for the network. The upload continues once the connection is back."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

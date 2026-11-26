@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createConnectivityMonitor,
+  type ConnectivityMonitor,
+} from "@/lib/connectivity/connectivity";
+
+import {
   CHUNK_RELOAD_GUARD_MS,
   claimChunkReload,
   installChunkLoadRecovery,
@@ -19,6 +24,12 @@ function fakeWindow(path = "/chat/abc") {
   return { win, reload };
 }
 
+function reachableMonitor(): ConnectivityMonitor {
+  return createConnectivityMonitor({
+    fetchImpl: vi.fn().mockResolvedValue(new Response(null)),
+  });
+}
+
 function firePreloadError(win: Window) {
   const event = new Event("vite:preloadError", { cancelable: true });
   win.dispatchEvent(event);
@@ -34,22 +45,45 @@ afterEach(() => {
 });
 
 describe("chunk load recovery", () => {
-  it("reloads once at the same address and keeps the error from the page", () => {
+  it("reloads once at the same address and keeps the error from the page", async () => {
     const { win, reload } = fakeWindow();
-    const uninstall = installChunkLoadRecovery(win);
+    const uninstall = installChunkLoadRecovery(win, reachableMonitor());
 
     const event = firePreloadError(win);
 
-    expect(reload).toHaveBeenCalledTimes(1);
     expect(event.defaultPrevented).toBe(true);
     expect(isChunkReloadPending()).toBe(true);
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     uninstall();
   });
 
-  it("lets the error through when the same address already reloaded a moment ago", () => {
+  it("waits for the network before reloading, so the page does not land on the offline page", async () => {
+    let online = false;
+    const monitor = createConnectivityMonitor({
+      fetchImpl: vi.fn(() =>
+        online
+          ? Promise.resolve(new Response(null))
+          : Promise.reject(new TypeError("Load failed")),
+      ),
+    });
     const { win, reload } = fakeWindow();
-    const uninstall = installChunkLoadRecovery(win);
+    const uninstall = installChunkLoadRecovery(win, monitor);
+
     firePreloadError(win);
+    await vi.waitFor(() => expect(monitor.getStatus()).toBe("offline"));
+    expect(reload).not.toHaveBeenCalled();
+
+    online = true;
+    monitor.reportNetworkSuccess();
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    uninstall();
+  });
+
+  it("lets the error through when the same address already reloaded a moment ago", async () => {
+    const { win, reload } = fakeWindow();
+    const uninstall = installChunkLoadRecovery(win, reachableMonitor());
+    firePreloadError(win);
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     // The reloaded page is a fresh module instance.
     resetChunkLoadRecoveryForTests();
 

@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetChunkLoadRecoveryForTests } from "@/lib/chunkLoadRecovery";
+import {
+  isChunkReloadPending,
+  resetChunkLoadRecoveryForTests,
+} from "@/lib/chunkLoadRecovery";
+import { connectivity } from "@/lib/connectivity/connectivity";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import { AppErrorBoundary } from "./AppErrorBoundary";
@@ -18,6 +22,8 @@ describe("AppErrorBoundary", () => {
     resetChunkLoadRecoveryForTests();
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("location", { ...window.location, reload });
+    vi.spyOn(connectivity, "reportNetworkFailure").mockImplementation(() => {});
+    vi.spyOn(connectivity, "waitUntilOnline").mockResolvedValue(undefined);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -42,7 +48,7 @@ describe("AppErrorBoundary", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads once for a code file that failed to load and shows the start screen meanwhile", () => {
+  it("reloads once for a code file that failed to load and shows the start screen meanwhile", async () => {
     render(
       <AppErrorBoundary reloadingFallback={<p>Starting</p>}>
         <Thrower
@@ -55,8 +61,9 @@ describe("AppErrorBoundary", () => {
       </AppErrorBoundary>,
     );
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(isChunkReloadPending()).toBe(true);
     expect(screen.getByText("Starting")).toBeInTheDocument();
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
   });
 });

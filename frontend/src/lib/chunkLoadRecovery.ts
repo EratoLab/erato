@@ -1,3 +1,9 @@
+import {
+  connectivity,
+  type ConnectivityMonitor,
+} from "@/lib/connectivity/connectivity";
+import { safeSessionStorage } from "@/utils/safeSessionStorage";
+
 /**
  * After a server update, a page still running the old build asks for code
  * files that are gone. Reload once at the same address so it picks up the new
@@ -53,23 +59,24 @@ export function claimChunkReload(
   }
 }
 
-function sessionStorageOf(win: Window): Storage | null {
-  try {
-    return win.sessionStorage;
-  } catch {
-    return null;
-  }
-}
-
-/** Reloads the page once per address and guard window. True when a reload is under way. */
-export function reloadOnceForChunkError(win: Window = window): boolean {
+/**
+ * Reloads the page once per address and guard window. True when a reload is
+ * under way. A file can also fail because the network dropped; reloading then
+ * would land on the browser's offline page, so the reload waits until the
+ * server answers again.
+ */
+export function reloadOnceForChunkError(
+  win: Window = window,
+  monitor: ConnectivityMonitor = connectivity,
+): boolean {
   if (reloadPending) return true;
   const address = `${win.location.pathname}${win.location.search}`;
-  if (!claimChunkReload(sessionStorageOf(win), address, Date.now())) {
+  if (!claimChunkReload(safeSessionStorage(win), address, Date.now())) {
     return false;
   }
   reloadPending = true;
-  win.location.reload();
+  monitor.reportNetworkFailure();
+  void monitor.waitUntilOnline().then(() => win.location.reload());
   return true;
 }
 
@@ -77,9 +84,12 @@ export function reloadOnceForChunkError(win: Window = window): boolean {
  * Vite fires `vite:preloadError` when a code file of the build fails to load.
  * Unhandled, it rethrows into whatever asked for the file (a lazy page).
  */
-export function installChunkLoadRecovery(win: Window = window): () => void {
+export function installChunkLoadRecovery(
+  win: Window = window,
+  monitor: ConnectivityMonitor = connectivity,
+): () => void {
   const onPreloadError = (event: Event) => {
-    if (reloadOnceForChunkError(win)) {
+    if (reloadOnceForChunkError(win, monitor)) {
       event.preventDefault();
     }
   };

@@ -38,6 +38,11 @@ export type V1betaApiContext<
      * fetcher's default; `null` for no limit.
      */
     readTimeoutMs?: number | null;
+    /**
+     * Time limit for a request of any method, for callers that send again
+     * themselves and accept that a write cut off may already have arrived.
+     */
+    requestTimeoutMs?: number;
   };
   queryOptions: {
     /**

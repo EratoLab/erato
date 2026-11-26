@@ -10,11 +10,16 @@ import { validateFileSizes } from "@/utils/validateFileSizes";
 
 import {
   UnsupportedFileTypeError,
+  UploadNetworkError,
   UploadTooLargeError,
   UploadUnknownError,
   type UploadError,
-  isUploadTooLarge,
+  toUploadError,
 } from "./errors";
+import {
+  uploadTimeLimitMs,
+  uploadWithNetworkRetry,
+} from "./uploadWithNetworkRetry";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -97,24 +102,24 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
           },
         };
 
-        // Call fetchUploadFile directly
         let result;
         try {
-          result = await fetchUploadFile(variables as UploadFileVariables);
+          result = await uploadWithNetworkRetry(() =>
+            fetchUploadFile({
+              ...(variables as UploadFileVariables),
+              requestTimeoutMs: uploadTimeLimitMs(
+                files.reduce((sum, file) => sum + file.size, 0),
+              ),
+            }),
+          );
           logger.log("Standalone file upload successful, result:", result);
         } catch (uploadError) {
           logger.error("Error calling fetchUploadFile:", uploadError);
-
-          // Check for file too large error
-          if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(
-              maxSizeFormatted,
-              files.map((file) => file.name),
-            );
-          }
-
-          // Fallback to unknown error
-          throw new UploadUnknownError(uploadError);
+          throw toUploadError(
+            uploadError,
+            files.map((file) => file.name),
+            maxSizeFormatted,
+          );
         }
 
         if (result.rejected_files && result.rejected_files.length > 0) {
@@ -131,7 +136,8 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
         logger.error("Error uploading standalone files:", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError;
+          err instanceof UploadUnknownError ||
+          err instanceof UploadNetworkError;
 
         setError(isKnownError ? err : new UploadUnknownError(err));
       } finally {

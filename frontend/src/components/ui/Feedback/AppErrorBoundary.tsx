@@ -1,15 +1,9 @@
-import { t } from "@lingui/core/macro";
+import { i18n } from "@lingui/core";
 import { Component } from "react";
 
-import {
-  isChunkLoadError,
-  isChunkReloadPending,
-  reloadOnceForChunkError,
-} from "@/lib/chunkLoadRecovery";
+import { isChunkReloadPending } from "@/lib/chunkLoadRecovery";
 
-import { Button } from "../Controls/Button";
-import { ErrorIcon } from "../icons";
-import { CopyErrorButton } from "./CopyErrorButton";
+import { catchError, ErrorPanel, type CatchState } from "./ErrorPanel";
 
 import type { ReactNode } from "react";
 
@@ -19,37 +13,6 @@ export interface AppErrorBoundaryProps {
   reloadingFallback?: ReactNode;
 }
 
-type AppErrorBoundaryState =
-  | { didCatch: false; error: null }
-  | { didCatch: true; error: unknown };
-
-function AppErrorFallback({ error }: { error: unknown }) {
-  return (
-    <div
-      className="flex size-full flex-col items-center justify-center gap-4 p-8"
-      role="alert"
-      data-testid="app-error"
-    >
-      <div className="flex size-12 items-center justify-center rounded-full bg-[var(--theme-error-bg)]">
-        <ErrorIcon className="size-6 text-[var(--theme-error-fg)]" />
-      </div>
-      <h1 className="text-lg font-medium text-[var(--theme-fg-primary)]">
-        {t({ id: "error.app.title", message: "Something went wrong" })}
-      </h1>
-      <p className="max-w-md text-center text-sm text-[var(--theme-fg-muted)]">
-        {t({
-          id: "error.app.body",
-          message: "This page could not be shown. Reload the page to continue.",
-        })}
-      </p>
-      <Button onClick={() => window.location.reload()} variant="primary">
-        {t({ id: "error.app.reload", message: "Reload" })}
-      </Button>
-      <CopyErrorButton error={error} />
-    </div>
-  );
-}
-
 /**
  * The one catch above every page. A code file that fails to load after a
  * server update reloads the page once; anything else shows a plain message
@@ -57,18 +20,11 @@ function AppErrorFallback({ error }: { error: unknown }) {
  */
 export class AppErrorBoundary extends Component<
   AppErrorBoundaryProps,
-  AppErrorBoundaryState
+  CatchState
 > {
-  state: AppErrorBoundaryState = { didCatch: false, error: null };
+  state: CatchState = { didCatch: false, error: null };
 
-  static getDerivedStateFromError(error: unknown): AppErrorBoundaryState {
-    // Here rather than in componentDidCatch, so the first fallback render
-    // already knows a reload is under way and does not flash the message.
-    if (isChunkLoadError(error)) {
-      reloadOnceForChunkError();
-    }
-    return { didCatch: true, error };
-  }
+  static getDerivedStateFromError = catchError;
 
   render() {
     if (!this.state.didCatch) {
@@ -79,6 +35,23 @@ export class AppErrorBoundary extends Component<
     if (isChunkReloadPending()) {
       return this.props.reloadingFallback ?? null;
     }
-    return <AppErrorFallback error={this.state.error} />;
+    // `i18n._` with the English text, not the `t` macro: production builds
+    // strip the macro's text, and an Office pane can fail before its
+    // translations load.
+    return (
+      <ErrorPanel
+        title={i18n._({
+          id: "error.app.title",
+          message: "Something went wrong",
+        })}
+        body={i18n._({
+          id: "error.app.body",
+          message: "This page could not be shown. Reload to continue.",
+        })}
+        actionLabel={i18n._({ id: "error.app.reload", message: "Reload" })}
+        onAction={() => window.location.reload()}
+        error={this.state.error}
+      />
+    );
   }
 }

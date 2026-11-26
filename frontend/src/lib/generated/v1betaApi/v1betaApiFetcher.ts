@@ -20,12 +20,20 @@ const baseUrl = ""; // TODO add your baseUrl
  */
 export const READ_RESPONSE_TIMEOUT_MS = 45_000;
 
+export const REQUEST_TIMED_OUT_MESSAGE = "Network error (request timed out)";
+
 function withReadTimeout(
   method: string,
   timeoutMs: number | null,
   callerSignal?: AbortSignal,
+  requestTimeoutMs?: number,
 ) {
-  if (method.toUpperCase() !== "GET" || timeoutMs === null) {
+  if (requestTimeoutMs !== undefined) {
+    timeoutMs = requestTimeoutMs;
+  } else if (method.toUpperCase() !== "GET") {
+    timeoutMs = null;
+  }
+  if (timeoutMs === null) {
     return {
       signal: callerSignal,
       timedOut: () => false,
@@ -99,9 +107,15 @@ export async function v1betaApiFetch<
     queryParams,
     signal,
     readTimeoutMs = READ_RESPONSE_TIMEOUT_MS,
+    requestTimeoutMs,
   } = options;
   let error: ErrorWrapper<TError>;
-  const readTimeout = withReadTimeout(method, readTimeoutMs, signal);
+  const readTimeout = withReadTimeout(
+    method,
+    readTimeoutMs,
+    signal,
+    requestTimeoutMs,
+  );
   // Separates fetch's own "no response" TypeError from TypeErrors thrown while
   // building the request, such as a body JSON.stringify cannot serialize.
   let requestSent = false;
@@ -183,7 +197,7 @@ export async function v1betaApiFetch<
     const errorObject: Error = {
       name: "unknown" as const,
       message: readTimeout.timedOut()
-        ? "Network error (request timed out)"
+        ? REQUEST_TIMED_OUT_MESSAGE
         : e instanceof Error
           ? `Network error (${e.message})`
           : "Network error",

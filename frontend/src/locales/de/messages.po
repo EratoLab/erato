@@ -4392,7 +4392,7 @@ msgstr "404 - Seite nicht gefunden"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
 msgid "error.app.body"
-msgstr "Diese Seite konnte nicht angezeigt werden. Laden Sie die Seite neu, um fortzufahren."
+msgstr "Diese Seite konnte nicht angezeigt werden. Laden Sie neu, um fortzufahren."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
@@ -4407,7 +4407,7 @@ msgstr "Etwas ist schiefgelaufen"
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
 msgid "error.plain.appUpdated"
-msgstr "Ein Teil der App konnte nicht geladen werden. Laden Sie die Seite neu, um fortzufahren."
+msgstr "Ein Teil der App konnte nicht geladen werden. Laden Sie neu, um fortzufahren."
 
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
@@ -11846,9 +11846,9 @@ msgid "upload.maxSizeHint"
 msgstr "Maximale Dateigröße: {maxSizeFormatted}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
 msgid "upload.waitingForNetwork"
-msgstr "Warte auf das Netzwerk…"
+msgstr "Warten auf das Netzwerk. Das Hochladen geht weiter, sobald die Verbindung wieder steht."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

@@ -372,6 +372,7 @@ export {
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
 export { AppErrorBoundary } from "@/components/ui/Feedback/AppErrorBoundary";
 export { installChunkLoadRecovery } from "@/lib/chunkLoadRecovery";
+export { installComposeDraftReloadKeeper } from "@/hooks/chat/composeDraftReloadKeeper";
 export { plainErrorMessage } from "@/utils/plainErrorMessage";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";

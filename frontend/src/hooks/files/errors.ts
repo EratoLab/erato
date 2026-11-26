@@ -1,8 +1,12 @@
 import { i18n } from "@lingui/core";
 
 import {
+  connectivity,
+  isNetworkFailure,
+} from "@/lib/connectivity/connectivity";
+import {
+  knownErrorMessage,
   noConnectionMessage,
-  plainErrorMessage,
 } from "@/utils/plainErrorMessage";
 
 import type { UploadFileError as ApiUploadFileError } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -33,11 +37,21 @@ export class UploadTooLargeError extends Error {
 }
 
 export class UploadUnknownError extends Error {
-  /** `detail` may be anything the request layer threw; only readable text is kept. */
+  /**
+   * `detail` is the caller's own text, or anything a request threw: a known
+   * failure is said in plain words alone; a thrown value without readable
+   * text stays in the logs and the copied error report.
+   */
   constructor(detail?: unknown) {
     const baseMessage = i18n._("upload.error.unknown");
-    const message = detail === undefined ? null : plainErrorMessage(detail);
-    super(message ? `${baseMessage}: ${message}` : baseMessage);
+    const known = knownErrorMessage(detail);
+    const text =
+      typeof detail === "string"
+        ? detail
+        : detail instanceof Error
+          ? detail.message
+          : "";
+    super(known ?? (text ? `${baseMessage}: ${text}` : baseMessage));
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadUnknownError";
   }
@@ -46,7 +60,7 @@ export class UploadUnknownError extends Error {
 /** The upload got no answer, also after waiting for the network and trying again. */
 export class UploadNetworkError extends Error {
   constructor(cause: unknown) {
-    super(plainErrorMessage(cause) ?? noConnectionMessage(), { cause });
+    super(knownErrorMessage(cause) ?? noConnectionMessage(), { cause });
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadNetworkError";
   }
@@ -132,7 +146,9 @@ export function isUploadTooLarge(error: unknown): error is ApiUploadFileError {
     return true;
   }
 
-  // Case 2: Firefox-specific fallback for opaque NetworkError
+  // Case 2: Firefox-specific fallback for opaque NetworkError. A real network
+  // drop gives the same text, so only while the server is reachable.
+  if (connectivity.getStatus() !== "online") return false;
   const isFirefox =
     typeof navigator !== "undefined" &&
     navigator.userAgent.toLowerCase().includes("firefox");
@@ -160,6 +176,19 @@ export function isUnsupportedFileType(
   error: unknown,
 ): error is UnsupportedFileTypeError {
   return error instanceof UnsupportedFileTypeError;
+}
+
+/** Turns what an upload request threw into the error the composer shows. */
+export function toUploadError(
+  error: unknown,
+  filenames: string[],
+  maxSizeFormatted?: string,
+): UploadTooLargeError | UploadNetworkError | UploadUnknownError {
+  if (isUploadTooLarge(error)) {
+    return new UploadTooLargeError(maxSizeFormatted, filenames);
+  }
+  if (isNetworkFailure(error)) return new UploadNetworkError(error);
+  return new UploadUnknownError(error);
 }
 
 export type UploadError =

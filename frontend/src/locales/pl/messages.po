@@ -4392,7 +4392,7 @@ msgstr "404 - Strona nie znaleziona"
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
 msgid "error.app.body"
-msgstr "Nie udało się wyświetlić tej strony. Odśwież stronę, aby kontynuować."
+msgstr "Nie udało się wyświetlić tej strony. Odśwież, aby kontynuować."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Feedback/AppErrorBoundary.tsx
@@ -4407,7 +4407,7 @@ msgstr "Coś poszło nie tak"
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
 msgid "error.plain.appUpdated"
-msgstr "Nie udało się wczytać części aplikacji. Odśwież stronę, aby kontynuować."
+msgstr "Nie udało się wczytać części aplikacji. Odśwież, aby kontynuować."
 
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
@@ -11846,9 +11846,9 @@ msgid "upload.maxSizeHint"
 msgstr "Maksymalny rozmiar pliku: {maxSizeFormatted}"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Chat/ChatInput.tsx
+#: src/components/ui/Feedback/ChatWarnings/ConnectionWarning.tsx
 msgid "upload.waitingForNetwork"
-msgstr "Oczekiwanie na sieć…"
+msgstr "Oczekiwanie na sieć. Przesyłanie zostanie wznowione, gdy połączenie wróci."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

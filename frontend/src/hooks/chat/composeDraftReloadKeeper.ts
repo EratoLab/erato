@@ -1,19 +1,15 @@
+import { safeSessionStorage } from "@/utils/safeSessionStorage";
+
 import {
   restoreComposeReloadState,
   saveComposeReloadState,
 } from "./composeReloadState";
+import { useComposeSessionStore } from "./store/composeSessionStore";
+import { useMessageQueueStore } from "./store/messageQueueStore";
 
 export const COMPOSE_DRAFT_RELOAD_KEY = "erato.web.composeDraft";
 
 let discarded = false;
-
-function sessionStorageOf(win: Window): Storage | null {
-  try {
-    return win.sessionStorage;
-  } catch {
-    return null;
-  }
-}
 
 function remove(storage: Storage) {
   try {
@@ -33,7 +29,7 @@ function remove(storage: Storage) {
 export function installComposeDraftReloadKeeper(
   win: Window = window,
 ): () => void {
-  const storage = sessionStorageOf(win);
+  const storage = safeSessionStorage(win);
   if (!storage) return () => {};
   try {
     restoreComposeReloadState(storage, COMPOSE_DRAFT_RELOAD_KEY);
@@ -53,10 +49,30 @@ export function installComposeDraftReloadKeeper(
       remove(storage);
     }
   };
-  const drop = () => remove(storage);
+  // A queued message can still send while the page is hidden; the snapshot
+  // follows, so a later reload does not bring back text already sent.
+  let stopFollowing: (() => void) | null = null;
+  const followWhileHidden = () => {
+    if (stopFollowing) return;
+    const unsubscribeDrafts = useComposeSessionStore.subscribe(save);
+    const unsubscribeQueue = useMessageQueueStore.subscribe(save);
+    stopFollowing = () => {
+      unsubscribeDrafts();
+      unsubscribeQueue();
+      stopFollowing = null;
+    };
+  };
+  const drop = () => {
+    stopFollowing?.();
+    remove(storage);
+  };
   const onVisibilityChange = () => {
-    if (win.document.visibilityState === "hidden") save();
-    else drop();
+    if (win.document.visibilityState === "hidden") {
+      save();
+      followWhileHidden();
+    } else {
+      drop();
+    }
   };
   const onPageShow = (event: PageTransitionEvent) => {
     // Back from the back/forward cache: the page and its draft never left.
@@ -70,13 +86,14 @@ export function installComposeDraftReloadKeeper(
     win.removeEventListener("pagehide", save);
     win.removeEventListener("pageshow", onPageShow);
     win.document.removeEventListener("visibilitychange", onVisibilityChange);
+    stopFollowing?.();
   };
 }
 
 /** Signing out: the next person in this tab must not get this draft. */
 export function discardComposeDraftsOnUnload(win: Window = window): void {
   discarded = true;
-  const storage = sessionStorageOf(win);
+  const storage = safeSessionStorage(win);
   if (storage) remove(storage);
 }
 

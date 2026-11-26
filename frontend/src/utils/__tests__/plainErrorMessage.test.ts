@@ -51,9 +51,6 @@ describe("plainErrorMessage", () => {
   });
 
   it("names stream and server problems in plain words", () => {
-    expect(plainErrorMessage(new Error("SSE stream stalled"))).toBe(
-      "The server stopped answering. Please try again.",
-    );
     expect(
       plainErrorMessage(new Error("SSE connection closed unexpectedly (edit)")),
     ).toBe("The connection to the server was lost. Please try again.");

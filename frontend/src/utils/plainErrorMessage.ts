@@ -5,23 +5,22 @@ import {
   isNetworkFailure,
   isStalledStream,
 } from "@/lib/connectivity/connectivity";
+import { REQUEST_TIMED_OUT_MESSAGE } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
 
 import { FrontendRequestError } from "./errorReport";
 
 // The browsers' own words for a request that got no answer (Safari, Chrome,
-// Firefox, older WebKit), bare or wrapped by the request layer as
-// "Network error (…)".
+// Firefox, older WebKit), bare or wrapped as "Network error (…)". Fetches
+// outside the request layer arrive without the network-failure tag.
 const BROWSER_NO_ANSWER =
   /(?:Load failed|Failed to fetch|NetworkError when attempting to fetch resource\.?|Network request failed|The network connection was lost\.?|The Internet connection appears to be offline\.?)/
     .source;
 const NO_CONNECTION_RE = new RegExp(
   `^(?:${BROWSER_NO_ANSWER}|Network error(?: \\(${BROWSER_NO_ANSWER}\\))?)$`,
 );
-const TIMED_OUT_MESSAGE = "Network error (request timed out)";
-const STALLED_RE = /^SSE stream stalled$/;
+// Set as plain `Error`s by the chat when a stream ends without its last event.
 const CLOSED_RE = /^SSE connection closed unexpectedly/;
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
-const GATEWAY_RE = /^SSE request failed: (502|503|504)\b/;
 
 function messageOf(error: unknown): string | null {
   if (typeof error === "string") return error;
@@ -53,29 +52,26 @@ export function noConnectionMessage(): string {
 
 /**
  * Plain words for the technical errors people otherwise see as they are
- * ("Load failed", "SSE stream stalled", "[object Object]"). Any other error
- * keeps its own message, so detail the server sent is not swallowed. Returns
- * null when the error has nothing to show, so the caller picks its own text.
+ * ("Load failed", "SSE stream stalled", a gateway's 502), or null for any
+ * other error.
  */
-export function plainErrorMessage(error: unknown): string | null {
+export function knownErrorMessage(error: unknown): string | null {
   if (error === null || error === undefined) return null;
   const message = messageOf(error)?.trim() ?? "";
 
   if (isChunkLoadError(error)) {
     return t({
       id: "error.plain.appUpdated",
-      message:
-        "Part of the app could not be loaded. Reload the page to continue.",
+      message: "Part of the app could not be loaded. Reload to continue.",
     });
   }
-
-  if (isStalledStream(error) || STALLED_RE.test(message)) {
+  if (isStalledStream(error)) {
     return t({
       id: "error.plain.serverStoppedAnswering",
       message: "The server stopped answering. Please try again.",
     });
   }
-  if (message === TIMED_OUT_MESSAGE) {
+  if (message === REQUEST_TIMED_OUT_MESSAGE) {
     return t({
       id: "error.plain.timedOut",
       message: "The server did not answer in time. Please try again.",
@@ -91,16 +87,24 @@ export function plainErrorMessage(error: unknown): string | null {
     });
   }
   const status = statusOf(error);
-  if (
-    (status !== null && GATEWAY_STATUSES.has(status)) ||
-    GATEWAY_RE.test(message)
-  ) {
+  if (status !== null && GATEWAY_STATUSES.has(status)) {
     return t({
       id: "error.plain.serverDidNotAnswer",
       message: "The server did not answer. Please try again in a moment.",
     });
   }
+  return null;
+}
 
+/**
+ * `knownErrorMessage`, else the error's own message, so detail the server
+ * sent is not swallowed. Null when the error has nothing readable to show (a
+ * plain object gives no "[object Object]"), so the caller picks its own text.
+ */
+export function plainErrorMessage(error: unknown): string | null {
+  const known = knownErrorMessage(error);
+  if (known) return known;
+  const message = messageOf(error)?.trim();
   if (!message || message === "[object Object]") return null;
   return message;
 }

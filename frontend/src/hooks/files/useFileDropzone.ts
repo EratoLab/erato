@@ -6,7 +6,6 @@ import {
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
 import { clientPlatformHeaders } from "@/lib/clientPlatform";
-import { isNetworkFailure } from "@/lib/connectivity/connectivity";
 import {
   useCreateChat,
   fetchUploadFile,
@@ -30,7 +29,7 @@ import {
   UploadUnknownError,
   UnsupportedFileTypeError,
   type UploadError,
-  isUploadTooLarge,
+  toUploadError,
 } from "./errors";
 import {
   uploadTimeLimitMs,
@@ -323,32 +322,23 @@ export function useFileDropzone({
         let result: FileUploadResponse;
         try {
           result = await uploadWithNetworkRetry(
-            (signal) =>
-              fetchUploadFile(variables as UploadFileVariables, signal),
-            {
-              timeLimitMs: uploadTimeLimitMs(
-                filesToUpload.reduce((sum, file) => sum + file.size, 0),
-              ),
-              onWaitingForNetwork: setWaitingForNetwork,
-            },
+            () =>
+              fetchUploadFile({
+                ...(variables as UploadFileVariables),
+                requestTimeoutMs: uploadTimeLimitMs(
+                  filesToUpload.reduce((sum, file) => sum + file.size, 0),
+                ),
+              }),
+            { onWaitingForNetwork: setWaitingForNetwork },
           );
           logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {
           logger.error("Error calling fetchUploadFile:", uploadError);
-
-          // Check for fetch-like error with status
-          if (isUploadTooLarge(uploadError)) {
-            throw new UploadTooLargeError(
-              maxSizeFormatted,
-              filesToUpload.map((file) => file.name),
-            );
-          }
-
-          if (isNetworkFailure(uploadError)) {
-            throw new UploadNetworkError(uploadError);
-          }
-
-          throw new UploadUnknownError(uploadError);
+          throw toUploadError(
+            uploadError,
+            filesToUpload.map((file) => file.name),
+            maxSizeFormatted,
+          );
         }
 
         if (result.rejected_files && result.rejected_files.length > 0) {

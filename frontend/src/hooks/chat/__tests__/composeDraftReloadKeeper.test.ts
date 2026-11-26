@@ -37,6 +37,10 @@ function draftFor(chatKey: string) {
   return sessionId ? store.getDraft(sessionId).message : undefined;
 }
 
+function pageDies() {
+  uninstalls.splice(0).forEach((uninstall) => uninstall());
+}
+
 function freshPage() {
   // A reload starts with empty in-memory stores.
   useComposeSessionStore.setState({
@@ -65,7 +69,7 @@ describe("unsent draft over a reload", () => {
     install();
     typeDraft("chat-1", "Half a question");
     window.dispatchEvent(new Event("pagehide"));
-    uninstalls.splice(0).forEach((uninstall) => uninstall());
+    pageDies();
 
     freshPage();
     install();
@@ -78,6 +82,7 @@ describe("unsent draft over a reload", () => {
     install();
     typeDraft("__new-chat__", "Typed before locking the phone");
     setVisibility("hidden");
+    pageDies();
 
     freshPage();
     install();
@@ -117,5 +122,28 @@ describe("unsent draft over a reload", () => {
     install();
 
     expect(draftFor("chat-1")).toBeUndefined();
+  });
+
+  it("does not bring back a queued message that sent while the page was hidden", () => {
+    install();
+    const store = useComposeSessionStore.getState();
+    const sessionId = store.resolveSessionId("chat-1");
+    useMessageQueueStore.setState({
+      queuedBySessionId: {
+        [sessionId]: {
+          message: "Queued while answering",
+          attachedFiles: [],
+          mentionedAssistants: [],
+        },
+      },
+    } as never);
+    setVisibility("hidden");
+    useMessageQueueStore.setState({ queuedBySessionId: {} });
+    pageDies();
+
+    freshPage();
+    install();
+
+    expect(draftFor("chat-1") ?? "").toBe("");
   });
 });
