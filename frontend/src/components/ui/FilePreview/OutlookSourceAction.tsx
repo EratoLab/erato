@@ -17,7 +17,6 @@ import { PHONE_FIELD_TEXT } from "../Input/phoneFieldText";
 
 import type { OutlookFileProvenance } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
-
 export function OutlookSourceAction({
   provenance,
 }: {
