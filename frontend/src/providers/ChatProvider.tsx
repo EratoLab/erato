@@ -33,10 +33,7 @@ import {
   useValueStoreSelector,
 } from "@/utils/chat/valueStore";
 
-import {
-  useChatInputFeature,
-  usePinnedChatsFeature,
-} from "./FeatureConfigProvider";
+import { useChatInputFeature } from "./FeatureConfigProvider";
 import { useFileCapabilitiesContext } from "./FileCapabilitiesProvider";
 
 import type { SendMessagePreparation } from "@/hooks/chat/sendMessagePreparation";
@@ -362,8 +359,6 @@ export function ChatProvider({
     return getSupportedFileTypes(capabilities);
   }, [acceptedFileTypesProp, capabilities]);
 
-  const { enabled: pinnedChatsEnabled, maxItems: pinnedChatsLimit } =
-    usePinnedChatsFeature();
   const { maxFiles: maxFilesPerMessage } = useChatInputFeature();
 
   // Get the chat history functionality
@@ -384,7 +379,7 @@ export function ChatProvider({
     isNewChatPending,
     pinnedChats,
     pinChat,
-  } = useChatHistory({ pinnedChatsEnabled, pinnedChatsLimit });
+  } = useChatHistory();
 
   const [newChatCounter, setNewChatCounter] = useState(0);
 

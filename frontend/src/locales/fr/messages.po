@@ -4674,8 +4674,8 @@ msgstr "Télécharger des fichiers"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Redirection vers le chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Redirection vers le chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx

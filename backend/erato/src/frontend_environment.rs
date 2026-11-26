@@ -390,6 +390,29 @@ fn voice_switch_environment(
     ]
 }
 
+/// What the page needs before it can draw: the theme's page colour (web app
+/// only; the add-in panes keep their host's look) and which optional
+/// translation files exist, so it asks for nothing that would answer "not
+/// found". Read per request: theme files and translation overrides change
+/// without a restart.
+fn start_environment(
+    branding: &crate::distribution::branding::BrandingAssets,
+    override_locales: Vec<&str>,
+    web: bool,
+) -> Vec<(&'static str, Value)> {
+    let mut entries = vec![(
+        "TRANSLATION_OVERRIDE_LOCALES",
+        Value::from(override_locales),
+    )];
+    if let Some(locales) = branding.theme_translation_locales() {
+        entries.push(("THEME_TRANSLATION_LOCALES", Value::from(locales)));
+    }
+    if web && let Some(colors) = branding.start_page_colors() {
+        entries.push(("THEME_START_COLORS", Value::Object(colors)));
+    }
+    entries
+}
+
 /// The confirmation phrase each language approves with, as shown, once a
 /// deployment configures one; the web app ships the built-in ones.
 fn approval_voice_phrases(
@@ -1089,8 +1112,10 @@ pub fn inject_environment_script_tag(
         script_tag.write_str("window.").unwrap();
         script_tag.write_str(key).unwrap();
         script_tag.write_str(" = ").unwrap();
+        // `<` only occurs inside JSON strings, where `\u003c` reads the same;
+        // a value holding `</script>` would otherwise end the tag.
         script_tag
-            .write_str(&serde_json::to_string(&value)?)
+            .write_str(&serde_json::to_string(&value)?.replace('<', "\\u003c"))
             .unwrap();
         script_tag.write_str(";\n").unwrap();
     }
@@ -1593,14 +1618,24 @@ pub mod axum {
             headers.get(http::header::CONTENT_TYPE) == Some(&HeaderValue::from_static("text/html"));
 
         if is_html && should_inject_environment {
-            let switches = reloadable.read().await.voice_switches;
-            for (key, value) in
-                voice_switch_environment(frontend_registry.configured_voices, switches)
+            let reloadable = reloadable.read().await;
+            let start = start_environment(
+                &frontend_registry.branding,
+                reloadable.distribution_bundle.translation_locales(),
+                frontend.mount_path == MAIN_FRONTEND_MOUNT_PATH,
+            );
+            for (key, value) in voice_switch_environment(
+                frontend_registry.configured_voices,
+                reloadable.voice_switches,
+            )
+            .into_iter()
+            .chain(start)
             {
                 frontend_environment
                     .additional_environment
                     .insert(key.to_string(), value);
             }
+            drop(reloadable);
             // HTML files: inject environment variables and prevent caching (for auth)
             let mut res = res.map(move |body| {
                 let body_bytes = body.map_err(Into::into).boxed_unsync();
@@ -2010,6 +2045,54 @@ mod tests {
         assert!(
             served.contains("window.APPROVAL_VOICE_DECISIONS_ENABLED = true;"),
             "{served}"
+        );
+    }
+
+    #[test]
+    fn the_start_environment_gives_the_page_colour_to_the_web_app_only() {
+        use serde_json::json;
+        use std::collections::HashMap;
+        let dir = tempfile::tempdir().unwrap();
+        let theme = dir.path().join("web/custom-theme/acme");
+        std::fs::create_dir_all(theme.join("locales/de")).unwrap();
+        std::fs::write(theme.join("locales/de/messages.po"), "").unwrap();
+        std::fs::write(
+            theme.join("theme.json"),
+            r##"{"theme":{"light":{"colors":{"shell":{"page":"#fafafa"}}}}}"##,
+        )
+        .unwrap();
+        let mut config = AppConfig::default();
+        config.frontend.web_frontend_bundle_path = dir.path().join("web").display().to_string();
+        config.frontend.theme = Some("acme".into());
+        let branding = crate::distribution::branding::BrandingAssets::from_config(&config);
+
+        let web: HashMap<_, _> = start_environment(&branding, vec!["fr"], true)
+            .into_iter()
+            .collect();
+        assert_eq!(web["THEME_START_COLORS"], json!({ "light": "#fafafa" }));
+        assert_eq!(web["THEME_TRANSLATION_LOCALES"], json!(["de"]));
+        assert_eq!(web["TRANSLATION_OVERRIDE_LOCALES"], json!(["fr"]));
+
+        let pane: HashMap<_, _> = start_environment(&branding, vec![], false)
+            .into_iter()
+            .collect();
+        assert!(!pane.contains_key("THEME_START_COLORS"));
+        assert_eq!(pane["THEME_TRANSLATION_LOCALES"], json!(["de"]));
+    }
+
+    #[test]
+    fn injected_values_cannot_end_the_script_tag() {
+        use serde_json::json;
+        let mut env = FrontedEnvironment::default();
+        env.additional_environment
+            .insert("TEXT".into(), json!("</script><script>alert(1)</script>"));
+        let mut output = Vec::new();
+        inject_environment_script_tag(b"<html><head></head></html>", &mut output, &env, &[], None)
+            .unwrap();
+        let html = String::from_utf8(output).unwrap();
+        assert!(
+            html.contains(r#"window.TEXT = "\u003c/script>\u003cscript>alert(1)\u003c/script>";"#),
+            "{html}"
         );
     }
 
