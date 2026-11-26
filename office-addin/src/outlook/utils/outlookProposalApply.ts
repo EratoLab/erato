@@ -1,4 +1,4 @@
-import { looksLikeHtmlFragment } from "@erato/frontend/library";
+import { isEmailDraftHtml } from "@erato/frontend/library";
 
 import {
   parseAppointmentDetails,
@@ -83,11 +83,12 @@ export function outlookEmailDraft(
   if (candidates.length > 1) return { missing: "ambiguous" };
   const [fence] = candidates;
   if (fence) {
-    const wantsHtml =
-      fence.language === "erato-email-html" || artifact?.bodyFormat === "html";
     return {
       content: fence.body,
-      isHtml: wantsHtml && looksLikeHtmlFragment(fence.body),
+      isHtml: isEmailDraftHtml(fence.body, {
+        language: fence.language,
+        bodyFormat: artifact?.bodyFormat,
+      }),
     };
   }
   // The whole answer is the draft when the model wrote it with no fence at all.
@@ -104,7 +105,7 @@ export function outlookEmailDraft(
   )
     return {
       content: text,
-      isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(text),
+      isHtml: isEmailDraftHtml(text, { bodyFormat: artifact.bodyFormat }),
     };
   return { missing: "not_found" };
 }

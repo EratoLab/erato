@@ -8,12 +8,16 @@ import {
 } from "@/components/ui/FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "@/components/ui/FilePreview/OutlookSourceAction";
 import { AudioTranscriptExcerpt } from "@/components/ui/FileUpload/AudioTranscriptExcerpt";
-import { getFileName } from "@/components/ui/FileUpload/FilePreviewBase";
+import {
+  getFileName,
+  getFilePreviewUrl,
+} from "@/components/ui/FileUpload/FilePreviewBase";
 import {
   audioTranscriptionPendingText,
   audioTranscriptionTileStatus,
   getDisplayTranscript,
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
+import { downloadFile } from "@/lib/fileDownload";
 
 import { ModalBase } from "./ModalBase";
 
@@ -135,8 +139,18 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
       )}
       {!isUnavailableMissingPermissions && file.download_url && (
         <Button
-          // eslint-disable-next-line lingui/no-unlocalized-strings
-          onClick={() => window.open(file.download_url, "_blank")}
+          onClick={(event) => {
+            const { download_url: downloadUrl } = file;
+            downloadFile(
+              {
+                name: getFileName(file),
+                content: getFilePreviewUrl(file) ?? downloadUrl,
+              },
+              // eslint-disable-next-line lingui/no-unlocalized-strings
+              () => window.open(downloadUrl, "_blank"),
+              event.currentTarget,
+            );
+          }}
           variant="primary"
         >
           {t`Download File`}

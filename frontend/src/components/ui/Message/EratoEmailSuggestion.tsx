@@ -18,9 +18,13 @@ import type { EratoEmailCodeBlockProps } from "@/config/componentRegistry";
 export function DefaultEratoEmailCodeBlock({
   content,
   isHtml,
+  isStreaming,
 }: EratoEmailCodeBlockProps) {
   const [copied, setCopied] = useState(false);
-  const previewHtml = useMemo(() => sanitizeHtmlPreview(content), [content]);
+  const previewHtml = useMemo(
+    () => (isHtml ? sanitizeHtmlPreview(content, { isStreaming }) : ""),
+    [content, isHtml, isStreaming],
+  );
 
   const handleCopy = useCallback(() => {
     void copyEmailToClipboard(content, isHtml ?? false)
@@ -37,7 +41,7 @@ export function DefaultEratoEmailCodeBlock({
     <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
       {isHtml ? (
         <div
-          className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          className="mb-2 text-sm [&_a]:text-theme-fg-accent [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
           // Sanitized with DOMPurify before rendering.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: previewHtml }}
@@ -56,15 +60,8 @@ export function DefaultEratoEmailCodeBlock({
   );
 }
 
-export function EratoEmailSuggestion({
-  content,
-  isHtml,
-}: EratoEmailCodeBlockProps) {
-  const CustomRenderer = componentRegistry.EratoEmailCodeBlock;
-
-  if (CustomRenderer) {
-    return <CustomRenderer content={content} isHtml={isHtml} />;
-  }
-
-  return <DefaultEratoEmailCodeBlock content={content} isHtml={isHtml} />;
+export function EratoEmailSuggestion(props: EratoEmailCodeBlockProps) {
+  const Renderer =
+    componentRegistry.EratoEmailCodeBlock ?? DefaultEratoEmailCodeBlock;
+  return <Renderer {...props} />;
 }

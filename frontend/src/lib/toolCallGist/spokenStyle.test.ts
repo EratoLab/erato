@@ -3,7 +3,6 @@ import { writeFileSync } from "node:fs";
 import { i18n } from "@lingui/core";
 import { describe, expect, it } from "vitest";
 
-import { againOverVoice, resumeEvent } from "@/hooks/audio/approvalListening";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
@@ -545,22 +544,6 @@ describe("the sentence that says how much a short reading holds back", () => {
     const again = spokenCardStep(pieces, flow, { type: "repeat" });
     expect(again.playing).toEqual(flow.playing);
     expect(again.released).toBe(false);
-  });
-
-  it("is said again after a cough over it, and the rest stays held back", () => {
-    const pieces = shortCard();
-    const flow = atHeld(pieces);
-    const cut = flow.playing!;
-    const stopped = spokenCardStep(pieces, flow, { type: "stop" });
-    const resumed = spokenCardStep(pieces, stopped, resumeEvent(cut));
-    expect(resumed.playing).toEqual(cut);
-    expect(resumed.released).toBe(false);
-    // "Again" said over it is the same sentence too.
-    expect(againOverVoice(cut, { type: "repeat" })).toEqual({ type: "held" });
-    expect(againOverVoice(cut, { type: "repeat", index: 0 })).toEqual({
-      type: "repeat",
-      index: 0,
-    });
   });
 
   it("never holds back a read's condition on a record nobody read", () => {

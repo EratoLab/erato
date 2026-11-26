@@ -3216,6 +3216,11 @@ msgstr "Geteilter Chat"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.share.aria"
+msgstr "Chat-Link teilen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.aria"
 msgstr "Chat-Freigabe umschalten"
 

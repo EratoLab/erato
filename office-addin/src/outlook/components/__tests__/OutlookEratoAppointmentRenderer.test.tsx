@@ -28,7 +28,6 @@ vi.mock("@erato/frontend/library", async () => ({
   Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
     <button type="button" {...props} />
   ),
-  looksLikeHtmlFragment: () => false,
   useChatContext: () => mockUseChatContext(),
   ...(await import("../../../test/helpers/eratoLibraryMock")).chatHooksFrom(
     () => mockUseChatContext(),

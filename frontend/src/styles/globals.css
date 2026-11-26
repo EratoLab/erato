@@ -22,6 +22,23 @@
     overscroll-behavior: none;
   }
 
+  /* Erato's own route links (root-relative, opened in place): holding one on
+     iOS opens a preview of the target page, which inside an app's web view
+     loads without the session and shows the sign-in page. Without the
+     preview the hold selects the label instead, so touch screens drop that
+     too. Links in answers open a new tab or an /api/ file and keep the
+     system menu. */
+  a[href^="/"]:not([target], [href^="/api/"]) {
+    -webkit-touch-callout: none;
+  }
+
+  @media (pointer: coarse) {
+    a[href^="/"]:not([target], [href^="/api/"]) {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+
   /* Native checkboxes/radios ignore border/background utilities; accent-color
      is the only themable knob without replacing the control. */
   input[type="checkbox"],

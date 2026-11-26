@@ -214,7 +214,6 @@ export const DEFAULT_STUBS = {
   StarterPromptsSection: StubNothing,
   AssistantWelcomeUpper: StubNothing,
   splitFilenameForDisplay: () => ({ stem: "", extension: "" }),
-  looksLikeHtmlFragment: () => false,
   isImageFileResource: () => false,
   getFilePreviewUrl: () => undefined,
   FileAttachmentsPreview: StubNothing,

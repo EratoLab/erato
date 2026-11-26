@@ -5005,6 +5005,7 @@ enable_builtin_ms_office_addin = true
     );
     assert!(rewrite.template.contains("{{selected_text}}"));
     assert!(rewrite.template.contains("erato-email-html"));
+    assert!(!rewrite.template.contains("{{body_format}}"));
 
     let review = &config.action_facets.facets["outlook_review_draft"];
     assert_eq!(review.platform.as_deref(), Some("outlook"));
@@ -5014,6 +5015,7 @@ enable_builtin_ms_office_addin = true
     );
     assert!(review.template.contains("{{full_body}}"));
     assert!(review.template.contains("erato-email-html"));
+    assert!(!review.template.contains("{{body_format}}"));
 }
 
 #[test]
