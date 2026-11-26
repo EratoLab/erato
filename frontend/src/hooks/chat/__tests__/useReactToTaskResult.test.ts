@@ -69,7 +69,7 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
   const onGenerationRunningRefusal = vi.fn();
   const attachToServerGeneration = vi.fn(passThroughAttach);
   const clearPendingChat = vi.fn();
-  const handleRefetchAndClear = vi.fn();
+  const finishStreamFromServer = vi.fn();
   const result = renderHook((props: TriggerOverrides) =>
     useReactToTaskResult({
       chatId: "chat-1",
@@ -85,7 +85,7 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
       setSSECleanupForKey: vi.fn(),
       setSSEAbortCallback: vi.fn(),
       clearPendingChat,
-      handleRefetchAndClear,
+      finishStreamFromServer,
       onGenerationRunningRefusal,
       ...overrides,
       ...props,
@@ -97,7 +97,7 @@ const renderTrigger = (overrides: TriggerOverrides = {}) => {
     onGenerationRunningRefusal,
     attachToServerGeneration,
     clearPendingChat,
-    handleRefetchAndClear,
+    finishStreamFromServer,
   };
 };
 
@@ -267,7 +267,7 @@ describe("useReactToTaskResult", () => {
     // nothing but a socket's own tail ever resets it, so a dropped connection
     // would leave `isPendingResponse` true and the composer disabled until the
     // user left the chat and came back.
-    const { clearPendingChat, handleRefetchAndClear } = renderTrigger();
+    const { clearPendingChat, finishStreamFromServer } = renderTrigger();
     const { warn } = spyOnComplaints();
     act(() => {
       useMessagingStore
@@ -279,25 +279,26 @@ describe("useReactToTaskResult", () => {
       lastOptions().onClose?.();
     });
 
-    expect(
-      useMessagingStore.getState().getStreaming(getStreamKey("chat-1"))
-        .isStreaming,
-    ).toBe(false);
     expect(clearPendingChat).toHaveBeenCalledWith(getStreamKey("chat-1"));
-    expect(handleRefetchAndClear).toHaveBeenCalledTimes(1);
+    expect(finishStreamFromServer).toHaveBeenCalledTimes(1);
+    expect(finishStreamFromServer).toHaveBeenCalledWith(
+      getStreamKey("chat-1"),
+      false,
+      expect.stringContaining("completed"),
+    );
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a reaction stream that ended properly alone", () => {
     // The terminal event already reset streaming; re-reconciling would refetch
     // the conversation a second time for every reaction that worked.
-    const { handleRefetchAndClear } = renderTrigger();
+    const { finishStreamFromServer } = renderTrigger();
 
     act(() => {
       lastOptions().onClose?.();
     });
 
-    expect(handleRefetchAndClear).not.toHaveBeenCalled();
+    expect(finishStreamFromServer).not.toHaveBeenCalled();
   });
 
   it("asks once per row per session, across remounts", () => {

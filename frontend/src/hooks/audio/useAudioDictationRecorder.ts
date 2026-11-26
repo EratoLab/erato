@@ -52,16 +52,25 @@ import {
   SILENT_FRAME_PROBABILITY,
 } from "./audioTuning";
 import {
+  audioContinuesWhileHidden,
+  holdPlayAndRecordSession,
+} from "./audioWhileHidden";
+import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import { playbackContext } from "./pcmPlayback";
 import { audioFrom, recordingSignals, withFrame } from "./recordingSignals";
 import { markSpeechEnded, microphoneOpened } from "./speechEnd";
 import {
   overVoiceGate,
   overVoiceStep,
   resolveOverVoiceMinSpeechMs,
+  spokeOn,
+  spokeOnStart,
+  spokeOnStep,
   type OverVoiceGate,
+  type SpokeOn,
 } from "./talkOverVoice";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
@@ -453,6 +462,8 @@ export function useAudioDictationRecorder({
   const onVoiceLoweredRef = useRef(onVoiceLowered);
   /** The current recording's wait over the voice, from its start. */
   const holdRef = useRef<OverVoiceHold | null>(null);
+  /** Speech after the voice paused for the current recording, once it has. */
+  const spokeOnRef = useRef<SpokeOn | null>(null);
   const recordingSignalsRef = useRef<RecordingSignals | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
@@ -600,15 +611,50 @@ export function useAudioDictationRecorder({
 
   /**
    * The conversation keeps this microphone for its next turn: live, heard,
-   * the page shown, and cancelling the voice's echo, which plays into it.
+   * usable while the page is hidden, and cancelling the voice's echo, which
+   * plays into it.
    */
   const keepsMicrophone = useCallback(
     (stream: MediaStream) =>
       keepMicrophoneRef.current &&
       microphoneEchoCancelledRef.current &&
-      microphoneUsable(stream),
+      microphoneUsable(stream, audioContinuesWhileHidden()),
     [],
   );
+
+  const closeMicrophone = useCallback(() => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+  }, []);
+
+  /** Closes a microphone kept open between turns; a running turn closes it as it ends. */
+  const closeIdleMicrophone = useCallback(() => {
+    if (audioSourceNodeRef.current || startInFlightRef.current) return;
+    closeMicrophone();
+  }, [closeMicrophone]);
+
+  const maxRecordingDurationMsRef = useRef(maxRecordingDurationSeconds * 1000);
+  useEffect(() => {
+    maxRecordingDurationMsRef.current = maxRecordingDurationSeconds * 1000;
+  }, [maxRecordingDurationSeconds]);
+  const idleReleaseTimerRef = useRef<number | null>(null);
+  const clearIdleRelease = useCallback(() => {
+    if (idleReleaseTimerRef.current === null) return;
+    window.clearTimeout(idleReleaseTimerRef.current);
+    idleReleaseTimerRef.current = null;
+  }, []);
+  /**
+   * A hidden page's microphone waits for the next turn at most as long as a
+   * turn may listen. A conversation that does not listen again by itself (a
+   * paused voice, words left in the composer, an error) gives it back then.
+   */
+  const releaseIdleMicrophoneLater = useCallback(() => {
+    clearIdleRelease();
+    idleReleaseTimerRef.current = window.setTimeout(() => {
+      idleReleaseTimerRef.current = null;
+      if (document.visibilityState === "hidden") closeIdleMicrophone();
+    }, maxRecordingDurationMsRef.current);
+  }, [clearIdleRelease, closeIdleMicrophone]);
 
   const tearDownCaptureGraph = useCallback(() => {
     clearRecordingDurationTimer();
@@ -623,41 +669,42 @@ export function useAudioDictationRecorder({
     if (stream && !keepsMicrophone(stream)) {
       stream.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
+    } else if (stream && document.visibilityState === "hidden") {
+      releaseIdleMicrophoneLater();
     }
     stopRecordingVisualizer();
   }, [
     clearRecordingDurationTimer,
     keepsMicrophone,
+    releaseIdleMicrophoneLater,
     stopRecordingVisualizer,
     stopVadEngine,
     unwatchCaptureTrack,
   ]);
 
-  const closeMicrophone = useCallback(() => {
-    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
-    mediaStreamRef.current = null;
-  }, []);
-
-  /** Closes a microphone kept open between turns; a running turn closes it as it ends. */
-  const closeIdleMicrophone = useCallback(() => {
-    if (audioSourceNodeRef.current || startInFlightRef.current) return;
-    closeMicrophone();
-  }, [closeMicrophone]);
+  const conversing = enabled && mode === "conversational" && vadAutoStopEnabled;
+  useEffect(() => {
+    keepMicrophoneRef.current = conversing;
+    if (!conversing) closeIdleMicrophone();
+  }, [closeIdleMicrophone, conversing]);
 
   useEffect(() => {
-    const keep = enabled && mode === "conversational" && vadAutoStopEnabled;
-    keepMicrophoneRef.current = keep;
-    if (!keep) closeIdleMicrophone();
-  }, [closeIdleMicrophone, enabled, mode, vadAutoStopEnabled]);
+    if (!conversing || !audioContinuesWhileHidden()) return;
+    return holdPlayAndRecordSession();
+  }, [conversing]);
 
   useEffect(() => {
     const closeWhenHidden = () => {
-      if (document.visibilityState === "hidden") closeIdleMicrophone();
+      if (document.visibilityState !== "hidden") clearIdleRelease();
+      else if (!audioContinuesWhileHidden()) closeIdleMicrophone();
+      else if (mediaStreamRef.current) releaseIdleMicrophoneLater();
     };
     document.addEventListener("visibilitychange", closeWhenHidden);
-    return () =>
+    return () => {
       document.removeEventListener("visibilitychange", closeWhenHidden);
-  }, [closeIdleMicrophone]);
+      clearIdleRelease();
+    };
+  }, [clearIdleRelease, closeIdleMicrophone, releaseIdleMicrophoneLater]);
 
   const closeQuietly = useCallback((socket: WebSocket | undefined | null) => {
     if (!socket) return;
@@ -1150,6 +1197,15 @@ export function useAudioDictationRecorder({
   );
 
   /**
+   * The current recording paused the voice, and the user's speech went on
+   * once it was quiet: what it holds is the user's, not the voice's echo.
+   */
+  const spokeOnAfterVoice = useCallback(
+    (): boolean => spokeOn(spokeOnRef.current),
+    [],
+  );
+
+  /**
    * Ends the recording and drops what it heard: nothing more is sent for
    * transcription and no words arrive. For a recording whose words are no
    * longer wanted, such as one for a card that was decided.
@@ -1205,6 +1261,7 @@ export function useAudioDictationRecorder({
           ? { released: null, gate: overVoiceGate(), lowered: false }
           : null;
       holdRef.current = hold;
+      spokeOnRef.current = null;
       // Frames are timed from the microphone's first sample once it comes.
       recordingSignalsRef.current = recordingSignals(Date.now(), hold !== null);
       if (hold === null) microphoneOpened();
@@ -1593,8 +1650,11 @@ export function useAudioDictationRecorder({
                 void checkTurn();
                 return;
               }
-              // The person went on, or only hesitated: the turn goes on.
-              if (nothingSaid || now.heard) return;
+              // The person went on, or only hesitated: the turn goes on;
+              // but a sound that paused the voice ends with its silence, so
+              // the voice can go on.
+              if (now.heard) return;
+              if (nothingSaid && spokeOnRef.current === null) return;
               // The turn ends with the words checked. What came after them
               // is not sent: speech there would have reopened the gate, and
               // a piece of room sound alone can come back as a word.
@@ -1626,6 +1686,12 @@ export function useAudioDictationRecorder({
                     event.probabilities.isSpeech,
                   );
                 if (gate.heard) cutAtPause(gate);
+                if (spokeOnRef.current)
+                  spokeOnRef.current = spokeOnStep(
+                    spokeOnRef.current,
+                    event.probabilities.isSpeech,
+                    frameMs,
+                  );
                 const current = holdRef.current;
                 if (current?.released !== null) return;
                 const step = overVoiceStep(
@@ -1636,6 +1702,15 @@ export function useAudioDictationRecorder({
                 );
                 current.gate = step.gate;
                 if (step.confirmed) {
+                  // Safari reports no `outputLatency`.
+                  const output = playbackContext();
+                  spokeOnRef.current = spokeOnStart(
+                    output
+                      ? ((Number(output.outputLatency) || 0) +
+                          (Number(output.baseLatency) || 0)) *
+                          1000
+                      : 0,
+                  );
                   onSpeechOverVoiceRef.current?.();
                   releaseHold("speech");
                   return;
@@ -1860,6 +1935,9 @@ export function useAudioDictationRecorder({
             setDictationError(
               t`Dictation stopped automatically after the configured maximum duration.`,
             );
+            // The conversation listens no more; a hidden page that kept its
+            // microphone between turns gives it back now.
+            if (document.visibilityState === "hidden") closeMicrophone();
           }, recordingLimitMs * 1000);
         };
 
@@ -2065,6 +2143,7 @@ export function useAudioDictationRecorder({
     toggleDictation,
     cancelDictation,
     readRecordingSignals,
+    spokeOnAfterVoice,
   };
 }
 
@@ -2084,9 +2163,16 @@ function inputLatencyMs(settings: MediaTrackSettings): number {
     : MIN_INPUT_LATENCY_MS;
 }
 
-/** The microphone is live, heard, cancels echo, and the page is shown. */
-function microphoneUsable(stream: MediaStream): boolean {
-  if (typeof document !== "undefined" && document.visibilityState === "hidden")
+/** The microphone is live, heard, cancels echo, and may be kept while hidden. */
+function microphoneUsable(
+  stream: MediaStream,
+  keptWhileHidden: boolean,
+): boolean {
+  if (
+    typeof document !== "undefined" &&
+    document.visibilityState === "hidden" &&
+    !keptWhileHidden
+  )
     return false;
   const tracks = stream.getAudioTracks();
   return (

@@ -1657,6 +1657,11 @@ pub enum MessageSubmitStreamingResponseMessage {
         sequence: u64,
         audio: String,
         sample_rate: u32,
+        /// On the first chunk of each passage the voice speaks, the passage's
+        /// text: what the voice says from this chunk on.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schema(nullable = false)]
+        text: Option<String>,
     },
     #[serde(rename = "audio_error")]
     AudioError { message_id: Uuid },
@@ -2150,6 +2155,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             sequence,
             audio,
             sample_rate,
+            text,
         } => (
             "audio_delta",
             serde_json::to_string(&MessageSubmitStreamingResponseMessage::AudioDelta {
@@ -2157,6 +2163,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
                 sequence: *sequence,
                 audio: audio.clone(),
                 sample_rate: *sample_rate,
+                text: text.clone(),
             })?,
         ),
         StreamingEvent::AudioError { message_id } => (
@@ -13260,6 +13267,11 @@ async fn stream_generate_chat_completion<'a>(
                     content.insert(at, pointer);
                 }
                 Ok(None) => {}
+                // Stopped while the audio was still being made: the user cut
+                // the voice short, and the text is kept as it is.
+                Err(error) if streaming_task.is_some_and(|t| t.is_abort_requested()) => {
+                    tracing::debug!(%error, "Speech ended by a stop; keeping text response");
+                }
                 Err(error) => {
                     tracing::warn!(%error, "Speech synthesis failed; keeping text response");
                     let event = StreamingEvent::AudioError {
@@ -26997,7 +27009,8 @@ pub(crate) async fn run_client_operation_continuation(
         (status = OK, content_type="text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = NOT_FOUND, description = "No active generation task found for this chat"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
-        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
+        (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs"),
+        (status = SERVICE_UNAVAILABLE, description = "When it cannot be told whether a generation is running")
     ),
     security(
         ("bearer_auth" = [])
@@ -27034,13 +27047,30 @@ pub async fn resume_message_sse(
     .0;
 
     let local = app_state.background_tasks.get_task(&request.chat_id).await;
+    // A client takes 404 as "the answer finished" and shows the stored copy,
+    // so a failed lookup must not look like one.
+    let shared = if local.is_some() {
+        None
+    } else {
+        app_state
+            .background_tasks
+            .try_get_shared_generation(&request.chat_id)
+            .await
+            .map_err(|error| {
+                tracing::warn!(
+                    chat_id = %request.chat_id,
+                    error = %error,
+                    "Could not look up a running generation to resume"
+                );
+                (
+                    axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                    "Could not look up the running generation".to_string(),
+                )
+            })?
+    };
     let generation_id = if let Some(task) = &local {
         task.generation_id
-    } else if let Some((generation_id, _)) = app_state
-        .background_tasks
-        .get_shared_generation(&request.chat_id)
-        .await
-    {
+    } else if let Some((generation_id, _)) = shared {
         generation_id
     } else {
         return Err((

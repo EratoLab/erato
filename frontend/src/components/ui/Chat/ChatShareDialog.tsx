@@ -10,11 +10,16 @@ import { Input } from "@/components/ui/Input/Input";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { toast } from "@/components/ui/Toast";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
+import { hostShellWithCapability, shellAnchor } from "@/lib/hostShell";
 
-import { CheckIcon, CopyIcon } from "../icons";
+import { CheckIcon, CopyIcon, ShareIcon } from "../icons";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings
 const CHAT_SHARE_PATH_PREFIX = "/chat-share/";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const SHARE_SHEET_CAPABILITY = "shareSheet";
+// eslint-disable-next-line lingui/no-unlocalized-strings
+const SHARE_SHEET_OPEN = "shareSheet.open";
 
 interface ChatShareDialogProps {
   isOpen: boolean;
@@ -93,6 +98,25 @@ export function ChatShareDialog({
     window.setTimeout(() => setIsCopied(false), 2000);
   };
 
+  // A host app's share sheet offers Copy among its targets, so it replaces
+  // copying rather than sitting next to it.
+  const shareSheet = hostShellWithCapability(SHARE_SHEET_CAPABILITY, 1);
+
+  const handleShare = async (anchor: Element) => {
+    if (!shareUrl || !shareSheet) {
+      return;
+    }
+    try {
+      await shareSheet.request(SHARE_SHEET_OPEN, {
+        url: shareUrl,
+        anchor: shellAnchor(anchor),
+      });
+    } catch {
+      // Copying after the round trip may no longer count as the tap's.
+      await handleCopy().catch(() => undefined);
+    }
+  };
+
   return (
     <ModalBase
       isOpen={isOpen}
@@ -168,13 +192,22 @@ export function ChatShareDialog({
         {shareLink?.enabled ? (
           <InteractiveContainer
             useDiv={true}
-            onClick={() => {
-              void handleCopy();
+            onClick={(event) => {
+              void (shareSheet
+                ? handleShare(event.currentTarget)
+                : handleCopy());
             }}
-            aria-label={t({
-              id: "chat.share.copy.aria",
-              message: "Copy chat link",
-            })}
+            aria-label={
+              shareSheet
+                ? t({
+                    id: "chat.share.share.aria",
+                    message: "Share chat link",
+                  })
+                : t({
+                    id: "chat.share.copy.aria",
+                    message: "Copy chat link",
+                  })
+            }
             className={clsx(
               "flex w-full items-center gap-3 rounded-[var(--theme-radius-input)] border border-theme-border bg-theme-bg-secondary px-3 py-2 text-left",
               "theme-transition cursor-pointer hover:bg-theme-bg-hover",
@@ -193,6 +226,8 @@ export function ChatShareDialog({
             <span className="shrink-0 text-theme-fg-secondary">
               {isCopied ? (
                 <CheckIcon className="size-4 text-theme-success-fg" />
+              ) : shareSheet ? (
+                <ShareIcon className="size-4" />
               ) : (
                 <CopyIcon className="size-4" />
               )}

@@ -40,6 +40,8 @@ interface SpeechState {
    * the user says waits until the answer is complete.
    */
   spokenPartDone: boolean;
+  /** A tool call of the response runs, or an approved action has not reported back. */
+  actionRunning: boolean;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -50,7 +52,120 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   blocked: false,
   failed: false,
   spokenPartDone: false,
+  actionRunning: false,
 }));
+/**
+ * What the voice says, passage by passage (its wait lines included), with
+ * the playback time each passage plays from and to: words heard over the
+ * voice that only repeat what it was saying then are its echo.
+ */
+export interface Said {
+  text: string;
+  startsAt: number;
+  /** The end of its audio scheduled so far. */
+  endsAt: number;
+  /** All its audio is scheduled: the next passage has begun. */
+  complete: boolean;
+}
+let said: Said[] = [];
+const MAX_SAID = 40;
+/** When the user last talked over the voice, in playback time. */
+let pausedAt: number | null = null;
+/** Whether the reply's own voice, not a wait line, was sounding then. */
+let replySounded = false;
+/** A voice's pace while its passage's length in time is not known yet. */
+const CHARS_PER_SECOND = 15;
+/**
+ * Around the estimated spot: what the recording held back before the speech
+ * over the voice was confirmed, with room for the estimate's error.
+ */
+const HEARD_BEFORE_CHARS = 150;
+const HEARD_AFTER_CHARS = 40;
+/** A passage that ended longer ago than this was not sounding any more. */
+const STILL_SOUNDING_S = 1.5;
+
+export function noteVoiceChunk(
+  text: string | undefined,
+  startsAt: number,
+  endsAt: number,
+) {
+  const last = said.at(-1);
+  if (text === undefined) {
+    if (last && !last.complete) last.endsAt = endsAt;
+    return;
+  }
+  if (last) last.complete = true;
+  said = [
+    ...said.slice(-(MAX_SAID - 1)),
+    { text, startsAt, endsAt, complete: false },
+  ];
+}
+
+/**
+ * What the voice was saying when the user talked over it: the stretch
+ * around the spot reached in the passage then playing, at that passage's
+ * own pace. Empty when nothing was sounding.
+ */
+export function voiceTextAtPause(): string {
+  return pausedAt === null ? "" : voiceTextAt(said, pausedAt);
+}
+
+/** Whether the user talked over the reply's own voice. */
+export const replySoundedAtPause = (): boolean => replySounded;
+
+/** {@link voiceTextAtPause} for passages `log` at playback time `at`. */
+export function voiceTextAt(log: readonly Said[], at: number): string {
+  const started = log.filter((entry) => entry.startsAt <= at);
+  const current = started.at(-1);
+  if (!current || at > current.endsAt + STILL_SOUNDING_S) return "";
+  const length = current.text.length;
+  const duration = current.endsAt - current.startsAt;
+  const rate =
+    current.complete && duration > 0.5 ? length / duration : CHARS_PER_SECOND;
+  const spot = Math.min(length, Math.round((at - current.startsAt) * rate));
+  const earlier =
+    spot < HEARD_BEFORE_CHARS
+      ? (started.at(-2)?.text.slice(-(HEARD_BEFORE_CHARS - spot)) ?? "")
+      : "";
+  return `${earlier} ${current.text.slice(
+    Math.max(0, spot - HEARD_BEFORE_CHARS),
+    spot + HEARD_AFTER_CHARS,
+  )}`.trim();
+}
+
+/**
+ * Tool calls of the current response that run, and an approved action whose
+ * result has not come: speech over the voice must not stop the turn then,
+ * or an action that ran would be shown as stopped.
+ */
+const runningCalls = new Set<string>();
+let approvedAction = false;
+const publishAction = () => {
+  const actionRunning = runningCalls.size > 0 || approvedAction;
+  if (useSpeechPlayback.getState().actionRunning !== actionRunning)
+    useSpeechPlayback.setState({ actionRunning });
+};
+
+export function noteToolCall(
+  streamKey: string | undefined,
+  toolCallId: string,
+  status: "preparing" | "in_progress" | "success" | "error",
+) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  if (status === "success" || status === "error") {
+    runningCalls.delete(toolCallId);
+    approvedAction = false;
+  } else runningCalls.add(toolCallId);
+  publishAction();
+}
+
+/** The response that follows an approval runs the approved action first. */
+export function noteApprovedAction(streamKey?: string) {
+  if (streamKey !== undefined && acceptingStream !== streamKey) return;
+  approvedAction = true;
+  publishAction();
+}
+
 /**
  * The last audio chunk played for the current response, so that a resumed
  * stream's replay is not said twice. Every stream numbers its audio from 0,
@@ -127,7 +242,7 @@ const queue = createPcmQueue(() => {
     underrunTimer = undefined;
     if (replyQuiet()) useSpeechPlayback.setState({ playing: false });
   }, UNDERRUN_HOLD_MS);
-});
+}, noteVoiceChunk);
 const interruptListeners = new Set<() => void>();
 
 /**
@@ -176,7 +291,7 @@ export function releaseReplyAudio() {
     return;
   }
   for (const chunk of chunks) {
-    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate, chunk.text)) {
       speechFailed();
       return;
     }
@@ -237,6 +352,11 @@ export function stopSpeechPlayback(streamKey?: string) {
  */
 export function pauseSpeechPlayback() {
   const context = playbackContext();
+  pausedAt = context?.currentTime ?? null;
+  replySounded = queue.active;
+  // Passages queued but not begun are said again later, if at all.
+  const at = pausedAt;
+  if (at !== null) said = said.filter((entry) => entry.startsAt <= at);
   if (!accepting || held !== null || !context) return;
   clearUnderrun();
   held = queue.pause(context);
@@ -257,8 +377,22 @@ export function resumeSpeechPlayback() {
   useSpeechPlayback.setState({ paused: false });
   const context = playbackContext();
   if (!playbackPlays(context)) return;
+  // The passage it was cut in goes on from about where it was: logged
+  // again as begun that long before now, so a later talk-over finds it.
+  const cut = pausedAt === null ? undefined : said.at(-1);
+  if (cut && pausedAt !== null && chunks.length > 0 && !chunks[0].text) {
+    const shift = context.currentTime - pausedAt;
+    said = [
+      ...said,
+      {
+        ...cut,
+        startsAt: cut.startsAt + shift,
+        endsAt: cut.complete ? cut.endsAt + shift : context.currentTime,
+      },
+    ];
+  }
   for (const chunk of chunks) {
-    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate, chunk.text)) {
       speechFailed();
       return;
     }
@@ -277,6 +411,12 @@ export function beginSpeechResponse(streamKey?: string) {
     useSpeechPlayback.getState().conversational;
   audioEnded = !accepting;
   resetParts();
+  said = [];
+  pausedAt = null;
+  replySounded = false;
+  runningCalls.clear();
+  approvedAction = false;
+  publishAction();
   useSpeechPlayback.setState({
     spokenPartDone: false,
     failed: false,
@@ -375,6 +515,8 @@ export function playSpeechChunk(
   audio: string,
   sampleRate: number,
   streamKey?: string,
+  /** On a passage's first chunk, what the voice says from here on. */
+  text?: string,
 ) {
   const state = useSpeechPlayback.getState();
   if (
@@ -389,11 +531,11 @@ export function playSpeechChunk(
   lastSequence = sequence;
   activeMessage = messageId;
   if (held !== null) {
-    held.push({ audio, sampleRate });
+    held.push({ audio, sampleRate, text });
     return;
   }
   if (gate !== null) {
-    gate.push({ audio, sampleRate });
+    gate.push({ audio, sampleRate, text });
     return;
   }
   const context = playbackContext();
@@ -401,7 +543,7 @@ export function playSpeechChunk(
     useSpeechPlayback.setState({ blocked: true });
     return; // The completed response remains available for explicit replay.
   }
-  if (!queue.enqueue(context, audio, sampleRate)) {
+  if (!queue.enqueue(context, audio, sampleRate, text)) {
     speechFailed();
     return;
   }

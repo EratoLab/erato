@@ -40,6 +40,8 @@ import {
   beginSpeechResponse,
   endSpeechResponse,
   moveSpeechStream,
+  noteApprovedAction,
+  noteToolCall,
   playSpeechChunk,
   readsBackContinuation,
   replyCallsTool,
@@ -176,6 +178,7 @@ const MAX_STALL_REATTACHES = 3;
 const MAX_NETWORK_RESUME_ATTEMPTS = 6;
 
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
+const RESUME_STREAM_URL = "/api/v1beta/me/messages/resumestream";
 
 /**
  * A user's decision on a parked MCP tool approval. `toolCallId` / `toolName` /
@@ -409,6 +412,13 @@ export function useChatMessaging(
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
   const stallReattachesByKeyRef = useRef<Record<string, number>>({});
   const reconnectWaitByKeyRef = useRef(new Map<string, () => void>());
+  const pendingRereadByKeyRef = useRef(new Map<string, () => void>());
+  useEffect(() => {
+    const pendingRereads = pendingRereadByKeyRef.current;
+    return () => {
+      pendingRereads.forEach((stop) => stop());
+    };
+  }, []);
   const [stops] = useState(createStopDelivery);
   useEffect(() => () => stops.dropAll(), [stops]);
   const preparationAbortByKeyRef = useRef<Record<string, AbortController>>({});
@@ -624,8 +634,13 @@ export function useChatMessaging(
 
   // --- Define handleRefetchAndClear callback ---
   const handleRefetchAndClear = useCallback(
-    async (options: { invalidate?: boolean; logContext: string }) => {
-      const { invalidate = false, logContext } = options;
+    async (options: {
+      invalidate?: boolean;
+      logContext: string;
+      /** The chat a stream belongs to, which can differ from the one shown. */
+      forChatId?: string;
+    }) => {
+      const { invalidate = false, logContext, forChatId } = options;
       let refetchedApiMessages: Message[] | null = null;
       const storeSnapshot = useMessagingStore.getState();
       const aliasResolvedNewChatKey = resolveStreamAlias(
@@ -643,6 +658,7 @@ export function useChatMessaging(
       const activeDerivedChatId =
         activeResolvedKey !== NEW_CHAT_STREAM_KEY ? activeResolvedKey : null;
       const effectiveChatId =
+        forChatId ??
         chatId ??
         newlyCreatedChatId ??
         storeSnapshot.newlyCreatedChatId ??
@@ -836,7 +852,13 @@ export function useChatMessaging(
               (message) => message.id === completionMessageId,
             ) === true);
 
-        if (hasPersistedCompletionMessage || !completionMessageId) {
+        if (completionStreaming.isStreaming) {
+          // A reattach to a still-running answer took over this chat while
+          // the read was out; it ends the turn itself.
+          logger.log(
+            `[DEBUG_STREAMING] ${logContext}: A stream owns this chat again, leaving it alone.`,
+          );
+        } else if (hasPersistedCompletionMessage || !completionMessageId) {
           logger.log(
             `[DEBUG_STREAMING] ${logContext}: Persisted assistant detected, resetting streaming state.`,
           );
@@ -874,6 +896,108 @@ export function useChatMessaging(
     ],
   );
   // --- End of handleRefetchAndClear callback ---
+
+  /**
+   * Ends a turn the server is done with by reading the chat's stored copy.
+   * The streamed answer stays on screen until that copy is in hand; when the
+   * read fails, the turn ends with the streamed answer kept and the chat is
+   * read again once the connection is back. The caller has already put the
+   * turn in its finalizing state.
+   */
+  const finishTurnFromServer = useCallback(
+    (finishedKey: string, logContext: string, saved = true) => {
+      const resolvedKey = resolveStreamAlias(
+        useMessagingStore.getState().streamKeyAliases,
+        finishedKey,
+      );
+      // The user may have moved to another chat meanwhile.
+      const forChatId =
+        resolvedKey !== NEW_CHAT_STREAM_KEY ? resolvedKey : undefined;
+      // The logContext must say "completed": that is what makes
+      // handleRefetchAndClear end the finalizing state.
+      void handleRefetchAndClear({ invalidate: true, logContext, forChatId })
+        .catch((error: unknown) => {
+          logger.warn("Completion refetch failed", error);
+          // Before the store write below, which is what re-renders.
+          setSubmittingForKey(finishedKey, false);
+          const messaging = useMessagingStore.getState();
+          if (!messaging.getStreaming(finishedKey).isStreaming) {
+            messaging.keepStreamedAnswer(finishedKey, { saved });
+            messaging.setStreaming(
+              { isStreaming: false, isFinalizing: false },
+              finishedKey,
+            );
+          }
+          // Any HTTP answer counts as online, so the reconnect read can fail
+          // again at once; the person coming back to the page tries again.
+          let settled = false;
+          const pendingRereads = pendingRereadByKeyRef.current;
+          pendingRereads.get(finishedKey)?.();
+          const stop = () => {
+            settled = true;
+            window.removeEventListener("focus", onReturn);
+            document.removeEventListener("visibilitychange", onReturn);
+            if (pendingRereads.get(finishedKey) === stop) {
+              pendingRereads.delete(finishedKey);
+            }
+          };
+          pendingRereads.set(finishedKey, stop);
+          const reread = (rereadContext: string) => {
+            if (settled) return;
+            const newerTurn =
+              isSubmittingForKey(finishedKey) ||
+              useMessagingStore.getState().getStreaming(finishedKey)
+                .isStreaming;
+            if (newerTurn) {
+              stop();
+              return;
+            }
+            handleRefetchAndClear({ logContext: rereadContext, forChatId })
+              .then(stop)
+              .catch((retryError: unknown) => {
+                logger.warn(`${rereadContext} failed`, retryError);
+              });
+          };
+          function onReturn() {
+            if (document.visibilityState === "visible") {
+              reread("Refetch on return after a failed completion refetch");
+            }
+          }
+          window.addEventListener("focus", onReturn);
+          document.addEventListener("visibilitychange", onReturn);
+          void connectivity.waitUntilOnline().then(() => {
+            reread("Refetch after a failed completion refetch");
+          });
+        })
+        .then(() => {
+          // Deliberately no clearPendingChat here: a chat the refetched
+          // list still does not return (filtered out, on a later page)
+          // has the placeholder as its only sidebar row, which must
+          // survive the finished turn. The listed-row swap clears it when
+          // the chat shows up; leaving for a new chat clears it otherwise.
+          setSubmittingForKey(finishedKey, false);
+        });
+    },
+    [handleRefetchAndClear, isSubmittingForKey, setSubmittingForKey],
+  );
+
+  /**
+   * Ends an answer whose stream stopped short of a completion the way a
+   * completion does, so its text stays until the stored copy replaces it.
+   * `saved` says whether the server reported the answer finished. A caller
+   * that also releases a handed-off submit reads the streaming state first,
+   * since that release resets an answer still streaming.
+   */
+  const finishStreamFromServer = useCallback(
+    (key: string, saved: boolean, logContext: string) => {
+      const messaging = useMessagingStore.getState();
+      messaging.keepStreamedAnswer(key, { saved });
+      endWaitTurn(key);
+      messaging.setStreaming({ isStreaming: false, isFinalizing: true }, key);
+      finishTurnFromServer(key, logContext, saved);
+    },
+    [finishTurnFromServer],
+  );
 
   // For backward compatibility with tests
   const cancelMessage = useCallback(() => {
@@ -1207,6 +1331,7 @@ export function useChatMessaging(
               responseData.audio,
               responseData.sample_rate,
               activeStreamKey,
+              responseData.text ?? undefined,
             );
             break;
           case "audio_error":
@@ -1443,51 +1568,10 @@ export function useChatMessaging(
               }
             }
             recentlyCompletedByKeyRef.current[activeStreamKey] = Date.now();
-            void handleRefetchAndClear({
-              invalidate: true,
-              logContext: "Assistant message completed",
-            })
-              .catch((error: unknown) => {
-                // A finished answer must not leave the chat locked: end the
-                // turn with the streamed answer kept, and read the chat once
-                // more when the connection is back.
-                logger.warn("Completion refetch failed", error);
-                // Before the store write below, which is what re-renders.
-                setSubmittingForKey(activeStreamKey, false);
-                const messaging = useMessagingStore.getState();
-                messaging.keepStreamedAnswer(activeStreamKey, { saved: true });
-                messaging.setStreaming(
-                  { isStreaming: false, isFinalizing: false },
-                  activeStreamKey,
-                );
-                void connectivity
-                  .waitUntilOnline()
-                  .then(() => {
-                    const newerTurn =
-                      isSubmittingForKey(activeStreamKey) ||
-                      useMessagingStore.getState().getStreaming(activeStreamKey)
-                        .isStreaming;
-                    if (newerTurn) return;
-                    return handleRefetchAndClear({
-                      logContext: "Refetch after a failed completion refetch",
-                    });
-                  })
-                  .catch((retryError: unknown) => {
-                    logger.warn("Refetch after reconnect failed", retryError);
-                  });
-              })
-              .then(() => {
-                // Deliberately no clearPendingChat here: a chat the refetched
-                // list still does not return (filtered out, on a later page)
-                // has the placeholder as its only sidebar row, which must
-                // survive the finished turn. The listed-row swap clears it when
-                // the chat shows up; leaving for a new chat clears it otherwise.
-                // Reset submission flag after refetch completes
-                setSubmittingForKey(activeStreamKey, false);
-                logger.log(
-                  "[DEBUG_STREAMING] assistant_message_completed: isSubmittingRef.current set to false after refetch.",
-                );
-              });
+            finishTurnFromServer(
+              activeStreamKey,
+              "Assistant message completed",
+            );
             break;
 
           case "tool_call_proposed":
@@ -1496,6 +1580,11 @@ export function useChatMessaging(
               responseData,
             );
             replyCallsTool(activeStreamKey);
+            noteToolCall(
+              activeStreamKey,
+              responseData.tool_call_id,
+              "preparing",
+            );
             handleToolCallProposed(responseData, activeStreamKey);
             break;
 
@@ -1505,6 +1594,11 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            noteToolCall(
+              activeStreamKey,
+              responseData.tool_call_id,
+              responseData.status,
+            );
             waitTurnTool(
               activeStreamKey,
               responseData.message_id,
@@ -1610,6 +1704,7 @@ export function useChatMessaging(
       setNewlyCreatedChatId, // for handleChatCreated
       // External handlers (handleChatCreated, handleUserMessageSaved, etc.) are stable imports
       handleRefetchAndClear, // Added dependency
+      finishTurnFromServer,
       refetchChatHistory,
       explicitNav, // Added explicit navigation dependency
       setError,
@@ -1624,14 +1719,15 @@ export function useChatMessaging(
   );
 
   /**
-   * A submit whose 409 handed its turn to a resume socket keeps the submit
-   * lock, so the composer stays disabled for the turn it is now watching. The
-   * socket closing (or failing to open) is what ends that wait — and the
-   * store write is also what produces the falling edge of `isPendingResponse`
-   * that arms the composer's queue drain.
+   * A submit that handed its turn to a resume socket keeps the submit lock,
+   * so the composer stays disabled for the turn it is now watching: after a
+   * 409, and after a dropped connection. The socket closing (or failing to
+   * open) is what ends that wait — and the store write is also what produces
+   * the falling edge of `isPendingResponse` that arms the composer's queue
+   * drain.
    *
-   * A no-op for every other resume: in those paths the submit lock is already
-   * clear by the time a resume socket is opened.
+   * It resets an answer that is still streaming, so a caller that wants to
+   * finish that answer reads its state first.
    */
   const releaseHandedOffSubmit = useCallback(
     (resumeStreamKey: string) => {
@@ -1806,127 +1902,143 @@ export function useChatMessaging(
       );
 
       const resumeStreamKeyRef = { current: resumeStreamKey, replays: true };
-      const cleanup = createSSEConnection(
-        "/api/v1beta/me/messages/resumestream",
-        {
-          method: "POST",
-          headers: {
-            ...getClientToolHeaders(),
-            [X_ERATO_PLATFORM_HEADER]: platform,
-          },
-          body: JSON.stringify({ chat_id: effectiveChatId }),
-          connectTimeoutMs: RESUME_CONNECT_TIMEOUT_MS,
-          idleTimeoutMs:
-            (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) <
-            MAX_STALL_REATTACHES
-              ? CHAT_STREAM_IDLE_TIMEOUT_MS
-              : undefined,
-          onMessage: (sseEvent) =>
-            processStreamEvent(sseEvent, resumeStreamKeyRef),
-          onOpen: () => {
-            resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
-            logger.log(
-              `[DEBUG_STREAMING] resumestream opened for chat ${effectiveChatId}`,
-            );
-          },
-          onError: (errorEvent) => {
-            const connectionError = getSSEConnectionError(
-              errorEvent,
-              "SSE resume connection error",
-            );
-            if (
-              isNetworkFailure(connectionError) &&
-              useMessagingStore.getState().getStreaming(resumeStreamKey)
-                .isStreaming
-            ) {
-              if (isStalledStream(connectionError)) {
-                stallReattachesByKeyRef.current[resumeStreamKey] =
-                  (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) + 1;
-              }
-              if (
-                resumeAfterReconnect(resumeStreamKey, effectiveChatId, reason)
-              ) {
-                return;
-              }
-            }
-            delete stallReattachesByKeyRef.current[resumeStreamKey];
-            // Nothing is running any more, typically because the answer
-            // finished while the connection was down: show what was stored.
-            const generationGone =
-              connectionError instanceof FrontendRequestError &&
-              connectionError.response?.status === 404;
-            if (generationGone) {
-              resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
-              useMessagingStore.getState().markAnswersSaved(resumeStreamKey);
-            }
-            const errorMessage = connectionError.message;
-            if (!errorMessage.includes("404")) {
-              logger.error(
-                `[DEBUG_STREAMING] resumestream error (${reason}):`,
-                errorMessage,
-              );
-            } else {
-              logger.log(
-                `[DEBUG_STREAMING] resumestream unavailable for ${effectiveChatId} (no active task)`,
-              );
-            }
-
-            setSSECleanupForKey(resumeStreamKey, null);
-            setSSEAbortCallback(null, resumeStreamKey);
-            releaseHandedOffSubmit(resumeStreamKey);
-            // Not gated on stillStreaming: the placeholder can leak past the
-            // point where streaming state was already reset, and clearing is
-            // idempotent and scoped to this stream's chat.
-            clearPendingChat(resumeStreamKey);
-
-            const stillStreaming = useMessagingStore
-              .getState()
-              .getStreaming(resumeStreamKey).isStreaming;
-            if (stillStreaming) {
-              if (!generationGone) {
-                setError(connectionError);
-              }
-              endWaitTurn(resumeStreamKey);
-              resetStreaming(resumeStreamKey);
-              void handleRefetchAndClear({
-                logContext: `Resume stream error (${reason})`,
-              });
-            }
-          },
-          onClose: () => {
-            logger.log(
-              `[DEBUG_STREAMING] resumestream closed for chat ${effectiveChatId}`,
-            );
-            delete stallReattachesByKeyRef.current[resumeStreamKey];
-            setSSECleanupForKey(resumeStreamKey, null);
-            setSSEAbortCallback(null, resumeStreamKey);
-            releaseHandedOffSubmit(resumeStreamKey);
-            // Not gated on stillStreaming: by the time a resume socket
-            // closes normally, streaming state is usually already reset, and
-            // a placeholder leaked earlier in the stream would otherwise
-            // survive forever. Clearing is idempotent and scoped.
-            clearPendingChat(resumeStreamKey);
-
-            // A resume that closes while we still think we're streaming ended
-            // without a completion event (e.g. the task died sending only
-            // StreamEnd). Trust the server: reconcile the persisted state and
-            // clear the streaming placeholder instead of spinning forever.
-            const stillStreaming = useMessagingStore
-              .getState()
-              .getStreaming(resumeStreamKey).isStreaming;
-            if (stillStreaming) {
-              logger.warn(
-                "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
-              );
-              endWaitTurn(resumeStreamKey);
-              resetStreaming(resumeStreamKey);
-              void handleRefetchAndClear({
-                logContext: `Resume stream closed without completion (${reason})`,
-              });
-            }
-          },
+      const cleanup = createSSEConnection(RESUME_STREAM_URL, {
+        method: "POST",
+        headers: {
+          ...getClientToolHeaders(),
+          [X_ERATO_PLATFORM_HEADER]: platform,
         },
-      );
+        body: JSON.stringify({ chat_id: effectiveChatId }),
+        connectTimeoutMs: RESUME_CONNECT_TIMEOUT_MS,
+        idleTimeoutMs:
+          (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) <
+          MAX_STALL_REATTACHES
+            ? CHAT_STREAM_IDLE_TIMEOUT_MS
+            : undefined,
+        onMessage: (sseEvent) =>
+          processStreamEvent(sseEvent, resumeStreamKeyRef),
+        onOpen: () => {
+          resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+          // An earlier reattach's failure no longer holds once one is
+          // connected again.
+          const shownError = useMessagingStore.getState().error;
+          if (
+            shownError instanceof FrontendRequestError &&
+            shownError.request.url === RESUME_STREAM_URL
+          ) {
+            setError(null);
+          }
+          logger.log(
+            `[DEBUG_STREAMING] resumestream opened for chat ${effectiveChatId}`,
+          );
+        },
+        onError: (errorEvent) => {
+          const connectionError = getSSEConnectionError(
+            errorEvent,
+            "SSE resume connection error",
+          );
+          if (
+            isNetworkFailure(connectionError) &&
+            useMessagingStore.getState().getStreaming(resumeStreamKey)
+              .isStreaming
+          ) {
+            if (isStalledStream(connectionError)) {
+              stallReattachesByKeyRef.current[resumeStreamKey] =
+                (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) + 1;
+            }
+            if (
+              resumeAfterReconnect(resumeStreamKey, effectiveChatId, reason)
+            ) {
+              return;
+            }
+          }
+          delete stallReattachesByKeyRef.current[resumeStreamKey];
+          // Nothing is running any more, typically because the answer
+          // finished while the connection was down: show what was stored.
+          const generationGone =
+            connectionError instanceof FrontendRequestError &&
+            connectionError.response?.status === 404;
+          if (generationGone) {
+            resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+            useMessagingStore.getState().markAnswersSaved(resumeStreamKey);
+            // Its status still says running until the next poll, which
+            // would open a reattach that only 404s again. Any other status
+            // (an approval waiting, an error) is still true.
+            const generationStatus = useGenerationStatusStore.getState();
+            if (
+              generationStatus.statusByChatId[effectiveChatId]?.kind ===
+              "running"
+            ) {
+              generationStatus.markTerminalLocal(effectiveChatId, "finished");
+            }
+          }
+          const errorMessage = connectionError.message;
+          if (!errorMessage.includes("404")) {
+            logger.error(
+              `[DEBUG_STREAMING] resumestream error (${reason}):`,
+              errorMessage,
+            );
+          } else {
+            logger.log(
+              `[DEBUG_STREAMING] resumestream unavailable for ${effectiveChatId} (no active task)`,
+            );
+          }
+
+          setSSECleanupForKey(resumeStreamKey, null);
+          setSSEAbortCallback(null, resumeStreamKey);
+          if (
+            useMessagingStore.getState().getStreaming(resumeStreamKey)
+              .isStreaming
+          ) {
+            if (!generationGone) {
+              setError(connectionError);
+            }
+            finishStreamFromServer(
+              resumeStreamKey,
+              generationGone,
+              generationGone
+                ? `Resume found the answer completed (${reason})`
+                : `Resume stream error, completed from the server (${reason})`,
+            );
+          }
+          releaseHandedOffSubmit(resumeStreamKey);
+          // Not gated on stillStreaming: the placeholder can leak past the
+          // point where streaming state was already reset, and clearing is
+          // idempotent and scoped to this stream's chat.
+          clearPendingChat(resumeStreamKey);
+        },
+        onClose: () => {
+          logger.log(
+            `[DEBUG_STREAMING] resumestream closed for chat ${effectiveChatId}`,
+          );
+          delete stallReattachesByKeyRef.current[resumeStreamKey];
+          setSSECleanupForKey(resumeStreamKey, null);
+          setSSEAbortCallback(null, resumeStreamKey);
+          // A resume that closes while we still think we're streaming ended
+          // without a completion event (e.g. the task died sending only
+          // StreamEnd). Trust the server: reconcile the persisted state
+          // instead of spinning forever.
+          if (
+            useMessagingStore.getState().getStreaming(resumeStreamKey)
+              .isStreaming
+          ) {
+            logger.warn(
+              "[DEBUG_STREAMING] resumestream closed while still streaming — reconciling from server.",
+            );
+            finishStreamFromServer(
+              resumeStreamKey,
+              false,
+              `Resume stream closed, completed from the server (${reason})`,
+            );
+          }
+          releaseHandedOffSubmit(resumeStreamKey);
+          // Not gated on stillStreaming: by the time a resume socket
+          // closes normally, streaming state is usually already reset, and
+          // a placeholder leaked earlier in the stream would otherwise
+          // survive forever. Clearing is idempotent and scoped.
+          clearPendingChat(resumeStreamKey);
+        },
+      });
 
       setSSECleanupForKey(resumeStreamKey, cleanup);
       setSSEAbortCallback(cleanup, resumeStreamKey);
@@ -1934,12 +2046,11 @@ export function useChatMessaging(
     },
     [
       chatId,
-      handleRefetchAndClear,
+      finishStreamFromServer,
       newlyCreatedChatId,
       platform,
       processStreamEvent,
       releaseHandedOffSubmit,
-      resetStreaming,
       resumeAfterReconnect,
       setError,
       setSSEAbortCallback,
@@ -2152,7 +2263,7 @@ export function useChatMessaging(
     // owes the same tail: nothing else in this file resets streaming state for
     // a socket it did not open itself.
     clearPendingChat,
-    handleRefetchAndClear,
+    finishStreamFromServer,
     onGenerationRunningRefusal: handleGenerationRunningRefusal,
   });
 
@@ -3243,6 +3354,13 @@ export function useChatMessaging(
       const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) {
         beginSpeechResponse(streamKey);
+        if (
+          settled.some(({ decision: given }) => isApprovalDecision(given)) ||
+          (itemDecisions ?? []).some((answer) =>
+            isApprovalDecision(answer.decision),
+          )
+        )
+          noteApprovedAction(streamKey);
         // A refusal said to the voice and a change request were answered
         // aloud before they went out. A tap was answered only on screen, and
         // an approval by voice is answered as the wait's first line, which

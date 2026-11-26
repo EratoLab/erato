@@ -13,6 +13,7 @@ import { ChatShareDialog } from "./ChatShareDialog";
 import { useToastStore } from "../Toast/toastStore";
 
 const setEnabled = vi.fn();
+let shareLink: { id: string; enabled: boolean } | null = null;
 const ERROR_TEXT = "Could not update the share link. Please try again.";
 
 vi.mock("@/hooks/ui/useThemedIcon", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/hooks/ui/useThemedIcon", () => ({
 
 vi.mock("@/hooks/useChatShareLink", () => ({
   useChatShareLink: () => ({
-    shareLink: null,
+    shareLink,
     setEnabled,
     isUpdating: false,
   }),
@@ -39,6 +40,7 @@ const renderDialog = (chatId: string | null) => (
 
 beforeEach(() => {
   setEnabled.mockReset();
+  shareLink = null;
   useToastStore.setState({ toasts: [] });
 });
 
@@ -54,7 +56,31 @@ function rejectLater() {
 
 afterEach(() => {
   cleanup();
+  delete window.ERATO_SHELL;
+  vi.unstubAllGlobals();
 });
+
+const SHARE_URL = `${window.location.origin}/chat-share/share-1`;
+
+function withEnabledLink() {
+  shareLink = { id: "share-1", enabled: true };
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  return writeText;
+}
+
+function withShareSheet(
+  request: (method: string, params?: unknown) => unknown,
+) {
+  const shell = {
+    contract: 1,
+    capabilities: { shareSheet: 1 },
+    request: vi.fn(request),
+    on: () => () => {},
+  };
+  window.ERATO_SHELL = shell;
+  return shell;
+}
 
 describe("ChatShareDialog", () => {
   it("shows an error in the dialog when the share link cannot be enabled", async () => {
@@ -122,5 +148,43 @@ describe("ChatShareDialog", () => {
         { variant: "error", title: ERROR_TEXT },
       ]),
     );
+  });
+
+  it("copies the link where no share sheet is offered", async () => {
+    const writeText = withEnabledLink();
+    render(renderDialog("chat-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy chat link" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(SHARE_URL));
+  });
+
+  it("opens the host's share sheet for the link instead of copying it", async () => {
+    const writeText = withEnabledLink();
+    const shell = withShareSheet(() => Promise.resolve({ completed: true }));
+    render(renderDialog("chat-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Share chat link" }));
+
+    await waitFor(() =>
+      expect(shell.request).toHaveBeenCalledWith("shareSheet.open", {
+        url: SHARE_URL,
+        anchor: { x: 0, y: 0, width: 0, height: 0 },
+      }),
+    );
+    expect(writeText).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Copy chat link" })).toBeNull();
+  });
+
+  it("copies the link when the share sheet cannot open", async () => {
+    const writeText = withEnabledLink();
+    withShareSheet(() =>
+      Promise.reject({ code: "unavailable", message: "busy" }),
+    );
+    render(renderDialog("chat-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Share chat link" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(SHARE_URL));
   });
 });

@@ -5,6 +5,9 @@ import {
   overVoiceGate,
   overVoiceStep,
   resolveOverVoiceMinSpeechMs,
+  spokeOn,
+  spokeOnStart,
+  spokeOnStep,
   type OverVoiceStep,
 } from "./talkOverVoice";
 
@@ -67,13 +70,56 @@ describe("talking over the voice", () => {
 });
 
 describe("the minimum speech over the voice", () => {
-  it("keeps values the backend accepts and falls back to 500 ms otherwise", () => {
+  it("keeps values the backend accepts and falls back to 300 ms otherwise", () => {
     expect(resolveOverVoiceMinSpeechMs(200)).toBe(200);
     expect(resolveOverVoiceMinSpeechMs(2000)).toBe(2000);
-    expect(resolveOverVoiceMinSpeechMs(undefined)).toBe(500);
+    expect(resolveOverVoiceMinSpeechMs(undefined)).toBe(300);
     // A malformed local override such as "abc" or "500ms" arrives as NaN.
-    expect(resolveOverVoiceMinSpeechMs(Number("500ms"))).toBe(500);
-    expect(resolveOverVoiceMinSpeechMs(199)).toBe(500);
-    expect(resolveOverVoiceMinSpeechMs(5000)).toBe(500);
+    expect(resolveOverVoiceMinSpeechMs(Number("500ms"))).toBe(300);
+    expect(resolveOverVoiceMinSpeechMs(199)).toBe(300);
+    expect(resolveOverVoiceMinSpeechMs(5000)).toBe(300);
+  });
+});
+
+describe("speech going on once the voice paused", () => {
+  const after = (frames: number[]) => {
+    let state = spokeOnStart();
+    for (const probability of frames)
+      state = spokeOnStep(state, probability, FRAME_MS);
+    return spokeOn(state);
+  };
+  // 10 frames = 320 ms: the output's delay and the room's ring.
+  const skipped = Array<number>(10).fill(0.95);
+
+  it("is the person when they talk on past the voice's own delay", () => {
+    expect(after([...skipped, ...Array<number>(7).fill(0.9)])).toBe(true);
+  });
+
+  it("is not when only the moments right after the pause held speech", () => {
+    // An echo still sounding while the voice stops, then nothing.
+    expect(after([...skipped, ...Array<number>(12).fill(0.1)])).toBe(false);
+  });
+
+  it("does not count speech after its window", () => {
+    expect(
+      after([
+        ...skipped,
+        ...Array<number>(19).fill(0.1),
+        ...Array(10).fill(0.9),
+      ]),
+    ).toBe(false);
+  });
+
+  it("skips the output's own delay too", () => {
+    let state = spokeOnStart(200);
+    // 13 frames: past the fixed skip, still inside the device's delay.
+    for (const probability of Array<number>(13).fill(0.95))
+      state = spokeOnStep(state, probability, FRAME_MS);
+    expect(state.speechMs).toBe(0);
+    expect(spokeOnStart(Number.NaN).skipMs).toBe(300);
+  });
+
+  it("is not known before the voice paused", () => {
+    expect(spokeOn(null)).toBe(false);
   });
 });

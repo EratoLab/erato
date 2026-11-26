@@ -68,8 +68,15 @@ export interface UseReactToTaskResultOptions {
    * reconciliation comment on the handlers below.
    */
   clearPendingChat: (streamKey: string) => void;
-  /** Re-reads the conversation from the server and clears local stream state. */
-  handleRefetchAndClear: (options: { logContext: string }) => unknown;
+  /**
+   * Ends a turn whose stream stopped short of a completion the way a
+   * completion does: its text stays until the stored copy replaces it.
+   */
+  finishStreamFromServer: (
+    streamKey: string,
+    saved: boolean,
+    logContext: string,
+  ) => void;
   /** Wired in the commit that adds the handoff; absent means "log only". */
   onGenerationRunningRefusal?: (chatId: string) => void;
 }
@@ -96,7 +103,7 @@ export function useReactToTaskResult({
   setSSECleanupForKey,
   setSSEAbortCallback,
   clearPendingChat,
-  handleRefetchAndClear,
+  finishStreamFromServer,
   onGenerationRunningRefusal,
 }: UseReactToTaskResultOptions): void {
   /**
@@ -208,8 +215,8 @@ export function useReactToTaskResult({
               reconcileAbandonedStream(
                 streamKey,
                 clearPendingChat,
-                handleRefetchAndClear,
-                "react stream error",
+                finishStreamFromServer,
+                "error",
               );
               handleReactError(
                 errorEvent,
@@ -224,8 +231,8 @@ export function useReactToTaskResult({
               reconcileAbandonedStream(
                 streamKey,
                 clearPendingChat,
-                handleRefetchAndClear,
-                "react stream closed without completion",
+                finishStreamFromServer,
+                "closed",
               );
             },
           },
@@ -245,7 +252,7 @@ export function useReactToTaskResult({
     attachToServerGeneration,
     chatId,
     clearPendingChat,
-    handleRefetchAndClear,
+    finishStreamFromServer,
     hasOpenSocket,
     messageOrder,
     messages,
@@ -272,8 +279,8 @@ export function useReactToTaskResult({
 const reconcileAbandonedStream = (
   streamKey: string,
   clearPendingChat: (streamKey: string) => void,
-  handleRefetchAndClear: (options: { logContext: string }) => unknown,
-  logContext: string,
+  finishStreamFromServer: UseReactToTaskResultOptions["finishStreamFromServer"],
+  ending: string,
 ): void => {
   // Not gated on `isStreaming`: a placeholder can leak past the point where
   // streaming state was already reset, and clearing it is idempotent.
@@ -282,10 +289,13 @@ const reconcileAbandonedStream = (
     return;
   }
   logger.warn(
-    `[DEBUG_STREAMING] The reaction stream ended while still streaming — reconciling from server (${logContext})`,
+    `[DEBUG_STREAMING] The reaction stream ended while still streaming — reconciling from server (${ending})`,
   );
-  useMessagingStore.getState().resetStreaming(streamKey);
-  void handleRefetchAndClear({ logContext });
+  finishStreamFromServer(
+    streamKey,
+    false,
+    `Reaction stream ${ending}, completed from the server`,
+  );
 };
 
 /**
