@@ -1376,7 +1376,7 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     expect(
       screen.queryByRole("button", { name: "Back to Preferences" }),
     ).toBeNull();
-    const list = screen.getByRole("navigation", { name: "Preferences" });
+    const list = screen.getByRole("list", { name: "Preferences" });
     expect(
       within(list)
         .getAllByRole("button")
@@ -1389,7 +1389,7 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     expect(screen.getByRole("dialog", { name: "Appearance" })).toBeVisible();
     const back = screen.getByRole("button", { name: "Back to Preferences" });
     expect(back).toHaveFocus();
-    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Preferences" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Color mode" })).toBeVisible();
     expect(screen.getByLabelText("Nickname")).not.toBeVisible();
 
@@ -1398,6 +1398,17 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Appearance" })).toHaveFocus();
     expect(screen.queryByRole("heading", { name: "Color mode" })).toBeNull();
+  });
+
+  it("leaves focus alone after a tap, where iOS would ring the back button", () => {
+    renderDialog();
+    const row = screen.getByRole("button", { name: "Appearance" });
+
+    fireEvent.click(row, { detail: 1 });
+
+    expect(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    ).not.toHaveFocus();
   });
 
   it("keeps unsaved edits across the list and shows Save on their page only", () => {
@@ -1429,9 +1440,7 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Back to Preferences" }),
     );
-    expect(
-      screen.getByRole("navigation", { name: "Preferences" }),
-    ).toBeVisible();
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
   });
 
   it("starts on the list again each time it opens", () => {
@@ -1442,8 +1451,6 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     view.update({ isOpen: true });
 
     expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
-    expect(
-      screen.getByRole("navigation", { name: "Preferences" }),
-    ).toBeVisible();
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
   });
 });

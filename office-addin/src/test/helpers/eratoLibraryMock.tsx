@@ -201,15 +201,18 @@ export const DEFAULT_STUBS = {
   },
   useMcpBrowserAuthorization: () => noop,
   // The wide layout: every tab is a tab panel, as before the narrow pages.
-  useSettingsPages: <T extends string>({ activeTab }: { activeTab: T }) => ({
+  useSettingsPages: <T extends string>({
+    activeTab,
+    title,
+  }: {
+    activeTab: T;
+    title: string;
+  }) => ({
     isNarrow: false,
     showList: false,
     shownTab: activeTab,
-    page: null,
-    openPage: noop,
-    backToList: noop,
-    backButtonRef: { current: null },
-    listRef: { current: null },
+    modalProps: { title, placement: "center" as const },
+    listProps: { pages: [], onOpen: noop, label: title, listRef: null },
     panelProps: (tab: T, ids: { tabId: string; panelId: string }) => ({
       id: ids.panelId,
       hidden: tab !== activeTab,

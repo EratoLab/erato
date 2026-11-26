@@ -25,11 +25,12 @@ interface ModalBaseProps {
   placement?: "center" | "bottom" | "fullscreen";
   /**
    * A back button before the title, for a dialog that shows one of its pages.
-   * It shares the close button's shape, so a theme sizes both at once.
+   * It shares the close button's shape, so a theme sizes both at once. Drawn
+   * in the header, so only with a `title`.
    */
   back?: {
     label: string;
-    onBack: () => void;
+    onBack: (event: React.MouseEvent<HTMLButtonElement>) => void;
     ref?: React.Ref<HTMLButtonElement>;
   };
   /** Actions pinned below the scrolling content, so they stay in view. */
@@ -159,6 +160,9 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
       closeOnOverlayClick &&
+      // What shows of a full-screen overlay is the safe-area strip painted
+      // as the dialog, where a tap must not close it and drop unsaved edits.
+      placement !== "fullscreen" &&
       event.target === event.currentTarget &&
       mouseDownTargetRef.current === event.currentTarget
     ) {

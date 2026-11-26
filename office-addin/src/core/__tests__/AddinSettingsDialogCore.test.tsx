@@ -363,7 +363,7 @@ describe("AddinSettingsDialogCore", () => {
       const dialog = screen.getByRole("dialog", { name: "Settings" });
       expect(dialog).toHaveAttribute("data-placement", "fullscreen");
       expect(screen.queryByRole("tablist")).toBeNull();
-      const list = screen.getByRole("navigation", { name: "Settings" });
+      const list = screen.getByRole("list", { name: "Settings" });
       expect(
         within(list)
           .getAllByRole("button")
@@ -385,6 +385,21 @@ describe("AddinSettingsDialogCore", () => {
       expect(screen.getByText("Word options")).not.toBeVisible();
     });
 
+    it("goes to a tab asked for while the list is open", () => {
+      const view = render(
+        <AddinSettingsDialogCore isOpen onClose={() => {}} />,
+      );
+      expect(screen.getByRole("list", { name: "Settings" })).toBeVisible();
+
+      view.rerender(
+        <AddinSettingsDialogCore isOpen onClose={() => {}} openTab="user" />,
+      );
+
+      expect(
+        screen.getByRole("dialog", { name: "User settings" }),
+      ).toBeVisible();
+    });
+
     it("opens on the tab it is asked for", () => {
       render(
         <AddinSettingsDialogCore isOpen onClose={() => {}} openTab="user" />,
@@ -394,7 +409,7 @@ describe("AddinSettingsDialogCore", () => {
         screen.getByRole("dialog", { name: "User settings" }),
       ).toBeVisible();
       expect(screen.getByTestId("user-settings")).toBeVisible();
-      expect(screen.queryByRole("navigation")).toBeNull();
+      expect(screen.queryByRole("list", { name: "Settings" })).toBeNull();
     });
   });
 });

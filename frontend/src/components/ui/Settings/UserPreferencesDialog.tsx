@@ -227,13 +227,44 @@ export function UserPreferencesDialog({
       personalizationEnabled,
     ],
   );
+  const tabLabels = {
+    personalization: t({
+      id: "preferences.dialog.tabs.personalization",
+      message: "Personalization",
+    }),
+    appearance: t({
+      id: "preferences.dialog.tabs.appearance",
+      message: "Appearance",
+    }),
+    audio: t({
+      id: "preferences.dialog.tabs.audio",
+      message: "Audio",
+    }),
+    serversTools: t({
+      id: "preferences.dialog.tabs.serversTools",
+      message: "MCP & Apps",
+    }),
+    data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
+    disclaimers: t({
+      id: "preferences.dialog.tabs.disclaimers",
+      message: "Disclaimers",
+    }),
+  } satisfies Record<PreferencesTab, string>;
+
   const requestedDefaultTab =
     initialTab && visibleTabs.includes(initialTab) ? initialTab : defaultTab;
   const pages = useSettingsPages({
     isOpen,
+    tabs: visibleTabs.map((tab) => ({ value: tab, label: tabLabels[tab] })),
     activeTab,
     onActiveTabChange: setActiveTab,
-    startOnPage: requestedDefaultTab === initialTab,
+    requestedTab:
+      requestedDefaultTab === initialTab ? requestedDefaultTab : undefined,
+    title: t({ id: "preferences.dialog.title", message: "Preferences" }),
+    backLabel: t({
+      id: "preferences.dialog.backToList",
+      message: "Back to Preferences",
+    }),
   });
   const { shownTab } = pages;
 
@@ -378,30 +409,6 @@ export function UserPreferencesDialog({
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
   };
-
-  const tabLabels = {
-    personalization: t({
-      id: "preferences.dialog.tabs.personalization",
-      message: "Personalization",
-    }),
-    appearance: t({
-      id: "preferences.dialog.tabs.appearance",
-      message: "Appearance",
-    }),
-    audio: t({
-      id: "preferences.dialog.tabs.audio",
-      message: "Audio",
-    }),
-    serversTools: t({
-      id: "preferences.dialog.tabs.serversTools",
-      message: "MCP & Apps",
-    }),
-    data: t({ id: "preferences.dialog.tabs.data", message: "Data" }),
-    disclaimers: t({
-      id: "preferences.dialog.tabs.disclaimers",
-      message: "Disclaimers",
-    }),
-  } satisfies Record<PreferencesTab, string>;
 
   const tabIcons = {
     personalization: <MenuScaleIcon className="size-4" />,
@@ -559,29 +566,11 @@ export function UserPreferencesDialog({
     }
   };
 
-  const dialogTitle = t({
-    id: "preferences.dialog.title",
-    message: "Preferences",
-  });
-
   return (
     <ModalBase
       isOpen={isOpen}
       onClose={handleClose}
-      title={pages.page ? tabLabels[pages.page] : dialogTitle}
-      back={
-        pages.page
-          ? {
-              label: t({
-                id: "preferences.dialog.backToList",
-                message: "Back to Preferences",
-              }),
-              onBack: pages.backToList,
-              ref: pages.backButtonRef,
-            }
-          : undefined
-      }
-      placement={pages.isNarrow ? "fullscreen" : "center"}
+      {...pages.modalProps}
       contentClassName={
         pages.isNarrow ? undefined : "h-[80vh] max-h-[700px] max-w-4xl"
       }
@@ -595,7 +584,10 @@ export function UserPreferencesDialog({
               // The rail announces itself as vertical but lays out as a
               // horizontal strip below `md`, so both arrow pairs have to work.
               arrowKeys="both"
-              aria-label={dialogTitle}
+              aria-label={t({
+                id: "preferences.dialog.title",
+                message: "Preferences",
+              })}
               className="overflow-x-auto md:flex-col md:overflow-x-visible"
               tabClassName="text-left md:w-full"
               options={visibleTabs.map((tab) => ({
@@ -611,17 +603,7 @@ export function UserPreferencesDialog({
           </aside>
         )}
 
-        {pages.showList ? (
-          <SettingsPageList
-            pages={visibleTabs.map((tab) => ({
-              value: tab,
-              label: tabLabels[tab],
-            }))}
-            onOpen={pages.openPage}
-            label={dialogTitle}
-            listRef={pages.listRef}
-          />
-        ) : null}
+        {pages.showList ? <SettingsPageList {...pages.listProps} /> : null}
 
         <section
           className={

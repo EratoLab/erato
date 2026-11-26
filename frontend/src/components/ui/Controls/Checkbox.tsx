@@ -64,7 +64,6 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     const input = (
       <input
         {...rest}
-        // A switch takes WebKit's own size; a fixed box would clip it.
         {...(isSwitch ? { switch: "", role: "switch" } : {})}
         ref={setRef}
         type="checkbox"
@@ -76,6 +75,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           event.currentTarget.indeterminate = indeterminate && !checked;
         }}
         data-ui={dataUi ?? "checkbox"}
+        // A switch takes WebKit's own size; a fixed box would clip it.
         className={clsx(INPUT_CLASS, !isSwitch && "size-4", className)}
       />
     );

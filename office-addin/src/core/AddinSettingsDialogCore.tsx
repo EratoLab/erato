@@ -141,13 +141,6 @@ function AddinSettingsDialog({
     if (requestedTab) setActiveTab(requestedTab);
   }
   const activeTab = tabOrder.includes(selectedTab) ? selectedTab : "appearance";
-  const pages = useSettingsPages({
-    isOpen,
-    activeTab,
-    onActiveTabChange: setActiveTab,
-    startOnPage: requestedTab !== undefined,
-  });
-  const { shownTab } = pages;
 
   const tabLabels: Record<AddinSettingsTab, string> = {
     appearance: t({
@@ -172,6 +165,20 @@ function AddinSettingsDialog({
       message: "Disclaimers",
     }),
   };
+
+  const pages = useSettingsPages({
+    isOpen,
+    tabs: tabOrder.map((tab) => ({ value: tab, label: tabLabels[tab] })),
+    activeTab,
+    onActiveTabChange: setActiveTab,
+    requestedTab,
+    title: t({ id: "officeAddin.settings.title", message: "Settings" }),
+    backLabel: t({
+      id: "officeAddin.settings.backToList",
+      message: "Back to Settings",
+    }),
+  });
+  const { shownTab } = pages;
 
   const tabGroupId = useId();
 
@@ -202,36 +209,13 @@ function AddinSettingsDialog({
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title={pages.page ? tabLabels[pages.page] : dialogTitle}
-      back={
-        pages.page
-          ? {
-              label: t({
-                id: "officeAddin.settings.backToList",
-                message: "Back to Settings",
-              }),
-              onBack: pages.backToList,
-              ref: pages.backButtonRef,
-            }
-          : undefined
-      }
-      placement={pages.isNarrow ? "fullscreen" : "center"}
+      {...pages.modalProps}
       contentClassName={
         pages.isNarrow ? undefined : "h-[80vh] max-h-[600px] max-w-xl"
       }
     >
       <div className="flex h-full flex-col gap-4">
-        {pages.showList ? (
-          <SettingsPageList
-            pages={tabOrder.map((tab) => ({
-              value: tab,
-              label: tabLabels[tab],
-            }))}
-            onOpen={pages.openPage}
-            label={dialogTitle}
-            listRef={pages.listRef}
-          />
-        ) : null}
+        {pages.showList ? <SettingsPageList {...pages.listProps} /> : null}
         {pages.isNarrow ? null : (
           <div className="shrink-0 border-b border-theme-border pb-2">
             <TabRail

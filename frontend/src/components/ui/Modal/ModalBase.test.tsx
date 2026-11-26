@@ -311,6 +311,28 @@ describe("ModalBase", () => {
     expect(dialog).toHaveClass("h-full", "max-h-none", "max-w-none");
   });
 
+  it("stays open when the safe-area strip of a full-screen overlay is tapped", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={onClose}
+        title="Preferences"
+        placement="fullscreen"
+      >
+        <div>body</div>
+      </ModalBase>,
+    );
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("puts a back button before the title, shaped like the close button", () => {
     const onBack = vi.fn();
     const onClose = vi.fn();

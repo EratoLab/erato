@@ -4,7 +4,6 @@ import clsx from "clsx";
 import { useState } from "react";
 
 import { refreshVoiceTraces } from "@/hooks/audio/voiceTraces";
-import { useIsBelow } from "@/hooks/useResponsive";
 import {
   approvalSpeechStyleQuery,
   fetchUpdateProfilePreferences,
@@ -13,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { useIsSettingsPageScreen } from "./SettingsPages";
 import { SpokenLanguagesSetting } from "./SpokenLanguagesSetting";
 import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
@@ -220,7 +220,7 @@ export function VoiceOutputSetting() {
   const replies = useReplySpeechStyle({});
   const cards = useApprovalSpeechStyle({});
   const [saving, setSaving] = useState(false);
-  const asSwitch = useIsBelow("sm");
+  const asSwitch = useIsSettingsPageScreen();
 
   // `null` clears the user's own value: the organization's applies again.
   const save = async (body: UpdateProfilePreferencesRequest) => {

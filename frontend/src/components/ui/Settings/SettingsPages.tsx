@@ -8,12 +8,33 @@ import { ChevronRightIcon } from "../icons";
 
 import type React from "react";
 
+/**
+ * Below `sm` settings dialogs fill the screen and their tabs become pages.
+ * Settings that look different on such a page (switches) read the same flag.
+ */
+export function useIsSettingsPageScreen(): boolean {
+  return useIsBelow("sm");
+}
+
+/** A click with no pointer position came from the keyboard (Enter, Space). */
+const fromKeyboard = (event?: React.MouseEvent) =>
+  event === undefined || event.detail === 0;
+
 interface UseSettingsPagesOptions<T extends string> {
   isOpen: boolean;
+  /** The dialog's visible tabs, in order. */
+  tabs: { value: T; label: string }[];
   activeTab: T;
   onActiveTabChange: (tab: T) => void;
-  /** Open on `activeTab`'s page instead of the list, as a link to one setting does. */
-  startOnPage: boolean;
+  /**
+   * The tab a link asks for. The dialog then opens on its page instead of the
+   * list, and goes to it when a new one is asked for while open.
+   */
+  requestedTab?: T;
+  /** The dialog's title, on the list and naming it. */
+  title: string;
+  /** The back button's accessible name, such as "Back to Settings". */
+  backLabel: string;
 }
 
 export interface SettingsPagesState<T extends string> {
@@ -23,12 +44,18 @@ export interface SettingsPagesState<T extends string> {
   showList: boolean;
   /** The tab whose content is on screen; `null` while the list shows. */
   shownTab: T | null;
-  /** The page open on a narrow screen, which titles the dialog; `null` otherwise. */
-  page: T | null;
-  openPage: (tab: T) => void;
-  backToList: () => void;
-  backButtonRef: React.RefObject<HTMLButtonElement | null>;
-  listRef: React.RefObject<HTMLElement | null>;
+  /** Spread onto ModalBase. */
+  modalProps: {
+    title: string;
+    back?: {
+      label: string;
+      onBack: (event?: React.MouseEvent) => void;
+      ref: React.Ref<HTMLButtonElement>;
+    };
+    placement: "center" | "fullscreen";
+  };
+  /** Spread onto SettingsPageList. */
+  listProps: SettingsPageListProps<T>;
   /** Tab-panel semantics on a wide screen; on a narrow one no tab list exists to label it. */
   panelProps: (
     tab: T,
@@ -44,28 +71,36 @@ export interface SettingsPagesState<T extends string> {
 /**
  * Settings on a narrow screen, the way a phone's own settings work: a list of
  * the dialog's tabs, each opening its page with a way back. On a wider screen
- * the caller keeps its tab rail and this only reports `isNarrow: false`.
+ * the caller keeps its tab rail and `modalProps` keeps the centred dialog.
  */
 export function useSettingsPages<T extends string>({
   isOpen,
+  tabs,
   activeTab,
   onActiveTabChange,
-  startOnPage,
+  requestedTab,
+  title,
+  backLabel,
 }: UseSettingsPagesOptions<T>): SettingsPagesState<T> {
-  const isNarrow = useIsBelow("sm");
-  const [onList, setOnList] = useState(!startOnPage);
-  const [wasOpen, setWasOpen] = useState(isOpen);
-  if (isOpen !== wasOpen) {
-    setWasOpen(isOpen);
-    if (isOpen) {
-      setOnList(!startOnPage);
+  const isNarrow = useIsSettingsPageScreen();
+  const [onList, setOnList] = useState(requestedTab === undefined);
+  // `undefined` while closed, `null` while open with no page asked for.
+  const request = isOpen ? (requestedTab ?? null) : undefined;
+  const [lastRequest, setLastRequest] = useState(request);
+  if (request !== lastRequest) {
+    setLastRequest(request);
+    if (lastRequest === undefined) {
+      setOnList(request === null);
+    } else if (request !== null && request !== undefined) {
+      setOnList(false);
     }
   }
 
   const backButtonRef = useRef<HTMLButtonElement | null>(null);
-  const listRef = useRef<HTMLElement | null>(null);
-  // Set only by navigation: opening the dialog leaves focus to ModalBase, which
-  // must see focus outside the dialog to remember what to return it to.
+  const listRef = useRef<HTMLUListElement | null>(null);
+  // Only keyboard navigation moves focus: after a tap iOS draws the focus ring
+  // on the back button. Opening leaves focus to ModalBase, which must see it
+  // outside the dialog to remember what to return it to.
   const pendingFocusRef = useRef<{ to: "back" } | { to: "row"; tab: T } | null>(
     null,
   );
@@ -83,23 +118,42 @@ export function useSettingsPages<T extends string>({
 
   const showList = isNarrow && onList;
   const shownTab = showList ? null : activeTab;
+  const page = isNarrow ? shownTab : null;
+  const pageLabel = tabs.find((tab) => tab.value === page)?.label;
 
   return {
     isNarrow,
     showList,
     shownTab,
-    page: isNarrow ? shownTab : null,
-    openPage: (tab) => {
-      onActiveTabChange(tab);
-      pendingFocusRef.current = { to: "back" };
-      setOnList(false);
+    modalProps: {
+      title: pageLabel ?? title,
+      back:
+        page === null
+          ? undefined
+          : {
+              label: backLabel,
+              onBack: (event) => {
+                if (fromKeyboard(event)) {
+                  pendingFocusRef.current = { to: "row", tab: activeTab };
+                }
+                setOnList(true);
+              },
+              ref: backButtonRef,
+            },
+      placement: isNarrow ? "fullscreen" : "center",
     },
-    backToList: () => {
-      pendingFocusRef.current = { to: "row", tab: activeTab };
-      setOnList(true);
+    listProps: {
+      pages: tabs,
+      label: title,
+      listRef,
+      onOpen: (tab, event) => {
+        onActiveTabChange(tab);
+        if (fromKeyboard(event)) {
+          pendingFocusRef.current = { to: "back" };
+        }
+        setOnList(false);
+      },
     },
-    backButtonRef,
-    listRef,
     panelProps: (tab, { tabId, panelId }) => ({
       id: panelId,
       hidden: tab !== shownTab,
@@ -110,10 +164,10 @@ export function useSettingsPages<T extends string>({
 
 interface SettingsPageListProps<T extends string> {
   pages: { value: T; label: string }[];
-  onOpen: (tab: T) => void;
+  onOpen: (tab: T, event?: React.MouseEvent) => void;
   /** Names the list for assistive technology; the dialog's title. */
   label: string;
-  listRef: React.Ref<HTMLElement>;
+  listRef: React.Ref<HTMLUListElement>;
 }
 
 /** The narrow screen's list of settings pages: one grouped section of rows. */
@@ -124,18 +178,15 @@ export function SettingsPageList<T extends string>({
   listRef,
 }: SettingsPageListProps<T>) {
   return (
-    <nav ref={listRef} aria-label={label} data-ui="settings-page-list">
-      <Card
-        variant="surface"
-        as="ul"
-        size="xs"
-        className="flex flex-col gap-0.5"
-      >
+    <Card variant="surface" size="xs" data-ui="settings-page-list">
+      <ul ref={listRef} aria-label={label} className="flex flex-col gap-0.5">
         {pages.map((page) => (
           <li key={page.value}>
+            {/* list-row-geometry sets only the corner, so these utilities
+                still size the row. */}
             <Row
               variant="list"
-              onClick={() => onOpen(page.value)}
+              onClick={(event) => onOpen(page.value, event)}
               data-settings-page={page.value}
               trailing={
                 <ChevronRightIcon
@@ -149,7 +200,7 @@ export function SettingsPageList<T extends string>({
             </Row>
           </li>
         ))}
-      </Card>
-    </nav>
+      </ul>
+    </Card>
   );
 }
