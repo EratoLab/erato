@@ -129,6 +129,7 @@ describe("FeatureConfigProvider", () => {
       userPreferencesEnabled: true,
       userPreferencesDataTabEnabled: true,
       disclaimersTabEnabled: true,
+      budgetTabEnabled: true,
       messageFeedbackEditTimeLimitSeconds: null,
       maxUploadSizeBytes: 52428800, // 50 MB - matches backend default
       audioTranscriptionEnabled: false,
@@ -241,6 +242,7 @@ describe("FeatureConfigProvider", () => {
           enabled: true,
           dataTabEnabled: true,
           disclaimersTabEnabled: true,
+          budgetTabEnabled: true,
           mcpServersTabEnabled: false,
           desktopSidecarTabEnabled: false,
         },

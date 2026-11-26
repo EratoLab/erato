@@ -168,6 +168,8 @@ interface UserPreferencesFeatureConfig {
   dataTabEnabled: boolean;
   /** Whether the deployment has enabled the Disclaimers tab and configured notices. */
   disclaimersTabEnabled: boolean;
+  /** Whether the deployment shows the Budget tab in web Settings. */
+  budgetTabEnabled: boolean;
   /** Whether the MCP servers tab is shown in the preferences dialog */
   mcpServersTabEnabled: boolean;
   /** Whether the desktop sidecar connection tab is shown in preferences */
@@ -378,6 +380,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     enabled: false,
     dataTabEnabled: true,
     disclaimersTabEnabled: false,
+    budgetTabEnabled: false,
     mcpServersTabEnabled: false,
     desktopSidecarTabEnabled: false,
   },
@@ -544,6 +547,7 @@ function createFeatureConfig(
       enabled: environment.userPreferencesEnabled,
       dataTabEnabled: environment.userPreferencesDataTabEnabled,
       disclaimersTabEnabled: environment.disclaimersTabEnabled ?? false,
+      budgetTabEnabled: environment.budgetTabEnabled ?? false,
       mcpServersTabEnabled: environment.mcpServersTabEnabled,
       desktopSidecarTabEnabled: environment.desktopSidecarSettingsTabEnabled,
     },

@@ -67,6 +67,7 @@ const FRONTEND_ENV_KEY_MESSAGE_TEXT_QUOTE_ENABLED: &str = "MESSAGE_TEXT_QUOTE_EN
 const FRONTEND_ENV_KEY_MESSAGE_TEXT_EXPLAIN_ENABLED: &str = "MESSAGE_TEXT_EXPLAIN_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_DISCLAIMERS_TAB_ENABLED: &str = "DISCLAIMERS_TAB_ENABLED";
+const FRONTEND_ENV_KEY_BUDGET_TAB_ENABLED: &str = "BUDGET_TAB_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
     "USER_PREFERENCES_DATA_TAB_ENABLED";
 const FRONTEND_ENV_KEY_MCP_SERVERS_TAB_ENABLED: &str = "MCP_SERVERS_TAB_ENABLED";
@@ -671,6 +672,10 @@ fn build_frontend_environment_with(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_DISCLAIMERS_TAB_ENABLED.to_string(),
         Value::Bool(config.disclaimers.settings_tab_visible()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_BUDGET_TAB_ENABLED.to_string(),
+        Value::Bool(frontend_kind == FrontendKind::Web && config.budget.frontend_tab_enabled()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED.to_string(),
