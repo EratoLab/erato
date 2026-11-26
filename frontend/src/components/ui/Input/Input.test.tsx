@@ -96,7 +96,11 @@ describe("Input tokens", () => {
       expect(select.className.split(/\s+/)).toContain(cls);
     }
     expect(input.className).not.toContain("--theme-radius-input");
-    expect(input.className).not.toContain("text-base");
+    expect(input.className.split(/\s+/)).not.toContain("text-base");
+    // On a phone the field grows to 16 px, below which iOS zooms the page
+    // when the field gets focus.
+    expect(input.className.split(/\s+/)).toContain("touch-phone:text-base");
+    expect(select.className.split(/\s+/)).toContain("touch-phone:text-base");
   });
 
   it("keeps the roomy input geometry by default, also for a time field", () => {

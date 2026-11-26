@@ -1373,6 +1373,28 @@ describe("ChatInput", () => {
       ).toBeTruthy();
     });
 
+    it("fills send with the primary colour on a phone, and keeps it secondary otherwise", async () => {
+      const { unmount } = await renderPhoneComposer({ touch: true });
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "Hello" },
+      });
+      // The mocked Button passes `variant` straight through to the element.
+      expect(screen.getByTestId("chat-input-send-message")).toHaveAttribute(
+        "variant",
+        "primary",
+      );
+      unmount();
+
+      await renderPhoneComposer({ touch: false });
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "Hello" },
+      });
+      expect(screen.getByTestId("chat-input-send-message")).toHaveAttribute(
+        "variant",
+        "secondary",
+      );
+    });
+
     it("still names the one model there is, in the + menu", async () => {
       await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
 

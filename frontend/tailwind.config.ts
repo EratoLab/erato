@@ -237,6 +237,12 @@ export default {
       );
       // For what a hovering pointer would reveal and a touch screen shows.
       addVariant("no-hover", `@media ${NO_HOVERING_POINTER}`);
+      // A phone held in the hand: the same condition as the one-line
+      // composer (useIsNarrowTouchScreen) and the touch block in globals.css.
+      addVariant(
+        "touch-phone",
+        `@media (max-width: 639.98px) { @media ${NO_HOVERING_POINTER} { & } }`,
+      );
       // The pressed look shows at once, as a phone's own controls do; letting
       // go still fades it out.
       addBase({

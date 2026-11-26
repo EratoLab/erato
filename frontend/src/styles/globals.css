@@ -635,6 +635,41 @@ body {
     padding: var(--theme-spacing-dropdown-chrome-padding);
   }
 
+  /* A phone held in the hand (narrow, no hovering pointer; the condition of
+     useIsNarrowTouchScreen): controls reach the 44 pt tap size iOS uses by
+     default, never below a larger theme size. The composer keeps its own
+     sizes: its bar is at least that tall, and a 44 pt row of buttons inside
+     it would make the one-line field taller than Messages' bar. */
+  @media (max-width: 639.98px) {
+    @media not all and (hover: hover) and (pointer: fine) {
+      :is(.btn-geometry-icon-sm, .btn-geometry-icon-md):where(
+          :not([data-ui="chat-input-controls"] *)
+        ) {
+        width: max(2.75rem, var(--theme-spacing-control-min-height));
+        height: max(2.75rem, var(--theme-spacing-control-min-height));
+      }
+
+      :is(.btn-geometry-sm, .btn-geometry-md):where(
+          :not([data-ui="chat-input-controls"] *)
+        ) {
+        min-height: max(2.75rem, var(--theme-spacing-control-min-height));
+        min-width: max(2.75rem, var(--theme-spacing-control-min-height));
+      }
+
+      .modal-close-geometry {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+      }
+
+      .dropdown-item-geometry {
+        min-height: 2.75rem;
+      }
+    }
+  }
+
   /* Popover panel shape, keyed on the two shape attributes rather than
      compounded onto .popover-panel-geometry, the class a panel carries
      alongside them: a bare attribute selector stays one specificity step below
@@ -1759,6 +1794,30 @@ body:has(.app-viewport) {
   --chat-top-bar-toggle-column: calc(
     var(--theme-spacing-control-min-height) + 0.5rem
   );
+}
+
+/* On a phone in the hand the toggle is a 44 pt control 1rem from the edge
+   (ChatHistorySidebar), which the column makes room for. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    :root {
+      --chat-top-bar-toggle-column: calc(
+        max(2.75rem, var(--theme-spacing-control-min-height)) + 1.5rem
+      );
+    }
+
+    /* iOS reads body text at 17 pt and lists menu choices at the same size;
+       rem keeps Erato's own text size setting on top. After the utilities,
+       at hook weight, so a theme.css rule on the hook still wins. */
+    [data-ui="message-content"] {
+      font-size: 1.0625rem;
+    }
+
+    [data-ui="menu-item"] {
+      font-size: 1.0625rem;
+      line-height: 1.375rem;
+    }
+  }
 }
 
 /* Sidebar chat rows. Same reasoning as .anchored-popover-skin: held inline,

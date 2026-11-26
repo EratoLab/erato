@@ -153,12 +153,20 @@ export function AnchoredPopover({
     }
 
     const panelRect = panelElement.getBoundingClientRect();
+    const reference = triggerRef.current ?? panelElement;
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight,
-      padding: resolvePopoverViewportPadding(
-        viewportPadding,
-        triggerRef.current ?? panelElement,
+      padding: resolvePopoverViewportPadding(viewportPadding, reference),
+    };
+    // Where the page runs under the status bar or the home bar, a panel kept
+    // only off the window edge ends up behind the clock.
+    const safeArea = {
+      top: resolvePopoverViewportPadding("var(--safe-area-top)", reference, 0),
+      bottom: resolvePopoverViewportPadding(
+        "var(--safe-area-bottom)",
+        reference,
+        0,
       ),
     };
 
@@ -168,8 +176,12 @@ export function AnchoredPopover({
     };
 
     const space = {
-      top: triggerRect.top - viewport.padding,
-      bottom: viewport.height - triggerRect.bottom - viewport.padding,
+      top: triggerRect.top - viewport.padding - safeArea.top,
+      bottom:
+        viewport.height -
+        triggerRect.bottom -
+        viewport.padding -
+        safeArea.bottom,
       left: triggerRect.left - viewport.padding,
       right: viewport.width - triggerRect.right - viewport.padding,
     };
@@ -218,9 +230,7 @@ export function AnchoredPopover({
     const left = clamp(desiredLeft, viewport.padding, maxLeft);
     const maxHeight = Math.max(
       0,
-      vertical === "bottom"
-        ? viewport.height - triggerRect.bottom - anchorGap - viewport.padding
-        : triggerRect.top - anchorGap - viewport.padding,
+      vertical === "bottom" ? space.bottom - anchorGap : space.top - anchorGap,
     );
 
     panelElement.style.top =

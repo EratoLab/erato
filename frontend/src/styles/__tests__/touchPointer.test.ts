@@ -158,3 +158,31 @@ describe("holding a finger on a control", () => {
     expect(rule.selector).not.toContain('[role="link"]');
   });
 });
+
+describe("the touch-phone variant", () => {
+  it("applies on a narrow screen without a hovering pointer only", async () => {
+    const result = await postcss([
+      tailwindcss({
+        ...tailwindConfig,
+        content: [
+          {
+            raw: '<div class="touch-phone:text-base"></div>',
+            extension: "html",
+          },
+        ],
+      }),
+    ]).process("@tailwind utilities;", { from: undefined });
+    const rules: Rule[] = [];
+    result.root.walkRules((rule) => {
+      rules.push(rule);
+    });
+
+    expect(rules).toHaveLength(1);
+    const inner = rules[0].parent as AtRule;
+    const outer = inner.parent as AtRule;
+    expect([outer.params, inner.params]).toEqual([
+      "(max-width: 639.98px)",
+      NOT_HOVERING,
+    ]);
+  });
+});
