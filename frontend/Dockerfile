@@ -38,6 +38,8 @@ COPY frontend /app/frontend
 RUN pnpm rebuild @swc/core esbuild msw protobufjs unrs-resolver
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build:lib
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
+# Compressed copies the backend sends by content negotiation.
+RUN node scripts/precompress-static-files.mjs out
 
 COPY office-addin/package.json office-addin/pnpm-lock.yaml office-addin/pnpm-workspace.yaml /app/office-addin/
 WORKDIR /app/office-addin
@@ -54,6 +56,7 @@ COPY office-addin /app/office-addin
 COPY site/public/setup/teams /app/site/public/setup/teams
 RUN cp /tmp/office-addin-pnpm-lock.yaml pnpm-lock.yaml
 RUN NODE_OPTIONS=--max-old-space-size=8192 pnpm run build
+RUN node ../frontend/scripts/precompress-static-files.mjs dist
 
 # Final stage - empty image with just the static files for all served frontends
 FROM scratch

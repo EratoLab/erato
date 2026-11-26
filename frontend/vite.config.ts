@@ -289,6 +289,9 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "out",
       assetsDir: "public/common/assets",
+      // The backend reads this manifest to tell content-hashed file names
+      // apart from fixed ones and caches only the former for a year.
+      manifest: true,
       reportCompressedSize: !silentLinkedBuildOutput,
       rolldownOptions: {
         // Expose entries must keep their re-export signatures so the import
