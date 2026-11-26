@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { forwardRef, useId } from "react";
 
 import { FormField } from "./FormField";
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
 
 import type { SelectHTMLAttributes } from "react";
 
@@ -52,6 +53,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             data-ui="select"
             className={clsx(
               "theme-transition w-full min-w-0 border bg-theme-bg-secondary text-sm text-theme-fg-primary",
+              PHONE_FIELD_TEXT,
               "[border-radius:var(--theme-radius-control)] [min-height:var(--theme-spacing-control-min-height)] [padding:var(--theme-spacing-control-padding-y)_var(--theme-spacing-control-padding-x)]",
               "focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50",
               error

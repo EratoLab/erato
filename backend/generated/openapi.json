@@ -248,7 +248,14 @@
             }
           },
           "400": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubVersionErrorResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": ""
@@ -305,7 +312,14 @@
             }
           },
           "400": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHubVersionErrorResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": ""
@@ -6823,6 +6837,7 @@
           "rating_mode",
           "default_share_with_whole_organization",
           "force_whole_organization_audience",
+          "validate_version_semver_format",
           "categories"
         ],
         "properties": {
@@ -6849,6 +6864,9 @@
           },
           "rating_mode": {
             "type": "string"
+          },
+          "validate_version_semver_format": {
+            "type": "boolean"
           }
         }
       },
@@ -7242,6 +7260,28 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "AssistantHubVersionErrorCode": {
+        "type": "string",
+        "enum": [
+          "invalid_version_format",
+          "version_not_increasing"
+        ]
+      },
+      "AssistantHubVersionErrorResponse": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/AssistantHubVersionErrorCode"
+          },
+          "current_version": {
+            "type": "string",
+            "description": "The highest comparable version already submitted for this assistant."
           }
         }
       },

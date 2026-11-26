@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Input } from "./Input";
 import { Select } from "./Select";
 import { Textarea } from "./Textarea";
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
 
 const originalOffsetHeightDescriptor = Object.getOwnPropertyDescriptor(
   HTMLTextAreaElement.prototype,
@@ -96,7 +97,9 @@ describe("Input tokens", () => {
       expect(select.className.split(/\s+/)).toContain(cls);
     }
     expect(input.className).not.toContain("--theme-radius-input");
-    expect(input.className).not.toContain("text-base");
+    expect(input.className.split(/\s+/)).not.toContain("text-base");
+    expect(input.className.split(/\s+/)).toContain(PHONE_FIELD_TEXT);
+    expect(select.className.split(/\s+/)).toContain(PHONE_FIELD_TEXT);
   });
 
   it("keeps the roomy input geometry by default, also for a time field", () => {
@@ -274,5 +277,57 @@ describe("Input tokens", () => {
     );
 
     expect(textarea.style.height).toBe("80px");
+  });
+
+  it("fits an auto-resizing textarea once a hidden panel shows it", () => {
+    let shown = false;
+    let notify = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          notify = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    Object.defineProperty(HTMLTextAreaElement.prototype, "offsetHeight", {
+      configurable: true,
+      get() {
+        return shown ? this.rows * 20 : 0;
+      },
+    });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        return shown ? this.rows * 20 : 0;
+      },
+    });
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return shown ? 70 : 0;
+      },
+    });
+
+    render(
+      <Textarea
+        aria-label="Instructions"
+        autoResize
+        readOnly
+        rows={2}
+        maxRows={6}
+        value={"one\ntwo\nthree"}
+      />,
+    );
+    const textarea = screen.getByRole("textbox", { name: "Instructions" });
+    expect(textarea.style.height).toBe("");
+
+    shown = true;
+    notify();
+
+    expect(textarea.style.height).toBe("70px");
+    vi.unstubAllGlobals();
   });
 });

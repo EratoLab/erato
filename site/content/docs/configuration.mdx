@@ -7240,6 +7240,25 @@ When enabled, the submission form hides the audience field and the server assign
 force_whole_organization_audience = true
 ```
 
+#### `assistant_hub.validate_version_semver_format`
+
+{/* erato_toml_config_key: assistant_hub.validate_version_semver_format */}
+
+Require new Assistant Hub submissions to use `MAJOR.MINOR.PATCH` with three non-negative decimal components. The API trims surrounding whitespace. Leading zeros, `v` prefixes, prerelease suffixes, and build suffixes are invalid.
+
+Each submission must exceed the highest version in that format previously submitted for the same assistant, including pending, declined, and withdrawn versions. Existing labels outside this format remain visible and are skipped in comparisons. The form suggests `1.0.0` when there is no comparable history, and authors can choose any valid starting version. When disabled, any unique, non-empty version label is accepted after trimming.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+**Example:**
+
+```toml
+[assistant_hub]
+validate_version_semver_format = true
+```
+
 #### `assistant_hub.categories`
 
 {/* erato_toml_config_key: assistant_hub.categories */}

@@ -42,7 +42,7 @@ export function useSidebar() {
 
 /**
  * Whether the screen is narrower than Tailwind's sm: breakpoint, where the
- * open sidebar is a drawer over the page instead of a column beside it.
+ * open sidebar pushes the page aside instead of standing beside it as a column.
  */
 export function useIsNarrowScreen(): boolean {
   return useIsBelow("sm");

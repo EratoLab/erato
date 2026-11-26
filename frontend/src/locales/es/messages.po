@@ -1370,6 +1370,16 @@ msgstr "Agrega un numero de version antes de enviar."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionFormat"
+msgstr "Introduce una versión con el formato MAJOR.MINOR.PATCH."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.validation.versionNotIncreasing"
+msgstr "Introduce una versión superior a {version}."
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionComment"
 msgstr "Comentario de version"
 
@@ -1377,6 +1387,11 @@ msgstr "Comentario de version"
 #: src/pages/AssistantHubSubmitPage.tsx
 msgid "assistantHub.submit.versionCommentHelp"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/AssistantHubSubmitPage.tsx
+msgid "assistantHub.submit.versionFormatHelp"
+msgstr "Usa el formato MAJOR.MINOR.PATCH sin ceros iniciales, por ejemplo, 1.0.0."
 
 #. js-lingui-explicit-id
 #: src/pages/AssistantHubSubmitPage.tsx
@@ -6592,6 +6607,11 @@ msgstr "Lo que muestra el chat"
 #: src/components/ui/Settings/VoiceOutputSetting.tsx
 msgid "preferences.dialog.audio.voice.sound.heading"
 msgstr "Cómo suena"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.backToList"
+msgstr "Volver a Preferencias"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx

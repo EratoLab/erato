@@ -4416,7 +4416,9 @@ export const ChatInput = ({
               ) : (
                 <Button
                   type="submit"
-                  variant="secondary"
+                  // On a phone send is the one filled control in the bar, as
+                  // iOS tints only a view's primary action.
+                  variant={oneLineComposer ? "primary" : "secondary"}
                   size="sm"
                   geometry="icon"
                   icon={<ArrowUpIcon className="size-5" />}

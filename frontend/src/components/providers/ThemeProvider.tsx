@@ -18,6 +18,8 @@ import {
   resolveDeclaredAssetPath,
   resolveIconPaths,
 } from "@/config/themeConfig";
+import { inHostShell } from "@/lib/hostShell";
+import { systemTextScale } from "@/lib/systemTextSize";
 import { debugLog } from "@/utils/debugLogger";
 import {
   checkFileExists,
@@ -59,6 +61,8 @@ type ThemeContextType = {
   setThemeMode: (mode: ThemeMode) => void;
   textSize: TextSize;
   setTextSize: (size: TextSize) => void;
+  /** Inside an app the device's own text size decides, not `textSize`. */
+  followsSystemTextSize: boolean;
   isCustomTheme: boolean;
   customThemeName?: string;
   customThemeConfig?: CustomThemeConfig | null;
@@ -907,9 +911,40 @@ export function ThemeProvider({
     if (isThemeReady) document.querySelector(START_COLORS_MARKER)?.remove();
   }, [isThemeReady]);
 
+  // Where the engine cannot report the device's size, Erato's own setting
+  // stays the way to change it.
+  const [followsSystemTextSize] = useState(
+    () => inHostShell() && systemTextScale() !== null,
+  );
+
   // Layout effect: the attribute changes the root font-size, and a passive
   // effect would paint one frame at the old scale first.
   useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (followsSystemTextSize) {
+      // People change the size in the device's settings and come back to the
+      // app, so it is read again whenever the page shows.
+      const apply = () => {
+        root.style.setProperty(
+          "--system-text-scale",
+          String(systemTextScale() ?? 1),
+        );
+      };
+      apply();
+      root.setAttribute("data-text-size", "system");
+      const onVisible = () => {
+        if (document.visibilityState === "visible") apply();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("focus", apply);
+      return () => {
+        document.removeEventListener("visibilitychange", onVisible);
+        window.removeEventListener("focus", apply);
+        root.removeAttribute("data-text-size");
+        root.style.removeProperty("--system-text-scale");
+      };
+    }
+
     if (textSize === "default") {
       document.documentElement.removeAttribute("data-text-size");
     } else {
@@ -919,7 +954,7 @@ export function ThemeProvider({
     return () => {
       document.documentElement.removeAttribute("data-text-size");
     };
-  }, [textSize]);
+  }, [followsSystemTextSize, textSize]);
 
   const toggleTheme = (mode: ThemeMode) => {
     if (persistThemeMode) {
@@ -941,6 +976,7 @@ export function ThemeProvider({
     setThemeMode: toggleTheme,
     textSize,
     setTextSize,
+    followsSystemTextSize,
     isCustomTheme,
     customThemeName: customThemeConfig?.name,
     customThemeConfig,

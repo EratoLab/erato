@@ -12,6 +12,7 @@ import {
   useReplySpeechStyle,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
+import { useIsSettingsPageScreen } from "./SettingsPages";
 import { SpokenLanguagesSetting } from "./SpokenLanguagesSetting";
 import { Checkbox } from "../Controls/Checkbox";
 import { SegmentedControl } from "../Controls/SegmentedControl";
@@ -141,6 +142,8 @@ interface SpokenRowProps {
   unavailable?: string;
   onChange: (spoken: boolean) => void;
   onFollowOrganization: () => void;
+  /** A switch trailing the label, for the narrow screen's settings pages. */
+  asSwitch: boolean;
 }
 
 /** One thing the voice says or not, with the same lock as the wording. */
@@ -154,6 +157,7 @@ function SpokenRow({
   unavailable,
   onChange,
   onFollowOrganization,
+  asSwitch,
 }: SpokenRowProps) {
   if (spoken === undefined) return null;
   return (
@@ -163,13 +167,20 @@ function SpokenRow({
         onCheckedChange={onChange}
         disabled={saving || userChoice === false || unavailable !== undefined}
         label={label}
+        appearance={asSwitch ? "switch" : "checkbox"}
       />
-      <p className="pl-6 text-sm text-theme-fg-secondary">{description}</p>
+      <p
+        className={clsx("text-sm text-theme-fg-secondary", !asSwitch && "pl-6")}
+      >
+        {description}
+      </p>
       {unavailable !== undefined && (
-        <p className="pl-6 text-xs text-theme-fg-muted">{unavailable}</p>
+        <p className={clsx("text-xs text-theme-fg-muted", !asSwitch && "pl-6")}>
+          {unavailable}
+        </p>
       )}
       <OrganizationNote
-        indent
+        indent={!asSwitch}
         userChoice={userChoice}
         ownValue={ownValue}
         saving={saving}
@@ -209,6 +220,7 @@ export function VoiceOutputSetting() {
   const replies = useReplySpeechStyle({});
   const cards = useApprovalSpeechStyle({});
   const [saving, setSaving] = useState(false);
+  const asSwitch = useIsSettingsPageScreen();
 
   // `null` clears the user's own value: the organization's applies again.
   const save = async (body: UpdateProfilePreferencesRequest) => {
@@ -264,6 +276,7 @@ export function VoiceOutputSetting() {
         })}
       />
       <SpokenRow
+        asSwitch={asSwitch}
         label={t({
           id: "preferences.dialog.audio.voice.repliesSpoken.label",
           message: "Speak replies",
@@ -285,6 +298,7 @@ export function VoiceOutputSetting() {
         }
       />
       <SpokenRow
+        asSwitch={asSwitch}
         label={t({
           id: "preferences.dialog.audio.voice.cardsSpoken.label",
           message: "Read approval cards aloud",
@@ -386,8 +400,14 @@ export function VoiceOutputSetting() {
                 id: "preferences.dialog.audio.voice.showInChat.label",
                 message: "Show what the voice said in the chat",
               })}
+              appearance={asSwitch ? "switch" : "checkbox"}
             />
-            <p className="pl-6 text-sm text-theme-fg-secondary">
+            <p
+              className={clsx(
+                "text-sm text-theme-fg-secondary",
+                !asSwitch && "pl-6",
+              )}
+            >
               {t({
                 id: "preferences.dialog.audio.voice.showInChat.description",
                 message:
@@ -395,7 +415,7 @@ export function VoiceOutputSetting() {
               })}
             </p>
             <OrganizationNote
-              indent
+              indent={!asSwitch}
               ownValue={replies.data.show_in_chat_source === "user"}
               saving={saving}
               onFollowOrganization={() =>

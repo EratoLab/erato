@@ -1,6 +1,8 @@
 import clsx from "clsx";
 import { forwardRef, useLayoutEffect, useRef } from "react";
 
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
+
 import type React from "react";
 
 function getAutoResizeBounds(
@@ -164,13 +166,26 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       const textarea = textareaRef.current;
       if (textarea === null) return;
 
-      const { minHeight, maxHeight, contentHeight } = getAutoResizeBounds(
-        textarea,
-        rows,
-        maxRows,
-      );
-      const newHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
-      textarea.style.height = `${newHeight}px`;
+      const fit = () => {
+        const { minHeight, maxHeight, contentHeight } = getAutoResizeBounds(
+          textarea,
+          rows,
+          maxRows,
+        );
+        if (minHeight === 0) return false;
+        textarea.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
+        return true;
+      };
+      if (fit() || typeof ResizeObserver === "undefined") return;
+
+      // Not rendered (a hidden tab or settings page) measures as zero; a fixed
+      // height from that would clip the text once shown, so fit it then.
+      textarea.style.height = "";
+      const observer = new ResizeObserver(() => {
+        if (fit()) observer.disconnect();
+      });
+      observer.observe(textarea);
+      return () => observer.disconnect();
     }, [
       value,
       autoResize,
@@ -223,7 +238,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             // (0,2,0) vs (0,1,0) — so it wins regardless of source order.
             "disabled:cursor-not-allowed disabled:bg-theme-bg-primary disabled:text-theme-fg-muted disabled:opacity-50",
             // Monospace font
-            monospace && "font-mono text-sm",
+            monospace && `font-mono text-sm ${PHONE_FIELD_TEXT}`,
             // Resize behavior
             autoResize ? "resize-none overflow-hidden" : "resize-y",
             // Custom classes

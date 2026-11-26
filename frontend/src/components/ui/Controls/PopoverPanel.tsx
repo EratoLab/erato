@@ -154,7 +154,7 @@ export function PopoverSeparator({
   );
 }
 
-const VIEWPORT_PADDING_FALLBACK_PX = 8;
+export const VIEWPORT_PADDING_FALLBACK_PX = 8;
 
 /**
  * Resolve a CSS length — a theme token, in practice — to pixels by measuring a
@@ -167,21 +167,35 @@ export function resolvePopoverViewportPadding(
   referenceElement: HTMLElement | null | undefined,
   fallback: number = VIEWPORT_PADDING_FALLBACK_PX,
 ) {
+  return resolvePopoverLengths([{ value, fallback }], referenceElement)[0];
+}
+
+/**
+ * Resolves CSS lengths (tokens, `var()`, `env()`) to px in the reference
+ * element's context. All probes are attached before the first is read, so
+ * the page lays out once however many lengths are asked for.
+ */
+export function resolvePopoverLengths(
+  lengths: ReadonlyArray<{ value: string; fallback: number }>,
+  referenceElement: HTMLElement | null | undefined,
+): number[] {
   if (typeof window === "undefined" || !referenceElement) {
-    return fallback;
+    return lengths.map(({ fallback }) => fallback);
   }
 
-  const probe = document.createElement("div");
-  probe.style.position = "absolute";
-  probe.style.visibility = "hidden";
-  probe.style.pointerEvents = "none";
-  probe.style.width = value;
+  const probes = lengths.map(({ value }) => {
+    const probe = document.createElement("div");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    probe.style.pointerEvents = "none";
+    probe.style.width = value;
+    referenceElement.appendChild(probe);
+    return probe;
+  });
+  const widths = probes.map((probe) => probe.getBoundingClientRect().width);
+  probes.forEach((probe) => probe.remove());
 
-  referenceElement.appendChild(probe);
-  const resolvedWidth = probe.getBoundingClientRect().width;
-  probe.remove();
-
-  return Number.isFinite(resolvedWidth) && resolvedWidth > 0
-    ? resolvedWidth
-    : fallback;
+  return widths.map((width, index) =>
+    Number.isFinite(width) && width > 0 ? width : lengths[index].fallback,
+  );
 }

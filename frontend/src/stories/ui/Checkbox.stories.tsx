@@ -77,3 +77,31 @@ export const FocusVisible: Story = {
     await userEvent.tab();
   },
 };
+
+/**
+ * `appearance="switch"`, for an on/off setting that is its own row on a narrow
+ * screen's settings page. Safari and the iPhone app draw WebKit's switch;
+ * other browsers draw the checkbox at the end of the row.
+ */
+export const SwitchInSettingsRows: Story = {
+  render: () => (
+    <div className="flex max-w-sm flex-col gap-4">
+      <Interactive
+        checked
+        appearance="switch"
+        label="Read approval cards aloud"
+      />
+      <Interactive
+        checked={false}
+        appearance="switch"
+        label="Show what the voice said in the chat"
+      />
+      <Interactive
+        checked={false}
+        disabled
+        appearance="switch"
+        label="Set by your organization"
+      />
+    </div>
+  ),
+};

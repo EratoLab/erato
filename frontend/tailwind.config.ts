@@ -2,9 +2,11 @@ import type { Config } from "tailwindcss";
 import defaultTheme from "tailwindcss/defaultTheme";
 import plugin from "tailwindcss/plugin";
 
-import { HOVERING_POINTER } from "./src/styles/pointerQueries";
-
-const NO_HOVERING_POINTER = `not all and ${HOVERING_POINTER}`;
+import {
+  HOVERING_POINTER,
+  NARROW_SCREEN,
+  NO_HOVERING_POINTER,
+} from "./src/styles/pointerQueries";
 
 /**
  * What a tap acts on. Plain surfaces stay out: a finger that scrolls over a
@@ -237,6 +239,12 @@ export default {
       );
       // For what a hovering pointer would reveal and a touch screen shows.
       addVariant("no-hover", `@media ${NO_HOVERING_POINTER}`);
+      // A phone held in the hand: the condition of the one-line composer
+      // (useIsNarrowTouchScreen) and of the phone blocks in globals.css.
+      addVariant(
+        "touch-phone",
+        `@media ${NARROW_SCREEN} { @media ${NO_HOVERING_POINTER} { & } }`,
+      );
       // The pressed look shows at once, as a phone's own controls do; letting
       // go still fades it out.
       addBase({

@@ -7269,6 +7269,13 @@ pub struct AssistantHubConfig {
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub force_whole_organization_audience: bool,
 
+    // Whether assistant hub versions must use increasing MAJOR.MINOR.PATCH numbers.
+    // Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::stability(level = "stable"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub validate_version_semver_format: bool,
+
     // Configured reviewer rules.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
@@ -7305,6 +7312,7 @@ impl Default for AssistantHubConfig {
             default_share_with_whole_organization:
                 default_assistant_hub_share_with_whole_organization(),
             force_whole_organization_audience: false,
+            validate_version_semver_format: false,
             reviewers: AssistantHubReviewerPermissionsConfig::default(),
             action_permissions: AssistantHubActionPermissionsConfig::default(),
             categories: HashMap::new(),
@@ -7354,6 +7362,27 @@ pub enum AssistantHubActionRole {
 #[cfg(test)]
 mod assistant_hub_config_tests {
     use super::{AssistantHubActionPermissionsConfig, AssistantHubActionRole, AssistantHubConfig};
+
+    #[test]
+    fn version_validation_is_opt_in() {
+        assert!(!AssistantHubConfig::default().validate_version_semver_format);
+
+        for (value, expected) in [
+            (serde_json::json!({}), false),
+            (
+                serde_json::json!({"validate_version_semver_format": false}),
+                false,
+            ),
+            (
+                serde_json::json!({"validate_version_semver_format": true}),
+                true,
+            ),
+        ] {
+            let config: AssistantHubConfig =
+                serde_json::from_value(value).expect("config should deserialize");
+            assert_eq!(config.validate_version_semver_format, expected);
+        }
+    }
 
     #[test]
     fn categories_are_enabled_by_default() {

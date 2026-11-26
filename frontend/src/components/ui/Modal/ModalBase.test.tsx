@@ -258,9 +258,12 @@ describe("ModalBase", () => {
     );
     const overlay = () =>
       document.querySelector('[data-ui="modal-overlay"]') as HTMLElement;
-    expect(overlay().className).toBe(
-      "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
+    expect(overlay()).toHaveClass(
+      "modal-overlay-skin",
+      "items-center",
+      "justify-center",
     );
+    expect(overlay()).not.toHaveAttribute("data-placement");
     expect(screen.getByRole("dialog")).not.toHaveAttribute("data-placement");
 
     rerender(
@@ -281,6 +284,79 @@ describe("ModalBase", () => {
     const dialog = screen.getByRole("dialog", { name: "Details" });
     expect(dialog).toHaveAttribute("data-placement", "bottom");
     expect(dialog).toHaveClass("max-w-full", "max-h-[calc(100%-3.25rem)]");
+  });
+
+  it("fills the screen without a gutter when placed full screen", () => {
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={vi.fn()}
+        title="Preferences"
+        placement="fullscreen"
+        contentClassName="max-w-4xl"
+      >
+        <div>body</div>
+      </ModalBase>,
+    );
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+    expect(overlay).toHaveAttribute("data-placement", "fullscreen");
+    expect(overlay).toHaveClass(
+      "items-stretch",
+      "[--modal-viewport-margin:0px]",
+    );
+    const dialog = screen.getByRole("dialog", { name: "Preferences" });
+    expect(dialog).toHaveAttribute("data-placement", "fullscreen");
+    expect(dialog).toHaveClass("h-full", "max-h-none", "max-w-none");
+  });
+
+  it("stays open when the safe-area strip of a full-screen overlay is tapped", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={onClose}
+        title="Preferences"
+        placement="fullscreen"
+      >
+        <div>body</div>
+      </ModalBase>,
+    );
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("puts a back button before the title, shaped like the close button", () => {
+    const onBack = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={onClose}
+        title="Appearance"
+        back={{ label: "Back to Preferences", onBack }}
+      >
+        <div>body</div>
+      </ModalBase>,
+    );
+    const back = screen.getByRole("button", { name: "Back to Preferences" });
+    expect(back).toHaveAttribute("data-ui", "modal-back");
+    expect(back).toHaveClass("modal-close-geometry");
+    expect(
+      back.compareDocumentPosition(
+        screen.getByRole("heading", { name: "Appearance" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(back);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   describe("stacked dialogs (ERMAIN-1025)", () => {
