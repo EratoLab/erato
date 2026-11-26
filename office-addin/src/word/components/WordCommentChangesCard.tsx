@@ -25,6 +25,7 @@ import {
   wordBlockedReasonText,
   wordCommentTaintText,
 } from "./WordReviewCardParts";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import { useWordChainedApply } from "../hooks/useWordChainedApply";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
@@ -442,10 +443,12 @@ export function WordCommentChangesCard({
     [review.comments, draft],
   );
   const mode = draft ? wordCommentCardMode(draft) : "copy";
+  const neverAllowed = useNeverAllowedActions("word");
   const offered =
     !!draft &&
     mode === "post" &&
-    (artifact?.allowedClientActions ?? []).includes(entry.action);
+    (artifact?.allowedClientActions ?? []).includes(entry.action) &&
+    !neverAllowed.has(entry.action);
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||

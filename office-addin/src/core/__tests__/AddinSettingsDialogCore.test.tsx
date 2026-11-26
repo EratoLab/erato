@@ -1,11 +1,18 @@
 import { i18n } from "@lingui/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, useHref, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AddinSettingsDialogCore } from "../AddinSettingsDialogCore";
 
 import type * as EratoLibrary from "@erato/frontend/library";
+import type React from "react";
 import type { ReactNode } from "react";
 
 const featureFlags = vi.hoisted(() => ({
@@ -14,14 +21,22 @@ const featureFlags = vi.hoisted(() => ({
   disclaimers: false,
 }));
 const authorizeInBrowser = vi.hoisted(() => vi.fn());
+// The real settings-pages hook reads the pane width; the task pane is wide
+// here unless a test narrows it.
+const pane = { narrow: false };
 
 vi.mock("@erato/frontend/library", async () => {
   // The core zone rule reads any `src/` import as host behavior reaching a
   // host-neutral file; a test-only stub set is neither.
   // eslint-disable-next-line import/no-restricted-paths
   const mock = await import("../../test/helpers/eratoLibraryMock");
-  const { TabRail, isDisclaimersSettingsLink, settingsClosedLocation } =
-    await vi.importActual<typeof EratoLibrary>("@erato/frontend/library");
+  const {
+    SettingsPageList,
+    TabRail,
+    isDisclaimersSettingsLink,
+    settingsClosedLocation,
+    useSettingsPages,
+  } = await vi.importActual<typeof EratoLibrary>("@erato/frontend/library");
 
   return mock.createEratoLibraryMock({
     AppearanceTabContent: () => <div data-testid="appearance-settings" />,
@@ -32,13 +47,28 @@ vi.mock("@erato/frontend/library", async () => {
       children,
       isOpen,
       onClose,
+      title,
+      back,
+      placement,
     }: {
       children: ReactNode;
       isOpen: boolean;
       onClose: () => void;
+      title?: string;
+      back?: {
+        label: string;
+        onBack: () => void;
+        ref?: React.Ref<HTMLButtonElement>;
+      };
+      placement?: string;
     }) =>
       isOpen ? (
-        <div role="dialog">
+        <div role="dialog" aria-label={title} data-placement={placement}>
+          {back ? (
+            <button ref={back.ref} onClick={back.onBack}>
+              {back.label}
+            </button>
+          ) : null}
           <button onClick={onClose}>Close</button>
           {children}
         </div>
@@ -56,7 +86,9 @@ vi.mock("@erato/frontend/library", async () => {
           Authorize in browser
         </button>
       ) : null,
+    SettingsPageList,
     TabRail,
+    useSettingsPages,
     useFeatureConfig: () => ({
       audioTranscription: { enabled: featureFlags.audio },
       audioDictation: { enabled: false },
@@ -82,13 +114,23 @@ function LocationProbe() {
 
 describe("AddinSettingsDialogCore", () => {
   beforeEach(() => {
+    pane.narrow = false;
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: pane.narrow && query === "(max-width: 639.98px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
     authorizeInBrowser.mockClear();
     i18n.activate("en");
     featureFlags.audio = false;
     featureFlags.mcpServers = false;
     featureFlags.disclaimers = false;
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
 
   it("opens the last tab from a task-pane link and cleans the URL on close", () => {
     featureFlags.disclaimers = true;
@@ -301,5 +343,73 @@ describe("AddinSettingsDialogCore", () => {
     );
 
     expect(tabNames()).toEqual(["Appearance", "User settings", "MCP & Apps"]);
+  });
+
+  describe("in a narrow pane", () => {
+    beforeEach(() => {
+      pane.narrow = true;
+    });
+
+    it("lists the tabs as pages and opens one with a way back", () => {
+      featureFlags.mcpServers = true;
+      render(
+        <AddinSettingsDialogCore
+          isOpen
+          onClose={() => {}}
+          hostContribution={{ tabLabel: "Word", content: <p>Word options</p> }}
+        />,
+      );
+
+      const dialog = screen.getByRole("dialog", { name: "Settings" });
+      expect(dialog).toHaveAttribute("data-placement", "fullscreen");
+      expect(screen.queryByRole("tablist")).toBeNull();
+      const list = screen.getByRole("list", { name: "Settings" });
+      expect(
+        within(list)
+          .getAllByRole("button")
+          .map((row) => row.textContent),
+      ).toEqual(["Appearance", "User settings", "MCP & Apps", "Word"]);
+
+      fireEvent.click(within(list).getByRole("button", { name: "Word" }));
+
+      expect(screen.getByRole("dialog", { name: "Word" })).toBeVisible();
+      expect(screen.getByText("Word options")).toBeVisible();
+      expect(screen.getByTestId("appearance-settings")).not.toBeVisible();
+      const back = screen.getByRole("button", { name: "Back to Settings" });
+      expect(back).toHaveFocus();
+
+      fireEvent.click(back);
+
+      expect(screen.getByRole("dialog", { name: "Settings" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Word" })).toHaveFocus();
+      expect(screen.getByText("Word options")).not.toBeVisible();
+    });
+
+    it("goes to a tab asked for while the list is open", () => {
+      const view = render(
+        <AddinSettingsDialogCore isOpen onClose={() => {}} />,
+      );
+      expect(screen.getByRole("list", { name: "Settings" })).toBeVisible();
+
+      view.rerender(
+        <AddinSettingsDialogCore isOpen onClose={() => {}} openTab="user" />,
+      );
+
+      expect(
+        screen.getByRole("dialog", { name: "User settings" }),
+      ).toBeVisible();
+    });
+
+    it("opens on the tab it is asked for", () => {
+      render(
+        <AddinSettingsDialogCore isOpen onClose={() => {}} openTab="user" />,
+      );
+
+      expect(
+        screen.getByRole("dialog", { name: "User settings" }),
+      ).toBeVisible();
+      expect(screen.getByTestId("user-settings")).toBeVisible();
+      expect(screen.queryByRole("list", { name: "Settings" })).toBeNull();
+    });
   });
 });

@@ -4,7 +4,7 @@ use crate::db::entity::share_grants;
 use crate::models::assistant_hub;
 use crate::models::assistant_hub::{
     HubAudienceGrantInput, HubPublicationAction, HubReviewInput, HubReviewRecord,
-    HubSubmissionProfile, HubVersionRecord,
+    HubSubmissionProfile, HubVersionRecord, HubVersionValidationError,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
@@ -14,6 +14,7 @@ use crate::services::sentry::log_internal_server_error;
 use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use chrono::{DateTime, FixedOffset};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -38,6 +39,7 @@ pub struct AssistantHubConfigResponse {
     pub rating_mode: String,
     pub default_share_with_whole_organization: bool,
     pub force_whole_organization_audience: bool,
+    pub validate_version_semver_format: bool,
     pub categories: Vec<AssistantHubCategory>,
 }
 
@@ -68,6 +70,22 @@ pub struct AssistantHubSubmissionRequest {
 pub struct AssistantHubSubmissionDiffResponse {
     #[schema(value_type = Object)]
     pub diff_summary: JsonValue,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AssistantHubVersionErrorCode {
+    InvalidVersionFormat,
+    VersionNotIncreasing,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AssistantHubVersionErrorResponse {
+    pub code: AssistantHubVersionErrorCode,
+    /// The highest comparable version already submitted for this assistant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub current_version: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -633,6 +651,38 @@ fn model_error_to_status(error: eyre::Report) -> StatusCode {
     }
 }
 
+pub enum AssistantHubSubmissionError {
+    Status(StatusCode),
+    Version(AssistantHubVersionErrorResponse),
+}
+
+impl IntoResponse for AssistantHubSubmissionError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::Status(status) => status.into_response(),
+            Self::Version(body) => (StatusCode::BAD_REQUEST, Json(body)).into_response(),
+        }
+    }
+}
+
+fn submission_error(error: eyre::Report) -> AssistantHubSubmissionError {
+    let (code, current_version) = match error.downcast_ref::<HubVersionValidationError>() {
+        Some(HubVersionValidationError::InvalidFormat) => {
+            (AssistantHubVersionErrorCode::InvalidVersionFormat, None)
+        }
+        Some(HubVersionValidationError::NotIncreasing { current_version }) => (
+            AssistantHubVersionErrorCode::VersionNotIncreasing,
+            Some(current_version.clone()),
+        ),
+        None => return AssistantHubSubmissionError::Status(model_error_to_status(error)),
+    };
+
+    AssistantHubSubmissionError::Version(AssistantHubVersionErrorResponse {
+        code,
+        current_version,
+    })
+}
+
 #[utoipa::path(
     get,
     path = "/assistant-hub/config",
@@ -666,6 +716,7 @@ pub async fn assistant_hub_config(
         rating_mode: config.rating_mode.clone(),
         default_share_with_whole_organization: config.default_share_with_whole_organization,
         force_whole_organization_audience: config.force_whole_organization_audience,
+        validate_version_semver_format: config.validate_version_semver_format,
         categories,
     }))
 }
@@ -677,7 +728,7 @@ pub async fn assistant_hub_config(
     request_body = AssistantHubSubmissionRequest,
     responses(
         (status = OK, body = AssistantHubSubmissionDiffResponse),
-        (status = BAD_REQUEST),
+        (status = BAD_REQUEST, body = AssistantHubVersionErrorResponse),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
@@ -689,9 +740,9 @@ pub async fn preview_assistant_hub_submission_diff(
     Extension(me_user): Extension<MeProfile>,
     Path(source_assistant_id): Path<String>,
     Json(request): Json<AssistantHubSubmissionRequest>,
-) -> Result<Json<AssistantHubSubmissionDiffResponse>, StatusCode> {
-    let source_assistant_id =
-        Uuid::parse_str(&source_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<Json<AssistantHubSubmissionDiffResponse>, AssistantHubSubmissionError> {
+    let source_assistant_id = Uuid::parse_str(&source_assistant_id)
+        .map_err(|_| AssistantHubSubmissionError::Status(StatusCode::BAD_REQUEST))?;
     let profile = HubSubmissionProfile::from(&request);
     let diff_summary = assistant_hub::build_submission_diff(
         &app_state.db,
@@ -701,7 +752,7 @@ pub async fn preview_assistant_hub_submission_diff(
         &profile,
     )
     .await
-    .map_err(model_error_to_status)?;
+    .map_err(submission_error)?;
 
     Ok(Json(AssistantHubSubmissionDiffResponse { diff_summary }))
 }
@@ -713,7 +764,7 @@ pub async fn preview_assistant_hub_submission_diff(
     request_body = AssistantHubSubmissionRequest,
     responses(
         (status = CREATED, body = AssistantHubVersionResponse),
-        (status = BAD_REQUEST),
+        (status = BAD_REQUEST, body = AssistantHubVersionErrorResponse),
         (status = FORBIDDEN),
         (status = NOT_FOUND),
         (status = UNAUTHORIZED),
@@ -726,9 +777,9 @@ pub async fn submit_assistant_hub_version(
     Extension(policy): Extension<PolicyEngine>,
     Path(source_assistant_id): Path<String>,
     Json(request): Json<AssistantHubSubmissionRequest>,
-) -> Result<(StatusCode, Json<AssistantHubVersionResponse>), StatusCode> {
-    let source_assistant_id =
-        Uuid::parse_str(&source_assistant_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<(StatusCode, Json<AssistantHubVersionResponse>), AssistantHubSubmissionError> {
+    let source_assistant_id = Uuid::parse_str(&source_assistant_id)
+        .map_err(|_| AssistantHubSubmissionError::Status(StatusCode::BAD_REQUEST))?;
     let profile = HubSubmissionProfile::from(&request);
     let audience_grants = request
         .audience_grants
@@ -745,7 +796,7 @@ pub async fn submit_assistant_hub_version(
         audience_grants,
     )
     .await
-    .map_err(model_error_to_status)?;
+    .map_err(submission_error)?;
 
     Ok((
         StatusCode::CREATED,
@@ -754,7 +805,9 @@ pub async fn submit_assistant_hub_version(
                 .await
                 .into_iter()
                 .next()
-                .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?,
+                .ok_or(AssistantHubSubmissionError::Status(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                ))?,
         }),
     ))
 }

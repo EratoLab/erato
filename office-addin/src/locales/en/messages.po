@@ -1988,6 +1988,11 @@ msgid "officeAddin.settings.audio.unsupported"
 msgstr "Audio input is not supported on this platform"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.backToList"
+msgstr "Back to Settings"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Configure how switching between Outlook emails maps to chats and how suggested Outlook actions behave."
@@ -2039,8 +2044,8 @@ msgstr "Word actions"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx
-#~ msgid "officeAddin.settings.serversTools.wordActions.builtIn"
-#~ msgstr "Built into Word"
+msgid "officeAddin.settings.serversTools.wordActions.builtIn"
+msgstr "Built into Word"
 
 #. js-lingui-explicit-id
 #: src/word/components/WordSettingsDialog.tsx

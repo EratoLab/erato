@@ -26,6 +26,7 @@ import {
 import { getMcpOauthServerId } from "@/lib/mcpOauthCallback";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import { UserPreferencesDialog } from "./UserPreferencesDialog";
 import { toast, Toaster } from "../Toast";
@@ -33,6 +34,10 @@ import { toast, Toaster } from "../Toast";
 import type { UserProfile } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type React from "react";
 import type { ReactNode } from "react";
+
+vi.mock("@/lib/systemTextSize", () => ({
+  systemTextScale: () => 1,
+}));
 
 const mockNavigate = vi.fn();
 const localStorageValues = new Map<string, string>();
@@ -463,6 +468,20 @@ describe("UserPreferencesDialog", () => {
     expect(
       within(control).getByRole("tab", { name: "Default" }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("leaves the text size to the device inside an app", () => {
+    installHostShell({});
+    try {
+      renderDialog();
+      fireEvent.click(screen.getByRole("tab", { name: "Appearance" }));
+
+      expect(
+        screen.queryByRole("tablist", { name: "Text size" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("renders accessible vertical tabs and linked tabpanels", () => {
@@ -1470,5 +1489,127 @@ describe("UserPreferencesDialog", () => {
         screen.getByText("Could not save preferences. Please try again."),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("UserPreferencesDialog on a narrow screen", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 639.98px)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      createJsonResponse([]),
+    );
+  });
+
+  it("lists the tabs as pages, opens one and goes back to the list", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "Preferences" });
+    expect(dialog).toHaveAttribute("data-placement", "fullscreen");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Back to Preferences" }),
+    ).toBeNull();
+    const list = screen.getByRole("list", { name: "Preferences" });
+    expect(
+      within(list)
+        .getAllByRole("button")
+        .map((row) => row.textContent),
+    ).toEqual(["Personalization", "Appearance", "MCP & Apps", "Data"]);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(within(list).getByRole("button", { name: "Appearance" }));
+
+    expect(screen.getByRole("dialog", { name: "Appearance" })).toBeVisible();
+    const back = screen.getByRole("button", { name: "Back to Preferences" });
+    expect(back).toHaveFocus();
+    expect(screen.queryByRole("list", { name: "Preferences" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Color mode" })).toBeVisible();
+    expect(screen.getByLabelText("Nickname")).not.toBeVisible();
+
+    fireEvent.click(back);
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: "Color mode" })).toBeNull();
+  });
+
+  it("keeps focus in the dialog after a tap, on the dialog rather than a button", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }), {
+      detail: 1,
+    });
+
+    const page = screen.getByRole("dialog", { name: "Appearance" });
+    expect(page).toHaveFocus();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+      { detail: 1 },
+    );
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toHaveFocus();
+  });
+
+  it("keeps unsaved edits across the list and shows Save on their page only", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Max" },
+    });
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Max");
+  });
+
+  it("names a page once, in the title", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "MCP & Apps" }));
+
+    expect(screen.getAllByRole("heading", { name: "MCP & Apps" })).toHaveLength(
+      1,
+    );
+  });
+
+  it("opens on the page a link asks for, with the list one step back", () => {
+    renderDialog({ initialTab: "data" });
+
+    expect(screen.getByRole("dialog", { name: "Data" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Archive all chats" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
+  });
+
+  it("starts on the list again each time it opens", () => {
+    const view = renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    view.update({ isOpen: false });
+    view.update({ isOpen: true });
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(screen.getByRole("list", { name: "Preferences" })).toBeVisible();
   });
 });

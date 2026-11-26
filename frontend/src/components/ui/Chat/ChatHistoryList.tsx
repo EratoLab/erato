@@ -443,7 +443,7 @@ const ChatHistoryListItem = memo<{
         as="div"
         selected={isActive}
         className={clsx(
-          "sidebar-content-col-geometry sidebar-trailing-col-geometry flex-col py-1.5 pb-3.5",
+          "sidebar-content-col-geometry sidebar-trailing-col-geometry flex-col py-1.5 pb-3.5 touch-phone:pb-2",
           layout === "compact" ? "gap-0.5" : "gap-1",
         )}
         // Spread, because the attribute NAME is the pinned part.
@@ -476,7 +476,7 @@ const ChatHistoryListItem = memo<{
           <>
             <p
               className={clsx(
-                "truncate text-xs",
+                "truncate text-xs touch-phone:hidden",
                 session.metadata?.fileCount == 0
                   ? "text-theme-fg-muted"
                   : "text-theme-fg-secondary",

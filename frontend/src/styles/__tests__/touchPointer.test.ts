@@ -6,6 +6,7 @@ import tailwindcss from "tailwindcss";
 import { describe, expect, it } from "vitest";
 
 import tailwindConfig from "../../../tailwind.config";
+import { NARROW_SCREEN, NO_HOVERING_POINTER } from "../pointerQueries";
 
 import type { AtRule, Rule } from "postcss";
 
@@ -179,5 +180,52 @@ describe("holding a finger on a control", () => {
     }
     expect(rule.selector).not.toContain("a[href]");
     expect(rule.selector).not.toContain('[role="link"]');
+  });
+});
+
+describe("the touch-phone variant", () => {
+  it("applies on a narrow screen without a hovering pointer only", async () => {
+    const result = await postcss([
+      tailwindcss({
+        ...tailwindConfig,
+        content: [
+          {
+            raw: '<div class="touch-phone:text-base"></div>',
+            extension: "html",
+          },
+        ],
+      }),
+    ]).process("@tailwind utilities;", { from: undefined });
+    const rules: Rule[] = [];
+    result.root.walkRules((rule) => {
+      rules.push(rule);
+    });
+
+    expect(rules).toHaveLength(1);
+    const inner = rules[0].parent as AtRule;
+    const outer = inner.parent as AtRule;
+    expect([outer.params, inner.params]).toEqual([
+      "(max-width: 639.98px)",
+      NOT_HOVERING,
+    ]);
+  });
+});
+
+describe("the phone blocks in globals.css", () => {
+  it("use the touch-phone variant's condition, nothing narrower or wider", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/styles/globals.css"),
+      "utf8",
+    );
+    const narrow = [
+      ...css.matchAll(/@media \(max-width: 639\.98px\) \{\s*@media ([^{]+)\{/g),
+    ];
+
+    expect(narrow.length).toBeGreaterThanOrEqual(3);
+    for (const match of narrow) {
+      expect(match[1].trim()).toBe(NO_HOVERING_POINTER);
+    }
+    expect(css.match(/639\.98px/g)).toHaveLength(narrow.length);
+    expect(NARROW_SCREEN).toBe("(max-width: 639.98px)");
   });
 });

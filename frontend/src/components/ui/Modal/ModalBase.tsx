@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 
 import { isImeComposing } from "@/utils/isImeComposing";
 
-import { CloseIcon } from "../icons";
+import { ChevronLeftIcon, CloseIcon } from "../icons";
 
 import type React from "react";
 
@@ -18,9 +18,21 @@ interface ModalBaseProps {
   contentClassName?: string;
   /**
    * `bottom` docks the dialog as a near-full-width sheet at the foot of the
-   * viewport, for narrow panes.
+   * viewport, for narrow panes. `fullscreen` covers the screen inside the safe
+   * areas, with no gutter, corner or shadow: on a narrow screen a centred
+   * popup only spends its width on margins.
    */
-  placement?: "center" | "bottom";
+  placement?: "center" | "bottom" | "fullscreen";
+  /**
+   * A back button before the title, for a dialog that shows one of its pages.
+   * It shares the close button's shape, so a theme sizes both at once. Drawn
+   * in the header, so only with a `title`.
+   */
+  back?: {
+    label: string;
+    onBack: (event: React.MouseEvent<HTMLButtonElement>) => void;
+    ref?: React.Ref<HTMLButtonElement>;
+  };
   /** Actions pinned below the scrolling content, so they stay in view. */
   footer?: React.ReactNode;
   /** `alertdialog` for a dialog that interrupts with a message to act on. */
@@ -41,6 +53,12 @@ interface ModalBaseProps {
   closeOnOverlayClick?: boolean;
 }
 
+const HEADER_BUTTON_CLASS =
+  "modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary";
+const HEADER_BUTTON_STYLE: React.CSSProperties = {
+  padding: "var(--theme-spacing-modal-close-button-padding)",
+};
+
 // Open dialogs, newest last. Escape belongs to the newest only, so a preview
 // stacked over another dialog closes alone.
 const openModals: object[] = [];
@@ -58,6 +76,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   className,
   contentClassName,
   placement = "center",
+  back,
   footer,
   role = "dialog",
   modal = role === "alertdialog",
@@ -141,6 +160,9 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
       closeOnOverlayClick &&
+      // What shows of a full-screen overlay is the safe-area strip painted
+      // as the dialog, where a tap must not close it and drop unsaved edits.
+      placement !== "fullscreen" &&
       event.target === event.currentTarget &&
       mouseDownTargetRef.current === event.currentTarget
     ) {
@@ -160,9 +182,12 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         // items-center after items-end, so a caller could not override it.
         // The skin's viewport gutter is unlayered, so a padding utility would
         // lose to it; the sheet narrows the gutter through the skin's variable.
+        "modal-overlay-skin fixed inset-0 z-50 flex justify-center",
         placement === "bottom"
-          ? "modal-overlay-skin fixed inset-0 z-50 flex items-end justify-center [--modal-viewport-margin:0.5rem]"
-          : "modal-overlay-skin fixed inset-0 z-50 flex items-center justify-center",
+          ? "items-end [--modal-viewport-margin:0.5rem]"
+          : placement === "fullscreen"
+            ? "items-stretch [--modal-viewport-margin:0px]"
+            : "items-center",
         className,
       )}
       onMouseDown={handleOverlayMouseDown}
@@ -170,6 +195,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
       role="presentation"
       aria-label={t`Close modal overlay`}
       data-ui="modal-overlay"
+      data-placement={placement === "center" ? undefined : placement}
     >
       <div
         ref={modalRef}
@@ -177,6 +203,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
           "modal-shell-skin modal-shell-frame-geometry theme-transition relative flex w-full flex-col overflow-hidden font-sans",
           "focus-ring",
           placement === "bottom" && "max-h-[calc(100%-3.25rem)] max-w-full",
+          placement === "fullscreen" && "h-full max-h-none max-w-none",
           contentClassName,
         )}
         // Make the content div focusable
@@ -186,11 +213,24 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         aria-labelledby={title ? titleId : labelledBy}
         aria-describedby={describedBy}
         data-ui="modal-shell"
-        data-placement={placement === "bottom" ? "bottom" : undefined}
+        data-placement={placement === "center" ? undefined : placement}
       >
         {/* Optional Header */}
         {title && (
           <div className="modal-section-geometry flex shrink-0 items-start gap-3 border-b border-theme-border">
+            {back ? (
+              <button
+                ref={back.ref}
+                type="button"
+                onClick={back.onBack}
+                className={HEADER_BUTTON_CLASS}
+                style={HEADER_BUTTON_STYLE}
+                aria-label={back.label}
+                data-ui="modal-back"
+              >
+                <ChevronLeftIcon className="size-6" />
+              </button>
+            ) : null}
             <h2
               id={titleId}
               className="min-w-0 flex-1 break-words font-heading text-lg font-semibold text-theme-fg-primary"
@@ -201,10 +241,8 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {showCloseButton ? (
               <button
                 onClick={onClose}
-                className="modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
-                style={{
-                  padding: "var(--theme-spacing-modal-close-button-padding)",
-                }}
+                className={HEADER_BUTTON_CLASS}
+                style={HEADER_BUTTON_STYLE}
                 aria-label={t`Close modal`}
               >
                 <CloseIcon className="size-6" />

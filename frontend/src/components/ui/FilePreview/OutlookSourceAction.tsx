@@ -13,6 +13,8 @@ import {
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 import { useOutlookSourceNavigator } from "@/providers/OutlookSourceNavigationProvider";
 
+import { PHONE_FIELD_TEXT } from "../Input/phoneFieldText";
+
 import type { OutlookFileProvenance } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export function OutlookSourceAction({
@@ -52,7 +54,7 @@ export function OutlookSourceAction({
               setSelected(Number(event.target.value));
               setFailed(false);
             }}
-            className="rounded border border-theme-border bg-theme-bg-primary p-2 text-sm text-theme-fg-primary"
+            className={`rounded border border-theme-border bg-theme-bg-primary p-2 text-sm text-theme-fg-primary ${PHONE_FIELD_TEXT}`}
           >
             {references.map((source, index) => (
               <option key={index} value={index}>

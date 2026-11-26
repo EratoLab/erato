@@ -1,3 +1,4 @@
+import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -141,6 +142,29 @@ const suggestNextVersionNumber = (
   return candidate;
 };
 
+const parseStrictVersion = (label: string) => {
+  const match = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(
+    label,
+  );
+  if (match?.[0] !== label) return undefined;
+
+  return {
+    label,
+    components: [BigInt(match[1]), BigInt(match[2]), BigInt(match[3])] as const,
+  };
+};
+
+type StrictVersion = NonNullable<ReturnType<typeof parseStrictVersion>>;
+
+const compareVersions = (left: StrictVersion, right: StrictVersion) => {
+  for (const [index, component] of left.components.entries()) {
+    const other = right.components[index];
+    if (component < other) return -1;
+    if (component > other) return 1;
+  }
+  return 0;
+};
+
 export default function AssistantHubSubmitPage() {
   const showError = usePageErrorToast();
   const navigate = useNavigate();
@@ -168,6 +192,12 @@ export default function AssistantHubSubmitPage() {
   const submitVersion = useSubmitAssistantHubVersion();
   const [longDescription, setLongDescription] = useState("");
   const [versionNumber, setVersionNumber] = useState("");
+  const [versionFieldTouched, setVersionFieldTouched] = useState(false);
+  const [rejectedVersionNumber, setRejectedVersionNumber] = useState<string>();
+  const [serverVersion, setServerVersion] = useState<{
+    sourceAssistantId: string;
+    version: StrictVersion;
+  }>();
   const [versionComment, setVersionComment] = useState("");
   const [creatorReviewComment, setCreatorReviewComment] = useState("");
   const [keywords, setKeywords] = useState("");
@@ -230,19 +260,45 @@ export default function AssistantHubSubmitPage() {
       })
       .at(0);
   }, [sourceVersions]);
+  const serverHighestVersion =
+    serverVersion?.sourceAssistantId === sourceAssistantId
+      ? serverVersion?.version
+      : undefined;
+  const strictVersionValidation =
+    config?.validate_version_semver_format === true ||
+    serverHighestVersion !== undefined ||
+    rejectedVersionNumber !== undefined;
+  const highestVersion = useMemo(() => {
+    if (!strictVersionValidation) return undefined;
+
+    let highest = serverHighestVersion;
+    for (const { version_number } of sourceVersions ?? []) {
+      const version = parseStrictVersion(version_number);
+      if (version && (!highest || compareVersions(version, highest) > 0)) {
+        highest = version;
+      }
+    }
+    return highest;
+  }, [strictVersionValidation, sourceVersions, serverHighestVersion]);
   const suggestedVersionNumber = useMemo(
     () =>
-      suggestNextVersionNumber(
-        currentPublishedVersion?.version_number ??
-          latestPublishedVersion?.version_number ??
-          latestSubmittedVersion?.version_number,
-        sourceVersions?.map((version) => version.version_number) ?? [],
-      ),
+      strictVersionValidation
+        ? highestVersion
+          ? `${highestVersion.components[0]}.${highestVersion.components[1]}.${highestVersion.components[2] + BigInt(1)}`
+          : "1.0.0"
+        : suggestNextVersionNumber(
+            currentPublishedVersion?.version_number ??
+              latestPublishedVersion?.version_number ??
+              latestSubmittedVersion?.version_number,
+            sourceVersions?.map((version) => version.version_number) ?? [],
+          ),
     [
       currentPublishedVersion?.version_number,
+      highestVersion,
       latestPublishedVersion?.version_number,
       latestSubmittedVersion?.version_number,
       sourceVersions,
+      strictVersionValidation,
     ],
   );
   const versionNumberHelpText = currentPublishedVersion
@@ -260,6 +316,37 @@ export default function AssistantHubSubmitPage() {
           id: "assistantHub.submit.noPublishedVersion",
           message: "No published version exists for this assistant yet.",
         });
+  const versionFormatHelp = strictVersionValidation
+    ? t({
+        id: "assistantHub.submit.versionFormatHelp",
+        message:
+          "Use MAJOR.MINOR.PATCH format, for example 1.0.0, with no leading zeros.",
+      })
+    : "";
+  let versionError = "";
+  if (strictVersionValidation) {
+    // Unicode White_Space matches the server's str::trim.
+    const enteredVersion = parseStrictVersion(
+      versionNumber.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, ""),
+    );
+    if (!enteredVersion || rejectedVersionNumber === versionNumber) {
+      versionError = t({
+        id: "assistantHub.submit.validation.versionFormat",
+        message: "Enter a version in MAJOR.MINOR.PATCH format.",
+      });
+    } else if (
+      highestVersion &&
+      compareVersions(enteredVersion, highestVersion) <= 0
+    ) {
+      versionError = i18n._({
+        id: "assistantHub.submit.validation.versionNotIncreasing",
+        message: "Enter a version greater than {version}.",
+        values: { version: highestVersion.label },
+      });
+    }
+  }
+  const versionFieldError =
+    versionNumber || versionFieldTouched ? versionError : "";
 
   useEffect(() => {
     document.title = `${t({
@@ -333,6 +420,7 @@ export default function AssistantHubSubmitPage() {
 
   useEffect(() => {
     if (
+      !config ||
       isLoadingMyVersions ||
       !sourceVersions ||
       !sourceAssistantId ||
@@ -342,8 +430,11 @@ export default function AssistantHubSubmitPage() {
     }
 
     setVersionNumber(suggestedVersionNumber);
+    setRejectedVersionNumber(undefined);
+    setVersionFieldTouched(false);
     setPrefilledVersionNumberForSourceId(sourceAssistantId);
   }, [
+    config,
     prefilledVersionNumberForSourceId,
     isLoadingMyVersions,
     sourceAssistantId,
@@ -397,6 +488,29 @@ export default function AssistantHubSubmitPage() {
     );
   };
 
+  const handleVersionError = (error: unknown) => {
+    if (typeof error !== "object" || !error || !("code" in error)) {
+      return false;
+    }
+    if (error.code === "invalid_version_format") {
+      setRejectedVersionNumber(versionNumber);
+      return true;
+    }
+    if (
+      error.code === "version_not_increasing" &&
+      "current_version" in error &&
+      typeof error.current_version === "string" &&
+      sourceAssistantId
+    ) {
+      const version = parseStrictVersion(error.current_version);
+      if (version) {
+        setServerVersion({ sourceAssistantId, version });
+        return true;
+      }
+    }
+    return false;
+  };
+
   const validate = () => {
     if (longDescription.trim().length === 0) {
       return t({
@@ -422,6 +536,8 @@ export default function AssistantHubSubmitPage() {
   const handlePreview = async () => {
     if (!sourceAssistantId) return;
     toast.dismissKey(SUBMIT_TOAST_KEY);
+    setVersionFieldTouched(true);
+    if (versionError) return;
     const validationError = validate();
     if (validationError) {
       showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
@@ -432,7 +548,8 @@ export default function AssistantHubSubmitPage() {
         pathParams: { sourceAssistantId },
         body: requestBody,
       });
-    } catch {
+    } catch (error) {
+      if (handleVersionError(error)) return;
       showError({
         dedupeKey: SUBMIT_TOAST_KEY,
         title: t({
@@ -446,6 +563,8 @@ export default function AssistantHubSubmitPage() {
   const handleSubmit = async () => {
     if (!sourceAssistantId) return;
     toast.dismissKey(SUBMIT_TOAST_KEY);
+    setVersionFieldTouched(true);
+    if (versionError) return;
     const validationError = validate();
     if (validationError) {
       showError({ dedupeKey: SUBMIT_TOAST_KEY, title: validationError });
@@ -480,7 +599,8 @@ export default function AssistantHubSubmitPage() {
         }),
       });
       navigate("/assistant-hub/my");
-    } catch {
+    } catch (error) {
+      if (handleVersionError(error)) return;
       showError({
         dedupeKey: SUBMIT_TOAST_KEY,
         title: t({
@@ -617,13 +737,24 @@ export default function AssistantHubSubmitPage() {
                     <Input
                       id="assistant-hub-version-number"
                       aria-describedby="assistant-hub-version-number-help"
+                      error={versionFieldError}
                       value={versionNumber}
-                      onChange={(event) => setVersionNumber(event.target.value)}
+                      onChange={(event) => {
+                        setRejectedVersionNumber(undefined);
+                        setVersionFieldTouched(true);
+                        setVersionNumber(event.target.value);
+                      }}
                     />
                     <p
                       id="assistant-hub-version-number-help"
                       className="mt-2 text-sm text-theme-fg-secondary"
                     >
+                      {versionFormatHelp && (
+                        <>
+                          {versionFormatHelp}
+                          <br />
+                        </>
+                      )}
                       {versionNumberHelpText}
                     </p>
                   </FormField>
