@@ -1896,6 +1896,11 @@ msgid "officeAddin.settings.audio.unsupported"
 msgstr "Wejście audio nie jest obsługiwane na tej platformie"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.backToList"
+msgstr "Wróć do Ustawień"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Skonfiguruj sposób mapowania przełączania między wiadomościami e-mail programu Outlook na czaty."

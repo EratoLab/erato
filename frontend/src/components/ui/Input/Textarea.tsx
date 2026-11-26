@@ -164,13 +164,26 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
       const textarea = textareaRef.current;
       if (textarea === null) return;
 
-      const { minHeight, maxHeight, contentHeight } = getAutoResizeBounds(
-        textarea,
-        rows,
-        maxRows,
-      );
-      const newHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
-      textarea.style.height = `${newHeight}px`;
+      const fit = () => {
+        const { minHeight, maxHeight, contentHeight } = getAutoResizeBounds(
+          textarea,
+          rows,
+          maxRows,
+        );
+        if (minHeight === 0) return false;
+        textarea.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
+        return true;
+      };
+      if (fit() || typeof ResizeObserver === "undefined") return;
+
+      // Not rendered (a hidden tab or settings page) measures as zero; a fixed
+      // height from that would clip the text once shown, so fit it then.
+      textarea.style.height = "";
+      const observer = new ResizeObserver(() => {
+        if (fit()) observer.disconnect();
+      });
+      observer.observe(textarea);
+      return () => observer.disconnect();
     }, [
       value,
       autoResize,

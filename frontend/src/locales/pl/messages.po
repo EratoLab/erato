@@ -6610,6 +6610,11 @@ msgstr "Jak to brzmi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/UserPreferencesDialog.tsx
+msgid "preferences.dialog.backToList"
+msgstr "Wróć do Preferencji"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/UserPreferencesDialog.tsx
 #: src/pages/AssistantsPage.tsx
 msgid "preferences.dialog.dataTab.archiveAll.archiving"
 msgstr "Archiwizowanie..."

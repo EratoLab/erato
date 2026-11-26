@@ -1339,6 +1339,14 @@ body:has(.app-viewport) {
     max(var(--modal-overlay-gutter), var(--safe-area-left));
 }
 
+/* A full-screen dialog is the page: what shows around it inside the safe
+   areas (under the status bar, beside the home bar) is the dialog's own
+   paint, not a dimmed and blurred chat. */
+.modal-overlay-skin[data-placement="fullscreen"] {
+  background-color: var(--theme-shell-modal);
+  backdrop-filter: none;
+}
+
 /* Scrim beside a drawer: the add-in's history drawer and the host sidebar
    on a narrow screen. Deliberately NOT the modal overlay skin: its backdrop
    blur re-filters the region behind the scrim on every frame while the panel
@@ -1352,6 +1360,11 @@ body:has(.app-viewport) {
   background-color: var(--theme-shell-modal);
   border-radius: var(--theme-radius-modal);
   box-shadow: var(--theme-elevation-modal);
+}
+
+.modal-shell-skin[data-placement="fullscreen"] {
+  border-radius: 0px;
+  box-shadow: none;
 }
 
 /* The card surface. This is the only rule in the family that sets a final
