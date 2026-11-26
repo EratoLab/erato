@@ -116,6 +116,11 @@ export { AppearanceTabContent } from "@/components/ui/Settings/AppearanceTabCont
 export { AudioInputTabContent } from "@/components/ui/Settings/AudioInputTabContent";
 export { TextSizeSetting } from "@/components/ui/Settings/TextSizeSetting";
 export {
+  SettingsPageList,
+  useSettingsPages,
+  type SettingsPagesState,
+} from "@/components/ui/Settings/SettingsPages";
+export {
   EntityRow,
   type EntityRowStatus,
 } from "@/components/ui/Settings/EntityRow";

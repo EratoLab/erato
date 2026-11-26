@@ -1349,3 +1349,101 @@ describe("UserPreferencesDialog", () => {
     });
   });
 });
+
+describe("UserPreferencesDialog on a narrow screen", () => {
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 639.98px)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => {},
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      createJsonResponse([]),
+    );
+  });
+
+  it("lists the tabs as pages, opens one and goes back to the list", () => {
+    renderDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "Preferences" });
+    expect(dialog).toHaveAttribute("data-placement", "fullscreen");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Back to Preferences" }),
+    ).toBeNull();
+    const list = screen.getByRole("navigation", { name: "Preferences" });
+    expect(
+      within(list)
+        .getAllByRole("button")
+        .map((row) => row.textContent),
+    ).toEqual(["Personalization", "Appearance", "MCP & Apps", "Data"]);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(within(list).getByRole("button", { name: "Appearance" }));
+
+    expect(screen.getByRole("dialog", { name: "Appearance" })).toBeVisible();
+    const back = screen.getByRole("button", { name: "Back to Preferences" });
+    expect(back).toHaveFocus();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Color mode" })).toBeVisible();
+    expect(screen.getByLabelText("Nickname")).not.toBeVisible();
+
+    fireEvent.click(back);
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Appearance" })).toHaveFocus();
+    expect(screen.queryByRole("heading", { name: "Color mode" })).toBeNull();
+  });
+
+  it("keeps unsaved edits across the list and shows Save on their page only", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    fireEvent.change(screen.getByLabelText("Nickname"), {
+      target: { value: "Max" },
+    });
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Personalization" }));
+    expect(screen.getByLabelText("Nickname")).toHaveValue("Max");
+  });
+
+  it("opens on the page a link asks for, with the list one step back", () => {
+    renderDialog({ initialTab: "data" });
+
+    expect(screen.getByRole("dialog", { name: "Data" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Archive all chats" }),
+    ).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to Preferences" }),
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Preferences" }),
+    ).toBeVisible();
+  });
+
+  it("starts on the list again each time it opens", () => {
+    const view = renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    view.update({ isOpen: false });
+    view.update({ isOpen: true });
+
+    expect(screen.getByRole("dialog", { name: "Preferences" })).toBeVisible();
+    expect(
+      screen.getByRole("navigation", { name: "Preferences" }),
+    ).toBeVisible();
+  });
+});

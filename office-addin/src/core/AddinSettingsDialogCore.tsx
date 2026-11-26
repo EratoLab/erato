@@ -4,12 +4,14 @@ import {
   DisclaimersPane,
   ModalBase,
   ServersToolsPane,
+  SettingsPageList,
   TabRail,
   TextSizeSetting,
   isDisclaimersSettingsLink,
   settingsClosedLocation,
   useFeatureConfig,
   useMcpBrowserAuthorization,
+  useSettingsPages,
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useId, useMemo, useState, type ReactNode } from "react";
@@ -139,6 +141,13 @@ function AddinSettingsDialog({
     if (requestedTab) setActiveTab(requestedTab);
   }
   const activeTab = tabOrder.includes(selectedTab) ? selectedTab : "appearance";
+  const pages = useSettingsPages({
+    isOpen,
+    activeTab,
+    onActiveTabChange: setActiveTab,
+    startOnPage: requestedTab !== undefined,
+  });
+  const { shownTab } = pages;
 
   const tabLabels: Record<AddinSettingsTab, string> = {
     appearance: t({
@@ -193,37 +202,65 @@ function AddinSettingsDialog({
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title={dialogTitle}
-      contentClassName="h-[80vh] max-h-[600px] max-w-xl"
+      title={pages.page ? tabLabels[pages.page] : dialogTitle}
+      back={
+        pages.page
+          ? {
+              label: t({
+                id: "officeAddin.settings.backToList",
+                message: "Back to Settings",
+              }),
+              onBack: pages.backToList,
+              ref: pages.backButtonRef,
+            }
+          : undefined
+      }
+      placement={pages.isNarrow ? "fullscreen" : "center"}
+      contentClassName={
+        pages.isNarrow ? undefined : "h-[80vh] max-h-[600px] max-w-xl"
+      }
     >
       <div className="flex h-full flex-col gap-4">
-        <div className="shrink-0 border-b border-theme-border pb-2">
-          <TabRail
-            variant="rail"
-            orientation="horizontal"
-            // The rail is horizontal, but it always took Up/Down as well as
-            // Left/Right; keyboard users of the task pane rely on both pairs.
-            arrowKeys="both"
-            aria-label={dialogTitle}
-            data-ui="tab-rail"
-            className="overflow-x-auto"
-            options={tabOrder.map((tab) => ({
+        {pages.showList ? (
+          <SettingsPageList
+            pages={tabOrder.map((tab) => ({
               value: tab,
               label: tabLabels[tab],
-              id: tabIds[tab],
-              panelId: panelIds[tab],
             }))}
-            value={activeTab}
-            onChange={setActiveTab}
+            onOpen={pages.openPage}
+            label={dialogTitle}
+            listRef={pages.listRef}
           />
-        </div>
+        ) : null}
+        {pages.isNarrow ? null : (
+          <div className="shrink-0 border-b border-theme-border pb-2">
+            <TabRail
+              variant="rail"
+              orientation="horizontal"
+              // The rail is horizontal, but it always took Up/Down as well as
+              // Left/Right; keyboard users of the task pane rely on both pairs.
+              arrowKeys="both"
+              aria-label={dialogTitle}
+              data-ui="tab-rail"
+              className="overflow-x-auto"
+              options={tabOrder.map((tab) => ({
+                value: tab,
+                label: tabLabels[tab],
+                id: tabIds[tab],
+                panelId: panelIds[tab],
+              }))}
+              value={activeTab}
+              onChange={setActiveTab}
+            />
+          </div>
+        )}
 
-        <div className="min-h-0 flex-1 px-1">
+        <div className={pages.showList ? "hidden" : "min-h-0 flex-1 px-1"}>
           <section
-            id={panelIds.appearance}
-            role="tabpanel"
-            aria-labelledby={tabIds.appearance}
-            hidden={activeTab !== "appearance"}
+            {...pages.panelProps("appearance", {
+              tabId: tabIds.appearance,
+              panelId: panelIds.appearance,
+            })}
             className="h-full space-y-4 overflow-y-auto"
           >
             <div className="space-y-1">
@@ -255,10 +292,10 @@ function AddinSettingsDialog({
           </section>
 
           <section
-            id={panelIds.user}
-            role="tabpanel"
-            aria-labelledby={tabIds.user}
-            hidden={activeTab !== "user"}
+            {...pages.panelProps("user", {
+              tabId: tabIds.user,
+              panelId: panelIds.user,
+            })}
             className="h-full"
           >
             <UserSettingsTabContent onClose={onClose} />
@@ -266,10 +303,10 @@ function AddinSettingsDialog({
 
           {audioSettingsEnabled ? (
             <section
-              id={panelIds.audio}
-              role="tabpanel"
-              aria-labelledby={tabIds.audio}
-              hidden={activeTab !== "audio"}
+              {...pages.panelProps("audio", {
+                tabId: tabIds.audio,
+                panelId: panelIds.audio,
+              })}
               className="h-full space-y-4 overflow-y-auto"
             >
               <div className="space-y-1">
@@ -289,7 +326,7 @@ function AddinSettingsDialog({
               </div>
               {audioInputSupported ? (
                 <AudioInputTabContent
-                  isActive={isOpen && activeTab === "audio"}
+                  isActive={isOpen && shownTab === "audio"}
                 />
               ) : (
                 <p role="status" className="text-sm text-theme-fg-secondary">
@@ -304,10 +341,10 @@ function AddinSettingsDialog({
 
           {serversToolsTabEnabled ? (
             <section
-              id={panelIds.serversTools}
-              role="tabpanel"
-              aria-labelledby={tabIds.serversTools}
-              hidden={activeTab !== "serversTools"}
+              {...pages.panelProps("serversTools", {
+                tabId: tabIds.serversTools,
+                panelId: panelIds.serversTools,
+              })}
               className="h-full space-y-4 overflow-y-auto"
             >
               <div className="space-y-1">
@@ -325,9 +362,9 @@ function AddinSettingsDialog({
                   })}
                 </p>
               </div>
-              {activeTab === "serversTools" ? (
+              {shownTab === "serversTools" ? (
                 <ServersToolsPane
-                  isActive={isOpen && activeTab === "serversTools"}
+                  isActive={isOpen && shownTab === "serversTools"}
                   mcp={
                     mcpServersEnabled
                       ? {
@@ -360,10 +397,10 @@ function AddinSettingsDialog({
 
           {hostContribution?.content != null ? (
             <section
-              id={panelIds.host}
-              role="tabpanel"
-              aria-labelledby={tabIds.host}
-              hidden={activeTab !== "host"}
+              {...pages.panelProps("host", {
+                tabId: tabIds.host,
+                panelId: panelIds.host,
+              })}
               className="h-full space-y-4 overflow-y-auto"
             >
               <div className="space-y-1">
@@ -379,14 +416,17 @@ function AddinSettingsDialog({
           ) : null}
           {disclaimersEnabled ? (
             <section
-              id={panelIds.disclaimers}
-              role="tabpanel"
-              aria-labelledby={tabIds.disclaimers}
-              hidden={activeTab !== "disclaimers"}
+              {...pages.panelProps("disclaimers", {
+                tabId: tabIds.disclaimers,
+                panelId: panelIds.disclaimers,
+              })}
+              // A tab panel on a wide pane (its role comes from panelProps);
+              // either way the long text has to be reachable by keyboard.
+              // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
               tabIndex={0}
               className="h-full overflow-y-auto"
             >
-              {isOpen && activeTab === "disclaimers" ? (
+              {isOpen && shownTab === "disclaimers" ? (
                 <DisclaimersPane />
               ) : null}
             </section>

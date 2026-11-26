@@ -1876,6 +1876,11 @@ msgid "officeAddin.settings.audio.unsupported"
 msgstr "La saisie audio n’est pas prise en charge sur cette plateforme"
 
 #. js-lingui-explicit-id
+#: src/core/AddinSettingsDialogCore.tsx
+msgid "officeAddin.settings.backToList"
+msgstr "Retour aux Paramètres"
+
+#. js-lingui-explicit-id
 #: src/outlook/components/AddinSettingsDialog.tsx
 msgid "officeAddin.settings.outlook.description"
 msgstr "Configurez la manière dont le passage d’un e-mail Outlook à un autre est associé aux conversations."
