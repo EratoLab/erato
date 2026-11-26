@@ -1,7 +1,9 @@
 import { t } from "@lingui/core/macro";
 
+import { SignedOutError } from "@/auth/authRecovery";
 import { isChunkLoadError } from "@/lib/chunkLoadRecovery";
 import {
+  isClosedStream,
   isNetworkFailure,
   isStalledStream,
 } from "@/lib/connectivity/connectivity";
@@ -9,17 +11,6 @@ import { REQUEST_TIMED_OUT_MESSAGE } from "@/lib/generated/v1betaApi/v1betaApiFe
 
 import { FrontendRequestError } from "./errorReport";
 
-// The browsers' own words for a request that got no answer (Safari, Chrome,
-// Firefox, older WebKit), bare or wrapped as "Network error (…)". Fetches
-// outside the request layer arrive without the network-failure tag.
-const BROWSER_NO_ANSWER =
-  /(?:Load failed|Failed to fetch|NetworkError when attempting to fetch resource\.?|Network request failed|The network connection was lost\.?|The Internet connection appears to be offline\.?)/
-    .source;
-const NO_CONNECTION_RE = new RegExp(
-  `^(?:${BROWSER_NO_ANSWER}|Network error(?: \\(${BROWSER_NO_ANSWER}\\))?)$`,
-);
-// Set as plain `Error`s by the chat when a stream ends without its last event.
-const CLOSED_RE = /^SSE connection closed unexpectedly/;
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 function messageOf(error: unknown): string | null {
@@ -52,13 +43,19 @@ export function noConnectionMessage(): string {
 
 /**
  * Plain words for the technical errors people otherwise see as they are
- * ("Load failed", "SSE stream stalled", a gateway's 502), or null for any
- * other error.
+ * ("Load failed", "SSE stream stalled", a gateway's 502), recognised by the
+ * tags their source sets, or null for any other error.
  */
 export function knownErrorMessage(error: unknown): string | null {
   if (error === null || error === undefined) return null;
   const message = messageOf(error)?.trim() ?? "";
 
+  if (error instanceof SignedOutError) {
+    return t({
+      id: "error.plain.signedOut",
+      message: "You are signed out. Reload to sign in again.",
+    });
+  }
   if (isChunkLoadError(error)) {
     return t({
       id: "error.plain.appUpdated",
@@ -77,10 +74,10 @@ export function knownErrorMessage(error: unknown): string | null {
       message: "The server did not answer in time. Please try again.",
     });
   }
-  if (isNetworkFailure(error) || NO_CONNECTION_RE.test(message)) {
+  if (isNetworkFailure(error)) {
     return noConnectionMessage();
   }
-  if (CLOSED_RE.test(message)) {
+  if (isClosedStream(error)) {
     return t({
       id: "error.plain.connectionLost",
       message: "The connection to the server was lost. Please try again.",

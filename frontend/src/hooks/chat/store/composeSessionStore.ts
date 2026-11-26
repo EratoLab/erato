@@ -16,6 +16,8 @@ import type { ComposeDraftState } from "@/hooks/chat/useComposeSession";
 interface ComposeSessionStore {
   sessionIdByChatKey: Partial<Record<string, string>>;
   draftsBySessionId: Partial<Record<string, ComposeDraftState>>;
+  /** Bumped when drafts kept over a reload arrive, so open composers re-read. */
+  restoreEpoch: number;
   resolveSessionId: (chatKey: string) => string;
   adoptSessionId: (fromChatKey: string, toChatKey: string) => void;
   getDraft: (sessionId: string) => ComposeDraftState;
@@ -33,6 +35,7 @@ export const useComposeSessionStore = create<ComposeSessionStore>()(
     (set, get) => ({
       sessionIdByChatKey: {},
       draftsBySessionId: {},
+      restoreEpoch: 0,
 
       resolveSessionId: (chatKey) => {
         const existing = get().sessionIdByChatKey[chatKey];

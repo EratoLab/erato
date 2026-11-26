@@ -9,6 +9,8 @@
  * pattern.
  */
 
+import { mergeApiAuthHeaders } from "./apiRequestAuth";
+
 /**
  * Attempts to recover authentication after a 401. Resolves `true` when the
  * session was refreshed (the caller may replay the request once) and `false`
@@ -76,4 +78,42 @@ export async function fetchWithAuthRecovery(
   if (!isSignedOutResponse(response) || !(await tryRecoverAuth(reason)))
     return response;
   return send();
+}
+
+/** The session ended: the proxy sends requests to the sign-in page. */
+export class SignedOutError extends Error {
+  constructor() {
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- shown via plainErrorMessage
+    super("Signed out");
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "SignedOutError";
+  }
+}
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- URL path
+const PROFILE_URL = "/api/v1beta/me/profile";
+
+/**
+ * Whether the session still holds, for a request that got no answer while the
+ * server answers health checks: an expired session can send API calls to the
+ * sign-in page on another site, which fetch reports as a network failure.
+ * Renews the session where a recovery handler is registered.
+ */
+export async function isStillSignedIn(): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetch(PROFILE_URL, {
+      headers: mergeApiAuthHeaders(),
+      credentials: "same-origin",
+      redirect: "manual",
+      cache: "no-store",
+    });
+  } catch {
+    // No answer at all is a network problem, not a sign-out.
+    return true;
+  }
+  if (response.type !== "opaqueredirect" && !isSignedOutResponse(response)) {
+    return true;
+  }
+  return tryRecoverAuth("signed-out-check");
 }

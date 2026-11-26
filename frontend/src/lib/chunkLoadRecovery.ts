@@ -70,7 +70,8 @@ export function reloadOnceForChunkError(
   monitor: ConnectivityMonitor = connectivity,
 ): boolean {
   if (reloadPending) return true;
-  const address = `${win.location.pathname}${win.location.search}`;
+  // The path only: a query can carry sign-in codes or other secrets.
+  const address = win.location.pathname;
   if (!claimChunkReload(safeSessionStorage(win), address, Date.now())) {
     return false;
   }

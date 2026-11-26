@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { sendWhenOnline } from "@/lib/connectivity/sendWhenOnline";
 import {
   fetchUploadFile,
   type UploadFileVariables,
@@ -16,10 +17,7 @@ import {
   type UploadError,
   toUploadError,
 } from "./errors";
-import {
-  uploadTimeLimitMs,
-  uploadWithNetworkRetry,
-} from "./uploadWithNetworkRetry";
+import { uploadTimeLimitMs } from "./uploadTimeLimit";
 
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -104,7 +102,7 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
 
         let result;
         try {
-          result = await uploadWithNetworkRetry(() =>
+          result = await sendWhenOnline(() =>
             fetchUploadFile({
               ...(variables as UploadFileVariables),
               requestTimeoutMs: uploadTimeLimitMs(

@@ -6,6 +6,7 @@ import {
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
 import { clientPlatformHeaders } from "@/lib/clientPlatform";
+import { sendWhenOnline } from "@/lib/connectivity/sendWhenOnline";
 import {
   useCreateChat,
   fetchUploadFile,
@@ -31,10 +32,7 @@ import {
   type UploadError,
   toUploadError,
 } from "./errors";
-import {
-  uploadTimeLimitMs,
-  uploadWithNetworkRetry,
-} from "./uploadWithNetworkRetry";
+import { uploadTimeLimitMs } from "./uploadTimeLimit";
 import { useFileUploadStore } from "./useFileUploadStore";
 
 import type { FileUploadItemWithSize } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -227,12 +225,21 @@ export function useFileDropzone({
   // Silent chat creation; its errors reach the upload's own catch.
   const createChatMutation = useCreateChat();
 
+  // Leaving the chat ends an upload still waiting for the network.
+  const unmountSignalRef = useRef<AbortSignal | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    unmountSignalRef.current = controller.signal;
+    return () => controller.abort();
+  }, []);
+
   // Function to upload files
   const uploadFiles = useCallback(
     async (files: File[]) => {
       if (disabled || isUploading || files.length === 0) return;
 
       let uploadedItems: FileUploadItem[] | undefined;
+      const signal = unmountSignalRef.current ?? undefined;
 
       try {
         setUploading(true);
@@ -274,7 +281,7 @@ export function useFileDropzone({
         // No chat yet — create one silently.
         if (!uploadChatId) {
           logger.log("Creating silent chat for file uploads");
-          const createChatResult = await uploadWithNetworkRetry(
+          const createChatResult = await sendWhenOnline(
             () =>
               createChatMutation.mutateAsync({
                 body: {
@@ -285,7 +292,13 @@ export function useFileDropzone({
                 },
                 headers: clientPlatformHeaders(),
               }),
-            { onWaitingForNetwork: setWaitingForNetwork },
+            {
+              signal,
+              onWaitingForNetwork: setWaitingForNetwork,
+              // A lost answer would leave an extra empty chat; resend only
+              // when the browser knew it was offline, so nothing went out.
+              mayResend: () => navigator.onLine === false,
+            },
           );
           logger.log("Silent chat creation result:", createChatResult);
           uploadChatId = createChatResult.chat_id;
@@ -316,7 +329,7 @@ export function useFileDropzone({
         // Call fetchUploadFile directly, bypassing the problematic hook
         let result: FileUploadResponse;
         try {
-          result = await uploadWithNetworkRetry(
+          result = await sendWhenOnline(
             () =>
               fetchUploadFile({
                 ...(variables as UploadFileVariables),
@@ -324,7 +337,7 @@ export function useFileDropzone({
                   filesToUpload.reduce((sum, file) => sum + file.size, 0),
                 ),
               }),
-            { onWaitingForNetwork: setWaitingForNetwork },
+            { signal, onWaitingForNetwork: setWaitingForNetwork },
           );
           logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {
@@ -349,6 +362,7 @@ export function useFileDropzone({
           uploadedItems = [];
         }
       } catch (err) {
+        if (signal?.aborted) return uploadedItems;
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||

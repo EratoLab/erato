@@ -73,6 +73,17 @@ export function useComposeSession({
     );
   }, [chatId, adoptSessionId, resolveSessionId]);
 
+  const restoreEpoch = useComposeSessionStore((state) => state.restoreEpoch);
+  useEffect(() => {
+    if (restoreEpoch === 0) return;
+    const restored = resolveSessionId(chatIdKey(chatId));
+    setActiveSessionId((current) =>
+      current === restored ? current : restored,
+    );
+    // Only a restore moves the session here; chat switches are handled above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreEpoch]);
+
   const getActiveSessionId = useCallback(
     () => activeSessionId,
     [activeSessionId],

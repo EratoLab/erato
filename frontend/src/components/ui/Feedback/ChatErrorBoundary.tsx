@@ -3,13 +3,16 @@
 import { t } from "@lingui/core/macro";
 import { Component } from "react";
 
-import {
-  isChunkLoadError,
-  isChunkReloadPending,
-} from "@/lib/chunkLoadRecovery";
+import { isChunkLoadError } from "@/lib/chunkLoadRecovery";
 import { plainErrorMessage } from "@/utils/plainErrorMessage";
 
-import { catchError, ErrorPanel, type CatchState } from "./ErrorPanel";
+import {
+  catchError,
+  ErrorPanel,
+  NOTHING_CAUGHT,
+  reloadAfterCatch,
+  type CatchState,
+} from "./ErrorPanel";
 
 import type { ReactNode } from "react";
 
@@ -57,20 +60,22 @@ export class ChatErrorBoundary extends Component<
   ChatErrorBoundaryProps,
   CatchState
 > {
-  state: CatchState = { didCatch: false, error: null };
+  state: CatchState = NOTHING_CAUGHT;
 
   static getDerivedStateFromError = catchError;
 
+  componentDidCatch(error: unknown) {
+    reloadAfterCatch(error, () => this.setState({ reloading: false }));
+  }
+
   private readonly resetErrorBoundary = () => {
     this.props.onReset?.();
-    this.setState({ didCatch: false, error: null });
+    this.setState(NOTHING_CAUGHT);
   };
 
   render() {
     if (this.state.didCatch) {
-      // The page is reloading for a newer build; a lazy part left without
-      // its module throws a technical error meanwhile.
-      if (isChunkReloadPending()) return null;
+      if (this.state.reloading) return null;
       return (
         <ChatErrorFallback
           error={this.state.error as Error}

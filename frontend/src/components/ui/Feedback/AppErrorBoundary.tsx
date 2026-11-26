@@ -1,9 +1,13 @@
 import { i18n } from "@lingui/core";
 import { Component } from "react";
 
-import { isChunkReloadPending } from "@/lib/chunkLoadRecovery";
-
-import { catchError, ErrorPanel, type CatchState } from "./ErrorPanel";
+import {
+  catchError,
+  ErrorPanel,
+  NOTHING_CAUGHT,
+  reloadAfterCatch,
+  type CatchState,
+} from "./ErrorPanel";
 
 import type { ReactNode } from "react";
 
@@ -22,17 +26,19 @@ export class AppErrorBoundary extends Component<
   AppErrorBoundaryProps,
   CatchState
 > {
-  state: CatchState = { didCatch: false, error: null };
+  state: CatchState = NOTHING_CAUGHT;
 
   static getDerivedStateFromError = catchError;
+
+  componentDidCatch(error: unknown) {
+    reloadAfterCatch(error, () => this.setState({ reloading: false }));
+  }
 
   render() {
     if (!this.state.didCatch) {
       return this.props.children;
     }
-    // A cancelled `vite:preloadError` leaves the lazy page without a module,
-    // which throws here while the reload is already running.
-    if (isChunkReloadPending()) {
+    if (this.state.reloading) {
       return this.props.reloadingFallback ?? null;
     }
     // `i18n._` with the English text, not the `t` macro: production builds

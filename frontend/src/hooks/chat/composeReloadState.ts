@@ -39,22 +39,27 @@ export function takeComposeReloadOptions(sessionId: string) {
   return options;
 }
 
-/** Explicit, one-reload snapshot for hosts whose consent flow reloads the pane. */
-export function saveComposeReloadState(
-  storage: Storage,
-  key: string,
-  // A page that is going away anyway loses its running uploads either way;
-  // it still keeps the text and the files already uploaded.
-  { allowPendingUploads = false }: { allowPendingUploads?: boolean } = {},
-): void {
-  if (reloadHolds.size > 0 && !allowPendingUploads) {
-    const error = new Error(
-      "Pending local attachments prevent composer reload",
-    );
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- internal error code, translated by the host
-    error.name = "ComposeReloadBlockedError";
-    throw error;
-  }
+export function hasPendingComposeUploads(): boolean {
+  return reloadHolds.size > 0;
+}
+
+type ComposeSessionState = ReturnType<typeof useComposeSessionStore.getState>;
+
+/** The composers' unsent state, as kept over one reload of the page. */
+export interface ComposeReloadSnapshot {
+  version: 2;
+  /** Profile id of the person who wrote it; another person never gets it. */
+  ownerId: string;
+  savedAt: number;
+  sessionIdByChatKey: ComposeSessionState["sessionIdByChatKey"];
+  draftsBySessionId: ComposeSessionState["draftsBySessionId"];
+  options: Partial<Record<string, ComposeReloadOptions>>;
+}
+
+export function buildComposeReloadSnapshot(
+  ownerId: string,
+  savedAt: number,
+): ComposeReloadSnapshot {
   const { sessionIdByChatKey, draftsBySessionId } =
     useComposeSessionStore.getState();
   const drafts = { ...draftsBySessionId };
@@ -83,46 +88,96 @@ export function saveComposeReloadState(
       ],
     };
   }
-  // Do not swallow quota/security errors: the host must not reload if saving fails.
-  const options = {
-    ...restoredOptions,
-    ...Object.fromEntries([...activeOptions].map(([id, read]) => [id, read()])),
+  // A download link opens the file without a session; the snapshot can
+  // outlive the session, so it keeps only the proxied preview.
+  for (const [sessionId, draft] of Object.entries(drafts)) {
+    if (!draft?.attachedFiles.length) continue;
+    drafts[sessionId] = {
+      ...draft,
+      attachedFiles: draft.attachedFiles.map((file) => ({
+        ...file,
+        download_url: "",
+      })),
+    };
+  }
+  return {
+    version: 2,
+    ownerId,
+    savedAt,
+    sessionIdByChatKey,
+    draftsBySessionId: drafts,
+    options: {
+      ...restoredOptions,
+      ...Object.fromEntries(
+        [...activeOptions].map(([id, read]) => [id, read()]),
+      ),
+    },
   };
-  storage.setItem(
-    key,
-    JSON.stringify({
-      version: 1,
-      sessionIdByChatKey,
-      draftsBySessionId: drafts,
-      options,
-    }),
-  );
 }
 
-export function restoreComposeReloadState(storage: Storage, key: string): void {
-  const raw = storage.getItem(key);
-  if (!raw) return;
-  const snapshot = JSON.parse(raw) as {
-    version: number;
-    options?: typeof restoredOptions;
-    sessionIdByChatKey?: ReturnType<
-      typeof useComposeSessionStore.getState
-    >["sessionIdByChatKey"];
-    draftsBySessionId?: ReturnType<
-      typeof useComposeSessionStore.getState
-    >["draftsBySessionId"];
-  };
-  if (
-    snapshot.version !== 1 ||
-    !snapshot.sessionIdByChatKey ||
-    !snapshot.draftsBySessionId
-  ) {
-    throw new Error("Invalid composer reload snapshot");
+/** Null for anything that is not a version 2 snapshot. */
+export function parseComposeReloadSnapshot(
+  raw: string,
+): ComposeReloadSnapshot | null {
+  try {
+    // Untrusted until checked: written by an earlier page, maybe an older build.
+    const snapshot = JSON.parse(raw) as Record<
+      keyof ComposeReloadSnapshot,
+      unknown
+    >;
+    if (
+      snapshot.version !== 2 ||
+      typeof snapshot.ownerId !== "string" ||
+      typeof snapshot.savedAt !== "number" ||
+      typeof snapshot.sessionIdByChatKey !== "object" ||
+      snapshot.sessionIdByChatKey === null ||
+      typeof snapshot.draftsBySessionId !== "object" ||
+      snapshot.draftsBySessionId === null
+    ) {
+      return null;
+    }
+    return {
+      ...snapshot,
+      options: snapshot.options ?? {},
+    } as unknown as ComposeReloadSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Brings a snapshot's drafts back. A chat whose composer already holds text
+ * keeps it. Open composers pick the drafts up through `restoreEpoch`.
+ */
+export function applyComposeReloadSnapshot(
+  snapshot: ComposeReloadSnapshot,
+): void {
+  const state = useComposeSessionStore.getState();
+  const sessionIdByChatKey = { ...state.sessionIdByChatKey };
+  const draftsBySessionId = { ...state.draftsBySessionId };
+  for (const [chatKey, sessionId] of Object.entries(
+    snapshot.sessionIdByChatKey,
+  )) {
+    if (!sessionId) continue;
+    const current = sessionIdByChatKey[chatKey];
+    const currentDraft = current ? draftsBySessionId[current] : undefined;
+    if (
+      currentDraft &&
+      (currentDraft.message ||
+        currentDraft.attachedFiles.length ||
+        currentDraft.mentionedAssistants.length)
+    ) {
+      continue;
+    }
+    sessionIdByChatKey[chatKey] = sessionId;
+    const draft = snapshot.draftsBySessionId[sessionId];
+    if (draft) draftsBySessionId[sessionId] = draft;
+    const options = snapshot.options[sessionId];
+    if (options) restoredOptions[sessionId] = options;
   }
   useComposeSessionStore.setState({
-    sessionIdByChatKey: snapshot.sessionIdByChatKey,
-    draftsBySessionId: snapshot.draftsBySessionId,
+    sessionIdByChatKey,
+    draftsBySessionId,
+    restoreEpoch: state.restoreEpoch + 1,
   });
-  restoredOptions = snapshot.options ?? {};
-  storage.removeItem(key);
 }

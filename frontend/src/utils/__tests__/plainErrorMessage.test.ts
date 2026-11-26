@@ -1,7 +1,9 @@
 import { i18n, type Messages } from "@lingui/core";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { SignedOutError } from "@/auth/authRecovery";
 import {
+  markClosedStream,
   markNetworkFailure,
   markStalledStream,
 } from "@/lib/connectivity/connectivity";
@@ -18,24 +20,18 @@ const NO_CONNECTION =
   "No connection to the server. Check your network and try again.";
 
 describe("plainErrorMessage", () => {
-  it.each([
-    "Load failed",
-    "Failed to fetch",
-    "NetworkError when attempting to fetch resource.",
-    "Network error (Load failed)",
-    "Network error (Failed to fetch)",
-    "Network error",
-  ])("says there is no connection for %j", (message) => {
-    expect(plainErrorMessage(new TypeError(message))).toBe(NO_CONNECTION);
+  it("says there is no connection for a request the request layer tagged", () => {
+    expect(
+      plainErrorMessage(
+        markNetworkFailure({
+          name: "unknown",
+          message: "Network error (Load failed)",
+        }),
+      ),
+    ).toBe(NO_CONNECTION);
   });
 
-  it("reads the request layer's plain objects instead of printing [object Object]", () => {
-    expect(
-      plainErrorMessage({
-        name: "unknown",
-        message: "Network error (Load failed)",
-      }),
-    ).toBe(NO_CONNECTION);
+  it("reads plain objects instead of printing [object Object]", () => {
     expect(plainErrorMessage({ status: 500, payload: "{}" })).toBeNull();
     expect(plainErrorMessage({})).toBeNull();
     expect(plainErrorMessage(null)).toBeNull();
@@ -52,7 +48,11 @@ describe("plainErrorMessage", () => {
 
   it("names stream and server problems in plain words", () => {
     expect(
-      plainErrorMessage(new Error("SSE connection closed unexpectedly (edit)")),
+      plainErrorMessage(
+        markClosedStream(
+          new Error("SSE connection closed unexpectedly (edit)"),
+        ),
+      ),
     ).toBe("The connection to the server was lost. Please try again.");
     expect(
       plainErrorMessage(new Error("Network error (request timed out)")),
@@ -68,6 +68,12 @@ describe("plainErrorMessage", () => {
     ).toBe("The server did not answer. Please try again in a moment.");
     expect(plainErrorMessage({ status: 504, payload: "" })).toBe(
       "The server did not answer. Please try again in a moment.",
+    );
+  });
+
+  it("says a signed-out session in plain words", () => {
+    expect(plainErrorMessage(new SignedOutError())).toBe(
+      "You are signed out. Reload to sign in again.",
     );
   });
 

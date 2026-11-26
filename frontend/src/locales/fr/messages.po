@@ -4431,6 +4431,11 @@ msgstr "Le serveur a cessé de répondre. Veuillez réessayer."
 
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "Vous êtes déconnecté. Rechargez pour vous reconnecter."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
 msgid "error.plain.timedOut"
 msgstr "Le serveur n’a pas répondu à temps. Veuillez réessayer."
 

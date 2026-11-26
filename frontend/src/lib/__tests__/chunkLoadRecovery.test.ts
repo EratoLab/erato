@@ -53,6 +53,10 @@ describe("chunk load recovery", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(isChunkReloadPending()).toBe(true);
+    // The query can carry secrets; only the path is stored.
+    expect(sessionStorage.getItem("erato.chunkLoadReload")).not.toContain(
+      "x=1",
+    );
     await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     uninstall();
   });

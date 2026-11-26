@@ -4431,6 +4431,11 @@ msgstr "The server stopped answering. Please try again."
 
 #. js-lingui-explicit-id
 #: src/utils/plainErrorMessage.ts
+msgid "error.plain.signedOut"
+msgstr "You are signed out. Reload to sign in again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
 msgid "error.plain.timedOut"
 msgstr "The server did not answer in time. Please try again."
 

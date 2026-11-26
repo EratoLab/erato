@@ -462,7 +462,8 @@ describe("useFileDropzone", () => {
     expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
   });
 
-  it("tries creating the chat again when the network dropped, then uploads", async () => {
+  it("creates the chat again only when the browser knew it was offline, then uploads", async () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
     mockCreateChatMutateAsync
       .mockRejectedValueOnce(
         markNetworkFailure({
@@ -486,6 +487,29 @@ describe("useFileDropzone", () => {
     expect(mockCreateChatMutateAsync).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBeNull();
     expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
+    onLine.mockRestore();
+  });
+
+  it("does not create the chat twice when only its answer may have been lost", async () => {
+    mockCreateChatMutateAsync.mockRejectedValue(
+      markNetworkFailure({
+        name: "unknown",
+        message: "Network error (Load failed)",
+      }),
+    );
+
+    const { result } = renderHook(() => useFileDropzone({ chatId: null }));
+
+    await act(async () => {
+      await result.current.uploadFiles([
+        new File(["test content"], "test1.pdf", { type: "application/pdf" }),
+      ]);
+    });
+
+    expect(mockCreateChatMutateAsync).toHaveBeenCalledTimes(1);
+    expect(result.current.error?.message).toBe(
+      "No connection to the server. Check your network and try again.",
+    );
   });
 
   describe("file size preflight", () => {

@@ -1,27 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  createConnectivityMonitor,
-  isNetworkFailure,
-  markNetworkFailure,
-} from "@/lib/connectivity/connectivity";
-
+import { SignedOutError } from "@/auth/authRecovery";
 import {
   UploadNetworkError,
   UploadUnknownError,
   toUploadError,
-} from "../errors";
-import {
-  uploadTimeLimitMs,
-  uploadWithNetworkRetry,
-} from "../uploadWithNetworkRetry";
+} from "@/hooks/files/errors";
+import { uploadTimeLimitMs } from "@/hooks/files/uploadTimeLimit";
 
-const noSleep = () => Promise.resolve();
+import {
+  createConnectivityMonitor,
+  isNetworkFailure,
+  markNetworkFailure,
+} from "./connectivity";
+import { sendWhenOnline } from "./sendWhenOnline";
+
+const signedIn = () => Promise.resolve(true);
 
 function dropped() {
   return markNetworkFailure({
     name: "unknown",
     message: "Network error (Load failed)",
+  });
+}
+
+function reachableMonitor() {
+  return createConnectivityMonitor({
+    fetchImpl: vi.fn().mockResolvedValue(new Response(null)),
   });
 }
 
@@ -43,11 +48,9 @@ function offlineMonitor() {
   };
 }
 
-describe("uploadWithNetworkRetry", () => {
+describe("sendWhenOnline", () => {
   it("sends again once the server answers the probe", async () => {
-    const connectivity = createConnectivityMonitor({
-      fetchImpl: vi.fn().mockResolvedValue(new Response(null)),
-    });
+    const connectivity = reachableMonitor();
     const send = vi
       .fn()
       .mockImplementationOnce(() => {
@@ -57,7 +60,7 @@ describe("uploadWithNetworkRetry", () => {
       .mockResolvedValueOnce({ files: [{ id: "f1" }] });
 
     await expect(
-      uploadWithNetworkRetry(send, { connectivity, sleep: noSleep }),
+      sendWhenOnline(send, { connectivity, stillSignedIn: signedIn }),
     ).resolves.toEqual({ files: [{ id: "f1" }] });
     expect(send).toHaveBeenCalledTimes(2);
   });
@@ -69,10 +72,10 @@ describe("uploadWithNetworkRetry", () => {
 
     const waiting: boolean[] = [];
     const send = vi.fn().mockResolvedValue("done");
-    const upload = uploadWithNetworkRetry(send, {
+    const upload = sendWhenOnline(send, {
       connectivity,
-      onWaitingForNetwork: (value) => waiting.push(value),
-      sleep: noSleep,
+      onWaitingForNetwork: (value: boolean) => waiting.push(value),
+      stillSignedIn: signedIn,
     });
 
     await vi.waitFor(() => expect(waiting).toEqual([true]));
@@ -92,11 +95,11 @@ describe("uploadWithNetworkRetry", () => {
       return Promise.reject(dropped());
     });
 
-    const error = await uploadWithNetworkRetry(send, {
+    const error = await sendWhenOnline(send, {
       connectivity,
-      onWaitingForNetwork: (value) => waiting.push(value),
+      onWaitingForNetwork: (value: boolean) => waiting.push(value),
       networkWaitMs: 700,
-      sleep: noSleep,
+      stillSignedIn: signedIn,
     }).catch((e: unknown) => e);
 
     expect(send).toHaveBeenCalledTimes(1);
@@ -105,37 +108,77 @@ describe("uploadWithNetworkRetry", () => {
   });
 
   it("gives up after the last try with a network failure", async () => {
-    const connectivity = createConnectivityMonitor({
-      fetchImpl: vi.fn().mockResolvedValue(new Response(null)),
-    });
     const send = vi.fn().mockRejectedValue(dropped());
 
-    const error = await uploadWithNetworkRetry(send, {
-      connectivity,
-      maxAttempts: 3,
-      sleep: noSleep,
+    const error = await sendWhenOnline(send, {
+      connectivity: reachableMonitor(),
+      maxAttempts: 2,
+      stillSignedIn: signedIn,
     }).catch((e: unknown) => e);
 
-    expect(send).toHaveBeenCalledTimes(3);
+    expect(send).toHaveBeenCalledTimes(2);
     expect(toUploadError(error, ["a.txt"]).message).toBe(
       "No connection to the server. Check your network and try again.",
     );
   });
 
   it("throws an answer from the server at once", async () => {
-    const connectivity = createConnectivityMonitor();
     const tooLarge = { status: 413, payload: "too large" };
     const send = vi.fn().mockRejectedValue(tooLarge);
 
     await expect(
-      uploadWithNetworkRetry(send, { connectivity, sleep: noSleep }),
+      sendWhenOnline(send, {
+        connectivity: reachableMonitor(),
+        stillSignedIn: signedIn,
+      }),
     ).rejects.toBe(tooLarge);
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("scales the time limit with the upload size", () => {
-    expect(uploadTimeLimitMs(0)).toBe(120_000);
-    expect(uploadTimeLimitMs(10 * 1024 * 1024)).toBeGreaterThan(600_000);
+  it("stops and says so when the session ended instead of the network", async () => {
+    const send = vi.fn().mockRejectedValue(dropped());
+
+    const error = await sendWhenOnline(send, {
+      connectivity: reachableMonitor(),
+      stillSignedIn: () => Promise.resolve(false),
+    }).catch((e: unknown) => e);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(error).toBeInstanceOf(SignedOutError);
+    expect(toUploadError(error, ["a.txt"]).message).toBe(
+      "You are signed out. Reload to sign in again.",
+    );
+  });
+
+  it("does not send again when the caller refuses a second copy", async () => {
+    const send = vi.fn().mockRejectedValue(dropped());
+
+    await expect(
+      sendWhenOnline(send, {
+        connectivity: reachableMonitor(),
+        mayResend: () => false,
+        stillSignedIn: signedIn,
+      }),
+    ).rejects.toSatisfy(isNetworkFailure);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends the wait when the caller cancels", async () => {
+    const { connectivity } = offlineMonitor();
+    connectivity.reportNetworkFailure();
+    await vi.waitFor(() => expect(connectivity.getStatus()).toBe("offline"));
+    const controller = new AbortController();
+    const send = vi.fn().mockResolvedValue("done");
+
+    const upload = sendWhenOnline(send, {
+      connectivity,
+      signal: controller.signal,
+      stillSignedIn: signedIn,
+    }).catch((e: unknown) => e);
+    controller.abort(new Error("left the chat"));
+
+    expect(await upload).toEqual(new Error("left the chat"));
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
@@ -159,5 +202,10 @@ describe("upload error texts", () => {
     const error = new UploadUnknownError({ status: 500, payload: "{}" });
     expect(error.message).not.toContain("[object Object]");
     expect(error.message).not.toContain(":");
+  });
+
+  it("scales the upload time limit with the size", () => {
+    expect(uploadTimeLimitMs(0)).toBe(120_000);
+    expect(uploadTimeLimitMs(10 * 1024 * 1024)).toBeGreaterThan(600_000);
   });
 });
