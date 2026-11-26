@@ -1,7 +1,7 @@
 import { plural, select, t } from "@lingui/core/macro";
 
 import { movesPlace, tableGoesToSource } from "./cardLayout";
-import { listedValues, namesInLine } from "./gist";
+import { GIST_ACTIONS, GIST_KINDS, listedValues, namesInLine } from "./gist";
 
 import type {
   Gist,
@@ -13,7 +13,10 @@ import type {
   GistValue,
   GistWarning,
 } from "./gist";
-import type { ToolCallOpaqueKind } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ToolCallLabel,
+  ToolCallOpaqueKind,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * The words of a tool-call gist: one whole sentence per verb and phase, so a
@@ -821,3 +824,25 @@ export const gistPlainLine = (
           : part,
     )
     .join("");
+
+/**
+ * What a tool does from its label's verb and kind alone, such as "Update
+ * document": the tool's name in a list of tools, in the user's language.
+ * Undefined where the label has no verb or kind a line has words for.
+ */
+export const gistToolLine = (
+  label: Pick<ToolCallLabel, "action" | "object_kind"> | null | undefined,
+): string | undefined => {
+  const action = GIST_ACTIONS.find((known) => known === label?.action);
+  const kind = GIST_KINDS.find((known) => known === label?.object_kind);
+  // "Update item" says less than the tool's own title.
+  if (!action || !kind || kind === "other") return undefined;
+  return gistSentence({
+    action,
+    phase: "ask",
+    shape: "other",
+    kind: gistKindLabel(kind, 1),
+    title: "",
+    where: "",
+  });
+};

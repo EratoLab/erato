@@ -309,6 +309,19 @@ export interface SpokenCardInput {
   /** The tool's title as the card shows it, for a call the card cannot describe. */
   toolTitle: string;
   server?: string;
+  /**
+   * A change the server applies for an app that checked it: the card says
+   * the app's own title and summary of it, not the apply call's input.
+   */
+  summary?: SpokenSummary;
+}
+
+/** A change as the app that prepared it names it. */
+export interface SpokenSummary {
+  title: string;
+  description?: string;
+  /** The card needs a choice on screen, so it is never decided by voice. */
+  onScreen: boolean;
 }
 
 /** What a card for one approval needs from the screen. */
@@ -1277,6 +1290,10 @@ const composedPieces = (
     mustSay: false,
     values: [],
   };
+  if (approval.summary) {
+    pieces.push(...summaryPieces(approval.summary), request);
+    return pieces;
+  }
   const names = spokenNamesFor(approval.label, options.language);
   const read = spokenReadFactsOf(
     approval.label,
@@ -1547,6 +1564,41 @@ const withFieldNames = (
   });
 };
 
+/** An app's own sentence, ended so the voice pauses after it. */
+const asSentence = (value: string): string => {
+  const trimmed = value.trim();
+  return /[.!?…:]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+};
+
+/**
+ * A change named by its app: the title as what the call does, the summary as
+ * its one detail. Both are said before a decision by voice counts.
+ */
+const summaryPieces = (summary: SpokenSummary): ComposedPiece[] => {
+  const title = shorten(summary.title, Number.MAX_SAFE_INTEGER);
+  const description = summary.description?.trim();
+  return [
+    {
+      role: "what",
+      text: asSentence(title),
+      mustSay: false,
+      values: [text("text", title)],
+    },
+    ...(description
+      ? [
+          {
+            role: "detail" as const,
+            text: asSentence(
+              shorten(description, Number.MAX_SAFE_INTEGER, MAX_PIECE_CHARS),
+            ),
+            mustSay: true,
+            values: [text("text", description)],
+          },
+        ]
+      : []),
+  ];
+};
+
 /**
  * Whether a read's reading says a condition of its own: one that is not held
  * back. Otherwise the held-back sentence names the conditions without
@@ -1601,21 +1653,35 @@ export const spokenApprovalFor = (
     input: unknown;
     display?: {
       title?: string;
+      description?: string | null;
       server_name?: string | null;
       label?: ToolCallLabel;
     } | null;
     child?: unknown;
+    follows?: { decide_on_screen?: boolean } | null;
   },
 ): SpokenApproval => {
   if (call.child == null && !DESCRIBED_KINDS.includes(approvalKind)) {
     return { type: "pointer" };
   }
+  const toolTitle = call.display?.title ?? call.tool_name;
   return {
     type: "call",
     label: call.display?.label,
     input: call.input,
-    toolTitle: call.display?.title ?? call.tool_name,
+    toolTitle,
     server: call.display?.server_name ?? undefined,
+    ...(call.child == null && call.follows
+      ? {
+          summary: {
+            title: toolTitle,
+            ...(call.display?.description
+              ? { description: call.display.description }
+              : {}),
+            onScreen: call.follows.decide_on_screen === true,
+          },
+        }
+      : {}),
   };
 };
 
@@ -1663,8 +1729,10 @@ export const voiceApprovable = (
 export const voiceApprovalOffered = (approval: SpokenApproval): boolean =>
   approval.type === "call" &&
   voiceApprovable(approval.label) &&
-  (spokenReadFactsOf(approval.label) !== undefined ||
-    toolCallCardOf(approval.label, approval.input).kind === "gist");
+  (approval.summary
+    ? !approval.summary.onScreen
+    : spokenReadFactsOf(approval.label) !== undefined ||
+      toolCallCardOf(approval.label, approval.input).kind === "gist");
 
 /** Whether two approvals said one after another are of the same kind. */
 export const sameSpokenKind = (
@@ -1672,6 +1740,7 @@ export const sameSpokenKind = (
   b: SpokenApproval | undefined,
 ): boolean => {
   if (a?.type !== "call" || b?.type !== "call") return false;
+  if (a.summary || b.summary) return false;
   const left = toolCallCardOf(a.label, a.input);
   const right = toolCallCardOf(b.label, b.input);
   return (

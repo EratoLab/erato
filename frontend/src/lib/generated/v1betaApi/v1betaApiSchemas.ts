@@ -165,6 +165,13 @@ export type ApprovalDecisionItem = {
    * is what tells its questions apart.
    */
   child_tool_call_id?: string;
+  /**
+   * What the user chose on a host's own card, such as a tick, for
+   * `approve` or `approve_always` of an item with `follows` set. Opaque to
+   * the server, at most 4 KiB of JSON; the operation carries it to the
+   * client as `confirmation`.
+   */
+  client_confirmation?: Record<string, any>;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -217,6 +224,7 @@ export type ApprovalItem = {
   called_as?: string;
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
+  follows?: ChainedApprovalRef;
   input: Value;
   /**
    * The item of an earlier stop on the same message this one replaces: the
@@ -332,6 +340,27 @@ export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
  * How a spoken card is worded.
  */
 export type ApprovalSpeechWording = "precise" | "natural";
+
+/**
+ * A server-called tool whose calls the user decides on.
+ */
+export type ApprovalToolInfo = {
+  /**
+   * `user_decision` (Ask, Always or Never) or `every_call`, which asks
+   * every time and offers no Always.
+   */
+  approval: string;
+  label?: ToolCallLabel;
+  /**
+   * `namespace/name`, the key of its stored decision.
+   */
+  qualified_name: string;
+  /**
+   * What the tool does, in the package's words. A client that can name the
+   * change from `label` in the user's language shows that instead.
+   */
+  title: string;
+};
 
 export type ApprovalVoiceCommand = {
   /**
@@ -1084,6 +1113,24 @@ export type CardChangedError = {
    * Always `card_changed`.
    */
   code: string;
+};
+
+/**
+ * The accepted proposal a server-called operation follows.
+ */
+export type ChainedApprovalRef = {
+  /**
+   * The user decides on screen: the card needs a tick or a row choice, so
+   * it offers no Always and takes no decision by voice.
+   */
+  decide_on_screen: boolean;
+  proposal_call_id: string;
+  /**
+   * The host's short code for why it asks again after it found, while
+   * writing, that the user must confirm something, such as
+   * `whole_document`.
+   */
+  reason?: string;
 };
 
 /**
@@ -2530,6 +2577,12 @@ export type FacetInfo = {
 
 export type FacetsResponse = {
   action_facets?: ActionFacetInfo[];
+  /**
+   * The tools the server calls to apply a change the user approves, which
+   * the listed facets can reach. Clients list them in the user's tool
+   * settings, and offer the server's decision flow where one is listed.
+   */
+  approval_tools?: ApprovalToolInfo[];
   facets: FacetInfo[];
   global_facet_settings: GlobalFacetSettings;
 };

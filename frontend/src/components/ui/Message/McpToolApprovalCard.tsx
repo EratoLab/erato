@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchWithAuthRecovery } from "@/auth/authRecovery";
 import { getIdToken } from "@/auth/tokenStore";
@@ -21,6 +21,7 @@ import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
   clientToolApprovalScopeAnchor,
   getClientToolHeaders,
+  useClientToolRegistry,
 } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
@@ -51,6 +52,10 @@ import { ApprovalQueueCard } from "./ApprovalQueueCard";
 import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
+import {
+  onlyItsCardApproves,
+  OwnClientToolApprovalItem,
+} from "./OwnClientToolApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
 import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import {
@@ -69,6 +74,7 @@ import type {
   StagedDecisions,
 } from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { ApprovalItemDecisionExtras } from "@/config/componentRegistry";
 import type {
   VoiceChange,
   VoiceChangeOutcome,
@@ -120,6 +126,25 @@ const APPROVE_CONTEXT: ToolApprovalDecision = "approve_context";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
 const REQUEST_CHANGE: ToolApprovalDecision = "request_change";
+
+/**
+ * One item's answer with what a host card sent beside it: its ticks go only
+ * with an approval, the user's words only with a change request.
+ */
+const answerWith = (
+  approvalId: string,
+  decision: ToolApprovalDecision,
+  extras: ApprovalItemDecisionExtras | undefined,
+): DecidedApproval => ({
+  approvalId,
+  decision,
+  ...(extras?.clientConfirmation !== undefined && isApprovalDecision(decision)
+    ? { clientConfirmation: extras.clientConfirmation }
+    : {}),
+  ...(decision === REQUEST_CHANGE && extras?.changeRequest
+    ? { changeRequest: extras.changeRequest }
+    : {}),
+});
 
 /** How often a card that shows waiting tasks reads the row again. */
 const WAITING_REFRESH_MS = 5_000;
@@ -287,6 +312,10 @@ export const McpToolApprovalCard = ({
   // `approval_id`; sent with the held `approve_context` answers.
   const [stagedPositions, setStagedPositions] = useState<
     Record<string, unknown>
+  >({});
+  // What a host card sent beside an item's held answer, by `approval_id`.
+  const [stagedExtras, setStagedExtras] = useState<
+    Record<string, ApprovalItemDecisionExtras>
   >({});
   const [isCoveredByParent, setIsCoveredByParent] = useState(false);
 
@@ -525,6 +554,16 @@ export const McpToolApprovalCard = ({
               .map((answer) => [answer.approvalId, answer.scopePosition]),
           ),
         );
+        setStagedExtras(
+          Object.fromEntries(
+            answers
+              .filter((answer) => answer.clientConfirmation !== undefined)
+              .map((answer) => [
+                answer.approvalId,
+                { clientConfirmation: answer.clientConfirmation },
+              ]),
+          ),
+        );
         await chatSession?.refetchMessages();
         return "conflict";
       }
@@ -556,6 +595,7 @@ export const McpToolApprovalCard = ({
       // way to send them again.
       setStaged({});
       setStagedPositions({});
+      setStagedExtras({});
       if (alreadyContinued) {
         await chatSession?.refetchMessages();
       }
@@ -576,20 +616,57 @@ export const McpToolApprovalCard = ({
     answers: StagedDecisions,
     positions: Record<string, unknown>,
     fallback: ToolApprovalDecision,
+    extras: Record<string, ApprovalItemDecisionExtras> = {},
   ): DecidedApproval[] =>
     approvalItems.map((item) => {
       const decision = answers[item.approval_id] ?? fallback;
       const scopePosition = positions[item.approval_id];
       return decision === "approve_context" && scopePosition !== undefined
         ? { approvalId: item.approval_id, decision, scopePosition }
-        : { approvalId: item.approval_id, decision };
+        : answerWith(
+            item.approval_id,
+            decision,
+            answers[item.approval_id] === undefined
+              ? undefined
+              : extras[item.approval_id],
+          );
     });
 
   const decideAll = (decision: ToolApprovalDecision) => {
-    const held = isApprovalDecision(decision) ? staged : {};
+    const approves = isApprovalDecision(decision);
+    const held = approves ? staged : {};
+    // An item only its own card can approve stays open, and the queue moves
+    // on to it with every other item allowed.
+    const leftOpen = approves
+      ? approvalItems.filter(
+          (item) =>
+            held[item.approval_id] === undefined && onlyItsCardApproves(item),
+        )
+      : [];
+    if (leftOpen.length > 0) {
+      stopApprovalSpeech();
+      setStaged({
+        ...Object.fromEntries(
+          approvalItems
+            .filter((item) => !leftOpen.includes(item))
+            .map((item) => [item.approval_id, decision]),
+        ),
+        ...held,
+      });
+      return;
+    }
     setStaged({});
     setStagedPositions({});
-    void decide(decision, itemAnswers(held, stagedPositions, decision));
+    setStagedExtras({});
+    void decide(
+      decision,
+      itemAnswers(
+        held,
+        stagedPositions,
+        decision,
+        approves ? stagedExtras : {},
+      ),
+    );
   };
 
   /**
@@ -597,15 +674,76 @@ export const McpToolApprovalCard = ({
    * request that does not cover the open set exactly is refused, so a card
    * that asks per item cannot send per item.
    */
-  const decideItem = (approvalId: string, decision: ToolApprovalDecision) => {
+  const decideItem = (
+    approvalId: string,
+    decision: ToolApprovalDecision,
+    extras?: ApprovalItemDecisionExtras,
+  ) => {
     stopApprovalSpeech();
     const answers: StagedDecisions = { ...staged, [approvalId]: decision };
+    const heldExtras = { ...stagedExtras };
+    if (extras) heldExtras[approvalId] = extras;
+    else delete heldExtras[approvalId];
     setStaged(answers);
+    setStagedExtras(heldExtras);
     if (approvalItems.some((item) => answers[item.approval_id] === undefined)) {
       return;
     }
-    void decide(decision, itemAnswers(answers, stagedPositions, decision));
+    void decide(
+      decision,
+      itemAnswers(answers, stagedPositions, decision, heldExtras),
+    );
   };
+  // Stable, so a host's own card is not drawn again on every render here.
+  const decideItemRef = useRef(decideItem);
+  decideItemRef.current = decideItem;
+  const decideQueuedItem = useCallback(
+    (
+      approvalId: string,
+      decision: ToolApprovalDecision,
+      extras?: ApprovalItemDecisionExtras,
+    ) => decideItemRef.current(approvalId, decision, extras),
+    [],
+  );
+
+  /**
+   * The turn's own single call decided on its card. A host card's ticks or
+   * words go with that call's answer; every other open item gets the same
+   * decision, as the card answers the whole stop.
+   */
+  const decideOwnRef =
+    useRef<
+      (
+        approvalId: string,
+        decision: ToolApprovalDecision,
+        extras?: ApprovalItemDecisionExtras,
+      ) => void
+    >(null);
+  decideOwnRef.current = (approvalId, decision, extras) => {
+    if (
+      extras?.clientConfirmation === undefined &&
+      extras?.changeRequest === undefined
+    ) {
+      void decide(decision);
+      return;
+    }
+    void decide(
+      decision,
+      approvalItems.map((item) =>
+        item.approval_id === approvalId
+          ? answerWith(approvalId, decision, extras)
+          : { approvalId: item.approval_id, decision },
+      ),
+    );
+  };
+  const decideOwn = useCallback(
+    (
+      approvalId: string,
+      decision: ToolApprovalDecision,
+      extras?: ApprovalItemDecisionExtras,
+    ) => decideOwnRef.current?.(approvalId, decision, extras),
+    [],
+  );
 
   /** The position-taker for a document scope, where this client holds it. */
   const scopeAnchor = (item: ApprovalItemPart) => {
@@ -665,7 +803,7 @@ export const McpToolApprovalCard = ({
     }
     void decide(
       APPROVE_CONTEXT,
-      itemAnswers(answers, positions, APPROVE_CONTEXT),
+      itemAnswers(answers, positions, APPROVE_CONTEXT, stagedExtras),
     );
   };
 
@@ -693,6 +831,7 @@ export const McpToolApprovalCard = ({
         { ...staged, [approvalId]: REQUEST_CHANGE },
         stagedPositions,
         REQUEST_CHANGE,
+        stagedExtras,
       ).map((answer) =>
         answer.approvalId === approvalId
           ? { approvalId, decision: REQUEST_CHANGE, changeRequest: words }
@@ -700,6 +839,7 @@ export const McpToolApprovalCard = ({
       );
       setStaged({});
       setStagedPositions({});
+      setStagedExtras({});
       return decide(REQUEST_CHANGE, answers);
     },
   };
@@ -760,12 +900,21 @@ export const McpToolApprovalCard = ({
       },
     ]);
   };
+  // A card that needs a choice on screen, or a change only another device can
+  // make, is never decided by voice.
+  const screenOnlyKey = useClientToolRegistry(() =>
+    approvalItems
+      .map((item) => `${item.approval_id}:${onlyItsCardApproves(item)}`)
+      .join("\n"),
+  );
   const decideByVoice = useCallback(
     (approvalId: string): Omit<VoiceDecision, "approves"> | undefined => {
+      const item = ownVoiceItem(approvalId);
       if (
         !voiceDecisionsOn ||
         approvalItems.length !== 1 ||
-        !ownVoiceItem(approvalId)
+        !item ||
+        onlyItsCardApproves(item)
       )
         return undefined;
       return {
@@ -775,8 +924,8 @@ export const McpToolApprovalCard = ({
           Promise.resolve("failed"),
       };
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the items are read through the ref; their ids and kind decide
-    [approvalIds.join("\n"), kind, voiceDecisionsOn],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the items are read through the ref; their ids, kind and screen-only flags decide
+    [screenOnlyKey, kind, voiceDecisionsOn],
   );
 
   const composeSessionId = useComposeSessionStore((state) =>
@@ -813,7 +962,11 @@ export const McpToolApprovalCard = ({
   const spokenItems = isQueue
     ? approvalQueueOf(request, approvalItems)
     : approvalItems.slice(0, 1);
-  const spokenApprovals = (isQueue ? spokenItems : [request]).map((call) =>
+  const spokenApprovals = (
+    isQueue
+      ? spokenItems
+      : [{ ...request, follows: approvalItems.at(0)?.follows }]
+  ).map((call) =>
     spokenApprovalFor(kind, {
       ...call,
       display: approvalDisplayOf(call.display, call.tool_name),
@@ -848,6 +1001,31 @@ export const McpToolApprovalCard = ({
     responding: chatSession?.isPendingResponse ?? false,
     userTurns,
   });
+
+  // The single call as the host card takes it, kept while the row is the same.
+  const firstItem = approvalItems.at(0);
+  const ownItem = useMemo<ApprovalItemPart>(
+    () =>
+      firstItem
+        ? firstItem.display != null
+          ? firstItem
+          : { ...firstItem, display: request.display }
+        : {
+            approval_id: request.tool_call_id,
+            tool_call_id: request.tool_call_id,
+            tool_name: request.tool_name,
+            input: request.input,
+            display: request.display,
+            child: null,
+          },
+    [
+      firstItem,
+      request.display,
+      request.input,
+      request.tool_call_id,
+      request.tool_name,
+    ],
+  );
 
   const phraseShown =
     useApprovalListening((state) => state.listening === spokenCard.key) &&
@@ -897,6 +1075,8 @@ export const McpToolApprovalCard = ({
     return (
       <>
         <ApprovalQueueCard
+          messageId={messageId}
+          chatId={chatId}
           request={request}
           items={approvalItems}
           waiting={waiting}
@@ -904,7 +1084,7 @@ export const McpToolApprovalCard = ({
           staged={staged}
           isArchived={isArchived === true}
           isBusy={cardIsBusy}
-          onDecideItem={decideItem}
+          onDecideItem={decideQueuedItem}
           onDecideAll={decideAll}
           scopeOffer={scopeOffer}
           onDecideScope={decideScope}
@@ -999,20 +1179,35 @@ export const McpToolApprovalCard = ({
       data-approval-kind={kind}
       className={APPROVAL_CARD_SHELL_CLASS}
     >
-      <OwnCallApprovalItem
-        toolName={request.tool_name}
-        display={request.display}
-        input={request.input}
-        serverId={request.mcp_server_id}
-        isClientTool={isClientTool}
-        openWorld={request.annotations.openWorldHint}
-        allowAlways={request.allow_always}
-        status={isArchived ? "dismissed" : "pending"}
-        resolvedLabel={isArchived ? archivedNoticeText() : undefined}
-        isBusy={cardIsBusy}
-        scrollIntoViewOnMount
-        onDecide={(decision) => void decide(decision)}
-      />
+      {isClientTool ? (
+        <OwnClientToolApprovalItem
+          item={ownItem}
+          serverId={request.mcp_server_id}
+          messageId={messageId}
+          chatId={chatId}
+          allowAlways={request.allow_always}
+          status={isArchived ? "dismissed" : "pending"}
+          resolvedLabel={isArchived ? archivedNoticeText() : undefined}
+          isBusy={cardIsBusy}
+          scrollIntoViewOnMount
+          onDecide={decideOwn}
+        />
+      ) : (
+        <OwnCallApprovalItem
+          toolName={request.tool_name}
+          display={request.display}
+          input={request.input}
+          serverId={request.mcp_server_id}
+          isClientTool={false}
+          openWorld={request.annotations.openWorldHint}
+          allowAlways={request.allow_always}
+          status={isArchived ? "dismissed" : "pending"}
+          resolvedLabel={isArchived ? archivedNoticeText() : undefined}
+          isBusy={cardIsBusy}
+          scrollIntoViewOnMount
+          onDecide={(decision) => void decide(decision)}
+        />
+      )}
       {phraseShown && (
         <p
           className="mt-2 text-sm text-theme-fg-secondary"

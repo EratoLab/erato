@@ -1744,6 +1744,16 @@ msgid "builtinToolApproval.title"
 msgstr "„{name}“ erlauben?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.elsewhere"
+msgstr "Öffne den Erato-Bereich, in dem diese Änderung vorbereitet wurde, um sie anzuwenden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.title"
+msgstr "Diese Änderung erlauben?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Sie interagieren mit einem KI-Chatbot. Generierte Antworten können sachliche Fehler enthalten und sollten vor der Verwendung überprüft werden."
@@ -6624,7 +6634,7 @@ msgid "preferences.dialog.desktopSidecar.tools.heading"
 msgstr "Verfügbare Tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/SidecarToolDecisions.tsx
+#: src/components/ui/Settings/ClientToolDecisionList.tsx
 msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr "Diese Auswahl konnte nicht gespeichert werden. Bitte erneut versuchen."
 
@@ -7164,6 +7174,26 @@ msgstr "Legen Sie fest, wann der Assistent diese Tools verwenden darf."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Tool-Berechtigungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.caption"
+msgstr "In die Office-Apps integriert · alle Geräte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.intro"
+msgstr "Wähle, ob Erato fragt, bevor es etwas in einer Office-App ändert, etwa im geöffneten Dokument. Deine Wahl gilt überall, wo du Erato nutzt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.name"
+msgstr "Office-Apps"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.tools.heading"
+msgstr "Änderungen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx

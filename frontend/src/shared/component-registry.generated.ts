@@ -409,6 +409,7 @@ export { ApprovalReferent } from "@/components/ui/Message/ApprovalReferent";
 export { ApprovalTechnicalDetails } from "@/components/ui/Message/ApprovalReferent";
 export { ApprovalToolHeading } from "@/components/ui/Message/ApprovalToolHeading";
 export { BuiltinToolApprovalItem } from "@/components/ui/Message/BuiltinToolApprovalItem";
+export { ChainedApprovalItem } from "@/components/ui/Message/ChainedApprovalItem";
 export { ClientToolFileApprovals } from "@/components/ui/Message/ClientToolFileApproval";
 export { CollapsibleCodeBlock } from "@/components/ui/Message/CollapsibleCodeBlock";
 export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/CollapsibleCodeBlock";
@@ -455,6 +456,9 @@ export type { MessageTextSelectionRect } from "@/components/ui/Message/messageTe
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { OriginApprovalLink } from "@/components/ui/Message/OriginApprovalLink";
 export { OwnCallApprovalItem } from "@/components/ui/Message/OwnCallApprovalItem";
+export { OwnClientToolApprovalItem } from "@/components/ui/Message/OwnClientToolApprovalItem";
+export { approvableHere } from "@/components/ui/Message/OwnClientToolApprovalItem";
+export { onlyItsCardApproves } from "@/components/ui/Message/OwnClientToolApprovalItem";
 export { ParkedChildItem } from "@/components/ui/Message/ParkedChildItem";
 export { ParkedTaskNotice } from "@/components/ui/Message/ParkedTaskNotice";
 export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
