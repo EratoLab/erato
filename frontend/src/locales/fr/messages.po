@@ -4390,6 +4390,51 @@ msgid "error.404.title"
 msgstr "404 - Page non trouvée"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "Cette page n’a pas pu être affichée. Rechargez la page pour continuer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.reload"
+msgstr "Recharger"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Un problème est survenu"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Une partie de l’application n’a pas pu être chargée. Rechargez la page pour continuer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "La connexion au serveur a été perdue. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "Pas de connexion au serveur. Vérifiez votre réseau et réessayez."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "Le serveur n’a pas répondu. Veuillez réessayer dans un instant."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "Le serveur a cessé de répondre. Veuillez réessayer."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "Le serveur n’a pas répondu à temps. Veuillez réessayer."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
 msgid "facets.builtin.schedule.displayName"
 msgstr ""
@@ -11799,6 +11844,11 @@ msgstr "Type(s) de fichier non pris en charge : {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Taille de fichier maximale : {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "upload.waitingForNetwork"
+msgstr "En attente du réseau…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

@@ -210,6 +210,7 @@ describe("useFileDropzone", () => {
           "Content-Type": "multipart/form-data",
         },
       }),
+      expect.any(AbortSignal),
     );
 
     // Check state updates. The server record carries no size, so each item is
@@ -264,6 +265,7 @@ describe("useFileDropzone", () => {
           "Content-Type": "multipart/form-data",
         },
       }),
+      expect.any(AbortSignal),
     );
 
     // Check that only one file was uploaded
@@ -392,6 +394,7 @@ describe("useFileDropzone", () => {
       expect.objectContaining({
         queryParams: { chat_id: "streaming-chat-id" },
       }),
+      expect.any(AbortSignal),
     );
     expect(useFileUploadStore.getState().silentChatId).toBeNull();
   });
@@ -429,6 +432,7 @@ describe("useFileDropzone", () => {
       expect.objectContaining({
         queryParams: { chat_id: "late-chat-id" },
       }),
+      expect.any(AbortSignal),
     );
   });
 
@@ -457,6 +461,7 @@ describe("useFileDropzone", () => {
       expect.objectContaining({
         queryParams: { chat_id: "silent-chat-id" },
       }),
+      expect.any(AbortSignal),
     );
     expect(useFileUploadStore.getState().silentChatId).toBe("silent-chat-id");
   });

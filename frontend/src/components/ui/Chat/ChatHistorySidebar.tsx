@@ -13,6 +13,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { discardComposeDraftsOnUnload } from "@/hooks/chat/composeDraftReloadKeeper";
 import {
   hasActiveFilters,
   useChatHistoryFilterFoldback,
@@ -829,6 +830,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
 
       try {
         const signOutUrl = "/oauth2/sign_out"; // eslint-disable-line lingui/no-unlocalized-strings
+        discardComposeDraftsOnUnload();
         window.location.href = signOutUrl;
 
         setTimeout(() => {

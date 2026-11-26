@@ -370,6 +370,9 @@ export {
   type TextareaProps,
 } from "@/components/ui/Input";
 export { ChatErrorBoundary } from "@/components/ui/Feedback/ChatErrorBoundary";
+export { AppErrorBoundary } from "@/components/ui/Feedback/AppErrorBoundary";
+export { installChunkLoadRecovery } from "@/lib/chunkLoadRecovery";
+export { plainErrorMessage } from "@/utils/plainErrorMessage";
 export { FeedbackCommentDialog } from "@/components/ui/Feedback/FeedbackCommentDialog";
 export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog";
 export { I18nProvider } from "@/providers/I18nProvider";

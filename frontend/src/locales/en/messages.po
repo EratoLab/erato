@@ -4390,6 +4390,51 @@ msgid "error.404.title"
 msgstr "404 - Page Not Found"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "This page could not be shown. Reload the page to continue."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.reload"
+msgstr "Reload"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Something went wrong"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Part of the app could not be loaded. Reload the page to continue."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "The connection to the server was lost. Please try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "No connection to the server. Check your network and try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "The server did not answer. Please try again in a moment."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "The server stopped answering. Please try again."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "The server did not answer in time. Please try again."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
 msgid "facets.builtin.schedule.displayName"
 msgstr "Schedule"
@@ -11799,6 +11844,11 @@ msgstr "Unsupported file type(s): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maximum file size: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "upload.waitingForNetwork"
+msgstr "Waiting for the network…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

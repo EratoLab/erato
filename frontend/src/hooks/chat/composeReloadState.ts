@@ -40,8 +40,14 @@ export function takeComposeReloadOptions(sessionId: string) {
 }
 
 /** Explicit, one-reload snapshot for hosts whose consent flow reloads the pane. */
-export function saveComposeReloadState(storage: Storage, key: string): void {
-  if (reloadHolds.size > 0) {
+export function saveComposeReloadState(
+  storage: Storage,
+  key: string,
+  // A page that is going away anyway loses its running uploads either way;
+  // it still keeps the text and the files already uploaded.
+  { allowPendingUploads = false }: { allowPendingUploads?: boolean } = {},
+): void {
+  if (reloadHolds.size > 0 && !allowPendingUploads) {
     const error = new Error(
       "Pending local attachments prevent composer reload",
     );

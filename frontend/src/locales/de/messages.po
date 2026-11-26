@@ -4390,6 +4390,51 @@ msgid "error.404.title"
 msgstr "404 - Seite nicht gefunden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.body"
+msgstr "Diese Seite konnte nicht angezeigt werden. Laden Sie die Seite neu, um fortzufahren."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.reload"
+msgstr "Neu laden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Feedback/AppErrorBoundary.tsx
+msgid "error.app.title"
+msgstr "Etwas ist schiefgelaufen"
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.appUpdated"
+msgstr "Ein Teil der App konnte nicht geladen werden. Laden Sie die Seite neu, um fortzufahren."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.connectionLost"
+msgstr "Die Verbindung zum Server wurde unterbrochen. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.noConnection"
+msgstr "Keine Verbindung zum Server. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverDidNotAnswer"
+msgstr "Der Server hat nicht geantwortet. Bitte versuchen Sie es gleich noch einmal."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.serverStoppedAnswering"
+msgstr "Der Server antwortet nicht mehr. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/utils/plainErrorMessage.ts
+msgid "error.plain.timedOut"
+msgstr "Der Server hat nicht rechtzeitig geantwortet. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/facetDisplayName.ts
 msgid "facets.builtin.schedule.displayName"
 msgstr "Planen"
@@ -11799,6 +11844,11 @@ msgstr "Nicht unterstützter Dateityp(en): {filenames}"
 #: src/components/ui/FileUpload/FileUploadButton.tsx
 msgid "upload.maxSizeHint"
 msgstr "Maximale Dateigröße: {maxSizeFormatted}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "upload.waitingForNetwork"
+msgstr "Warte auf das Netzwerk…"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/WaitingTaskItem.tsx

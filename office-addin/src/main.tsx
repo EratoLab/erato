@@ -7,9 +7,11 @@
 import "@erato/frontend/library.css";
 import "./styles.css";
 import {
+  AppErrorBoundary,
   BrandingOverviewPage,
   I18nProvider,
   applyComponentKitRegistrations,
+  installChunkLoadRecovery,
 } from "@erato/frontend/library";
 import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
@@ -25,6 +27,7 @@ const TeamsApp = lazy(() => import("./teams/TeamsApp"));
 const WordApp = lazy(() => import("./word/WordApp"));
 
 injectFrontendEnv();
+installChunkLoadRecovery();
 
 // Kit scripts have executed by now (document order). Host routes add their
 // own contributions synchronously when their lazy module is selected.

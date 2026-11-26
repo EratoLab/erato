@@ -114,10 +114,7 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
           }
 
           // Fallback to unknown error
-          throw new UploadUnknownError(
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            String(uploadError) || "Failed to upload files",
-          );
+          throw new UploadUnknownError(uploadError);
         }
 
         if (result.rejected_files && result.rejected_files.length > 0) {
@@ -136,7 +133,7 @@ export function useStandaloneFileUpload(): UseStandaloneFileUploadResult {
           err instanceof UploadTooLargeError ||
           err instanceof UploadUnknownError;
 
-        setError(isKnownError ? err : new UploadUnknownError());
+        setError(isKnownError ? err : new UploadUnknownError(err));
       } finally {
         setIsUploading(false);
       }

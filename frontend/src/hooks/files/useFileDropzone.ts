@@ -6,6 +6,7 @@ import {
   useMessagingStore,
 } from "@/hooks/chat/store/messagingStore";
 import { clientPlatformHeaders } from "@/lib/clientPlatform";
+import { isNetworkFailure } from "@/lib/connectivity/connectivity";
 import {
   useCreateChat,
   fetchUploadFile,
@@ -24,12 +25,17 @@ import {
 } from "@/utils/validateFileSizes";
 
 import {
+  UploadNetworkError,
   UploadTooLargeError,
   UploadUnknownError,
   UnsupportedFileTypeError,
   type UploadError,
   isUploadTooLarge,
 } from "./errors";
+import {
+  uploadTimeLimitMs,
+  uploadWithNetworkRetry,
+} from "./uploadWithNetworkRetry";
 import { useFileUploadStore } from "./useFileUploadStore";
 
 import type { FileUploadItemWithSize } from "@/components/ui/FileUpload/FilePreviewBase";
@@ -197,6 +203,7 @@ export function useFileDropzone({
     isUploading,
     error: uploadError,
     setUploading,
+    setWaitingForNetwork,
     addFiles,
     setError,
     clearFiles,
@@ -315,8 +322,16 @@ export function useFileDropzone({
         // Call fetchUploadFile directly, bypassing the problematic hook
         let result: FileUploadResponse;
         try {
-          // Use type assertion on the variables object for the call
-          result = await fetchUploadFile(variables as UploadFileVariables);
+          result = await uploadWithNetworkRetry(
+            (signal) =>
+              fetchUploadFile(variables as UploadFileVariables, signal),
+            {
+              timeLimitMs: uploadTimeLimitMs(
+                filesToUpload.reduce((sum, file) => sum + file.size, 0),
+              ),
+              onWaitingForNetwork: setWaitingForNetwork,
+            },
+          );
           logger.log("File upload API call successful, result:", result);
         } catch (uploadError) {
           logger.error("Error calling fetchUploadFile:", uploadError);
@@ -329,11 +344,11 @@ export function useFileDropzone({
             );
           }
 
-          // Fallback to unknown error
-          throw new UploadUnknownError(
-            // eslint-disable-next-line lingui/no-unlocalized-strings
-            String(uploadError) || "Failed to upload files",
-          );
+          if (isNetworkFailure(uploadError)) {
+            throw new UploadNetworkError(uploadError);
+          }
+
+          throw new UploadUnknownError(uploadError);
         }
 
         if (result.rejected_files && result.rejected_files.length > 0) {
@@ -352,10 +367,12 @@ export function useFileDropzone({
         logger.error("Error uploading files (outer catch):", err);
         const isKnownError =
           err instanceof UploadTooLargeError ||
-          err instanceof UploadUnknownError;
+          err instanceof UploadUnknownError ||
+          err instanceof UploadNetworkError;
 
-        setError(isKnownError ? err : new UploadUnknownError());
+        setError(isKnownError ? err : new UploadUnknownError(err));
       } finally {
+        setWaitingForNetwork(false);
         setUploading(false);
       }
 
@@ -377,6 +394,7 @@ export function useFileDropzone({
       addFiles,
       onFilesUploaded,
       setUploading,
+      setWaitingForNetwork,
       setError,
       setSilentChatId,
     ],

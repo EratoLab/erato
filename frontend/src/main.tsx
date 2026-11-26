@@ -5,6 +5,8 @@ import { BrowserRouter } from "react-router-dom";
 import AppRoutes from "./App"; // App.tsx now exports AppRoutes
 import { applyComponentKitRegistrations } from "./config/componentRegistry";
 import { initE2EOverrides } from "./config/componentRegistryE2E";
+import { installComposeDraftReloadKeeper } from "./hooks/chat/composeDraftReloadKeeper";
+import { installChunkLoadRecovery } from "./lib/chunkLoadRecovery";
 import { announceStartScreenReport } from "./lib/shellStartScreen";
 import "./styles/globals.css"; // Corrected path to global stylesheet
 
@@ -13,6 +15,10 @@ import "non.geist"; // Imports Geist Sans Variable
 import "non.geist/mono"; // Imports Geist Mono Variable
 
 const startApp = async (): Promise<void> => {
+  installChunkLoadRecovery();
+  // Before the first render, so the composer mounts with the kept draft.
+  installComposeDraftReloadKeeper();
+
   // Before the page finishes loading, which is when an app that covers the
   // start stops waiting for a page that never said it reports.
   announceStartScreenReport();

@@ -570,6 +570,9 @@ export const ChatInput = ({
   const uploadedFiles = useFileUploadStore((state) => state.uploadedFiles);
   const setSilentChatId = useFileUploadStore((state) => state.setSilentChatId);
   const setUploadStoreError = useFileUploadStore((state) => state.setError);
+  const isUploadWaitingForNetwork = useFileUploadStore(
+    (state) => state.isWaitingForNetwork,
+  );
   const sendErrorText = useMemo(
     () => resolveChatSendErrorMessage(messagingError),
     [messagingError],
@@ -3670,6 +3673,20 @@ export const ChatInput = ({
             {t({
               id: "chat.compaction.pending",
               message: "Compacting chat history…",
+            })}
+          </Alert>
+        )}
+
+        {isUploadWaitingForNetwork && (
+          <Alert
+            type="info"
+            geometryVariant="message"
+            className="mb-2"
+            data-testid="upload-waiting-for-network"
+          >
+            {t({
+              id: "upload.waitingForNetwork",
+              message: "Waiting for the network…",
             })}
           </Alert>
         )}

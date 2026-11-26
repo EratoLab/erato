@@ -1,5 +1,10 @@
 import { i18n } from "@lingui/core";
 
+import {
+  noConnectionMessage,
+  plainErrorMessage,
+} from "@/utils/plainErrorMessage";
+
 import type { UploadFileError as ApiUploadFileError } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 export class UploadTooLargeError extends Error {
@@ -28,11 +33,22 @@ export class UploadTooLargeError extends Error {
 }
 
 export class UploadUnknownError extends Error {
-  constructor(message?: string) {
+  /** `detail` may be anything the request layer threw; only readable text is kept. */
+  constructor(detail?: unknown) {
     const baseMessage = i18n._("upload.error.unknown");
+    const message = detail === undefined ? null : plainErrorMessage(detail);
     super(message ? `${baseMessage}: ${message}` : baseMessage);
     // eslint-disable-next-line lingui/no-unlocalized-strings
     this.name = "UploadUnknownError";
+  }
+}
+
+/** The upload got no answer, also after waiting for the network and trying again. */
+export class UploadNetworkError extends Error {
+  constructor(cause: unknown) {
+    super(plainErrorMessage(cause) ?? noConnectionMessage(), { cause });
+    // eslint-disable-next-line lingui/no-unlocalized-strings
+    this.name = "UploadNetworkError";
   }
 }
 
@@ -149,6 +165,7 @@ export function isUnsupportedFileType(
 export type UploadError =
   | UploadTooLargeError
   | UploadUnknownError
+  | UploadNetworkError
   | CloudLinkError
   | UnsupportedFileTypeError
   | SharedFileWithoutContentError

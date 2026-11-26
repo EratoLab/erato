@@ -3,6 +3,12 @@
 import { t } from "@lingui/core/macro";
 import { Component } from "react";
 
+import {
+  isChunkLoadError,
+  reloadOnceForChunkError,
+} from "@/lib/chunkLoadRecovery";
+import { plainErrorMessage } from "@/utils/plainErrorMessage";
+
 import { Button } from "../Controls/Button";
 import { ErrorIcon } from "../icons";
 import { CopyErrorButton } from "./CopyErrorButton";
@@ -23,6 +29,10 @@ interface FallbackProps {
  * Error fallback component to display when chat encounters an error
  */
 const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
+  // Trying again cannot bring back a code file the server no longer has.
+  const tryAgain = isChunkLoadError(error)
+    ? () => window.location.reload()
+    : resetErrorBoundary;
   return (
     <div className="flex size-full flex-col items-center justify-center space-y-4 p-8">
       <div className="flex size-12 items-center justify-center rounded-full bg-[var(--theme-error-bg)]">
@@ -32,10 +42,10 @@ const ChatErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
         {t`Chat Error`}
       </h3>
       <p className="max-w-md text-center text-sm text-[var(--theme-fg-muted)]">
-        {error.message ||
+        {plainErrorMessage(error) ??
           t`Something went wrong while loading the chat interface.`}
       </p>
-      <Button onClick={resetErrorBoundary} variant="primary" className="mt-4">
+      <Button onClick={tryAgain} variant="primary" className="mt-4">
         {t`Try Again`}
       </Button>
       <CopyErrorButton error={error} />
@@ -63,6 +73,9 @@ export class ChatErrorBoundary extends Component<
   state: ChatErrorBoundaryState = { didCatch: false, error: null };
 
   static getDerivedStateFromError(error: unknown): ChatErrorBoundaryState {
+    if (isChunkLoadError(error)) {
+      reloadOnceForChunkError();
+    }
     return { didCatch: true, error };
   }
 
