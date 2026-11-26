@@ -1,4 +1,5 @@
-import { sanitizeReplyFormHtml } from "./sanitizeReplyFormHtml";
+import { sanitizeHtmlPreview } from "@erato/frontend/library";
+
 import { callOfficeAsync } from "../../utils/officeAsync";
 import {
   isMessageRead,
@@ -36,12 +37,11 @@ export function escapeTextAsHtml(text: string): string {
 }
 
 /**
- * Build the HTML body passed to the reply form: outbound-grade sanitization
- * for model-produced HTML fragments (stricter than the in-chat preview — the
- * output becomes the user's draft), entity-escaping for plain text.
+ * Build the HTML body passed to the reply form: an HTML draft cleaned as the
+ * card shows it, plain text entity-escaped.
  */
 export function buildReplyFormBody(content: string, isHtml: boolean): string {
-  return isHtml ? sanitizeReplyFormHtml(content) : escapeTextAsHtml(content);
+  return isHtml ? sanitizeHtmlPreview(content) : escapeTextAsHtml(content);
 }
 
 export function isReplyFormBodyTooLarge(body: string): boolean {

@@ -1,4 +1,7 @@
-import { htmlToPlainText } from "@erato/frontend/library";
+import {
+  emailDraftHtmlToText,
+  sanitizeHtmlPreview,
+} from "@erato/frontend/library";
 
 import { plainTextToHtml } from "./htmlConvert";
 import { callOfficeAsync } from "../../utils/officeAsync";
@@ -9,7 +12,7 @@ import {
 } from "../hooks/composeSelectionStore";
 import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 
-// A compose write (setSelectedDataAsync/prependAsync) drops a callback ~never,
+// A compose write (setSelectedDataAsync) drops a callback ~never,
 // but on a wedged host it could hang the whole insert forever — bound it.
 const COMPOSE_WRITE_TIMEOUT_MS = 15_000;
 
@@ -36,6 +39,39 @@ export type BodyFormat = "html" | "text";
 interface ComposeWriteAttempt {
   coercionType: Office.CoercionType;
   data: string;
+}
+
+const BLOCK_TAG_RE = /<(?:p|div|ul|ol|table|blockquote|h[1-6]|pre|hr)\b/i;
+
+/**
+ * One paragraph goes in as inline text: as a block it would split the
+ * paragraph the cursor or the selection is in.
+ */
+function inlineIfOneParagraph(html: string): string {
+  const paragraph = /^<p>([\s\S]*)<\/p>$/.exec(html.trim())?.[1];
+  return paragraph !== undefined && !BLOCK_TAG_RE.test(paragraph)
+    ? paragraph
+    : html;
+}
+
+/** An HTML draft in the body's own format first, the other one if the host refuses. */
+function htmlDraftWriteAttempts(
+  draft: string,
+  bodyFormat: BodyFormat,
+): ComposeWriteAttempt[] {
+  const text = {
+    coercionType: Office.CoercionType.Text,
+    data: emailDraftHtmlToText(draft),
+  };
+  if (!text.data) {
+    // Nothing is left of the draft: writing it would only delete the selection.
+    throw new Error("The draft has no text to insert");
+  }
+  const html = {
+    coercionType: Office.CoercionType.Html,
+    data: inlineIfOneParagraph(sanitizeHtmlPreview(draft)),
+  };
+  return bodyFormat === "html" ? [html, text] : [text, html];
 }
 
 async function tryReadComposeBody(
@@ -133,18 +169,10 @@ export async function getComposeBodyType(): Promise<BodyFormat> {
 }
 
 /**
- * Replaces the current selection in the compose body (or inserts at cursor
- * if nothing is selected).
+ * Replaces the current selection in the compose body, or inserts at the
+ * cursor if nothing is selected, in the body's own format.
  *
- * Automatically detects the body format and adapts:
- * - HTML body + plain text content → converts newlines to `<br>`, inserts as HTML
- * - HTML body + HTML content → inserts as HTML
- * - Plain text body + HTML content → strips tags before inserting
- * - Plain text body + plain text content → inserts as-is
- *
- * @param data The content to insert.
- * @param isHtml Whether `data` contains HTML markup. When true and the body
- *               is plain text, HTML tags are stripped automatically.
+ * @param isHtml Whether `data` is an HTML draft.
  */
 export async function replaceComposeSelection(
   data: string,
@@ -154,21 +182,7 @@ export async function replaceComposeSelection(
 
   const bodyFormat = await getComposeBodyType();
   const writeAttempts: ComposeWriteAttempt[] = isHtml
-    ? bodyFormat === "text"
-      ? [
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-          { coercionType: Office.CoercionType.Html, data },
-        ]
-      : [
-          { coercionType: Office.CoercionType.Html, data },
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-        ]
+    ? htmlDraftWriteAttempts(data, bodyFormat)
     : bodyFormat === "html"
       ? [
           {
@@ -225,8 +239,11 @@ export async function replaceComposeSubjectText(
   const words = normalizeSelectionText(selectedText).split(" ");
   const pattern = new RegExp(words.map(escapeRegExp).join("\\s+"), "g");
   const replacement = normalizeSelectionText(
-    isHtml ? htmlToPlainText(data) : data,
+    isHtml ? emailDraftHtmlToText(data) : data,
   );
+  if (!replacement) {
+    throw new Error("The draft has no text to insert");
+  }
 
   await withPausedSelectionPolling(async () => {
     const subject = await callOfficeAsync<string>(
@@ -249,43 +266,4 @@ export async function replaceComposeSubjectText(
       { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
     );
   });
-}
-
-/**
- * Prepends content to the beginning of the compose body.
- */
-export async function prependComposeBody(data: string): Promise<void> {
-  const item = getActiveComposeItem();
-
-  const bodyFormat = await getComposeBodyType();
-  const writeAttempts: ComposeWriteAttempt[] =
-    bodyFormat === "html"
-      ? [
-          { coercionType: Office.CoercionType.Html, data },
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-        ]
-      : [
-          {
-            coercionType: Office.CoercionType.Text,
-            data: htmlToPlainText(data),
-          },
-          { coercionType: Office.CoercionType.Html, data },
-        ];
-
-  await withPausedSelectionPolling(() =>
-    tryComposeWrite(writeAttempts, (attempt) =>
-      callOfficeAsync<void>(
-        (callback) =>
-          item.body.prependAsync(
-            attempt.data,
-            { coercionType: attempt.coercionType },
-            callback,
-          ),
-        { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
-      ),
-    ),
-  );
 }

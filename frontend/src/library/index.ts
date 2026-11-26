@@ -697,7 +697,9 @@ export type { ExecutorBinding } from "@/lib/generated/v1betaApi/v1betaApiSchemas
 export { createLogger } from "@/utils/debugLogger";
 export {
   copyEmailToClipboard,
+  emailDraftHtmlToText,
   htmlToPlainText,
+  isEmailDraftHtml,
   transformEmailFencesForCopy,
 } from "@/utils/emailClipboard";
 export { mapOutsideCodeFences } from "@/utils/codeFences";

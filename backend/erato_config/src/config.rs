@@ -311,32 +311,25 @@ Output format:
 - No headings, no bullet points, no quotes, no explanations."#;
 
 const BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE: &str = r#"
-FOR THIS MESSAGE ONLY: The user is composing an email in {{body_format}} format and has selected the following text from the email {{source_property}}:
+FOR THIS MESSAGE ONLY: The user is composing an email and has selected the following text from the email {{source_property}}:
 
 {{selected_text}}
 
-Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>. For a subject, write the words only, without tags.
 
-The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
-
-If {{body_format}} is "text", output the rewrite inside exactly one fenced code block with language tag erato-email. The block must contain only plain text replacement content - no HTML tags, no explanations, no labels, and no markdown inside the block.
-
-If {{body_format}} is "html", output the rewrite inside exactly one fenced code block with language tag erato-email-html. The block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no markdown, no explanations, no labels, and no full document wrappers such as <html> or <body>.
+Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 "#;
 
 const BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE: &str = r#"
-FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}). The full draft body is:
+FOR THIS MESSAGE ONLY: The user is composing an email. The full draft body is:
 
 {{full_body}}
 
 For this reply only:
 
-The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
-
-- If {{body_format}} is "text", output specific rewrite suggestions inside fenced code blocks with language tag erato-email. Each such block must contain only plain text suggestion content - no HTML tags, no labels, and no markdown inside the block.
-- If {{body_format}} is "html", output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no labels, no markdown inside the block, and no full document wrappers such as <html> or <body>.
+Output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;
