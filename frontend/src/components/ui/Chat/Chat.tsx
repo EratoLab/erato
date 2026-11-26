@@ -22,6 +22,7 @@ import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
 import { useSharedItemsIntoComposer } from "@/hooks/files/useSharedItemsIntoComposer";
 import { useSidebar, useFilePreviewModal } from "@/hooks/ui";
+import { useMergedRef } from "@/hooks/ui/useMergedRef";
 import { useChatShareLink } from "@/hooks/useChatShareLink";
 import { useProfile } from "@/hooks/useProfile";
 import {
@@ -55,7 +56,7 @@ import { ChatUsageAdvisory } from "./ChatUsageAdvisory";
 import { DelegatedRunsSection } from "./DelegatedRunsSection";
 import { EditChatTitleDialog } from "./EditChatTitleDialog";
 import { dismissChatActionFailure, runChatAction } from "./chatActionFeedback";
-import { useSidebarPageProps } from "./sidebarPage";
+import { useSidebarPage } from "./sidebarPage";
 import { Button } from "../Controls/Button";
 import { ChatErrorBoundary } from "../Feedback/ChatErrorBoundary";
 import { FeedbackCommentDialog } from "../Feedback/FeedbackCommentDialog";
@@ -911,7 +912,16 @@ export const Chat = ({
     </>
   );
 
-  const sidebarPageProps = useSidebarPageProps(sidebarCollapsed, collapsedMode);
+  const { ref: sidebarPageRef, ...sidebarPageProps } = useSidebarPage(
+    sidebarCollapsed,
+    collapsedMode,
+  );
+  const { ref: dropzoneRootRef, ...dropzoneRootProps } =
+    getConversationDropzoneRootProps();
+  const pageRef = useMergedRef(
+    sidebarPageRef,
+    dropzoneRootRef as React.ForwardedRef<HTMLDivElement>,
+  );
 
   return (
     <ChatInputControlsProvider value={chatInputControls}>
@@ -920,6 +930,7 @@ export const Chat = ({
         data-ui="app-shell"
       >
         <ChatHistorySidebar
+          pageRef={sidebarPageRef}
           collapsed={sidebarCollapsed}
           onNewChat={handleSidebarNewChat}
           onToggleCollapse={onToggleCollapse}
@@ -947,8 +958,9 @@ export const Chat = ({
         />
         <ChatErrorBoundary onReset={handleErrorReset}>
           <div
-            {...getConversationDropzoneRootProps()}
+            {...dropzoneRootProps}
             {...sidebarPageProps}
+            ref={pageRef}
             className={clsx(
               "page-shell-skin relative flex h-full min-w-0 flex-1 flex-col",
               "sm:mt-0",

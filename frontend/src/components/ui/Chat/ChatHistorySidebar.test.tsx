@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { ChatHistorySidebar } from "./ChatHistorySidebar";
-import { useSidebarPageProps } from "./sidebarPage";
+import { useSidebarPage } from "./sidebarPage";
 
 import type { ChatSession } from "@/types/chat";
 import type { I18n, Messages } from "@lingui/core";
@@ -1509,14 +1509,13 @@ describe("ChatHistorySidebar", () => {
 
   describe("dragging the drawer", () => {
     const DRAWER_WIDTH = 280;
-    const Page = ({ collapsed }: { collapsed: boolean }) => (
-      <div {...useSidebarPageProps(collapsed, "hidden")} data-testid="page" />
-    );
     const ToggleHarness = ({ initiallyOpen }: { initiallyOpen: boolean }) => {
       const [collapsed, setCollapsed] = useState(!initiallyOpen);
+      const sidebarPage = useSidebarPage(collapsed, "hidden");
       return (
         <>
           <ChatHistorySidebar
+            pageRef={sidebarPage.ref}
             sessions={sessions}
             currentSessionId="chat-1"
             collapsed={collapsed}
@@ -1526,7 +1525,7 @@ describe("ChatHistorySidebar", () => {
             onSessionUnarchive={vi.fn()}
             isLoading={false}
           />
-          <Page collapsed={collapsed} />
+          <div {...sidebarPage} data-testid="page" />
         </>
       );
     };
@@ -1660,6 +1659,7 @@ describe("ChatHistorySidebar", () => {
       expect(page().style.transform).toBe("translateX(140px)");
       expect(scrim.style.transform).toBe("translateX(140px)");
       expect(page()).toHaveAttribute("data-sidebar-moving");
+      expect(scrim).toHaveAttribute("data-sidebar-moving");
 
       touch(edge, "touchmove", 185, 400, 600);
       touch(edge, "touchend", 185, 400, 800);
@@ -1697,16 +1697,49 @@ describe("ChatHistorySidebar", () => {
       });
     });
 
-    it("brings the page back on a tap on it", async () => {
-      await renderDrawer(true);
+    it("brings the page back on a tap on it, keeping its shape until it is back", async () => {
+      vi.useFakeTimers();
+      try {
+        await renderDrawer(true);
+        const scrim = screen.getByTestId("sidebar-scrim");
+
+        fireEvent.click(scrim);
+
+        expect(sidebarMode()).toBe("hidden");
+        expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+        expect(scrim).not.toHaveAttribute("data-sidebar-pushed");
+        expect(page()).toHaveAttribute("data-sidebar-moving");
+
+        act(() => {
+          vi.advanceTimersByTime(250);
+        });
+        expect(page()).toHaveAttribute("data-sidebar-moving");
+        act(() => {
+          vi.advanceTimersByTime(150);
+        });
+        expect(page()).not.toHaveAttribute("data-sidebar-moving");
+        expect(scrim).not.toHaveAttribute("data-sidebar-moving");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("brings the page back from where it is when turned back during the slide", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      touch(edge, "touchstart", 5, 400, 0);
+      touch(edge, "touchmove", 185, 400, 600);
+      touch(edge, "touchend", 185, 400, 800);
+      runFrames(2);
+      expect(sidebarMode()).toBe("expanded");
 
       fireEvent.click(screen.getByTestId("sidebar-scrim"));
 
       expect(sidebarMode()).toBe("hidden");
-      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
-      expect(screen.getByTestId("sidebar-scrim")).not.toHaveAttribute(
-        "data-sidebar-pushed",
-      );
+      expect(page().style.transform).toBe("");
+      expect(page().style.transition).toBe("");
+      expect(page()).toHaveAttribute("data-sidebar-moving");
     });
 
     it("keeps the page in place on a wide screen", async () => {

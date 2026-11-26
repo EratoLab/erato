@@ -9,6 +9,8 @@ const FLICK_PX_PER_MS = 0.35;
 const VELOCITY_WINDOW_MS = 100;
 const SETTLE_MIN_MS = 150;
 const SETTLE_MAX_MS = 300;
+/** The page's own transition when the state switches without a drag. */
+const CLASS_SLIDE_MS = 300;
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
 const SETTLE_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 // eslint-disable-next-line lingui/no-unlocalized-strings -- media query
@@ -66,8 +68,8 @@ export interface DrawerSwipeElements {
   edge: HTMLElement | null;
   /**
    * The page beside the drawer, which the open drawer pushes aside by its
-   * width. Looked up when a drag starts: the page can be replaced while the
-   * drawer stays (an error screen, for one).
+   * width. Looked up when a drag starts: the page can go away while the
+   * drawer stays (the chat's error screen takes its place).
    */
   page: () => HTMLElement | null;
 }
@@ -122,6 +124,7 @@ export function attachDrawerSwipe(
     }
   };
   const releasePage = () => {
+    delete scrim.dataset.sidebarMoving;
     if (movedPage) {
       movedPage.style.transform = "";
       movedPage.style.transition = "";
@@ -163,12 +166,35 @@ export function attachDrawerSwipe(
     }
   };
 
+  const reduceMotion = () =>
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(REDUCED_MOTION_QUERY).matches;
+
+  // Closed without a drag (the button, a tap on the page, Escape, a pick):
+  // the stylesheet slides the page back, and without the marker its corners
+  // would go square as the slide starts.
+  const holdShapeWhileClosing = () => {
+    const target = page();
+    if (!target || reduceMotion()) {
+      return;
+    }
+    if (movedPage !== target) {
+      releasePage();
+      movedPage = target;
+    }
+    target.dataset.sidebarMoving = "";
+    scrim.dataset.sidebarMoving = "";
+    sliding = true;
+    window.clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => {
+      sliding = false;
+      tidy();
+    }, CLASS_SLIDE_MS + 50);
+  };
+
   const settle = (open: boolean, ended: Gesture) => {
-    const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(REDUCED_MOTION_QUERY).matches;
     const remaining = Math.abs((open ? 1 : 0) - ended.progress);
-    const ms = reduceMotion
+    const ms = reduceMotion()
       ? 0
       : Math.round(SETTLE_MIN_MS + (SETTLE_MAX_MS - SETTLE_MIN_MS) * remaining);
 
@@ -280,6 +306,7 @@ export function attachDrawerSwipe(
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
+      scrim.dataset.sidebarMoving = "";
       if (movedPage) {
         movedPage.style.transition = "none";
         movedPage.dataset.sidebarMoving = "";
@@ -349,11 +376,16 @@ export function attachDrawerSwipe(
         sliding = false;
         waitingForPage = false;
         tidy();
+        if (!host.isOpen()) {
+          holdShapeWhileClosing();
+        }
         return;
       }
       if (waitingForPage) {
         waitingForPage = false;
         tidy();
+      } else if (!host.isOpen()) {
+        holdShapeWhileClosing();
       }
     },
     detach: () => {
@@ -373,7 +405,7 @@ interface SidebarDrawerSwipeOptions {
   drawerRef: RefObject<HTMLElement | null>;
   scrimRef: RefObject<HTMLElement | null>;
   edgeRef: RefObject<HTMLElement | null>;
-  findPage: () => HTMLElement | null;
+  pageRef: RefObject<HTMLElement | null> | undefined;
   onOpen: () => void;
   onClose: () => void;
 }
@@ -384,12 +416,12 @@ export function useSidebarDrawerSwipe({
   drawerRef,
   scrimRef,
   edgeRef,
-  findPage,
+  pageRef,
   onOpen,
   onClose,
 }: SidebarDrawerSwipeOptions) {
-  const latest = useRef({ isOpen, findPage, onOpen, onClose });
-  latest.current = { isOpen, findPage, onOpen, onClose };
+  const latest = useRef({ isOpen, pageRef, onOpen, onClose });
+  latest.current = { isOpen, pageRef, onOpen, onClose };
   const swipeRef = useRef<DrawerSwipe | null>(null);
 
   useLayoutEffect(() => {
@@ -407,7 +439,7 @@ export function useSidebarDrawerSwipe({
         drawer,
         scrim,
         edge: edgeRef.current,
-        page: () => latest.current.findPage(),
+        page: () => latest.current.pageRef?.current ?? null,
       },
       {
         isOpen: () => latest.current.isOpen,

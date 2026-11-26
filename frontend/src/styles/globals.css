@@ -1135,16 +1135,21 @@ body {
 
   /* The page beside the sidebar and the scrim that dims it. On a narrow
      screen the open sidebar pushes both aside by its own width, and the part
-     of the page still in view becomes a card; [data-sidebar-moving] is set
-     while a finger or the settle after it moves them. */
-  .sidebar-page-geometry {
-    --sidebar-page-radius: var(--theme-radius-card);
-  }
-
+     of the page still in view becomes a card; [data-sidebar-moving] keeps
+     that shape while they follow a finger or slide back. */
   .sidebar-page-geometry[data-sidebar-pushed],
   .sidebar-page-geometry[data-sidebar-moving] {
     overflow: clip;
-    border-radius: var(--sidebar-page-radius);
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  }
+
+  /* The pushed page reaches past the screen's right edge. Clipped there, it
+     gives a scrollIntoView inside it nothing to scroll sideways. */
+  :has(
+    > .sidebar-page-geometry[data-sidebar-pushed],
+    > .sidebar-page-geometry[data-sidebar-moving]
+  ) {
+    overflow-x: clip;
   }
 
   .sidebar-page-geometry[data-sidebar-pushed] {

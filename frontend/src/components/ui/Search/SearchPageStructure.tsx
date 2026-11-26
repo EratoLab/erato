@@ -9,7 +9,7 @@ import {
   dismissChatActionFailure,
   runChatAction,
 } from "@/components/ui/Chat/chatActionFeedback";
-import { useSidebarPageProps } from "@/components/ui/Chat/sidebarPage";
+import { useSidebarPage } from "@/components/ui/Chat/sidebarPage";
 import { useSidebar } from "@/hooks/ui";
 import { useProfile } from "@/hooks/useProfile";
 import { useChatSession } from "@/providers/ChatProvider";
@@ -182,11 +182,12 @@ export default function SearchPageStructure({
     `SearchPageStructure render. Path: ${pathname}, currentChatId: ${currentChatId ?? "null"}`,
   );
 
-  const sidebarPageProps = useSidebarPageProps(sidebarCollapsed, collapsedMode);
+  const sidebarPage = useSidebarPage(sidebarCollapsed, collapsedMode);
 
   return (
     <div className="flex size-full flex-col sm:flex-row" data-ui="page-shell">
       <ChatHistorySidebar
+        pageRef={sidebarPage.ref}
         collapsed={sidebarCollapsed}
         onNewChat={() => void handleNewChat()}
         onToggleCollapse={onToggleCollapse}
@@ -213,10 +214,10 @@ export default function SearchPageStructure({
 
       {/* Main search content area */}
       <div
-        {...sidebarPageProps}
+        {...sidebarPage}
         className={clsx(
           "flex h-full min-w-0 flex-1 flex-col",
-          sidebarPageProps.className,
+          sidebarPage.className,
         )}
       >
         {children}
