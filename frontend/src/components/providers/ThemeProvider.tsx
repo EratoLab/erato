@@ -804,6 +804,22 @@ export function ThemeProvider({
     };
   }, [theme]);
 
+  // Read by the system-glass shape rules in globals.css; a layout effect for
+  // the same reason as the text size below.
+  const shapes = customThemeConfig?.shapes;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (shapes === "theme") {
+      root.setAttribute("data-theme-shapes", "theme");
+    } else {
+      root.removeAttribute("data-theme-shapes");
+    }
+
+    return () => {
+      root.removeAttribute("data-theme-shapes");
+    };
+  }, [shapes]);
+
   // Layout effect: the attribute changes the root font-size, and a passive
   // effect would paint one frame at the old scale first.
   useLayoutEffect(() => {

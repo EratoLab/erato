@@ -201,7 +201,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
             {showCloseButton ? (
               <button
                 onClick={onClose}
-                className="modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
+                className="modal-close-geometry modal-close-skin focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
                 style={{
                   padding: "var(--theme-spacing-modal-close-button-padding)",
                 }}

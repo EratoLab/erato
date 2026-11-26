@@ -338,6 +338,13 @@ export type ThemeCodeHighlight = {
   blockStyle?: Partial<ThemeCodeHighlightBlockStyle>;
 };
 
+/**
+ * Who shapes controls where the page runs inside an app with system glass:
+ * the system (capsule buttons, large menu and dialog corners) or the theme's
+ * own radius tokens.
+ */
+export type ThemeShapes = "system" | "theme";
+
 export type Theme = {
   colors: ThemeColors;
   borderRadius: string;

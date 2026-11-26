@@ -1,10 +1,11 @@
 import { renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CONVERSATION_MARGIN_PX,
   restingTop,
   usePersonTurn,
+  visibleListHeight,
   writtenAnswerStart,
 } from "./conversationFollow";
 
@@ -121,5 +122,20 @@ describe("usePersonTurn", () => {
     ]);
     expect(turn()).toBe(before);
     expect(replying()).toBe(true);
+  });
+});
+
+describe("visibleListHeight", () => {
+  it("leaves out what a floating composer covers", () => {
+    const list = document.createElement("div");
+    vi.spyOn(list, "clientHeight", "get").mockReturnValue(600);
+    expect(visibleListHeight(list)).toBe(600);
+
+    // jsdom computes no scroll padding.
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      scrollPaddingBottom: "90px",
+    } as CSSStyleDeclaration);
+    expect(visibleListHeight(list)).toBe(510);
+    vi.restoreAllMocks();
   });
 });

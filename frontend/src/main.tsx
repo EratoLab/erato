@@ -6,6 +6,7 @@ import AppRoutes from "./App"; // App.tsx now exports AppRoutes
 import { applyComponentKitRegistrations } from "./config/componentRegistry";
 import { initE2EOverrides } from "./config/componentRegistryE2E";
 import { announceStartScreenReport } from "./lib/shellStartScreen";
+import { markSystemGlass } from "./lib/shellSystemGlass";
 import "./styles/globals.css"; // Corrected path to global stylesheet
 
 // Import Geist fonts
@@ -16,6 +17,7 @@ const startApp = async (): Promise<void> => {
   // Before the page finishes loading, which is when an app that covers the
   // start stops waiting for a page that never said it reports.
   announceStartScreenReport();
+  markSystemGlass(document.documentElement);
 
   // Kit scripts have executed by now (document order); pick up their
   // registrations, which land after the registry module evaluates.
