@@ -12,7 +12,7 @@ import {
 } from "../hooks/composeSelectionStore";
 import { isMessageRead, resolveSupportedMailboxItem } from "../sessionPolicy";
 
-// A compose write (setSelectedDataAsync/prependAsync) drops a callback ~never,
+// A compose write (setSelectedDataAsync) drops a callback ~never,
 // but on a wedged host it could hang the whole insert forever — bound it.
 const COMPOSE_WRITE_TIMEOUT_MS = 15_000;
 
@@ -41,18 +41,35 @@ interface ComposeWriteAttempt {
   data: string;
 }
 
+const BLOCK_TAG_RE = /<(?:p|div|ul|ol|table|blockquote|h[1-6]|pre|hr)\b/i;
+
+/**
+ * One paragraph goes in as inline text: as a block it would split the
+ * paragraph the cursor or the selection is in.
+ */
+function inlineIfOneParagraph(html: string): string {
+  const paragraph = /^<p>([\s\S]*)<\/p>$/.exec(html.trim())?.[1];
+  return paragraph !== undefined && !BLOCK_TAG_RE.test(paragraph)
+    ? paragraph
+    : html;
+}
+
 /** An HTML draft in the body's own format first, the other one if the host refuses. */
 function htmlDraftWriteAttempts(
   draft: string,
   bodyFormat: BodyFormat,
 ): ComposeWriteAttempt[] {
-  const html = {
-    coercionType: Office.CoercionType.Html,
-    data: sanitizeHtmlPreview(draft),
-  };
   const text = {
     coercionType: Office.CoercionType.Text,
     data: emailDraftHtmlToText(draft),
+  };
+  if (!text.data) {
+    // Nothing is left of the draft: writing it would only delete the selection.
+    throw new Error("The draft has no text to insert");
+  }
+  const html = {
+    coercionType: Office.CoercionType.Html,
+    data: inlineIfOneParagraph(sanitizeHtmlPreview(draft)),
   };
   return bodyFormat === "html" ? [html, text] : [text, html];
 }
@@ -152,19 +169,10 @@ export async function getComposeBodyType(): Promise<BodyFormat> {
 }
 
 /**
- * Replaces the current selection in the compose body (or inserts at cursor
- * if nothing is selected).
+ * Replaces the current selection in the compose body, or inserts at the
+ * cursor if nothing is selected, in the body's own format.
  *
- * Automatically detects the body format and adapts:
- * - HTML body + plain text content → converts newlines to `<br>`, inserts as HTML
- * - HTML body + HTML content → cleans the draft, inserts as HTML
- * - Plain text body + HTML content → converts the draft to text (line breaks,
- *   list markers, link addresses) before inserting
- * - Plain text body + plain text content → inserts as-is
- *
- * @param data The content to insert.
- * @param isHtml Whether `data` contains HTML markup. When true and the body
- *               is plain text, it is converted to text automatically.
+ * @param isHtml Whether `data` is an HTML draft.
  */
 export async function replaceComposeSelection(
   data: string,
@@ -233,6 +241,9 @@ export async function replaceComposeSubjectText(
   const replacement = normalizeSelectionText(
     isHtml ? emailDraftHtmlToText(data) : data,
   );
+  if (!replacement) {
+    throw new Error("The draft has no text to insert");
+  }
 
   await withPausedSelectionPolling(async () => {
     const subject = await callOfficeAsync<string>(
@@ -255,28 +266,4 @@ export async function replaceComposeSubjectText(
       { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
     );
   });
-}
-
-/**
- * Prepends content to the beginning of the compose body.
- */
-export async function prependComposeBody(data: string): Promise<void> {
-  const item = getActiveComposeItem();
-
-  const bodyFormat = await getComposeBodyType();
-  const writeAttempts = htmlDraftWriteAttempts(data, bodyFormat);
-
-  await withPausedSelectionPolling(() =>
-    tryComposeWrite(writeAttempts, (attempt) =>
-      callOfficeAsync<void>(
-        (callback) =>
-          item.body.prependAsync(
-            attempt.data,
-            { coercionType: attempt.coercionType },
-            callback,
-          ),
-        { timeoutMs: COMPOSE_WRITE_TIMEOUT_MS },
-      ),
-    ),
-  );
 }

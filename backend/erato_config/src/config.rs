@@ -315,9 +315,9 @@ FOR THIS MESSAGE ONLY: The user is composing an email and has selected the follo
 
 {{selected_text}}
 
-Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>.
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>. For a subject, write the words only, without tags.
 
-Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, lists, <strong>/<em>, <a href> - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
+Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 "#;
@@ -329,7 +329,7 @@ FOR THIS MESSAGE ONLY: The user is composing an email. The full draft body is:
 
 For this reply only:
 
-Output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment: <p>, <br>, lists, <strong>/<em>, <a href> - no markdown, no styles, no images, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
+Output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;

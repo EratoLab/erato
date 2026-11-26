@@ -188,8 +188,8 @@ interface MessageContentProps {
  * Tags newer models drift to when they drop the `erato-email` convention.
  * Only consulted when a host facet produced the message (see
  * {@link HostArtifactContext}), so generic chat code blocks are never
- * hijacked. HTML-vs-text is then taken from the facet's `body_format`, not the
- * tag (the `-html` suffix is exactly what the model keeps normalizing away).
+ * hijacked. HTML-vs-text is then read from the draft itself, not the tag (the
+ * `-html` suffix is exactly what the model keeps normalizing away).
  */
 const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "",

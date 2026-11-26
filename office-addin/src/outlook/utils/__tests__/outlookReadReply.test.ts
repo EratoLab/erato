@@ -75,7 +75,7 @@ describe("escapeTextAsHtml", () => {
 });
 
 describe("buildReplyFormBody", () => {
-  it("sanitizes HTML content with the outbound config", () => {
+  it("cleans an HTML draft", () => {
     expect(buildReplyFormBody("<p>hello</p>", true)).toBe("<p>hello</p>");
     expect(
       buildReplyFormBody('<p onclick="x()">hi<script>x()</script></p>', true),
@@ -93,7 +93,7 @@ describe("buildReplyFormBody", () => {
         true,
       ),
     ).toBe(
-      '<p>Hi</p><ul><li><a href="https://example.com/a">agenda</a></li></ul>',
+      '<p>Hi</p><ul><li><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">agenda</a></li></ul>',
     );
   });
 });

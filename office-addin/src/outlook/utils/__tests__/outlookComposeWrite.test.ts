@@ -10,7 +10,6 @@ import {
   getComposeBodyType,
   replaceComposeSelection,
   replaceComposeSubjectText,
-  prependComposeBody,
 } from "../outlookComposeWrite";
 
 describe("outlookComposeWrite", () => {
@@ -159,154 +158,13 @@ describe("outlookComposeWrite", () => {
         expect.any(Function),
       );
     });
-
-    it("converts plain text to HTML with line breaks for html body", async () => {
-      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Html)),
-          ),
-          setSelectedDataAsync,
-          prependAsync: vi.fn(),
-        },
-      });
-      mailbox.item = item;
-
-      await replaceComposeSelection("line one\nline two");
-      expect(setSelectedDataAsync).toHaveBeenCalledWith(
-        "line one<br>\nline two",
-        { coercionType: Office.CoercionType.Html },
-        expect.any(Function),
-      );
-    });
-
-    it("uses Html coercion for html content into html body", async () => {
-      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Html)),
-          ),
-          setSelectedDataAsync,
-          prependAsync: vi.fn(),
-        },
-      });
-      mailbox.item = item;
-
-      await replaceComposeSelection("<b>bold</b>", true);
-      expect(setSelectedDataAsync).toHaveBeenCalledWith(
-        "<b>bold</b>",
-        { coercionType: Office.CoercionType.Html },
-        expect.any(Function),
-      );
-    });
-
-    it("uses Text coercion for plain content into text body", async () => {
-      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Text)),
-          ),
-          setSelectedDataAsync,
-          prependAsync: vi.fn(),
-        },
-      });
-      mailbox.item = item;
-
-      await replaceComposeSelection("plain text");
-      expect(setSelectedDataAsync).toHaveBeenCalledWith(
-        "plain text",
-        { coercionType: Office.CoercionType.Text },
-        expect.any(Function),
-      );
-    });
-
-    it("strips HTML tags when inserting html content into text body", async () => {
-      const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Text)),
-          ),
-          setSelectedDataAsync,
-          prependAsync: vi.fn(),
-        },
-      });
-      mailbox.item = item;
-
-      await replaceComposeSelection("<b>bold</b> text", true);
-      expect(setSelectedDataAsync).toHaveBeenCalledWith(
-        "bold text",
-        { coercionType: Office.CoercionType.Text },
-        expect.any(Function),
-      );
-    });
-
-    it("falls back to text insertion when html insertion is rejected", async () => {
-      const setSelectedDataAsync = vi.fn((data, options, callback) => {
-        if (options.coercionType === Office.CoercionType.Html) {
-          callback(
-            createMockAsyncResult(undefined, "failed", {
-              message: "HTML insertion unsupported",
-              code: "InvalidFormatError",
-            }),
-          );
-          return;
-        }
-
-        callback(createMockAsyncResult(undefined));
-      });
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn((coercionType, callback) => {
-            if (coercionType === Office.CoercionType.Html) {
-              callback(createMockAsyncResult("plain text"));
-              return;
-            }
-
-            callback(createMockAsyncResult("plain text"));
-          }),
-          setSelectedDataAsync,
-          prependAsync: vi.fn(),
-        },
-      });
-      mailbox.item = item;
-
-      await replaceComposeSelection("<b>bold</b>", true);
-      expect(setSelectedDataAsync).toHaveBeenNthCalledWith(
-        1,
-        "<b>bold</b>",
-        { coercionType: Office.CoercionType.Html },
-        expect.any(Function),
-      );
-      expect(setSelectedDataAsync).toHaveBeenNthCalledWith(
-        2,
-        "bold",
-        { coercionType: Office.CoercionType.Text },
-        expect.any(Function),
-      );
-    });
   });
 
   describe("draft format and body type", () => {
     const HTML_DRAFT =
       '<p>Hi,</p><ul><li>one</li><li><a href="https://example.com/a">two</a></li></ul><img src="https://x.example/p.gif"><p style="color:#fff">Bye</p>';
     const CLEAN_HTML =
-      '<p>Hi,</p><ul><li>one</li><li><a href="https://example.com/a">two</a></li></ul><p>Bye</p>';
+      '<p>Hi,</p><ul><li>one</li><li><a href="https://example.com/a" target="_blank" rel="noopener noreferrer">two</a></li></ul><p>Bye</p>';
     const DRAFT_TEXT = "Hi,\n\n- one\n- two (https://example.com/a)\n\nBye";
     const PLAIN_DRAFT = "Hi,\nthanks";
     const PLAIN_AS_HTML = "Hi,<br>\nthanks";
@@ -460,6 +318,25 @@ describe("outlookComposeWrite", () => {
       ]);
     });
 
+    it("writes a one-paragraph draft as inline text, so the paragraph it lands in stays whole", async () => {
+      const setSelectedDataAsync = installBody(Office.CoercionType.Html);
+
+      await replaceComposeSelection("<p>the <b>revised</b> words</p>", true);
+
+      expect(written(setSelectedDataAsync)).toEqual([
+        [Office.CoercionType.Html, "the <b>revised</b> words"],
+      ]);
+    });
+
+    it("writes nothing when cleaning leaves no text", async () => {
+      const setSelectedDataAsync = installBody(Office.CoercionType.Html);
+
+      await expect(
+        replaceComposeSelection('<img src="https://x.example/p.gif">', true),
+      ).rejects.toThrow("no text");
+      expect(setSelectedDataAsync).not.toHaveBeenCalled();
+    });
+
     it("writes nothing raw when the host refuses both coercions", async () => {
       const setSelectedDataAsync = vi.fn((_data, _options, callback) =>
         callback(
@@ -603,77 +480,6 @@ describe("outlookComposeWrite", () => {
 
       expect(setAsync).toHaveBeenCalledWith(
         "Biweekly sync",
-        expect.any(Function),
-      );
-    });
-  });
-
-  describe("prependComposeBody", () => {
-    it("prepends an appointment organizer description", async () => {
-      const prependAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      mailbox.item = createAppointmentCompose({
-        getAsync: vi.fn(),
-        getTypeAsync: vi.fn((callback) =>
-          callback(createMockAsyncResult(Office.CoercionType.Text)),
-        ),
-        setSelectedDataAsync: vi.fn(),
-        prependAsync,
-      });
-
-      await prependComposeBody("Important: agenda updated");
-
-      expect(prependAsync).toHaveBeenCalledWith(
-        "Important: agenda updated",
-        { coercionType: Office.CoercionType.Text },
-        expect.any(Function),
-      );
-    });
-
-    it("calls prependAsync with matching coercion type", async () => {
-      const prependAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      const item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Html)),
-          ),
-          setSelectedDataAsync: vi.fn(),
-          prependAsync,
-        },
-      });
-      mailbox.item = item;
-
-      await prependComposeBody("<p>header</p>");
-      expect(prependAsync).toHaveBeenCalledWith(
-        "<p>header</p>",
-        { coercionType: Office.CoercionType.Html },
-        expect.any(Function),
-      );
-    });
-
-    it("prepends a cleaned draft as text into a text body", async () => {
-      const prependAsync = vi.fn((_data, _options, callback) =>
-        callback(createMockAsyncResult(undefined)),
-      );
-      mailbox.item = createMockMessageCompose({
-        body: {
-          getAsync: vi.fn(),
-          getTypeAsync: vi.fn((callback) =>
-            callback(createMockAsyncResult(Office.CoercionType.Text)),
-          ),
-          setSelectedDataAsync: vi.fn(),
-          prependAsync,
-        },
-      });
-
-      await prependComposeBody("<ol><li>a</li><li>b</li></ol>");
-      expect(prependAsync).toHaveBeenCalledWith(
-        "1. a\n2. b",
-        { coercionType: Office.CoercionType.Text },
         expect.any(Function),
       );
     });

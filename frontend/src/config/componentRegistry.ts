@@ -50,7 +50,7 @@ import type { ComponentType, ReactNode } from "react";
 export interface EratoEmailCodeBlockProps {
   /** The raw text content inside the erato-email code block. */
   content: string;
-  /** Whether the content is HTML (from `erato-email-html` language tag). */
+  /** Whether the draft is HTML, as read from the block itself. */
   isHtml?: boolean;
 }
 

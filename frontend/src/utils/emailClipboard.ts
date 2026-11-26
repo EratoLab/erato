@@ -1,5 +1,7 @@
 import { mapOutsideCodeFences } from "./codeFences";
 import {
+  EMAIL_DRAFT_PLAIN_BLOCK_TAGS,
+  EMAIL_DRAFT_TAGS,
   linkTargetDisplay,
   linkTextNamesTarget,
   sanitizeHtmlPreview,
@@ -126,12 +128,13 @@ function isCell(element: Element | null): boolean {
   return element?.tagName === "TD" || element?.tagName === "TH";
 }
 
-const HTML_FRAGMENT_TAG_NAMES =
-  "p|br|div|span|a|ul|ol|li|blockquote|h[1-6]|b|i|em|strong|u|s|table|thead|tbody|tr|td|th|pre|code|hr|img";
+const HTML_FRAGMENT_TAG_NAMES = [
+  ...EMAIL_DRAFT_TAGS,
+  ...EMAIL_DRAFT_PLAIN_BLOCK_TAGS,
+].join("|");
 
-// Element tags model-produced HTML fragments reliably contain. Deliberately
-// narrow: plain business text with `<Name>`, `<mail@example.com>` or `<30`
-// must not match.
+// Plain business text with `<Name>`, `<mail@example.com>` or `<30` must not
+// match.
 const HTML_FRAGMENT_TAG_RE = new RegExp(
   `</?(?:${HTML_FRAGMENT_TAG_NAMES})(?:\\s[^<>]*)?/?>`,
   "i",
@@ -141,14 +144,26 @@ const STARTS_WITH_ELEMENT_RE = new RegExp(
   "i",
 );
 
-const HTML_CHARACTER_REFERENCE_RE = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/i;
+const CHARACTER_REFERENCE_RE = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/gi;
+
+/** "R&D;" has the shape of a character reference; only a real one decodes. */
+function holdsCharacterReference(content: string): boolean {
+  const candidates = [
+    ...new Set(content.match(CHARACTER_REFERENCE_RE) ?? []),
+  ].join(" ");
+  return (
+    candidates !== "" &&
+    new DOMParser().parseFromString(candidates, "text/html").body
+      .textContent !== candidates
+  );
+}
 
 /**
  * Whether an email draft block holds HTML. A body that starts with an element
- * tag is HTML whatever the context. Every Outlook draft facet asks for HTML
- * and models keep dropping the `-html` suffix, so for an HTML fence or any
- * block of an email-bodied facet (bodyFormat present, whatever its value) a
- * known tag or a character reference anywhere counts too.
+ * tag is HTML whatever the context. Models drop the `-html` suffix of the
+ * fence, so in an HTML fence and in any block of an email-bodied facet
+ * (bodyFormat present, whatever its value) a known tag or a character
+ * reference anywhere counts too.
  */
 export function isEmailDraftHtml(
   content: string,
@@ -157,18 +172,17 @@ export function isEmailDraftHtml(
   if (STARTS_WITH_ELEMENT_RE.test(content)) {
     return true;
   }
-  const askedForHtml =
-    options.language === "erato-email-html" ||
-    options.language === "html" ||
-    !!options.bodyFormat;
+  const isEmailDraft =
+    options.language === "erato-email-html" || !!options.bodyFormat;
   return (
-    askedForHtml &&
-    (HTML_FRAGMENT_TAG_RE.test(content) ||
-      HTML_CHARACTER_REFERENCE_RE.test(content))
+    isEmailDraft &&
+    (HTML_FRAGMENT_TAG_RE.test(content) || holdsCharacterReference(content))
   );
 }
 
 const QUOTE = "> ";
+// A line holding nothing else is how an editor writes a blank line.
+const NON_BREAKING_SPACE = String.fromCharCode(160);
 const BLANK_LINE_BLOCKS = new Set(
   "P H1 H2 H3 H4 H5 H6 HR TABLE BLOCKQUOTE PRE UL OL".split(" "),
 );
@@ -181,12 +195,9 @@ interface LinePrefix {
 }
 
 /**
- * Converts an HTML email draft to the text a plain-text email can carry:
- * paragraphs as blank-line separated text, `<br>` as a line break, "- " and
- * "1. " list markers with nested lists indented, "text (url)" links, "> "
- * quotes, headings on their own line and table rows as " | " separated
- * lines. Cleans the draft first, so the text holds exactly what the card
- * shows. Drafts only: other HTML keeps {@link htmlToPlainText}.
+ * Converts an HTML email draft to the text a plain-text email can carry.
+ * Cleans the draft first, so the text holds what the card shows. Drafts only:
+ * other HTML keeps {@link htmlToPlainText}.
  */
 export function emailDraftHtmlToText(html: string): string {
   const doc = new DOMParser().parseFromString(
@@ -255,7 +266,12 @@ export function emailDraftHtmlToText(html: string): string {
       return;
     }
     const text = raw.replace(/\s+/g, " ");
-    const visible = line === null ? text.trimStart() : text;
+    if (line === null && text === " " && raw.includes(NON_BREAKING_SPACE)) {
+      pushBlank();
+      return;
+    }
+    const visible =
+      line === null || line.endsWith(" ") ? text.trimStart() : text;
     if (visible) {
       append(visible);
     }
@@ -290,15 +306,22 @@ export function emailDraftHtmlToText(html: string): string {
     }
     if (tag === "A") {
       const href = element.getAttribute("href");
-      if (href && !element.textContent?.trim()) {
-        appendText(linkTargetDisplay(href));
-        return;
-      }
+      const text = element.textContent ?? "";
+      const target = href ? ` (${linkTargetDisplay(href)})` : "";
       visitChildren(element);
-      if (href && !linkTextNamesTarget(element.textContent ?? "", href)) {
-        appendText(` (${linkTargetDisplay(href)})`);
+      // The cleaner has already added the target to a misleading link text.
+      if (href && !linkTextNamesTarget(text, href) && !text.endsWith(target)) {
+        line = line?.trimEnd() ?? null;
+        append(/\s$/.test(text) ? `${target} ` : target);
       }
       return;
+    }
+    if (tag === "S" || tag === "DEL") {
+      // Struck-through words are deleted words; text cannot show the strike.
+      return;
+    }
+    if (tag === "SUP" && element.textContent?.trim()) {
+      append("^");
     }
     if (tag === "TD" || tag === "TH") {
       if (isCell(element.previousElementSibling)) {
@@ -318,7 +341,8 @@ export function emailDraftHtmlToText(html: string): string {
     }
     if (tag === "UL" || tag === "OL") {
       listDepth += 1;
-      let index = 0;
+      let index = Number.parseInt(element.getAttribute("start") ?? "", 10);
+      index = (tag === "OL" && index ? index : 1) - 1;
       element.childNodes.forEach((child) => {
         if (child.nodeName !== "LI") {
           visit(child);

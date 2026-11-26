@@ -380,7 +380,7 @@ export function OutlookEratoEmailRenderer({
     <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
       {isHtml ? (
         <div
-          className="mb-2 text-sm [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
+          className="mb-2 text-sm [&_a]:text-theme-fg-accent [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-theme-border [&_blockquote]:pl-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5"
           // Sanitized with DOMPurify before rendering.
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: previewHtml ?? "" }}

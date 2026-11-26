@@ -160,9 +160,45 @@ describe("emailDraftHtmlToText", () => {
       "https://example.com",
     ],
     [
-      "link without text",
-      '<p><a href="https://example.com/a"></a></p>',
-      "https://example.com/a",
+      "link text ending in a space",
+      '<p>See <a href="https://example.com/a">our page </a>now</p>',
+      "See our page (https://example.com/a) now",
+    ],
+    [
+      "link with an encoded address",
+      '<p><a href="mailto:anna%40example.com?subject=Hi">anna@example.com</a></p>',
+      "anna@example.com",
+    ],
+    [
+      "newline paragraphs around a list",
+      "Hi Anna,\n\nthe points:\n<ul><li>one</li><li>two</li></ul>\n\nBest regards\nSam",
+      "Hi Anna,\n\nthe points:\n\n- one\n- two\n\nBest regards\nSam",
+    ],
+    [
+      "angle-bracket text that is no tag",
+      "<p>Ask Max <max@example.com> or <Name> today</p>",
+      "Ask Max <max@example.com> or <Name> today",
+    ],
+    [
+      "a blank line written as a line with a non-breaking space",
+      "<div>Hi Anna,</div><div>&nbsp;</div><div>Thanks.</div>",
+      "Hi Anna,\n\nThanks.",
+    ],
+    [
+      "numbering that starts later",
+      '<ol start="4"><li>four</li><li>five</li></ol>',
+      "4. four\n5. five",
+    ],
+    [
+      "superscript and struck-through words",
+      "<p>10<sup>6</sup> units for <del>100</del> <ins>80</ins> EUR</p>",
+      "10^6 units for 80 EUR",
+    ],
+    ["spaces around inline tags", "<p>a <strong> b </strong> c</p>", "a b c"],
+    [
+      "sections and definition lists",
+      "<section>one</section><dl><dt>Term</dt><dd>Meaning</dd></dl>",
+      "one\nTerm\nMeaning",
     ],
     [
       "mail link",
@@ -250,12 +286,12 @@ describe("emailDraftHtmlToText", () => {
     ).toBe("Hi\n\nsecret");
   });
 
-  it("shows the real target of a spoofed link once", () => {
+  it("shows the real target of a misleading link once", () => {
     expect(
       emailDraftHtmlToText(
         '<p><a href="https://evil.example">https://bank.example</a></p>',
       ),
-    ).toBe("https://evil.example");
+    ).toBe("https://bank.example (https://evil.example)");
   });
 
   it("drops an unsafe link target", () => {
@@ -282,7 +318,8 @@ describe("isEmailDraftHtml", () => {
       { language: "erato-email", bodyFormat: "text" },
       true,
     ],
-    ["Hi <b>there</b>", { language: "html", bodyFormat: "text" }, true],
+    ["R&D; reports on Friday", { bodyFormat: "text" }, false],
+    ["Tom &amp; Anna", { bodyFormat: "text" }, true],
     ["Hi <b>there</b>", { language: "text", bodyFormat: "text" }, true],
     ["Hi <b>there</b>", { bodyFormat: "text" }, true],
     ["Terms &amp; Conditions", { language: "erato-email-html" }, true],
@@ -417,7 +454,7 @@ describe("copyEmailToClipboard", () => {
     await copyEmailToClipboard(draft, true);
     const item = write.mock.calls[0][0][0] as ClipboardItemStub;
     expect(await readBlob(item.data["text/html"])).toBe(
-      '<p>Hi</p><a href="https://evil.example">https://evil.example</a>',
+      '<p>Hi</p><a href="https://evil.example" target="_blank" rel="noopener noreferrer">https://bank.example (https://evil.example)</a>',
     );
   });
 
