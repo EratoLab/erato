@@ -475,7 +475,6 @@ const ChatHistoryListItem = memo<{
         {layout !== "compact" && showTimestamps && (
           <>
             <p
-              // A phone keeps two lines per chat: the title and the time.
               className={clsx(
                 "truncate text-xs touch-phone:hidden",
                 session.metadata?.fileCount == 0

@@ -6,6 +6,7 @@ import tailwindcss from "tailwindcss";
 import { describe, expect, it } from "vitest";
 
 import tailwindConfig from "../../../tailwind.config";
+import { NARROW_SCREEN, NO_HOVERING_POINTER } from "../pointerQueries";
 
 import type { AtRule, Rule } from "postcss";
 
@@ -184,5 +185,24 @@ describe("the touch-phone variant", () => {
       "(max-width: 639.98px)",
       NOT_HOVERING,
     ]);
+  });
+});
+
+describe("the phone blocks in globals.css", () => {
+  it("use the touch-phone variant's condition, nothing narrower or wider", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/styles/globals.css"),
+      "utf8",
+    );
+    const narrow = [
+      ...css.matchAll(/@media \(max-width: 639\.98px\) \{\s*@media ([^{]+)\{/g),
+    ];
+
+    expect(narrow.length).toBeGreaterThanOrEqual(3);
+    for (const match of narrow) {
+      expect(match[1].trim()).toBe(NO_HOVERING_POINTER);
+    }
+    expect(css.match(/639\.98px/g)).toHaveLength(narrow.length);
+    expect(NARROW_SCREEN).toBe("(max-width: 639.98px)");
   });
 });

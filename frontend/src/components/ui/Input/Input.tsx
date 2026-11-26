@@ -1,6 +1,8 @@
 import clsx from "clsx";
 import { forwardRef } from "react";
 
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
+
 import type React from "react";
 
 export type InputGeometry = "input" | "control";
@@ -115,7 +117,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             // Base styles
             "w-full",
             geometry === "control"
-              ? "text-sm [border-radius:var(--theme-radius-control)] [min-height:var(--theme-spacing-control-min-height)] [padding:var(--theme-spacing-control-padding-y)_var(--theme-spacing-control-padding-x)] touch-phone:text-base"
+              ? `text-sm [border-radius:var(--theme-radius-control)] [min-height:var(--theme-spacing-control-min-height)] [padding:var(--theme-spacing-control-padding-y)_var(--theme-spacing-control-padding-x)] ${PHONE_FIELD_TEXT}`
               : "text-base [border-radius:var(--theme-radius-input)] [padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
             "text-theme-fg-primary placeholder:text-theme-fg-muted",
             "theme-transition",

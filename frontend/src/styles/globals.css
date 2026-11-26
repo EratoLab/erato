@@ -642,30 +642,57 @@ body {
      it would make the one-line field taller than Messages' bar. */
   @media (max-width: 639.98px) {
     @media not all and (hover: hover) and (pointer: fine) {
-      :is(.btn-geometry-icon-sm, .btn-geometry-icon-md):where(
+      :is(.btn-geometry-icon-sm, .btn-geometry-sm):where(
           :not([data-ui="chat-input-controls"] *)
         ) {
-        width: max(2.75rem, var(--theme-spacing-control-min-height));
-        height: max(2.75rem, var(--theme-spacing-control-min-height));
+        --touch-control-box: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height) - 0.25rem
+        );
       }
 
-      :is(.btn-geometry-sm, .btn-geometry-md):where(
-          :not([data-ui="chat-input-controls"] *)
-        ) {
-        min-height: max(2.75rem, var(--theme-spacing-control-min-height));
-        min-width: max(2.75rem, var(--theme-spacing-control-min-height));
+      .btn-geometry-icon-sm:where(:not([data-ui="chat-input-controls"] *)) {
+        width: var(--touch-control-box);
+        height: var(--touch-control-box);
+      }
+
+      .btn-geometry-sm:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: var(--touch-control-box);
+        min-width: var(--touch-control-box);
+      }
+
+      .btn-geometry-icon-md:where(:not([data-ui="chat-input-controls"] *)) {
+        width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+        height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+      }
+
+      .btn-geometry-md:where(:not([data-ui="chat-input-controls"] *)) {
+        min-height: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
+        min-width: max(
+          var(--touch-target-min),
+          var(--theme-spacing-control-min-height)
+        );
       }
 
       .modal-close-geometry {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 2.75rem;
-        min-height: 2.75rem;
+        min-width: var(--touch-target-min);
+        min-height: var(--touch-target-min);
       }
 
       .dropdown-item-geometry {
-        min-height: 2.75rem;
+        min-height: var(--touch-target-min);
       }
     }
   }
@@ -1177,6 +1204,11 @@ body {
    reports what its bars and display cutouts cover. An embedding shell can
    re-declare these. */
 :root {
+  /* iOS's default tap size and the gap its bar buttons keep from the screen
+     edge, used by the phone rules below. px, so Erato's own smaller text size
+     cannot shrink a target. */
+  --touch-target-min: 44px;
+  --phone-edge-inset: 1rem;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -1788,6 +1820,37 @@ body:has(.app-viewport) {
   min-height: var(--sidebar-icon-col-content);
 }
 
+/* On a phone in the hand the small icon control is the tap target of the
+   phone block in @layer components, so the band and the rail column account
+   for that box instead. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    .sidebar-band-geometry {
+      min-height: calc(
+        max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem,
+            2rem
+          ) +
+          2 * var(--theme-spacing-shell-compact-padding-y) + 1px
+      );
+    }
+
+    .sidebar-icon-col-geometry {
+      margin-left: calc(
+        var(--theme-layout-sidebar-slim-width) / 2 -
+          var(--theme-spacing-shell-compact-padding-x) -
+          max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem,
+            var(--sidebar-icon-col-content)
+          ) /
+          2
+      );
+    }
+  }
+}
+
 /* The hidden-mode sidebar toggle floats at 0.5rem + a small icon button
    (control-min-height - 0.25rem) + a 0.25rem gap. */
 :root {
@@ -1802,20 +1865,24 @@ body:has(.app-viewport) {
   @media not all and (hover: hover) and (pointer: fine) {
     :root {
       --chat-top-bar-toggle-column: calc(
-        max(2.75rem, var(--theme-spacing-control-min-height)) + 1.5rem
+        max(
+            var(--touch-target-min),
+            var(--theme-spacing-control-min-height) - 0.25rem
+          ) +
+          var(--phone-edge-inset) + 0.5rem
       );
     }
 
-    /* iOS reads body text at 17 pt and lists menu choices at the same size;
-       rem keeps Erato's own text size setting on top. After the utilities,
-       at hook weight, so a theme.css rule on the hook still wins. */
+    /* iOS reads body text at 17 pt and lists menu choices at the same size,
+       or larger where the theme sets larger text. After the utilities, at
+       hook weight, so a theme.css rule on the hook still wins. */
     [data-ui="message-content"] {
-      font-size: 1.0625rem;
+      font-size: max(1.0625rem, var(--theme-font-size-base));
     }
 
     [data-ui="menu-item"] {
-      font-size: 1.0625rem;
-      line-height: 1.375rem;
+      font-size: max(1.0625rem, var(--theme-font-size-sm));
+      line-height: 1.3;
     }
   }
 }

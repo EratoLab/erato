@@ -917,7 +917,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               ref={expandToggleRef}
               surface="floating"
               onToggle={onToggleCollapse}
-              className="absolute left-2 top-2 z-30 touch-phone:left-4"
+              className="absolute left-2 top-2 z-30 touch-phone:left-[var(--phone-edge-inset)]"
             />
           )}
 

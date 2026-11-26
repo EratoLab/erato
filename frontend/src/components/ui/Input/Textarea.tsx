@@ -1,6 +1,8 @@
 import clsx from "clsx";
 import { forwardRef, useLayoutEffect, useRef } from "react";
 
+import { PHONE_FIELD_TEXT } from "./phoneFieldText";
+
 import type React from "react";
 
 function getAutoResizeBounds(
@@ -223,7 +225,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             // (0,2,0) vs (0,1,0) — so it wins regardless of source order.
             "disabled:cursor-not-allowed disabled:bg-theme-bg-primary disabled:text-theme-fg-muted disabled:opacity-50",
             // Monospace font
-            monospace && "font-mono text-sm",
+            monospace && `font-mono text-sm ${PHONE_FIELD_TEXT}`,
             // Resize behavior
             autoResize ? "resize-none overflow-hidden" : "resize-y",
             // Custom classes

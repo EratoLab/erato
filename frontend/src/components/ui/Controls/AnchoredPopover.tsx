@@ -17,7 +17,11 @@ import { createPortal } from "react-dom";
 
 import { isImeComposing } from "@/utils/isImeComposing";
 
-import { PopoverPanel, resolvePopoverViewportPadding } from "./PopoverPanel";
+import {
+  PopoverPanel,
+  resolvePopoverLengths,
+  VIEWPORT_PADDING_FALLBACK_PX,
+} from "./PopoverPanel";
 
 import type { PopoverWidth } from "./PopoverPanel";
 
@@ -153,22 +157,22 @@ export function AnchoredPopover({
     }
 
     const panelRect = panelElement.getBoundingClientRect();
-    const reference = triggerRef.current ?? panelElement;
+    // Where the page runs under the status bar or the home bar, a panel kept
+    // only off the window edge ends up behind the clock.
+    const [padding, safeTop, safeBottom] = resolvePopoverLengths(
+      [
+        { value: viewportPadding, fallback: VIEWPORT_PADDING_FALLBACK_PX },
+        { value: "var(--safe-area-top)", fallback: 0 },
+        { value: "var(--safe-area-bottom)", fallback: 0 },
+      ],
+      triggerRef.current ?? panelElement,
+    );
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight,
-      padding: resolvePopoverViewportPadding(viewportPadding, reference),
+      padding,
     };
-    // Where the page runs under the status bar or the home bar, a panel kept
-    // only off the window edge ends up behind the clock.
-    const safeArea = {
-      top: resolvePopoverViewportPadding("var(--safe-area-top)", reference, 0),
-      bottom: resolvePopoverViewportPadding(
-        "var(--safe-area-bottom)",
-        reference,
-        0,
-      ),
-    };
+    const safeArea = { top: safeTop, bottom: safeBottom };
 
     const requiredSpace = {
       vertical: panelRect.height + anchorGap + viewport.padding,
