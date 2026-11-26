@@ -225,7 +225,14 @@ describe("the phone blocks in globals.css", () => {
     for (const match of narrow) {
       expect(match[1].trim()).toBe(NO_HOVERING_POINTER);
     }
-    expect(css.match(/639\.98px/g)).toHaveLength(narrow.length);
+    // The one other narrow case is a slim pane used with a mouse (the compact card buttons).
+    const withMouse =
+      css.match(
+        /@media \(max-width: 639\.98px\) and \(hover: hover\) and \(pointer: fine\) \{/g,
+      ) ?? [];
+    expect(css.match(/639\.98px/g)).toHaveLength(
+      narrow.length + withMouse.length,
+    );
     expect(NARROW_SCREEN).toBe("(max-width: 639.98px)");
   });
 });
