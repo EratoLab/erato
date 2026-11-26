@@ -1744,6 +1744,16 @@ msgid "builtinToolApproval.title"
 msgstr "Allow “{name}”?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.elsewhere"
+msgstr "Open the Erato pane where this change was prepared to apply it."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ChainedApprovalItem.tsx
+msgid "chainedApproval.title"
+msgstr "Allow this change?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "You are interacting with an AI chatbot. Generated answers may contain factual errors and should be verified before use."
@@ -4674,8 +4684,8 @@ msgstr "Upload Files"
 
 #. js-lingui-explicit-id
 #: src/pages/HomePage.tsx
-msgid "home.redirecting"
-msgstr "Redirecting to chat..."
+#~ msgid "home.redirecting"
+#~ msgstr "Redirecting to chat..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Controls/InfoTooltip.tsx
@@ -6624,7 +6634,7 @@ msgid "preferences.dialog.desktopSidecar.tools.heading"
 msgstr "Available tools"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Settings/SidecarToolDecisions.tsx
+#: src/components/ui/Settings/ClientToolDecisionList.tsx
 msgid "preferences.dialog.desktopSidecar.tools.saveFailed"
 msgstr "Could not save this choice. Try again."
 
@@ -7164,6 +7174,26 @@ msgstr "Choose when the assistant may use these tools."
 #: src/components/ui/Settings/McpToolApprovalSettings.tsx
 msgid "preferences.dialog.mcpServers.tools.permissions.heading"
 msgstr "Tool permissions"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.caption"
+msgstr "Built into the Office apps · every device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.intro"
+msgstr "Choose whether Erato asks before it changes something in an Office app, such as the open document. Your choice applies wherever you use Erato."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.name"
+msgstr "Office apps"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Settings/OfficeAppsToolDecisions.tsx
+msgid "preferences.dialog.officeApps.tools.heading"
+msgstr "Changes"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Settings/ClientToolFileApprovalSetting.tsx

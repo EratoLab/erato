@@ -85,25 +85,30 @@ export const ApprovalBulkActions = ({
   onDecideAll,
   isBusy,
   testId,
+  allowsAll = true,
 }: {
   itemCount: number;
   onDecideAll: (decision: ToolApprovalDecision) => void;
   isBusy: boolean;
   testId: string;
+  /** Some open item can still be allowed without its own card. */
+  allowsAll?: boolean;
 }) => (
   <div className="space-y-1" data-testid={testId}>
     <div className="flex flex-wrap gap-2">
       {itemCount > 1 && (
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={isBusy}
-            onClick={() => onDecideAll("approve")}
-            data-testid="tool-approval-allow-all"
-          >
-            {t({ id: "toolApproval.allowAll", message: "Allow all" })}
-          </Button>
+          {allowsAll && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isBusy}
+              onClick={() => onDecideAll("approve")}
+              data-testid="tool-approval-allow-all"
+            >
+              {t({ id: "toolApproval.allowAll", message: "Allow all" })}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

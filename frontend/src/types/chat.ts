@@ -56,6 +56,26 @@ export interface MessageError {
   filter_details?: MessageErrorFilterDetails | null;
 }
 
+/** The card a host shows for one accepted (or still pending) submission. */
+export interface HostSubmittedCard {
+  toolCallId: string;
+  language: string;
+  content: string;
+  pending?: boolean;
+}
+
+const NO_SUBMITTED_CARDS: readonly HostSubmittedCard[] = [];
+
+/** A message's submitted cards: `submittedCards`, else `submittedCard` as one. */
+export const submittedCardsOf = (
+  artifact:
+    | Pick<HostArtifact, "submittedCard" | "submittedCards">
+    | null
+    | undefined,
+): readonly HostSubmittedCard[] =>
+  artifact?.submittedCards ??
+  (artifact?.submittedCard ? [artifact.submittedCard] : NO_SUBMITTED_CARDS);
+
 /**
  * Host-neutral artifact envelope: a render hint set on an ASSISTANT message
  * whose triggering user message carried a host action facet (an Outlook
@@ -76,7 +96,7 @@ export interface HostArtifact {
   /** The action facet id that produced this assistant message (free-form). */
   facetId: string;
   /**
-   * Output format the facet requested; drives HTML-vs-text rendering. Present
+   * The facet's `body_format` argument. Its value decides nothing. Present
    * exactly when the facet's output IS an email body (it carried a
    * `body_format` arg) — everything email-shaped keys off it: the drifted
    * fence-tag rescue and the unfenced whole-body email card. Absent for
@@ -99,14 +119,15 @@ export interface HostArtifact {
    * Review hint only; the host still owns consent and live-state validation.
    * `pending` shows the card while its call is still being written or
    * checked, as for a draft the host fills in; otherwise only for an accepted
-   * call.
+   * call. Read as a one-item `submittedCards` when that is absent.
    */
-  submittedCard?: {
-    toolCallId: string;
-    language: string;
-    content: string;
-    pending?: boolean;
-  };
+  submittedCard?: HostSubmittedCard;
+  /**
+   * Every submission of the message that has a card, each shown after the
+   * step that made its call: an answer that makes several changes shows one
+   * card per change. Takes the place of `submittedCard` when set.
+   */
+  submittedCards?: readonly HostSubmittedCard[];
   /**
    * Replaces the default set of drifted fence tags rescued as the email
    * artifact when `bodyFormat` is present (the default covers the tags

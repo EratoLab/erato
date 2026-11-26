@@ -311,32 +311,25 @@ Output format:
 - No headings, no bullet points, no quotes, no explanations."#;
 
 const BUILTIN_OUTLOOK_REWRITE_SELECTION_TEMPLATE: &str = r#"
-FOR THIS MESSAGE ONLY: The user is composing an email in {{body_format}} format and has selected the following text from the email {{source_property}}:
+FOR THIS MESSAGE ONLY: The user is composing an email and has selected the following text from the email {{source_property}}:
 
 {{selected_text}}
 
-Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
+Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>. For a subject, write the words only, without tags.
 
-The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
-
-If {{body_format}} is "text", output the rewrite inside exactly one fenced code block with language tag erato-email. The block must contain only plain text replacement content - no HTML tags, no explanations, no labels, and no markdown inside the block.
-
-If {{body_format}} is "html", output the rewrite inside exactly one fenced code block with language tag erato-email-html. The block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no markdown, no explanations, no labels, and no full document wrappers such as <html> or <body>.
+Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 "#;
 
 const BUILTIN_OUTLOOK_REVIEW_DRAFT_TEMPLATE: &str = r#"
-FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}). The full draft body is:
+FOR THIS MESSAGE ONLY: The user is composing an email. The full draft body is:
 
 {{full_body}}
 
 For this reply only:
 
-The current {{body_format}} is the only authoritative format for this response. Ignore any output formats used in previous turns of this conversation; if a prior turn used a different code-block language tag (for example, `erato-email` vs `erato-email-html`), do not carry it over.
-
-- If {{body_format}} is "text", output specific rewrite suggestions inside fenced code blocks with language tag erato-email. Each such block must contain only plain text suggestion content - no HTML tags, no labels, and no markdown inside the block.
-- If {{body_format}} is "html", output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no labels, no markdown inside the block, and no full document wrappers such as <html> or <body>.
+Output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 
 For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 "#;
@@ -2671,6 +2664,7 @@ impl AppConfig {
                 }
             }
         }
+        validate_server_called_tools(&config.client_tools.tools);
 
         config
             .validate_decision_providers()
@@ -8165,8 +8159,10 @@ pub struct ClientToolsConfig {
 /// user-confirmed mutations.
 ///
 /// Returning client tools MUST be read-only / idempotent: a backend restart
-/// drops the parked turn, so a client may re-execute on recovery. Mutations
-/// must use the terminal `client_actions` (`propose_client_action`) path.
+/// drops the parked turn, so a client may re-execute on recovery. The one
+/// exception are writes the user approves through the server: a
+/// `called_by = "server"` apply tool, or a tool with `approval = "every_call"`
+/// or `"none"`. Their executors must run a call at most once per call id.
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ClientToolConfig {
     /// Tool name exposed to the model (e.g. "fetch_availability", selected in
@@ -8216,8 +8212,8 @@ pub struct ClientToolConfig {
 
     /// Opt into a validated draft submission. Validate arguments against
     /// `parameters` before dispatch; a successful client result ends generation
-    /// without another inference call. The executor must only validate/stage a
-    /// draft; applying it remains a separate user-confirmed client action.
+    /// without another inference call, unless a server-called tool follows
+    /// it (`follows_tool`). The executor must only validate/stage a draft.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub submission: Option<ClientToolSubmissionConfig>,
@@ -8308,6 +8304,95 @@ pub struct ClientToolConfig {
     #[serde(default, skip_serializing_if = "ClientToolApprovalScope::is_call")]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub approval_scope: ClientToolApprovalScope,
+
+    /// Who calls the tool. `server`: never offered to a model; the server
+    /// calls it after the submission named in `follows_tool` was accepted, so
+    /// the change the client checked is the change it applies. Requires
+    /// `requires_client_registration`. Default: `model`.
+    #[serde(default, skip_serializing_if = "ClientToolCalledBy::is_model")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub called_by: ClientToolCalledBy,
+
+    /// Qualified name of a configured submission tool this server-called tool
+    /// follows: the server calls it once for each accepted call of that
+    /// submission, through this tool's approval. At most one tool follows a
+    /// submission. Only for `called_by = "server"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub follows_tool: Option<String>,
+
+    /// Calls the server makes of this tool in one answer, whatever their
+    /// outcome. Must be 1–20. Default: 5. Only with `follows_tool`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub max_calls_per_message: Option<u32>,
+
+    /// Qualified names of read tools whose results describe the state a call
+    /// of this tool replaced. When the answer goes on after the call, their
+    /// earlier results in it reach the model shortened to their replay
+    /// receipt. Default: the followed submission's `recovery_read_tools`.
+    /// Only with `follows_tool`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub invalidated_read_tools: Option<Vec<String>>,
+
+    /// When the user is asked before a call runs. `user_decision` follows the
+    /// user's stored Ask / Always / Never (a server-called tool asks while
+    /// none is stored); `every_call` asks on every call and never offers
+    /// Always; `none` runs without asking and is left out of the user's
+    /// settings. Default: `user_decision`.
+    #[serde(default, skip_serializing_if = "ClientToolApproval::is_user_decision")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub approval: ClientToolApproval,
+
+    /// Action facet action ids this tool carries out, such as
+    /// `word.apply_document_plan`. An action facet's
+    /// `client_actions_always_ask` that lists one of them makes a call that
+    /// uses it ask every time in that facet. An id belongs to at most one
+    /// server-called tool.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub client_actions: Vec<String>,
+}
+
+/// `client_tools.tools.<id>.called_by`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolCalledBy {
+    /// Offered to the model, which calls it.
+    #[default]
+    Model,
+    /// Called by the server after an accepted submission; never offered.
+    Server,
+}
+
+impl ClientToolCalledBy {
+    pub fn is_model(&self) -> bool {
+        *self == Self::Model
+    }
+}
+
+/// `client_tools.tools.<id>.approval`.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Default, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolApproval {
+    /// The user's stored decision for the tool.
+    #[default]
+    UserDecision,
+    /// Asks on every call; a stored Always does not skip it.
+    EveryCall,
+    /// Runs without asking.
+    None,
+}
+
+impl ClientToolApproval {
+    pub fn is_user_decision(&self) -> bool {
+        *self == Self::UserDecision
+    }
 }
 
 /// `client_tools.tools.<id>.approval_scope`.
@@ -8748,6 +8833,55 @@ pub struct ClientToolSubmissionConfig {
     )]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub part_key: String,
+    /// JSON Pointer to a top-level boolean argument that says another change
+    /// follows this one, such as `/more_changes`. The server reads it and
+    /// removes it before the client sees the call. Without it, the answer
+    /// ends after a followed change that applied cleanly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub more_steps_key: Option<String>,
+    // Replaced by `follows_tool` on the server-called tool. Read only so that
+    // load refuses a config that still has the table: serde would drop it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub apply: Option<UnreadTable>,
+}
+
+/// A table this version no longer reads, whatever it holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Facet, HeapSize)]
+#[facet(opaque)]
+pub struct UnreadTable;
+
+impl<'de> Deserialize<'de> for UnreadTable {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        serde::de::IgnoredAny::deserialize(deserializer).map(|_| Self)
+    }
+}
+
+impl Serialize for UnreadTable {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        serializer.serialize_map(Some(0))?.end()
+    }
+}
+
+impl ClientToolConfig {
+    /// Calls of a following tool per answer.
+    pub fn max_calls_per_message(&self) -> u32 {
+        self.max_calls_per_message.unwrap_or(5)
+    }
+
+    /// The read tools a call of this tool makes stale, given the submission
+    /// it follows.
+    pub fn invalidated_read_tools<'a>(
+        &'a self,
+        followed: &'a ClientToolSubmissionConfig,
+    ) -> &'a [String] {
+        self.invalidated_read_tools
+            .as_deref()
+            .unwrap_or(&followed.recovery_read_tools)
+    }
 }
 
 fn default_submission_max_attempts() -> u32 {
@@ -8793,6 +8927,8 @@ impl Default for ClientToolSubmissionConfig {
             max_part_calls: default_submission_max_part_calls(),
             max_row_tries: default_submission_max_row_tries(),
             part_key: default_submission_part_key(),
+            more_steps_key: None,
+            apply: None,
         }
     }
 }
@@ -8900,6 +9036,133 @@ fn validate_submission_parts(
                 "Client tool '{name}' is a part tool of both '{qualified}' and '{}'.",
                 other.qualified_name()
             );
+        }
+    }
+}
+
+/// Panics unless every server-called tool follows a submission that no other
+/// tool follows and can be dispatched like one, the follower's settings are
+/// usable, and each facet action id belongs to at most one server-called
+/// tool.
+fn validate_server_called_tools(tools: &HashMap<String, ClientToolConfig>) {
+    let mut followers: HashMap<&str, String> = HashMap::new();
+    for tool in tools.values() {
+        let qualified = tool.qualified_name();
+        if let Some(submission) = &tool.submission {
+            if submission.apply.is_some() {
+                panic!(
+                    "Client tool '{qualified}' has a [submission.apply] table, which this version does not read: set follows_tool = \"{qualified}\" on the called_by = \"server\" tool, and use submission.more_steps_key, max_calls_per_message and invalidated_read_tools."
+                );
+            }
+            if let Some(pointer) = &submission.more_steps_key {
+                let top_level = pointer
+                    .strip_prefix('/')
+                    .is_some_and(|key| !key.is_empty() && !key.contains('/') && key.len() <= 64);
+                if !top_level {
+                    panic!(
+                        "Client tool '{qualified}' submission.more_steps_key must point to a top-level argument, such as \"/more_changes\"."
+                    );
+                }
+            }
+        }
+        let Some(followed_name) = &tool.follows_tool else {
+            if tool.max_calls_per_message.is_some() || tool.invalidated_read_tools.is_some() {
+                panic!(
+                    "Client tool '{qualified}' sets max_calls_per_message or invalidated_read_tools, which apply only together with follows_tool."
+                );
+            }
+            continue;
+        };
+        if tool.called_by != ClientToolCalledBy::Server {
+            panic!(
+                "Client tool '{qualified}' sets follows_tool, which is only for called_by = \"server\"."
+            );
+        }
+        let Some(followed) = tools
+            .values()
+            .find(|candidate| candidate.qualified_name() == *followed_name)
+            .filter(|candidate| candidate.submission.is_some())
+        else {
+            panic!(
+                "Client tool '{qualified}' follows_tool '{followed_name}' must name a configured submission tool."
+            );
+        };
+        if let Some(previous) = followers.insert(followed_name.as_str(), qualified.clone()) {
+            let mut pair = [previous, qualified];
+            pair.sort();
+            panic!(
+                "Submission '{followed_name}' is followed by more than one server-called tool: '{}' and '{}'.",
+                pair[0], pair[1]
+            );
+        }
+        if !(1..=20).contains(&tool.max_calls_per_message()) {
+            panic!("Client tool '{qualified}' max_calls_per_message must be 1–20.");
+        }
+        for name in tool.invalidated_read_tools.iter().flatten() {
+            let read = configured_non_submission_tool(tools, name);
+            if read.is_none_or(|read| {
+                read.namespace_or_default() != followed.namespace_or_default()
+                    || read.called_by == ClientToolCalledBy::Server
+            }) {
+                panic!(
+                    "Client tool '{qualified}' invalidated_read_tools entry '{name}' must name a configured model-called client tool of the namespace '{}'.",
+                    followed.namespace_or_default()
+                );
+            }
+        }
+    }
+    let mut action_owners: HashMap<&str, String> = HashMap::new();
+    for tool in tools.values() {
+        let qualified = tool.qualified_name();
+        for action in &tool.client_actions {
+            if action.is_empty() || action != action.trim() {
+                panic!("Client tool '{qualified}' has an empty or untrimmed client_actions entry.");
+            }
+        }
+        if tool.approval != ClientToolApproval::UserDecision
+            && tool.child_access == ClientToolChildAccess::Read
+        {
+            panic!(
+                "Client tool '{qualified}' cannot combine approval = \"every_call\" or \"none\" with child_access = \"read\"."
+            );
+        }
+        if tool.called_by != ClientToolCalledBy::Server {
+            continue;
+        }
+        let refusal = if !tool.requires_client_registration {
+            Some("requires requires_client_registration = true")
+        } else if tool.submission.is_some() {
+            Some("cannot be a submission")
+        } else if tool.durable.is_some() {
+            Some("cannot be durable")
+        } else if tool.child_access == ClientToolChildAccess::Read {
+            Some("cannot set child_access = \"read\"")
+        } else if tool.approval_scope == ClientToolApprovalScope::Context {
+            Some("cannot set approval_scope = \"context\"")
+        } else if tool.approval == ClientToolApproval::None {
+            Some("cannot set approval = \"none\"")
+        } else if tools.values().any(|owner| {
+            owner
+                .submission
+                .as_ref()
+                .is_some_and(|submission| submission.part_tools.contains(&qualified))
+        }) {
+            Some("cannot be a part tool")
+        } else {
+            None
+        };
+        if let Some(refusal) = refusal {
+            panic!("Client tool '{qualified}' sets called_by = \"server\" and {refusal}.");
+        }
+        if tool.follows_tool.is_none() {
+            panic!("Client tool '{qualified}' sets called_by = \"server\" and needs follows_tool.");
+        }
+        for action in &tool.client_actions {
+            if let Some(previous) = action_owners.insert(action, qualified.clone()) {
+                panic!(
+                    "Client action '{action}' is listed by the server-called tools '{previous}' and '{qualified}'."
+                );
+            }
         }
     }
 }

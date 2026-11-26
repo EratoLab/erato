@@ -1971,9 +1971,21 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.approval": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.approval_scope": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.called_by": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2007,6 +2019,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.client_actions.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.description": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
@@ -2037,9 +2055,21 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.follows_tool": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.host_context": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.8.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.invalidated_read_tools.[]": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2058,6 +2088,12 @@
   "client_tools.tools.<key>.label.object_kind": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.max_calls_per_message": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
@@ -2109,6 +2145,13 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "client_tools.tools.<key>.submission.apply": {
+    "default_value_security": "unreviewed",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "client_tools.tools.<key>.submission.max_attempts": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.7.0",
@@ -2130,6 +2173,12 @@
   "client_tools.tools.<key>.submission.max_row_tries": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "client_tools.tools.<key>.submission.more_steps_key": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "unreleased",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

@@ -795,22 +795,22 @@ chat_provider_ids = ["test-token-limit"]
 # delegation = { max_tasks_per_turn = 3 }
 #
 # Outlook override example: redefine the builtin Outlook facets only if you
-# need to customize them. If you do, keep the text-vs-HTML contract aligned
-# with the frontend renderer and Outlook insertion behavior.
+# need to customize them. If you do, keep asking for an erato-email-html
+# block: the add-in converts the draft to text when the message is plain
+# text. body_format still arrives as an argument: keep it in allowed_args,
+# it needs no placeholder.
 #
 # [action_facets.facets.outlook_rewrite_selection]
 # display_name = "Outlook Rewrite Selection"
 # platform = "outlook"
 # template = """
-# FOR THIS MESSAGE ONLY: The user is composing an email in {{body_format}} format and has selected the following text from the email {{source_property}}:
+# FOR THIS MESSAGE ONLY: The user is composing an email and has selected the following text from the email {{source_property}}:
 #
 # {{selected_text}}
 #
-# Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs.
+# Rewrite ONLY the selected text above - do not include surrounding email content such as greetings, sign-offs, or other paragraphs. When the selection is part of a paragraph, write the rewrite without <p>. For a subject, write the words only, without tags.
 #
-# If {{body_format}} is "text", output the rewrite inside exactly one fenced code block with language tag erato-email. The block must contain only plain text replacement content - no HTML tags, no explanations, no labels, and no markdown inside the block.
-#
-# If {{body_format}} is "html", output the rewrite inside exactly one fenced code block with language tag erato-email-html. The block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no markdown, no explanations, no labels, and no full document wrappers such as <html> or <body>.
+# Output the rewrite inside exactly one fenced code block with language tag erato-email-html. Write a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no explanations, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 #
 # Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new selection, respond normally in plain text.
 # """
@@ -820,14 +820,13 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Outlook Review Draft"
 # platform = "outlook"
 # template = """
-# FOR THIS MESSAGE ONLY: The user is composing an email (format: {{body_format}}). The full draft body is:
+# FOR THIS MESSAGE ONLY: The user is composing an email. The full draft body is:
 #
 # {{full_body}}
 #
 # For this reply only:
 #
-# - If {{body_format}} is "text", output specific rewrite suggestions inside fenced code blocks with language tag erato-email. Each such block must contain only plain text suggestion content - no HTML tags, no labels, and no markdown inside the block.
-# - If {{body_format}} is "html", output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment suitable for inserting into an existing Outlook email body - no labels, no markdown inside the block, and no full document wrappers such as <html> or <body>.
+# Output specific rewrite suggestions inside fenced code blocks with language tag erato-email-html. Each such block must contain only a simple HTML fragment: <p>, <br>, <ul>/<ol>, <strong>/<em>, <a href> with a full https:// or mailto: address - no markdown, no styles, no images, no labels, and no full document wrappers such as <html> or <body>. Always write HTML; Outlook converts it when the message is plain text. Ignore any output formats used in previous turns of this conversation.
 #
 # For general feedback (tone, completeness, structure), use plain text. Output exactly one suggestion unless the user explicitly asks for alternatives. On follow-up messages without a new draft, respond normally in plain text.
 # """
@@ -877,7 +876,7 @@ chat_provider_ids = ["test-token-limit"]
 # allowed_args = ["body_format"]
 # template = """
 # FOR THIS MESSAGE ONLY: <your reply-drafting instructions; have the model emit
-# the reply body in an erato-email / erato-email-html fenced block and call the
+# the reply body in an erato-email-html fenced block and call the
 # propose_client_action tool exactly once with the recommended action>
 # """
 #
@@ -979,6 +978,30 @@ chat_provider_ids = ["test-token-limit"]
 # # action = "comment"
 # # object_kind = "comment"
 # # fields = ["$.changes[*].op"]
+#
+# # Optional, for a submission the client checks before it is applied (the
+# # proposal): once the client accepts it, the server calls the tool whose
+# # `follows_tool` names the submission (the operation) itself, through that
+# # tool's approval (Ask by default, or the user's Always / Never). The
+# # operation is never offered to the model. The submission's `more_steps_key`
+# # names a top-level boolean argument the server removes before the client
+# # sees the call; when true the answer goes on after the operation. At most
+# # `max_calls_per_message` operations per answer (1-20, default 5).
+# # [client_tools.tools.editor_apply_draft]
+# # name = "apply_draft"
+# # namespace = "editor"
+# # description = "Apply the checked draft"
+# # parameters = '{"type":"object"}'
+# # called_by = "server"              # "model" (default) | "server"
+# # approval = "user_decision"        # "user_decision" (default) | "every_call" | "none"
+# # requires_client_registration = true
+# # timeout_ms = 120000
+# # follows_tool = "editor/submit_draft"
+# # max_calls_per_message = 5
+# # invalidated_read_tools = ["editor/read_context"]   # default: the submission's recovery_read_tools
+# # client_actions = ["editor.apply_draft"]
+# # [client_tools.tools.editor_submit_draft.submission]
+# # more_steps_key = "/more_changes"
 #
 # # Optional: with durable_operations_enabled, a call whose stream drops or
 # # times out parks durably for the same device and Outlook mailbox instead of

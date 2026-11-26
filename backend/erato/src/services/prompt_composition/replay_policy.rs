@@ -166,6 +166,44 @@ pub fn upgrade_legacy_receipt(mut message: InputMessage) -> InputMessage {
     message
 }
 
+impl ToolReplayPolicy {
+    /// A result of the answer in progress shortened to the tool's receipt
+    /// fields, with `note` in place of the earlier-turn note. `None` for a
+    /// tool without a receipt: its results are never shortened.
+    pub fn shortened_result(&self, tool_name: &str, output: &Value, note: &str) -> Option<Value> {
+        let spec = self.receipts.get(tool_name)?;
+        let mut result = shortened_output(output, spec);
+        if let Some(status) = output.get("status") {
+            result
+                .entry("status".to_string())
+                .or_insert_with(|| status.clone());
+        }
+        result.insert(
+            RECEIPT_MARKER_KEY.to_string(),
+            Value::String(note.to_string()),
+        );
+        Some(Value::Object(result))
+    }
+}
+
+/// The receipt fields of a result, at their nesting, plus a refused call's
+/// first validation issue.
+fn shortened_output(output: &Value, spec: &ReceiptSpec) -> Map<String, Value> {
+    let mut result = kept_fields(Some(output), &spec.output_paths, |value, size| {
+        Some(if size <= MAX_RECEIPT_FIELD_BYTES {
+            value.clone()
+        } else {
+            Value::String(size_marker(size))
+        })
+    });
+    if let Some(issue) = first_validation_issue(Some(output)) {
+        result
+            .entry("validation_errors".to_string())
+            .or_insert_with(|| Value::Array(vec![issue.clone()]));
+    }
+    result
+}
+
 fn shorten_tool_use(tool_use: &mut ToolUse, spec: &ReceiptSpec) {
     // A call whose arguments are a copied receipt meant the arguments under
     // "kept"; replaying the wrapper would teach it again.

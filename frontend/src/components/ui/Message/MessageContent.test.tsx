@@ -1150,6 +1150,85 @@ describe("MessageContent", () => {
     expect(container.querySelector("b")).toHaveTextContent("Bold reply");
   });
 
+  it.each([
+    ["erato-email", "text"],
+    ["erato-email", undefined],
+    ["email", "text"],
+    ["erato-email-html", "text"],
+  ] as const)(
+    "renders a %s fence whose body starts with a tag as HTML (body_format %s)",
+    (language, bodyFormat) => {
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(
+            `\`\`\`${language}\n<p>Hi,</p><ul><li>one</li></ul>\n\`\`\``,
+          )}
+          outlookArtifact={{
+            facetId: "outlook_reply_from_read",
+            bodyFormat,
+            renderMode: "body",
+          }}
+        />,
+      );
+
+      expect(container.querySelector("li")).toHaveTextContent("one");
+      expect(container.querySelector(".whitespace-pre-wrap")).toBeNull();
+    },
+  );
+
+  it.each(["```erato-email\n", "```html\n", "```email\n", ""])(
+    "renders a draft that opens with text and has tags further in as HTML (%j, body_format text)",
+    (fenceStart) => {
+      const draft =
+        "Hi Sam,<br><br>thanks for the <strong>signed</strong> copy.";
+      const { container } = renderWithTheme(
+        <MessageContent
+          content={textContent(
+            fenceStart ? `${fenceStart}${draft}\n\`\`\`` : draft,
+          )}
+          outlookArtifact={{
+            facetId: "outlook_review_draft",
+            bodyFormat: "text",
+            renderMode: fenceStart ? "suggestions" : "body",
+          }}
+        />,
+      );
+
+      expect(container.querySelector("strong")).toHaveTextContent("signed");
+      expect(container).not.toHaveTextContent("<br>");
+    },
+  );
+
+  it("renders an unfenced reply that starts with a tag as HTML when the facet says text", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent("<p>Hi,</p><p>thanks.</p>")}
+        outlookArtifact={{
+          facetId: "outlook_review_draft",
+          bodyFormat: "text",
+          renderMode: "body",
+        }}
+      />,
+    );
+
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+    expect(container.querySelector(".whitespace-pre-wrap")).toBeNull();
+  });
+
+  it("shows an HTML draft without remote images or hidden text", () => {
+    const { container } = renderWithTheme(
+      <MessageContent
+        content={textContent(
+          '```erato-email-html\n<p>Hi<img src="https://tracker.example/p.gif"></p><p style="display:none">secret</p>\n```',
+        )}
+      />,
+    );
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("[style]")).toBeNull();
+    expect(container).toHaveTextContent("secret");
+  });
+
   it("keeps a plain-text draft under the canonical tag as text even when the facet says html", () => {
     const { container } = renderWithTheme(
       <MessageContent
@@ -1679,6 +1758,62 @@ describe("MessageContent", () => {
         expect(screen.getByTestId("submitted-card")).toHaveTextContent(
           "Planning",
         );
+      } finally {
+        componentRegistry.HostCardCodeBlock = original;
+      }
+    });
+
+    it("renders each submitted card after the step that made its call", () => {
+      const original = componentRegistry.HostCardCodeBlock;
+      componentRegistry.HostCardCodeBlock = function SubmittedCardStub({
+        content,
+      }) {
+        return <div data-testid="submitted-card">{content}</div>;
+      };
+      try {
+        const call = (id: string) =>
+          ({ ...toolUseContent({}), tool_call_id: id }) as ContentPart;
+        renderWithTheme(
+          <MessageContent
+            content={[
+              call("call-1"),
+              ...textContent("First step applied, now the second."),
+              call("call-2"),
+              ...textContent("Both steps are done."),
+            ]}
+            hostArtifact={{
+              facetId: "editor",
+              renderMode: "suggestions",
+              cardFenceLanguages: ["editor-draft"],
+              submittedCards: [
+                {
+                  toolCallId: "call-2",
+                  language: "editor-draft",
+                  content: "Second change",
+                },
+                {
+                  toolCallId: "call-1",
+                  language: "editor-draft",
+                  content: "First change",
+                },
+              ],
+            }}
+          />,
+        );
+        const cards = screen.getAllByTestId("submitted-card");
+        expect(cards.map((card) => card.textContent)).toEqual([
+          "First change",
+          "Second change",
+        ]);
+        const between = screen.getByText("First step applied, now the second.");
+        const last = screen.getByText("Both steps are done.");
+
+        const follows = (a: Node, b: Node) =>
+          (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0;
+        expect(follows(cards[0], between)).toBe(true);
+        expect(follows(between, cards[1])).toBe(true);
+        expect(follows(cards[1], last)).toBe(true);
       } finally {
         componentRegistry.HostCardCodeBlock = original;
       }

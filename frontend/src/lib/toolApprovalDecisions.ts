@@ -16,7 +16,16 @@ export interface DecidedApproval {
   changeRequest?: string;
   /** For `approve` or `reject` said by voice: the endpoint's receipt. */
   voiceReceipt?: string;
+  /**
+   * For `approve` or `approve_always` of an item with `follows` set: what the
+   * user chose on the host's own card, sent as `client_confirmation`.
+   */
+  clientConfirmation?: unknown;
 }
+
+/** The decisions that may carry a host card's `client_confirmation`. */
+const takesClientConfirmation = (decision: ToolApprovalDecision): boolean =>
+  decision === "approve" || decision === "approve_always";
 
 /** What a body needs of an open item: a task's item names its question. */
 export interface DecidedItem {
@@ -97,6 +106,14 @@ export const buildContinueStreamBody = ({
         ? { change_request: item.changeRequest }
         : {}),
       ...(item.voiceReceipt ? { voice_receipt: item.voiceReceipt } : {}),
+      ...(item.clientConfirmation !== undefined &&
+      takesClientConfirmation(item.decision)
+        ? {
+            client_confirmation: item.clientConfirmation as NonNullable<
+              ApprovalDecisionItem["client_confirmation"]
+            >,
+          }
+        : {}),
       ...questionOf(items, item.approvalId),
     }));
     return {

@@ -64,12 +64,14 @@ import {
   useMessageTextActionsFeature,
   useTraceFeature,
 } from "@/providers/FeatureConfigProvider";
+import { submittedCardsOf } from "@/types/chat";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import {
   rehypeWrittenStart,
   writtenAnswerStart,
 } from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
+import { isEmailDraftHtml } from "@/utils/emailClipboard";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
@@ -187,8 +189,8 @@ interface MessageContentProps {
  * Tags newer models drift to when they drop the `erato-email` convention.
  * Only consulted when a host facet produced the message (see
  * {@link HostArtifactContext}), so generic chat code blocks are never
- * hijacked. HTML-vs-text is then taken from the facet's `body_format`, not the
- * tag (the `-html` suffix is exactly what the model keeps normalizing away).
+ * hijacked. HTML-vs-text is then read from the draft itself, not the tag (the
+ * `-html` suffix is exactly what the model keeps normalizing away).
  */
 const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "",
@@ -200,16 +202,6 @@ const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "plain",
   "html",
 ]);
-
-// Element tags model-produced HTML fragments reliably contain. Deliberately
-// narrow: plain German business text with `<Name>`, `<mail@firma.de>` or
-// `<30 T€` must not match.
-const HTML_FRAGMENT_TAG_RE =
-  /<\/?(?:p|br|div|span|a|ul|ol|li|blockquote|h[1-6]|b|i|em|strong|u|s|table|thead|tbody|tr|td|th|pre|code|hr|img)(?:\s[^<>]*)?\/?>/i;
-
-function looksLikeHtmlFragment(text: string): boolean {
-  return HTML_FRAGMENT_TAG_RE.test(text);
-}
 
 /**
  * The `erato-appointment` fence (the JSON payload a scheduling facet's
@@ -341,20 +333,16 @@ function classifyEratoEmailBlock(
 ): { isEmail: boolean; isHtml: boolean } {
   // isHtml drives data-lossy paths (innerHTML render, text/html clipboard,
   // Html coercion, reply prefill), where plain text loses its newlines and
-  // DOMPurify deletes <angle-bracket> content. Treating HTML as text is merely
-  // ugly. So: never classify html without markup evidence in the content;
-  // body_format alone (the DESTINATION format, not the produced one) never
-  // promotes.
-  if (language === "erato-email") {
-    // Rescue the "-html suffix dropped" drift only when the facet asked for
-    // html AND the content actually contains markup.
+  // DOMPurify deletes <angle-bracket> content, so it needs markup evidence in
+  // the content; body_format alone never promotes.
+  if (language === "erato-email" || language === "erato-email-html") {
     return {
       isEmail: true,
-      isHtml: artifact?.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: isEmailDraftHtml(content, {
+        language,
+        bodyFormat: artifact?.bodyFormat,
+      }),
     };
-  }
-  if (language === "erato-email-html") {
-    return { isEmail: true, isHtml: looksLikeHtmlFragment(content) };
   }
   // Only when we KNOW an email-bodied facet produced this message do we accept
   // drifted tags. `bodyFormat` presence is what marks the facet email-bodied —
@@ -367,7 +355,10 @@ function classifyEratoEmailBlock(
   ) {
     return {
       isEmail: true,
-      isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: isEmailDraftHtml(content, {
+        language: language.toLowerCase(),
+        bodyFormat: artifact.bodyFormat,
+      }),
     };
   }
   return { isEmail: false, isHtml: false };
@@ -591,7 +582,11 @@ function MarkdownCode({
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
-      <EratoEmailSuggestion content={codeContent} isHtml={emailBlock.isHtml} />
+      <EratoEmailSuggestion
+        content={codeContent}
+        isHtml={emailBlock.isHtml}
+        isStreaming={isStreaming}
+      />
     );
   }
 
@@ -615,7 +610,8 @@ function MarkdownCode({
 
   if (isBlockCode && rules.isHostCardLanguage(language)) {
     // An accepted submission replaces the echoed fence to avoid a second actionable card.
-    if (artifact?.submittedCard?.language === language) return null;
+    if (submittedCardsOf(artifact).some((card) => card.language === language))
+      return null;
     return <HostCardBlock language={language} content={codeContent} />;
   }
 
@@ -2064,16 +2060,34 @@ export const MessageContent = memo(function MessageContent({
     [content],
   );
 
-  const submittedCard = hostArtifact?.submittedCard;
-  const hasSubmittedCard =
-    submittedCard &&
-    fenceRulesFor(hostArtifact).isHostCardLanguage(submittedCard.language) &&
-    content.some(
-      (part) =>
-        part.content_type === "tool_use" &&
-        part.tool_call_id === submittedCard.toolCallId &&
-        (submittedCard.pending === true || part.status === "success"),
-    );
+  // Each submitted card with the index of the call it shows, in call order:
+  // it is drawn after the step that made the call.
+  const submittedCards = React.useMemo(() => {
+    const cards = submittedCardsOf(hostArtifact);
+    if (cards.length === 0) return [];
+    const rules = fenceRulesFor(hostArtifact ?? null);
+    return cards
+      .filter((card) => rules.isHostCardLanguage(card.language))
+      .flatMap((card) => {
+        const index = content.findIndex(
+          (part) =>
+            part.content_type === "tool_use" &&
+            part.tool_call_id === card.toolCallId &&
+            (card.pending === true || part.status === "success"),
+        );
+        return index === -1 ? [] : [{ card, index }];
+      })
+      .sort((left, right) => left.index - right.index);
+  }, [content, hostArtifact]);
+  const unplacedCards = submittedCards.filter(
+    ({ index }) =>
+      !clusters.some(
+        (cluster) =>
+          cluster.kind === "trace" &&
+          index >= cluster.startIndex &&
+          index <= cluster.endIndex,
+      ),
+  );
 
   const traceDurationMs = React.useMemo(
     () =>
@@ -2138,8 +2152,15 @@ export const MessageContent = memo(function MessageContent({
           // (text/image) content exists below it.
           const lastTracePartIndex = cluster.endIndex;
           // A card shown while the message streams follows the work the trace still does.
+          const clusterCards = submittedCards.filter(
+            ({ index }) =>
+              index >= cluster.startIndex && index <= cluster.endIndex,
+          );
           const hasLaterContent =
-            (!!hasSubmittedCard && !isStreaming) ||
+            (!isStreaming &&
+              submittedCards.some(
+                ({ index }) => index >= cluster.startIndex,
+              )) ||
             foldsWordPlan ||
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
@@ -2203,6 +2224,17 @@ export const MessageContent = memo(function MessageContent({
                   </React.Fragment>
                 );
               })}
+              {clusterCards.map(({ card }) => (
+                <HostArtifactContext.Provider
+                  key={`submitted-card-${card.toolCallId}`}
+                  value={hostArtifact ?? null}
+                >
+                  <HostCardBlock
+                    language={card.language}
+                    content={card.content}
+                  />
+                </HostArtifactContext.Provider>
+              ))}
             </React.Fragment>
           );
         }
@@ -2275,10 +2307,10 @@ export const MessageContent = memo(function MessageContent({
               >
                 <EratoEmailSuggestion
                   content={textForArtifact}
-                  isHtml={
-                    wholeBodyArtifact.bodyFormat === "html" &&
-                    looksLikeHtmlFragment(textForArtifact)
-                  }
+                  isHtml={isEmailDraftHtml(textForArtifact, {
+                    bodyFormat: wholeBodyArtifact.bodyFormat,
+                  })}
+                  isStreaming={!!isStreaming}
                 />
               </HostArtifactContext.Provider>
             );
@@ -2353,15 +2385,14 @@ export const MessageContent = memo(function MessageContent({
 
         return null;
       })}
-      {hasSubmittedCard && (
-        <HostArtifactContext.Provider value={hostArtifact}>
-          <HostCardBlock
-            key={submittedCard.toolCallId}
-            language={submittedCard.language}
-            content={submittedCard.content}
-          />
+      {unplacedCards.map(({ card }) => (
+        <HostArtifactContext.Provider
+          key={`submitted-card-${card.toolCallId}`}
+          value={hostArtifact ?? null}
+        >
+          <HostCardBlock language={card.language} content={card.content} />
         </HostArtifactContext.Provider>
-      )}
+      ))}
       {showsWordPlan && messageId && (
         <React.Suspense fallback={null}>
           <WordHistoryPlanCard

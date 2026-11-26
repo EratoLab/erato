@@ -3566,6 +3566,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When it cannot be told whether a generation is running"
           }
         },
         "security": [
@@ -6006,6 +6009,10 @@
             "type": "string",
             "description": "For a delegated task's item: the `child_tool_call_id` of the question\nthe card showed. A task that asks again keeps its `approval_id`, so this\nis what tells its questions apart."
           },
+          "client_confirmation": {
+            "type": "object",
+            "description": "What the user chose on a host's own card, such as a tick, for\n`approve` or `approve_always` of an item with `follows` set. Opaque to\nthe server, at most 4 KiB of JSON; the operation carries it to the\nclient as `confirmation`."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },
@@ -6084,6 +6091,10 @@
                 "$ref": "#/components/schemas/ToolDisplayMetadata"
               }
             ]
+          },
+          "follows": {
+            "$ref": "#/components/schemas/ChainedApprovalRef",
+            "description": "Set when the server itself made this call (the operation) after a\nproposal the client checked and accepted: the card is the host's own."
           },
           "input": {
             "$ref": "#/components/schemas/Value"
@@ -6251,6 +6262,33 @@
           "precise",
           "natural"
         ]
+      },
+      "ApprovalToolInfo": {
+        "type": "object",
+        "description": "A server-called tool whose calls the user decides on.",
+        "required": [
+          "qualified_name",
+          "title",
+          "approval"
+        ],
+        "properties": {
+          "approval": {
+            "type": "string",
+            "description": "`user_decision` (Ask, Always or Never) or `every_call`, which asks\nevery time and offers no Always."
+          },
+          "label": {
+            "$ref": "#/components/schemas/ToolCallLabel",
+            "description": "The change in the same terms as a tool call's label (`action` and\n`object_kind`), when the tool has one."
+          },
+          "qualified_name": {
+            "type": "string",
+            "description": "`namespace/name`, the key of its stored decision."
+          },
+          "title": {
+            "type": "string",
+            "description": "What the tool does, in the package's words. A client that can name the\nchange from `label` in the user's language shows that instead."
+          }
+        }
       },
       "ApprovalVoiceCommand": {
         "type": "object",
@@ -7596,6 +7634,27 @@
           "code": {
             "type": "string",
             "description": "Always `card_changed`."
+          }
+        }
+      },
+      "ChainedApprovalRef": {
+        "type": "object",
+        "description": "The accepted proposal a server-called operation follows.",
+        "required": [
+          "proposal_call_id",
+          "decide_on_screen"
+        ],
+        "properties": {
+          "decide_on_screen": {
+            "type": "boolean",
+            "description": "The user decides on screen: the card needs a tick or a row choice, so\nit offers no Always and takes no decision by voice."
+          },
+          "proposal_call_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "The host's short code for why it asks again after it found, while\nwriting, that the user must confirm something, such as\n`whole_document`."
           }
         }
       },
@@ -10444,6 +10503,13 @@
             "items": {
               "$ref": "#/components/schemas/ActionFacetInfo"
             }
+          },
+          "approval_tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalToolInfo"
+            },
+            "description": "The tools the server calls to apply a change the user approves, which\nthe listed facets can reach. Clients list them in the user's tool\nsettings, and offer the server's decision flow where one is listed."
           },
           "facets": {
             "type": "array",

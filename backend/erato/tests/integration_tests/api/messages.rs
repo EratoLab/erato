@@ -3,6 +3,7 @@
 mod approval_change_requests;
 mod approval_decided_once;
 mod approval_voice_commands;
+mod chained_apply;
 mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;
@@ -2778,6 +2779,67 @@ async fn test_resume_stream_no_active_task(pool: Pool<Postgres>) {
 
     // Clean up - abort the server
     server_handle.abort();
+}
+
+/// A failed lookup of the shared lease answers 503: a client reads 404 as
+/// "the answer finished" and drops what it streamed for the stored copy.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_resume_stream_lookup_failure_is_not_a_404(pool: Pool<Postgres>) {
+    let (app_config, _server) = setup_mock_llm_server(None).await;
+    let app_state = test_app_state(app_config, pool.clone()).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state.clone());
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let body = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": "Hello" }))
+        .await
+        .text();
+    let chat_id: Uuid = body
+        .split("\n\n")
+        .filter_map(|event| event.split("data:").nth(1))
+        .filter_map(|data| serde_json::from_str::<Value>(data.trim()).ok())
+        .find(|json| json["message_type"] == "chat_created")
+        .and_then(|json| json["chat_id"].as_str()?.parse().ok())
+        .expect("Expected a chat_created event");
+    if let Some(task) = app_state.background_tasks.get_task(&chat_id).await {
+        app_state
+            .background_tasks
+            .remove_task(
+                &chat_id,
+                task.generation_id,
+                erato::services::background_tasks::TaskOutcome::Completed,
+            )
+            .await;
+    }
+    let resume = || {
+        server
+            .post("/api/v1beta/me/messages/resumestream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "chat_id": chat_id }))
+    };
+
+    sqlx::query("ALTER TABLE temp_chat_generations RENAME TO temp_chat_generations_away")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let failed = resume().await;
+    sqlx::query("ALTER TABLE temp_chat_generations_away RENAME TO temp_chat_generations")
+        .execute(&pool)
+        .await
+        .unwrap();
+    failed.assert_status(axum::http::StatusCode::SERVICE_UNAVAILABLE);
+
+    resume()
+        .await
+        .assert_status(axum::http::StatusCode::NOT_FOUND);
 }
 
 /// Test resume streaming with full event replay and continuation.
@@ -8635,6 +8697,12 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -9420,6 +9488,12 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["client/*".to_string()];
@@ -9975,6 +10049,12 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -10569,6 +10649,12 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             child_host_inputs: Vec::new(),
             child_dispatch: None,
             approval_scope: Default::default(),
+            called_by: Default::default(),
+            follows_tool: None,
+            max_calls_per_message: None,
+            invalidated_read_tools: None,
+            approval: Default::default(),
+            client_actions: Vec::new(),
         },
     );
     app_config.facets.tool_call_allowlist = vec!["outlook/read_file".to_string()];
@@ -12245,6 +12331,12 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                follows_tool: None,
+                max_calls_per_message: None,
+                invalidated_read_tools: None,
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
     }
@@ -12316,6 +12408,12 @@ async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
                 child_host_inputs: Vec::new(),
                 child_dispatch: None,
                 approval_scope: Default::default(),
+                called_by: Default::default(),
+                follows_tool: None,
+                max_calls_per_message: None,
+                invalidated_read_tools: None,
+                approval: Default::default(),
+                client_actions: Vec::new(),
             },
         );
     }

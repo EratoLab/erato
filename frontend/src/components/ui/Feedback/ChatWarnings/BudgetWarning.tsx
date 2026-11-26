@@ -1,11 +1,15 @@
 import { t, msg } from "@lingui/core/macro";
 import clsx from "clsx";
+import { useContext } from "react";
 
 import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
 import { useBudgetWarning } from "@/hooks/budget/useBudgetWarning";
+import { useBudgetWarningAcknowledgement } from "@/hooks/budget/useBudgetWarningAcknowledgement";
+import { ProfileContext } from "@/providers/ProfileProvider";
 
 import { Alert } from "../Alert";
 
+import type { BudgetWarningSeverity } from "@/hooks/budget/useBudgetWarningAcknowledgement";
 import type React from "react";
 
 interface BudgetWarningProps {
@@ -30,21 +34,35 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
   className,
   onDismiss,
 }) => {
-  // Fetch budget status (will use cached data if available)
-  const { data: budgetStatus } = useBudgetStatus();
-
-  // Calculate warning states
+  const userId = useContext(ProfileContext)?.profile?.id;
+  const {
+    data: budgetStatus,
+    fetchStatus,
+    isSuccess,
+    isPlaceholderData,
+  } = useBudgetStatus();
   const warning = useBudgetWarning(budgetStatus);
 
-  // Only show if we have data and are in warning or error state
-  const shouldShow = warning.hasData && (warning.isWarning || warning.isError);
+  let severity: BudgetWarningSeverity | null | undefined;
+  if (warning.hasData) {
+    severity = warning.isError ? "error" : warning.isWarning ? "warning" : null;
+  } else if (budgetStatus?.enabled === false) {
+    severity = null;
+  }
 
-  if (!shouldShow) {
+  const confirmedSeverity =
+    isSuccess && fetchStatus === "idle" && !isPlaceholderData
+      ? severity
+      : undefined;
+  const [acknowledgement, acknowledge] = useBudgetWarningAcknowledgement(
+    userId,
+    confirmedSeverity,
+  );
+
+  if (!severity || acknowledgement === severity) {
     return null;
   }
 
-  // Determine alert type and title
-  const alertType = warning.isError ? "error" : "warning";
   const title = warning.isError
     ? t(
         msg({
@@ -88,11 +106,14 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
 
   return (
     <Alert
-      type={alertType}
+      type={severity}
       title={title}
       geometryVariant="message"
-      dismissible={!!onDismiss}
-      onDismiss={onDismiss}
+      dismissible
+      onDismiss={() => {
+        acknowledge(severity);
+        onDismiss?.();
+      }}
       className={clsx("mb-2", className)}
     >
       {message}

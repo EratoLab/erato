@@ -133,7 +133,8 @@ pub fn card_asked(pieces: &[CardPiece], outcome: VoiceDecisionOutcome) -> bool {
 }
 
 /// Why a stop is decided on screen only, for any decision by voice: it is
-/// not the turn's own single call, or that call is not `approval_id`.
+/// not the turn's own single call, that call's card needs a choice on
+/// screen, or it is not `approval_id`.
 pub fn stop_is_screen_only(
     kind: ToolApprovalKind,
     decidable: &[ApprovalItem],
@@ -146,6 +147,10 @@ pub fn stop_is_screen_only(
         kind,
         ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
     ) || item.child.is_some()
+        || item
+            .follows
+            .as_ref()
+            .is_some_and(|follows| follows.decide_on_screen)
         || approval_id != Some(item.approval_id.as_str())
 }
 
