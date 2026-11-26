@@ -4382,6 +4382,7 @@ export const ChatInput = ({
                 ) : (
                   <ChatInputAudioModeButton
                     isRecording={false}
+                    variant={oneLineComposer ? "primary" : "secondary"}
                     onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />

@@ -19,6 +19,8 @@ type ChatInputAudioModeButtonIdleProps = ChatInputAudioModeButtonCommonProps & {
   isRecording: false;
   /** Optional override for the resting-state pattern. */
   staticBars?: readonly number[];
+  /** Send's variant: the button stands in send's place. */
+  variant?: "primary" | "secondary";
 };
 
 type ChatInputAudioModeButtonRecordingProps =
@@ -108,7 +110,7 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
   return (
     <Button
       type="button"
-      variant="secondary"
+      variant={props.variant ?? "secondary"}
       size="sm"
       onClick={props.onToggle}
       disabled={props.disabled}
@@ -119,7 +121,11 @@ export function ChatInputAudioModeButton(props: ChatInputAudioModeButtonProps) {
         <Waveform
           heights={audioLevelsToBarHeights(staticBars)}
           testId="chat-input-audio-mode-static-waveform"
-          className="text-[var(--theme-fg-primary)]"
+          className={
+            props.variant === "primary"
+              ? undefined
+              : "text-[var(--theme-fg-primary)]"
+          }
         />
       }
     />
