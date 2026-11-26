@@ -243,6 +243,17 @@ pub fn load_fingerprinted_files(bundle_root: &Path) -> FingerprintedFiles {
                         .chain(entry.assets)
                 })
                 .map(|path| path.trim_start_matches('/').to_string())
+                .filter(|path| {
+                    let hashed = is_content_hashed_file_name(path);
+                    if !hashed {
+                        tracing::warn!(
+                            manifest_path = %manifest_path.display(),
+                            file = %path,
+                            "Build manifest lists a file without a recognisable content hash in its name; it is not cached as fingerprinted"
+                        );
+                    }
+                    hashed
+                })
                 .collect(),
         ),
         Err(error) => {
@@ -253,6 +264,36 @@ pub fn load_fingerprinted_files(bundle_root: &Path) -> FingerprintedFiles {
             FingerprintedFiles::default()
         }
     }
+}
+
+/// Whether a file name ends the way Vite names content-hashed output,
+/// `<name>-<8-character hash>.<extension>`. The server checks this itself
+/// because the manifest may come from a build it did not make (a fork, a
+/// replaced bundle). The hash alphabet is base64url; requiring an uppercase
+/// letter or a digit in it rules out fixed names that end in a lowercase word
+/// (`chat-messages.js`), not ones like `Inter-SemiBold.woff2`, which only a
+/// build without hashes would list. A real hash without one (about one in
+/// 700) only loses the year-long rule and is checked on each use instead.
+fn is_content_hashed_file_name(path: &str) -> bool {
+    let file_name = path.rsplit('/').next().unwrap_or(path);
+    let Some((stem, extension)) = file_name.rsplit_once('.') else {
+        return false;
+    };
+    let stem = stem.as_bytes();
+    let Some(hash_start) = stem.len().checked_sub(8) else {
+        return false;
+    };
+    let hash = &stem[hash_start..];
+    !extension.is_empty()
+        && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && hash_start > 0
+        && stem[hash_start - 1] == b'-'
+        && hash
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        && hash
+            .iter()
+            .any(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
 }
 
 fn load_rewrites(bundle_root: &Path) -> Vec<FrontendRewrite> {
@@ -378,7 +419,12 @@ mod tests {
                     "css": ["assets/app-B2x9QaZk.css"],
                     "assets": ["assets/inter-Dk3Lp0aQ.woff2"]
                 },
-                "src/worker.ts": { "file": "assets/worker-a1B2c3D4.js", "isDynamicEntry": true }
+                "src/worker.ts": { "file": "assets/worker-a1B2c3D4.js", "isDynamicEntry": true },
+                "src/fixed.ts": {
+                    "file": "assets/chat-messages.js",
+                    "css": ["style.css", "assets/settings-sub-page.css"],
+                    "assets": ["assets/logo.png", "assets/vendor-BE-7qn-f.js"]
+                }
             })
             .to_string(),
         )
@@ -394,6 +440,7 @@ mod tests {
                 "assets/app-B2x9QaZk.css",
                 "assets/app-Cf4s1aiG.js",
                 "assets/inter-Dk3Lp0aQ.woff2",
+                "assets/vendor-BE-7qn-f.js",
                 "assets/worker-a1B2c3D4.js"
             ]
         );

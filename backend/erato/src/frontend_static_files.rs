@@ -113,6 +113,21 @@ pub fn resolve_bundle_file(bundle_root: &Path, request_path: &str) -> Option<(Pa
     safe_relative_path(relative).then(|| (bundle_root.join(relative), relative.to_string()))
 }
 
+/// Whether a request path reaches into a build's `.vite` directory (its
+/// manifest), however the path is encoded, cased or padded with empty and `.`
+/// segments, all of which the file services resolve. Trailing dots and spaces
+/// are ignored because Windows drops them when opening a path.
+pub fn names_build_metadata(request_path: &str) -> bool {
+    percent_encoding::percent_decode_str(request_path)
+        .decode_utf8_lossy()
+        .split(['/', '\\'])
+        .any(|segment| {
+            segment
+                .trim_end_matches(['.', ' '])
+                .eq_ignore_ascii_case(".vite")
+        })
+}
+
 /// Prepares a request for tower-http's file services, which know only
 /// modification dates (`etag` is the content tag of the file the request
 /// names, `None` for pages):
@@ -246,6 +261,31 @@ mod tests {
         assert_eq!(resolve_bundle_file(root, "/public/%2e%2e/secret"), None);
         assert_eq!(resolve_bundle_file(root, "/a\\b"), None);
         assert_eq!(resolve_bundle_file(root, "/"), None);
+    }
+
+    #[test]
+    fn build_metadata_paths_are_recognised_in_any_form() {
+        for path in [
+            "/.vite/manifest.json",
+            "//.vite/manifest.json",
+            "/./.vite/manifest.json",
+            "/%2Evite/manifest.json",
+            "/%2e%56ITE/manifest.json",
+            "/.vite%2Fmanifest.json",
+            "/.vite./manifest.json",
+            "/.vite%20/manifest.json",
+            "/public/platform-office-addin//.vite/manifest.json",
+            "/platform-office-addin/.vite/manifest.json",
+        ] {
+            assert!(names_build_metadata(path), "{path}");
+        }
+        for path in [
+            "/assets/app.vite.js",
+            "/vite/manifest.json",
+            "/.vitepress/a.js",
+        ] {
+            assert!(!names_build_metadata(path), "{path}");
+        }
     }
 
     #[tokio::test]

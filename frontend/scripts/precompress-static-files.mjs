@@ -6,8 +6,10 @@
 // other file (pages, translations, fixed-name assets) is compressed by the
 // backend per response.
 //
-// Also checks the promise the backend relies on when it caches listed files
-// for a year: each of them has a content hash in its name.
+// Also stops the build when a listed file plainly has no content hash in its
+// name (a changed output-name setting). The backend applies a stricter check
+// of its own and drops such names; that one may also drop a real hash, which
+// is harmless there but must not fail a build.
 //
 // Usage: node scripts/precompress-static-files.mjs <dir> [<dir> ...]
 
@@ -55,8 +57,8 @@ async function readFingerprintedFiles(dir) {
   const unhashed = files.filter((file) => !HASHED_FILE_NAME.test(file));
   if (unhashed.length > 0) {
     throw new Error(
-      `${dir}: the build manifest lists files without a content hash in their name, ` +
-        `which the backend would cache for a year: ${unhashed.join(", ")}`,
+      `${dir}: the build manifest lists files without a content hash in their name ` +
+        `(check the build's output file names): ${unhashed.join(", ")}`,
     );
   }
   return files.map((file) => path.join(dir, file));
