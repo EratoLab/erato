@@ -5,8 +5,10 @@
  * Multiple components can use this hook and will share the same cache.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useContext } from "react";
 
 import { fetchBudgetStatus } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { ProfileContext } from "@/providers/ProfileProvider";
 
 export interface BudgetStatusResponse {
   /** Whether the budget feature is enabled */
@@ -31,8 +33,7 @@ interface UseBudgetStatusOptions {
 }
 
 /**
- * Query key for budget status
- * Exported so other code can invalidate the cache
+ * Query key prefix used to invalidate the cache after a chat response.
  */
 export const BUDGET_QUERY_KEY = ["budget-status"] as const;
 
@@ -70,12 +71,14 @@ const normalizeBudgetStatusResponse = (
  */
 export function useBudgetStatus(options: UseBudgetStatusOptions = {}) {
   const { enabled = true, refetchInterval = false } = options;
+  const profileContext = useContext(ProfileContext);
+  const userId = profileContext?.profile?.id;
 
   return useQuery({
-    queryKey: BUDGET_QUERY_KEY,
-    queryFn: async (): Promise<BudgetStatusResponse> =>
-      normalizeBudgetStatusResponse(await fetchBudgetStatus({})),
-    enabled,
+    queryKey: userId ? [...BUDGET_QUERY_KEY, userId] : BUDGET_QUERY_KEY,
+    queryFn: async ({ signal }): Promise<BudgetStatusResponse> =>
+      normalizeBudgetStatusResponse(await fetchBudgetStatus({}, signal)),
+    enabled: enabled && (!profileContext?.isLoading || !!userId),
     refetchInterval,
     staleTime: 30 * 1000, // Data is fresh for 30 seconds
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes (formerly cacheTime)

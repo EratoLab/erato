@@ -12,6 +12,59 @@ import { chatIsReadyToChat } from "./shared";
 
 test.describe("Budget Warnings (Mocked)", () => {
   test(
+    "Dismisses the budget warning by keyboard until the severity changes",
+    { tag: TAG_CI },
+    async ({ page }) => {
+      const budgetUrl = "**/api/v1beta/me/budget";
+      let spending = 75;
+      await page.route(budgetUrl, (route) =>
+        route.fulfill({
+          json: {
+            enabled: true,
+            budget_period_days: 30,
+            current_spending: spending,
+            warn_threshold: 0.7,
+            budget_limit: 100,
+            budget_currency: "USD",
+          },
+        }),
+      );
+
+      await page.goto("/");
+      await chatIsReadyToChat(page);
+      const composer = page.getByRole("textbox", { name: "Type a message..." });
+      const warning = page.getByRole("alert").filter({
+        hasText: "Approaching Budget Limit",
+      });
+      await expect(warning).toBeVisible();
+      const dismiss = warning.getByRole("button", { name: "Dismiss" });
+      await dismiss.focus();
+      await page.keyboard.press("Enter");
+      await expect(warning).toHaveCount(0);
+      await expect(composer).toBeFocused();
+      await page.keyboard.type("The composer still accepts input");
+      await expect(composer).toHaveValue("The composer still accepts input");
+
+      spending = 85;
+      await Promise.all([page.waitForResponse(budgetUrl), page.reload()]);
+      await chatIsReadyToChat(page);
+      await expect(warning).toHaveCount(0);
+
+      spending = 100;
+      await Promise.all([page.waitForResponse(budgetUrl), page.reload()]);
+      const limitReached = page.getByRole("alert").filter({
+        hasText: "Budget Limit Reached",
+      });
+      await expect(limitReached).toBeVisible();
+      await limitReached
+        .getByRole("button", { name: "Dismiss" })
+        .press("Space");
+      await expect(limitReached).toHaveCount(0);
+      await expect(composer).toBeFocused();
+    },
+  );
+
+  test(
     "Shows warning when approaching budget limit (70% threshold)",
     { tag: TAG_NO_CI },
     async ({ page }) => {
