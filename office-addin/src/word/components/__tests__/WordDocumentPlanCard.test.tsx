@@ -85,6 +85,7 @@ import {
 } from "../../utils/wordInPlaceSwitch";
 import { readWordCommentStates } from "../../utils/wordPlanCommentCheck";
 import { wordPlanCommentConsequences } from "../../utils/wordPlanComments";
+import { WordDocumentPlanCard } from "../WordDocumentPlanCard";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type { WordOoxmlHostOptions } from "../../../test/mocks/word/ooxmlHost";
@@ -2913,7 +2914,7 @@ describe("comment threads a plan deletes", () => {
     expect(
       screen.queryByText("Automatic action under your Always allow setting."),
     ).toBeNull();
-    expect(mock.pendingConfirmations.size).toBe(0);
+    await waitFor(() => expect(mock.pendingConfirmations.size).toBe(0));
     expect(await liveComments()).toBe(3);
   });
 
@@ -3168,5 +3169,145 @@ describe("whole-document imports of documents with comments", () => {
       ]);
       expect(word.insert).toHaveBeenCalledOnce();
     });
+  });
+});
+
+describe("a change the server applies", () => {
+  const chainedTurn = (
+    plan: WordDocumentPlan,
+    apply?: { status: string; output: Record<string, unknown> },
+  ) => {
+    mock.artifact = {
+      ...mock.artifact,
+      submittedCard: undefined,
+      submittedCards: [
+        {
+          toolCallId: "submit-A",
+          language: "erato-word-document-plan",
+          content: JSON.stringify(plan),
+        },
+      ],
+    };
+    mock.content = [
+      {
+        content_type: "tool_use",
+        tool_call_id: "submit-A",
+        tool_name: "submit_document_plan",
+        status: "success",
+        input: plan,
+        output: {
+          status: "success",
+          result: { draft_id: "submit-A", snapshot: plan.snapshot },
+          apply: { call_id: "submit-A.apply" },
+        },
+      },
+      ...(apply
+        ? [
+            {
+              content_type: "tool_use",
+              tool_call_id: "submit-A.apply",
+              tool_name: "apply_document_plan",
+              input: {},
+              ...apply,
+            },
+          ]
+        : []),
+    ];
+  };
+
+  it("shows in the answer where the change stands, never an Apply", () => {
+    const state = setup();
+    chainedTurn(state.plan);
+    state.mount();
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("shows the server's result after a reload, without the pane's review", () => {
+    const state = setup();
+    chainedTurn(state.plan, {
+      status: "error",
+      output: { status: "cancelled", reason: "pane_gone", changes_left: 1 },
+    });
+    state.mount();
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "Not changed: the Erato pane was closed.",
+    );
+  });
+
+  it("never says nothing changed when the pane did not answer in time", () => {
+    const state = setup();
+    chainedTurn(state.plan, {
+      status: "error",
+      output: { status: "cancelled", reason: "timeout", changes_left: 0 },
+    });
+    state.mount();
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "The change may already be in the document.",
+    );
+  });
+
+  it("approves from the decision place with what the user confirmed, writing nothing itself", () => {
+    const state = setup();
+    const onDecide = vi.fn();
+    const entry = WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!;
+    const execute = vi.spyOn(entry, "execute");
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={
+          new Map([[String(mock.artifact.messageId), state.capture]])
+        }
+      >
+        <WordDocumentPlanCard
+          entry={entry}
+          content={JSON.stringify(state.plan)}
+          decision={{
+            allowAlways: true,
+            decideOnScreen: false,
+            status: "pending",
+            resolvedLabel: undefined,
+            isBusy: false,
+            onDecide,
+          }}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(onDecide).toHaveBeenCalledWith("approve", {});
+    expect(execute).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDecide).toHaveBeenLastCalledWith("reject");
+  });
+
+  it("can still be declined from the decision place when the pane cannot make the change", () => {
+    const state = setup();
+    const onDecide = vi.fn();
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map()}
+      >
+        <WordDocumentPlanCard
+          entry={WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!}
+          content={JSON.stringify(state.plan)}
+          decision={{
+            allowAlways: true,
+            decideOnScreen: false,
+            status: "pending",
+            resolvedLabel: undefined,
+            isBusy: false,
+            onDecide,
+          }}
+        />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDecide).toHaveBeenCalledWith("reject");
   });
 });

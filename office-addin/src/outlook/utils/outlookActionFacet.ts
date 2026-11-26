@@ -484,3 +484,24 @@ export function previewOutlookSend(
     draftWithoutScheduling: withoutScheduling?.draft ?? null,
   };
 }
+
+/**
+ * The facet with the item the request is sent from, where the facet takes it: the server hands it
+ * to the call that carries out a proposed reply, so a reply opens only on that email. Never the
+ * no-item sentinel, and never on a facet that does not advertise the argument.
+ */
+export function withOutlookItemIdentity<
+  T extends { id: string; args?: Record<string, string> },
+>(
+  facet: T | undefined,
+  itemIdentity: string | null | undefined,
+  availableFacetArgs: ReadonlyMap<string, ReadonlySet<string>> | undefined,
+): T | undefined {
+  if (
+    !facet ||
+    !itemIdentity ||
+    !availableFacetArgs?.get(facet.id)?.has("item_identity")
+  )
+    return facet;
+  return { ...facet, args: { ...facet.args, item_identity: itemIdentity } };
+}

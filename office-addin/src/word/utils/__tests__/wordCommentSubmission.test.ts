@@ -78,6 +78,12 @@ describe("word_submit_comment_changes", () => {
         rows: 1,
         status: "awaiting_user",
         note: WORD_COMMENT_NOTHING_WRITTEN,
+        approval_preview: {
+          title: expect.any(String),
+          summary: "Reply to, resolve or reopen comments",
+          actions: ["word.respond_to_comments"],
+          decide_on_screen: false,
+        },
       },
     });
     expect(wordCommentDraft("call-1")).toMatchObject({

@@ -13,7 +13,7 @@ use chrono::Utc;
 use eyre::{ContextCompat, Report, WrapErr, eyre};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
-    IntoActiveModel, Order, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set,
+    IntoActiveModel, IsolationLevel, Order, QueryFilter, QueryOrder, QuerySelect, QueryTrait, Set,
     TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
@@ -154,17 +154,66 @@ fn normalize_text_vec(values: Vec<String>) -> Option<Vec<String>> {
     (!deduped.is_empty()).then_some(deduped)
 }
 
-fn validate_profile(
+#[derive(Debug)]
+pub enum HubVersionValidationError {
+    InvalidFormat,
+    NotIncreasing { current_version: String },
+}
+
+impl std::fmt::Display for HubVersionValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidFormat => write!(f, "Version number must use MAJOR.MINOR.PATCH format"),
+            Self::NotIncreasing { current_version } => {
+                write!(f, "Version number must be greater than {current_version}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for HubVersionValidationError {}
+
+// Compare each decimal component by digit count and then lexicographically.
+// Canonical decimal strings make this numeric ordering without an integer size limit.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct HubVersionNumber<'a>([(usize, &'a str); 3]);
+
+impl<'a> HubVersionNumber<'a> {
+    fn parse(value: &'a str) -> Option<Self> {
+        let mut parts = value.split('.');
+        let components = [parts.next()?, parts.next()?, parts.next()?];
+        if parts.next().is_some()
+            || components.iter().any(|part| {
+                part.is_empty()
+                    || (part.len() > 1 && part.starts_with('0'))
+                    || !part.bytes().all(|byte| byte.is_ascii_digit())
+            })
+        {
+            return None;
+        }
+        Some(Self(components.map(|part| (part.len(), part))))
+    }
+}
+
+fn validate_profile<'a>(
     config: &AssistantHubConfig,
-    profile: &HubSubmissionProfile,
-) -> Result<(), Report> {
+    profile: &'a HubSubmissionProfile,
+) -> Result<Option<HubVersionNumber<'a>>, Report> {
     if profile.long_description.trim().is_empty() {
         return Err(eyre!("long_description must not be empty"));
     }
 
-    if profile.version_number.trim().is_empty() {
+    let version_number = profile.version_number.trim();
+    let version = if config.validate_version_semver_format {
+        Some(
+            HubVersionNumber::parse(version_number)
+                .ok_or(HubVersionValidationError::InvalidFormat)?,
+        )
+    } else if version_number.is_empty() {
         return Err(eyre!("version_number must not be empty"));
-    }
+    } else {
+        None
+    };
 
     for category_id in &profile.category_ids {
         if !config.categories.contains_key(category_id) {
@@ -172,7 +221,7 @@ fn validate_profile(
         }
     }
 
-    Ok(())
+    Ok(version)
 }
 
 fn validate_review_input(input: &HubReviewInput) -> Result<Option<String>, Report> {
@@ -199,12 +248,19 @@ fn ensure_reviewer(config: &AssistantHubConfig, groups: &[String]) -> Result<(),
 }
 
 async fn validate_source_assistant(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     subject: &Subject,
     source_assistant_id: Uuid,
+    lock_source: bool,
 ) -> Result<assistants::Model, Report> {
     let user_id = user_uuid(subject)?;
-    let source_assistant = Assistants::find_by_id(source_assistant_id)
+    let query = Assistants::find_by_id(source_assistant_id);
+    let query = if lock_source {
+        query.lock_exclusive()
+    } else {
+        query
+    };
+    let source_assistant = query
         .one(conn)
         .await?
         .wrap_err("Source assistant not found")?;
@@ -213,13 +269,7 @@ async fn validate_source_assistant(
         return Err(eyre!("Access denied: User does not own source assistant"));
     }
 
-    let is_hub_version = AssistantHubAssistantVersions::find()
-        .filter(assistant_hub_assistant_versions::Column::AssistantId.eq(source_assistant_id))
-        .one(conn)
-        .await?
-        .is_some();
-
-    if is_hub_version {
+    if is_hub_version_assistant(conn, source_assistant_id).await? {
         return Err(eyre!(
             "Hub version assistants cannot be used as source assistants"
         ));
@@ -229,12 +279,10 @@ async fn validate_source_assistant(
 }
 
 async fn get_or_create_hub_assistant(
-    conn: &DatabaseConnection,
-    subject: &Subject,
-    source_assistant_id: Uuid,
+    conn: &impl ConnectionTrait,
+    source_assistant: &assistants::Model,
 ) -> Result<assistant_hub_assistants::Model, Report> {
-    let source_assistant = validate_source_assistant(conn, subject, source_assistant_id).await?;
-
+    let source_assistant_id = source_assistant.id;
     if let Some(existing) = AssistantHubAssistants::find()
         .filter(assistant_hub_assistants::Column::SourceAssistantId.eq(source_assistant_id))
         .one(conn)
@@ -259,7 +307,7 @@ async fn get_or_create_hub_assistant(
 }
 
 async fn ensure_unique_version_number(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     hub_assistant_id: Uuid,
     version_number: &str,
 ) -> Result<(), Report> {
@@ -285,15 +333,39 @@ async fn ensure_unique_version_number(
     Ok(())
 }
 
-async fn clone_source_assistant(
-    conn: &DatabaseConnection,
-    source_assistant_id: Uuid,
-) -> Result<assistants::Model, Report> {
-    let source = Assistants::find_by_id(source_assistant_id)
-        .one(conn)
-        .await?
-        .wrap_err("Source assistant not found")?;
+async fn ensure_increasing_version_number(
+    conn: &impl ConnectionTrait,
+    hub_assistant_id: Uuid,
+    requested: HubVersionNumber<'_>,
+) -> Result<(), Report> {
+    use assistant_hub_assistant_versions::Column;
 
+    let history = AssistantHubAssistantVersions::find()
+        .filter(Column::AssistantHubAssistantId.eq(hub_assistant_id))
+        .select_only()
+        .column(Column::VersionNumber)
+        .into_tuple::<String>()
+        .all(conn)
+        .await?;
+    let highest = history
+        .iter()
+        .filter_map(|label| HubVersionNumber::parse(label).map(|version| (version, label)))
+        .max_by(|(left, _), (right, _)| left.cmp(right));
+    if let Some((highest, label)) = highest
+        && requested <= highest
+    {
+        return Err(HubVersionValidationError::NotIncreasing {
+            current_version: label.clone(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+async fn clone_source_assistant(
+    conn: &impl ConnectionTrait,
+    source: assistants::Model,
+) -> Result<assistants::Model, Report> {
     let now = Utc::now().into();
     let cloned = assistants::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -315,7 +387,7 @@ async fn clone_source_assistant(
     let cloned = Assistants::insert(cloned).exec_with_returning(conn).await?;
 
     let file_links = AssistantFileUploads::find()
-        .filter(assistant_file_uploads::Column::AssistantId.eq(source_assistant_id))
+        .filter(assistant_file_uploads::Column::AssistantId.eq(source.id))
         .all(conn)
         .await?;
 
@@ -339,7 +411,7 @@ pub struct HubDiffFile {
 }
 
 async fn files_for_assistant(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     assistant_id: Uuid,
 ) -> Result<Vec<HubDiffFile>, Report> {
     let links = AssistantFileUploads::find()
@@ -374,7 +446,7 @@ fn diff_field<T: Serialize + PartialEq>(field: &str, before: Option<T>, after: T
 }
 
 async fn previous_accepted_version(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     hub_assistant_id: Uuid,
 ) -> Result<Option<HubVersionRecord>, Report> {
     let Some(version) = AssistantHubAssistantVersions::find()
@@ -431,14 +503,23 @@ pub async fn build_submission_diff(
     ensure_enabled(config)?;
     validate_profile(config, profile)?;
 
-    let source = validate_source_assistant(conn, subject, source_assistant_id).await?;
+    let source = validate_source_assistant(conn, subject, source_assistant_id, false).await?;
     let hub_assistant = AssistantHubAssistants::find()
         .filter(assistant_hub_assistants::Column::SourceAssistantId.eq(source_assistant_id))
         .one(conn)
         .await?;
-    let source_files = files_for_assistant(conn, source_assistant_id).await?;
-    let previous = if let Some(hub_assistant) = hub_assistant {
-        previous_accepted_version(conn, hub_assistant.id).await?
+    build_submission_diff_for_source(conn, source, hub_assistant.map(|hub| hub.id), profile).await
+}
+
+async fn build_submission_diff_for_source(
+    conn: &impl ConnectionTrait,
+    source: assistants::Model,
+    hub_assistant_id: Option<Uuid>,
+    profile: &HubSubmissionProfile,
+) -> Result<JsonValue, Report> {
+    let source_files = files_for_assistant(conn, source.id).await?;
+    let previous = if let Some(hub_assistant_id) = hub_assistant_id {
+        previous_accepted_version(conn, hub_assistant_id).await?
     } else {
         None
     };
@@ -492,14 +573,51 @@ pub async fn submit_version(
     ensure_enabled(config)?;
     let mut profile = profile;
     profile.version_number = profile.version_number.trim().to_string();
-    validate_profile(config, &profile)?;
+    let requested_version = validate_profile(config, &profile)?;
 
-    let hub_assistant = get_or_create_hub_assistant(conn, subject, source_assistant_id).await?;
-    ensure_unique_version_number(conn, hub_assistant.id, &profile.version_number).await?;
-    let cloned = clone_source_assistant(conn, source_assistant_id).await?;
+    let audience_grants = if config.force_whole_organization_audience {
+        let organization = share_grant::ShareSubject::organization();
+        vec![HubAudienceGrantInput {
+            subject_type: organization.subject_type.to_string(),
+            subject_id_type: organization.subject_id_type.to_string(),
+            subject_id: organization.subject_id.to_string(),
+            role: "viewer".to_string(),
+        }]
+    } else {
+        audience_grants
+    };
+    if !audience_grants.is_empty() {
+        validate_source_assistant(conn, subject, source_assistant_id, false).await?;
+        // The snapshot has the same owner as the source. Authorize on the source
+        // because request-scoped policy queries cannot see uncommitted snapshots.
+        policy
+            .rebuild_data_if_needed(conn, &crate::config::AppConfig::default())
+            .await?;
+        authorize!(
+            policy,
+            subject,
+            &Resource::Assistant(source_assistant_id.to_string()),
+            Action::Share
+        )?;
+    }
+
+    let transaction = conn
+        .begin_with_config(Some(IsolationLevel::ReadCommitted), None)
+        .await?;
+    // The source row exists even for the first submission. Hold its lock until
+    // commit so the next submitter sees the version saved by this transaction.
+    let source =
+        validate_source_assistant(&transaction, subject, source_assistant_id, true).await?;
+    let hub_assistant = get_or_create_hub_assistant(&transaction, &source).await?;
+    if let Some(requested_version) = requested_version {
+        ensure_increasing_version_number(&transaction, hub_assistant.id, requested_version).await?;
+    }
+    ensure_unique_version_number(&transaction, hub_assistant.id, &profile.version_number).await?;
+    let cloned = clone_source_assistant(&transaction, source.clone()).await?;
 
     let diff_summary =
-        build_submission_diff(conn, config, subject, source_assistant_id, &profile).await?;
+        build_submission_diff_for_source(&transaction, source, Some(hub_assistant.id), &profile)
+            .await?;
     let now = Utc::now().into();
     let version = assistant_hub_assistant_versions::ActiveModel {
         id: Set(Uuid::new_v4()),
@@ -525,29 +643,17 @@ pub async fn submit_version(
     };
 
     let version = AssistantHubAssistantVersions::insert(version)
-        .exec_with_returning(conn)
+        .exec_with_returning(&transaction)
         .await?;
     let creator = Users::find_by_id(hub_assistant.owner_user_id)
-        .one(conn)
+        .one(&transaction)
         .await?
         .wrap_err("Assistant hub creator not found")?;
 
-    let audience_grants = if config.force_whole_organization_audience {
-        let organization = share_grant::ShareSubject::organization();
-        vec![HubAudienceGrantInput {
-            subject_type: organization.subject_type.to_string(),
-            subject_id_type: organization.subject_id_type.to_string(),
-            subject_id: organization.subject_id.to_string(),
-            role: "viewer".to_string(),
-        }]
-    } else {
-        audience_grants
-    };
     for grant in audience_grants {
-        share_grant::create_share_grant(
-            conn,
-            policy,
-            subject,
+        share_grant::insert_share_grant(
+            &transaction,
+            false,
             "assistant".to_string(),
             cloned.id.to_string(),
             grant.subject_type,
@@ -557,6 +663,7 @@ pub async fn submit_version(
         )
         .await?;
     }
+    transaction.commit().await?;
 
     Ok(HubVersionRecord {
         hub_assistant,
@@ -1083,7 +1190,7 @@ pub async fn set_featured(
 }
 
 pub async fn is_hub_version_assistant(
-    conn: &DatabaseConnection,
+    conn: &impl ConnectionTrait,
     assistant_id: Uuid,
 ) -> Result<bool, Report> {
     Ok(AssistantHubAssistantVersions::find()

@@ -143,3 +143,40 @@ export const WORD_AUTHORING_CONTRACT = {
     "Passages that contain pending tracked changes are returned as native anchored-content. They cannot be edited until the user accepts or rejects those changes in Word: keep them and tell the user. While Track Changes is on, accepted edits are written as tracked changes under the user's name, and changes that need a full-document rewrite (sections, new or relinked headers/footers, moves, objects, formatting, new lists) cannot be applied.",
   sections: `scope=document only. sections:[{id,source?:'section-1',after?:'output-id-or-kept-body-ref',layout?,headers?,footers?}]. The complete ordered section list replaces existing boundaries. The last section omits after; all others end after the named output block. The read record's afterBlock identifies its existing boundary. source retains that section's existing properties. An absent sections property preserves existing boundaries and requires their original relative order. ${WORD_SECTION_PROPERTIES}`,
 } as const;
+
+/** The server applies an accepted change and the answer goes on (facets list the apply tool). */
+let chainedApply = false;
+let chainedContract: typeof WORD_AUTHORING_CONTRACT | undefined;
+
+export function setWordChainedApply(offered: boolean): void {
+  chainedApply = offered;
+}
+
+/** The package's tool description and facet prompt carry the first replacement word for word. */
+const NEXT_TURN_WORDING: readonly [string, string][] = [
+  [
+    "submit what fits and continue in the next turn",
+    "submit what fits with more_changes:true and continue after its result",
+  ],
+  [
+    "now and tell the user the rest follows in the next turn",
+    "now with more_changes:true and continue after its result",
+  ],
+];
+
+/** The wording for this pane's server: where the server applies changes, the answer goes on. */
+export function wordChainedWording(text: string): string {
+  if (!chainedApply) return text;
+  return NEXT_TURN_WORDING.reduce(
+    (wording, [before, after]) => wording.split(before).join(after),
+    text,
+  );
+}
+
+export function wordAuthoringContract(): typeof WORD_AUTHORING_CONTRACT {
+  if (!chainedApply) return WORD_AUTHORING_CONTRACT;
+  chainedContract ??= JSON.parse(
+    wordChainedWording(JSON.stringify(WORD_AUTHORING_CONTRACT)),
+  ) as typeof WORD_AUTHORING_CONTRACT;
+  return chainedContract;
+}

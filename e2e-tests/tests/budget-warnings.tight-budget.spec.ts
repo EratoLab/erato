@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { TAG_CI } from "./tags";
-import { chatIsReadyToChat, createAuthenticatedContext } from "./shared";
+import {
+  chatIsReadyToChat,
+  createAuthenticatedContext,
+  ensureOpenSidebar,
+} from "./shared";
 
 /**
  * Budget Warning Tests - Tight Budget Scenario
@@ -13,11 +17,11 @@ import { chatIsReadyToChat, createAuthenticatedContext } from "./shared";
  * to trigger budget errors with minimal real usage.
  */
 
-test.describe("Budget Warnings (Real Budget Enforcement)", () => {
+test.describe("Budget warnings and Settings with a tight budget", () => {
   test(
     "Shows budget error after sending a message that exceeds the tight budget",
     { tag: TAG_CI },
-    async ({ page, browser }) => {
+    async ({ browser }) => {
       // Note: The tight-budget scenario is ensured by the setup-tight-budget project
       // which runs before these tests
 
@@ -69,6 +73,29 @@ test.describe("Budget Warnings (Real Budget Enforcement)", () => {
           .catch(() => false);
 
         expect(hasWarning || hasError).toBe(true);
+
+        await ensureOpenSidebar(userPage);
+        await userPage
+          .getByRole("button")
+          .filter({
+            has: userPage.getByTestId("avatar-identity"),
+          })
+          .click();
+        await userPage.getByRole("menuitem", { name: "Settings" }).click();
+        await userPage.getByRole("tab", { name: "Budget" }).click();
+        const budgetPane = userPage.getByRole("tabpanel", { name: "Budget" });
+        await expect(
+          budgetPane.getByText("Spending over the last 30 days"),
+        ).toBeVisible();
+        await expect(
+          budgetPane
+            .getByRole("table", { name: "Spending by model" })
+            .getByRole("rowheader")
+            .first(),
+        ).toBeVisible();
+        await expect(
+          budgetPane.getByText("Remaining allowance").locator(".."),
+        ).toContainText("$0.00");
 
         // Log which type of alert was shown for debugging
         if (hasWarning) {

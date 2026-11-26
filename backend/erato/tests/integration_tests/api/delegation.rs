@@ -5240,6 +5240,7 @@ fn answer_metadata(
     was_aborted: bool,
 ) -> erato::models::message::GenerationMetadata {
     erato::models::message::GenerationMetadata {
+        budget_usage: None,
         used_prompt_tokens: None,
         used_completion_tokens: None,
         used_total_tokens: None,
@@ -8116,6 +8117,7 @@ fn word_action_facet(
         presentation: None,
         client_actions_always_ask: vec![],
         grant_scope: Default::default(),
+        draft_block_actions: Default::default(),
         tool_call_allowlist: tool_call_allowlist.iter().map(|s| s.to_string()).collect(),
         delegation: Some(serde_json::from_value(delegation).unwrap()),
     }

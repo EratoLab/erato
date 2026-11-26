@@ -350,6 +350,12 @@ export type ApprovalToolInfo = {
    * every time and offers no Always.
    */
   approval: string;
+  /**
+   * The action facet action ids the tool carries out, such as
+   * `outlook.reply`: a client's own decisions for these actions now follow
+   * the tool's decision.
+   */
+  client_actions?: string[];
   label?: ToolCallLabel;
   /**
    * `namespace/name`, the key of its stored decision.
@@ -715,6 +721,7 @@ export type AssistantHubConfigResponse = {
   enabled: boolean;
   force_whole_organization_audience: boolean;
   rating_mode: string;
+  validate_version_semver_format: boolean;
 };
 
 export type AssistantHubCreator = {
@@ -850,6 +857,18 @@ export type AssistantHubVersion = {
    * @format date-time
    */
   withdrawn_at?: string | null | undefined;
+};
+
+export type AssistantHubVersionErrorCode =
+  | "invalid_version_format"
+  | "version_not_increasing";
+
+export type AssistantHubVersionErrorResponse = {
+  code: AssistantHubVersionErrorCode;
+  /**
+   * The highest comparable version already submitted for this assistant.
+   */
+  current_version?: string;
 };
 
 export type AssistantHubVersionResponse = {
@@ -1032,6 +1051,18 @@ export type AudioTranscriptionMetadata = {
 
 export type BudgetCurrency = "EUR" | "USD";
 
+export type BudgetModelSpending = {
+  identifier: string;
+  label: string;
+  pricing_complete: boolean;
+  /**
+   * Known spending. Null when none of this model's usage could be priced.
+   *
+   * @format double
+   */
+  spending: number | null;
+};
+
 /**
  * Budget status information for the current user
  */
@@ -1044,14 +1075,14 @@ export type BudgetStatusResponse = {
    */
   budget_limit?: number;
   /**
-   * Number of days in the current budget period
+   * Number of days in the rolling budget window
    *
    * @format int32
    * @minimum 0
    */
   budget_period_days?: number;
   /**
-   * Current spending in the budget period for the user (unit-less)
+   * Known spending in the rolling window for the user (unit-less)
    *
    * @format double
    */
@@ -1060,12 +1091,57 @@ export type BudgetStatusResponse = {
    * Whether the budget feature is enabled
    */
   enabled: boolean;
+  user_settings?: BudgetUserSettings;
   /**
    * The warning threshold (0.0 to 1.0)
    *
    * @format double
    */
   warn_threshold?: number;
+};
+
+export type BudgetTokenUsage = {
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  completion_tokens: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  prompt_tokens: number;
+  /**
+   * Breakdown of the completion tokens.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  reasoning_tokens?: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  total_tokens: number;
+};
+
+export type BudgetUserSettings = {
+  /**
+   * Extra allowance that becomes spendable in the next 24 hours with no new spend.
+   *
+   * @format double
+   */
+  allowance_freed_next_24h: number | null;
+  /**
+   * @format date-time
+   */
+  as_of: string;
+  models: BudgetModelSpending[];
+  pricing_complete: boolean;
+  /**
+   * @format date-time
+   */
+  window_start: string;
 };
 
 /**
@@ -6120,6 +6196,14 @@ export type ToolUse = {
    * @default null
    */
   allowed_by?: ToolAllowedBy;
+  /**
+   * Token usage reported by this call.
+   *
+   * @default null
+   */
+  budget_usage?: {
+    [key: string]: BudgetTokenUsage;
+  };
   /**
    * @default null
    */

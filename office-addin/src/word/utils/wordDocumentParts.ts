@@ -2,6 +2,7 @@ import {
   isAcceptedWordPartsFinish,
   isAcceptedWordSectionPart,
   isAcceptedWordSectionPlan,
+  WORD_MORE_CHANGES_ARGUMENT,
   wordDocumentTableStyle,
   wordIndexRuns,
   wordPartsLayout,
@@ -873,7 +874,14 @@ export function finishWordParts(
     result: refusal(path, code, message, "Document plan finish rejected."),
   });
   if (
-    !only(input, ["snapshot", "readToken", "draft_id", "revision", "finish"]) ||
+    !only(input, [
+      "snapshot",
+      "readToken",
+      "draft_id",
+      "revision",
+      "finish",
+      WORD_MORE_CHANGES_ARGUMENT,
+    ]) ||
     input.finish !== true
   )
     return fail(

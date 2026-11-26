@@ -48,6 +48,14 @@ pub struct OfferedClientTool {
     /// The active action facet's `client_actions_always_ask` entries that
     /// this tool carries out.
     pub always_ask_actions: Vec<String>,
+    /// A server-called tool that carries out a proposed client action.
+    pub proposal: bool,
+    /// For a proposal tool: the open item the request was sent for, from the
+    /// request's facet arguments.
+    pub item_identity: Option<String>,
+    /// For a proposal tool: the active facet's `draft_block_actions` entries
+    /// whose action this tool carries out.
+    pub draft_block_actions: HashMap<String, String>,
 }
 
 /// The desktop sidecar tools whose results the Erato desktop app shows for
@@ -180,6 +188,9 @@ impl OfferedClientTool {
             grant: None,
             executor_strict_mode: false,
             always_ask_actions: Vec::new(),
+            proposal: false,
+            item_identity: None,
+            draft_block_actions: HashMap::new(),
         })
     }
 

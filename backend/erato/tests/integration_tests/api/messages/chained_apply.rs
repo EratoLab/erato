@@ -19,6 +19,8 @@ const APPLY: &str = "apply_document_plan";
 const FIX: &str = "fix_text";
 const REGISTERED: &str = "read_document_blocks,submit_document_plan,apply_document_plan,fix_text";
 const UNEXPECTED: &str = "UNEXPECTED EXTRA INFERENCE";
+const PROPOSE: &str = "propose_client_action";
+const OPEN_REPLY: &str = "open_reply";
 
 enum Step {
     Tools(Vec<(&'static str, &'static str, Value)>),
@@ -72,6 +74,16 @@ struct Options {
     /// The pane holds the turn's client transport, as a Word pane does.
     shared_transport: bool,
     apply_timeout_ms: u64,
+    /// An Outlook facet whose proposals `open_reply` carries out.
+    proposal: Option<ProposalFacet>,
+}
+
+struct ProposalFacet {
+    actions: Vec<&'static str>,
+    always_ask: Vec<&'static str>,
+    draft_blocks: Vec<&'static str>,
+    /// The stored decision for `outlook/open_reply`.
+    decision: Option<&'static str>,
 }
 
 impl Default for Options {
@@ -88,6 +100,7 @@ impl Default for Options {
             fix_approval: ClientToolApproval::EveryCall,
             shared_transport: false,
             apply_timeout_ms: 10_000,
+            proposal: None,
         }
     }
 }
@@ -131,7 +144,7 @@ impl Chat {
         for step in steps {
             let marker = match &step {
                 Step::Tools(calls) => calls[0].0,
-                Step::Text(text) => *text,
+                Step::Text(text) => text.lines().next().unwrap(),
             };
             let capture = recorder.clone();
             let required: Vec<&'static str> = previous.into_iter().collect();
@@ -249,12 +262,56 @@ impl Chat {
                     presentation: None,
                     client_actions_always_ask: always_ask.iter().map(|a| a.to_string()).collect(),
                     grant_scope: Default::default(),
+                    draft_block_actions: Default::default(),
                     tool_call_allowlist: vec!["word/*".into()],
                     delegation: None,
                 },
             );
             json!({"id":"edit_document","args":{}})
         });
+        let proposal_decision = options.proposal.as_ref().and_then(|p| p.decision);
+        let action_facet = match options.proposal {
+            Some(proposal) => {
+                config.client_tools.tools.insert(
+                    "outlook_open_reply".into(),
+                    ClientToolConfig {
+                        name: OPEN_REPLY.into(),
+                        namespace: Some("outlook".into()),
+                        description: "Open a reply to the email".into(),
+                        parameters: json!({"type":"object"}).to_string(),
+                        called_by: ClientToolCalledBy::Server,
+                        client_actions: vec!["outlook.reply".into()],
+                        ..tool(OPEN_REPLY)
+                    },
+                );
+                config.action_facets.facets.insert(
+                    "outlook_reply_from_read".into(),
+                    ActionFacetConfig {
+                        display_name: "Reply".into(),
+                        platform: None,
+                        template: "Draft a reply.".into(),
+                        allowed_args: vec!["item_identity".into()],
+                        client_actions: proposal.actions.iter().map(|a| a.to_string()).collect(),
+                        presentation: Some("auto_prompt".into()),
+                        client_actions_always_ask: proposal
+                            .always_ask
+                            .iter()
+                            .map(|a| a.to_string())
+                            .collect(),
+                        grant_scope: Default::default(),
+                        draft_block_actions: proposal
+                            .draft_blocks
+                            .iter()
+                            .map(|language| (language.to_string(), "outlook.reply".to_string()))
+                            .collect(),
+                        tool_call_allowlist: vec![],
+                        delegation: None,
+                    },
+                );
+                Some(json!({"id":"outlook_reply_from_read","args":{"item_identity":"item-1"}}))
+            }
+            None => action_facet,
+        };
         let state = test_app_state(config, pool).await;
         let chat_id = seed_origin_chat(&state.db).await;
         let chat = Self {
@@ -272,6 +329,9 @@ impl Chat {
         if let Some(decision) = options.decision {
             chat.store_decision("word/apply_document_plan", decision)
                 .await;
+        }
+        if let Some(decision) = proposal_decision {
+            chat.store_decision("outlook/open_reply", decision).await;
         }
         chat
     }
@@ -1568,4 +1628,458 @@ async fn the_model_cannot_call_the_apply_tool_itself(pool: Pool<Postgres>) {
     assert_eq!(chat.requests().len(), 2);
     let parts = parts(&chat.message().await);
     assert_eq!(tool_use(&parts, "call_forged")["output"]["status"], "error");
+}
+
+fn propose(id: &'static str, action: &str) -> Step {
+    Step::Tools(vec![(id, PROPOSE, json!({ "action": action }))])
+}
+
+fn proposal_options(decision: Option<&'static str>, always_ask: Vec<&'static str>) -> Options {
+    Options {
+        registered: OPEN_REPLY,
+        decision: None,
+        proposal: Some(ProposalFacet {
+            actions: vec!["outlook.reply", "outlook.reply_all"],
+            always_ask,
+            draft_blocks: vec![],
+            decision,
+        }),
+        ..Default::default()
+    }
+}
+
+fn opened() -> Value {
+    json!({"result":{"status":"applied"}})
+}
+
+fn proposed_actions(request: &Value) -> Vec<String> {
+    request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["function"]["name"] == PROPOSE)
+        .map(|tool| {
+            tool["function"]["parameters"]["properties"]["action"]["enum"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|action| action.as_str().unwrap().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_proposed_action_asks_and_approve_carries_it_out_without_another_request(
+    pool: Pool<Postgres>,
+) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![opened()],
+        proposal_options(None, vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert!(!offered(&chat.requests()[0]).contains(&OPEN_REPLY.to_string()));
+    let stop = chat.stop().await.expect("the action asks by default");
+    assert_eq!(stop["kind"], "client_tool");
+    assert_eq!(stop["tool_name"], OPEN_REPLY);
+    assert_eq!(stop["mcp_server_id"], "outlook");
+    assert_eq!(stop["allow_always"], true);
+    assert_eq!(stop["display"]["title"], "Open a reply to the email");
+    let item = &stop["approvals"][0];
+    assert!(
+        item["follows"]["proposal_call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(":call_p")
+    );
+    let parts_before = parts(&chat.message().await);
+    let proposal = tool_use(&parts_before, "call_p");
+    assert_eq!(proposal["output"]["status"], "proposed");
+    assert!(
+        proposal["output"]["apply"]["call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(":call_p.apply")
+    );
+    assert!(chat.dispatched().is_empty());
+    chat.decide(json!({"decision":"approve"}))
+        .await
+        .assert_status_ok();
+    let dispatched = chat.dispatched();
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert!(dispatched[0].1.ends_with(":call_p.apply"));
+    assert!(
+        dispatched[0].2["proposal_call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(":call_p")
+    );
+    assert_eq!(dispatched[0].2["action"], "outlook.reply");
+    assert_eq!(
+        dispatched[0].2["item_identity"], "item-1",
+        "the send-time identity of the open item travels with the call"
+    );
+    assert_eq!(chat.requests().len(), 1, "a clean action ends the answer");
+    let parts = parts(&chat.message().await);
+    let apply = tool_use(&parts, "call_p.apply");
+    assert_eq!(apply["tool_name"], OPEN_REPLY);
+    assert_eq!(apply["output"]["result"]["status"], "applied");
+    assert!(apply["output"].get("changes_left").is_none());
+    assert!(chat.stop().await.is_none());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_rejected_proposal_carries_out_nothing_and_ends(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![],
+        proposal_options(Some("ask"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    chat.decide(json!({"decision":"reject"}))
+        .await
+        .assert_status_ok();
+    assert!(chat.dispatched().is_empty());
+    assert_eq!(chat.requests().len(), 1);
+    let parts = parts(&chat.message().await);
+    assert_eq!(
+        tool_use(&parts, "call_p.apply")["output"]["status"],
+        "rejected"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_action_no_tool_carries_out_keeps_todays_flow(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply_all"), Step::Text("DONE")],
+        vec![],
+        proposal_options(Some("always_allow"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert!(chat.stop().await.is_none());
+    assert!(chat.dispatched().is_empty());
+    assert_eq!(chat.requests().len(), 2, "the model goes on as today");
+    let parts = parts(&chat.message().await);
+    let proposal = tool_use(&parts, "call_p");
+    assert_eq!(
+        proposal["output"],
+        json!({"status":"proposed","action":"outlook.reply_all"})
+    );
+    assert!(!has_tool_use(&parts, "call_p.apply"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_old_pane_without_the_tool_keeps_todays_flow(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply"), Step::Text("DONE")],
+        vec![],
+        Options {
+            registered: READ,
+            ..proposal_options(Some("always_allow"), vec![])
+        },
+    )
+    .await;
+    chat.submit().await;
+    assert!(chat.dispatched().is_empty());
+    assert_eq!(chat.requests().len(), 2);
+    assert!(!has_tool_use(&parts(&chat.message().await), "call_p.apply"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn always_allow_carries_out_the_action_at_once(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![opened()],
+        proposal_options(Some("always_allow"), vec!["outlook.reply_all"]),
+    )
+    .await;
+    chat.submit().await;
+    assert!(
+        chat.stop().await.is_none(),
+        "the facet asks every time only for reply all"
+    );
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_facet_that_always_asks_for_the_proposed_action_asks_under_always(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![opened()],
+        proposal_options(Some("always_allow"), vec!["outlook.reply"]),
+    )
+    .await;
+    chat.submit().await;
+    let stop = chat.stop().await.expect("the facet asks every time");
+    assert_eq!(stop["allow_always"], false);
+    assert!(chat.dispatched().is_empty());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_failed_action_goes_back_to_the_model(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply"), Step::Text("EXPLAINED")],
+        vec![json!({"result":{"status":"unavailable","reason":"other_item"}})],
+        proposal_options(Some("always_allow"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.requests().len(), 2);
+    let messages = chat.requests()[1]["messages"].clone();
+    assert!(messages.to_string().contains("other_item"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_proposal_of_an_action_turned_off_is_refused_with_a_reason(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply"), Step::Text("TOLD")],
+        vec![],
+        proposal_options(Some("never_allow"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(
+        proposed_actions(&chat.requests()[0]),
+        ["outlook.reply", "outlook.reply_all"],
+        "a turned-off action is not swapped for another"
+    );
+    assert!(chat.dispatched().is_empty());
+    assert_eq!(chat.requests().len(), 2);
+    let parts = parts(&chat.message().await);
+    assert_eq!(tool_use(&parts, "call_p")["output"]["status"], "turned_off");
+    assert!(!has_tool_use(&parts, "call_p.apply"));
+    assert!(chat.requests()[1].to_string().contains("turned off"));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_change_request_on_a_proposal_lets_the_model_propose_again(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![
+            propose("call_p", "outlook.reply"),
+            propose("call_q", "outlook.reply"),
+        ],
+        vec![opened()],
+        proposal_options(Some("ask"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    chat.decide(json!({"decision":"request_change","change_request":"Make it more formal"}))
+        .await
+        .assert_status_ok();
+    assert_eq!(chat.requests().len(), 2);
+    assert!(chat.requests()[1].to_string().contains("more formal"));
+    let parts_before = parts(&chat.message().await);
+    assert_eq!(
+        tool_use(&parts_before, "call_q")["output"]["status"],
+        "proposed"
+    );
+    let stop = chat.stop().await.expect("the changed proposal asks");
+    assert!(
+        stop["approvals"][0]["tool_call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(":call_q.apply")
+    );
+    chat.decide(json!({"decision":"approve"}))
+        .await
+        .assert_status_ok();
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 2);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_clean_action_in_a_batch_runs_the_rest_then_ends_without_a_request(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![Step::Tools(vec![
+            ("call_p", PROPOSE, json!({"action":"outlook.reply"})),
+            ("call_r", READ, json!({"snapshot":"s1"})),
+        ])],
+        vec![opened(), read_result()],
+        Options {
+            registered: "open_reply,read_document_blocks",
+            ..proposal_options(Some("always_allow"), vec![])
+        },
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names()[0], OPEN_REPLY);
+    assert!(has_tool_use(&parts(&chat.message().await), "call_r"));
+    assert_eq!(chat.requests().len(), 1, "the answer ends after the batch");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn several_versions_for_the_user_to_pick_end_without_a_request(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply")],
+        vec![json!({"result":{"status":"unavailable","reason":"user_picks"}})],
+        proposal_options(Some("always_allow"), vec![]),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_facets_list_the_actions_a_tool_carries_out(pool: Pool<Postgres>) {
+    let chat = Chat::new(
+        pool,
+        vec![Step::Text("UNUSED")],
+        vec![],
+        proposal_options(None, vec![]),
+    )
+    .await;
+    let response = chat
+        .server()
+        .get("/api/v1beta/me/facets")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let listed = response.json::<Value>()["approval_tools"].clone();
+    let reply = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["qualified_name"] == "outlook/open_reply")
+        .expect("the facet reaches the reply tool through its action");
+    assert_eq!(reply["client_actions"], json!(["outlook.reply"]));
+}
+
+const DRAFT: &str = "DRAFTED\n```erato-email\nThanks, Tuesday works.\n```";
+
+fn drafting_options(decision: Option<&'static str>) -> Options {
+    let mut options = proposal_options(decision, vec![]);
+    options.proposal.as_mut().unwrap().draft_blocks = vec!["erato-email", "erato-email-html"];
+    options
+}
+
+fn proposals(parts: &[Value]) -> Vec<Value> {
+    parts
+        .iter()
+        .filter(|part| part["content_type"] == "tool_use" && part["tool_name"] == PROPOSE)
+        .cloned()
+        .collect()
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_draft_without_a_proposal_gets_one_from_the_server_without_another_request(
+    pool: Pool<Postgres>,
+) {
+    let mut chat = Chat::new(
+        pool,
+        vec![Step::Text(DRAFT)],
+        vec![opened()],
+        drafting_options(None),
+    )
+    .await;
+    chat.submit().await;
+    let stop = chat.stop().await.expect("the server's proposal asks");
+    assert_eq!(stop["tool_name"], OPEN_REPLY);
+    let parts_before = parts(&chat.message().await);
+    let proposal = &proposals(&parts_before)[0];
+    assert_eq!(proposal["input"], json!({"action":"outlook.reply"}));
+    assert_eq!(proposal["output"]["status"], "proposed");
+    chat.decide(json!({"decision":"approve"}))
+        .await
+        .assert_status_ok();
+    let dispatched = chat.dispatched();
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(dispatched[0].2["action"], "outlook.reply");
+    assert_eq!(dispatched[0].2["item_identity"], "item-1");
+    assert_eq!(chat.requests().len(), 1);
+    let parts = parts(&chat.message().await);
+    assert_eq!(proposals(&parts).len(), 1);
+    assert!(parts.iter().any(|part| {
+        part["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("```erato-email"))
+    }));
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_failed_server_proposal_goes_back_to_the_model_with_the_call_in_its_history(
+    pool: Pool<Postgres>,
+) {
+    let mut chat = Chat::new(
+        pool,
+        vec![Step::Text(DRAFT), Step::Text("EXPLAINED")],
+        vec![json!({"result":{"status":"unavailable","reason":"other_item"}})],
+        drafting_options(Some("always_allow")),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    let requests = chat.requests();
+    assert_eq!(requests.len(), 2);
+    let messages = requests[1]["messages"].as_array().unwrap();
+    let call_message = messages
+        .iter()
+        .find(|message| message["tool_calls"][0]["function"]["name"] == PROPOSE)
+        .expect("the server's call is replayed as the model's");
+    assert!(call_message["content"].to_string().contains("DRAFTED"));
+    let call_id = call_message["tool_calls"][0]["id"].as_str().unwrap();
+    assert!(
+        call_id.chars().all(|c| c.is_ascii_alphanumeric()),
+        "{call_id}"
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| message["role"] == "tool" && message["tool_call_id"] == call_id)
+    );
+    assert!(requests[1].to_string().contains("other_item"));
+    assert_eq!(proposals(&parts(&chat.message().await)).len(), 1);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_model_proposal_is_not_followed_by_a_server_one(pool: Pool<Postgres>) {
+    let mut chat = Chat::new(
+        pool,
+        vec![propose("call_p", "outlook.reply"), Step::Text(DRAFT)],
+        vec![json!({"result":{"status":"unavailable","reason":"other_item"}})],
+        drafting_options(Some("always_allow")),
+    )
+    .await;
+    chat.submit().await;
+    assert_eq!(chat.dispatched_names(), [OPEN_REPLY]);
+    assert_eq!(chat.requests().len(), 2);
+    let parts = parts(&chat.message().await);
+    assert_eq!(proposals(&parts).len(), 1);
+    assert!(chat.stop().await.is_none());
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn no_server_proposal_for_two_drafts_a_facet_without_blocks_or_a_tool_set_to_never(
+    pool: Pool<Postgres>,
+) {
+    let two = "TWO\n```erato-email\nA\n```\n\n```erato-email\nB\n```";
+    let cases = [
+        (two, drafting_options(None)),
+        (DRAFT, proposal_options(None, vec![])),
+        (DRAFT, drafting_options(Some("never_allow"))),
+    ];
+    for (text, options) in cases {
+        let mut chat = Chat::new(pool.clone(), vec![Step::Text(text)], vec![], options).await;
+        chat.submit().await;
+        assert!(chat.stop().await.is_none(), "{text}");
+        assert!(chat.dispatched().is_empty());
+        assert_eq!(chat.requests().len(), 1);
+        assert!(proposals(&parts(&chat.message().await)).is_empty());
+    }
 }

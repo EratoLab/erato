@@ -1,12 +1,23 @@
-import { DocumentIcon, EntityRow, RadioCard } from "@erato/frontend/library";
+import {
+  approvalToolRows,
+  ClientToolDecisionList,
+  DocumentIcon,
+  EntityRow,
+  RadioCard,
+  useApprovalTools,
+} from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
-import { useId, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 
 import {
   AddinSettingsDialogCore,
   type AddinSettingsDialogCoreProps,
 } from "../../core/AddinSettingsDialogCore";
 import { ClientActionsSettings } from "../../core/clientActions/ClientActionsSettings";
+import {
+  carryOverMappingsFor,
+  serverDecidedActions,
+} from "../../core/clientActions/proposalApply";
 import {
   useActionFacetClientActions,
   useAvailableActionFacetArgs,
@@ -34,6 +45,32 @@ import type { WordCommentAuthorMode } from "@erato/frontend/word-review";
 
 export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
   const { supportsAudioCapture } = useOffice();
+  const approvalTools = useApprovalTools();
+  // The pane's actions whose decision the server keeps, as the tools that carry them out list them.
+  const wordMappings = useMemo(
+    () => carryOverMappingsFor(approvalTools, "word"),
+    [approvalTools],
+  );
+  const wordTools = useMemo(
+    () =>
+      approvalTools.filter((tool) =>
+        wordMappings.some(
+          (mapping) => mapping.serverKey === tool.qualified_name,
+        ),
+      ),
+    [approvalTools, wordMappings],
+  );
+  const serverDecided = useMemo(
+    () => serverDecidedActions(wordMappings),
+    [wordMappings],
+  );
+  const paneActions = useCallback(
+    (allowed: readonly string[]) =>
+      offerableWordClientActions(allowed).filter(
+        (action) => !serverDecided.has(action),
+      ),
+    [serverDecided],
+  );
   return (
     <AddinSettingsDialogCore
       {...props}
@@ -76,9 +113,19 @@ export function WordSettingsDialog(props: AddinSettingsDialogCoreProps) {
             })}
             data-testid="servers-tools-word-actions-row"
           >
+            {/* Document and comment changes ask on the server, so every device has the same choice. */}
+            <ClientToolDecisionList
+              tools={approvalToolRows(wordTools)}
+              defaultDecision="ask"
+              heading={t({
+                id: "officeAddin.word.settings.serverChanges",
+                message: "Changes",
+              })}
+              data-testid="word-server-tool-decisions"
+            />
             <ClientActionsSettings
               store={wordClientActionDecisionStore}
-              offerableActions={offerableWordClientActions}
+              offerableActions={paneActions}
               displayLabel={clientActionDisplayLabel}
               copy={{
                 intro: t({

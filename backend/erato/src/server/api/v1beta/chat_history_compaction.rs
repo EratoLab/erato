@@ -574,9 +574,8 @@ async fn compact_under_lease(
     checkpoint.input_file_uploads = Some(retained.iter().copied().collect());
     checkpoint.generation_metadata = Some(
         serde_json::to_value(crate::models::message::GenerationMetadata {
-            used_prompt_tokens: response.usage.prompt_tokens.map(|n| n as u32),
-            used_completion_tokens: response.usage.completion_tokens.map(|n| n as u32),
-            used_total_tokens: response.usage.total_tokens.map(|n| n as u32),
+            budget_usage: crate::models::message::BudgetTokenUsage::from_chat(&response.usage)
+                .map(|usage| [(marker.summarizer_chat_provider_id.clone(), usage)].into()),
             langfuse_trace_id: compaction_trace
                 .as_ref()
                 .map(|trace| trace.trace_id().to_owned()),

@@ -43,7 +43,7 @@ import { useClientActionConfirmFlow } from "../../core/clientActions/useClientAc
 import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
-import { useWordWrite } from "../providers/WordWriteProvider";
+import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
 import { isActionDenied } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
 import {
@@ -53,12 +53,12 @@ import {
   type WordClientAction,
   type WordClientActionEntry,
 } from "../utils/wordClientActions";
+import { wordProposalReviewKey } from "../utils/wordProposalApply";
 import {
   originalWordAnchor,
   readWordTrackingMode,
   showWordReviewLocation,
 } from "../utils/wordReviewLocation";
-import { EMPTY_WORD_REVIEW } from "../utils/wordReviewState";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
 import type {
@@ -144,7 +144,6 @@ function WordActionCard({
     capturesByAssistantMessageId,
     revertSlot,
     setRevertSlot,
-    reviews,
     updateReview,
     operationInProgress,
     beginOperation,
@@ -162,8 +161,12 @@ function WordActionCard({
       messageId !== undefined && messages[messageId]?.status === "sending",
     Object.is,
   );
-  const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
-  const review = reviews.get(batchKey) ?? EMPTY_WORD_REVIEW;
+  const batchKey = wordProposalReviewKey(
+    messageId ?? "",
+    entry.action,
+    content,
+  );
+  const review = useWordReview(batchKey);
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );

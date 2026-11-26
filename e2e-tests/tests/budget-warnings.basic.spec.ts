@@ -100,7 +100,9 @@ test.describe("Budget Warnings (Mocked)", () => {
       await expect(page.getByText(/\$100/)).toBeVisible();
 
       // Verify budget period information is shown
-      await expect(page.getByText(/30-day budget period/i)).toBeVisible();
+      await expect(
+        page.getByText(/spending over the last 30 days/i),
+      ).toBeVisible();
     },
   );
 

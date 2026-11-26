@@ -11,6 +11,7 @@ import {
   wordHistoryProposalKey,
   wordMessageLineage,
   wordParagraphsFromDocumentText,
+  wordPlanContentJson,
   wordPlanNotInProposal,
   wordSnapshotFromHistory,
   WORD_READ_TOOL,
@@ -248,7 +249,7 @@ describe("Word plans restored from chat history", () => {
       expect(
         acceptedWordPlanFromHistory([part({ ...output.result, plan })])
           ?.content,
-      ).toBe(JSON.stringify(plan));
+      ).toBe(wordPlanContentJson(plan));
       expect(
         acceptedWordPlanFromHistory([part(output.result)]),
       ).toBeUndefined();
@@ -260,6 +261,22 @@ describe("Word plans restored from chat history", () => {
       ).toBeUndefined();
     },
   );
+});
+
+describe("an accepted plan's text", () => {
+  it("is one text whatever order the plan's keys arrive in", () => {
+    const sent = {
+      version: 1,
+      snapshot: "s",
+      blocks: [{ type: "paragraph", text: "A", id: "b1" }],
+    };
+    const refetched = {
+      blocks: [{ id: "b1", text: "A", type: "paragraph" }],
+      snapshot: "s",
+      version: 1,
+    };
+    expect(wordPlanContentJson(sent)).toBe(wordPlanContentJson(refetched));
+  });
 });
 
 describe("parts a smaller retry left out", () => {

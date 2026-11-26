@@ -164,7 +164,13 @@ const fullPlan = (
   deleted: [],
 });
 
-const TODAYS_RECEIPT = ["action", "draft_id", "plan", "snapshot"];
+const TODAYS_RECEIPT = [
+  "action",
+  "approval_preview",
+  "draft_id",
+  "plan",
+  "snapshot",
+];
 
 describe("a smaller retry that leaves out parts", () => {
   it.each([

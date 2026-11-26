@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 
+import { isProposalChained } from "../../core/clientActions/proposalApply";
 import { extractProposedClientAction as extractProposedClientActionFor } from "../../core/clientActions/proposedClientAction";
 
 import type { ContentPart, HostArtifact } from "@erato/frontend/library";
@@ -242,7 +243,9 @@ export function buildOutlookArtifact(args: {
       ? { alwaysAskClientActions: args.clientActionInfo.alwaysAskActions }
       : {}),
     ...(proposedClientAction ? { proposedClientAction } : {}),
-    ...(args.clientActionInfo?.presentation
+    // The server carries out a chained proposal after the user's decision in the chat: the
+    // pane does not prompt for it as well.
+    ...(args.clientActionInfo?.presentation && !isProposalChained(args.content)
       ? { clientActionPresentation: args.clientActionInfo.presentation }
       : {}),
     ...(args.freshItemIdentity !== undefined

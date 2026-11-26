@@ -184,11 +184,20 @@ vi.mock("../../utils/wordSelectionCapture", async (importOriginal) => ({
 
 vi.mock("../../utils/wordAuthoringBudget", () => ({
   checkWordAuthoringBudget: host.budget,
+  wordCompleteReadBudgetFor:
+    (args: Record<string, unknown>) => (snapshot: unknown) => async () => {
+      const budget = await host.budget(snapshot, { ...args, mode: "complete" });
+      return budget.ok ? undefined : budget.issue;
+    },
 }));
 
 vi.mock("../../utils/wordDocumentReadTool", () => ({
   WORD_READ_TOOL: "read_document_blocks",
-  wordDocumentReadSession: { activate: vi.fn(), clear: vi.fn() },
+  wordDocumentReadSession: {
+    activate: vi.fn(),
+    clear: vi.fn(),
+    followCopies: () => () => {},
+  },
 }));
 
 vi.mock("../../utils/wordDocumentReadRequest", () => ({

@@ -1,9 +1,10 @@
 import {
-  normalizeWordDocumentPlan,
-  parseWordDocumentPlan,
+  canonicalWordPlan,
   MAX_PLAN_BYTES,
   MAX_WORD_SCOPE_BYTES,
-  canonicalWordPlan,
+  normalizeWordDocumentPlan,
+  parseWordDocumentPlan,
+  WORD_MORE_CHANGES_ARGUMENT,
   wordReadScope,
   wordSourceReadRefs,
   WordTableCellSubmissionError,
@@ -17,6 +18,7 @@ import {
   WORD_SCOPED_OVER_COMPLETE_READ_BUDGET,
   WORD_SCOPED_SIZE,
   WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN,
+  wordChainedWording,
 } from "./wordAuthoringContract";
 import { wordBlockIndex } from "./wordDocumentOutline";
 import { wordTargetInventory } from "./wordTargetRead";
@@ -246,8 +248,8 @@ export function expandWordScopedSubmission(
         "/scoped_edit",
         `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${
           snapshot.completeReadIssue
-            ? WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN
-            : WORD_SCOPED_OVER_COMPLETE_READ_BUDGET
+            ? wordChainedWording(WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN)
+            : wordChainedWording(WORD_SCOPED_OVER_COMPLETE_READ_BUDGET)
         }`,
       );
     // too-large asks for a read, so the complete read uses the recovery read allowance.
@@ -259,7 +261,12 @@ export function expandWordScopedSubmission(
   }
   const edit = input.scoped_edit;
   if (
-    !only(input, ["snapshot", "readToken", "scoped_edit"]) ||
+    !only(input, [
+      "snapshot",
+      "readToken",
+      "scoped_edit",
+      WORD_MORE_CHANGES_ARGUMENT,
+    ]) ||
     !object(edit) ||
     !only(edit, ["body", "objects", "stories", "sections"]) ||
     !Object.keys(edit).length
@@ -845,7 +852,10 @@ export function expandWordScopedSubmission(
   const json = JSON.stringify(value);
   // The host's keeps count too; refused here, the model splits the change instead of reading again.
   if (new TextEncoder().encode(json).length > MAX_PLAN_BYTES)
-    return fail("/scoped_edit", WORD_SCOPED_EXPANDED_TOO_LARGE);
+    return fail(
+      "/scoped_edit",
+      wordChainedWording(WORD_SCOPED_EXPANDED_TOO_LARGE),
+    );
   const parseIssues: WordPlanDiagnostics = [];
   const parsed = parseWordDocumentPlan(json, parseIssues);
   if (!parsed) {

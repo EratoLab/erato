@@ -74,6 +74,11 @@ describe("Word client tool registration", () => {
       ["submit_document_plan", false],
       ["plan_document_sections", false],
       ["write_document_section", false],
+      ["apply_document_plan", false],
+      ["apply_comment_changes", false],
+      ["replace_selection", false],
+      ["insert_at_cursor", false],
+      ["apply_edits", false],
     ]);
   });
 

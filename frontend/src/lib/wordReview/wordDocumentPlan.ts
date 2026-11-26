@@ -1,4 +1,5 @@
 import { isDefaultTableStyle, wordHeadingStyle } from "./wordBuiltInStyles";
+import { WORD_MORE_CHANGES_ARGUMENT } from "./wordHistoryNames";
 import { wordPlanError } from "./wordPlanDiagnostics";
 import { wordPlanMatchesObjectScope } from "./wordReadScope";
 import { resolveWordSource, wordSourceDetails } from "./wordRichContent";
@@ -239,6 +240,7 @@ export function parseWordDocumentPlan(
     const v: unknown = JSON.parse(content);
     // An omitted deleted array means no explicit deletions, never permission to drop uncovered blocks.
     if (object(v) && v.deleted === undefined) v.deleted = [];
+    if (object(v)) delete v[WORD_MORE_CHANGES_ARGUMENT];
     if (
       !object(v) ||
       !keys(v, [

@@ -444,6 +444,7 @@ export const DEFAULT_STUBS = {
   componentRegistry: {},
   createBrowserClientInfo: (info: unknown) => info,
   dynamicActivate: async () => {},
+  clientToolAvailabilityChanged: noop,
   extractTextFromContent: () => "",
   findCapabilityByExtension: () => null,
   getSupportedFileTypes: () => [],
@@ -601,6 +602,20 @@ export const DEFAULT_STUBS = {
   usePersistedState: <T,>(_key: string, initialValue: T) =>
     useState(initialValue),
   useProfile: () => ({ profile: undefined }),
+  useApprovalTools: () => [],
+  approvalToolRows: () => [],
+  ClientToolDecisionList: () => null,
+  addUnsetClientToolDecisions: async () => [],
+  alwaysAllowLockedLine: () => "",
+  HostArtifactProvider: ({ children }: { children?: ReactNode }) => children,
+  submittedCardsOf: (
+    artifact:
+      | { submittedCard?: unknown; submittedCards?: readonly unknown[] }
+      | null
+      | undefined,
+  ) =>
+    artifact?.submittedCards ??
+    (artifact?.submittedCard ? [artifact.submittedCard] : []),
   useStandardMessageActions: () => noop,
   useUnarchiveChat: () => async () => undefined,
   useChatInputControls: () => ({

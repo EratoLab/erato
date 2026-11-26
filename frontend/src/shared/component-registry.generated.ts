@@ -427,6 +427,7 @@ export { LocalSearchCoverageNotice } from "@/components/ui/Message/LocalSearchCo
 export { McpToolApprovalCard } from "@/components/ui/Message/McpToolApprovalCard";
 export type { McpToolApprovalRequestPart } from "@/components/ui/Message/McpToolApprovalCard";
 export { MermaidBlock } from "@/components/ui/Message/MermaidBlock";
+export { HostArtifactProvider } from "@/components/ui/Message/MessageContent";
 export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { useHostArtifact } from "@/components/ui/Message/MessageContent";
 export { useOutlookArtifact } from "@/components/ui/Message/MessageContent";

@@ -24,6 +24,23 @@ export interface BudgetWarningResult {
   formattedLimit: string;
 }
 
+export function getBudgetWarningLevel(
+  status: BudgetStatusResponse | undefined,
+) {
+  if (
+    !status?.enabled ||
+    status.current_spending === null ||
+    status.budget_limit === null
+  ) {
+    return null;
+  }
+  if (status.current_spending >= status.budget_limit) return "error";
+  return status.current_spending >=
+    status.budget_limit * (status.warn_threshold ?? 0.7)
+    ? "warning"
+    : null;
+}
+
 /**
  * Calculate budget warning states from budget status data
  *
@@ -71,15 +88,13 @@ export function useBudgetWarning(
 
     const spending = budgetStatus.current_spending;
     const limit = budgetStatus.budget_limit;
-    const warnThreshold = budgetStatus.warn_threshold ?? 0.7; // Default to 70%
     const currency = budgetStatus.budget_currency ?? "USD";
 
     // Calculate percentage used
     const percentUsed = limit > 0 ? (spending / limit) * 100 : 0;
 
     // Determine warning/error states
-    const isError = spending >= limit; // At or over limit
-    const isWarning = !isError && spending >= limit * warnThreshold; // Above threshold but below limit
+    const level = getBudgetWarningLevel(budgetStatus);
 
     // Format currency values using Intl.NumberFormat for proper locale-aware formatting
     // This respects the user's locale for currency symbols, decimal separators, and thousands separators
@@ -92,8 +107,8 @@ export function useBudgetWarning(
     const formattedLimit = currencyFormatter.format(limit);
 
     return {
-      isWarning,
-      isError,
+      isWarning: level === "warning",
+      isError: level === "error",
       percentUsed,
       hasData: true,
       formattedSpending,

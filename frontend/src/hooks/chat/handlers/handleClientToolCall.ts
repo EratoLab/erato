@@ -5,6 +5,7 @@ import { operationExecutorBinding } from "@/lib/clientOperations/registration";
 
 import {
   abortClientToolCall,
+  answersNeedsDecision,
   answersScopeChanged,
   clientToolAcceptsGrantCalls,
   getClientToolExecutor,
@@ -189,7 +190,10 @@ async function runAndPost(
       await postClientToolResult(body, tool_call_id, deps, binding);
       // The server asks the user again and sends the same call once they
       // allow it, which must not be skipped as already answered.
-      if (answersScopeChanged(body.validation_errors))
+      if (
+        answersScopeChanged(body.validation_errors) ||
+        answersNeedsDecision(body.result)
+      )
         unmarkClientToolCallAnswered(tool_call_id);
     } finally {
       releaseClientToolCallAbort(tool_call_id);

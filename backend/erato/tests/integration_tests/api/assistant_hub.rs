@@ -436,6 +436,209 @@ async fn test_assistant_hub_rejects_duplicate_version_number(pool: Pool<Postgres
     assert_eq!(my_versions["versions"][0]["version_number"], "1.0.0");
 }
 
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_assistant_hub_strict_version_validation(pool: Pool<Postgres>) {
+    let mut config = assistant_hub_app_config();
+    config.assistant_hub.validate_version_semver_format = false;
+    let mut app_state = test_app_state(config, pool).await;
+    let legacy_server = create_test_server(app_state.clone());
+
+    let owner_subject = "assistant-hub-version-owner";
+    let owner_email = "assistant-hub-version-owner@example.com";
+    let owner_token = JwtTokenBuilder::new()
+        .subject(owner_subject)
+        .email(owner_email)
+        .build();
+    let reviewer_token = JwtTokenBuilder::new()
+        .subject("assistant-hub-version-reviewer")
+        .email("assistant-hub-version-reviewer@example.com")
+        .groups(vec![REVIEWER_GROUP_ID.to_string()])
+        .build();
+    let owner = erato::models::user::get_or_create_user(
+        &app_state.db,
+        TEST_USER_ISSUER,
+        owner_subject,
+        Some(owner_email),
+    )
+    .await
+    .unwrap();
+    let source = erato::models::assistant::create_assistant(
+        &app_state.db,
+        &PolicyEngine::new(),
+        &erato::policy::types::Subject::User(owner.id.to_string()),
+        "Versioned assistant".to_string(),
+        None,
+        "A test assistant.".to_string(),
+        None,
+        None,
+        Some("mock-llm".to_string()),
+        false,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let source_path = format!("/api/v1beta/assistant-hub/assistants/{}", source.id);
+    let versions_path = format!("{source_path}/versions");
+    let submission = |version: &str| {
+        json!({
+            "long_description": "An assistant for version testing.",
+            "category_ids": [STORE_CATEGORY_ID],
+            "keywords": [],
+            "version_number": version
+        })
+    };
+    let submit = |server: &axum_test::TestServer, version: &str| {
+        server
+            .post(&versions_path)
+            .json(&submission(version))
+            .with_bearer_token(&owner_token)
+    };
+
+    let legacy_config: Value = legacy_server
+        .get("/api/v1beta/assistant-hub/config")
+        .with_bearer_token(&owner_token)
+        .await
+        .json();
+    assert_eq!(legacy_config["validate_version_semver_format"], false);
+    let legacy = submit(&legacy_server, " v99.0.0 ").await;
+    legacy.assert_status(http::StatusCode::CREATED);
+    assert_eq!(
+        legacy.json::<Value>()["version"]["version_number"],
+        "v99.0.0"
+    );
+    submit(&legacy_server, "v99.0.0")
+        .await
+        .assert_status_bad_request();
+    submit(&legacy_server, " \t ")
+        .await
+        .assert_status_bad_request();
+
+    app_state
+        .config
+        .assistant_hub
+        .validate_version_semver_format = true;
+    let server = create_test_server(app_state);
+    let strict_config: Value = server
+        .get("/api/v1beta/assistant-hub/config")
+        .with_bearer_token(&owner_token)
+        .await
+        .json();
+    assert_eq!(strict_config["validate_version_semver_format"], true);
+
+    for label in [
+        "",
+        "1.0",
+        "1.0.0.0",
+        "1..0",
+        "v1.0.0",
+        "1.0.0-rc.1",
+        "1.0.0+build",
+        "01.0.0",
+        "1.00.0",
+        "1.0.00",
+        "1.-1.0",
+        "1.０.0",
+    ] {
+        let rejected = submit(&server, label).await;
+        rejected.assert_status_bad_request();
+        assert_eq!(
+            rejected.json::<Value>(),
+            json!({"code": "invalid_version_format"}),
+            "{label:?}"
+        );
+    }
+    let preview = server
+        .post(&format!("{source_path}/submission-diff"))
+        .json(&submission("1.0"))
+        .with_bearer_token(&owner_token)
+        .await;
+    preview.assert_status_bad_request();
+    assert_eq!(preview.json::<Value>()["code"], "invalid_version_format");
+
+    let first = submit(&server, " \t0.1.0\n ").await;
+    first.assert_status(http::StatusCode::CREATED);
+    assert_eq!(first.json::<Value>()["version"]["version_number"], "0.1.0");
+
+    let pending = submit(&server, "1.9.0").await;
+    pending.assert_status(http::StatusCode::CREATED);
+    let pending: Value = pending.json();
+    let pending_id = pending["version"]["version_id"].as_str().unwrap();
+    for label in ["1.9.0", "1.8.9"] {
+        let rejected = submit(&server, label).await;
+        rejected.assert_status_bad_request();
+        assert_eq!(
+            rejected.json::<Value>(),
+            json!({"code": "version_not_increasing", "current_version": "1.9.0"})
+        );
+    }
+    server
+        .post(&format!(
+            "/api/v1beta/assistant-hub/versions/{pending_id}/review"
+        ))
+        .json(&json!({"accepted": false, "reviewer_review_comment": "Please revise"}))
+        .with_bearer_token(&reviewer_token)
+        .await
+        .assert_status_ok();
+    let below_declined = submit(&server, "1.8.9").await;
+    below_declined.assert_status_bad_request();
+    assert_eq!(below_declined.json::<Value>()["current_version"], "1.9.0");
+
+    let next = submit(&server, "1.10.0").await;
+    next.assert_status(http::StatusCode::CREATED);
+    let next: Value = next.json();
+    let next_id = next["version"]["version_id"].as_str().unwrap();
+    server
+        .post(&format!(
+            "/api/v1beta/assistant-hub/versions/{next_id}/withdraw"
+        ))
+        .with_bearer_token(&owner_token)
+        .await
+        .assert_status_ok();
+    let below_withdrawn = submit(&server, "1.9.1").await;
+    below_withdrawn.assert_status_bad_request();
+    assert_eq!(below_withdrawn.json::<Value>()["current_version"], "1.10.0");
+
+    let mut invalid_audience = submission("1.10.1");
+    invalid_audience["audience_grants"] = json!([{
+        "subject_type": "organization",
+        "subject_id_type": "organization_id",
+        "subject_id": "invalid-organization-id",
+        "role": "viewer"
+    }]);
+    server
+        .post(&versions_path)
+        .json(&invalid_audience)
+        .with_bearer_token(&owner_token)
+        .await
+        .assert_status_bad_request();
+
+    let (first, second) = tokio::join!(submit(&server, "1.10.1"), submit(&server, "1.10.1"));
+    let (created, rejected) = if first.status_code() == http::StatusCode::CREATED {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    created.assert_status(http::StatusCode::CREATED);
+    rejected.assert_status_bad_request();
+    assert_eq!(
+        rejected.json::<Value>(),
+        json!({"code": "version_not_increasing", "current_version": "1.10.1"})
+    );
+
+    let versions: Value = server
+        .get("/api/v1beta/assistant-hub/my/versions")
+        .with_bearer_token(&owner_token)
+        .await
+        .json();
+    assert_eq!(version_count(&versions), 5);
+    assert_eq!(versions["versions"][4]["version_number"], "v99.0.0");
+}
+
 /// Verifies that featuring is held on the hub assistant, not on an
 /// individual immutable version, so the flag carries forward when a newer
 /// version becomes current.

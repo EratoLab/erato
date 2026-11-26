@@ -676,6 +676,48 @@ fn test_action_facet_grant_scope_needs_a_client_action() {
     ));
 }
 
+const DRAFT_BLOCK_TOOL: &str = r#"
+[client_tools.tools.open_form]
+name = "open_form"
+namespace = "editor"
+description = "Open a form"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["word.add_comments"]
+"#;
+
+#[test]
+fn test_action_facet_draft_block_actions_are_parsed() {
+    let config = ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.add_comments\" }}\n{DRAFT_BLOCK_TOOL}"
+    ));
+    assert_eq!(
+        config.action_facets.facets["word_selection"].draft_block_actions["editor-draft"],
+        "word.add_comments"
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "maps block 'editor-draft' to 'word.other', which is not in client_actions"
+)]
+fn test_action_facet_draft_block_action_needs_a_client_action() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.other\" }}\n{DRAFT_BLOCK_TOOL}"
+    ));
+}
+
+#[test]
+#[should_panic(
+    expected = "maps block 'editor-draft' to 'word.add_comments', which no server-called client tool without follows_tool carries out"
+)]
+fn test_action_facet_draft_block_action_needs_a_server_called_tool() {
+    ms_office_addin_config_from_toml(&format!(
+        "{GRANT_SCOPE_FACET}draft_block_actions = {{ \"editor-draft\" = \"word.add_comments\" }}\n"
+    ));
+}
+
 #[test]
 #[should_panic(expected = "`comment_assistant_author` must contain `{user}` exactly once")]
 fn test_config_with_comment_author_template_without_user_is_invalid() {
@@ -2793,11 +2835,11 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     assert!(!gpt4_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         gpt4_provider.model_capabilities.cost_input_tokens_per_1m,
-        30.0
+        Some(30.0)
     );
     assert_eq!(
         gpt4_provider.model_capabilities.cost_output_tokens_per_1m,
-        60.0
+        Some(60.0)
     );
 
     // Test GPT-4o Mini model capabilities
@@ -2827,13 +2869,13 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
         gpt4o_mini_provider
             .model_capabilities
             .cost_input_tokens_per_1m,
-        0.15
+        Some(0.15)
     );
     assert_eq!(
         gpt4o_mini_provider
             .model_capabilities
             .cost_output_tokens_per_1m,
-        0.6
+        Some(0.6)
     );
 
     // Test accessing a provider through the config API
@@ -2919,11 +2961,11 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     assert!(!basic_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         basic_provider.model_capabilities.cost_input_tokens_per_1m,
-        0.0
+        None
     );
     assert_eq!(
         basic_provider.model_capabilities.cost_output_tokens_per_1m,
-        0.0
+        None
     );
 }
 
@@ -3907,10 +3949,59 @@ fn a_server_called_tool_always_has_a_decision() {
 }
 
 #[test]
-#[should_panic(expected = "sets called_by = \"server\" and needs follows_tool")]
-fn a_server_called_tool_needs_follows_tool() {
+#[should_panic(
+    expected = "sets called_by = \"server\" and needs follows_tool or the client_actions it carries out"
+)]
+fn a_server_called_tool_needs_follows_tool_or_client_actions() {
     migrate_config_with_action_facets(
-        &CHAINED_APPLY.replace("follows_tool = \"editor/submit_draft\"\n", ""),
+        &CHAINED_APPLY
+            .replace("follows_tool = \"editor/submit_draft\"\n", "")
+            .replace("client_actions = [\"editor.apply_draft\"]\n", ""),
+    );
+}
+
+const PROPOSAL_TOOL: &str = r#"
+[client_tools.tools.outlook_open_reply]
+name = "open_reply"
+namespace = "outlook"
+description = "Open a reply to the email"
+parameters = '{"type":"object"}'
+called_by = "server"
+requires_client_registration = true
+client_actions = ["outlook.reply"]
+
+[action_facets.facets.outlook_reply_from_read]
+display_name = "Reply"
+template = "Reply."
+allowed_args = ["body_format"]
+client_actions = ["outlook.reply"]
+"#;
+
+#[test]
+fn a_server_called_tool_may_carry_out_proposed_actions() {
+    let config = migrate_config_with_action_facets(PROPOSAL_TOOL);
+    let tool = &config.client_tools.tools["outlook_open_reply"];
+    assert_eq!(tool.called_by, erato::config::ClientToolCalledBy::Server);
+    assert!(erato::services::chained_apply::is_proposal_tool(tool));
+    assert_eq!(
+        erato::services::chained_apply::proposal_tool(&config.client_tools.tools, "outlook.reply")
+            .map(|tool| tool.qualified_name()),
+        Some("outlook/open_reply".to_string())
+    );
+}
+
+#[test]
+fn a_follower_never_carries_out_a_proposal() {
+    let config = migrate_config_with_action_facets(CHAINED_APPLY);
+    assert!(!erato::services::chained_apply::is_proposal_tool(
+        &config.client_tools.tools["apply"]
+    ));
+    assert!(
+        erato::services::chained_apply::proposal_tool(
+            &config.client_tools.tools,
+            "editor.apply_draft"
+        )
+        .is_none()
     );
 }
 
