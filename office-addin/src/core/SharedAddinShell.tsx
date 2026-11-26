@@ -91,6 +91,9 @@ export const SHARED_ADDIN_FEATURE_CONFIG = {
   // Read aloud stays off in the task panes until audio output is verified
   // there (Word and Outlook for Windows); remove this line to offer it.
   messageActions: { readAloudEnabled: false },
+  // The panes list no pinned chats; with the server's setting on, every
+  // chat-history hook would also ask for the pinned list.
+  pinnedChats: { enabled: false },
 } satisfies FeatureConfigOverrides;
 
 /**

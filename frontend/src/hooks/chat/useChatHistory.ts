@@ -230,10 +230,14 @@ export interface ChatHistoryOptions {
   pinnedChatsLimit?: number;
 }
 
-export function useChatHistory({
-  pinnedChatsEnabled = false,
-  pinnedChatsLimit = 5,
-}: ChatHistoryOptions = {}) {
+export function useChatHistory(options: ChatHistoryOptions = {}) {
+  // Callers without options (sending, navigation) must name the same lists as
+  // the sidebar's, or each asks the server for a list of its own.
+  const featureConfig = useOptionalFeatureConfig();
+  const {
+    pinnedChatsEnabled = featureConfig?.pinnedChats.enabled ?? false,
+    pinnedChatsLimit = featureConfig?.pinnedChats.maxItems ?? 5,
+  } = options;
   // const router = useRouter(); // Removed Next.js router
   const navigate = useNavigate(); // Added React Router navigate
   const location = useLocation();
@@ -263,7 +267,7 @@ export function useChatHistory({
 
   // Standalone library use has no feature config; filtering stays on there.
   const listFilters = useChatHistoryListFilters(
-    useOptionalFeatureConfig()?.sidebar.chatHistoryFiltersEnabled ?? true,
+    featureConfig?.sidebar.chatHistoryFiltersEnabled ?? true,
   );
   const { typeFilter, statusFilter, sourceFilter } = listFilters;
 

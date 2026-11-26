@@ -79,6 +79,7 @@ import type {
 } from "react";
 
 const mockUseChatContext = vi.fn();
+const mockUseBudgetStatus = vi.fn();
 const mockUseChatCompaction = vi.fn();
 const mockUseUploadFeature = vi.fn();
 const mockUseChatInputFeature = vi.fn();
@@ -366,11 +367,13 @@ vi.mock("../Feedback/Alert", () => ({
     children,
     dismissible,
     onDismiss,
+    geometryVariant: _geometryVariant,
     ...props
   }: {
     children: ReactNode;
     dismissible?: boolean;
     onDismiss?: () => void;
+    geometryVariant?: string;
   } & HTMLAttributes<HTMLDivElement>) => (
     <div {...props}>
       {children}
@@ -383,8 +386,8 @@ vi.mock("../Feedback/Alert", () => ({
   ),
 }));
 
-vi.mock("../Feedback/ChatWarnings/BudgetWarning", () => ({
-  BudgetWarning: () => null,
+vi.mock("@/hooks/budget/useBudgetStatus", () => ({
+  useBudgetStatus: () => mockUseBudgetStatus(),
 }));
 
 // The browser dialog is covered against the real component in its own test;
@@ -450,6 +453,7 @@ vi.mock("../icons", async (importOriginal) => ({
 describe("ChatInput", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockUseBudgetStatus.mockReturnValue({ data: undefined });
     stagedPreview.real = false;
     mockUseChatCompaction.mockReturnValue({
       available: false,
@@ -567,6 +571,51 @@ describe("ChatInput", () => {
       toggleAudioRecording: vi.fn(),
     });
   });
+
+  it.each([false, true])(
+    "restores composer focus when dismissing the budget warning in audio mode %s",
+    async (audioMode) => {
+      stagedPreview.real = true;
+      mockUseBudgetStatus.mockReturnValue({
+        data: {
+          enabled: true,
+          current_spending: 75,
+          budget_limit: 100,
+          warn_threshold: 0.7,
+          budget_currency: "USD",
+        },
+        isSuccess: true,
+        fetchStatus: "idle",
+      });
+      mockUseAudioDictationFeature.mockReturnValue({ enabled: audioMode });
+      mockUseAudioConversationalFeature.mockReturnValue({ enabled: audioMode });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput
+              onSendMessage={vi.fn()}
+              controlledIsAudioMode={audioMode}
+              onControlledIsAudioModeChange={vi.fn()}
+            />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+
+      const dismiss = screen.getByRole("button", { name: "Dismiss" });
+      dismiss.focus();
+      fireEvent.click(dismiss);
+
+      expect(dismiss).not.toBeInTheDocument();
+      const target = audioMode
+        ? screen.getByRole("button", { name: "Stop audio mode" })
+        : screen.getByPlaceholderText("Type a message...");
+      expect(target).toHaveFocus();
+    },
+  );
 
   it("clears the shared upload error when the file error alert is dismissed", async () => {
     const queryClient = new QueryClient({

@@ -80,6 +80,14 @@ type ThemeContextType = {
    */
   assetPaths: ThemeAssetPaths;
   logoPath: string | null;
+  /**
+   * The theme is applied for the start: its `theme.json` has loaded (or is
+   * known to be absent), its style sheets and its text fonts have loaded,
+   * failed, or taken too long. Until then the page shows no content, so a
+   * customer's page never shows another look or a stand-in font first. Stays
+   * true once reached.
+   */
+  isThemeReady: boolean;
 };
 
 /** Resolved location of each optional theme asset, or null when unavailable. */
@@ -226,6 +234,40 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_FONTS_MARKER = 'link[data-theme-fonts="true"]';
 const THEME_STYLES_MARKER = 'link[data-theme-styles="true"]';
 const THEME_VARS_MARKER = 'style[data-theme-vars="true"]';
+/** Written by index.html from the colour the server put into the page. */
+export const START_COLORS_STYLE_ID = "erato-start-colors";
+const START_COLORS_MARKER = `style#${START_COLORS_STYLE_ID}`;
+
+/** After this long the page shows, whatever of the theme is still loading. */
+const THEME_START_WAIT_MS = 3000;
+
+/**
+ * How long the start waits for the theme's text fonts once its style sheets
+ * have settled. Cached fonts arrive well within it; a large font on a slow
+ * network swaps in later (`font-display: swap`), which beats a later app.
+ */
+const THEME_FONT_WAIT_MS = 400;
+
+/**
+ * Loads the fonts the applied theme sets for text and headings. A font loads
+ * only once text uses it, and the start shows no text before the app: without
+ * this the app's first frame would use the browser's stand-in font.
+ */
+const loadThemeFonts = async () => {
+  const fonts = document.fonts as FontFaceSet | undefined;
+  if (!fonts) return;
+  const root = window.getComputedStyle(document.documentElement);
+  const shorthands = [
+    ["400", "--theme-font-body"],
+    ["600", "--theme-font-heading"],
+  ].flatMap(([weight, variable]) => {
+    const family = root.getPropertyValue(variable).trim();
+    return family ? [`${weight} 1em ${family}`] : [];
+  });
+  await Promise.all(
+    shorthands.map((shorthand) => fonts.load(shorthand).catch(() => [])),
+  );
+};
 
 const removeThemeStylesheets = () => {
   document.querySelector(THEME_FONTS_MARKER)?.remove();
@@ -239,14 +281,15 @@ const removeThemeVariablesStyle = () => {
 const appendThemeStylesheet = (
   href: string | null,
   marker: "data-theme-fonts" | "data-theme-styles",
-) => {
-  if (!href) return;
+): HTMLLinkElement | null => {
+  if (!href) return null;
 
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
   link.setAttribute(marker, "true");
   document.head.appendChild(link);
+  return link;
 };
 
 const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
@@ -591,6 +634,10 @@ export function ThemeProvider({
   // asset as absent would be indistinguishable from one that declares nothing
   // and we would fire the very request the declaration exists to prevent.
   const [isThemeLoadSettled, setIsThemeLoadSettled] = useState(false);
+  // The theme whose style sheets have settled; compared by identity so a
+  // newly loaded theme waits for its own.
+  const [stylesheetsSettledFor, setStylesheetsSettledFor] =
+    useState<CustomThemeConfig | null>(null);
   const [systemThemeOverride, setSystemThemeOverride] = useState<
     "light" | "dark" | null
   >(null);
@@ -665,14 +712,28 @@ export function ThemeProvider({
       resolvedThemeConfigPath,
     );
 
-    appendThemeStylesheet(fontsCssPath, "data-theme-fonts");
-    appendThemeStylesheet(themeCssPath, "data-theme-styles");
+    const links = [
+      appendThemeStylesheet(fontsCssPath, "data-theme-fonts"),
+      appendThemeStylesheet(themeCssPath, "data-theme-styles"),
+    ].filter((link): link is HTMLLinkElement => link !== null);
 
     const themeVariablesStyle = document.querySelector(THEME_VARS_MARKER);
     const themeStylesheet = document.querySelector(THEME_STYLES_MARKER);
     if (themeVariablesStyle && themeStylesheet) {
       document.head.insertBefore(themeVariablesStyle, themeStylesheet);
     }
+
+    const settle = () => setStylesheetsSettledFor(customThemeConfig);
+    let pending = links.length;
+    const settleOne = () => {
+      pending -= 1;
+      if (pending === 0) settle();
+    };
+    for (const link of links) {
+      link.addEventListener("load", settleOne, { once: true });
+      link.addEventListener("error", settleOne, { once: true });
+    }
+    if (pending === 0) settle();
 
     return () => {
       removeThemeStylesheets();
@@ -780,6 +841,13 @@ export function ThemeProvider({
 
     setTheme(baseTheme);
 
+    if (isThemeLoadSettled) {
+      // The page's start colour stays until the loaded theme replaces it, in
+      // this same frame, so the default look never shows in between.
+      syncThemeVariablesStyle(baseTheme);
+      document.querySelector(START_COLORS_MARKER)?.remove();
+    }
+
     // Save to localStorage
     if (typeof window !== "undefined") {
       // Update data-theme attributes on document for potential CSS selectors
@@ -794,7 +862,7 @@ export function ThemeProvider({
         document.documentElement.removeAttribute("data-theme-name");
       }
     }
-  }, [effectiveTheme, customThemeConfig]);
+  }, [effectiveTheme, customThemeConfig, isThemeLoadSettled]);
 
   useEffect(() => {
     syncThemeVariablesStyle(theme);
@@ -803,6 +871,41 @@ export function ThemeProvider({
       removeThemeVariablesStyle();
     };
   }, [theme]);
+
+  const expectsStylesheets =
+    enableCustomTheme &&
+    customThemeConfig !== null &&
+    !!resolvedThemeConfigPath;
+  const stylesheetsSettled =
+    !expectsStylesheets || stylesheetsSettledFor === customThemeConfig;
+  const [isThemeReady, setIsThemeReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsThemeReady(true), THEME_START_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // After the theme's variables are applied (the merge effect above), so the
+  // fonts read here are the loaded theme's.
+  useEffect(() => {
+    if (isThemeReady || !isThemeLoadSettled || !stylesheetsSettled) return;
+    let cancelled = false;
+    const ready = () => {
+      if (!cancelled) setIsThemeReady(true);
+    };
+    const timer = setTimeout(ready, THEME_FONT_WAIT_MS);
+    void loadThemeFonts().then(ready);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isThemeReady, isThemeLoadSettled, stylesheetsSettled]);
+
+  // Shown before its theme arrived (the ceiling above), the app must not keep
+  // every surface in the page colour the start style forces.
+  useEffect(() => {
+    if (isThemeReady) document.querySelector(START_COLORS_MARKER)?.remove();
+  }, [isThemeReady]);
 
   // Layout effect: the attribute changes the root font-size, and a passive
   // effect would paint one frame at the old scale first.
@@ -846,6 +949,7 @@ export function ThemeProvider({
     iconMappings,
     assetPaths,
     logoPath,
+    isThemeReady,
   };
 
   return (

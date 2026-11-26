@@ -48,6 +48,9 @@ afterEach(() => {
   delete (window as Window & { ERATO_COMPONENT_KITS?: unknown })
     .ERATO_COMPONENT_KITS;
   delete window.API_ROOT_URL;
+  delete window.THEME_CUSTOMER_NAME;
+  delete window.THEME_TRANSLATION_LOCALES;
+  delete window.TRANSLATION_OVERRIDE_LOCALES;
 });
 
 describe("i18n Locale Detection (No Persistence)", () => {
@@ -334,6 +337,91 @@ describe("i18n Component Kit Catalogs", () => {
         "shared.label": "Runtime override",
       },
     });
+  });
+});
+
+describe("i18n start requests", () => {
+  beforeEach(() => {
+    window.API_ROOT_URL = "/api/";
+    window.THEME_CUSTOMER_NAME = "acme";
+  });
+
+  /** Answers nothing until every request asked so far has been made. */
+  const holdAnswers = () => {
+    const pending: Array<() => void> = [];
+    const fetchMock = vi.fn(
+      (url: string) =>
+        new Promise<Response>((resolve) => {
+          pending.push(() =>
+            resolve({
+              ok: true,
+              json: async () =>
+                url.endsWith("index.json")
+                  ? { locales: ["en"] }
+                  : { messages: { [url]: url } },
+            } as Response),
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return {
+      fetchMock,
+      answerAll: () => pending.splice(0).forEach((answer) => answer()),
+    };
+  };
+
+  it("asks for every catalog at once instead of one after another", async () => {
+    window.ERATO_COMPONENT_KITS = [{ name: "kit", components: [] }];
+    window.THEME_TRANSLATION_LOCALES = ["en"];
+    window.TRANSLATION_OVERRIDE_LOCALES = ["en"];
+    const { fetchMock, answerAll } = holdAnswers();
+
+    const activation = dynamicActivate("en");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([
+      "/public/common/custom-theme/acme/locales/en/messages.json",
+      "/public/common/locales/en/messages.json",
+      "/public/common/overrides/en.json",
+      "/public/component-kits/kit/locales/en/messages.json",
+    ]);
+    answerAll();
+    await activation;
+    expect(i18n.messages["/public/common/overrides/en.json"]).toBe(
+      "/public/common/overrides/en.json",
+    );
+  });
+
+  it("skips the theme and override catalogs the server does not list", async () => {
+    window.THEME_TRANSLATION_LOCALES = ["de"];
+    window.TRANSLATION_OVERRIDE_LOCALES = [];
+    const { fetchMock, answerAll } = holdAnswers();
+
+    const activation = dynamicActivate("en");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    answerAll();
+    await activation;
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/public/common/locales/en/messages.json",
+    ]);
+  });
+
+  it("tries the optional catalogs when the server does not list them", async () => {
+    const { fetchMock, answerAll } = holdAnswers();
+
+    const activation = dynamicActivate("en");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    answerAll();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    answerAll();
+    await activation;
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/public/common/locales/en/messages.json",
+      "/public/common/custom-theme/acme/locales/en/messages.json",
+      "/public/common/overrides/index.json",
+      "/public/common/overrides/en.json",
+    ]);
   });
 });
 
