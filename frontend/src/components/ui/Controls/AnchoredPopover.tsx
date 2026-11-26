@@ -173,6 +173,14 @@ export function AnchoredPopover({
       padding,
     };
     const safeArea = { top: safeTop, bottom: safeBottom };
+    // An on-screen keyboard covers the bottom of the window without making it
+    // shorter; only the visual viewport ends where the keyboard begins.
+    const visibleBottom = window.visualViewport
+      ? Math.min(
+          viewport.height,
+          window.visualViewport.offsetTop + window.visualViewport.height,
+        )
+      : viewport.height;
 
     const requiredSpace = {
       vertical: panelRect.height + anchorGap + viewport.padding,
@@ -182,10 +190,7 @@ export function AnchoredPopover({
     const space = {
       top: triggerRect.top - viewport.padding - safeArea.top,
       bottom:
-        viewport.height -
-        triggerRect.bottom -
-        viewport.padding -
-        safeArea.bottom,
+        visibleBottom - triggerRect.bottom - viewport.padding - safeArea.bottom,
       left: triggerRect.left - viewport.padding,
       right: viewport.width - triggerRect.right - viewport.padding,
     };

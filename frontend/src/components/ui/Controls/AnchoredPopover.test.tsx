@@ -170,6 +170,30 @@ describe("AnchoredPopover", () => {
       measure.mockRestore();
     });
 
+    it("opens above when an on-screen keyboard covers the room below", () => {
+      const measure = panelSize(60, 200);
+      Object.defineProperty(window, "visualViewport", {
+        configurable: true,
+        value: {
+          offsetTop: 0,
+          height: 420,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        },
+      });
+      try {
+        render(ui("bottom"));
+
+        // 420 - 320 - 8 leaves 92 below the rectangle, too little for 200.
+        expect(screen.getByRole("toolbar").style.bottom).toBe(
+          `${window.innerHeight - 300 + 8}px`,
+        );
+      } finally {
+        Reflect.deleteProperty(window, "visualViewport");
+        measure.mockRestore();
+      }
+    });
+
     it("closes on a press elsewhere and on Escape", () => {
       const onOpenChange = vi.fn();
       render(ui("top", onOpenChange));
