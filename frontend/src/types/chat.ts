@@ -96,7 +96,7 @@ export interface HostArtifact {
   /** The action facet id that produced this assistant message (free-form). */
   facetId: string;
   /**
-   * Output format the facet requested; drives HTML-vs-text rendering. Present
+   * The facet's `body_format` argument. Its value decides nothing. Present
    * exactly when the facet's output IS an email body (it carried a
    * `body_format` arg) — everything email-shaped keys off it: the drifted
    * fence-tag rescue and the unfenced whole-body email card. Absent for

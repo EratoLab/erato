@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 import { useTokenUsageEstimate } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { encodeBase64 } from "@/utils/file/encodeBase64";
 
 import type {
   TokenUsageResponse,
@@ -144,23 +145,6 @@ export const getTokenEstimationQueryKey = (
   ];
 };
 
-/**
- * Encodes `File` bytes as standard base64. Uses `FileReader.readAsDataURL`
- * so large payloads stream through the browser's native decoder instead of
- * blowing the JS call stack via `btoa(String.fromCharCode(...))`.
- */
-async function fileToBase64(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("FileReader failed"));
-    reader.readAsDataURL(file);
-  });
-  const commaIndex = dataUrl.indexOf(",");
-  return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : "";
-}
-
 async function buildVirtualFilesPayload(
   files: File[],
 ): Promise<TokenUsageVirtualFile[]> {
@@ -168,7 +152,7 @@ async function buildVirtualFilesPayload(
     files.map(async (file) => ({
       filename: file.name,
       content_type: file.type || undefined,
-      base64: await fileToBase64(file),
+      base64: await encodeBase64(file),
     })),
   );
 }
@@ -182,7 +166,7 @@ export async function digestVirtualFilesContent(
 
   const parts = await Promise.all(
     files.map(async (file) => {
-      const base64 = await fileToBase64(file);
+      const base64 = await encodeBase64(file);
       return `${file.name}|${file.type}|${file.size}|${file.lastModified}|${base64}`;
     }),
   );

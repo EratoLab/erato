@@ -895,6 +895,9 @@ export default defineConfig(({ mode }) => {
         : undefined,
     },
     build: {
+      // The backend reads this manifest to tell content-hashed file names
+      // apart from fixed ones and caches only the former for a year.
+      manifest: true,
       rolldownOptions: {
         // Shared expose entries: chunks are shared with the app entry, so
         // the import map hands kits the add-in's own module instances.

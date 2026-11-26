@@ -3566,6 +3566,9 @@
           },
           "500": {
             "description": "When an internal server error occurs"
+          },
+          "503": {
+            "description": "When it cannot be told whether a generation is running"
           }
         },
         "security": [
@@ -11872,6 +11875,10 @@
                 "type": "integer",
                 "format": "int64",
                 "minimum": 0
+              },
+              "text": {
+                "type": "string",
+                "description": "On the first chunk of each passage the voice speaks, the passage's\ntext: what the voice says from this chunk on."
               }
             }
           },

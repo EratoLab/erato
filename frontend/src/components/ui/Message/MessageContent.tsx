@@ -71,6 +71,7 @@ import {
   writtenAnswerStart,
 } from "@/utils/chat/conversationFollow";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
+import { isEmailDraftHtml } from "@/utils/emailClipboard";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
@@ -188,8 +189,8 @@ interface MessageContentProps {
  * Tags newer models drift to when they drop the `erato-email` convention.
  * Only consulted when a host facet produced the message (see
  * {@link HostArtifactContext}), so generic chat code blocks are never
- * hijacked. HTML-vs-text is then taken from the facet's `body_format`, not the
- * tag (the `-html` suffix is exactly what the model keeps normalizing away).
+ * hijacked. HTML-vs-text is then read from the draft itself, not the tag (the
+ * `-html` suffix is exactly what the model keeps normalizing away).
  */
 const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "",
@@ -201,16 +202,6 @@ const DRIFTED_EMAIL_TAGS: ReadonlySet<string> = new Set([
   "plain",
   "html",
 ]);
-
-// Element tags model-produced HTML fragments reliably contain. Deliberately
-// narrow: plain German business text with `<Name>`, `<mail@firma.de>` or
-// `<30 T€` must not match.
-const HTML_FRAGMENT_TAG_RE =
-  /<\/?(?:p|br|div|span|a|ul|ol|li|blockquote|h[1-6]|b|i|em|strong|u|s|table|thead|tbody|tr|td|th|pre|code|hr|img)(?:\s[^<>]*)?\/?>/i;
-
-function looksLikeHtmlFragment(text: string): boolean {
-  return HTML_FRAGMENT_TAG_RE.test(text);
-}
 
 /**
  * The `erato-appointment` fence (the JSON payload a scheduling facet's
@@ -342,20 +333,16 @@ function classifyEratoEmailBlock(
 ): { isEmail: boolean; isHtml: boolean } {
   // isHtml drives data-lossy paths (innerHTML render, text/html clipboard,
   // Html coercion, reply prefill), where plain text loses its newlines and
-  // DOMPurify deletes <angle-bracket> content. Treating HTML as text is merely
-  // ugly. So: never classify html without markup evidence in the content;
-  // body_format alone (the DESTINATION format, not the produced one) never
-  // promotes.
-  if (language === "erato-email") {
-    // Rescue the "-html suffix dropped" drift only when the facet asked for
-    // html AND the content actually contains markup.
+  // DOMPurify deletes <angle-bracket> content, so it needs markup evidence in
+  // the content; body_format alone never promotes.
+  if (language === "erato-email" || language === "erato-email-html") {
     return {
       isEmail: true,
-      isHtml: artifact?.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: isEmailDraftHtml(content, {
+        language,
+        bodyFormat: artifact?.bodyFormat,
+      }),
     };
-  }
-  if (language === "erato-email-html") {
-    return { isEmail: true, isHtml: looksLikeHtmlFragment(content) };
   }
   // Only when we KNOW an email-bodied facet produced this message do we accept
   // drifted tags. `bodyFormat` presence is what marks the facet email-bodied —
@@ -368,7 +355,10 @@ function classifyEratoEmailBlock(
   ) {
     return {
       isEmail: true,
-      isHtml: artifact.bodyFormat === "html" && looksLikeHtmlFragment(content),
+      isHtml: isEmailDraftHtml(content, {
+        language: language.toLowerCase(),
+        bodyFormat: artifact.bodyFormat,
+      }),
     };
   }
   return { isEmail: false, isHtml: false };
@@ -592,7 +582,11 @@ function MarkdownCode({
 
   if (isBlockCode && emailBlock.isEmail) {
     return (
-      <EratoEmailSuggestion content={codeContent} isHtml={emailBlock.isHtml} />
+      <EratoEmailSuggestion
+        content={codeContent}
+        isHtml={emailBlock.isHtml}
+        isStreaming={isStreaming}
+      />
     );
   }
 
@@ -2313,10 +2307,10 @@ export const MessageContent = memo(function MessageContent({
               >
                 <EratoEmailSuggestion
                   content={textForArtifact}
-                  isHtml={
-                    wholeBodyArtifact.bodyFormat === "html" &&
-                    looksLikeHtmlFragment(textForArtifact)
-                  }
+                  isHtml={isEmailDraftHtml(textForArtifact, {
+                    bodyFormat: wholeBodyArtifact.bodyFormat,
+                  })}
+                  isStreaming={!!isStreaming}
                 />
               </HostArtifactContext.Provider>
             );

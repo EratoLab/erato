@@ -227,7 +227,7 @@ impl BrandingAssets {
     }
 }
 
-fn safe_relative_path(path: &str) -> bool {
+pub(crate) fn safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && !path.contains(['\\', ':', '%', '?', '#'])
         && path

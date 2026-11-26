@@ -3216,6 +3216,11 @@ msgstr "Chat compartido"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+msgid "chat.share.share.aria"
+msgstr "Compartir enlace del chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatShareDialog.tsx
 msgid "chat.share.toggle.aria"
 msgstr "Activar o desactivar el uso compartido del chat"
 

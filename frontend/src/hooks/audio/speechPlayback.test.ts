@@ -476,3 +476,78 @@ describe("one reply, one utterance", () => {
     }
   });
 });
+
+describe("what the voice was saying when it was talked over", () => {
+  const PASSAGE = "a".repeat(150) + " der Spot " + "b".repeat(150);
+
+  it("is the stretch around the spot the passage had reached", async () => {
+    const { voiceTextAt } = await import("./speechPlayback");
+    // 310 characters over 20 s: the spot at 10 s is the middle.
+    const log = [
+      { text: PASSAGE, startsAt: 0, endsAt: 20, complete: true },
+      { text: "Nächster Absatz.", startsAt: 20, endsAt: 21, complete: false },
+    ];
+    const heard = voiceTextAt(log, 10);
+    expect(heard).toContain("der Spot");
+    expect(heard).not.toContain("Nächster");
+    expect(voiceTextAt(log, 20.5)).toContain("Nächster");
+  });
+
+  it("finds the spot of a long passage by its own pace (review 1)", async () => {
+    const { voiceTextAt } = await import("./speechPlayback");
+    // 2000 characters read in 160 s: 12.5 a second, slower than the default.
+    const long = Array.from(
+      { length: 200 },
+      (_, at) => `w${String(at).padStart(3, "0")}xxxxx`,
+    ).join(" ");
+    const log = [{ text: long, startsAt: 0, endsAt: 160, complete: true }];
+    // At 100 s the voice is at character 1250: word 125.
+    expect(voiceTextAt(log, 100)).toContain("w124xxxxx");
+    // Where a fixed pace of 15 a second would put it.
+    expect(voiceTextAt(log, 100)).not.toContain("w150xxxxx");
+  });
+
+  it("is nothing when the voice had stopped sounding", async () => {
+    const { voiceTextAt } = await import("./speechPlayback");
+    const log = [{ text: "Kurz.", startsAt: 0, endsAt: 0.4, complete: true }];
+    expect(voiceTextAt(log, 0.2)).toBe("Kurz.");
+    expect(voiceTextAt(log, 5)).toBe("");
+    expect(voiceTextAt([], 1)).toBe("");
+  });
+
+  it("logs each passage when it starts playing, and forgets them with the next response", async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+    await p.unlockSpeechPlayback();
+    p.beginSpeechResponse("s");
+    p.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s", "Erster Satz.");
+    p.playSpeechChunk("m", 1, "AQIDBA==", 24000, "s");
+    const { playbackContext } = await import("./pcmPlayback");
+    Object.assign(playbackContext() as object, { currentTime: 1.3 });
+    p.pauseSpeechPlayback();
+    expect(p.voiceTextAtPause()).toBe("Erster Satz.");
+    p.beginSpeechResponse("t");
+    expect(p.voiceTextAtPause()).toBe("");
+  });
+
+  it("still knows the passage after the voice went on from a pause", async () => {
+    const p = await import("./speechPlayback");
+    const { playbackContext } = await import("./pcmPlayback");
+    p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+    await p.unlockSpeechPlayback();
+    const clock = playbackContext() as unknown as { currentTime: number };
+    p.beginSpeechResponse("s");
+    const passage = "Ein Satz. ".repeat(10);
+    p.playSpeechChunk("m", 0, "AQIDBA==", 24000, "s", passage);
+    p.playSpeechChunk("m", 1, "AQIDBA==", 24000, "s");
+    clock.currentTime = 1.6;
+    // Talked over in the passage's second chunk: it goes on from there.
+    p.pauseSpeechPlayback();
+    clock.currentTime = 9;
+    p.resumeSpeechPlayback();
+    // Talked over again while the resumed chunk plays.
+    clock.currentTime = 9.4;
+    p.pauseSpeechPlayback();
+    expect(p.voiceTextAtPause()).toContain("Ein Satz.");
+  });
+});
