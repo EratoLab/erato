@@ -1,12 +1,19 @@
-import { t, msg } from "@lingui/core/macro";
+import { t, msg, plural } from "@lingui/core/macro";
 import clsx from "clsx";
 import { useContext } from "react";
 
-import { useBudgetStatus } from "@/hooks/budget/useBudgetStatus";
-import { useBudgetWarning } from "@/hooks/budget/useBudgetWarning";
+import {
+  BUDGET_REFRESH_INTERVAL,
+  useBudgetStatus,
+} from "@/hooks/budget/useBudgetStatus";
+import {
+  getBudgetWarningLevel,
+  useBudgetWarning,
+} from "@/hooks/budget/useBudgetWarning";
 import { useBudgetWarningAcknowledgement } from "@/hooks/budget/useBudgetWarningAcknowledgement";
 import { ProfileContext } from "@/providers/ProfileProvider";
 
+import { Button } from "../../Controls/Button";
 import { Alert } from "../Alert";
 
 import type { BudgetWarningSeverity } from "@/hooks/budget/useBudgetWarningAcknowledgement";
@@ -40,7 +47,14 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
     fetchStatus,
     isSuccess,
     isPlaceholderData,
-  } = useBudgetStatus();
+    isError,
+    isFetching,
+    refetch,
+  } = useBudgetStatus({
+    // A confirmed drop in severity clears a previous dismissal.
+    refetchInterval: (status) =>
+      getBudgetWarningLevel(status) ? BUDGET_REFRESH_INTERVAL : false,
+  });
   const warning = useBudgetWarning(budgetStatus);
 
   let severity: BudgetWarningSeverity | null | undefined;
@@ -93,15 +107,17 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
     message = t`You are using ${percentUsed}% of your budget (${formattedSpending} of ${formattedLimit}).`;
   }
 
-  // Show budget period if available
+  // Show the rolling window if available.
   if (budgetStatus?.budget_period_days) {
     const days = budgetStatus.budget_period_days;
-    message += t(
-      msg({
-        id: "chat.warning.budget.period_suffix",
-        message: ` This is for your ${days}-day budget period.`,
+    const windowDescription = t({
+      id: "chat.warning.budget.rolling_window",
+      message: plural(days, {
+        one: "This covers spending over the last day.",
+        other: "This covers spending over the last # days.",
       }),
-    );
+    });
+    message = `${message} ${windowDescription}`;
   }
 
   return (
@@ -115,8 +131,29 @@ export const BudgetWarning: React.FC<BudgetWarningProps> = ({
         onDismiss?.();
       }}
       className={clsx("mb-2", className)}
+      action={
+        isError ? (
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={isFetching}
+            onClick={() => void refetch()}
+          >
+            {t({ id: "preferences.budget.retry", message: "Retry" })}
+          </Button>
+        ) : undefined
+      }
     >
       {message}
+      {isError ? (
+        <p className="mt-1">
+          {t({
+            id: "chat.warning.budget.stale",
+            message:
+              "Could not refresh your budget. These figures may be out of date.",
+          })}
+        </p>
+      ) : null}
     </Alert>
   );
 };

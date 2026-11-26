@@ -714,9 +714,8 @@ pub struct SeedStats {
 ///
 /// The copies get fresh ids, are rewired to each other via
 /// `previous_message_id`, form no sibling groups, and are all part of the
-/// active thread. Payload columns (`raw_message`, snapshots, parameters,
-/// metadata, file-upload ids) are copied verbatim and timestamps are
-/// preserved, so the copied history reads identically to the original. Each
+/// active thread. The copied history preserves timestamps and payloads, with
+/// message-level budget charges retained only on the original rows. Each
 /// distinct file id referenced by the copied messages gets a
 /// `chat_file_uploads` row on the target chat so file resolution works there.
 ///
@@ -748,6 +747,10 @@ pub async fn seed_chat_lineage(
     let mut file_ids: std::collections::BTreeSet<Uuid> = std::collections::BTreeSet::new();
     let mut previous_new_id: Option<Uuid> = None;
     for message in &lineage {
+        let mut generation_metadata = message.generation_metadata.clone();
+        if let Some(metadata) = &mut generation_metadata {
+            crate::models::message::remove_budget_metadata(metadata);
+        }
         let copy = messages::ActiveModel {
             chat_id: ActiveValue::Set(*target_chat_id),
             raw_message: ActiveValue::Set(message.raw_message.clone()),
@@ -759,7 +762,7 @@ pub async fn seed_chat_lineage(
             generation_input_messages: ActiveValue::Set(message.generation_input_messages.clone()),
             input_file_uploads: ActiveValue::Set(message.input_file_uploads.clone()),
             generation_parameters: ActiveValue::Set(message.generation_parameters.clone()),
-            generation_metadata: ActiveValue::Set(message.generation_metadata.clone()),
+            generation_metadata: ActiveValue::Set(generation_metadata),
             input_parameters: ActiveValue::Set(message.input_parameters.clone()),
             ..Default::default()
         };

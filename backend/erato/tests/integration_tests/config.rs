@@ -2835,11 +2835,11 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     assert!(!gpt4_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         gpt4_provider.model_capabilities.cost_input_tokens_per_1m,
-        30.0
+        Some(30.0)
     );
     assert_eq!(
         gpt4_provider.model_capabilities.cost_output_tokens_per_1m,
-        60.0
+        Some(60.0)
     );
 
     // Test GPT-4o Mini model capabilities
@@ -2869,13 +2869,13 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
         gpt4o_mini_provider
             .model_capabilities
             .cost_input_tokens_per_1m,
-        0.15
+        Some(0.15)
     );
     assert_eq!(
         gpt4o_mini_provider
             .model_capabilities
             .cost_output_tokens_per_1m,
-        0.6
+        Some(0.6)
     );
 
     // Test accessing a provider through the config API
@@ -2961,11 +2961,11 @@ config = { bucket = "test-bucket", endpoint = "http://localhost:8333", region = 
     assert!(!basic_provider.model_capabilities.supports_verbosity);
     assert_eq!(
         basic_provider.model_capabilities.cost_input_tokens_per_1m,
-        0.0
+        None
     );
     assert_eq!(
         basic_provider.model_capabilities.cost_output_tokens_per_1m,
-        0.0
+        None
     );
 }
 

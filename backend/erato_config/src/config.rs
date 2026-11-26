@@ -13205,13 +13205,11 @@ pub struct ModelCapabilities {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub supports_strict_tool_calling: bool,
     // Price per 1 million input tokens (unit-less)
-    #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
-    pub cost_input_tokens_per_1m: f64,
+    pub cost_input_tokens_per_1m: Option<f64>,
     // Price per 1 million output tokens (unit-less)
-    #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
-    pub cost_output_tokens_per_1m: f64,
+    pub cost_output_tokens_per_1m: Option<f64>,
 }
 
 fn default_context_size_tokens() -> usize {
@@ -13237,8 +13235,8 @@ impl Default for ModelCapabilities {
             supports_encrypted_reasoning_content: default_supports_encrypted_reasoning_content(),
             supports_verbosity: false,
             supports_strict_tool_calling: false,
-            cost_input_tokens_per_1m: 0.0,
-            cost_output_tokens_per_1m: 0.0,
+            cost_input_tokens_per_1m: None,
+            cost_output_tokens_per_1m: None,
         }
     }
 }
@@ -13328,11 +13326,39 @@ pub struct BudgetConfig {
     #[serde(default = "default_warn_threshold")]
     pub warn_threshold: f64,
 
-    // Number of days that counts as one budget period.
+    // Number of 24-hour days in the rolling budget window.
     // Only has an effect if `enabled` is `true`.
     // Defaults to `30`.
     #[serde(default = "default_budget_period_days")]
     pub budget_period_days: u32,
+
+    /// Settings for the read-only Budget tab in web Settings.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub frontend_tab: BudgetFrontendTabConfig,
+
+    /// Prices keyed by the exact model or deployment identifier used for budget accounting.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub model_rates: HashMap<String, BudgetModelRate>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct BudgetFrontendTabConfig {
+    /// Show the Budget tab when budget tracking is enabled. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct BudgetModelRate {
+    /// Price per 1 million prompt tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_input_tokens_per_1m: f64,
+    /// Price per 1 million completion tokens in the budget currency.
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub cost_output_tokens_per_1m: f64,
 }
 
 #[derive(
@@ -13356,6 +13382,10 @@ fn default_budget_period_days() -> u32 {
 }
 
 impl BudgetConfig {
+    pub fn frontend_tab_enabled(&self) -> bool {
+        self.enabled && self.frontend_tab.enabled
+    }
+
     /// Validates the budget configuration.
     pub fn validate(&self) -> Result<(), Report> {
         if self.enabled {
@@ -13364,10 +13394,10 @@ impl BudgetConfig {
             }
 
             if let Some(max_budget) = self.max_budget
-                && max_budget <= 0.0
+                && (!max_budget.is_finite() || max_budget <= 0.0)
             {
                 return Err(eyre!(
-                    "max_budget must be greater than 0, got: {}",
+                    "max_budget must be finite and greater than 0, got: {}",
                     max_budget
                 ));
             }
@@ -13386,7 +13416,66 @@ impl BudgetConfig {
                 ));
             }
         }
+        for (identifier, rate) in &self.model_rates {
+            if [
+                rate.cost_input_tokens_per_1m,
+                rate.cost_output_tokens_per_1m,
+            ]
+            .iter()
+            .any(|cost| !cost.is_finite() || *cost < 0.0)
+            {
+                return Err(eyre!(
+                    "Budget rates for '{identifier}' must be finite and nonnegative"
+                ));
+            }
+        }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod budget_config_tests {
+    use super::*;
+
+    #[test]
+    fn frontend_tab_is_opt_in_and_requires_budget_tracking() {
+        for (toml, expected) in [
+            ("enabled = true", false),
+            ("enabled = true\n[frontend_tab]", false),
+            ("enabled = true\n[frontend_tab]\nenabled = false", false),
+            ("enabled = true\n[frontend_tab]\nenabled = true", true),
+            ("[frontend_tab]\nenabled = true", false),
+        ] {
+            let config: BudgetConfig = Config::builder()
+                .add_source(File::from_str(toml, FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize()
+                .unwrap();
+            assert_eq!(config.frontend_tab_enabled(), expected, "{toml}");
+        }
+    }
+
+    #[test]
+    fn model_rates_use_the_exact_reported_identifier() {
+        let config: BudgetConfig = Config::builder()
+            .add_source(File::from_str(
+                r#"
+                [model_rates."Deployment/v1.2"]
+                cost_input_tokens_per_1m = 1.0
+                cost_output_tokens_per_1m = 2.0
+                "#,
+                FileFormat::Toml,
+            ))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap();
+        assert_eq!(
+            config.model_rates["Deployment/v1.2"].cost_output_tokens_per_1m,
+            2.0
+        );
+        config.validate().unwrap();
     }
 }
 

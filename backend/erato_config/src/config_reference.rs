@@ -56,6 +56,9 @@ fn map_key_placeholder(path: &[String]) -> String {
             "<written-form>".to_string()
         }
         Some("mcp_servers") => "<server-id>".to_string(),
+        Some("model_rates") if path.len() == 2 && path[0] == "budget" => {
+            "<model-identifier>".to_string()
+        }
         Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
         Some("field_names" | "choice_labels")
             if path.first().map(String::as_str) == Some("mcp_servers") =>

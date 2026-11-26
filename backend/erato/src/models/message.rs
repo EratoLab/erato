@@ -340,11 +340,76 @@ pub enum GenerationErrorType {
     },
 }
 
+/// Token usage keyed by the billing identifier of the model or deployment.
+pub type BudgetUsage = BTreeMap<String, BudgetTokenUsage>;
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+pub struct BudgetTokenUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    /// Breakdown of the completion tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub reasoning_tokens: Option<u64>,
+}
+
+impl BudgetTokenUsage {
+    pub(crate) fn from_chat(usage: &genai::chat::Usage) -> Option<Self> {
+        let count = |tokens: Option<i32>| tokens.and_then(|tokens| u64::try_from(tokens).ok());
+        let prompt = count(usage.prompt_tokens);
+        let completion = count(usage.completion_tokens);
+        let total = count(usage.total_tokens);
+        let reasoning = usage
+            .completion_tokens_details
+            .as_ref()
+            .and_then(|details| count(details.reasoning_tokens));
+        prompt.or(completion).or(total).or(reasoning)?;
+        let prompt_tokens = prompt.unwrap_or_default();
+        let completion_tokens = completion.or(reasoning).unwrap_or_default();
+        Some(Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: total.unwrap_or(prompt_tokens + completion_tokens),
+            reasoning_tokens: reasoning,
+        })
+    }
+
+    fn accumulate(&mut self, other: Self) {
+        self.prompt_tokens = self.prompt_tokens.saturating_add(other.prompt_tokens);
+        self.completion_tokens = self
+            .completion_tokens
+            .saturating_add(other.completion_tokens);
+        self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
+        if let Some(reasoning) = other.reasoning_tokens {
+            self.reasoning_tokens = Some(
+                self.reasoning_tokens
+                    .unwrap_or_default()
+                    .saturating_add(reasoning),
+            );
+        }
+    }
+}
+
 /// Metadata about the generation process, including usage statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GenerationMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub submission_outcome: Option<crate::services::submission_correction::SubmissionOutcome>,
+    /// Charges incurred on this message, including chat completions and tool calls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_usage: Option<BudgetUsage>,
     /// Number of prompt tokens used during generation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub used_prompt_tokens: Option<u32>,
@@ -474,6 +539,10 @@ pub struct ToolUse {
     )]
     #[schema(nullable = false)]
     pub allowed_by: Option<ToolAllowedBy>,
+    /// Token usage reported by this call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = BTreeMap<String, BudgetTokenUsage>, nullable = false)]
+    pub budget_usage: Option<BudgetUsage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3100,21 +3169,12 @@ pub async fn update_message_content(
         Action::SubmitMessage
     )?;
 
-    let mut parsed_raw_message = MessageSchema::validate(&message.raw_message)?;
-    // Ensure it's an assistant message we are updating
-    if parsed_raw_message.role != MessageRole::Assistant {
-        return Err(eyre!(
-            "Attempted to update content of a non-assistant message"
-        ));
-    }
-
-    parsed_raw_message.content = strip_image_urls_from_content(new_content_parts);
-    let mut updated_raw_message = parsed_raw_message.to_json()?;
-    remove_json_null_characters(&mut updated_raw_message);
-
     let active_model = messages::ActiveModel {
         id: ActiveValue::Set(*message_id),
-        raw_message: ActiveValue::Set(updated_raw_message),
+        raw_message: ActiveValue::Set(updated_assistant_content(
+            MessageSchema::validate(&message.raw_message)?,
+            new_content_parts,
+        )?),
         ..Default::default() // Only update raw_message, preserve other fields
     };
 
@@ -3132,6 +3192,172 @@ pub async fn update_message_content(
     Ok(updated_message_model)
 }
 
+fn updated_assistant_content(
+    mut message: MessageSchema,
+    content: Vec<ContentPart>,
+) -> Result<JsonValue, Report> {
+    if message.role != MessageRole::Assistant {
+        return Err(eyre!(
+            "Attempted to update content of a non-assistant message"
+        ));
+    }
+    message.content = strip_image_urls_from_content(content);
+    let mut raw = message.to_json()?;
+    remove_json_null_characters(&mut raw);
+    Ok(raw)
+}
+
+async fn lock_message_for_update(
+    conn: &sea_orm::DatabaseTransaction,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: Uuid,
+) -> Result<messages::Model, Report> {
+    let message = Messages::find_by_id(message_id)
+        .lock_exclusive()
+        .one(conn)
+        .await?
+        .ok_or_else(|| eyre!("Message with ID {message_id} not found for update"))?;
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(message.chat_id.to_string()),
+        Action::SubmitMessage
+    )?;
+    Ok(message)
+}
+
+fn add_budget_usage(
+    metadata: &mut Option<JsonValue>,
+    contributions: &BudgetUsage,
+) -> Result<(), Report> {
+    let metadata = metadata.get_or_insert_with(|| serde_json::json!({}));
+    let mut usage: BudgetUsage = metadata
+        .get("budget_usage")
+        .filter(|value| !value.is_null())
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()?
+        .unwrap_or_default();
+
+    if metadata.get("budget_usage_settlements").is_none() {
+        // A message written before settlements had timestamps can still resume.
+        // Retain its earlier usage at the message creation time.
+        if !usage.is_empty() {
+            metadata["budget_usage_at_creation"] = to_value(&usage)?;
+        }
+        metadata["budget_usage_settlements"] = JsonValue::Array(Vec::new());
+    }
+    let settlements = metadata["budget_usage_settlements"]
+        .as_array_mut()
+        .ok_or_else(|| eyre!("Invalid budget usage settlements"))?;
+    settlements.push(serde_json::json!({
+        "settled_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false),
+        "usage": contributions,
+    }));
+
+    for (identifier, counts) in contributions {
+        usage
+            .entry(identifier.clone())
+            .or_default()
+            .accumulate(*counts);
+    }
+
+    metadata["budget_usage"] = to_value(usage)?;
+    Ok(())
+}
+
+pub(crate) async fn record_chat_budget_usage(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: Uuid,
+    identifier: &str,
+    usage: BudgetTokenUsage,
+) -> Result<(), Report> {
+    let tx = conn.begin().await?;
+    let mut message = lock_message_for_update(&tx, policy, subject, message_id).await?;
+    add_budget_usage(
+        &mut message.generation_metadata,
+        &BudgetUsage::from([(identifier.to_owned(), usage)]),
+    )?;
+    messages::Entity::update(messages::ActiveModel {
+        id: ActiveValue::Set(message_id),
+        generation_metadata: ActiveValue::Set(message.generation_metadata),
+        ..Default::default()
+    })
+    .exec(&tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Settle a metered tool and charge its usage in the same row write. The saved
+/// tool result is the receipt, so writing the same settlement again is safe.
+pub(crate) async fn settle_metered_tool_call(
+    conn: &DatabaseConnection,
+    policy: &PolicyEngine,
+    subject: &Subject,
+    message_id: Uuid,
+    call_id: &str,
+    content: Vec<ContentPart>,
+) -> Result<(), Report> {
+    let tx = conn.begin().await?;
+    let mut message = lock_message_for_update(&tx, policy, subject, message_id).await?;
+    let previous = MessageSchema::validate(&message.raw_message)?;
+    if previous.content.iter().any(|part| {
+        matches!(part, ContentPart::ToolUse(tool) if tool.tool_call_id == call_id && tool.budget_usage.is_some())
+    }) {
+        return Ok(());
+    }
+    let usage = content
+        .iter()
+        .find_map(|part| match part {
+            ContentPart::ToolUse(tool) if tool.tool_call_id == call_id => {
+                tool.budget_usage.as_ref()
+            }
+            _ => None,
+        })
+        .ok_or_else(|| eyre!("Missing budget usage on settled tool call {call_id}"))?;
+    add_budget_usage(&mut message.generation_metadata, usage)?;
+    messages::Entity::update(messages::ActiveModel {
+        id: ActiveValue::Set(message_id),
+        raw_message: ActiveValue::Set(updated_assistant_content(previous, content)?),
+        generation_metadata: ActiveValue::Set(message.generation_metadata),
+        ..Default::default()
+    })
+    .exec(&tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+const BUDGET_METADATA_KEYS: &[&str] = &[
+    "budget_usage",
+    "budget_usage_at_creation",
+    "budget_usage_settlements",
+    "used_prompt_tokens",
+    "used_completion_tokens",
+    "used_total_tokens",
+    "used_reasoning_tokens",
+];
+
+/// Carry the committed accounting fields through updates to generation status.
+pub(crate) fn preserve_budget_metadata(replacement: &mut JsonValue, stored: Option<&JsonValue>) {
+    for &key in BUDGET_METADATA_KEYS {
+        if let Some(value) = stored.and_then(|metadata| metadata.get(key)) {
+            replacement[key] = value.clone();
+        }
+    }
+}
+
+pub(crate) fn remove_budget_metadata(metadata: &mut JsonValue) {
+    if let Some(fields) = metadata.as_object_mut() {
+        for key in BUDGET_METADATA_KEYS {
+            fields.remove(*key);
+        }
+    }
+}
+
 /// Update the generation metadata for a message.
 pub async fn update_message_generation_metadata(
     conn: &DatabaseConnection,
@@ -3140,21 +3366,13 @@ pub async fn update_message_generation_metadata(
     message_id: &Uuid,
     generation_metadata: GenerationMetadata,
 ) -> Result<messages::Model, Report> {
-    // Find the message to get its chat_id for authorization
-    let message = Messages::find_by_id(*message_id)
-        .one(conn)
-        .await?
-        .ok_or_else(|| eyre!("Message with ID {} not found for update", message_id))?;
-
-    // Authorize that the subject can update this message (part of submitting to chat)
-    authorize!(
-        policy,
-        subject,
-        &Resource::Chat(message.chat_id.to_string()),
-        Action::SubmitMessage
-    )?;
-
-    let generation_metadata_json = to_value(generation_metadata)?;
+    let tx = conn.begin().await?;
+    let message = lock_message_for_update(&tx, policy, subject, *message_id).await?;
+    let mut generation_metadata_json = to_value(generation_metadata)?;
+    preserve_budget_metadata(
+        &mut generation_metadata_json,
+        message.generation_metadata.as_ref(),
+    );
 
     let active_model = messages::ActiveModel {
         id: ActiveValue::Set(*message_id),
@@ -3162,17 +3380,11 @@ pub async fn update_message_generation_metadata(
         ..Default::default() // Only update generation_metadata, preserve other fields
     };
 
-    messages::Entity::update(active_model)
-        .exec(conn)
+    let updated_message_model = messages::Entity::update(active_model)
+        .exec(&tx)
         .await
         .map_err(|e| eyre!("Failed to update message generation metadata: {}", e))?;
-
-    // Re-fetch the message to return the updated model
-    let updated_message_model = Messages::find_by_id(*message_id)
-        .one(conn)
-        .await?
-        .ok_or_else(|| eyre!("Message with ID {} not found after update", message_id))?;
-
+    tx.commit().await?;
     Ok(updated_message_model)
 }
 

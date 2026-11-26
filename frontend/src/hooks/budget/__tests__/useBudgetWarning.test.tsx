@@ -25,6 +25,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: null,
       budget_limit: null,
       budget_currency: null,
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -42,6 +43,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -62,6 +64,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -82,6 +85,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -100,6 +104,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.8, // Custom 80% threshold
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -117,6 +122,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: null, // Should default to 0.7
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -133,6 +139,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "EUR",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -151,6 +158,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 0, // Edge case: zero limit
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -168,6 +176,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -186,6 +195,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result } = renderHook(() => useBudgetWarning(budgetStatus));
@@ -204,6 +214,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result, rerender } = renderHook(
@@ -230,6 +241,7 @@ describe("useBudgetWarning", () => {
       warn_threshold: 0.7,
       budget_limit: 1000,
       budget_currency: "USD",
+      user_settings: null,
     };
 
     const { result, rerender } = renderHook(
