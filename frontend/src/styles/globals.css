@@ -2696,6 +2696,71 @@ html[data-system-glass][data-theme="dark"] {
   box-shadow: var(--theme-elevation-input);
 }
 
+/* Closer to the system's own glass, as far as a page can go. The round
+   controls carry only a glyph, so they let more of the chat through than the
+   composer and menus, whose text needs the fuller fill; a stronger blur keeps
+   busy text behind them calm. Every glass surface gets the light the system
+   draws on its rim, brighter along the top edge, and a round control swells
+   a little while it is pressed, as the system's glass buttons do. Increase
+   Contrast fills them solid again (below). */
+html[data-system-glass] {
+  --glass-control-opacity: 0.55;
+  --glass-control-blur: blur(24px) saturate(200%);
+  --glass-rim-top: color-mix(in srgb, white 60%, transparent);
+  --glass-rim: color-mix(in srgb, white 16%, transparent);
+}
+
+/* Dark surfaces need more fill for the glyph to keep 3:1 over a light
+   picture scrolled behind. */
+html[data-system-glass][data-theme="dark"] {
+  --glass-control-opacity: 0.7;
+  --glass-rim-top: color-mix(in srgb, white 28%, transparent);
+  --glass-rim: color-mix(in srgb, white 8%, transparent);
+}
+
+:where(html[data-system-glass]) .floating-control-skin,
+:where(html[data-system-glass]) .modal-close-skin {
+  --glass-opacity: var(--glass-control-opacity);
+  --glass-blur: var(--glass-control-blur);
+}
+
+/* The swell rides the controls' own transition (theme-transition). Button
+   keeps data-pressed for a moment after a tap, which a quick tap needs to
+   show it at all. */
+:where(html[data-system-glass])
+  :where(.floating-control-skin, .modal-close-skin):is(
+    :active,
+    [data-pressed="true"]
+  ) {
+  transform: scale(1.08);
+}
+
+:where(html[data-system-glass])
+  :where([data-ui="chat-conversation-shell"])
+  [data-ui="chat-input-shell"]::after,
+:where(html[data-system-glass]) .floating-control-skin::after,
+:where(html[data-system-glass]) .modal-close-skin::after,
+:where(html[data-system-glass]) .anchored-popover-skin::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0.5px var(--glass-rim-top),
+    inset 0 0 0 0.5px var(--glass-rim);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-system-glass])
+    :where(.floating-control-skin, .modal-close-skin):is(
+      :active,
+      [data-pressed="true"]
+    ) {
+    transform: none;
+  }
+}
+
 /* Inside the one-line glass capsule the framed icon buttons beside the text
    drop their frames until pressed; send and voice keep the theme's fill. */
 :where(html[data-system-glass])
@@ -2837,8 +2902,10 @@ html[data-system-glass][data-theme="dark"] {
 
 /* Increase Contrast keeps the shapes and makes the fill solid. */
 @media (prefers-contrast: more) {
-  html[data-system-glass] {
+  html[data-system-glass],
+  html[data-system-glass][data-theme="dark"] {
     --glass-opacity: 1;
+    --glass-control-opacity: 1;
   }
 }
 

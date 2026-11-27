@@ -163,3 +163,34 @@ describe("hints on the glass", () => {
     });
   });
 });
+
+// The round floating controls carry only a glyph and let more through; the
+// glyph (the theme's secondary text colour) keeps the 3:1 a control's
+// graphic needs over white and black content.
+describe("glyphs on the round glass controls", () => {
+  const controlOpacity = {
+    light: Number(
+      declaration("html[data-system-glass]", "--glass-control-opacity"),
+    ),
+    dark: Number(
+      declaration(
+        'html[data-system-glass][data-theme="dark"]',
+        "--glass-control-opacity",
+      ),
+    ),
+  };
+
+  it.each([
+    ["light", defaultTheme, controlOpacity.light],
+    ["dark", darkTheme, controlOpacity.dark],
+  ] as const)("reach 3:1 in the %s theme", (_, theme, share) => {
+    const glyph = rgb(theme.colors.foreground.secondary);
+    const surface = rgb(theme.colors.shell.chatInput);
+    const worst = Math.min(
+      ...[WHITE, BLACK].map((content) =>
+        contrast(glyph, mix(surface, content, share)),
+      ),
+    );
+    expect(worst).toBeGreaterThanOrEqual(3);
+  });
+});
