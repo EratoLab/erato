@@ -1283,44 +1283,19 @@ body {
 
   /* The page beside the sidebar. On a narrow screen the open sidebar pushes
      it aside by the sidebar's width, and it shows as a card over the
-     sidebar, from the screen's top to its bottom: bands of the page's colour
-     fill the system bars' strips, and the card's corners clip it while it is
-     pushed or moving ([data-sidebar-moving] while it follows a finger or
-     slides back). The stacking and the bands hold whenever the page can be
-     pushed, so that a drag starting does not rebuild the page's layers. */
+     sidebar, from the screen's top to its bottom: two unblurred copies of
+     its box, shifted by the system bars' heights, fill their strips with the
+     page's colour and carry the card's corners up and down to the screen's
+     edges. All of it holds whenever the page can be pushed, so a drag
+     starting changes nothing but the page's position. */
   .sidebar-page-geometry[data-sidebar-pushable] {
     position: relative;
-    /* Over the sidebar (z-40): the corners and the edge's shadow fall on it. */
+    /* Over the sidebar (z-40), which paints round the card's corners. */
     z-index: 41;
-  }
-
-  .sidebar-page-geometry[data-sidebar-pushable]::before,
-  .sidebar-page-geometry[data-sidebar-pushable]::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-color: var(--theme-shell-page);
-  }
-
-  .sidebar-page-geometry[data-sidebar-pushable]::before {
-    bottom: 100%;
-    height: var(--safe-area-top, 0px);
-  }
-
-  .sidebar-page-geometry[data-sidebar-pushable]::after {
-    top: 100%;
-    height: var(--safe-area-bottom, 0px);
-  }
-
-  .sidebar-page-geometry[data-sidebar-pushed],
-  .sidebar-page-geometry[data-sidebar-moving] {
-    clip-path: inset(
-      calc(-1 * var(--safe-area-top, 0px)) 0
-        calc(-1 * var(--safe-area-bottom, 0px)) 0 round
-        var(--sidebar-page-radius, var(--theme-radius-card))
-    );
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+    box-shadow:
+      0 calc(-1 * var(--safe-area-top, 0px)) 0 0 var(--theme-shell-page),
+      0 var(--safe-area-bottom, 0px) 0 0 var(--theme-shell-page);
   }
 
   /* The pushed page reaches past the screen's edge; clipped there, it gives

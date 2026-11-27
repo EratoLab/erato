@@ -1723,31 +1723,16 @@ describe("ChatHistorySidebar", () => {
       });
     });
 
-    it("brings the page back on a tap on it, keeping its shape until it is back", async () => {
-      vi.useFakeTimers();
-      try {
-        await renderDrawer(true);
-        const scrim = screen.getByTestId("sidebar-scrim");
+    it("brings the page back on a tap on it", async () => {
+      await renderDrawer(true);
+      const scrim = screen.getByTestId("sidebar-scrim");
 
-        fireEvent.click(scrim);
+      fireEvent.click(scrim);
 
-        expect(sidebarMode()).toBe("hidden");
-        expect(page()).not.toHaveAttribute("data-sidebar-pushed");
-        expect(scrim).not.toHaveAttribute("data-sidebar-pushed");
-        expect(page()).toHaveAttribute("data-sidebar-moving");
-
-        act(() => {
-          vi.advanceTimersByTime(250);
-        });
-        expect(page()).toHaveAttribute("data-sidebar-moving");
-        act(() => {
-          vi.advanceTimersByTime(150);
-        });
-        expect(page()).not.toHaveAttribute("data-sidebar-moving");
-        expect(scrim).not.toHaveAttribute("data-sidebar-moving");
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(sidebarMode()).toBe("hidden");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      expect(scrim).not.toHaveAttribute("data-sidebar-pushed");
+      expect(page()).toHaveAttribute("data-sidebar-pushable");
     });
 
     it("brings the page back from where it is when turned back during the slide", async () => {
@@ -1765,7 +1750,7 @@ describe("ChatHistorySidebar", () => {
       expect(sidebarMode()).toBe("hidden");
       expect(page().style.transform).toBe("");
       expect(page().style.transition).toBe("");
-      expect(page()).toHaveAttribute("data-sidebar-moving");
+      expect(page()).not.toHaveAttribute("data-sidebar-moving");
     });
 
     it("keeps the page in place on a wide screen", async () => {
