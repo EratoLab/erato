@@ -11885,6 +11885,16 @@ msgid "ui.imagePreview.altText"
 msgstr "Aperçu en taille réelle"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.open"
+msgstr "Ouvrir l’aperçu de l’image"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageContent.tsx
+msgid "ui.imagePreview.openWithAlt"
+msgstr "Ouvrir l’aperçu de l’image : {imageLabel}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.imagePreview.title"
 msgstr "Aperçu de l'image"

@@ -245,6 +245,7 @@ export const useChatMessageRenderer = ({
       isStreaming: !!message.loading && message.loading.state !== "done",
       showRaw: showRawMarkdown,
       onImageClick: lightbox.openLightbox,
+      previewInlineImages: message.role === "assistant",
       onFileLinkPreview: onFilePreview,
       preserveSoftLineBreaks: isUser,
       createdAt: message.createdAt,
