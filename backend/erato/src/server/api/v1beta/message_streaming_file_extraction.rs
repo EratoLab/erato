@@ -564,7 +564,7 @@ struct FileBlock<'a> {
 fn file_block(block: &rmcp::model::ContentBlock) -> Option<FileBlock<'_>> {
     use rmcp::model::{ContentBlock, MetaObject, ResourceContents};
 
-    fn name<'a>(metas: [Option<&'a MetaObject>; 2]) -> Option<&'a Value> {
+    fn name(metas: [Option<&MetaObject>; 2]) -> Option<&Value> {
         metas
             .into_iter()
             .flatten()
@@ -2809,7 +2809,7 @@ mod tests {
             too_long.as_str(),
             long_parameter.as_str(),
         ] {
-            let error = block_mime_type(mime_type).err().expect(mime_type);
+            let error = block_mime_type(mime_type).expect_err(mime_type);
             assert!(error.to_string().contains("Invalid MIME type"), "{error}");
         }
 
