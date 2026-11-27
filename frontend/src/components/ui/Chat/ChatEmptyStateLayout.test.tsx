@@ -52,6 +52,29 @@ describe("ChatEmptyStateLayout composer height", () => {
     expect(shell.style.getPropertyValue("--chat-composer-height")).toBe("");
   });
 
+  it("starts and stops publishing when the app's answer changes", () => {
+    removeHostShell();
+    const listeners: Array<(payload: unknown) => void> = [];
+    installHostShell({ share: 1 });
+    window.ERATO_SHELL = {
+      ...(window.ERATO_SHELL as object),
+      on: (_event: string, listener: (payload: unknown) => void) => {
+        listeners.push(listener);
+        return () => {};
+      },
+    };
+    act(() => markSystemGlass(document.documentElement));
+    const shell = renderLayout("conversation").container
+      .firstElementChild as HTMLElement;
+    expect(shell.style.getPropertyValue("--chat-composer-height")).toBe("");
+
+    act(() => listeners.forEach((listener) => listener({ available: true })));
+    expect(shell.style.getPropertyValue("--chat-composer-height")).toBe("72px");
+
+    act(() => listeners.forEach((listener) => listener({ available: false })));
+    expect(shell.style.getPropertyValue("--chat-composer-height")).toBe("");
+  });
+
   it("publishes nothing while the composer is centred or outside the app", () => {
     const centred = renderLayout("centered").container
       .firstElementChild as HTMLElement;
