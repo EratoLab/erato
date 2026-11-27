@@ -30,6 +30,8 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+**On a phone the model is chosen from a sub-menu.** In the composer's "+" menu the model list no longer sits inline: one Model row shows the current model and opens the models as a page of the same menu, with a back row, as an iPhone menu opens a nested menu. A deployment with a single model keeps one row. For component kits and hosts: an `AddMenuSection` with `submenu: { summary }` renders this way.
+
 **Inside the phone app, text follows the phone's own text size.** Where the page runs in a native app (the `window.ERATO_SHELL` contract), its text scales with the device's text size setting, read again whenever the app comes back to the front, and the Text size choice under Preferences, Appearance is hidden there. Browsers, desktop and the Office add-in keep Erato's own Small / Default / Large / Extra large setting.
 
 **A start shows one calm screen, then the app.** The page paints the theme's page colour from its first frame (`colors.shell.page`, else `colors.background.secondary`, written into the HTML by the server; use a plain colour there, not `var(…)`), loads translations, theme and landing page together, and shows the app once the theme and its style sheets are applied, after at most three seconds. "Loading translations...", "Redirecting to chat..." and the loading spinner no longer show in between. For component kits: `useChatHistory()` called without options now follows the deployment's pinned-chats setting, so with pinned chats on, `chats` leaves the pinned ones out, as the sidebar's list does. [#1698](https://github.com/EratoLab/erato/pull/1698)

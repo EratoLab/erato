@@ -1399,6 +1399,7 @@ describe("ChatInput", () => {
 
       const { modelSection, selectedToolCount } = addControlsProps();
       expect(selectedToolCount).toBe(1);
+      expect(modelSection?.submenu?.summary).toBe("Model A");
       const items = modelSection?.items as AddMenuToolItem[];
       expect(items.map((item) => [item.checked, item.exclusive])).toEqual([
         [true, true],
@@ -1449,6 +1450,7 @@ describe("ChatInput", () => {
       await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
 
       expect(addControlsProps().modelSection?.items).toHaveLength(1);
+      expect(addControlsProps().modelSection?.submenu).toBeUndefined();
     });
 
     it("says in the + menu why an assistant's tools cannot be changed", async () => {
