@@ -70,6 +70,7 @@ export interface SettingsPagesState<T extends string> {
     hidden: boolean;
     role?: "tabpanel";
     "aria-labelledby"?: string;
+    "data-ui"?: "settings-page";
   };
 }
 
@@ -170,7 +171,9 @@ export function useSettingsPages<T extends string>({
     panelProps: (tab, { tabId, panelId }) => ({
       id: panelId,
       hidden: tab !== shownTab,
-      ...(isNarrow ? {} : { role: "tabpanel", "aria-labelledby": tabId }),
+      ...(isNarrow
+        ? { "data-ui": "settings-page" as const }
+        : { role: "tabpanel" as const, "aria-labelledby": tabId }),
     }),
   };
 }

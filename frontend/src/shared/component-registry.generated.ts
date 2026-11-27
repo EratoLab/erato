@@ -485,6 +485,8 @@ export type { WaitingCallPart } from "@/components/ui/Message/waitingCall";
 export { WaitingTaskItem } from "@/components/ui/Message/WaitingTaskItem";
 export { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
+export { sheetSettlesClosed } from "@/components/ui/Modal/useSheetDismiss";
+export { useSheetDismiss } from "@/components/ui/Modal/useSheetDismiss";
 export { CANCEL_REMINDER_TOOL_NAME } from "@/components/ui/Scheduled/reminderConfirmation";
 export { CREATE_REMINDER_TOOL_NAME } from "@/components/ui/Scheduled/reminderConfirmation";
 export { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";

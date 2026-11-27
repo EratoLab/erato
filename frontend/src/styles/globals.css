@@ -1529,6 +1529,65 @@ body:has(.app-viewport) {
   box-shadow: none;
 }
 
+/* On a phone (narrow, no hovering pointer) every dialog that does not fill
+   the screen is a sheet (ModalBase's `data-sheet`): it rises from the bottom
+   edge at full width, rounds its top corners only and runs on under the home
+   indicator, which its own padding keeps clear; with the keyboard open the
+   overlay ends at the keyboard and that padding is gone. Short dialogs take
+   their content's height, long ones the whole screen below the status bar.
+   Unlayered, so a caller's max-w-* cannot narrow it; `:where` holds each rule
+   at its class's weight, so a theme.css rule on the same class still wins. */
+.modal-overlay-skin:where([data-sheet]) {
+  padding: calc(var(--safe-area-top) + 0.5rem) var(--safe-area-right) 0
+    var(--safe-area-left);
+  animation: modal-scrim-in 250ms ease-out;
+}
+
+.modal-shell-frame-geometry:where([data-sheet]) {
+  max-width: none;
+  max-height: 100%;
+  padding-bottom: var(--safe-area-bottom);
+}
+
+.modal-shell-skin:where([data-sheet]) {
+  border-radius: var(--theme-radius-modal) var(--theme-radius-modal) 0 0;
+  animation: modal-sheet-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* iOS's grabber: 36 by 5 pt, 5 pt below the sheet's edge, over the header's
+   padding. */
+[data-ui="modal-grabber"] {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  z-index: 1;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--theme-fg-muted) 45%, transparent);
+  pointer-events: none;
+}
+
+@keyframes modal-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes modal-scrim-in {
+  from {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay-skin:where([data-sheet]),
+  .modal-shell-skin:where([data-sheet]) {
+    animation: none;
+  }
+}
+
 /* The card surface. This is the only rule in the family that sets a final
    value; tone and state below move the variables it reads. That split is what
    gives a theme two knobs instead of one: re-declaring --card-border retunes
@@ -2574,4 +2633,47 @@ html[data-system-glass]:not([data-theme-shapes="theme"]) {
 :where(html[data-system-glass]:not([data-theme-shapes="theme"]))
   .floating-control-skin {
   border-radius: 50%;
+}
+
+/* In the same app the settings pages look like the phone's own settings:
+   grouped sections on the theme's secondary background, the title level
+   with the round buttons and no line under it, larger rows. Only there: a phone browser keeps the plain page. The
+   overlay paints the safe-area strips, so it takes the same fill; its rule
+   matches the fullscreen overlay's weight, the shell's stays at its class. */
+:where(html[data-system-glass])
+  .modal-overlay-skin[data-placement="fullscreen"],
+:where(html[data-system-glass])
+  .modal-shell-skin:where([data-placement="fullscreen"]) {
+  background-color: var(--theme-bg-secondary);
+}
+
+:where(html[data-system-glass])
+  [data-placement="fullscreen"]
+  > [data-ui="modal-header"] {
+  align-items: center;
+  border-bottom-color: transparent;
+}
+
+:where(html[data-system-glass]) {
+  --settings-group-radius: var(--theme-radius-card);
+}
+
+:where(html[data-system-glass]:not([data-theme-shapes="theme"])) {
+  --settings-group-radius: 26px;
+}
+
+:where(html[data-system-glass]) [data-ui="settings-page-list"] {
+  --card-radius: var(--settings-group-radius);
+}
+
+:where(html[data-system-glass])
+  [data-ui="settings-page-list"]
+  [data-settings-page] {
+  min-height: 52px;
+}
+
+:where(html[data-system-glass]) [data-ui="settings-page"] {
+  padding: 1rem;
+  border-radius: var(--settings-group-radius);
+  background-color: var(--theme-bg-primary);
 }
