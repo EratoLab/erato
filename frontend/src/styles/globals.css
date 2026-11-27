@@ -1505,9 +1505,11 @@ body:has(.app-viewport) {
 /* Glyph sizes on a phone held in the hand. The composer's +, microphone and
    send arrow draw about 17 pt and the message actions about 14 pt, as iOS
    apps do, with a heavier line; the desktop sizes drew them at 9 to 12 pt.
-   Line icons only (an SVG with its own stroke width), so a waveform, a
-   spinner or a filled badge keep their sizes. Pixels, like the tap size:
-   Erato's own text size setting does not shrink them. */
+   Icon buttons only, and only their line icons (an SVG with its own stroke
+   width), so a labelled chip, a waveform, a spinner or a filled icon keep
+   their sizes; the slot grows with the glyph, which a theme's smaller
+   composer buttons cap. Pixels, like the tap size: Erato's own text size
+   setting does not shrink them. */
 @media (max-width: 639.98px) {
   @media not all and (hover: hover) and (pointer: fine) {
     :root {
@@ -1515,28 +1517,55 @@ body:has(.app-viewport) {
       --phone-glyph-inline: 22px;
     }
 
-    :where([data-ui="chat-input-controls"] [data-slot="icon"])
+    :where([data-ui="chat-input-controls"] [data-geometry^="icon-"])
+      > [data-slot="icon"]:has(
+        > :is(svg[stroke-width], svg:has(> [stroke-width]), span > svg)
+      ) {
+      --phone-glyph: min(
+        var(--phone-glyph-composer),
+        var(--theme-spacing-control-min-height) - 0.75rem
+      );
+      width: var(--phone-glyph);
+      height: var(--phone-glyph);
+    }
+
+    :where([data-ui="message-controls"] [data-geometry^="icon-"])
+      > [data-slot="icon"]:has(
+        > :is(svg[stroke-width], svg:has(> [stroke-width]))
+      ) {
+      --phone-glyph: var(--phone-glyph-inline);
+      width: var(--phone-glyph);
+      height: var(--phone-glyph);
+    }
+
+    :where(
+        :is([data-ui="chat-input-controls"], [data-ui="message-controls"])
+          [data-geometry^="icon-"]
+          > [data-slot="icon"]
+      )
       :is(svg[stroke-width], svg:has(> [stroke-width])) {
-      width: var(--phone-glyph-composer);
-      height: var(--phone-glyph-composer);
+      width: var(--phone-glyph);
+      height: var(--phone-glyph);
       flex-shrink: 0;
     }
 
-    :where([data-ui="chat-input-controls"] [data-slot="icon"])
+    :where([data-ui="chat-input-controls"] [data-geometry^="icon-"])
+      > [data-slot="icon"]
       :is(svg[stroke-width], svg > [stroke-width]) {
       stroke-width: 2;
     }
 
-    :where([data-ui="message-controls"] [data-slot="icon"])
-      :is(svg[stroke-width], svg:has(> [stroke-width])) {
-      width: var(--phone-glyph-inline);
-      height: var(--phone-glyph-inline);
-      flex-shrink: 0;
-    }
-
-    :where([data-ui="message-controls"] [data-slot="icon"])
+    :where([data-ui="message-controls"] [data-geometry^="icon-"])
+      > [data-slot="icon"]
       :is(svg[stroke-width], svg > [stroke-width]) {
       stroke-width: 1.75;
+    }
+
+    /* The "+" button's count stays in its corner as the glyph grows. */
+    :where([data-ui="chat-input-controls"])
+      [data-ui="chat-input-add-menu-badge"] {
+      inset-inline-end: -0.25rem;
+      top: -0.25rem;
     }
   }
 }

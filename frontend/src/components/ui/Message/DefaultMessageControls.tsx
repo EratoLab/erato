@@ -45,8 +45,10 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
 }: MessageControlsProps) {
   const { editingEnabled, regenerationEnabled } = useMessageActionsFeature();
   const [isCopied, setIsCopied] = useState(false);
+  // A time wrapped under the buttons sits close under them.
   const controlsRowStyle = {
-    gap: "var(--theme-spacing-control-gap)",
+    columnGap: "var(--theme-spacing-control-gap)",
+    rowGap: 0,
   } as const;
   const controlsClusterStyle = {
     gap: "var(--theme-spacing-control-gap)",
