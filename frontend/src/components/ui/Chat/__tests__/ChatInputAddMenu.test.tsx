@@ -134,6 +134,93 @@ describe("ChatInputAddMenu", () => {
     });
   });
 
+  describe("a section shown as a sub-menu", () => {
+    const onPick = vi.fn();
+    const menu = (
+      <ChatInputAddMenu
+        tools={[{ id: "web", label: "Web", checked: false, onToggle: vi.fn() }]}
+        extraSections={[
+          {
+            id: "model",
+            header: "Model",
+            placement: "belowTools",
+            submenu: { summary: "Model A" },
+            items: ["Model A", "Model B"].map((name, index) => ({
+              id: `m${index}`,
+              label: name,
+              checked: index === 0,
+              exclusive: true,
+              onToggle: () => onPick(name),
+            })),
+          },
+        ]}
+      />
+    );
+
+    it("shows one row with the current choice instead of the whole list", () => {
+      render(menu);
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+      const row = screen.getByTestId("chat-input-add-menu-page-model");
+      expect(row).toHaveAttribute("aria-haspopup", "menu");
+      expect(row).toHaveTextContent("Model");
+      expect(row).toHaveTextContent("Model A");
+      expect(screen.queryByRole("menuitemradio")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitemcheckbox", { name: "Web" }),
+      ).toBeVisible();
+    });
+
+    it("opens the choices as a page with a back row, and picking one closes the menu", async () => {
+      render(menu);
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-page-model"));
+
+      expect(screen.getByTestId("chat-input-add-menu-page-back")).toHaveFocus();
+      expect(
+        screen.queryByRole("menuitemcheckbox", { name: "Web" }),
+      ).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Model B" }));
+
+      expect(onPick).toHaveBeenCalledWith("Model B");
+      await waitFor(() => {
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      });
+    });
+
+    it("goes back by the back row or arrow left, focusing the row that opened it", () => {
+      render(menu);
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+      const row = () => screen.getByTestId("chat-input-add-menu-page-model");
+
+      fireEvent.keyDown(row(), { key: "ArrowRight" });
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-page-back"));
+      expect(row()).toHaveFocus();
+
+      fireEvent.click(row());
+      fireEvent.keyDown(
+        screen.getByRole("menuitemradio", { name: "Model A" }),
+        {
+          key: "ArrowLeft",
+        },
+      );
+      expect(row()).toHaveFocus();
+    });
+
+    it("starts on the whole menu again after closing on a page", () => {
+      render(menu);
+      const trigger = screen.getByTestId("chat-input-add-menu-trigger");
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-page-model"));
+      fireEvent.keyDown(document, { key: "Escape" });
+      fireEvent.click(trigger);
+
+      expect(
+        screen.getByTestId("chat-input-add-menu-page-model"),
+      ).toBeVisible();
+    });
+  });
+
   // A mention row puts focus in the composer; closing after the select delay
   // must leave it there instead of returning it to the "+" trigger.
   it("leaves focus where a selected row moved it", async () => {

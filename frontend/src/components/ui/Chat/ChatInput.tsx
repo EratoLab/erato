@@ -2531,6 +2531,8 @@ export const ChatInput = ({
       // Menu placement is an internal key.
       // eslint-disable-next-line lingui/no-unlocalized-strings
       placement: "belowTools",
+      // The list of models outgrows the menu, so it opens as its own page.
+      submenu: { summary: selectedModel?.model_display_name },
       items: availableModels.map((model) => ({
         id: `model-${model.chat_provider_id}`,
         label: <ModelSelectorOptionContent model={model} compact />,

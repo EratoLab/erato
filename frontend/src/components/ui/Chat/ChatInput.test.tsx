@@ -1398,6 +1398,7 @@ describe("ChatInput", () => {
 
       const { modelSection, selectedToolCount } = addControlsProps();
       expect(selectedToolCount).toBe(1);
+      expect(modelSection?.submenu?.summary).toBe("Model A");
       const items = modelSection?.items as AddMenuToolItem[];
       expect(items.map((item) => [item.checked, item.exclusive])).toEqual([
         [true, true],
