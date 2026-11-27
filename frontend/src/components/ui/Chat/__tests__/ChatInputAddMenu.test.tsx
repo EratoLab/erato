@@ -207,6 +207,20 @@ describe("ChatInputAddMenu", () => {
       expect(row()).toHaveFocus();
     });
 
+    it("moves focus to the page, not onto a row, when a finger opened it", () => {
+      render(menu);
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-page-model"), {
+        detail: 1,
+      });
+
+      const page = screen.getByRole("group", { name: "Model" });
+      expect(page).toHaveFocus();
+      expect(
+        screen.getByTestId("chat-input-add-menu-page-back"),
+      ).toHaveAccessibleName("Back: Model");
+    });
+
     it("starts on the whole menu again after closing on a page", () => {
       render(menu);
       const trigger = screen.getByTestId("chat-input-add-menu-trigger");

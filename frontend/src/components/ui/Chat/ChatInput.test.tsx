@@ -1449,6 +1449,7 @@ describe("ChatInput", () => {
       await renderPhoneComposer({ touch: true, availableModels: [models[0]] });
 
       expect(addControlsProps().modelSection?.items).toHaveLength(1);
+      expect(addControlsProps().modelSection?.submenu).toBeUndefined();
     });
 
     it("says in the + menu why an assistant's tools cannot be changed", async () => {

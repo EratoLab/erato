@@ -3341,6 +3341,11 @@ msgstr "Modell"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Zurück:"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
 msgid "chatInput.addMenu.toolsHeader"
 msgstr "Tools"
 

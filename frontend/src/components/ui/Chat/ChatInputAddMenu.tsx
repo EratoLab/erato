@@ -175,6 +175,9 @@ export function ChatInputAddMenu({
   // The section shown as a page in place of the whole menu, if any.
   const [openPageId, setOpenPageId] = useState<string | null>(null);
   const returnFocusToPageRowRef = useRef<string | null>(null);
+  // A key moves focus onto a row, as in the rest of the menu; a tap moves it
+  // to the page itself, so no row lights up under the finger.
+  const swapByKeyRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const baseId = useId();
@@ -253,19 +256,29 @@ export function ChatInputAddMenu({
     if (!panel) return;
     const returnTo = returnFocusToPageRowRef.current;
     returnFocusToPageRowRef.current = null;
-    const target =
-      openPageId === null && returnTo !== null
+    const byKey = swapByKeyRef.current;
+    swapByKeyRef.current = false;
+    let target: HTMLElement | null = null;
+    if (openPageId !== null) {
+      target = byKey
+        ? panel.querySelector<HTMLElement>(ROW_ITEM_SELECTOR)
+        : panel.querySelector<HTMLElement>("[data-add-menu-page]");
+    } else if (returnTo !== null) {
+      target = byKey
         ? panel.querySelector<HTMLElement>(
             `[data-testid="chat-input-add-menu-page-${returnTo}"]`,
           )
-        : openPageId !== null
-          ? panel.querySelector<HTMLElement>(ROW_ITEM_SELECTOR)
-          : null;
+        : panel;
+    }
     target?.focus();
   }, [isOpen, openPageId]);
 
-  const openPage = (sectionId: string) => setOpenPageId(sectionId);
-  const leavePage = useCallback(() => {
+  const openPage = (sectionId: string, byKey: boolean) => {
+    swapByKeyRef.current = byKey;
+    setOpenPageId(sectionId);
+  };
+  const leavePage = useCallback((byKey: boolean) => {
+    swapByKeyRef.current = byKey;
     setOpenPageId((current) => {
       returnFocusToPageRowRef.current = current;
       return null;
@@ -279,7 +292,7 @@ export function ChatInputAddMenu({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        leavePage();
+        leavePage(true);
       }
     };
     panel.addEventListener("keydown", onKeyDown);
@@ -414,11 +427,14 @@ export function ChatInputAddMenu({
       aria-expanded={false}
       disabled={isBusy}
       data-testid={`chat-input-add-menu-page-${section.id}`}
-      onClick={() => openPage(section.id)}
+      // A click a key produced (Enter, Space) carries no pointer detail.
+      onClick={(event: React.MouseEvent) =>
+        openPage(section.id, event.detail === 0)
+      }
       onKeyDown={(event: React.KeyboardEvent) => {
         if (event.key === "ArrowRight") {
           event.preventDefault();
-          openPage(section.id);
+          openPage(section.id, true);
         }
       }}
       trailing={
@@ -599,15 +615,18 @@ export function ChatInputAddMenu({
           <div
             role="group"
             aria-labelledby={pageHeaderId}
-            className="flex flex-col"
+            tabIndex={-1}
+            data-add-menu-page=""
+            className="flex flex-col focus:outline-none"
           >
             <Row
               variant="menu"
               role="menuitem"
               tabIndex={-1}
-              id={pageHeaderId}
               data-testid="chat-input-add-menu-page-back"
-              onClick={leavePage}
+              onClick={(event: React.MouseEvent) =>
+                leavePage(event.detail === 0)
+              }
               leading={
                 <ChevronLeftIcon
                   className="size-4 shrink-0"
@@ -615,7 +634,13 @@ export function ChatInputAddMenu({
                 />
               }
             >
-              <span className="min-w-0 flex-1 truncate font-medium">
+              <span className="sr-only">
+                {t({ id: "chatInput.addMenu.pageBack", message: "Back:" })}{" "}
+              </span>
+              <span
+                id={pageHeaderId}
+                className="min-w-0 flex-1 truncate font-medium"
+              >
                 {openPageSection.header}
               </span>
             </Row>
