@@ -1,7 +1,14 @@
 import { t } from "@lingui/core/macro";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { FilePreviewModal } from "@/components/ui/Modal/FilePreviewModal";
 import {
@@ -820,7 +827,7 @@ export const Chat = ({
 
   // The list pads its top by the floating bar's height (globals.css); CSS
   // cannot read it, and a theme's accessory may be taller than one row.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const bar = topBarRef.current;
     const page = bar?.parentElement;
     if (!floatsTopBar || !bar || !page) return;
@@ -880,7 +887,10 @@ export const Chat = ({
   const aboveComposerContent = (
     <>
       {!centeredEmpty && topContent ? (
-        <div className="shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4">
+        <div
+          className="shrink-0 border-b border-theme-border bg-[var(--theme-shell-page)] p-3 sm:px-4"
+          data-ui="chat-top-content"
+        >
           {topContent}
         </div>
       ) : null}

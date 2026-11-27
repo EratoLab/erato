@@ -138,4 +138,15 @@ describe("visibleListHeight", () => {
     expect(visibleListHeight(list)).toBe(510);
     vi.restoreAllMocks();
   });
+
+  it("leaves out what floating top buttons cover too", () => {
+    const list = document.createElement("div");
+    vi.spyOn(list, "clientHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      scrollPaddingBottom: "90px",
+      scrollPaddingTop: "119px",
+    } as CSSStyleDeclaration);
+    expect(visibleListHeight(list)).toBe(391);
+    vi.restoreAllMocks();
+  });
 });

@@ -1299,10 +1299,11 @@ body {
   .sidebar-page-geometry[data-sidebar-pushed],
   .sidebar-page-geometry[data-sidebar-moving] {
     box-shadow:
-      0 calc(-1 * var(--safe-area-top, 0px)) 0 0 var(--theme-shell-page),
+      0 calc(-1 * var(--sidebar-page-top-reach, var(--safe-area-top, 0px))) 0 0
+        var(--theme-shell-page),
       0 var(--safe-area-bottom, 0px) 0 0 var(--theme-shell-page);
     clip-path: inset(
-      calc(-1 * var(--safe-area-top, 0px)) 0
+      calc(-1 * var(--sidebar-page-top-reach, var(--safe-area-top, 0px))) 0
         calc(-1 * var(--safe-area-bottom, 0px)) 0 round
         var(--sidebar-page-radius, var(--theme-radius-card))
     );
@@ -2718,14 +2719,18 @@ html[data-system-glass][data-theme="dark"] {
    sidebar button alone takes the same row. */
 @media (max-width: 639.98px) {
   @media not all and (hover: hover) and (pointer: fine) {
-    html[data-system-glass]
-      [data-ui="chat-conversation-dropzone"]:has(
-        > [data-ui="chat-conversation-shell"]
-      ) {
-      --chat-top-overlap: calc(
+    :where(
+      html[data-system-glass]
+        [data-ui="chat-conversation-dropzone"]:has(
+          > [data-ui="chat-conversation-shell"]
+        )
+    ) {
+      /* At least the floating sidebar button's row, which a short or empty
+         accessory row would not clear. */
+      --chat-top-reach: calc(
         var(--safe-area-top) +
-          var(
-            --chat-top-bar-height,
+          max(
+            var(--chat-top-bar-height, 0px),
             max(
                 var(--touch-target-min),
                 var(--theme-spacing-control-min-height) - 0.25rem
@@ -2733,12 +2738,17 @@ html[data-system-glass][data-theme="dark"] {
               1rem
           )
       );
+      --chat-top-overlap: var(--chat-top-reach);
+      /* The pushed sidebar card's corners and strip start at its own top. */
+      --sidebar-page-top-reach: 0px;
       margin-top: calc(-1 * var(--safe-area-top));
     }
 
-    html[data-system-glass]
-      [data-ui="chat-conversation-dropzone"]:has(
-        > [data-ui="chat-conversation-shell"]
+    :where(
+        html[data-system-glass]
+          [data-ui="chat-conversation-dropzone"]:has(
+            > [data-ui="chat-conversation-shell"]
+          )
       )
       > [data-ui="chat-top-bar"] {
       position: absolute;
@@ -2748,9 +2758,11 @@ html[data-system-glass][data-theme="dark"] {
       pointer-events: none;
     }
 
-    html[data-system-glass]
-      [data-ui="chat-conversation-dropzone"]:has(
-        > [data-ui="chat-conversation-shell"]
+    :where(
+        html[data-system-glass]
+          [data-ui="chat-conversation-dropzone"]:has(
+            > [data-ui="chat-conversation-shell"]
+          )
       )
       > [data-ui="chat-top-bar"]
       > *
@@ -2758,15 +2770,29 @@ html[data-system-glass][data-theme="dark"] {
       pointer-events: auto;
     }
 
-    html[data-system-glass]
-      [data-ui="chat-conversation-dropzone"]
+    /* A notice above the list (an archived chat, a run's header, a shared
+       chat's title) starts below the buttons, and the list under it keeps
+       its own top. */
+    :where(html[data-system-glass] [data-ui="chat-conversation-dropzone"])
+      [data-ui="chat-top-content"] {
+      padding-top: calc(var(--chat-top-reach, 0px) + 0.75rem);
+    }
+
+    :where(html[data-system-glass] [data-ui="chat-conversation-dropzone"])
+      [data-ui="welcome-above"]:has(> [data-ui="chat-top-content"]) {
+      --chat-top-overlap: 0px;
+    }
+
+    :where(html[data-system-glass] [data-ui="chat-conversation-dropzone"])
       [data-ui="chat-body"] {
       scroll-padding-top: var(--chat-top-overlap, 0px);
     }
 
-    html[data-system-glass]
-      [data-ui="chat-conversation-dropzone"]
-      > [data-ui="chat-conversation-shell"]
+    :where(
+        html[data-system-glass]
+          [data-ui="chat-conversation-dropzone"]
+          > [data-ui="chat-conversation-shell"]
+      )
       > [data-ui="welcome-above"]::before {
       content: "";
       position: absolute;
