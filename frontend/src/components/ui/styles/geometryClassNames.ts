@@ -94,6 +94,7 @@ export const ERATO_GEOMETRY_CLASS = Object.freeze({
   sidebarPageGeometry: "sidebar-page-geometry",
   sidebarRowGeometry: "sidebar-row-geometry",
   sidebarRowSelected: "sidebar-row-selected",
+  sidebarScrimGeometry: "sidebar-scrim-geometry",
   sidebarScrimSkin: "sidebar-scrim-skin",
   sidebarSectionSkin: "sidebar-section-skin",
   sidebarSkin: "sidebar-skin",

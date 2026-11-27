@@ -291,13 +291,18 @@ const ChatHistoryHeader = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 ChatHistoryHeader.displayName = "ChatHistoryHeader";
 
+const useNewChatIconId = () =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
+  useThemedIcon("navigation", "newChat");
+
+const logNewChat = () => logger.log("[CHAT_FLOW] New chat item clicked");
+
 /** Exported for the add-in's history drawer, which renders the same row. */
 export const NewChatItem = memo<{
   onNewChat?: () => void;
   isSlimMode?: boolean;
 }>(({ onNewChat, isSlimMode = false }) => {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
-  const newChatIconId = useThemedIcon("navigation", "newChat");
+  const newChatIconId = useNewChatIconId();
 
   return (
     <SidebarNavigationItem
@@ -314,7 +319,7 @@ export const NewChatItem = memo<{
       }
       isSlimMode={isSlimMode}
       onClick={() => {
-        logger.log("[CHAT_FLOW] New chat item clicked");
+        logNewChat();
         onNewChat?.();
       }}
     />
@@ -434,8 +439,7 @@ ScheduledNavigationItem.displayName = "ScheduledNavigationItem";
  * row at the top stays for the sidebar beside the page.
  */
 const NewChatButton = ({ onNewChat }: { onNewChat: () => void }) => {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal theme icon identifiers, not user-facing text
-  const newChatIconId = useThemedIcon("navigation", "newChat");
+  const newChatIconId = useNewChatIconId();
   return (
     <Button
       variant="primary"
@@ -447,7 +451,10 @@ const NewChatButton = ({ onNewChat }: { onNewChat: () => void }) => {
           className="size-4"
         />
       }
-      onClick={onNewChat}
+      onClick={() => {
+        logNewChat();
+        onNewChat();
+      }}
       data-ui="sidebar-new-chat-button"
     >
       {t`New Chat`}
@@ -946,7 +953,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               ref={edgeRef}
               aria-hidden="true"
               className={clsx(
-                "viewport-layer fixed inset-y-0 left-0 z-30 w-[calc(var(--safe-area-left,0px)+20px)] touch-none",
+                "viewport-layer fixed inset-y-0 left-0 z-[43] w-[calc(var(--safe-area-left,0px)+20px)] touch-none",
                 !isHiddenMode && "pointer-events-none",
               )}
               data-ui="sidebar-edge"
@@ -960,14 +967,15 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               ref={expandToggleRef}
               surface="floating"
               onToggle={onToggleCollapse}
-              className="absolute left-2 top-2 z-30 touch-phone:left-[var(--phone-edge-inset)]"
+              className="absolute left-2 top-2 z-[43] touch-phone:left-[var(--phone-edge-inset)]"
             />
           )}
 
           {/* On a narrow screen the open sidebar pushes the page aside, and
-              this lies over what stays in view of it. A tap there lands here
-              and only closes the sidebar; the control underneath never gets
-              that tap. */}
+              this lies over what stays in view of it. Stacking there: the
+              sidebar 40, the page 41, this 42, the edge strip and the
+              floating toggle 43. A tap here only closes the sidebar; the
+              control underneath never gets that tap. */}
           {isNarrowScreen && (
             <div
               ref={scrimRef}
@@ -978,8 +986,8 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(
-                // Over the pushed page, which stands over the sidebar.
                 "viewport-layer fixed inset-0 z-[42] touch-pan-y",
+                ERATO_GEOMETRY_CLASS.sidebarScrimGeometry,
                 ERATO_GEOMETRY_CLASS.sidebarScrimSkin,
                 "transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
                 isDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0",
@@ -1013,6 +1021,7 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
               className,
             )}
             style={sidebarShellStyle}
+            data-pushes-page={isNarrowScreen ? "" : undefined}
             data-ui="sidebar"
             data-sidebar-mode={
               isHiddenMode ? "hidden" : isSlimMode ? "slim" : "expanded"

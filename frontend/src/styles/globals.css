@@ -1283,14 +1283,39 @@ body {
 
   /* The page beside the sidebar. On a narrow screen the open sidebar pushes
      it aside by the sidebar's width, and it shows as a card over the
-     sidebar: from the screen's top to its bottom, system bars included, with
-     the card's corners clipping it. [data-sidebar-moving] keeps that shape
-     while it follows a finger or slides back. */
-  .sidebar-page-geometry[data-sidebar-pushed],
-  .sidebar-page-geometry[data-sidebar-moving] {
+     sidebar, from the screen's top to its bottom: bands of the page's colour
+     fill the system bars' strips, and the card's corners clip it while it is
+     pushed or moving ([data-sidebar-moving] while it follows a finger or
+     slides back). The stacking and the bands hold whenever the page can be
+     pushed, so that a drag starting does not rebuild the page's layers. */
+  .sidebar-page-geometry[data-sidebar-pushable] {
     position: relative;
     /* Over the sidebar (z-40): the corners and the edge's shadow fall on it. */
     z-index: 41;
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushable]::before,
+  .sidebar-page-geometry[data-sidebar-pushable]::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-color: var(--theme-shell-page);
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushable]::before {
+    bottom: 100%;
+    height: var(--safe-area-top, 0px);
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushable]::after {
+    top: 100%;
+    height: var(--safe-area-bottom, 0px);
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-page-geometry[data-sidebar-moving] {
     clip-path: inset(
       calc(-1 * var(--safe-area-top, 0px)) 0
         calc(-1 * var(--safe-area-bottom, 0px)) 0 round
@@ -1298,39 +1323,23 @@ body {
     );
   }
 
-  /* The card behind the page, reaching under the system bars, where the
-     page's own box stops. */
-  .sidebar-page-geometry[data-sidebar-pushed]::before,
-  .sidebar-page-geometry[data-sidebar-moving]::before {
-    content: "";
-    position: absolute;
-    inset: calc(-1 * var(--safe-area-top, 0px)) 0
-      calc(-1 * var(--safe-area-bottom, 0px));
-    z-index: -1;
-    pointer-events: none;
-    background-color: var(--theme-shell-page);
-  }
-
-  /* Round the card's corners the sidebar's colour shows, wherever the page's
-     parent or the body would otherwise show through. The pushed page also
-     reaches past the screen's right edge; clipped there, it gives a
-     scrollIntoView inside it nothing to scroll sideways. */
+  /* The pushed page reaches past the screen's edge; clipped there, it gives
+     a scrollIntoView inside it nothing to scroll the document by. */
   :has(
     > .sidebar-page-geometry[data-sidebar-pushed],
     > .sidebar-page-geometry[data-sidebar-moving]
   ) {
-    overflow-x: clip;
-    background-color: var(--theme-shell-sidebar);
+    overflow: clip;
   }
 
-  body:has(
-      .sidebar-page-geometry[data-sidebar-pushed],
-      .sidebar-page-geometry[data-sidebar-moving]
-    ) {
-    background-color: var(--theme-shell-sidebar);
+  /* The layer over the pushed page (data-ui="sidebar-scrim") moves and rounds
+     with it. */
+  .sidebar-scrim-geometry {
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
   }
 
-  .sidebar-page-geometry[data-sidebar-pushed] {
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-scrim-geometry[data-sidebar-pushed] {
     transform: translateX(
       var(--sidebar-width-override, var(--theme-layout-sidebar-width))
     );
@@ -1551,15 +1560,29 @@ body:has(.app-viewport) {
 /* Over the page the open sidebar pushes aside on a narrow screen: it takes
    the tap that closes the sidebar and draws the card's edge. Clear, so the
    page reads as it is; a theme can tint it. */
-.sidebar-scrim-skin {
-  border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
-  box-shadow: 0 0 32px rgb(0 0 0 / 0.18);
+:root {
+  --sidebar-page-shadow: 0 0 32px rgb(0 0 0 / 0.18);
 }
 
-.sidebar-scrim-skin[data-sidebar-pushed] {
-  transform: translateX(
-    var(--sidebar-width-override, var(--theme-layout-sidebar-width))
-  );
+:root[data-theme="dark"] {
+  --sidebar-page-shadow: 0 0 32px rgb(0 0 0 / 0.6);
+}
+
+.sidebar-scrim-skin {
+  box-shadow: var(--sidebar-page-shadow);
+}
+
+/* Behind the pushed page's rounded corners the sidebar's own paint carries on
+   past its edge. Painting the body there instead repaints the whole screen
+   when a drag starts. */
+.sidebar-skin[data-pushes-page]::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 100%;
+  width: var(--sidebar-page-radius, var(--theme-radius-card));
+  pointer-events: none;
+  background: inherit;
 }
 
 .modal-shell-skin {
@@ -2614,7 +2637,8 @@ html[data-system-glass]:not([data-theme-shapes="theme"]) {
   --theme-radius-dropdown: 26px;
   --theme-radius-modal: 28px;
   /* The card of the page the open sidebar pushes aside follows the screen's
-     own corners. */
+     own corners: those of the iPhones with Face ID. An iPhone SE's square
+     screen shows it rounded. */
   --sidebar-page-radius: 55px;
 }
 

@@ -401,7 +401,7 @@ describe("ChatHistorySidebar", () => {
       "absolute",
       "left-2",
       "top-2",
-      "z-30",
+      "z-[43]",
     );
     expect(toggle).not.toHaveAttribute("style");
     // The caller positions it, so the primitive must not add `relative`.
@@ -1677,6 +1677,8 @@ describe("ChatHistorySidebar", () => {
       const edge = screen.getByTestId("sidebar-edge");
       const scrim = screen.getByTestId("sidebar-scrim");
       expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      // Set before any drag, so a drag starting changes no stacking.
+      expect(page()).toHaveAttribute("data-sidebar-pushable");
 
       touch(edge, "touchstart", 5, 400, 0);
       touch(edge, "touchmove", 145, 400, 400);
@@ -1772,6 +1774,7 @@ describe("ChatHistorySidebar", () => {
 
       expect(sidebarMode()).toBe("expanded");
       expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushable");
     });
 
     it("starts the slide before the page switches", async () => {
