@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -400,7 +401,7 @@ describe("ChatHistorySidebar", () => {
       "absolute",
       "left-2",
       "top-2",
-      "z-30",
+      "z-[43]",
     );
     expect(toggle).not.toHaveAttribute("style");
     // The caller positions it, so the primitive must not add `relative`.
@@ -1303,6 +1304,10 @@ describe("ChatHistorySidebar", () => {
       return { onToggleCollapse, onSessionSelect, onNewChat, pickChat };
     };
     const navigationRows = ["New Chat", "Search", "Assistants", "Scheduled"];
+    // On a narrow screen New Chat is the button at the drawer's foot.
+    const narrowControl = (label: string) =>
+      screen.queryByRole("link", { name: label }) ??
+      screen.getByRole("button", { name: label });
 
     it("closes on a narrow screen once the picked chat is opened", async () => {
       mockedNarrowScreen = true;
@@ -1321,7 +1326,7 @@ describe("ChatHistorySidebar", () => {
         mockedNarrowScreen = true;
         const { onToggleCollapse } = await renderOpenSidebar();
 
-        fireEvent.click(screen.getByRole("link", { name: label }));
+        fireEvent.click(narrowControl(label));
 
         expect(onToggleCollapse).toHaveBeenCalledTimes(1);
       },
@@ -1331,9 +1336,27 @@ describe("ChatHistorySidebar", () => {
       mockedNarrowScreen = true;
       const { onNewChat } = await renderOpenSidebar();
 
-      fireEvent.click(screen.getByRole("link", { name: "New Chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "New Chat" }));
 
       expect(onNewChat).toHaveBeenCalledTimes(1);
+    });
+
+    it("puts New Chat at the drawer's foot on a narrow screen and at the top beside the page", async () => {
+      mockedNarrowScreen = true;
+      await renderOpenSidebar();
+      const footer = document.querySelector('[data-ui="sidebar-footer"]')!;
+      expect(
+        within(footer as HTMLElement).getByRole("button", { name: "New Chat" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "New Chat" })).toBeNull();
+
+      cleanup();
+      mockedNarrowScreen = false;
+      await renderOpenSidebar();
+      expect(
+        screen.getByRole("link", { name: "New Chat" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "New Chat" })).toBeNull();
     });
 
     it("stays open on a wide screen", async () => {
@@ -1415,15 +1438,10 @@ describe("ChatHistorySidebar", () => {
 
       const scrim = screen.getByTestId("sidebar-scrim");
       const sidebar = document.querySelector('[data-ui="sidebar"]')!;
-      expect(scrim).toHaveClass("fixed", "inset-0", "z-40");
+      // The pushed page stands at 41, over the sidebar; this over both.
+      expect(scrim).toHaveClass("fixed", "inset-0", "z-[42]");
       expect(scrim).not.toHaveClass("pointer-events-none");
-      // Same layer as the sidebar and earlier in the document: the sidebar
-      // paints over it, the page under it.
       expect(sidebar).toHaveClass("z-40");
-      expect(
-        scrim.compareDocumentPosition(sidebar) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
     });
 
     it("lets taps through once the drawer is closed", async () => {
@@ -1438,7 +1456,7 @@ describe("ChatHistorySidebar", () => {
     it("closes on Escape and hands focus to the control that reopens it", async () => {
       mockedNarrowScreen = true;
       await renderDrawer();
-      screen.getByRole("link", { name: "New Chat" }).focus();
+      screen.getByRole("link", { name: "Search" }).focus();
 
       fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
@@ -1453,7 +1471,7 @@ describe("ChatHistorySidebar", () => {
     it("hands focus that was in the drawer to the reopen control on a tap beside it", async () => {
       mockedNarrowScreen = true;
       await renderDrawer();
-      screen.getByRole("link", { name: "New Chat" }).focus();
+      screen.getByRole("link", { name: "Search" }).focus();
       const scrim = screen.getByTestId("sidebar-scrim");
 
       // A browser blurs on a press that is not prevented; jsdom does not.
@@ -1600,12 +1618,19 @@ describe("ChatHistorySidebar", () => {
       }
     };
 
+    const shellRequest = vi.fn((_name: string, _args?: unknown) =>
+      Promise.resolve(null),
+    );
+    const haptics = () =>
+      shellRequest.mock.calls.filter(([name]) => name === "haptics.play");
+
     beforeEach(() => {
       mockedNarrowScreen = true;
+      shellRequest.mockClear();
       window.ERATO_SHELL = {
         contract: 1,
-        capabilities: { leftEdgeSwipe: 1 },
-        request: () => Promise.resolve(null),
+        capabilities: { leftEdgeSwipe: 1, haptics: 1 },
+        request: shellRequest,
         on: () => () => {},
       };
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
@@ -1652,6 +1677,8 @@ describe("ChatHistorySidebar", () => {
       const edge = screen.getByTestId("sidebar-edge");
       const scrim = screen.getByTestId("sidebar-scrim");
       expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      // Set before any drag, so a drag starting changes no stacking.
+      expect(page()).toHaveAttribute("data-sidebar-pushable");
 
       touch(edge, "touchstart", 5, 400, 0);
       touch(edge, "touchmove", 145, 400, 400);
@@ -1697,31 +1724,16 @@ describe("ChatHistorySidebar", () => {
       });
     });
 
-    it("brings the page back on a tap on it, keeping its shape until it is back", async () => {
-      vi.useFakeTimers();
-      try {
-        await renderDrawer(true);
-        const scrim = screen.getByTestId("sidebar-scrim");
+    it("brings the page back on a tap on it", async () => {
+      await renderDrawer(true);
+      const scrim = screen.getByTestId("sidebar-scrim");
 
-        fireEvent.click(scrim);
+      fireEvent.click(scrim);
 
-        expect(sidebarMode()).toBe("hidden");
-        expect(page()).not.toHaveAttribute("data-sidebar-pushed");
-        expect(scrim).not.toHaveAttribute("data-sidebar-pushed");
-        expect(page()).toHaveAttribute("data-sidebar-moving");
-
-        act(() => {
-          vi.advanceTimersByTime(250);
-        });
-        expect(page()).toHaveAttribute("data-sidebar-moving");
-        act(() => {
-          vi.advanceTimersByTime(150);
-        });
-        expect(page()).not.toHaveAttribute("data-sidebar-moving");
-        expect(scrim).not.toHaveAttribute("data-sidebar-moving");
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(sidebarMode()).toBe("hidden");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      expect(scrim).not.toHaveAttribute("data-sidebar-pushed");
+      expect(page()).toHaveAttribute("data-sidebar-pushable");
     });
 
     it("brings the page back from where it is when turned back during the slide", async () => {
@@ -1739,7 +1751,7 @@ describe("ChatHistorySidebar", () => {
       expect(sidebarMode()).toBe("hidden");
       expect(page().style.transform).toBe("");
       expect(page().style.transition).toBe("");
-      expect(page()).toHaveAttribute("data-sidebar-moving");
+      expect(page()).not.toHaveAttribute("data-sidebar-moving");
     });
 
     it("keeps the page in place on a wide screen", async () => {
@@ -1748,6 +1760,7 @@ describe("ChatHistorySidebar", () => {
 
       expect(sidebarMode()).toBe("expanded");
       expect(page()).not.toHaveAttribute("data-sidebar-pushed");
+      expect(page()).not.toHaveAttribute("data-sidebar-pushable");
     });
 
     it("starts the slide before the page switches", async () => {
@@ -1852,6 +1865,22 @@ describe("ChatHistorySidebar", () => {
       cleanup();
 
       expect(frameQueue.size).toBe(0);
+    });
+
+    it("ticks once when a drag opens or closes it, and not when it springs back", async () => {
+      await renderDrawer(false);
+      const edge = screen.getByTestId("sidebar-edge");
+
+      drag(edge, 5, 115, 600);
+      expect(haptics()).toHaveLength(0);
+
+      drag(edge, 5, 185, 600);
+      expect(sidebarMode()).toBe("expanded");
+      expect(haptics()).toEqual([["haptics.play", { kind: "light" }]]);
+
+      drag(drawer(), 250, 60, 600);
+      expect(sidebarMode()).toBe("hidden");
+      expect(haptics()).toHaveLength(2);
     });
 
     it("springs back from a slow pull short of half", async () => {
@@ -2037,7 +2066,7 @@ describe("ChatHistorySidebar", () => {
 
       it("gives the page back after a chat is picked in the drawer", async () => {
         await renderDrawer(true);
-        screen.getByRole("link", { name: "New Chat" }).focus();
+        screen.getByRole("link", { name: "Search" }).focus();
 
         act(() => {
           historyListProps.at(-1)?.onSessionSelect?.("chat-2");

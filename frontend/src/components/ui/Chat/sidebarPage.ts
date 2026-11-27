@@ -27,7 +27,8 @@ export function useSidebarPage(
   collapsedMode: "hidden" | "slim",
 ) {
   const ref = useRef<HTMLDivElement>(null);
-  const pushed = useSidebarPushesPage(sidebarCollapsed);
+  const pushable = useIsNarrowScreen();
+  const pushed = pushable && !sidebarCollapsed;
   return {
     ref,
     className: clsx(
@@ -39,6 +40,7 @@ export function useSidebarPage(
         collapsedMode === "slim" &&
         "sm:ml-[var(--theme-layout-sidebar-slim-width)]",
     ),
+    "data-sidebar-pushable": pushable ? "" : undefined,
     "data-sidebar-pushed": pushed ? "" : undefined,
     inert: pushed || undefined,
     "aria-hidden": pushed && !SUPPORTS_INERT ? true : undefined,

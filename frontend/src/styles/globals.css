@@ -1281,18 +1281,36 @@ body {
     block-size: 0.25rem;
   }
 
-  /* The page beside the sidebar and the scrim that dims it. On a narrow
-     screen the open sidebar pushes both aside by its own width, and the part
-     of the page still in view becomes a card; [data-sidebar-moving] keeps
-     that shape while they follow a finger or slide back. */
-  .sidebar-page-geometry[data-sidebar-pushed],
-  .sidebar-page-geometry[data-sidebar-moving] {
-    overflow: clip;
-    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  /* The page beside the sidebar. On a narrow screen the open sidebar pushes
+     it aside by the sidebar's width, and it shows as a card over the
+     sidebar, from the screen's top to its bottom: two unblurred copies of
+     its box, shifted by the system bars' heights, fill their strips with the
+     colour the body shows there, and the card's outline clips the page and
+     them. The stacking holds whenever the page can be pushed; the shape
+     only while it is pushed or moving ([data-sidebar-moving] while it
+     follows a finger or settles after one), so the closed page keeps its
+     square edges. */
+  .sidebar-page-geometry[data-sidebar-pushable] {
+    position: relative;
+    /* Over the sidebar (z-40), which paints round the card's corners. */
+    z-index: 41;
   }
 
-  /* The pushed page reaches past the screen's right edge. Clipped there, it
-     gives a scrollIntoView inside it nothing to scroll sideways. */
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-page-geometry[data-sidebar-moving] {
+    box-shadow:
+      0 calc(-1 * var(--safe-area-top, 0px)) 0 0 var(--theme-shell-page),
+      0 var(--safe-area-bottom, 0px) 0 0 var(--theme-shell-page);
+    clip-path: inset(
+      calc(-1 * var(--safe-area-top, 0px)) 0
+        calc(-1 * var(--safe-area-bottom, 0px)) 0 round
+        var(--sidebar-page-radius, var(--theme-radius-card))
+    );
+  }
+
+  /* The pushed page reaches past the screen's right edge; clipped there, it
+     gives a scrollIntoView inside it nothing to scroll sideways. Only
+     sideways: the card reaches under the system bars. */
   :has(
     > .sidebar-page-geometry[data-sidebar-pushed],
     > .sidebar-page-geometry[data-sidebar-moving]
@@ -1300,7 +1318,14 @@ body {
     overflow-x: clip;
   }
 
-  .sidebar-page-geometry[data-sidebar-pushed] {
+  /* The layer over the pushed page (data-ui="sidebar-scrim") moves and rounds
+     with it. */
+  .sidebar-scrim-geometry {
+    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-scrim-geometry[data-sidebar-pushed] {
     transform: translateX(
       var(--sidebar-width-override, var(--theme-layout-sidebar-width))
     );
@@ -1516,6 +1541,34 @@ body:has(.app-viewport) {
    the panel's edge already carries the depth cue. */
 .drawer-overlay-skin {
   background-color: var(--theme-overlay-modal);
+}
+
+/* Over the page the open sidebar pushes aside on a narrow screen: it takes
+   the tap that closes the sidebar and draws the card's edge. Clear, so the
+   page reads as it is; a theme can tint it. */
+:root {
+  --sidebar-page-shadow: 0 0 32px rgb(0 0 0 / 0.18);
+}
+
+:root[data-theme="dark"] {
+  --sidebar-page-shadow: 0 0 32px rgb(0 0 0 / 0.6);
+}
+
+.sidebar-scrim-skin {
+  box-shadow: var(--sidebar-page-shadow);
+}
+
+/* Behind the pushed page's rounded corners the sidebar's own paint carries on
+   past its edge. Painting the body there instead repaints the whole screen
+   when a drag starts. */
+.sidebar-skin[data-pushes-page]::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 100%;
+  width: var(--sidebar-page-radius, var(--theme-radius-card));
+  pointer-events: none;
+  background: inherit;
 }
 
 .modal-shell-skin {
@@ -2667,6 +2720,10 @@ html[data-system-glass][data-theme="dark"] {
 html[data-system-glass]:not([data-theme-shapes="theme"]) {
   --theme-radius-dropdown: 26px;
   --theme-radius-modal: 28px;
+  /* The card of the page the open sidebar pushes aside follows the screen's
+     own corners: those of the iPhones with Face ID. An iPhone SE's square
+     screen shows it rounded. */
+  --sidebar-page-radius: 55px;
 }
 
 :where(html[data-system-glass]:not([data-theme-shapes="theme"]))

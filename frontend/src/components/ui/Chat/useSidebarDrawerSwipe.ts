@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
+import { playHaptic } from "@/lib/shellHaptics";
+
 import type { RefObject } from "react";
 
 /** Movement before a touch counts as a drag in one direction. */
@@ -9,8 +11,6 @@ const FLICK_PX_PER_MS = 0.35;
 const VELOCITY_WINDOW_MS = 100;
 const SETTLE_MIN_MS = 150;
 const SETTLE_MAX_MS = 300;
-/** The page's own transition when the state switches without a drag. */
-const CLASS_SLIDE_MS = 300;
 // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
 const SETTLE_EASING = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 // eslint-disable-next-line lingui/no-unlocalized-strings -- media query
@@ -128,7 +128,7 @@ export function attachDrawerSwipe(
     if (movedPage) {
       movedPage.style.transform = "";
       movedPage.style.transition = "";
-      // Kept until here so the page keeps its pushed shape while it slides.
+      // Kept until here: the page stays clipped at its parent while it slides.
       delete movedPage.dataset.sidebarMoving;
       movedPage = null;
     }
@@ -170,28 +170,6 @@ export function attachDrawerSwipe(
     typeof window.matchMedia === "function" &&
     window.matchMedia(REDUCED_MOTION_QUERY).matches;
 
-  // Closed without a drag (the button, a tap on the page, Escape, a pick):
-  // the stylesheet slides the page back, and without the marker its corners
-  // would go square as the slide starts.
-  const holdShapeWhileClosing = () => {
-    const target = page();
-    if (!target || reduceMotion()) {
-      return;
-    }
-    if (movedPage !== target) {
-      releasePage();
-      movedPage = target;
-    }
-    target.dataset.sidebarMoving = "";
-    scrim.dataset.sidebarMoving = "";
-    sliding = true;
-    window.clearTimeout(settleTimer);
-    settleTimer = window.setTimeout(() => {
-      sliding = false;
-      tidy();
-    }, CLASS_SLIDE_MS + 50);
-  };
-
   const settle = (open: boolean, ended: Gesture) => {
     const remaining = Math.abs((open ? 1 : 0) - ended.progress);
     const ms = reduceMotion()
@@ -223,6 +201,8 @@ export function attachDrawerSwipe(
     // The slide starts now. The page's switch costs a frame or two of work,
     // and doing it here would hold the slide's first frame back.
     place(open ? 1 : 0, ended.width);
+    // Felt as the drawer gives way; a pull that springs back stays silent.
+    playHaptic("light");
     drawer.style.opacity = open ? "1" : "0";
     const pointerEvents = open ? "auto" : "none";
     drawer.style.pointerEvents = pointerEvents;
@@ -306,6 +286,9 @@ export function attachDrawerSwipe(
       drawer.style.transition = "none";
       drawer.style.opacity = "1";
       scrim.style.transition = "none";
+      // Measured on an iPhone 15 (WebKit): without this attribute change on
+      // the scrim, the drag's first frame takes about 40 ms instead of 20.
+      // Why is not known; keep it until a profile says otherwise.
       scrim.dataset.sidebarMoving = "";
       if (movedPage) {
         movedPage.style.transition = "none";
@@ -376,16 +359,11 @@ export function attachDrawerSwipe(
         sliding = false;
         waitingForPage = false;
         tidy();
-        if (!host.isOpen()) {
-          holdShapeWhileClosing();
-        }
         return;
       }
       if (waitingForPage) {
         waitingForPage = false;
         tidy();
-      } else if (!host.isOpen()) {
-        holdShapeWhileClosing();
       }
     },
     detach: () => {
