@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { useLayoutEffect, useRef } from "react";
 
-import { hasSystemGlass } from "@/lib/shellSystemGlass";
+import { useSystemGlass } from "@/lib/shellSystemGlass";
 
 import type { ReactNode } from "react";
 
@@ -36,8 +36,8 @@ export function ChatEmptyStateLayout({
   const centered = mode === "centered";
   const shellRef = useRef<HTMLDivElement>(null);
   const clusterRef = useRef<HTMLDivElement>(null);
-  // Read once: the page is marked before the first render.
-  const floatsComposer = mode === "conversation" && hasSystemGlass();
+  const systemGlass = useSystemGlass();
+  const floatsComposer = mode === "conversation" && systemGlass;
 
   // The app's glass floats the composer over the list and pads the list by
   // this much; CSS alone cannot read the composer's height.

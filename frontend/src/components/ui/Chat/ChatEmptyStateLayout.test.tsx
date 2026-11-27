@@ -1,5 +1,8 @@
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { markSystemGlass } from "@/lib/shellSystemGlass";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 
 import { ChatEmptyStateLayout } from "./ChatEmptyStateLayout";
 
@@ -19,11 +22,13 @@ describe("ChatEmptyStateLayout composer height", () => {
       },
     );
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(72);
-    document.documentElement.setAttribute("data-system-glass", "");
+    installHostShell({ systemGlass: 1 });
+    markSystemGlass(document.documentElement);
   });
 
   afterEach(() => {
-    document.documentElement.removeAttribute("data-system-glass");
+    removeHostShell();
+    markSystemGlass(document.documentElement);
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -52,7 +57,8 @@ describe("ChatEmptyStateLayout composer height", () => {
       .firstElementChild as HTMLElement;
     expect(centred.style.getPropertyValue("--chat-composer-height")).toBe("");
 
-    document.documentElement.removeAttribute("data-system-glass");
+    removeHostShell();
+    act(() => markSystemGlass(document.documentElement));
     const browser = renderLayout("conversation").container
       .firstElementChild as HTMLElement;
     expect(browser.style.getPropertyValue("--chat-composer-height")).toBe("");
