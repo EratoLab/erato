@@ -1285,26 +1285,37 @@ body {
      it aside by the sidebar's width, and it shows as a card over the
      sidebar, from the screen's top to its bottom: two unblurred copies of
      its box, shifted by the system bars' heights, fill their strips with the
-     page's colour and carry the card's corners up and down to the screen's
-     edges. All of it holds whenever the page can be pushed, so a drag
-     starting changes nothing but the page's position. */
+     colour the body shows there, and the card's outline clips the page and
+     them. The stacking holds whenever the page can be pushed; the shape
+     only while it is pushed or moving ([data-sidebar-moving] while it
+     follows a finger or settles after one), so the closed page keeps its
+     square edges. */
   .sidebar-page-geometry[data-sidebar-pushable] {
     position: relative;
     /* Over the sidebar (z-40), which paints round the card's corners. */
     z-index: 41;
-    border-radius: var(--sidebar-page-radius, var(--theme-radius-card));
+  }
+
+  .sidebar-page-geometry[data-sidebar-pushed],
+  .sidebar-page-geometry[data-sidebar-moving] {
     box-shadow:
       0 calc(-1 * var(--safe-area-top, 0px)) 0 0 var(--theme-shell-page),
       0 var(--safe-area-bottom, 0px) 0 0 var(--theme-shell-page);
+    clip-path: inset(
+      calc(-1 * var(--safe-area-top, 0px)) 0
+        calc(-1 * var(--safe-area-bottom, 0px)) 0 round
+        var(--sidebar-page-radius, var(--theme-radius-card))
+    );
   }
 
-  /* The pushed page reaches past the screen's edge; clipped there, it gives
-     a scrollIntoView inside it nothing to scroll the document by. */
+  /* The pushed page reaches past the screen's right edge; clipped there, it
+     gives a scrollIntoView inside it nothing to scroll sideways. Only
+     sideways: the card reaches under the system bars. */
   :has(
     > .sidebar-page-geometry[data-sidebar-pushed],
     > .sidebar-page-geometry[data-sidebar-moving]
   ) {
-    overflow: clip;
+    overflow-x: clip;
   }
 
   /* The layer over the pushed page (data-ui="sidebar-scrim") moves and rounds
