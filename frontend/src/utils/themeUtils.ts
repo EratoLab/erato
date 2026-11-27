@@ -1,5 +1,5 @@
 // Utility functions for theme handling
-import type { Theme, ThemeOverride } from "@/config/theme";
+import type { Theme, ThemeOverride, ThemeShapes } from "@/config/theme";
 
 /**
  * Page alignment options
@@ -73,6 +73,8 @@ export type ThemeAssetKey = (typeof THEME_ASSET_KEYS)[number];
  */
 export interface CustomThemeConfig {
   name: string;
+  /** For both colour modes; defaults to "system". */
+  shapes?: ThemeShapes;
   logo?: {
     path: string;
     darkPath?: string;

@@ -54,7 +54,7 @@ interface ModalBaseProps {
 }
 
 const HEADER_BUTTON_CLASS =
-  "modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary";
+  "modal-close-geometry modal-close-skin focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary";
 const HEADER_BUTTON_STYLE: React.CSSProperties = {
   padding: "var(--theme-spacing-modal-close-button-padding)",
 };

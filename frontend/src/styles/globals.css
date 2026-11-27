@@ -733,6 +733,56 @@ body {
     }
   }
 
+  /* Inside an app with system glass (see the glass section at the end) the
+     platform shapes buttons: capsules, and circles for icon buttons, whatever
+     the theme's radius. 9999px rather than the pill token, which a theme's
+     legacy borderRadius overwrites. A theme keeps its own corners with
+     `shapes: "theme"`. */
+  :where(html[data-system-glass]:not([data-theme-shapes="theme"]))
+    :is(.btn-geometry-sm, .btn-geometry-md, .btn-geometry-lg) {
+    border-radius: 9999px;
+  }
+
+  :where(html[data-system-glass]:not([data-theme-shapes="theme"]))
+    :is(.btn-geometry-icon-sm, .btn-geometry-icon-md, .btn-geometry-icon-lg) {
+    border-radius: 50%;
+  }
+
+  /* There the composer at the foot of a chat floats over the list, which
+     runs on under it down to the screen's edge and pads its end by the
+     overlap (MessageList). ChatEmptyStateLayout publishes the composer's
+     height; the bottom safe area is the app viewport's padding, which the
+     list reaches into by the same overlap. Not while a notice stands below
+     the composer: the list would run under it, and it paints no surface. */
+  html[data-system-glass]
+    [data-ui="chat-conversation-shell"]:has(> [data-ui="welcome-below"]:empty) {
+    --chat-composer-overlap: calc(
+      var(--chat-composer-height, 0px) + var(--safe-area-bottom)
+    );
+  }
+
+  html[data-system-glass]
+    [data-ui="chat-conversation-shell"]:has(> [data-ui="welcome-below"]:empty)
+    [data-ui="chat-body"] {
+    scroll-padding-bottom: var(--chat-composer-overlap);
+  }
+
+  html[data-system-glass]
+    [data-ui="chat-conversation-shell"]:has(> [data-ui="welcome-below"]:empty)
+    > [data-ui="composer-cluster"] {
+    position: relative;
+    z-index: 10;
+    margin-top: calc(-1 * var(--chat-composer-overlap));
+    pointer-events: none;
+  }
+
+  html[data-system-glass]
+    [data-ui="chat-conversation-shell"]:has(> [data-ui="welcome-below"]:empty)
+    > [data-ui="composer-cluster"]
+    :is(form > *, [data-ui="delegated-runs-section"]) {
+    pointer-events: auto;
+  }
+
   /* Popover panel shape, keyed on the two shape attributes rather than
      compounded onto .popover-panel-geometry, the class a panel carries
      alongside them: a bare attribute selector stays one specificity step below
@@ -1368,16 +1418,25 @@ body:has(.app-viewport) {
   --chat-input-line-height: calc(
     var(--theme-spacing-control-min-height) - 0.25rem
   );
+  /* Half the one-line height, its 1px border included. */
+  --chat-input-capsule-radius: calc(
+    var(--chat-input-line-height) / 2 +
+      var(--theme-spacing-input-compact-padding-x) + 1px
+  );
   padding-block: var(--theme-spacing-input-compact-padding-x);
-  /* Up to a capsule: half the one-line height, its 1px border included. A
-     larger theme radius would make a taller composer a stadium. */
+  /* Up to a capsule. A larger theme radius would make a taller composer a
+     stadium. */
   border-radius: min(
     var(--theme-radius-input),
-    calc(
-      var(--chat-input-line-height) / 2 +
-        var(--theme-spacing-input-compact-padding-x) + 1px
-    )
+    var(--chat-input-capsule-radius)
   );
+}
+
+/* With system glass the platform's capsule, whatever the theme's radius; it
+   keeps those ends when the text grows to more lines. */
+:where(html[data-system-glass]:not([data-theme-shapes="theme"]))
+  [data-ui="chat-input-shell"]:where([data-layout="one-line"]) {
+  border-radius: var(--chat-input-capsule-radius);
 }
 
 /* One text line (1.5rem) as tall as the buttons beside it. Audio mode's state
@@ -2415,4 +2474,104 @@ section[data-footnotes="true"] > .sr-only {
   color: var(--theme-diff-added-fg);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Glass on the navigation layer, only where the page runs inside an app that
+   draws floating glass controls itself (`systemGlass` capability; main.tsx
+   sets the attribute before the first paint). A web page cannot use the
+   system's own material, so this is a frosted look made from the theme's
+   colours. Controls that float over the chat, menus and the round dialog
+   buttons take it; messages, cards, dialogs and the sidebar stay solid, as
+   glass belongs to the navigation layer, not the content. The paint rules
+   carry the weight of the hook or class alone, so a theme.css rule on it
+   still wins, as do hover and focus utilities on the controls. */
+html[data-system-glass] {
+  --glass-blur: blur(16px) saturate(180%);
+  --glass-edge: color-mix(in srgb, var(--theme-fg-primary) 12%, transparent);
+  /* Typed text stays at 4.5:1 or more over white and over black content for
+     the shipped themes at this value, before the blur. */
+  --glass-opacity: 0.75;
+}
+
+:where(html[data-system-glass])
+  :where([data-ui="chat-conversation-shell"])
+  [data-ui="chat-input-shell"],
+:where(html[data-system-glass]) .floating-control-skin,
+:where(html[data-system-glass]) .modal-close-skin,
+:where(html[data-system-glass]) .anchored-popover-skin {
+  --glass-surface: var(--theme-shell-chat-input);
+  background: transparent;
+  border-color: var(--glass-edge);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+:where(html[data-system-glass]) .anchored-popover-skin {
+  --glass-surface: var(--theme-shell-dropdown);
+}
+
+:where(html[data-system-glass]) .modal-close-skin {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+}
+
+/* The fill: the theme's surface laid over the chat's background, as it looks
+   today, then let through at --glass-opacity. Mixing the theme colour with
+   transparency instead would multiply a see-through theme colour's own alpha
+   and leave the control almost clear. Below the control's content (the
+   backdrop filter makes the control a stacking context). */
+:where(html[data-system-glass])
+  :where([data-ui="chat-conversation-shell"])
+  [data-ui="chat-input-shell"]::before,
+:where(html[data-system-glass]) .floating-control-skin::before,
+:where(html[data-system-glass]) .modal-close-skin::before,
+:where(html[data-system-glass]) .anchored-popover-skin::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    linear-gradient(var(--glass-surface), var(--glass-surface)),
+    var(--theme-shell-chat-body);
+  opacity: var(--glass-opacity);
+  pointer-events: none;
+}
+
+/* The two round controls float like the composer and take its shadow. */
+:where(html[data-system-glass]) .floating-control-skin,
+:where(html[data-system-glass]) .modal-close-skin {
+  box-shadow: var(--theme-elevation-input);
+}
+
+/* Inside the one-line glass capsule the framed icon buttons beside the text
+   drop their frames until pressed; send and voice keep the theme's fill. */
+:where(html[data-system-glass])
+  :where([data-ui="chat-conversation-shell"])
+  [data-ui="chat-input-shell"]:where([data-layout="one-line"])
+  [data-ui="chat-input-controls"]
+  [data-variant="secondary"]:not([type="submit"], :active) {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+/* Increase Contrast keeps the shapes and makes the fill solid. */
+@media (prefers-contrast: more) {
+  html[data-system-glass] {
+    --glass-opacity: 1;
+  }
+}
+
+/* The same app's shapes for menus, dialogs and the floating sidebar button
+   (buttons and the composer above). The tokens are re-declared above the
+   theme's :root, which they have to outrank; menu rows stay concentric
+   through --dropdown-item-radius. */
+html[data-system-glass]:not([data-theme-shapes="theme"]) {
+  --theme-radius-dropdown: 26px;
+  --theme-radius-modal: 28px;
+}
+
+:where(html[data-system-glass]:not([data-theme-shapes="theme"]))
+  .floating-control-skin {
+  border-radius: 50%;
 }

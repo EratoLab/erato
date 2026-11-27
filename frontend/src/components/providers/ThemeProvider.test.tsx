@@ -866,6 +866,36 @@ describe("ThemeProvider", () => {
     expect(varsCss).toContain("--theme-border-chat-input-focus: #6b7280;");
     expect(varsCss).toContain("--theme-radius-shell: 1rem;");
   });
+  it("marks a theme that keeps its own shapes in the app", async () => {
+    mockEnv.mockReturnValue(
+      createMockEnv({ themeConfigPath: "/custom/brand/theme.json" }),
+    );
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () =>
+        ({
+          ...mockTheme,
+          shapes: "theme",
+        }) satisfies CustomThemeConfig,
+    });
+
+    const { unmount } = render(
+      <ThemeProvider>
+        <div>content</div>
+      </ThemeProvider>,
+    );
+    expect(document.documentElement).not.toHaveAttribute("data-theme-shapes");
+
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute(
+        "data-theme-shapes",
+        "theme",
+      );
+    });
+    unmount();
+    expect(document.documentElement).not.toHaveAttribute("data-theme-shapes");
+  });
+
   it("applies a persisted text size to documentElement", () => {
     localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
 

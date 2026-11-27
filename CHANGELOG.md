@@ -52,6 +52,10 @@ Typical "Notable changes" categories to copy & paste:
 
 **On a phone, controls, menus and text take iOS sizes.** On a narrow touch screen every button is at least 44 px, menu rows are 44 px with 17 px text, message text is 17 px, and form fields keep 16 px text so iOS does not zoom into them. Chat rows in the sidebar show the title and the time, and send is the composer's one filled button. Menus opened from a button keep clear of the status bar and the home bar on every screen. A theme's larger sizes still win; desktop and a mouse or trackpad are unchanged.
 
+**Glass on the navigation layer inside an app with system glass.** Where the page runs inside an app that offers the `systemGlass` capability of `window.ERATO_SHELL` (the iPhone app, unless Reduce Transparency is on), the composer at the foot of a chat, the floating sidebar button, the dialog close and back buttons and the menus become frosted glass mixed from the theme's colours, and the chat scrolls on under the composer. Buttons there become capsules and circles, menus and dialogs take larger corners; a theme keeps its own corners with `"shapes": "theme"` in `theme.json`. Messages and cards stay solid. Phone browsers and desktop are unchanged.
+
+**On a phone, voice mode's button is filled like send.** In the one-line composer the button that starts voice mode, which stands in send's place while the field is empty, takes the theme's primary colour as send does.
+
 #### Bug fixes
 
 **The app fits a phone screen.** On a phone the app was taller than what the browser shows, so the bottom of the composer was cut off; it now takes the visible height. The page declares `viewport-fit=cover` and keeps its own content clear of system bars and display cutouts, so no bands remain around it, and while an on-screen keyboard is open the app and its dialogs take the space above the keyboard instead of sliding out of view. Inside the app, the page background behind everything is now `colors.shell.page` (it was `colors.background.primary`); it shows only where a screen paints no surface of its own.
