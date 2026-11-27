@@ -109,6 +109,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { playHaptic } from "@/lib/shellHaptics";
 import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { useChatSession } from "@/providers/ChatProvider";
 import {
@@ -1028,6 +1029,13 @@ export const ChatInput = ({
     toggleDictation();
   }, [getActiveSessionId, isDictating, toggleDictation]);
 
+  // Only the person's own taps: the conversation also starts and stops
+  // dictation by itself on every turn.
+  const toggleDictationByHand = useCallback(() => {
+    playHaptic("light");
+    toggleDictationForCurrentTarget();
+  }, [toggleDictationForCurrentTarget]);
+
   const { data: facetsData, error: facetsError } = useFacets({});
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
   const fileFetchOptionsRef = useRef(fileFetchOptions);
@@ -1242,6 +1250,7 @@ export const ChatInput = ({
         setQueueReplacePending({ runMode: decidedDelegation?.runMode });
         return true;
       }
+      playHaptic("light");
       settleDictation(composeSessionId, trimmedMessage);
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
@@ -1960,6 +1969,8 @@ export const ChatInput = ({
       if (isDictationCompleting) {
         return;
       }
+      // A conversation's turns go by themselves, often with the phone put away.
+      if (!isAudioMode) playHaptic("light");
 
       settleDictation(composeSessionId, messageContent);
       const resolvedMentions = resolveMentionedAssistants(
@@ -2904,6 +2915,7 @@ export const ChatInput = ({
     if (!audioConversationalEnabled) {
       return;
     }
+    playHaptic("light");
 
     if (speechEnabled) {
       // Resume playback from the user gesture, before microphone startup,
@@ -2998,6 +3010,7 @@ export const ChatInput = ({
     if (!audioTranscriptionEnabled || isRecording || isRecordingUpload) {
       return;
     }
+    playHaptic("light");
 
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     clearPendingAutoSendTimeout();
@@ -3079,11 +3092,17 @@ export const ChatInput = ({
     startTranscriptAudioMode,
   ]);
 
+  const stopAudioRecordingByHand = useCallback(() => {
+    playHaptic("light");
+    toggleAudioRecording();
+  }, [toggleAudioRecording]);
+
   // Ends conversational audio mode from any state: the microphone closes,
   // the voice and a card being read fall silent, and nothing listens again
   // after the answer. Words dictated for a message stay in the composer to
   // review; words said to a card are dropped.
   const exitAudioMode = useCallback(() => {
+    playHaptic("light");
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
     pendingConversationalStartRef.current = false;
@@ -4239,7 +4258,7 @@ export const ChatInput = ({
                 isRecording &&
                 isRecordingCapturingAudio && (
                   <WaveformButton
-                    onClick={toggleAudioRecording}
+                    onClick={stopAudioRecordingByHand}
                     bars={recordingBars}
                     disabled={disabled || isLoading}
                     ariaLabel={t`Stop audio transcript recording`}
@@ -4265,7 +4284,7 @@ export const ChatInput = ({
                     size="sm"
                     busy
                     iconClassName="text-[var(--theme-fg-primary)]"
-                    onClick={isRecording ? toggleAudioRecording : undefined}
+                    onClick={isRecording ? stopAudioRecordingByHand : undefined}
                     disabled={!isRecording}
                     data-testid="chat-input-record-audio-transcript"
                     aria-label={
@@ -4294,7 +4313,7 @@ export const ChatInput = ({
                 // once real audio is flowing.
                 (isCapturingAudio && isDictating ? (
                   <WaveformButton
-                    onClick={toggleDictationForCurrentTarget}
+                    onClick={toggleDictationByHand}
                     bars={dictationBars}
                     disabled={
                       disabled ||
@@ -4327,7 +4346,7 @@ export const ChatInput = ({
                     // replaces it read the same.
                     iconClassName="text-[var(--theme-fg-primary)]"
                     icon={<VoiceIcon className="size-4" />}
-                    onClick={toggleDictationForCurrentTarget}
+                    onClick={toggleDictationByHand}
                     disabled={
                       disabled ||
                       isLoading ||

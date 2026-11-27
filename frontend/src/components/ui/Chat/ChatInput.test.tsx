@@ -42,6 +42,7 @@ import { UploadTooLargeError } from "@/hooks/files/errors";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { readTeamsTranscriptIndex } from "@/hooks/teams/useTeamsTranscriptIndex";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 import { setPageVisibility } from "@/test/pageVisibility";
 import {
   teamsIndex,
@@ -2632,6 +2633,54 @@ describe("ChatInput", () => {
       passages: ["the dictated words"],
       whole: false,
     });
+  });
+
+  it("lets a host app play a haptic for a dictation tap and a sent message", async () => {
+    const shellRequest = installHostShell({ haptics: 1 });
+    try {
+      mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler:
+          (
+            message: string,
+            _attachedFiles: FileUploadItem[],
+            innerOnSend: (message: string) => void,
+          ) =>
+          (event: FormEvent) => {
+            event.preventDefault();
+            innerOnSend(message.trim());
+          },
+      });
+      const onSendMessage = vi.fn();
+      const { i18n } = await import("@lingui/core");
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <I18nProvider i18n={i18n}>
+            <ChatInput onSendMessage={onSendMessage} />
+          </I18nProvider>
+        </QueryClientProvider>,
+      );
+      const haptics = () =>
+        shellRequest.mock.calls.filter(([method]) => method === "haptics.play");
+
+      const textarea = screen.getByPlaceholderText("Type a message...");
+      fireEvent.change(textarea, { target: { value: "Hello" } });
+      expect(haptics()).toHaveLength(0);
+      fireEvent.click(screen.getByTestId("chat-input-record-audio"));
+      expect(haptics()).toEqual([["haptics.play", { kind: "light" }]]);
+      fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+      expect(onSendMessage).toHaveBeenCalled();
+      expect(haptics()).toHaveLength(2);
+    } finally {
+      removeHostShell();
+    }
   });
 
   describe("textarea scroll during dictation", () => {

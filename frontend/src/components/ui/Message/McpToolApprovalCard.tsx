@@ -33,6 +33,7 @@ import {
   listUserToolApprovalSettingsQuery,
   profileQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { playHaptic } from "@/lib/shellHaptics";
 import {
   buildContinueStreamBody,
   isApprovalDecision,
@@ -472,7 +473,13 @@ export const McpToolApprovalCard = ({
   const decide = async (
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
+    { byVoice = false }: { byVoice?: boolean } = {},
   ): Promise<VoiceChangeOutcome> => {
+    // Felt at the tap, as the card's own buttons stop; a spoken decision is
+    // usually given with the phone put away.
+    if (!byVoice) {
+      playHaptic(isApprovalDecision(decision) ? "success" : "light");
+    }
     // The decision is on its way: the card stops listening before its voice
     // stops, or the microphone would open in the moment before it closes.
     const { key: spokenKey } = useApprovalSpeech.getState();
@@ -846,7 +853,7 @@ export const McpToolApprovalCard = ({
       setStaged({});
       setStagedPositions({});
       setStagedExtras({});
-      return decide(REQUEST_CHANGE, answers);
+      return decide(REQUEST_CHANGE, answers, { byVoice: true });
     },
   };
   /** The turn's own call of a stop the voice may act on, not a task's. */
@@ -898,13 +905,17 @@ export const McpToolApprovalCard = ({
     const [only] = approvalItems;
     if (approvalItems.length !== 1 || only.approval_id !== approvalId)
       return Promise.resolve("conflict");
-    return decide(decision, [
-      {
-        approvalId,
-        decision,
-        ...(receipt ? { voiceReceipt: receipt } : {}),
-      },
-    ]);
+    return decide(
+      decision,
+      [
+        {
+          approvalId,
+          decision,
+          ...(receipt ? { voiceReceipt: receipt } : {}),
+        },
+      ],
+      { byVoice: true },
+    );
   };
   // A card that needs a choice on screen, or a change only another device can
   // make, is never decided by voice.

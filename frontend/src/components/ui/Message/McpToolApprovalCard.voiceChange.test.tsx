@@ -14,6 +14,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { ChatContextProviders } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { testChatValue } from "@/test/chatContextValue";
+import { installHostShell, removeHostShell } from "@/test/hostShellStub";
 import { FrontendRequestError } from "@/utils/errorReport";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
@@ -340,6 +341,19 @@ describe("ERMAIN-1259: deciding a card by voice", () => {
         ],
       }),
     );
+  });
+
+  it("plays no haptic for a spoken decision", async () => {
+    const shellRequest = installHostShell({ haptics: 1 });
+    try {
+      renderCard(request, vi.fn().mockResolvedValue(undefined), true);
+      await act(async () => {
+        await spoken.decide?.("call-1")?.send("approve", "receipt-1");
+      });
+      expect(shellRequest).not.toHaveBeenCalled();
+    } finally {
+      removeHostShell();
+    }
   });
 
   it("a receipt the server refused shows no server text; the card waits", async () => {
