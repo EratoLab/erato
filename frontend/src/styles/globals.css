@@ -2705,11 +2705,15 @@ html[data-system-glass][data-theme="dark"] {
    Contrast fills them solid again (below). */
 html[data-system-glass] {
   --glass-control-opacity: 0.55;
+  --glass-control-blur: blur(24px) saturate(200%);
   --glass-rim-top: color-mix(in srgb, white 60%, transparent);
   --glass-rim: color-mix(in srgb, white 16%, transparent);
 }
 
+/* Dark surfaces need more fill for the glyph to keep 3:1 over a light
+   picture scrolled behind. */
 html[data-system-glass][data-theme="dark"] {
+  --glass-control-opacity: 0.7;
   --glass-rim-top: color-mix(in srgb, white 28%, transparent);
   --glass-rim: color-mix(in srgb, white 8%, transparent);
 }
@@ -2717,12 +2721,17 @@ html[data-system-glass][data-theme="dark"] {
 :where(html[data-system-glass]) .floating-control-skin,
 :where(html[data-system-glass]) .modal-close-skin {
   --glass-opacity: var(--glass-control-opacity);
-  --glass-blur: blur(24px) saturate(200%);
-  transition: transform 220ms cubic-bezier(0.3, 1.6, 0.5, 1);
+  --glass-blur: var(--glass-control-blur);
 }
 
+/* The swell rides the controls' own transition (theme-transition). Button
+   keeps data-pressed for a moment after a tap, which a quick tap needs to
+   show it at all. */
 :where(html[data-system-glass])
-  :where(.floating-control-skin, .modal-close-skin):active {
+  :where(.floating-control-skin, .modal-close-skin):is(
+    :active,
+    [data-pressed="true"]
+  ) {
   transform: scale(1.08);
 }
 
@@ -2743,9 +2752,12 @@ html[data-system-glass][data-theme="dark"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :where(html[data-system-glass]) .floating-control-skin,
-  :where(html[data-system-glass]) .modal-close-skin {
-    transition: none;
+  :where(html[data-system-glass])
+    :where(.floating-control-skin, .modal-close-skin):is(
+      :active,
+      [data-pressed="true"]
+    ) {
+    transform: none;
   }
 }
 
@@ -2890,7 +2902,8 @@ html[data-system-glass][data-theme="dark"] {
 
 /* Increase Contrast keeps the shapes and makes the fill solid. */
 @media (prefers-contrast: more) {
-  html[data-system-glass] {
+  html[data-system-glass],
+  html[data-system-glass][data-theme="dark"] {
     --glass-opacity: 1;
     --glass-control-opacity: 1;
   }

@@ -113,7 +113,8 @@ export const SidebarToggle = forwardRef<HTMLButtonElement, SidebarToggleProps>(
           <CountBadge
             variant="attention"
             data-testid={badgeTestId}
-            className="absolute -right-0.5 -top-0.5"
+            // Above the glass rim the app draws over the control (globals.css).
+            className="absolute -right-0.5 -top-0.5 z-[1]"
           >
             {attentionCount}
           </CountBadge>
