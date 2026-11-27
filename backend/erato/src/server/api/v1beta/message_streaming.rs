@@ -11310,8 +11310,11 @@ async fn stream_generate_chat_completion<'a>(
                         Ok(result) => result,
                         Err(err) => {
                             let tool_error = format!("Failed to process MCP tool output: {err}");
-                            let output_value =
-                                mcp_tool_processing_error_output(&tool_call_result, &tool_error);
+                            let output_value = mcp_tool_processing_error_output(
+                                &tool_call_result,
+                                output_schema.as_deref(),
+                                &tool_error,
+                            );
                             let tool_response_content = serde_json::to_string(&output_value)
                                 .unwrap_or_else(|_| tool_error.clone());
                             persist_otel_tool_call(
@@ -11423,7 +11426,7 @@ async fn stream_generate_chat_completion<'a>(
                             post_processed.result_details,
                             structured_content_for_view(
                                 &tool_call_result,
-                                &file_content_parts,
+                                post_processed.structured_content_pointer,
                                 output_value.as_ref(),
                             ),
                             tool_call_result.meta.as_ref(),
@@ -25526,7 +25529,7 @@ pub(crate) async fn run_continuation(
                                         processed.result_details,
                                         structured_content_for_view(
                                             &result,
-                                            &file_content_parts,
+                                            processed.structured_content_pointer,
                                             processed.output_value.as_ref(),
                                         ),
                                         result.meta.as_ref(),
@@ -25538,6 +25541,7 @@ pub(crate) async fn run_continuation(
                                 MessageToolCallStatus::Error,
                                 Some(mcp_tool_processing_error_output(
                                     &result,
+                                    output_schema.as_deref(),
                                     &format!("Failed to process MCP tool output: {error}"),
                                 )),
                                 Some(ToolResultDetails::failed(ToolCallFailure::AnswerUnreadable)),

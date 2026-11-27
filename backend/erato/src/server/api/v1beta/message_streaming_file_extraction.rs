@@ -5,6 +5,7 @@ use crate::models::message::{
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
+use crate::services::file_storage::FileStorage;
 use crate::services::prompt_composition::replay_policy::MAX_RECEIPT_FIELD_BYTES;
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
@@ -36,26 +37,57 @@ struct ExtractedFileField {
     file_name: Option<String>,
 }
 
+/// A file of a tool result, validated and decoded, not yet stored.
+#[derive(Debug, PartialEq)]
+struct McpResultFile {
+    mime_type: String,
+    file_name: Option<String>,
+    bytes: Vec<u8>,
+}
+
+/// A stored file of a tool result, as the result's output names it.
+struct StoredMcpFile {
+    id: Uuid,
+    file_name: String,
+    mime_type: String,
+}
+
+/// What a result's files are read into before any of them is stored.
+struct ValidatedMcpFiles {
+    /// The output the marked fields are part of, when the tool marks any.
+    marked_output: Option<Value>,
+    marked_fields: Vec<ExtractedFileField>,
+    /// The files to store: one per marked field, in their order, then one
+    /// per content block that does not repeat a marked field's file.
+    files: Vec<McpResultFile>,
+    /// Whether file blocks past `MAX_RESULT_FILE_BLOCKS` were left out.
+    blocks_left_out: bool,
+}
+
 pub struct McpToolPostProcessResult {
     pub tool_response: ToolResponse,
     pub output_value: Option<JsonValue>,
     pub file_content_parts: Vec<ContentPart>,
     pub result_details: Option<ToolResultDetails>,
+    /// Where `output_value` holds the result's `structuredContent` once files
+    /// were taken out of its marked fields, as a JSON pointer. `None` when
+    /// none were: the returned `structuredContent` then carries no file.
+    pub structured_content_pointer: Option<&'static str>,
 }
 
 /// The result's `structuredContent` for the call's view. Once files were
-/// taken out of it, that is the stored output, which names them instead of
-/// carrying their bytes.
+/// taken out of its marked fields, that is the stored output's copy, which
+/// names them instead of carrying their bytes. Files from content blocks
+/// were never part of it.
 pub(super) fn structured_content_for_view<'a>(
     result: &'a rmcp::model::CallToolResult,
-    file_content_parts: &[ContentPart],
+    structured_content_pointer: Option<&str>,
     output_value: Option<&'a JsonValue>,
 ) -> Option<&'a JsonValue> {
     let returned = result.structured_content.as_ref()?;
-    if file_content_parts.is_empty() {
-        Some(returned)
-    } else {
-        output_value
+    match structured_content_pointer {
+        None => Some(returned),
+        Some(pointer) => output_value?.pointer(pointer),
     }
 }
 
@@ -64,6 +96,24 @@ const MAX_RESULT_LINKS: usize = 10;
 /// Link blocks read per result, kept or not, so thousands of them cost a
 /// bounded number of URL parses.
 const MAX_RESULT_LINK_CANDIDATES: usize = 100;
+/// File blocks read per result. Further ones are neither decoded nor stored,
+/// and the model is told so.
+const MAX_RESULT_FILE_BLOCKS: usize = 64;
+/// The files of one result's blocks may together be this many times as large
+/// as one of them may be.
+const MAX_RESULT_FILE_BLOCK_SIZES: usize = 2;
+/// Longest `mimeType` of a file block.
+const MAX_BLOCK_MIME_TYPE_CHARS: usize = 127;
+/// MIME types of an embedded resource that names none: `mimeType` is
+/// optional there.
+const DEFAULT_TEXT_RESOURCE_MIME_TYPE: &str = "text/plain";
+const DEFAULT_BLOB_RESOURCE_MIME_TYPE: &str = "application/octet-stream";
+/// Largest file taken from a content block where no file storage provider
+/// sets an upload limit: the default limit of an upload.
+const DEFAULT_MAX_RESULT_FILE_BYTES: usize = 50 * 1024 * 1024;
+/// `_meta` key under which an `image` or embedded `resource` block names its
+/// file. Only a block that does is a file.
+const FILE_NAME_META_KEY: &str = "chat.erato/file_name";
 
 fn json_pointer_escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
@@ -372,28 +422,396 @@ fn extension_for_mime_type(mime_type: &str) -> Option<&'static str> {
     }
 }
 
-fn decode_mcp_file(extracted: &ExtractedFileField) -> Result<Vec<u8>, Report> {
-    use base64::{Engine as _, engine::general_purpose};
-
-    if let Some(name) = &extracted.file_name
-        && (name == "."
-            || name == ".."
-            || name.contains(['/', '\\', ':'])
-            || name.chars().any(char::is_control))
+fn validate_mcp_file_name(name: &str) -> Result<(), Report> {
+    if name == "."
+        || name == ".."
+        || name.contains(['/', '\\', ':'])
+        || name.chars().any(char::is_control)
     {
         return Err(eyre!("Unsafe filename in MCP file output"));
     }
-    if !extracted.mime_type.contains('/') || extracted.mime_type.chars().any(char::is_control) {
+    Ok(())
+}
+
+fn validate_mcp_mime_type(mime_type: &str) -> Result<(), Report> {
+    if !mime_type.contains('/') || mime_type.chars().any(char::is_control) {
         return Err(eyre!("Invalid MIME type in MCP file output"));
     }
+    Ok(())
+}
+
+fn decode_mcp_file_data(base64_data: &str, json_pointer: &str) -> Result<Vec<u8>, Report> {
+    use base64::{Engine as _, engine::general_purpose};
+
     general_purpose::STANDARD
-        .decode(extracted.base64_data.as_bytes())
-        .wrap_err_with(|| {
-            format!(
-                "Failed to decode base64 file data from MCP at {}",
-                extracted.json_pointer
-            )
+        .decode(base64_data.as_bytes())
+        .wrap_err_with(|| format!("Failed to decode base64 file data from MCP at {json_pointer}"))
+}
+
+fn decode_mcp_file(extracted: &ExtractedFileField) -> Result<Vec<u8>, Report> {
+    if let Some(name) = &extracted.file_name {
+        validate_mcp_file_name(name)?;
+    }
+    validate_mcp_mime_type(&extracted.mime_type)?;
+    decode_mcp_file_data(&extracted.base64_data, &extracted.json_pointer)
+}
+
+/// A server's name for a content block's file: checked like a marked field's
+/// file name, then without invisible characters.
+fn block_file_name(name: &str) -> Result<String, Report> {
+    validate_mcp_file_name(name)?;
+    let name = sanitize_display_text(name, MAX_DISPLAY_NAME_CHARS);
+    if name.truncated {
+        return Err(eyre!(
+            "Filename in MCP file output is longer than {MAX_DISPLAY_NAME_CHARS} characters"
+        ));
+    }
+    // What is left once invisible characters are gone can be `..`, or nothing.
+    if name.text.is_empty() {
+        return Err(eyre!("Unsafe filename in MCP file output"));
+    }
+    validate_mcp_file_name(&name.text)?;
+    Ok(name.text)
+}
+
+/// Whether `text` is a token as MIME types are made of (RFC 9110).
+fn is_mime_token(text: &str) -> bool {
+    !text.is_empty()
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+/// Whether `parameters`, the part of a MIME type after its first `;`, is a
+/// list of `name=value` pairs, each value a token or a quoted string.
+fn are_mime_parameters(parameters: &str) -> bool {
+    let blank = [' ', '\t'];
+    let mut rest = parameters.trim_start_matches(blank);
+    while !rest.is_empty() {
+        let Some((name, value)) = rest.split_once('=') else {
+            return false;
+        };
+        if !is_mime_token(name) {
+            return false;
+        }
+        rest = if let Some(quoted) = value.strip_prefix('"') {
+            let mut characters = quoted.char_indices();
+            let end = loop {
+                match characters.next() {
+                    Some((_, '\\')) if characters.next().is_some() => {}
+                    Some((end, '"')) => break end,
+                    Some((_, character)) if character != '\\' && !character.is_control() => {}
+                    _ => return false,
+                }
+            };
+            &quoted[end + 1..]
+        } else {
+            let end = value.find(';').unwrap_or(value.len());
+            if !is_mime_token(value[..end].trim_end_matches(blank)) {
+                return false;
+            }
+            &value[end..]
+        };
+        rest = match rest.trim_start_matches(blank).strip_prefix(';') {
+            Some(next) => next.trim_start_matches(blank),
+            None => return rest.trim_start_matches(blank).is_empty(),
+        };
+    }
+    true
+}
+
+/// A file block's MIME type as it is stored and listed: `type/subtype` in
+/// lower case, without its parameters. Anything that is not a MIME type of
+/// at most `MAX_BLOCK_MIME_TYPE_CHARS` characters is refused.
+fn block_mime_type(mime_type: &str) -> Result<String, Report> {
+    let (essence, parameters) = mime_type
+        .split_once(';')
+        .map_or((mime_type, None), |(essence, parameters)| {
+            (essence, Some(parameters))
+        });
+    let essence = essence.trim_end_matches([' ', '\t']);
+    let valid = mime_type.len() <= MAX_BLOCK_MIME_TYPE_CHARS
+        && essence
+            .split_once('/')
+            .is_some_and(|(kind, subtype)| is_mime_token(kind) && is_mime_token(subtype))
+        && parameters.is_none_or(are_mime_parameters);
+    if !valid {
+        return Err(eyre!("Invalid MIME type in MCP file output"));
+    }
+    Ok(essence.to_ascii_lowercase())
+}
+
+/// What a file block carries: Base64, or a resource's text.
+enum FileBlockData<'a> {
+    Base64(&'a str),
+    Text(&'a str),
+}
+
+/// A content block that names itself a file, not yet validated.
+struct FileBlock<'a> {
+    /// `_meta["chat.erato/file_name"]`.
+    name: &'a Value,
+    mime_type: &'a str,
+    data: FileBlockData<'a>,
+}
+
+/// `block` as a file, when it is one: an `image` block or an embedded
+/// `resource` whose `_meta`, or that of the resource it embeds, holds
+/// `chat.erato/file_name`. An absent, `null` or empty name names nothing,
+/// and the block's own `_meta` is read first. Every other block is generic
+/// content and stays unread. So does an embedded view (a resource with a
+/// `ui:` URI, as MCP Apps names views), named or not.
+fn file_block(block: &rmcp::model::ContentBlock) -> Option<FileBlock<'_>> {
+    use rmcp::model::{ContentBlock, MetaObject, ResourceContents};
+
+    fn name(metas: [Option<&MetaObject>; 2]) -> Option<&Value> {
+        metas
+            .into_iter()
+            .flatten()
+            .filter_map(|meta| meta.0.get(FILE_NAME_META_KEY))
+            .find(|name| !name.is_null() && name.as_str() != Some(""))
+    }
+    match block {
+        ContentBlock::Image(image) => Some(FileBlock {
+            name: name([image.meta.as_ref(), None])?,
+            mime_type: &image.mime_type,
+            data: FileBlockData::Base64(&image.data),
+        }),
+        ContentBlock::Resource(embedded) => {
+            let (uri, mime_type, data, meta) = match &embedded.resource {
+                ResourceContents::BlobResourceContents {
+                    uri,
+                    mime_type,
+                    blob,
+                    meta,
+                } => (
+                    uri,
+                    mime_type
+                        .as_deref()
+                        .unwrap_or(DEFAULT_BLOB_RESOURCE_MIME_TYPE),
+                    FileBlockData::Base64(blob),
+                    meta,
+                ),
+                ResourceContents::TextResourceContents {
+                    uri,
+                    mime_type,
+                    text,
+                    meta,
+                } => (
+                    uri,
+                    mime_type
+                        .as_deref()
+                        .unwrap_or(DEFAULT_TEXT_RESOURCE_MIME_TYPE),
+                    FileBlockData::Text(text),
+                    meta,
+                ),
+                _ => return None,
+            };
+            let view = uri
+                .get(.."ui:".len())
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("ui:"));
+            if view {
+                return None;
+            }
+            Some(FileBlock {
+                name: name([embedded.meta.as_ref(), meta.as_ref()])?,
+                mime_type,
+                data,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// The files a result carries as content blocks that name themselves files,
+/// validated and decoded, and whether blocks past `MAX_RESULT_FILE_BLOCKS`
+/// were left out. A resource link is no file: `mcp_result_details` keeps it
+/// as a link.
+fn extract_mcp_file_blocks(
+    content: &[rmcp::model::ContentBlock],
+    max_file_bytes: usize,
+) -> Result<(Vec<McpResultFile>, bool), Report> {
+    let max_total_bytes = max_file_bytes.saturating_mul(MAX_RESULT_FILE_BLOCK_SIZES);
+    let too_large = |json_pointer: &str| {
+        eyre!(
+            "MCP file output at {json_pointer} is larger than the {max_file_bytes} bytes a file may have"
+        )
+    };
+    let too_large_together = || {
+        eyre!(
+            "MCP file outputs in the content of one result are larger than the {max_total_bytes} bytes they may have together"
+        )
+    };
+    let mut blocks = content
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| Some((index, file_block(block)?)));
+    let mut files = Vec::new();
+    let mut total_bytes = 0usize;
+    for (index, block) in blocks.by_ref().take(MAX_RESULT_FILE_BLOCKS) {
+        let json_pointer = format!("/content/{index}");
+        let file_name = match block.name {
+            Value::String(name) => block_file_name(name)?,
+            _ => {
+                return Err(eyre!(
+                    "MCP file name '{FILE_NAME_META_KEY}' at {json_pointer} is not a string"
+                ));
+            }
+        };
+        let mime_type = block_mime_type(block.mime_type)?;
+        // Sizes are checked before decoding, so that what is too large costs
+        // no copy. Padding makes the estimate for Base64 up to two bytes high.
+        let (estimated_bytes, slack) = match block.data {
+            FileBlockData::Base64(base64_data) => (base64_data.len() / 4 * 3, 2),
+            FileBlockData::Text(text) => (text.len(), 0),
+        };
+        if estimated_bytes > max_file_bytes.saturating_add(slack) {
+            return Err(too_large(&json_pointer));
+        }
+        if total_bytes.saturating_add(estimated_bytes) > max_total_bytes.saturating_add(slack) {
+            return Err(too_large_together());
+        }
+        let bytes = match block.data {
+            FileBlockData::Base64(base64_data) => decode_mcp_file_data(base64_data, &json_pointer)?,
+            FileBlockData::Text(text) => text.as_bytes().to_vec(),
+        };
+        if bytes.len() > max_file_bytes {
+            return Err(too_large(&json_pointer));
+        }
+        total_bytes += bytes.len();
+        if total_bytes > max_total_bytes {
+            return Err(too_large_together());
+        }
+        files.push(McpResultFile {
+            mime_type,
+            file_name: Some(file_name),
+            bytes,
+        });
+    }
+    Ok((files, blocks.next().is_some()))
+}
+
+/// Reads every file of a result, from the fields its output schema marks and
+/// from its content blocks, without storing any.
+fn validate_mcp_result_files(
+    output_schema: Option<&rmcp::model::JsonObject>,
+    tool_call_result: &rmcp::model::CallToolResult,
+    tool_response_content: &str,
+    max_file_bytes: usize,
+) -> Result<ValidatedMcpFiles, Report> {
+    let mut marked_output = None;
+    let mut marked_fields = Vec::new();
+    if let Some(output_schema) = output_schema {
+        let output_schema_value = Value::Object(output_schema.clone());
+        let schema_paths = collect_file_content_paths(&output_schema_value);
+        if !schema_paths.is_empty() {
+            let output_json = mcp_tool_output_value(tool_call_result, tool_response_content)?;
+            marked_fields = extract_mcp_file_fields(&output_schema_value, &output_json)?;
+            marked_output = Some(output_json);
+        }
+    }
+    let mut files = marked_fields
+        .iter()
+        .map(|field| {
+            Ok(McpResultFile {
+                bytes: decode_mcp_file(field)?,
+                mime_type: field.mime_type.clone(),
+                file_name: field.file_name.clone(),
+            })
         })
+        .collect::<Result<Vec<_>, Report>>()?;
+    let (block_files, blocks_left_out) =
+        extract_mcp_file_blocks(&tool_call_result.content, max_file_bytes)?;
+    let marked_files = files.len();
+    for file in block_files {
+        // A server may send one file both in a marked field and as a block:
+        // it is stored once, as the marked field's file. Parameters of the
+        // marked field's MIME type do not make it another file. Two blocks
+        // are always two files, whatever they hold.
+        let marked = files[..marked_files].iter().any(|marked| {
+            let essence = marked.mime_type.split(';').next().unwrap_or_default();
+            essence.trim().eq_ignore_ascii_case(&file.mime_type) && marked.bytes == file.bytes
+        });
+        if !marked {
+            files.push(file);
+        }
+    }
+    Ok(ValidatedMcpFiles {
+        marked_output,
+        marked_fields,
+        files,
+        blocks_left_out,
+    })
+}
+
+/// A result's output beside the files its content blocks carried. Like the
+/// wrapper `resolve_client_tool_files` builds: the tool's own output under
+/// `result`, and each file under the reference a marked input field takes.
+fn output_beside_block_files(output: Value, files: &[StoredMcpFile], left_out: bool) -> Value {
+    json!({
+        "result": output,
+        "files": files
+            .iter()
+            .map(|file| {
+                json!({
+                    "fileReference": format!("erato-file://{}", file.id),
+                    "filename": file.file_name,
+                    "mimeType": file.mime_type,
+                })
+            })
+            .collect::<Vec<_>>(),
+        "filesTruncated": left_out,
+    })
+}
+
+/// Names the stored files in the result's output: a marked field holds its
+/// file's reference in place of the Base64, and the files of content blocks
+/// are listed beside the output. Returns where the output then holds the
+/// structured content the marked fields were taken out of.
+fn name_stored_mcp_files(
+    marked_output: Option<Value>,
+    marked_fields: &[ExtractedFileField],
+    stored: &[StoredMcpFile],
+    blocks_left_out: bool,
+    tool_response_content: &mut String,
+    output_value: &mut Option<JsonValue>,
+) -> Result<Option<&'static str>, Report> {
+    let (marked_files, block_files) = stored.split_at(marked_fields.len());
+    let mut structured_content_pointer = None;
+    let mut changed = false;
+    if let Some(mut output_json) = marked_output {
+        let replacements = marked_fields
+            .iter()
+            .zip(marked_files)
+            .map(|(field, file)| {
+                (
+                    field.json_pointer.as_str(),
+                    format!("erato-file://{}", file.id),
+                )
+            })
+            .collect::<Vec<_>>();
+        replace_mcp_file_fields(&mut output_json, &replacements)?;
+        if !marked_files.is_empty() {
+            structured_content_pointer = Some("");
+        }
+        *output_value = Some(output_json);
+        changed = true;
+    }
+    if !block_files.is_empty() || blocks_left_out {
+        let output = output_value.take().unwrap_or(Value::Null);
+        *output_value = Some(output_beside_block_files(
+            output,
+            block_files,
+            blocks_left_out,
+        ));
+        structured_content_pointer = structured_content_pointer.map(|_| "/result");
+        changed = true;
+    }
+    if changed && let Some(output) = output_value {
+        *tool_response_content =
+            serde_json::to_string(output).wrap_err("Failed to serialize MCP tool output")?;
+    }
+    Ok(structured_content_pointer)
 }
 
 fn mcp_file_content_part(file_upload_id: Uuid, mime_type: &str) -> ContentPart {
@@ -408,30 +826,68 @@ fn mcp_file_content_part(file_upload_id: Uuid, mime_type: &str) -> ContentPart {
     }
 }
 
-async fn process_mcp_file_outputs(
+/// Stores a result's validated files as file uploads of the chat, in order.
+/// When one of them cannot be stored, none is kept: the objects written so
+/// far are removed again, and no row stays.
+async fn store_mcp_files(
     app_state: &AppState,
     policy: &PolicyEngine,
     subject: &Subject,
     chat_id: Uuid,
-    output_schema: &Value,
-    output_value: &mut Value,
-) -> Result<Vec<ContentPart>, Report> {
-    use crate::models::file_upload::create_file_upload;
-    let extracted_fields = extract_mcp_file_fields(output_schema, output_value)?;
-    if extracted_fields.is_empty() {
+    files: Vec<McpResultFile>,
+) -> Result<Vec<StoredMcpFile>, Report> {
+    use crate::policy::prelude::*;
+
+    if files.is_empty() {
         return Ok(Vec::new());
     }
+    // Checked before anything is written.
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.to_string()),
+        Action::Update
+    )?;
+    let file_storage = app_state.default_file_storage_provider();
+    let mut written_paths = Vec::new();
+    let stored = write_mcp_files(
+        &app_state.db,
+        file_storage,
+        app_state.default_file_storage_provider_id(),
+        subject.user_id(),
+        chat_id,
+        files,
+        &mut written_paths,
+    )
+    .await;
+    if stored.is_err() {
+        remove_mcp_objects(file_storage, &written_paths).await;
+    }
 
-    // Validate the entire result before persisting any files.
-    let decoded_files = extracted_fields
-        .iter()
-        .map(decode_mcp_file)
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut file_pointers = Vec::new();
-    let mut replacements = Vec::new();
+    // The new file_upload rows must enter the policy data before the client
+    // fetches their previews after the turn completes.
 
-    for (index, (extracted, file_bytes)) in extracted_fields.iter().zip(decoded_files).enumerate() {
-        let mime_type = extracted.mime_type.as_str();
+    stored
+}
+
+/// Writes the files' objects, then their rows in one transaction, so that no
+/// row is kept unless every file was stored. `written_paths` gets each
+/// object's path before the object is written.
+async fn write_mcp_files(
+    db: &sea_orm::DatabaseConnection,
+    file_storage: &FileStorage,
+    file_storage_provider_id: String,
+    owner_user_id: &str,
+    chat_id: Uuid,
+    files: Vec<McpResultFile>,
+    written_paths: &mut Vec<String>,
+) -> Result<Vec<StoredMcpFile>, Report> {
+    use crate::models::file_upload::create_file_upload_record;
+    use sea_orm::TransactionTrait;
+
+    let mut uploads = Vec::new();
+    for (index, file) in files.into_iter().enumerate() {
+        let mime_type = file.mime_type.as_str();
         let extension = extension_for_mime_type(mime_type).unwrap_or("bin");
 
         let timestamp = SystemTime::now()
@@ -439,23 +895,22 @@ async fn process_mcp_file_outputs(
             .unwrap_or_default()
             .as_millis();
         let generated_filename = format!("mcp_generated_{}_{}.{}", timestamp, index, extension);
-        let filename = extracted
+        let filename = file
             .file_name
-            .as_ref()
             .filter(|file_name| !file_name.is_empty())
-            .cloned()
-            .unwrap_or_else(|| generated_filename.clone());
+            .unwrap_or(generated_filename);
 
-        let file_storage_provider_id = app_state.default_file_storage_provider_id();
-        let file_storage = app_state.default_file_storage_provider();
-        // Keep MCP-provided display names out of storage paths. Besides avoiding path traversal,
-        // this preserves the existing unique generated storage naming behavior.
+        // The object gets a random name, as an upload's does. An
+        // MCP-provided name is the display name only and never part of the
+        // storage path.
         let directory = if mime_type.starts_with("image/") {
             "generated_images"
         } else {
             "generated_files"
         };
-        let file_storage_path = format!("{directory}/{generated_filename}");
+        let file_storage_path = format!("{directory}/{}.{extension}", Uuid::new_v4());
+        // Noted first: a write that fails half-way may leave an object too.
+        written_paths.push(file_storage_path.clone());
 
         let mut writer = file_storage
             .upload_file_writer(&file_storage_path, Some(mime_type))
@@ -463,7 +918,7 @@ async fn process_mcp_file_outputs(
             .wrap_err("Failed to create writer for MCP generated file")?;
 
         writer
-            .write(file_bytes)
+            .write(file.bytes)
             .await
             .wrap_err("Failed to write MCP generated file bytes")?;
 
@@ -472,33 +927,43 @@ async fn process_mcp_file_outputs(
             .await
             .wrap_err("Failed to close MCP generated file writer")?;
 
-        let file_upload = create_file_upload(
-            &app_state.db,
-            policy,
-            subject,
+        uploads.push((filename, file.mime_type, file_storage_path));
+    }
+
+    let transaction = db.begin().await?;
+    let mut stored = Vec::new();
+    for (filename, mime_type, file_storage_path) in uploads {
+        let file_upload = create_file_upload_record(
+            &transaction,
+            Uuid::new_v4(),
+            owner_user_id.to_string(),
             &chat_id,
             filename.clone(),
             file_storage_provider_id.clone(),
-            file_storage_path.clone(),
+            file_storage_path,
             None,
             None,
         )
         .await?;
-
-        replacements.push((
-            extracted.json_pointer.as_str(),
-            format!("erato-file://{}", file_upload.id),
-        ));
-
-        file_pointers.push(mcp_file_content_part(file_upload.id, mime_type));
+        stored.push(StoredMcpFile {
+            id: file_upload.id,
+            file_name: filename,
+            mime_type,
+        });
     }
+    transaction.commit().await?;
 
-    replace_mcp_file_fields(output_value, &replacements)?;
+    Ok(stored)
+}
 
-    // The new file_upload rows must enter the policy data before the client
-    // fetches their previews after the turn completes.
-
-    Ok(file_pointers)
+/// Removes objects of files that were not stored after all. A removal that
+/// fails is logged and the others still run.
+async fn remove_mcp_objects(file_storage: &FileStorage, paths: &[String]) {
+    for path in paths {
+        if let Err(error) = file_storage.delete_generated_file(path).await {
+            tracing::warn!(%error, path, "Failed to remove an MCP generated file that was not stored");
+        }
+    }
 }
 
 fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
@@ -516,7 +981,8 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
 /// The result's `https` links, bounded. Structured content and embedded
 /// resources are not kept here: a shared chat would hand them to its
 /// viewers, and only a call's view reads structured content, which
-/// `ToolResultView` keeps for it.
+/// `ToolResultView` keeps for it. A block that names itself a file is
+/// stored as one instead (`file_block`).
 fn mcp_result_details(
     content: &[rmcp::model::ContentBlock],
     server_url: Option<&str>,
@@ -590,13 +1056,54 @@ fn mcp_tool_output_value(
     }
 }
 
+/// Replaces the string under `path` in `value`, wherever the value has one,
+/// with a note of its length. Unlike `expand_paths_for_value`, it accepts
+/// any shape: the output it reads may be the one that failed validation.
+fn omit_file_content(value: &mut Value, path: &[FileContentPathPart]) {
+    match path.split_first() {
+        None => {
+            if let Value::String(content) = value
+                && !content.starts_with(OMITTED_FILE_CONTENT_PREFIX)
+            {
+                *content = format!("{OMITTED_FILE_CONTENT_PREFIX}: {} bytes]", content.len());
+            }
+        }
+        Some((FileContentPathPart::Field { name, .. }, rest)) => {
+            if let Some(next) = value.get_mut(name) {
+                omit_file_content(next, rest);
+            }
+        }
+        Some((FileContentPathPart::ArrayItem, rest)) => {
+            if let Value::Array(items) = value {
+                for item in items {
+                    omit_file_content(item, rest);
+                }
+            }
+        }
+    }
+}
+
+/// What a marked field holds in the output of a result that could not be
+/// processed, in place of its content.
+const OMITTED_FILE_CONTENT_PREFIX: &str = "[file content omitted";
+
+/// What a call's row and the model get for a result that could not be
+/// processed: the error and the tool's own output. The fields `output_schema`
+/// marks as file content keep only a note of their length, so the Base64 of
+/// the result's files is not part of it.
 pub(super) fn mcp_tool_processing_error_output(
     tool_call_result: &rmcp::model::CallToolResult,
+    output_schema: Option<&rmcp::model::JsonObject>,
     processing_error: &str,
 ) -> Value {
     let tool_response_content = mcp_result_to_text(tool_call_result);
-    let original_output = mcp_tool_output_value(tool_call_result, &tool_response_content)
+    let mut original_output = mcp_tool_output_value(tool_call_result, &tool_response_content)
         .unwrap_or_else(|_| Value::String(tool_response_content));
+    if let Some(output_schema) = output_schema {
+        for path in collect_file_content_paths(&Value::Object(output_schema.clone())) {
+            omit_file_content(&mut original_output, &path.parts);
+        }
+    }
 
     json!({
         "status": "error",
@@ -690,27 +1197,31 @@ pub async fn post_process_mcp_tool_result(
     let mut output_value = serde_json::from_str(&tool_response_content)
         .ok()
         .or(Some(JsonValue::String(tool_response_content.clone())));
-    let mut file_content_parts: Vec<ContentPart> = Vec::new();
 
-    if let Some(output_schema) = output_schema {
-        let output_schema_value = Value::Object(output_schema.as_ref().clone());
-        let schema_paths = collect_file_content_paths(&output_schema_value);
-        if !schema_paths.is_empty() {
-            let mut output_json = mcp_tool_output_value(tool_call_result, &tool_response_content)?;
-            file_content_parts = process_mcp_file_outputs(
-                app_state,
-                policy,
-                subject,
-                chat_id,
-                &output_schema_value,
-                &mut output_json,
-            )
-            .await?;
-            tool_response_content = serde_json::to_string(&output_json)
-                .wrap_err("Failed to serialize MCP tool output")?;
-            output_value = Some(output_json);
-        }
-    }
+    // Validate the entire result before persisting any files.
+    let validated = validate_mcp_result_files(
+        output_schema.map(|schema| schema.as_ref()),
+        tool_call_result,
+        &tool_response_content,
+        app_state
+            .config
+            .max_upload_size_bytes()
+            .map(|bytes| bytes as usize)
+            .unwrap_or(DEFAULT_MAX_RESULT_FILE_BYTES),
+    )?;
+    let stored = store_mcp_files(app_state, policy, subject, chat_id, validated.files).await?;
+    let file_content_parts = stored
+        .iter()
+        .map(|file| mcp_file_content_part(file.id, &file.mime_type))
+        .collect();
+    let structured_content_pointer = name_stored_mcp_files(
+        validated.marked_output,
+        &validated.marked_fields,
+        &stored,
+        validated.blocks_left_out,
+        &mut tool_response_content,
+        &mut output_value,
+    )?;
 
     let result_details = mcp_result_details(&tool_call_result.content, server_url);
     Ok(McpToolPostProcessResult {
@@ -722,6 +1233,7 @@ pub async fn post_process_mcp_tool_result(
         output_value,
         file_content_parts,
         result_details,
+        structured_content_pointer,
     })
 }
 
@@ -1595,6 +2107,7 @@ mod tests {
 
         let output = mcp_tool_processing_error_output(
             &tool_result,
+            None,
             "Failed to process MCP tool output: Missing mime_type",
         );
 
@@ -1604,6 +2117,77 @@ mod tests {
             "Failed to process MCP tool output: Missing mime_type"
         );
         assert_eq!(output["mcp_output"], original_output);
+    }
+
+    #[test]
+    fn file_processing_error_output_leaves_out_the_content_of_marked_fields() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "report": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                },
+                "files": { "type": "array", "items": { "$ref": "#/$defs/File" } }
+            },
+            "$defs": {
+                "File": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }
+            }
+        });
+        let schema = schema.as_object().unwrap();
+        let output = json!({
+            "stdout": "starting worker",
+            "error": { "type": "runtime", "message": "worker failed" },
+            "report": { "content": "d29ybGQ=", "mime_type": "application/pdf" },
+            "files": [
+                { "content": "aGVsbG8=", "mime_type": "text/plain", "name": "a.txt" },
+                { "content": "invalid!", "mime_type": "text/plain" },
+                { "content": 7 },
+                "not an object",
+                null
+            ]
+        });
+        let expected = json!({
+            "stdout": "starting worker",
+            "error": { "type": "runtime", "message": "worker failed" },
+            "report": { "content": "[file content omitted: 8 bytes]",
+                        "mime_type": "application/pdf" },
+            "files": [
+                { "content": "[file content omitted: 8 bytes]", "mime_type": "text/plain",
+                  "name": "a.txt" },
+                { "content": "[file content omitted: 8 bytes]", "mime_type": "text/plain" },
+                { "content": 7 },
+                "not an object",
+                null
+            ]
+        });
+        // The output in `structuredContent`, and as JSON text alone.
+        let structured = CallToolResult::structured_error(output.clone());
+        let text = CallToolResult::success(vec![ContentBlock::text(output.to_string())]);
+        for result in [structured, text] {
+            let error_output =
+                mcp_tool_processing_error_output(&result, Some(schema), "Failed to process");
+            assert_eq!(error_output["status"], "error");
+            assert_eq!(error_output["error"], "Failed to process");
+            assert_eq!(error_output["mcp_output"], expected);
+        }
+
+        // Output of another shape than the schema describes is kept as it is.
+        for output in [json!("plain text"), json!([1, 2]), json!({"files": "none"})] {
+            let result = CallToolResult::structured(output.clone());
+            let error_output =
+                mcp_tool_processing_error_output(&result, Some(schema), "Failed to process");
+            assert_eq!(error_output["mcp_output"], output);
+        }
     }
 
     #[test]
@@ -1774,6 +2358,901 @@ mod tests {
             output["images"][0]["data_base64"],
             json!("erato-file://123")
         );
+    }
+
+    const MAX_TEST_FILE_BYTES: usize = 1024;
+
+    struct NamedFiles {
+        files: Vec<(Option<String>, String, Vec<u8>)>,
+        stored: Vec<StoredMcpFile>,
+        left_out: bool,
+        content: String,
+        output: Value,
+        structured_content_pointer: Option<&'static str>,
+    }
+
+    /// Post-processing without storage: every validated file gets a new id,
+    /// and a file without a name gets `generated-<position>`.
+    fn name_files(schema: Option<&Value>, result: &CallToolResult) -> Result<NamedFiles, Report> {
+        let mut content = mcp_result_to_text(result);
+        let mut output = serde_json::from_str(&content)
+            .ok()
+            .or(Some(Value::String(content.clone())));
+        let validated = validate_mcp_result_files(
+            schema.map(|schema| schema.as_object().unwrap()),
+            result,
+            &content,
+            MAX_TEST_FILE_BYTES,
+        )?;
+        let files: Vec<_> = validated
+            .files
+            .iter()
+            .map(|file| {
+                (
+                    file.file_name.clone(),
+                    file.mime_type.clone(),
+                    file.bytes.clone(),
+                )
+            })
+            .collect();
+        let stored: Vec<_> = validated
+            .files
+            .into_iter()
+            .enumerate()
+            .map(|(index, file)| StoredMcpFile {
+                id: Uuid::new_v4(),
+                file_name: file
+                    .file_name
+                    .unwrap_or_else(|| format!("generated-{index}")),
+                mime_type: file.mime_type,
+            })
+            .collect();
+        let structured_content_pointer = name_stored_mcp_files(
+            validated.marked_output,
+            &validated.marked_fields,
+            &stored,
+            validated.blocks_left_out,
+            &mut content,
+            &mut output,
+        )?;
+        Ok(NamedFiles {
+            files,
+            stored,
+            left_out: validated.blocks_left_out,
+            content,
+            output: output.unwrap(),
+            structured_content_pointer,
+        })
+    }
+
+    fn result_of(result: Value) -> CallToolResult {
+        serde_json::from_value(result).unwrap()
+    }
+
+    fn file_entry(file: &StoredMcpFile) -> Value {
+        json!({
+            "fileReference": format!("erato-file://{}", file.id),
+            "filename": file.file_name,
+            "mimeType": file.mime_type,
+        })
+    }
+
+    const NAME: &str = "chat.erato/file_name";
+
+    #[test]
+    fn image_and_resource_blocks_become_named_file_references() {
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Created the report."},
+            {"type": "image", "data": "aGVsbG8=", "mimeType": "image/png",
+             "_meta": {NAME: "chart.png"}},
+            {"type": "resource",
+             "resource": {"uri": "reports://q3/export", "mimeType": "application/pdf",
+                          "blob": "d29ybGQ="},
+             "_meta": {NAME: "report.pdf"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [
+                (
+                    Some("chart.png".into()),
+                    "image/png".into(),
+                    b"hello".to_vec()
+                ),
+                (
+                    Some("report.pdf".into()),
+                    "application/pdf".into(),
+                    b"world".to_vec()
+                ),
+            ]
+        );
+        assert!(!named.left_out);
+        assert_eq!(
+            named.output,
+            json!({
+                "result": "Created the report.",
+                "files": [
+                    {"fileReference": format!("erato-file://{}", named.stored[0].id),
+                     "filename": "chart.png", "mimeType": "image/png"},
+                    {"fileReference": format!("erato-file://{}", named.stored[1].id),
+                     "filename": "report.pdf", "mimeType": "application/pdf"},
+                ],
+                "filesTruncated": false,
+            })
+        );
+        // The model reads the stored output, which carries no bytes.
+        assert_eq!(
+            serde_json::from_str::<Value>(&named.content).unwrap(),
+            named.output
+        );
+        for bytes in ["aGVsbG8=", "d29ybGQ=", "hello", "world"] {
+            assert!(!named.content.contains(bytes), "{}", named.content);
+        }
+        assert!(matches!(
+            mcp_file_content_part(named.stored[0].id, &named.stored[0].mime_type),
+            ContentPart::ImageFilePointer(pointer) if pointer.file_upload_id == named.stored[0].id
+        ));
+        assert!(matches!(
+            mcp_file_content_part(named.stored[1].id, &named.stored[1].mime_type),
+            ContentPart::TextFilePointer(pointer) if pointer.file_upload_id == named.stored[1].id
+        ));
+        // No marked field: the view keeps the structured content as returned.
+        assert_eq!(named.structured_content_pointer, None);
+
+        // A resource's text is a file as well, and JSON output stays JSON.
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "{\"rows\":2}"},
+            {"type": "resource",
+             "resource": {"uri": "reports://q3/rows.csv", "mimeType": "text/csv",
+                          "text": "x,y\n1,2\n",
+                          "_meta": {"chat.erato/file_name": "rows.csv"}}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [(
+                Some("rows.csv".into()),
+                "text/csv".into(),
+                b"x,y\n1,2\n".to_vec()
+            )]
+        );
+        assert_eq!(
+            named.output,
+            json!({"result": {"rows": 2}, "files": [file_entry(&named.stored[0])],
+                   "filesTruncated": false})
+        );
+        assert!(!named.content.contains("x,y"), "{}", named.content);
+    }
+
+    #[test]
+    fn only_a_block_that_names_its_file_is_a_file() {
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Done."},
+            {"type": "image", "data": "aGVsbG8=", "mimeType": "image/png",
+             "_meta": {NAME: "chart.png"}},
+            // Blocks without the name stay unread, whatever they hold.
+            {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png"},
+            {"type": "image", "data": "invalid!", "mimeType": "invalid"},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/report.pdf", "mimeType": "application/pdf",
+                          "blob": "d29ybGQ="}},
+            {"type": "resource",
+             "resource": {"uri": "records://rows/1", "text": "SYNTHETIC-RESOURCE"}},
+            {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png",
+             "_meta": {"other": "chart.png"}},
+            {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png", "_meta": {NAME: null}},
+            {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png", "_meta": {NAME: ""}},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/b.pdf", "mimeType": "application/pdf",
+                          "blob": "d29ybGQ=", "_meta": {NAME: ""}},
+             "_meta": {NAME: null}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [(
+                Some("chart.png".into()),
+                "image/png".into(),
+                b"hello".to_vec()
+            )]
+        );
+        assert_eq!(
+            named.output,
+            json!({"result": "Done.", "files": [file_entry(&named.stored[0])],
+                   "filesTruncated": false})
+        );
+        for unread in ["d29ybGQ=", "world", "SYNTHETIC-RESOURCE", "report.pdf"] {
+            assert!(!named.content.contains(unread), "{}", named.content);
+        }
+
+        // Without a named block the output is the tool's own, as before.
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Done."},
+            {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png"},
+            {"type": "resource",
+             "resource": {"uri": "records://rows/1", "text": "SYNTHETIC-RESOURCE"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert!(named.files.is_empty());
+        assert_eq!(named.output, json!("Done."));
+        assert_eq!(named.content, "Done.");
+
+        // The block's own `_meta` names the file before the resource's does;
+        // invisible characters are no part of a name.
+        let pdf = |block_meta: Value, resource_meta: Value| {
+            json!({"type": "resource",
+                   "resource": {"uri": "file:///exports/from-uri.pdf",
+                                "mimeType": "application/pdf", "blob": "YQ==",
+                                "_meta": resource_meta},
+                   "_meta": block_meta})
+        };
+        let result = result_of(json!({"content": [
+            pdf(json!({NAME: "block.pdf"}), json!({NAME: "resource.pdf"})),
+            pdf(json!({NAME: null}), json!({NAME: "resource.pdf"})),
+            pdf(json!({NAME: ""}), json!({NAME: "resource.pdf"})),
+            pdf(json!({}), json!({NAME: "\u{2066}resource\u{2069}.pdf"})),
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named
+                .files
+                .iter()
+                .map(|file| file.0.as_deref())
+                .collect::<Vec<_>>(),
+            [
+                Some("block.pdf"),
+                Some("resource.pdf"),
+                Some("resource.pdf"),
+                Some("resource.pdf")
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_malformed_file_block_fails_before_persistence() {
+        // Any persistence attempt fails: no database or storage is configured.
+        let app_state = app_state_without_storage();
+        let policy = PolicyEngine::new();
+        let subject = Subject::User(Uuid::new_v4().to_string());
+        let tool_call = ToolCall {
+            call_id: "export-call".into(),
+            fn_name: "export_report".into(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let image = |data: &str, mime_type: &str| {
+            json!({"type": "image", "data": data, "mimeType": mime_type,
+                   "_meta": {NAME: "chart.png"}})
+        };
+        let resource = |resource: Value| json!({"type": "resource", "resource": resource, "_meta": {NAME: "report"}});
+        let named = |name: Value| {
+            json!({"type": "image", "data": "aGVsbG8=", "mimeType": "image/png",
+                   "_meta": {NAME: name}})
+        };
+        for (malformed, expected_error) in [
+            (
+                image("invalid!", "image/png"),
+                "Failed to decode base64 file data from MCP at /content/2",
+            ),
+            (image("aGVsbG8=", "invalid"), "Invalid MIME type"),
+            (image("aGVsbG8=", ""), "Invalid MIME type"),
+            (
+                resource(
+                    json!({"uri": "file:///a.pdf", "mimeType": "application/pdf",
+                           "blob": "invalid!"}),
+                ),
+                "Failed to decode base64 file data from MCP at /content/2",
+            ),
+            (
+                resource(json!({"uri": "file:///a.pdf", "mimeType": "", "blob": "aGVsbG8="})),
+                "Invalid MIME type",
+            ),
+            (
+                // No `mimeType` is no excuse for bad Base64.
+                resource(json!({"uri": "file:///a.pdf", "blob": "invalid!"})),
+                "Failed to decode base64 file data from MCP at /content/2",
+            ),
+            (
+                resource(
+                    json!({"uri": "file:///a.txt", "mimeType": "text\n/plain", "text": "hello"}),
+                ),
+                "Invalid MIME type",
+            ),
+            (named(json!("../chart.png")), "Unsafe filename"),
+            (named(json!("dir\\chart.png")), "Unsafe filename"),
+            (named(json!("c:chart.png")), "Unsafe filename"),
+            (named(json!("chart\n.png")), "Unsafe filename"),
+            (named(json!(".\u{200B}.")), "Unsafe filename"),
+            (named(json!("\u{200B}")), "Unsafe filename"),
+            (
+                named(json!(7)),
+                "MCP file name 'chat.erato/file_name' at /content/2 is not a string",
+            ),
+            (
+                named(json!(["chart.png"])),
+                "MCP file name 'chat.erato/file_name' at /content/2 is not a string",
+            ),
+            (
+                named(json!("a".repeat(MAX_DISPLAY_NAME_CHARS + 1))),
+                "Filename in MCP file output is longer than",
+            ),
+        ] {
+            let result = result_of(json!({"content": [
+                {"type": "text", "text": "Exported."},
+                {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png",
+                 "_meta": {NAME: "valid.png"}},
+                malformed,
+            ]}));
+            let error = post_process_mcp_tool_result(
+                &app_state,
+                &policy,
+                &subject,
+                Uuid::new_v4(),
+                &tool_call,
+                None,
+                &result,
+                None,
+            )
+            .await
+            .err()
+            .expect("a malformed block must fail");
+            assert!(error.to_string().contains(expected_error), "{error}");
+
+            // What the model gets instead names the error and carries no bytes.
+            let output = mcp_tool_processing_error_output(
+                &result,
+                None,
+                &format!("Failed to process MCP tool output: {error}"),
+            );
+            assert_eq!(output["status"], "error");
+            assert_eq!(output["mcp_output"], "Exported.");
+            assert!(
+                output["error"].as_str().unwrap().contains(expected_error),
+                "{output}"
+            );
+            assert!(!output.to_string().contains("d29ybGQ="), "{output}");
+        }
+    }
+
+    #[test]
+    fn a_failed_result_hands_on_no_file_content() {
+        // A result with a valid marked field and a valid block fails over a
+        // second block. What is handed on instead holds neither file.
+        let schema = optional_files_schema();
+        let schema = schema.as_object().unwrap();
+        let mut result = CallToolResult::structured(json!({
+            "success": true,
+            "stdout": "exported",
+            "files": [{ "content_base64": "aGVsbG8=", "mime_type": "text/plain" }]
+        }));
+        result.content.extend(
+            serde_json::from_value::<Vec<ContentBlock>>(json!([
+                {"type": "image", "data": "d29ybGQ=", "mimeType": "image/png",
+                 "_meta": {NAME: "valid.png"}},
+                {"type": "image", "data": "invalid!", "mimeType": "image/png",
+                 "_meta": {NAME: "broken.png"}},
+            ]))
+            .unwrap(),
+        );
+        let error = name_files(Some(&Value::Object(schema.clone())), &result)
+            .err()
+            .unwrap();
+        assert!(
+            error.to_string().contains("Failed to decode base64"),
+            "{error}"
+        );
+        let output = mcp_tool_processing_error_output(&result, Some(schema), &error.to_string());
+        assert_eq!(
+            output["mcp_output"],
+            json!({
+                "success": true,
+                "stdout": "exported",
+                "files": [{ "content_base64": "[file content omitted: 8 bytes]",
+                            "mime_type": "text/plain" }]
+            })
+        );
+        for content in ["aGVsbG8=", "d29ybGQ=", "invalid!"] {
+            assert!(!output.to_string().contains(content), "{output}");
+        }
+    }
+
+    #[test]
+    fn a_file_block_mime_type_is_checked_and_kept_without_parameters() {
+        let longest = format!("a/{}", "b".repeat(MAX_BLOCK_MIME_TYPE_CHARS - 2));
+        for (mime_type, expected) in [
+            ("image/png", "image/png"),
+            ("IMAGE/PNG", "image/png"),
+            ("Text/CSV; Charset=UTF-8", "text/csv"),
+            ("text/csv;charset=utf-8;header=present", "text/csv"),
+            (
+                "text/csv ; charset=\"utf-8; x\\\"y\" ; header=present",
+                "text/csv",
+            ),
+            ("text/plain;", "text/plain"),
+            ("text/html;profile=mcp-app", "text/html"),
+            (
+                "application/vnd.example.report+json",
+                "application/vnd.example.report+json",
+            ),
+            (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ),
+            (longest.as_str(), longest.as_str()),
+        ] {
+            assert_eq!(block_mime_type(mime_type).unwrap(), expected, "{mime_type}");
+        }
+        let too_long = format!("a/{}", "b".repeat(MAX_BLOCK_MIME_TYPE_CHARS - 1));
+        let long_parameter = format!("text/csv;x={}", "y".repeat(MAX_BLOCK_MIME_TYPE_CHARS));
+        for mime_type in [
+            "",
+            "invalid",
+            "/png",
+            "image/",
+            "image/png/x",
+            " image/png",
+            "ima ge/png",
+            "image/p ng",
+            "image/p\u{e4}ng",
+            "image/png\u{0}",
+            "image/png\n",
+            "image/<svg>",
+            "image/png,image/gif",
+            "image/png;charset",
+            "image/png;=utf-8",
+            "image/png;charset=",
+            "image/png;charset=utf-8 x",
+            "image/png;charset=\"utf-8",
+            "image/png;charset=\"utf-8\"x",
+            "image/png;charset=\"a\nb\"",
+            "image/png;char set=utf-8",
+            too_long.as_str(),
+            long_parameter.as_str(),
+        ] {
+            let error = block_mime_type(mime_type).expect_err(mime_type);
+            assert!(error.to_string().contains("Invalid MIME type"), "{error}");
+        }
+
+        // The type decides how the file is shown, and it is what is listed.
+        let result = result_of(json!({"content": [
+            {"type": "image", "data": "aGVsbG8=", "mimeType": "IMAGE/PNG",
+             "_meta": {NAME: "chart"}},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/rows", "text": "x,y\n",
+                          "mimeType": "Text/CSV; charset=utf-8"},
+             "_meta": {NAME: "rows"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(named.output["files"][0]["mimeType"], "image/png");
+        assert_eq!(named.output["files"][1]["mimeType"], "text/csv");
+        assert!(matches!(
+            mcp_file_content_part(named.stored[0].id, &named.stored[0].mime_type),
+            ContentPart::ImageFilePointer(_)
+        ));
+        assert!(matches!(
+            mcp_file_content_part(named.stored[1].id, &named.stored[1].mime_type),
+            ContentPart::TextFilePointer(_)
+        ));
+    }
+
+    #[test]
+    fn file_blocks_of_one_result_have_a_size_of_their_own_and_one_together() {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        let at_limit = "x".repeat(MAX_TEST_FILE_BYTES);
+        let over_limit = "x".repeat(MAX_TEST_FILE_BYTES + 1);
+        let image = |content: &str| {
+            json!({"type": "image", "data": STANDARD.encode(content), "mimeType": "image/png",
+                   "_meta": {NAME: "chart.png"}})
+        };
+        let text = |content: &str| {
+            json!({"type": "resource",
+                   "resource": {"uri": "file:///a.txt", "mimeType": "text/plain", "text": content},
+                   "_meta": {NAME: "a.txt"}})
+        };
+        // An unnamed block is not read and so has no size.
+        let unnamed = json!({"type": "image", "data": STANDARD.encode(&over_limit),
+                             "mimeType": "image/png"});
+        for (content, expected_error) in [
+            (vec![image(&at_limit)], None),
+            (vec![text(&at_limit)], None),
+            (
+                vec![image(&over_limit)],
+                Some("MCP file output at /content/0 is larger than the 1024 bytes"),
+            ),
+            (
+                vec![unnamed.clone(), text(&over_limit)],
+                Some("MCP file output at /content/1 is larger than the 1024 bytes"),
+            ),
+            // Together the files of a result may be twice as large as one.
+            (
+                vec![image(&at_limit), unnamed.clone(), text(&at_limit)],
+                None,
+            ),
+            (
+                vec![image(&at_limit), text(&at_limit), text("x")],
+                Some("larger than the 2048 bytes they may have together"),
+            ),
+            (
+                vec![text(&at_limit), image(&at_limit), image("x")],
+                Some("larger than the 2048 bytes they may have together"),
+            ),
+            (
+                // Nothing past the budget is decoded.
+                vec![
+                    text(&at_limit),
+                    text(&at_limit),
+                    json!({"type": "image", "data": format!("{}!", "A".repeat(64)),
+                           "mimeType": "image/png", "_meta": {NAME: "chart.png"}}),
+                ],
+                Some("larger than the 2048 bytes they may have together"),
+            ),
+        ] {
+            let files = content.len();
+            let named = name_files(None, &result_of(json!({"content": content})));
+            match (named, expected_error) {
+                (Ok(named), None) => assert!(named.files.len() <= files),
+                (Err(error), Some(expected)) => {
+                    assert!(error.to_string().contains(expected), "{error}")
+                }
+                (Ok(_), Some(expected)) => panic!("expected an error: {expected}"),
+                (Err(error), None) => panic!("{error}"),
+            }
+        }
+    }
+
+    #[test]
+    fn marked_fields_and_file_blocks_share_one_result() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "files": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "data_base64": { "type": "string", "chat.erato/file_content_field": true },
+                        "name": { "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }}
+            }
+        });
+        let structured = json!({"summary": "Exported.", "files": [
+            {"name": "chart.png", "mime_type": "image/png; quality=high",
+             "data_base64": "aGVsbG8="}
+        ]});
+
+        // Marked fields alone: the output is the structured content with the
+        // reference in place of the Base64, as before.
+        let result = CallToolResult::structured(structured.clone());
+        let named = name_files(Some(&schema), &result).unwrap();
+        assert_eq!(
+            named.files,
+            [(
+                Some("chart.png".into()),
+                "image/png; quality=high".into(),
+                b"hello".to_vec()
+            )]
+        );
+        let mut replaced = structured.clone();
+        replaced["files"][0]["data_base64"] = json!(format!("erato-file://{}", named.stored[0].id));
+        assert_eq!(named.output, replaced);
+        assert_eq!(
+            serde_json::from_str::<Value>(&named.content).unwrap(),
+            replaced
+        );
+        assert_eq!(
+            structured_content_for_view(
+                &result,
+                named.structured_content_pointer,
+                Some(&named.output)
+            ),
+            Some(&replaced)
+        );
+
+        // The marked field's file again as a block is not stored twice,
+        // whatever parameters either type has. Blocks with other files are
+        // listed beside the output, also where two of them hold the same
+        // bytes under different names.
+        let mut result = CallToolResult::structured(structured.clone());
+        result.content.extend(
+            serde_json::from_value::<Vec<ContentBlock>>(json!([
+                {"type": "image", "data": "aGVsbG8=", "mimeType": "IMAGE/PNG",
+                 "_meta": {NAME: "chart-copy.png"}},
+                {"type": "resource",
+                 "resource": {"uri": "file:///exports/1", "mimeType": "text/csv",
+                              "text": "x,y\n"},
+                 "_meta": {NAME: "data.csv"}},
+                {"type": "resource",
+                 "resource": {"uri": "file:///exports/2", "mimeType": "text/csv",
+                              "blob": "eCx5Cg=="},
+                 "_meta": {NAME: "again.csv"}},
+                // The marked file's bytes without a name: not a file at all.
+                {"type": "image", "data": "aGVsbG8=", "mimeType": "image/png"},
+            ]))
+            .unwrap(),
+        );
+        let named = name_files(Some(&schema), &result).unwrap();
+        assert_eq!(
+            named.files,
+            [
+                (
+                    Some("chart.png".into()),
+                    "image/png; quality=high".into(),
+                    b"hello".to_vec()
+                ),
+                (
+                    Some("data.csv".into()),
+                    "text/csv".into(),
+                    b"x,y\n".to_vec()
+                ),
+                (
+                    Some("again.csv".into()),
+                    "text/csv".into(),
+                    b"x,y\n".to_vec()
+                ),
+            ]
+        );
+        let mut replaced = structured.clone();
+        replaced["files"][0]["data_base64"] = json!(format!("erato-file://{}", named.stored[0].id));
+        assert_eq!(
+            named.output,
+            json!({"result": replaced,
+                   "files": [file_entry(&named.stored[1]), file_entry(&named.stored[2])],
+                   "filesTruncated": false})
+        );
+        assert!(!named.content.contains("aGVsbG8="), "{}", named.content);
+        // The view gets the structured content alone, naming its file.
+        let for_view = structured_content_for_view(
+            &result,
+            named.structured_content_pointer,
+            Some(&named.output),
+        );
+        assert_eq!(for_view, Some(&replaced));
+
+        // A marked schema without files in the result: blocks are still read,
+        // and the view keeps the structured content as returned.
+        let empty = json!({"summary": "Exported.", "files": []});
+        let mut result = CallToolResult::structured(empty.clone());
+        result.content.push(
+            serde_json::from_value(json!({"type": "image", "data": "aGVsbG8=",
+                                          "mimeType": "image/png", "_meta": {NAME: "chart.png"}}))
+            .unwrap(),
+        );
+        let named = name_files(Some(&schema), &result).unwrap();
+        assert_eq!(named.output["result"], empty);
+        assert_eq!(named.output["files"], json!([file_entry(&named.stored[0])]));
+        assert_eq!(named.structured_content_pointer, None);
+        assert_eq!(
+            structured_content_for_view(&result, None, Some(&named.output)),
+            Some(&empty)
+        );
+
+        // A malformed marked field fails the result whatever its blocks hold.
+        let mut result = CallToolResult::structured(json!({"files": [
+            {"name": "chart.png", "mime_type": "image/png", "data_base64": "invalid!"}
+        ]}));
+        result.content.push(
+            serde_json::from_value(json!({"type": "image", "data": "aGVsbG8=",
+                                          "mimeType": "image/png", "_meta": {NAME: "chart.png"}}))
+            .unwrap(),
+        );
+        let error = name_files(Some(&schema), &result).err().unwrap();
+        assert!(
+            error.to_string().contains("Failed to decode base64"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_result_flagged_as_an_error_keeps_its_files() {
+        // Like a marked field's file: a file of a result the server flags
+        // with `isError` is stored all the same.
+        let mut result = result_of(json!({"content": [
+            {"type": "text", "text": "Export failed half-way."},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/log", "text": "step 1 ok\n"},
+             "_meta": {NAME: "export.log"}},
+        ]}));
+        result.is_error = Some(true);
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [(
+                Some("export.log".into()),
+                "text/plain".into(),
+                b"step 1 ok\n".to_vec()
+            )]
+        );
+        assert_eq!(named.output["result"], "Export failed half-way.");
+        assert_eq!(named.output["files"], json!([file_entry(&named.stored[0])]));
+    }
+
+    #[test]
+    fn a_named_resource_without_a_mime_type_gets_a_default_and_a_view_is_no_file() {
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Exported."},
+            {"type": "resource", "resource": {"uri": "file:///exports/notes", "text": "hello"},
+             "_meta": {NAME: "notes"}},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/dump", "blob": "d29ybGQ="},
+             "_meta": {NAME: "dump"}},
+            // Views of any spelling, well-formed or not, named or not, stay unread.
+            {"type": "resource",
+             "resource": {"uri": "ui://records/row", "mimeType": "text/html;profile=mcp-app",
+                          "text": "<p>SYNTHETIC-VIEW</p>"},
+             "_meta": {NAME: "view.html"}},
+            {"type": "resource", "resource": {"uri": "UI://records/chart", "blob": "invalid!"},
+             "_meta": {NAME: "view"}},
+            {"type": "resource",
+             "resource": {"uri": "ui:row", "mimeType": "invalid", "text": "<p>SYNTHETIC-VIEW</p>"},
+             "_meta": {NAME: "../view.html"}},
+            // A URI that only begins like the scheme is a file.
+            {"type": "resource",
+             "resource": {"uri": "uix://records/row.txt", "mimeType": "text/plain", "text": "row"},
+             "_meta": {NAME: "row.txt"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [
+                (Some("notes".into()), "text/plain".into(), b"hello".to_vec()),
+                (
+                    Some("dump".into()),
+                    "application/octet-stream".into(),
+                    b"world".to_vec()
+                ),
+                (Some("row.txt".into()), "text/plain".into(), b"row".to_vec()),
+            ]
+        );
+        assert_eq!(
+            named.output["files"],
+            json!([
+                file_entry(&named.stored[0]),
+                file_entry(&named.stored[1]),
+                file_entry(&named.stored[2])
+            ])
+        );
+        assert!(matches!(
+            mcp_file_content_part(named.stored[1].id, &named.stored[1].mime_type),
+            ContentPart::TextFilePointer(_)
+        ));
+        assert!(
+            !named.content.contains("SYNTHETIC-VIEW"),
+            "{}",
+            named.content
+        );
+
+        // A result that holds only a view keeps its output as it was.
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Shown."},
+            {"type": "resource",
+             "resource": {"uri": "ui://records/row", "mimeType": "text/html;profile=mcp-app",
+                          "text": "<p>SYNTHETIC-VIEW</p>"},
+             "_meta": {NAME: "view.html"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert!(named.files.is_empty());
+        assert_eq!(named.output, json!("Shown."));
+        assert_eq!(named.content, "Shown.");
+    }
+
+    #[test]
+    fn file_blocks_past_the_bound_are_left_out_unread() {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+        let image = |index: usize| {
+            json!({"type": "image", "data": STANDARD.encode(format!("image {index}")),
+                   "mimeType": "image/png", "_meta": {NAME: format!("image-{index}.png")}})
+        };
+        for count in [
+            MAX_RESULT_FILE_BLOCKS - 1,
+            MAX_RESULT_FILE_BLOCKS,
+            MAX_RESULT_FILE_BLOCKS + 1,
+            5_000,
+        ] {
+            let mut content = vec![json!({"type": "text", "text": "Done."})];
+            // Blocks that are no files do not count: links, embedded views
+            // and blocks without a name.
+            content.extend((0..MAX_RESULT_FILE_BLOCKS).flat_map(|i| {
+                [
+                    link(
+                        format!("https://records.example.test/rows/{i}"),
+                        format!("row-{i}"),
+                    ),
+                    json!({"type": "resource",
+                           "resource": {"uri": format!("ui://records/rows/{i}"),
+                                        "text": "<p>view</p>"},
+                           "_meta": {NAME: "view.html"}}),
+                    json!({"type": "image", "data": "invalid!", "mimeType": "invalid"}),
+                ]
+            }));
+            content.extend((0..count).map(image));
+            // A malformed block fails the result within the bound; past it,
+            // the block is not read.
+            content.push(
+                json!({"type": "image", "data": "invalid!", "mimeType": "invalid",
+                                "_meta": {NAME: "broken.png"}}),
+            );
+            let named = name_files(None, &result_of(json!({"content": content})));
+            if count < MAX_RESULT_FILE_BLOCKS {
+                let error = named
+                    .err()
+                    .expect("the malformed block is within the bound");
+                assert!(error.to_string().contains("Invalid MIME type"), "{error}");
+                continue;
+            }
+            let named = named.unwrap();
+            assert_eq!(named.files.len(), MAX_RESULT_FILE_BLOCKS);
+            assert_eq!(named.files[0].2, b"image 0");
+            assert_eq!(
+                named.files[MAX_RESULT_FILE_BLOCKS - 1].2,
+                format!("image {}", MAX_RESULT_FILE_BLOCKS - 1).into_bytes()
+            );
+            assert!(named.left_out);
+            let files = named.output["files"].as_array().unwrap();
+            assert_eq!(files.len(), MAX_RESULT_FILE_BLOCKS);
+            assert_eq!(named.output["filesTruncated"], true);
+            assert_eq!(named.output["result"], "Done.");
+        }
+
+        // Exactly the bound, nothing after it: nothing was left out.
+        let content: Vec<Value> = (0..MAX_RESULT_FILE_BLOCKS).map(image).collect();
+        let named = name_files(None, &result_of(json!({"content": content}))).unwrap();
+        assert_eq!(named.files.len(), MAX_RESULT_FILE_BLOCKS);
+        assert!(!named.left_out);
+        assert_eq!(named.output["filesTruncated"], false);
+    }
+
+    #[tokio::test]
+    async fn objects_get_random_names_and_are_removed_when_the_rows_cannot_be_written() {
+        let storage = FileStorage::in_memory_azblob();
+        let files = vec![
+            McpResultFile {
+                mime_type: "image/png".into(),
+                file_name: Some("chart.png".into()),
+                bytes: b"hello".to_vec(),
+            },
+            McpResultFile {
+                mime_type: "application/x-custom".into(),
+                file_name: None,
+                bytes: b"world".to_vec(),
+            },
+        ];
+        let mut written_paths = Vec::new();
+        // No database is connected, so the rows cannot be written.
+        let stored = write_mcp_files(
+            &sea_orm::DatabaseConnection::default(),
+            &storage,
+            "storage".into(),
+            "user",
+            Uuid::new_v4(),
+            files,
+            &mut written_paths,
+        )
+        .await;
+        assert!(stored.is_err());
+
+        // Both objects were written, each under a random name in the
+        // directory and with the extension of its type.
+        assert_eq!(written_paths.len(), 2);
+        for (path, (directory, extension, bytes)) in written_paths.iter().zip([
+            ("generated_images", "png", b"hello"),
+            ("generated_files", "bin", b"world"),
+        ]) {
+            let name = path
+                .strip_prefix(&format!("{directory}/"))
+                .and_then(|name| name.strip_suffix(&format!(".{extension}")))
+                .unwrap_or_else(|| panic!("unexpected path {path}"));
+            assert!(Uuid::parse_str(name).is_ok(), "{path}");
+            assert!(!path.contains("chart"), "{path}");
+            assert_eq!(storage.read_file_to_bytes(path).await.unwrap(), bytes);
+        }
+        assert_ne!(written_paths[0], written_paths[1]);
+
+        remove_mcp_objects(&storage, &written_paths).await;
+        for path in &written_paths {
+            assert!(storage.read_file_to_bytes(path).await.is_err(), "{path}");
+        }
+        // Removing what is already gone is not an error worth more than a log line.
+        remove_mcp_objects(&storage, &written_paths).await;
     }
 
     #[test]
