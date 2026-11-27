@@ -25,6 +25,16 @@ const DETAILS_VIEW: &str = "<p>SYNTHETIC-VIEW</p>";
 const DETAILS_STRUCTURED: &str = "SYNTHETIC-STRUCTURED-ONLY";
 const SERVER_LINK: &str = "https://127.0.0.1/rows/row-1";
 
+/// What a fixture adds to the marked-field cases.
+#[derive(Clone, Default)]
+struct Extras {
+    /// Content blocks the result carries beside its text.
+    blocks: Vec<Value>,
+    /// The storage refuses the upload with this number, counted from 0, and
+    /// every later one.
+    failing_put: Option<usize>,
+}
+
 #[derive(Clone)]
 struct Fixture {
     output: Value,
@@ -34,10 +44,10 @@ struct Fixture {
     /// its text, links and resources. The links are kept as links and the
     /// resources stored as files, except the embedded view.
     details: bool,
-    /// Content blocks the result carries beside its text.
-    blocks: Vec<Value>,
+    extras: Extras,
     is_error: bool,
     storage_failure: bool,
+    puts: Arc<AtomicUsize>,
     calls: Arc<AtomicUsize>,
     reads: Arc<AtomicUsize>,
     files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
@@ -93,7 +103,7 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
             result["content"]
                 .as_array_mut()
                 .unwrap()
-                .extend(fixture.blocks);
+                .extend(fixture.extras.blocks);
             if fixture.details {
                 result["structuredContent"] =
                     json!({"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_STRUCTURED}});
@@ -137,7 +147,19 @@ async fn storage(
         return http::StatusCode::FORBIDDEN.into_response();
     }
     let mut files = fixture.files.lock().unwrap();
+    if method == Method::DELETE {
+        files.remove(uri.path());
+        return http::StatusCode::NO_CONTENT.into_response();
+    }
     if method == Method::PUT {
+        let put = fixture.puts.fetch_add(1, Ordering::SeqCst);
+        if fixture
+            .extras
+            .failing_put
+            .is_some_and(|failing| put >= failing)
+        {
+            return http::StatusCode::FORBIDDEN.into_response();
+        }
         files.insert(uri.path().to_string(), body.to_vec());
         if let Some(mime) = headers.get("content-type") {
             fixture
@@ -254,7 +276,7 @@ async fn check_output(
             expected_files,
             protocol,
             false,
-            Vec::new(),
+            Extras::default(),
         )
         .await;
     }
@@ -308,7 +330,10 @@ async fn check_blocks(
             expected_files,
             protocol,
             false,
-            blocks.clone(),
+            Extras {
+                blocks: blocks.clone(),
+                ..Extras::default()
+            },
         )
         .await;
     }
@@ -331,7 +356,7 @@ async fn check_details(pool: Pool<Postgres>, approval: Option<&str>) {
             2,
             protocol,
             true,
-            Vec::new(),
+            Extras::default(),
         )
         .await;
     }
@@ -349,14 +374,15 @@ async fn check_output_for_protocol(
     expected_files: usize,
     protocol: erato::config::McpProtocolMode,
     details: bool,
-    blocks: Vec<Value>,
+    extras: Extras,
 ) {
     let fixture = Fixture {
         output,
         protocol,
         structured,
         details,
-        blocks,
+        extras,
+        puts: Arc::default(),
         is_error,
         storage_failure,
         calls: Arc::default(),
@@ -540,6 +566,10 @@ async fn check_output_for_protocol(
         "failed validation or rejection must not create file rows"
     );
     assert_eq!(fixture.files.lock().unwrap().len(), expected_files);
+    if let Some(failing) = fixture.extras.failing_put {
+        // The uploads before the refused one were written, and are gone again.
+        assert!(fixture.puts.load(Ordering::SeqCst) > failing);
+    }
 
     assert_eq!(
         fixture.calls.load(Ordering::SeqCst),
@@ -658,7 +688,7 @@ async fn check_output_for_protocol(
             }
         }
     }
-    let mut expected_bytes = block_files(&fixture.blocks);
+    let mut expected_bytes = block_files(&fixture.extras.blocks);
     if fixture.details {
         expected_bytes.extend([
             ("row-1".to_string(), DETAILS_TEXT.as_bytes().to_vec()),
@@ -701,11 +731,16 @@ async fn check_output_for_protocol(
                 .to_string()
                 .contains(&format!("erato-file://{id}"))
         );
-        // A server's name is the display name only, never the storage path.
+        // The object has a random name; a server's name is the display
+        // name only.
+        let object_name = upload
+            .file_storage_path
+            .rsplit('/')
+            .next()
+            .and_then(|name| name.split('.').next())
+            .unwrap();
         assert!(
-            !upload
-                .file_storage_path
-                .ends_with(&format!("/{}", upload.filename)),
+            Uuid::parse_str(object_name).is_ok(),
             "{}",
             upload.file_storage_path
         );
@@ -718,7 +753,8 @@ async fn check_output_for_protocol(
         {
             assert_eq!(listed["fileReference"], format!("erato-file://{id}"));
             assert!(listed["mimeType"].as_str().unwrap().contains('/'));
-            if let Some(mime_type) = block_mime_types(&fixture.blocks).get(&upload.filename) {
+            if let Some(mime_type) = block_mime_types(&fixture.extras.blocks).get(&upload.filename)
+            {
                 assert_eq!(listed["mimeType"], *mime_type, "{listed}");
             }
             let image = listed["mimeType"].as_str().unwrap().starts_with("image/");
@@ -900,6 +936,33 @@ async fn approved_storage_failure(pool: Pool<Postgres>) {
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn uninterrupted_storage_failure(pool: Pool<Postgres>) {
     check_output(pool, file_output(), None, true, false, true, "error", 0).await;
+}
+/// The second of two files cannot be stored: the first one's object is
+/// removed again and no file row is kept.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_storage_failure_after_the_first_file(pool: Pool<Postgres>) {
+    for protocol in [
+        erato::config::McpProtocolMode::Legacy,
+        erato::config::McpProtocolMode::Stateless,
+    ] {
+        check_output_for_protocol(
+            pool.clone(),
+            file_output(),
+            None,
+            true,
+            false,
+            false,
+            "error",
+            0,
+            protocol,
+            false,
+            Extras {
+                failing_put: Some(1),
+                ..Extras::default()
+            },
+        )
+        .await;
+    }
 }
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_empty_files(pool: Pool<Postgres>) {
@@ -1104,7 +1167,8 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
         protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
         details: false,
-        blocks: Vec::new(),
+        extras: Extras::default(),
+        puts: Arc::default(),
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),
@@ -1337,7 +1401,8 @@ async fn invalid_mcp_file_argument_reaches_model_and_chat_history(pool: Pool<Pos
         protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
         details: false,
-        blocks: Vec::new(),
+        extras: Extras::default(),
+        puts: Arc::default(),
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),

@@ -5,6 +5,7 @@ use crate::models::message::{
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
+use crate::services::file_storage::FileStorage;
 use crate::services::prompt_composition::replay_policy::MAX_RECEIPT_FIELD_BYTES;
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
@@ -754,6 +755,8 @@ fn mcp_file_content_part(file_upload_id: Uuid, mime_type: &str) -> ContentPart {
 }
 
 /// Stores a result's validated files as file uploads of the chat, in order.
+/// When one of them cannot be stored, none is kept: the objects written so
+/// far are removed again, and no row stays.
 async fn store_mcp_files(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -761,9 +764,56 @@ async fn store_mcp_files(
     chat_id: Uuid,
     files: Vec<McpResultFile>,
 ) -> Result<Vec<StoredMcpFile>, Report> {
-    use crate::models::file_upload::create_file_upload;
-    let mut stored = Vec::new();
+    use crate::policy::prelude::*;
 
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Checked before anything is written.
+    authorize!(
+        policy,
+        subject,
+        &Resource::Chat(chat_id.to_string()),
+        Action::Update
+    )?;
+    let file_storage = app_state.default_file_storage_provider();
+    let mut written_paths = Vec::new();
+    let stored = write_mcp_files(
+        &app_state.db,
+        file_storage,
+        app_state.default_file_storage_provider_id(),
+        subject.user_id(),
+        chat_id,
+        files,
+        &mut written_paths,
+    )
+    .await;
+    if stored.is_err() {
+        remove_mcp_objects(file_storage, &written_paths).await;
+    }
+
+    // The new file_upload rows must enter the policy data before the client
+    // fetches their previews after the turn completes.
+
+    stored
+}
+
+/// Writes the files' objects, then their rows in one transaction, so that no
+/// row is kept unless every file was stored. `written_paths` gets each
+/// object's path before the object is written.
+async fn write_mcp_files(
+    db: &sea_orm::DatabaseConnection,
+    file_storage: &FileStorage,
+    file_storage_provider_id: String,
+    owner_user_id: &str,
+    chat_id: Uuid,
+    files: Vec<McpResultFile>,
+    written_paths: &mut Vec<String>,
+) -> Result<Vec<StoredMcpFile>, Report> {
+    use crate::models::file_upload::create_file_upload_record;
+    use sea_orm::TransactionTrait;
+
+    let mut uploads = Vec::new();
     for (index, file) in files.into_iter().enumerate() {
         let mime_type = file.mime_type.as_str();
         let extension = extension_for_mime_type(mime_type).unwrap_or("bin");
@@ -776,18 +826,19 @@ async fn store_mcp_files(
         let filename = file
             .file_name
             .filter(|file_name| !file_name.is_empty())
-            .unwrap_or_else(|| generated_filename.clone());
+            .unwrap_or(generated_filename);
 
-        let file_storage_provider_id = app_state.default_file_storage_provider_id();
-        let file_storage = app_state.default_file_storage_provider();
-        // Keep MCP-provided display names out of storage paths. Besides avoiding path traversal,
-        // this preserves the existing unique generated storage naming behavior.
+        // The object gets a random name, as an upload's does. An
+        // MCP-provided name is the display name only and never part of the
+        // storage path.
         let directory = if mime_type.starts_with("image/") {
             "generated_images"
         } else {
             "generated_files"
         };
-        let file_storage_path = format!("{directory}/{generated_filename}");
+        let file_storage_path = format!("{directory}/{}.{extension}", Uuid::new_v4());
+        // Noted first: a write that fails half-way may leave an object too.
+        written_paths.push(file_storage_path.clone());
 
         let mut writer = file_storage
             .upload_file_writer(&file_storage_path, Some(mime_type))
@@ -804,30 +855,43 @@ async fn store_mcp_files(
             .await
             .wrap_err("Failed to close MCP generated file writer")?;
 
-        let file_upload = create_file_upload(
-            &app_state.db,
-            policy,
-            subject,
+        uploads.push((filename, file.mime_type, file_storage_path));
+    }
+
+    let transaction = db.begin().await?;
+    let mut stored = Vec::new();
+    for (filename, mime_type, file_storage_path) in uploads {
+        let file_upload = create_file_upload_record(
+            &transaction,
+            Uuid::new_v4(),
+            owner_user_id.to_string(),
             &chat_id,
             filename.clone(),
             file_storage_provider_id.clone(),
-            file_storage_path.clone(),
+            file_storage_path,
             None,
             None,
         )
         .await?;
-
         stored.push(StoredMcpFile {
             id: file_upload.id,
             file_name: filename,
-            mime_type: file.mime_type,
+            mime_type,
         });
     }
-
-    // The new file_upload rows must enter the policy data before the client
-    // fetches their previews after the turn completes.
+    transaction.commit().await?;
 
     Ok(stored)
+}
+
+/// Removes objects of files that were not stored after all. A removal that
+/// fails is logged and the others still run.
+async fn remove_mcp_objects(file_storage: &FileStorage, paths: &[String]) {
+    for path in paths {
+        if let Err(error) = file_storage.delete_generated_file(path).await {
+            tracing::warn!(%error, path, "Failed to remove an MCP generated file that was not stored");
+        }
+    }
 }
 
 fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
@@ -2671,6 +2735,60 @@ mod tests {
             error.to_string().contains("Failed to decode base64"),
             "{error}"
         );
+    }
+
+    #[tokio::test]
+    async fn objects_get_random_names_and_are_removed_when_the_rows_cannot_be_written() {
+        let storage = FileStorage::in_memory_azblob();
+        let files = vec![
+            McpResultFile {
+                mime_type: "image/png".into(),
+                file_name: Some("chart.png".into()),
+                bytes: b"hello".to_vec(),
+            },
+            McpResultFile {
+                mime_type: "application/x-custom".into(),
+                file_name: None,
+                bytes: b"world".to_vec(),
+            },
+        ];
+        let mut written_paths = Vec::new();
+        // No database is connected, so the rows cannot be written.
+        let stored = write_mcp_files(
+            &sea_orm::DatabaseConnection::default(),
+            &storage,
+            "storage".into(),
+            "user",
+            Uuid::new_v4(),
+            files,
+            &mut written_paths,
+        )
+        .await;
+        assert!(stored.is_err());
+
+        // Both objects were written, each under a random name in the
+        // directory and with the extension of its type.
+        assert_eq!(written_paths.len(), 2);
+        for (path, (directory, extension, bytes)) in written_paths.iter().zip([
+            ("generated_images", "png", b"hello"),
+            ("generated_files", "bin", b"world"),
+        ]) {
+            let name = path
+                .strip_prefix(&format!("{directory}/"))
+                .and_then(|name| name.strip_suffix(&format!(".{extension}")))
+                .unwrap_or_else(|| panic!("unexpected path {path}"));
+            assert!(Uuid::parse_str(name).is_ok(), "{path}");
+            assert!(!path.contains("chart"), "{path}");
+            assert_eq!(storage.read_file_to_bytes(path).await.unwrap(), bytes);
+        }
+        assert_ne!(written_paths[0], written_paths[1]);
+
+        remove_mcp_objects(&storage, &written_paths).await;
+        for path in &written_paths {
+            assert!(storage.read_file_to_bytes(path).await.is_err(), "{path}");
+        }
+        // Removing what is already gone is not an error worth more than a log line.
+        remove_mcp_objects(&storage, &written_paths).await;
     }
 
     #[test]
