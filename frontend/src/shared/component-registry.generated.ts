@@ -419,6 +419,8 @@ export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/Collapsi
 export { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 export { useConversationMessage } from "@/components/ui/Message/ConversationMessages";
 export { useConversationSelector } from "@/components/ui/Message/ConversationMessages";
+export { DecisionPlaceContext } from "@/components/ui/Message/decisionPlace";
+export { useInDecisionPlace } from "@/components/ui/Message/decisionPlace";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
 export { DefaultEratoAppointmentCodeBlock } from "@/components/ui/Message/EratoAppointmentBlock";
 export { EratoAppointmentBlock } from "@/components/ui/Message/EratoAppointmentBlock";

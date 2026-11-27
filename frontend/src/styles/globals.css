@@ -601,6 +601,20 @@ body {
     border-radius: var(--theme-radius-control);
   }
 
+  /* A card's own row of buttons in a slim pane takes the compact size, under a
+     mouse only: a finger keeps the full target. The buttons stay size "sm" so
+     a theme's data-geometry rules still reach them; two classes outrank the
+     button's own geometry and type scale. */
+  @media (max-width: 639.98px) and (hover: hover) and (pointer: fine) {
+    .card-actions .btn-geometry-sm {
+      padding-block: 0.25rem;
+      min-height: 0;
+      min-width: 0;
+      font-size: var(--theme-font-size-xs);
+      line-height: var(--theme-line-height-xs);
+    }
+  }
+
   /* The capsule/circle dialect. A capsule is a text label plus inline padding
      and reads the pill token; a circle is an intrinsic square with no label
      and declares 50%, so a theme softening the pill radius — which is what

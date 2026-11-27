@@ -844,7 +844,10 @@ export function WordDocumentPlanCard({
     <WordStatusAlert status={review.status}>{status}</WordStatusAlert>
   ) : (
     commentWarning && (
-      <Alert type="warning" className="m-3 [overflow-wrap:anywhere]">
+      <Alert
+        type="warning"
+        className="word-review__aside my-3 [overflow-wrap:anywhere]"
+      >
         {commentWarning}
       </Alert>
     )
@@ -852,7 +855,7 @@ export function WordDocumentPlanCard({
   const statusTrailing = (
     <>
       {mismatchedParagraphs.length > 0 && (
-        <div className="word-review__actions m-3 mt-0">
+        <div className="word-review__actions word-review__aside mb-3">
           {mismatchedParagraphs.map((id, i) => (
             <Button
               key={id}
@@ -872,7 +875,7 @@ export function WordDocumentPlanCard({
       )}
       <WordDiagnosticDetails diagnostic={review.documentPlanDiagnostic} />
       {status && errorReport && (
-        <div className="m-3 mt-0">
+        <div className="word-review__aside mb-3">
           <CopyErrorButton
             error={errorReport}
             reportOptions={{ chatId: currentChatId }}
@@ -1106,7 +1109,7 @@ export function WordDocumentPlanCard({
             <Alert
               type="info"
               role="status"
-              className="m-3 [overflow-wrap:anywhere]"
+              className="word-review__aside my-3 [overflow-wrap:anywhere]"
             >
               {blockedText}
             </Alert>

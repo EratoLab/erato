@@ -1,22 +1,21 @@
-import {
-  sanitizeHtmlPreview,
-  useConversationMessage,
-} from "@erato/frontend/library";
+import { useConversationMessage } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useMemo } from "react";
 
 import {
-  appointmentAttendeesText,
-  appointmentWhenText,
-} from "../utils/outlookCreateAppointment";
+  parseProposalApplyInput,
+  sameItem,
+} from "../../core/clientActions/proposalApply";
+import { useOutlookMailItem } from "../providers/OutlookMailItemProvider";
 import {
   OUTLOOK_PROPOSAL_TOOLS,
   outlookAppointmentDraft,
   outlookEmailDraft,
+  outlookProposalBridge,
+  outlookReplyItem,
 } from "../utils/outlookProposalApply";
 import { getReadModeRecipientSummary } from "../utils/outlookReadReply";
 
-import type { AppointmentDetails } from "../utils/outlookCreateAppointment";
 import type { ApprovalItemCardProps } from "@erato/frontend/library";
 
 /** The pane's Outlook namespace, as the server names its tools' requests. */
@@ -24,8 +23,9 @@ const OUTLOOK_NAMESPACE = "outlook";
 const PROPOSAL_TOOLS = new Set(Object.values(OUTLOOK_PROPOSAL_TOOLS));
 
 /**
- * A proposed Outlook action the server carries out, in the chat's decision place: what the reply
- * or appointment will hold, above the usual decisions. Anything else gets the generic card.
+ * A proposed Outlook action the server carries out, in the chat's decision place: who the reply
+ * goes to and that it opens the draft above, over the usual decisions. Anything else gets the
+ * generic card.
  */
 export function OutlookApprovalItemCard(props: ApprovalItemCardProps) {
   const { item, serverId, status, renderDefault } = props;
@@ -49,106 +49,88 @@ function OutlookProposalCard({
   const artifact = message?.hostArtifact;
   const appointment =
     item.tool_name === OUTLOOK_PROPOSAL_TOOLS["outlook.create_appointment"];
-  const note = useMemo(() => {
-    if (appointment) {
-      const draft = outlookAppointmentDraft(content);
-      return "details" in draft ? (
-        <AppointmentPreview details={draft.details} />
-      ) : null;
-    }
-    const draft = outlookEmailDraft(content, artifact);
-    if ("missing" in draft) return null;
-    const replyAll =
-      item.tool_name === OUTLOOK_PROPOSAL_TOOLS["outlook.reply_all"];
-    return (
-      <ReplyPreview
-        content={draft.content}
-        isHtml={draft.isHtml}
-        replyAll={replyAll}
-      />
-    );
-  }, [appointment, content, artifact, item.tool_name]);
-  return <>{renderDefault(note ? { note } : undefined)}</>;
+  // The draft is in the answer right above; the card names what the draft does not show.
+  const found = useMemo(
+    () =>
+      !(
+        "missing" in
+        (appointment
+          ? outlookAppointmentDraft(content)
+          : outlookEmailDraft(content, artifact))
+      ),
+    [appointment, content, artifact],
+  );
+  if (!found) return <>{renderDefault()}</>;
+  const note = appointment ? (
+    <p
+      className="text-xs text-theme-fg-secondary"
+      data-testid="outlook-proposal-appointment"
+    >
+      {t({
+        id: "officeAddin.proposal.appointmentFromDraft",
+        message:
+          "This opens the appointment above in Outlook. Nothing is saved or sent until you do it there.",
+      })}
+    </p>
+  ) : (
+    <ReplyNote
+      replyAll={item.tool_name === OUTLOOK_PROPOSAL_TOOLS["outlook.reply_all"]}
+      draftItem={outlookReplyItem(
+        parseProposalApplyInput(item.input)?.itemIdentity,
+        outlookProposalBridge()?.message(messageId),
+      )}
+    />
+  );
+  return <>{renderDefault({ note })}</>;
 }
 
-function ReplyPreview({
-  content,
-  isHtml,
+function ReplyNote({
   replyAll,
+  draftItem,
 }: {
-  content: string;
-  isHtml: boolean;
   replyAll: boolean;
+  /** The email the draft was written for, when known. */
+  draftItem: string | undefined;
 }) {
-  // Read from the email open now: the reply form takes its recipients from it.
-  const summary = getReadModeRecipientSummary();
+  const { itemIdentity } = useOutlookMailItem();
+  // Approving is refused while another email is open, so the card promises no reply to it.
+  if (draftItem && itemIdentity && draftItem !== itemIdentity)
+    return (
+      <p
+        className="text-xs text-theme-fg-secondary"
+        data-testid="outlook-proposal-other-email"
+      >
+        {t({
+          id: "officeAddin.emailRenderer.replyStaleItem",
+          message:
+            "This draft was written for a different email. Open that email again, or use Copy.",
+        })}
+      </p>
+    );
+  // The reply form takes its recipients from the email open now, so they are named only when
+  // that is known to be the email the draft was written for.
+  const summary = sameItem(draftItem, itemIdentity)
+    ? getReadModeRecipientSummary()
+    : null;
   const entries = summary
     ? [
         ...(summary.sender ? [summary.sender] : []),
         ...(replyAll ? summary.recipients : []),
       ]
     : [];
-  const html = useMemo(
-    () => (isHtml ? sanitizeHtmlPreview(content) : null),
-    [content, isHtml],
-  );
   return (
-    <div className="space-y-2" data-testid="outlook-proposal-reply">
+    <div className="space-y-1" data-testid="outlook-proposal-reply">
       {entries.length > 0 && (
         <p className="break-words text-xs text-theme-fg-secondary">
           {t({ id: "officeAddin.proposal.replyTo", message: "To:" })}{" "}
           {entries.join(", ")}
         </p>
       )}
-      {html !== null ? (
-        <div
-          className="max-h-48 overflow-auto text-sm [&_p]:my-1"
-          // Sanitized with DOMPurify before rendering.
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ) : (
-        <div className="max-h-48 overflow-auto whitespace-pre-wrap text-sm">
-          {content}
-        </div>
-      )}
       <p className="text-xs text-theme-fg-secondary">
         {t({
-          id: "officeAddin.proposal.replyNotSent",
+          id: "officeAddin.proposal.replyFromDraft",
           message:
-            "This opens a prefilled reply. Nothing is sent until you press Send in Outlook.",
-        })}
-      </p>
-    </div>
-  );
-}
-
-function AppointmentPreview({ details }: { details: AppointmentDetails }) {
-  const attendees = appointmentAttendeesText(details);
-  return (
-    <div
-      className="space-y-1 text-sm"
-      data-testid="outlook-proposal-appointment"
-    >
-      <p className="font-medium text-theme-fg-primary [overflow-wrap:anywhere]">
-        {details.subject}
-      </p>
-      <p className="text-theme-fg-secondary">{appointmentWhenText(details)}</p>
-      {details.location ? (
-        <p className="text-theme-fg-secondary [overflow-wrap:anywhere]">
-          {details.location}
-        </p>
-      ) : null}
-      {attendees && (
-        <p className="break-words text-xs text-theme-fg-secondary">
-          {attendees}
-        </p>
-      )}
-      <p className="text-xs text-theme-fg-secondary">
-        {t({
-          id: "officeAddin.proposal.appointmentNotSent",
-          message:
-            "This opens a prefilled appointment. Nothing is saved or sent until you do it in Outlook.",
+            "This opens the draft above as a reply. Nothing is sent until you press Send in Outlook.",
         })}
       </p>
     </div>

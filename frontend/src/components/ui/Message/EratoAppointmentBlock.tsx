@@ -101,7 +101,7 @@ export function DefaultEratoAppointmentCodeBlock({
 
   if (!summary) {
     return (
-      <div className="my-2 whitespace-pre-wrap rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3 text-sm text-theme-fg-muted">
+      <div className="my-2 whitespace-pre-wrap rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3 text-sm text-theme-fg-muted">
         {content}
       </div>
     );
@@ -137,7 +137,7 @@ export function DefaultEratoAppointmentCodeBlock({
   ];
 
   return (
-    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
       <p className="text-xs uppercase tracking-wide text-theme-fg-muted">
         {t({
           id: "chat.message.appointment.suggested",

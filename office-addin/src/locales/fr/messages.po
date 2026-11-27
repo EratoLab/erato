@@ -606,12 +606,14 @@ msgstr "Impossible d'ouvrir le formulaire de réponse. Vérifiez que l'e-mail re
 #~ msgstr "Formulaire de réponse ouvert"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
 msgid "officeAddin.emailRenderer.replyStaleItem"
 msgstr "Ce brouillon a été rédigé pour un autre e-mail. Rouvrez cet e-mail ou utilisez Copier."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookEratoEmailRenderer.tsx
+#: src/outlook/components/OutlookProposalStatus.tsx
 msgid "officeAddin.emailRenderer.replyTooLarge"
 msgstr "Le brouillon est trop volumineux pour préremplir une réponse. Utilisez Copier et collez-le dans une réponse."
 
@@ -1371,6 +1373,86 @@ msgid "officeAddin.outlook.context.thread.spoken"
 msgstr "Fil d’e-mails"
 
 #. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentMaybeOpen"
+msgstr "Le rendez-vous est peut-être déjà ouvert dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentNotOpened"
+msgstr "Aucun rendez-vous n’a été ouvert."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.appointmentOpened"
+msgstr "Rendez-vous ouvert dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedAppointment"
+msgstr "Refusé. Aucun rendez-vous n’a été ouvert."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.deniedReply"
+msgstr "Refusé. Aucune réponse n’a été ouverte."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingAppointment"
+msgstr "Ouverture du rendez-vous…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.openingReply"
+msgstr "Ouverture de la réponse…"
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.otherEmail"
+msgstr "Aucune réponse n’a été ouverte : un autre e-mail est ouvert maintenant."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneAppointment"
+msgstr "Aucun rendez-vous n’a été ouvert : le volet Erato a été fermé."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.paneGoneReply"
+msgstr "Aucune réponse n’a été ouverte : le volet Erato a été fermé."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyMaybeOpen"
+msgstr "La réponse est peut-être déjà ouverte dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyNotOpened"
+msgstr "Aucune réponse n’a été ouverte."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.replyOpened"
+msgstr "Réponse ouverte dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedAppointment"
+msgstr "Arrêté. Aucun rendez-vous n’a été ouvert."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.stoppedReply"
+msgstr "Arrêté. Aucune réponse n’a été ouverte."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookProposalStatus.tsx
+msgid "officeAddin.outlook.proposal.waiting"
+msgstr "En attente de votre décision"
+
+#. js-lingui-explicit-id
 #: src/outlook/utils/outlookSentWith.ts
 msgid "officeAddin.outlook.sentWith.draft.meta.to"
 msgstr "{others, plural, =0 {À {first}} other {À {first} +#}}"
@@ -1582,13 +1664,23 @@ msgstr "{missing} des {total} images de diapositives n’ont pas pu être envoy�
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.appointmentNotSent"
-msgstr ""
+msgid "officeAddin.proposal.appointmentFromDraft"
+msgstr "Cela ouvre le rendez-vous ci-dessus dans Outlook. Rien n’est enregistré ni envoyé avant que vous le fassiez vous-même."
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx
-msgid "officeAddin.proposal.replyNotSent"
-msgstr ""
+#~ msgid "officeAddin.proposal.appointmentNotSent"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+msgid "officeAddin.proposal.replyFromDraft"
+msgstr "Cela ouvre le brouillon ci-dessus comme réponse. Rien n’est envoyé avant que vous cliquiez sur Envoyer dans Outlook."
+
+#. js-lingui-explicit-id
+#: src/outlook/components/OutlookApprovalItemCard.tsx
+#~ msgid "officeAddin.proposal.replyNotSent"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/outlook/components/OutlookApprovalItemCard.tsx

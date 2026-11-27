@@ -1,10 +1,20 @@
 .word-review {
   --review-line: var(--theme-border);
   --review-muted: var(--theme-fg-secondary);
+  --review-inset: var(--theme-spacing-message-padding-x);
   margin-block: var(--theme-spacing-message-gap);
   min-width: 0;
   max-width: 100%;
   text-align: left;
+}
+/* In the chat's decision place the place's own frame and inset hold the card;
+   a bordered box inside it keeps an inset of its own. */
+.word-review--flush {
+  --review-inset: 0px;
+  margin-block: 0;
+}
+.word-review--flush :where(.card-skin, .word-parts__changes) {
+  --review-inset: var(--theme-spacing-message-padding-x);
 }
 :where(.word-review) :where(h3, h4, p) {
   margin: 0;
@@ -12,14 +22,12 @@
 .word-review__header {
   display: grid;
   gap: var(--theme-spacing-message-gap);
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
+  padding: var(--theme-spacing-message-padding-y) var(--review-inset);
 }
 .word-review__receipt {
   display: grid;
   gap: 4px;
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
+  padding: var(--theme-spacing-message-padding-y) var(--review-inset);
 }
 .word-review h3 {
   font-size: var(--theme-font-size-xl);
@@ -54,8 +62,7 @@
   align-items: end;
   flex-wrap: wrap;
   gap: 10px;
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
+  padding: var(--theme-spacing-message-padding-y) var(--review-inset);
   border-block: 1px solid var(--review-line);
 }
 .word-review__filters > span {
@@ -85,6 +92,15 @@
 .word-review__row--open {
   background: var(--theme-bg-secondary);
 }
+/* With no inset of its own a fill would end at the text's edge. */
+.word-review--flush .word-review__row--open {
+  background: none;
+}
+.word-review--flush
+  :where(.card-skin, .word-parts__changes)
+  .word-review__row--open {
+  background: var(--theme-bg-secondary);
+}
 /* Row variant="list" owns no padding or type scale; the card's inset and
    text size come from here so rows line up with the header above them. */
 .word-review__row-toggle {
@@ -92,7 +108,7 @@
   align-items: start;
   gap: var(--theme-spacing-control-gap);
   width: 100%;
-  padding: 0.625rem var(--theme-spacing-message-padding-x);
+  padding: 0.625rem var(--review-inset);
   text-align: left;
   font-size: var(--theme-font-size-sm);
   line-height: var(--theme-line-height-sm);
@@ -108,8 +124,7 @@
   text-overflow: ellipsis;
 }
 .word-review__detail {
-  padding: 0 var(--theme-spacing-message-padding-x)
-    var(--theme-spacing-message-padding-y);
+  padding: 0 var(--review-inset) var(--theme-spacing-message-padding-y);
   display: grid;
   gap: 10px;
 }
@@ -134,12 +149,15 @@
 .word-review__footer {
   display: grid;
   gap: 10px;
-  padding: var(--theme-spacing-message-padding-y)
-    var(--theme-spacing-message-padding-x);
+  padding: var(--theme-spacing-message-padding-y) var(--review-inset);
   border-top: 1px solid var(--review-line);
 }
 .word-review__footer > button {
   justify-self: start;
+}
+/* A notice or a button row inside the card, set in a little from the card's own inset. */
+.word-review__aside {
+  margin-inline: calc(var(--review-inset) * 0.75);
 }
 .word-review__actions {
   display: flex;
@@ -185,8 +203,7 @@
 .word-review__diagnostic {
   display: grid;
   justify-items: start;
-  padding: 0 var(--theme-spacing-message-padding-x)
-    var(--theme-spacing-message-padding-y);
+  padding: 0 var(--review-inset) var(--theme-spacing-message-padding-y);
 }
 .word-review__diagnostic-body {
   display: grid;
@@ -232,8 +249,7 @@
 .word-plan-review__section {
   display: grid;
   gap: 6px;
-  padding: 0 var(--theme-spacing-message-padding-x)
-    var(--theme-spacing-message-padding-y);
+  padding: 0 var(--review-inset) var(--theme-spacing-message-padding-y);
   justify-items: stretch;
 }
 .word-plan-review__section > button {
@@ -266,8 +282,7 @@
   padding: 0.5rem 0.25rem;
 }
 .word-plan-review__hint {
-  padding: 0 var(--theme-spacing-message-padding-x)
-    var(--theme-spacing-message-padding-y);
+  padding: 0 var(--review-inset) var(--theme-spacing-message-padding-y);
 }
 
 /* A change in parts: one flat list the chat scrolls, never a scroll box of its own, so twenty

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { DecisionPlaceContext } from "@/components/ui/Message/decisionPlace";
 
 import { WordProposalCard } from "../WordProposalCard";
 
@@ -198,6 +199,19 @@ describe("WordProposalCard", () => {
 
     view.rerender(<WordProposalCard plan={plan} snapshot={snapshot()} />);
     expect(screen.queryByTestId("word-plan-not-changed")).toBeNull();
+  });
+
+  it("leaves its frame and inset to the decision place it is drawn in", () => {
+    render(
+      <DecisionPlaceContext.Provider value>
+        <WordProposalCard plan={plan} snapshot={snapshot()} testId="card" />
+      </DecisionPlaceContext.Provider>,
+      { wrapper },
+    );
+
+    const card = screen.getByTestId("card");
+    expect(card).toHaveClass("word-review--flush");
+    expect(card).not.toHaveClass("border");
   });
 
   it("hands the footer and status to an adapter", () => {

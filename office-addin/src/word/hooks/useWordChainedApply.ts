@@ -1,22 +1,19 @@
 import { useConversationSelector } from "@erato/frontend/library";
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 import {
-  answerFences,
-  USER_PICKS,
-} from "../../core/clientActions/proposalApply";
+  chainedCallId,
+  chainedCallState,
+  chainedProposalState,
+  useChainedState,
+} from "../../core/clientActions/chainedCall";
+import { answerFences } from "../../core/clientActions/proposalApply";
 import { useWordWrite } from "../providers/WordWriteProvider";
-import {
-  wordChainedApplyCallId,
-  wordChainedApplyState,
-  wordChainedHoldsAction,
-} from "../utils/wordChainedApply";
-import {
-  CLIENT_ACTION_TOOL_NAME,
-  WORD_CLIENT_ACTIONS,
-} from "../utils/wordClientActions";
+import { wordChainedHoldsAction } from "../utils/wordChainedApply";
+import { WORD_CLIENT_ACTIONS } from "../utils/wordClientActions";
 import { wordDocumentReadSession } from "../utils/wordDocumentReadTool";
 
+import type { WordApplyCallResult } from "../utils/wordApplyCall";
 import type { WordChainedApplyState } from "../utils/wordChainedApply";
 import type { WordClientAction } from "../utils/wordClientActions";
 import type { ContentPart } from "@erato/frontend/library";
@@ -24,76 +21,44 @@ import type { WordDocumentCapture } from "@erato/frontend/word-review";
 
 /**
  * Where the server's apply of this card's submission stands, or undefined when the server applies
- * none (today's card, which applies itself). Read as one string, so streamed text does not redraw
- * the card.
+ * none (today's card, which applies itself).
  */
 export function useWordChainedApply(
   messageId: string | undefined,
   submissionCallId: string | undefined,
 ): WordChainedApplyState | undefined {
-  const selected = useConversationSelector((messages) => {
-    const content = messageId ? messages[messageId]?.content : undefined;
-    const applyCallId = wordChainedApplyCallId(content, submissionCallId);
-    return applyCallId
-      ? JSON.stringify(wordChainedApplyState(content, applyCallId))
-      : "";
-  }, Object.is);
-  return useMemo(
-    () =>
-      selected ? (JSON.parse(selected) as WordChainedApplyState) : undefined,
-    [selected],
-  );
+  return useChainedState<WordApplyCallResult>(messageId, (content) => {
+    const applyCallId = chainedCallId(content, submissionCallId);
+    return applyCallId ? chainedCallState(content, applyCallId) : undefined;
+  });
 }
 
 /**
- * Where the server's call for the answer's proposed action stands, as the stored answer has it.
- * Undefined when the server makes none, or when the answer offers several versions: the user then
- * picks one with its own button.
+ * Where the server's call for the answer's proposed action stands. Undefined when the server
+ * makes none, or when the answer offers several versions: the user then picks one with its own
+ * button.
  */
 export function wordChainedProposalState(
   content: readonly ContentPart[] | undefined,
   action: WordClientAction,
 ): WordChainedApplyState | undefined {
-  // After a change request the model proposes again, and that call is the one that stands.
-  const applyCallId = (content ?? [])
-    .flatMap((part) =>
-      part.content_type === "tool_use" &&
-      part.tool_name === CLIENT_ACTION_TOOL_NAME &&
-      typeof part.input === "object" &&
-      part.input !== null &&
-      (part.input as Record<string, unknown>).action === action
-        ? [wordChainedApplyCallId(content, part.tool_call_id)]
-        : [],
-    )
-    .findLast((callId) => callId !== undefined);
-  if (!applyCallId) return undefined;
   const language = WORD_CLIENT_ACTIONS.get(action)?.fenceLanguage;
-  const versions = answerFences(content).filter(
-    (fence) => fence.language === language,
-  ).length;
-  if (versions > 1) return undefined;
-  const state = wordChainedApplyState(content, applyCallId);
-  return state.kind === "done" && state.result.reason === USER_PICKS
-    ? undefined
-    : state;
+  return chainedProposalState<WordApplyCallResult>(
+    content,
+    [action],
+    (answer) =>
+      answerFences(answer).filter((fence) => fence.language === language)
+        .length > 1,
+  );
 }
 
-/** {@link wordChainedProposalState} for a card in the answer, read as one string. */
+/** {@link wordChainedProposalState} for a card in the answer. */
 export function useWordChainedProposal(
   messageId: string | undefined,
   action: WordClientAction,
 ): WordChainedApplyState | undefined {
-  const selected = useConversationSelector((messages) => {
-    const state = wordChainedProposalState(
-      messageId ? messages[messageId]?.content : undefined,
-      action,
-    );
-    return state ? JSON.stringify(state) : "";
-  }, Object.is);
-  return useMemo(
-    () =>
-      selected ? (JSON.parse(selected) as WordChainedApplyState) : undefined,
-    [selected],
+  return useChainedState<WordApplyCallResult>(messageId, (content) =>
+    wordChainedProposalState(content, action),
   );
 }
 

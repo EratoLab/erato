@@ -132,23 +132,47 @@ const isEmailAction = (action: string): action is OutlookEmailClientAction =>
 const openedForms = new Set<string>();
 
 /**
- * Records that the card in an answer opened this action's form on the user's click, so the
- * server's call for the same answer does not open a second one.
+ * Records that this action's form is opening or open for an answer, from the card's button or the
+ * server's call, so the other one does not open a second form. Returns the undo for an open that
+ * failed; it leaves an earlier open of the same form recorded.
  */
 export function markOutlookFormOpened(
   messageId: string | undefined,
   action: OutlookClientAction,
-): void {
-  if (messageId) openedForms.add(`${messageId}:${action}`);
+): () => void {
+  const key = `${messageId}:${action}`;
+  if (!messageId || openedForms.has(key)) return () => {};
+  openedForms.add(key);
+  return () => {
+    openedForms.delete(key);
+  };
 }
 
-const formOpened = (messageId: string, action: string) =>
-  openedForms.has(`${messageId}:${action}`);
+/** Whether this action's form is opening or was opened for this answer in this pane session. */
+export const outlookFormOpened = (
+  messageId: string | undefined,
+  action: string,
+): boolean => !!messageId && openedForms.has(`${messageId}:${action}`);
 
 /** For tests: forgets the forms the cards opened. */
 export function resetOutlookOpenedForms(): void {
   openedForms.clear();
 }
+
+/**
+ * The email a reply for an answer may open on: the one the server's call names, else the one the
+ * answer was made for.
+ */
+export const outlookReplyItem = (
+  requested: string | null | undefined,
+  message:
+    | {
+        artifact: OutlookHostArtifact | undefined;
+        sendItemIdentity: string | undefined;
+      }
+    | undefined,
+): string | undefined =>
+  requested ?? message?.artifact?.itemIdentity ?? message?.sendItemIdentity;
 
 /** Several drafts are versions the user picks from with their own buttons, not a failure. */
 const missing = (why: "not_found" | "ambiguous"): ProposalApplyResult =>
@@ -175,13 +199,10 @@ export function createOutlookProposalExecutor(
       if (!message) return { status: "unavailable", reason: "no_message" };
       if (!message.latest)
         return { status: "unavailable", reason: "not_latest" };
-      if (formOpened(context.messageId, input.action))
+      if (outlookFormOpened(context.messageId, input.action))
         return { status: "applied", reason: "already_applied" };
       if (isEmailAction(input.action)) {
-        const expected =
-          input.itemIdentity ??
-          message.artifact?.itemIdentity ??
-          message.sendItemIdentity;
+        const expected = outlookReplyItem(input.itemIdentity, message);
         if (!sameItem(expected, host.itemIdentity()))
           return { status: "unavailable", reason: "other_item" };
         const draft = outlookEmailDraft(message.content, message.artifact);
@@ -189,11 +210,14 @@ export function createOutlookProposalExecutor(
         if (context.signal?.aborted)
           return { status: "failed", reason: "stopped" };
         writeStarts();
+        // Recorded before the form is open: a second call arriving meanwhile must not open
+        // another one.
+        const unmark = markOutlookFormOpened(context.messageId, input.action);
         try {
           await openReplyForm(input.action, draft.content, draft.isHtml);
-          markOutlookFormOpened(context.messageId, input.action);
           return { status: "applied" };
         } catch (error) {
+          unmark();
           return {
             status: "failed",
             reason:

@@ -1,13 +1,14 @@
-import { useOutlookArtifact } from "@erato/frontend/library";
+import { Button, useOutlookArtifact } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  ACTION_BUTTON_CLASS,
-  PRIMARY_ACTION_BUTTON_CLASS,
-} from "../../core/clientActions/clientActionButtonStyles";
+  OutlookProposalStatus,
+  useOutlookProposalState,
+} from "./OutlookProposalStatus";
 import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import {
+  APPOINTMENT_CLIENT_ACTIONS,
   offerableAppointmentClientActions,
   type OutlookAppointmentClientAction,
 } from "../utils/outlookClientActions";
@@ -18,7 +19,11 @@ import {
   appointmentAttendeesText,
   appointmentWhenText,
 } from "../utils/outlookCreateAppointment";
-import { markOutlookFormOpened } from "../utils/outlookProposalApply";
+import {
+  markOutlookFormOpened,
+  outlookAppointmentDraft,
+  outlookFormOpened,
+} from "../utils/outlookProposalApply";
 
 import type { EratoAppointmentCodeBlockProps } from "@erato/frontend/library";
 
@@ -69,6 +74,14 @@ export function OutlookEratoAppointmentRenderer({
     (offeredActions as string[]).includes(artifact.proposedClientAction)
       ? (artifact.proposedClientAction as OutlookAppointmentClientAction)
       : undefined;
+  const proposal = useOutlookProposalState(
+    artifact?.messageId,
+    APPOINTMENT_CLIENT_ACTIONS,
+    (answer) => {
+      const draft = outlookAppointmentDraft(answer);
+      return "missing" in draft && draft.missing === "ambiguous";
+    },
+  );
 
   const [status, setStatus] = useState<"idle" | "opening" | "done" | "error">(
     "idle",
@@ -118,7 +131,7 @@ export function OutlookEratoAppointmentRenderer({
   // visible but unstyled as an artifact.
   if (!details) {
     return (
-      <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+      <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
         <pre className="whitespace-pre-wrap break-words text-xs text-theme-fg-muted">
           {content}
         </pre>
@@ -130,7 +143,7 @@ export function OutlookEratoAppointmentRenderer({
   const attendeesText = appointmentAttendeesText(details);
 
   return (
-    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-secondary p-3">
+    <div className="my-2 rounded-[var(--theme-radius-message)] border border-theme-border bg-theme-bg-primary p-3">
       <dl className="mb-2 space-y-0.5 text-sm">
         <div className="flex gap-1">
           <dt className="font-medium text-theme-fg-primary">
@@ -186,18 +199,15 @@ export function OutlookEratoAppointmentRenderer({
         )}
       </dl>
       {offeredActions.length > 0 && (
-        <div className="flex gap-2">
+        <div className="card-actions flex flex-wrap gap-2">
           {offeredActions.map((action) => (
-            <button
+            <Button
               key={action}
-              type="button"
+              variant={
+                action === proposedAction && !proposal ? "primary" : "secondary"
+              }
               onClick={() => void handleActionClick()}
               disabled={isBusy}
-              className={
-                action === proposedAction
-                  ? PRIMARY_ACTION_BUTTON_CLASS
-                  : ACTION_BUTTON_CLASS
-              }
             >
               {isBusy
                 ? t({
@@ -213,9 +223,19 @@ export function OutlookEratoAppointmentRenderer({
                       id: "officeAddin.appointmentRenderer.openAppointment",
                       message: "Open appointment",
                     })}
-            </button>
+            </Button>
           ))}
         </div>
+      )}
+      {proposal && (
+        <OutlookProposalStatus
+          state={proposal}
+          kind="appointment"
+          openedHere={outlookFormOpened(
+            artifact?.messageId,
+            "outlook.create_appointment",
+          )}
+        />
       )}
       {status === "error" && (
         <p role="alert" className="mt-1 text-xs text-theme-error-fg">

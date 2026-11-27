@@ -8,7 +8,6 @@ import {
   wordPartsSectionPlanCall,
 } from "@erato/frontend/word-review";
 
-import { wordChainedApplyCallId } from "./wordChainedApply";
 import {
   extractProposedClientAction,
   offerableWordClientActionsForFacet,
@@ -19,6 +18,7 @@ import {
   WORD_REPLACE_FENCE,
 } from "./wordClientActions";
 import { WORD_SUBMIT_PLAN_ACTION } from "./wordDocumentSubmission";
+import { chainedCallId } from "../../core/clientActions/chainedCall";
 
 import type {
   ContentPart,
@@ -59,7 +59,7 @@ function chainedCards(
       language: WORD_COMMENT_CARD_FENCES[comment.action],
     }));
   const cards = [...plans, ...comments];
-  if (!cards.some((card) => wordChainedApplyCallId(content, card.toolCallId)))
+  if (!cards.some((card) => chainedCallId(content, card.toolCallId)))
     return undefined;
   const order = new Map(
     (content ?? []).map((part, index) => [

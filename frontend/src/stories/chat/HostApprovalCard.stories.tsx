@@ -140,9 +140,12 @@ type Setup = "host" | "reviewGone" | "elsewhere";
 const DecisionPlace = ({
   setup,
   request,
+  width,
 }: {
   setup: Setup;
   request: McpToolApprovalRequestPart;
+  /** The column the card gets, such as an Office pane's; the web chat's when unset. */
+  width?: number;
 }) => {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
@@ -177,7 +180,7 @@ const DecisionPlace = ({
           },
         })}
       >
-        <div className="max-w-xl">
+        <div className="max-w-xl" style={width ? { width } : undefined}>
           <McpToolApprovalCard
             messageId="story-message"
             request={request}
@@ -211,6 +214,15 @@ export const HostCard: Story = {
   args: {
     setup: "host",
     request: chainedRequest({ decide_on_screen: false }, true),
+  },
+};
+
+/** In an Office pane: the place's frame is the only one, so the decision keeps its width. */
+export const HostCardInSlimPane: Story = {
+  args: {
+    setup: "host",
+    request: chainedRequest({ decide_on_screen: false }, true),
+    width: 272,
   },
 };
 

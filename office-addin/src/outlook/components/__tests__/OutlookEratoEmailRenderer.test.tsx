@@ -14,6 +14,11 @@ import {
   installMockMailbox,
   uninstallMockMailbox,
 } from "../../../test/mocks/outlook/mailbox";
+import {
+  createOutlookProposalExecutor,
+  markOutlookFormOpened,
+  outlookFormOpened,
+} from "../../utils/outlookProposalApply";
 import { OutlookEratoEmailRenderer } from "../OutlookEratoEmailRenderer";
 
 import type * as ComposeSelectionStore from "../../hooks/composeSelectionStore";
@@ -41,6 +46,10 @@ const realLibrary = await vi.hoisted(() =>
 );
 
 vi.mock("@erato/frontend/library", async () => ({
+  Button: ({ icon: _icon, ...props }: Record<string, unknown>) => (
+    <button type="button" {...props} />
+  ),
+  isEmailDraftHtml: realLibrary.isEmailDraftHtml,
   sanitizeHtmlPreview: realLibrary.sanitizeHtmlPreview,
   emailDraftHtmlToText: realLibrary.emailDraftHtmlToText,
   copyEmailToClipboard: (...args: unknown[]) =>
@@ -111,6 +120,8 @@ function prime(options: {
   currentItemIdentity: string | null;
   /** The user's decisions on the server, by tool. */
   decisions?: Record<string, string>;
+  /** The stored answer's parts. */
+  content?: unknown[];
 }) {
   mockUseOutlookArtifact.mockReturnValue(options.artifact);
   mockUseOutlookMailItem.mockReturnValue({
@@ -123,6 +134,7 @@ function prime(options: {
       [options.artifact.messageId]: {
         id: options.artifact.messageId,
         role: "assistant",
+        content: options.content,
       },
     },
     messageOrder: [options.artifact.messageId],
@@ -285,6 +297,273 @@ describe("OutlookEratoEmailRenderer — the user's decisions", () => {
     );
     expect(screen.getByRole("button", { name: "Opened!" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
+  });
+});
+
+describe("OutlookEratoEmailRenderer — where Erato's proposed reply stands", () => {
+  const APPLY_ID = "call-propose.apply";
+  const proposed = (apply?: Record<string, unknown>) => [
+    { content_type: "text", text: "```erato-email\nDraft body\n```\n" },
+    {
+      content_type: "tool_use",
+      tool_call_id: "call-propose",
+      tool_name: "propose_client_action",
+      status: "success",
+      input: { action: REPLY },
+      output: {
+        apply: { call_id: APPLY_ID },
+        action: REPLY,
+        status: "proposed",
+      },
+    },
+    ...(apply
+      ? [
+          {
+            content_type: "tool_use",
+            tool_call_id: APPLY_ID,
+            tool_name: "open_reply",
+            input: {},
+            ...apply,
+          },
+        ]
+      : []),
+  ];
+  const show = (
+    content: unknown[],
+    block = "Draft body",
+    before?: (artifact: TestArtifact) => void,
+  ) => {
+    const artifact = makeArtifact({ proposedClientAction: REPLY });
+    before?.(artifact);
+    prime({ artifact, currentItemIdentity: "item-a", content });
+    render(<OutlookEratoEmailRenderer content={block} isHtml={false} />);
+  };
+
+  it("says the reply waits for the decision, which stays the one primary action", () => {
+    show(proposed());
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "secondary",
+    );
+  });
+
+  it("speaks only for the draft the proposal opens, and fills no button beside it", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed(),
+      ],
+      "An aside",
+    );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "secondary",
+    );
+  });
+
+  it("does not say no reply was opened when the draft's own button opened one", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+      "Draft body",
+      (artifact) => markOutlookFormOpened(artifact.messageId, REPLY),
+    );
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+  });
+
+  it("says no reply was opened after the user denied it", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "rejected", reason: "user_rejected" },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Denied. No reply was opened.",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("says the reply opened once the server's call did", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "applied" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Reply opened in Outlook.",
+    );
+  });
+
+  it("names another open email as why no reply opened", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "unavailable", reason: "other_item" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "a different email is open now",
+    );
+  });
+
+  it("gives the way forward when the draft was too large to prefill", () => {
+    show(
+      proposed({
+        status: "success",
+        output: { result: { status: "failed", reason: "too_large" } },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Draft is too large to prefill a reply. Use Copy and paste it into a reply instead.",
+    );
+  });
+
+  it("turns the draft's own reply buttons off while the server's call opens the reply", () => {
+    show(proposed({ status: "in_progress" }));
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Opening the reply…",
+    );
+    expect(screen.getByRole("button", { name: "Reply" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Reply All" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("keeps the reply buttons of another draft in the answer usable meanwhile", () => {
+    show(
+      [
+        { content_type: "text", text: "```text\nAn aside\n```\n" },
+        ...proposed({ status: "in_progress" }),
+      ],
+      "An aside",
+    );
+
+    expect(screen.getByRole("button", { name: "Reply" })).toBeEnabled();
+  });
+
+  it("opens one form when the server's call arrives while the draft's own button still opens it", async () => {
+    let finish!: () => void;
+    mockOpenReplyForm.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+
+    const execute = createOutlookProposalExecutor("open_reply", () => ({
+      itemIdentity: () => "item-a",
+      message: () => ({
+        content: proposed() as EratoLibrary.ContentPart[],
+        artifact,
+        sendItemIdentity: undefined,
+        latest: true,
+      }),
+    }));
+    const answer = await execute(
+      {
+        proposal_call_id: "call-propose",
+        action: REPLY,
+        item_identity: "item-a",
+      },
+      {
+        toolCallId: `${artifact.messageId}.apply`,
+        messageId: artifact.messageId,
+        chatId: "chat-1",
+      },
+    );
+
+    expect(answer).toMatchObject({
+      result: { status: "applied", reason: "already_applied" },
+    });
+    expect(mockOpenReplyForm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+  });
+
+  it("lets the server's call open the reply after the draft's own button failed to", async () => {
+    mockOpenReplyForm.mockRejectedValueOnce(new Error("host"));
+    let artifact!: TestArtifact;
+    show(proposed(), "Draft body", (shown) => {
+      artifact = shown;
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Failed to open the reply form.",
+    );
+    expect(outlookFormOpened(artifact.messageId, REPLY)).toBe(false);
+  });
+
+  it("follows the newest proposal once a change was asked for on the card", () => {
+    const [draft, first, firstCall] = proposed({
+      status: "error",
+      output: { status: "change_requested" },
+    });
+    show([
+      draft,
+      first,
+      firstCall,
+      {
+        content_type: "tool_use",
+        tool_call_id: "call-again",
+        tool_name: "propose_client_action",
+        status: "success",
+        input: { action: REPLY },
+        output: { apply: { call_id: "call-again.apply" }, action: REPLY },
+      },
+    ]);
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+  });
+
+  it("says Stop ended the call before any reply opened", () => {
+    show(
+      proposed({
+        status: "error",
+        output: { status: "cancelled", reason: "aborted" },
+      }),
+    );
+
+    expect(screen.getByTestId("outlook-proposal-status")).toHaveTextContent(
+      "Stopped. No reply was opened.",
+    );
+  });
+
+  it("adds no line and keeps the proposed button primary without a call of the server", () => {
+    show([{ content_type: "text", text: "```erato-email\nDraft body\n```\n" }]);
+
+    expect(screen.queryByTestId("outlook-proposal-status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reply" })).toHaveAttribute(
+      "variant",
+      "primary",
+    );
   });
 });
 
