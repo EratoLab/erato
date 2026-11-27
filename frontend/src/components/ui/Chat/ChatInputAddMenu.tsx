@@ -599,6 +599,7 @@ export function ChatInputAddMenu({
                   variant="attention"
                   className="absolute -end-2 -top-1.5"
                   data-testid="chat-input-add-menu-badge"
+                  data-ui="chat-input-add-menu-badge"
                 >
                   {selectedToolCount}
                 </CountBadge>

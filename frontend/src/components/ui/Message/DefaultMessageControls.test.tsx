@@ -25,7 +25,11 @@ const render = (
   );
 
 vi.mock("@/components/ui/Message/MessageTimestamp", () => ({
-  MessageTimestamp: () => <time data-testid="message-timestamp">now</time>,
+  MessageTimestamp: ({ className }: { className?: string }) => (
+    <time data-testid="message-timestamp" className={className}>
+      now
+    </time>
+  ),
 }));
 
 describe("DefaultMessageControls", () => {
@@ -68,8 +72,11 @@ describe("DefaultMessageControls", () => {
     const controlsSurface = controlsRow?.firstElementChild;
 
     expect(controlsRow).toHaveStyle({
-      gap: "var(--theme-spacing-control-gap)",
+      columnGap: "var(--theme-spacing-control-gap)",
+      rowGap: "0",
     });
+    expect(controlsRow).toHaveClass("flex-wrap");
+    expect(controlsRow?.querySelector("time")).toHaveClass("whitespace-nowrap");
     expect(controlsSurface).toHaveStyle({
       gap: "var(--theme-spacing-control-gap)",
     });

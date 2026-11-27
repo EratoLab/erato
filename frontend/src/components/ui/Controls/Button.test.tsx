@@ -220,4 +220,18 @@ describe("Button", () => {
     expect(button).not.toHaveTextContent("idle");
     expect(button.querySelector('[data-ui="spinner"]')).not.toBeNull();
   });
+  it("marks the icon slot for phone glyph rules, but not the busy ring", () => {
+    const { rerender } = render(
+      <Button icon={<svg data-testid="glyph" />} aria-label="Go" />,
+    );
+    expect(screen.getByTestId("glyph").parentElement).toHaveAttribute(
+      "data-slot",
+      "icon",
+    );
+
+    rerender(<Button icon={<svg />} busy aria-label="Go" />);
+    expect(
+      screen.getByRole("button", { name: "Go" }).querySelector("[data-slot]"),
+    ).toBeNull();
+  });
 });

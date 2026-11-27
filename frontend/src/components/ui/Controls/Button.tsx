@@ -339,6 +339,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               className={iconClasses}
               style={loading || busy ? LOADING_RING_STYLE : undefined}
               aria-hidden="true"
+              data-slot={loading || busy ? undefined : "icon"}
             >
               {loading ? (
                 <SpinnerIcon size="sm" />
