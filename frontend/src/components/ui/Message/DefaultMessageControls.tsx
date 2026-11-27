@@ -150,7 +150,9 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   return (
     <div
       className={clsx(
-        "flex items-center",
+        // A narrow screen moves the time under the buttons rather than
+        // breaking it word by word beside them.
+        "flex flex-wrap items-center",
         showOnHover &&
           "theme-transition opacity-0 group-hover:opacity-100 no-hover:opacity-100",
         className,
@@ -330,7 +332,10 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
       </div>
 
       {/* Timestamp */}
-      <MessageTimestamp createdAt={safeCreatedAt} />
+      <MessageTimestamp
+        createdAt={safeCreatedAt}
+        className="whitespace-nowrap"
+      />
     </div>
   );
 });

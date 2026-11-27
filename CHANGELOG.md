@@ -30,6 +30,8 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+**On a phone the composer's and the answers' icons are larger.** The "+", microphone and send glyphs in the composer draw at about 17 pt with a heavier line, and the copy, read-aloud and feedback icons under an answer at about 14 pt, as iOS apps draw them; before they were 9 to 12 pt. The time under an answer stays on one line and moves under the buttons on a narrow screen instead of breaking word by word. For themes: `--phone-glyph-composer`, `--phone-glyph-inline`, and a Button's icon slot carries `data-slot="icon"`.
+
 **The phone app's glass comes closer to the system's.** The round floating buttons let more of the chat through behind a stronger blur, every glass surface (composer, menus, round buttons) draws a light rim brighter along its top edge, and a round button swells a little while pressed. Increase Contrast still fills them solid. For themes: `--glass-control-opacity`, `--glass-control-blur`, `--glass-rim-top`, `--glass-rim`.
 
 **In the phone app a chat runs up under the status bar, and Share is a round glass button.** As at its foot, a chat now scrolls on under the top of the screen: the sidebar button and Share float over it as round glass controls, and a band under the status bar keeps the clock readable. Share shows its glyph alone there, in the accent colour while the chat's link is live; phone browsers and desktop keep the worded button. Only the list's top padding changes; scrolling and auto-scroll work as before. For themes: `data-ui="chat-share-button"`, `--chat-top-overlap`, `--chat-top-bar-height`.

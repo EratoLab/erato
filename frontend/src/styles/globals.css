@@ -1502,6 +1502,45 @@ body:has(.app-viewport) {
   );
 }
 
+/* Glyph sizes on a phone held in the hand. The composer's +, microphone and
+   send arrow draw about 17 pt and the message actions about 14 pt, as iOS
+   apps do, with a heavier line; the desktop sizes drew them at 9 to 12 pt.
+   Line icons only (an SVG with its own stroke width), so a waveform, a
+   spinner or a filled badge keep their sizes. Pixels, like the tap size:
+   Erato's own text size setting does not shrink them. */
+@media (max-width: 639.98px) {
+  @media not all and (hover: hover) and (pointer: fine) {
+    :root {
+      --phone-glyph-composer: 28px;
+      --phone-glyph-inline: 22px;
+    }
+
+    :where([data-ui="chat-input-controls"] [data-slot="icon"])
+      :is(svg[stroke-width], svg:has(> [stroke-width])) {
+      width: var(--phone-glyph-composer);
+      height: var(--phone-glyph-composer);
+      flex-shrink: 0;
+    }
+
+    :where([data-ui="chat-input-controls"] [data-slot="icon"])
+      :is(svg[stroke-width], svg > [stroke-width]) {
+      stroke-width: 2;
+    }
+
+    :where([data-ui="message-controls"] [data-slot="icon"])
+      :is(svg[stroke-width], svg:has(> [stroke-width])) {
+      width: var(--phone-glyph-inline);
+      height: var(--phone-glyph-inline);
+      flex-shrink: 0;
+    }
+
+    :where([data-ui="message-controls"] [data-slot="icon"])
+      :is(svg[stroke-width], svg > [stroke-width]) {
+      stroke-width: 1.75;
+    }
+  }
+}
+
 .chat-message-skin {
   border-radius: var(--theme-radius-message);
   padding: var(--theme-spacing-message-padding-y)
