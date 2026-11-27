@@ -1,6 +1,7 @@
 import { wordSourceReadRefs } from "@erato/frontend/word-review";
 import { i18n } from "@lingui/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -19,6 +20,8 @@ import {
   wordDocumentOoxmlToFile,
 } from "../../utils/wordDocumentPackage";
 import { captureWordAuthoringSnapshot } from "../../utils/wordDocumentXml";
+import { runWordPlanApply } from "../../utils/wordPlanApply";
+import { wordWriteBridge } from "../../utils/wordWriteBridge";
 import { WordDocumentPlanCard } from "../WordDocumentPlanCard";
 
 import type * as EratoLibrary from "@erato/frontend/library";
@@ -28,6 +31,11 @@ import type {
 } from "@erato/frontend/word-review";
 
 const host = vi.hoisted(() => ({ messageId: "download-message" }));
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("@erato/frontend/library", async (importOriginal) => {
   const { chatHooksFrom } = await import(
     "../../../test/helpers/eratoLibraryMock"
@@ -44,16 +52,9 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
       messageId: host.messageId,
       itemIdentity: "doc-A",
       allowedClientActions: ["word.apply_document_plan"],
-      clientActionPresentation: "render_buttons",
     }),
     useChatContext,
     ...chatHooksFrom(useChatContext),
-    usePersistedState: () => [{}, vi.fn()],
-    useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
-      select({
-        registerConfirmation: () => {},
-        unregisterConfirmation: () => {},
-      }),
   };
 });
 
@@ -108,16 +109,28 @@ async function interruptedDocument() {
       },
     })),
   };
+  const content = JSON.stringify(plan);
   const { container } = render(
     <WordWriteProvider
       documentIdentity="doc-A"
       capturesByAssistantMessageId={new Map([[host.messageId, capture]])}
     >
-      <WordDocumentPlanCard entry={entry} content={JSON.stringify(plan)} />
+      <WordDocumentPlanCard entry={entry} content={content} />
     </WordWriteProvider>,
     { wrapper: TestTheme },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Apply change" }));
+  // The server's apply call writes; the card in the answer shows what it left.
+  await act(() =>
+    runWordPlanApply({
+      key: `${host.messageId}:${entry.action}:${content}`,
+      content,
+      capture,
+      messageId: host.messageId,
+      entry,
+      host: wordWriteBridge()!,
+      importConfirmed: false,
+    }),
+  );
   await screen.findByRole("button", { name: "Download original document" });
   return { bytes, entry, container };
 }

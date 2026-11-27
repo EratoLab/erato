@@ -117,11 +117,7 @@ export async function runWordCommentApply({
       consent: "approved",
       consentKind: previous.consentKind ?? consentKind,
     };
-    host.updateReview(key, {
-      status: "done",
-      comments: state,
-      automatic: consentKind === "standing_grant",
-    });
+    host.updateReview(key, { status: "done", comments: state });
     recordWordCommentOutcome(
       wordCommentOutcomeRecord({
         draft,

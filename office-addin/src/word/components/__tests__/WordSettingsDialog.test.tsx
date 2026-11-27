@@ -74,13 +74,16 @@ vi.mock("@erato/frontend/library", () => ({
   DocumentIcon: () => <svg />,
   EntityRow: ({
     name,
+    caption,
     children,
   }: {
     name: string;
+    caption: string;
     children: React.ReactNode;
   }) => (
     <div>
       <span>{name}</span>
+      <span>{caption}</span>
       {children}
     </div>
   ),
@@ -114,7 +117,6 @@ vi.mock("@erato/frontend/library", () => ({
       <span>{helper}</span>
     </label>
   ),
-  usePersistedState: () => [{}, vi.fn()],
   useApprovalTools: () => mockApprovalTools.tools,
   approvalToolRows: (tools: { qualified_name: string; title: string }[]) =>
     tools.map((tool) => ({
@@ -154,8 +156,6 @@ describe("WordSettingsDialog", () => {
           {
             displayName: "Review this document",
             clientActions: ["word.apply_edits"],
-            presentation: "auto_prompt",
-            alwaysAskActions: [],
             grantScope: {},
           },
         ],
@@ -164,8 +164,6 @@ describe("WordSettingsDialog", () => {
           {
             displayName: "Draft in this document",
             clientActions: ["word.insert_at_cursor"],
-            presentation: "auto_prompt",
-            alwaysAskActions: [],
             grantScope: {},
           },
         ],
@@ -265,35 +263,7 @@ describe("WordSettingsDialog", () => {
     );
   });
 
-  it("shows both Word actions, grouped by the facet that advertises them", () => {
-    render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
-
-    expect(screen.getByText("Word actions")).toBeInTheDocument();
-    expect(
-      screen.getByText("Apply the changes to the document"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Insert the text at the cursor"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Review this document")).toBeInTheDocument();
-    expect(screen.getByText("Draft in this document")).toBeInTheDocument();
-  });
-
-  it("lists document changes with the server's decisions once the server applies them", () => {
-    mockUseActionFacetClientActions.mockReturnValue(
-      new Map([
-        [
-          "word_document_authoring",
-          {
-            displayName: "Rewrite this document",
-            clientActions: ["word.apply_edits", "word.apply_document_plan"],
-            presentation: "auto_prompt",
-            alwaysAskActions: [],
-            grantScope: {},
-          },
-        ],
-      ]),
-    );
+  it("lists the server's Word tools with the user's decisions, and no other host's", () => {
     mockApprovalTools.tools = [
       {
         qualified_name: "word/apply_document_plan",
@@ -301,83 +271,29 @@ describe("WordSettingsDialog", () => {
         approval: "user_decision",
         client_actions: ["word.apply_document_plan"],
       },
+      {
+        qualified_name: "outlook/open_reply",
+        title: "Open a reply",
+        approval: "user_decision",
+        client_actions: ["outlook.reply"],
+      },
     ];
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
 
-    expect(screen.getByTestId("word-server-tool-decisions")).toHaveTextContent(
-      "Change the document",
-    );
-    expect(screen.queryByText("Apply document rewrite")).toBeNull();
+    expect(screen.getByText("Word actions")).toBeInTheDocument();
     expect(
-      screen.getByText("Apply the changes to the document"),
+      screen.getByText("Built into Word · every device"),
     ).toBeInTheDocument();
+    const list = screen.getByTestId("word-server-tool-decisions");
+    expect(list).toHaveTextContent("Change the document");
+    expect(list).not.toHaveTextContent("Open a reply");
   });
 
-  it("uses Word copy that never claims a later send-time gate", () => {
+  it("keeps no decisions of its own on this device", () => {
     render(<WordSettingsDialog isOpen={true} onClose={() => {}} />);
 
-    expect(screen.queryByText(/press Send in Outlook/)).toBeNull();
-    expect(
-      screen.getAllByText(/write into the open document straight away/).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText(/a single Revert undoes the batch/).length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("describes insertion and structural recovery separately from paragraph edits", () => {
-    mockUseActionFacetClientActions.mockReturnValue(
-      new Map([
-        [
-          "word_document_authoring",
-          {
-            displayName: "Rewrite this document",
-            clientActions: [
-              "word.apply_edits",
-              "word.insert_at_cursor",
-              "word.apply_document_plan",
-            ],
-            presentation: "auto_prompt",
-            alwaysAskActions: [],
-            grantScope: {},
-          },
-        ],
-      ]),
-    );
-    render(<WordSettingsDialog isOpen onClose={() => {}} />);
-    expect(
-      screen.getAllByText(/a single Revert undoes the batch/),
-    ).toHaveLength(1);
-    expect(
-      screen.getByText(/This action has no Erato Revert/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/while the applied document remains unchanged/),
-    ).toBeInTheDocument();
-  });
-
-  it("explains Always allow for replacing a selected passage", () => {
-    mockUseActionFacetClientActions.mockReturnValue(
-      new Map([
-        [
-          "word_selection",
-          {
-            displayName: "Word selection",
-            clientActions: ["word.replace_selection"],
-            presentation: "auto_prompt",
-            alwaysAskActions: [],
-            grantScope: {},
-          },
-        ],
-      ]),
-    );
-    render(<WordSettingsDialog isOpen onClose={() => {}} />);
-    expect(
-      screen.getByText(
-        /Replaces the selected passage without asking, only if it is unchanged since your request/,
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/a single Revert undoes the batch/)).toBeNull();
+    expect(screen.queryByTestId("word-server-tool-decisions")).toBeNull();
+    expect(screen.queryByText("Apply the changes to the document")).toBeNull();
   });
 
   describe("compatibility mode", () => {
@@ -439,8 +355,6 @@ describe("WordSettingsDialog", () => {
             {
               displayName: "Selection",
               clientActions: ["word.add_comments"],
-              presentation: "render_buttons",
-              alwaysAskActions: [],
               grantScope: {},
             },
           ],

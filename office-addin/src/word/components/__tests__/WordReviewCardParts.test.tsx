@@ -102,7 +102,7 @@ describe("WordReviewCardParts", () => {
         type: "error",
         role: "alert",
       });
-    for (const status of ["done", "reverting", "denied", "reverted"] as const)
+    for (const status of ["done", "reverting", "reverted"] as const)
       expect(wordStatusAlertProps(status)).toEqual({
         type: "info",
         role: "status",

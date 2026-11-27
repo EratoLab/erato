@@ -1,5 +1,4 @@
 import { createApplyCallMarkers } from "./applyCallMarkers";
-import { CLIENT_ACTION_TOOL_NAME } from "./proposedClientAction";
 
 import type { CarryOverMapping } from "./carryOverDecisions";
 import type {
@@ -65,24 +64,6 @@ export function parseProposalApplyInput(
 export const proposalAnswer = (
   result: ProposalApplyResult,
 ): ClientToolExecutionResult => ({ ok: true, result });
-
-/**
- * Whether the server carries out the message's proposal through a tool of its own: then the
- * user decides in the chat's decision place, and the pane does not prompt on its own.
- */
-export function isProposalChained(
-  content: readonly ContentPart[] | undefined,
-): boolean {
-  return (content ?? []).some(
-    (part) =>
-      part.content_type === "tool_use" &&
-      part.tool_name === CLIENT_ACTION_TOOL_NAME &&
-      part.status === "success" &&
-      object(part.output) &&
-      object(part.output.apply) &&
-      typeof part.output.apply.call_id === "string",
-  );
-}
 
 /** Whether `messageId` is the chat's latest assistant message. */
 export function isLatestAssistantMessage(
@@ -232,11 +213,4 @@ export function carryOverMappingsFor(
       ? [{ serverKey: tool.qualified_name, actions: tool.client_actions! }]
       : [],
   );
-}
-
-/** The pane actions the server decides for a host: those its approval tools carry out. */
-export function serverDecidedActions(
-  mappings: readonly CarryOverMapping[],
-): ReadonlySet<string> {
-  return new Set(mappings.flatMap((mapping) => mapping.actions));
 }

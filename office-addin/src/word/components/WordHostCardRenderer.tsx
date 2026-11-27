@@ -3,7 +3,6 @@ import {
   Card,
   Alert,
   SyntaxHighlightedCode,
-  useConversationSelector,
   useHostArtifact,
   WordReviewCard,
   WordReviewDetailsToggle,
@@ -26,31 +25,24 @@ import { WordDocumentPartsCard } from "./WordDocumentPartsCard";
 import { WordDocumentPlanCard } from "./WordDocumentPlanCard";
 import { WordEditReport, wordEditsTitleText } from "./WordEditReport";
 import {
-  isAutomaticWordRun,
   WordApplyButton,
   wordBlockedReasonText,
-  WordReviewConfirm,
+  WordChainedStatus,
   WordStatusAlert,
 } from "./WordReviewCardParts";
 import { WordReviewPanel } from "./WordReviewPanel";
-import {
-  wordDeniedText,
-  wordInsertedText,
-  WordReviewReceipt,
-} from "./WordReviewReceipt";
+import { wordInsertedText, WordReviewReceipt } from "./WordReviewReceipt";
 import { WordSelectionCard } from "./WordSelectionCard";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import { useWordProposalCall } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
-import { isActionDenied } from "../utils/clientActionPolicy";
 import { revertWordEdits } from "../utils/wordApplyEdits";
 import {
   offerableWordClientActionsForFacet,
   wordActionForFence,
   WORD_EDITS_FENCE,
-  type WordClientAction,
   type WordClientActionEntry,
 } from "../utils/wordClientActions";
 import { wordProposalReviewKey } from "../utils/wordProposalApply";
@@ -110,7 +102,7 @@ export function WordHostCardRenderer({
         content={content}
       />
     );
-  // A changed action or payload must not reuse an earlier confirmation.
+  // A changed action or payload must not reuse an earlier card's state.
   return (
     <WordActionCard
       key={`${entry.action}:${content}`}
@@ -151,16 +143,11 @@ function WordActionCard({
     locationGeneration,
     invalidateLocations,
   } = useWordWrite();
-  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
-    entry.action,
-  );
+  const neverAllowed = useNeverAllowedActions("word");
   const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
-  const isGenerating = useConversationSelector(
-    (messages) =>
-      messageId !== undefined && messages[messageId]?.status === "sending",
-    Object.is,
-  );
+  const call = useWordProposalCall(messageId, entry.action);
+  const isGenerating = call.preparing;
   const batchKey = wordProposalReviewKey(
     messageId ?? "",
     entry.action,
@@ -172,19 +159,19 @@ function WordActionCard({
   );
   const capture =
     (messageId ? capturesByAssistantMessageId.get(messageId) : undefined) ??
-    review.capture;
-  const enforcedAskActions = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
-  );
+    review.capture ??
+    call.stagedCapture;
+  // An answer still being written does not name its document yet; its staged copy does.
+  const expectedIdentity =
+    artifact?.itemIdentity ?? call.stagedCapture?.identity;
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    expectedIdentity,
     currentIdentity: documentIdentity,
   });
   // A capture rebuilt from history is no copy to write to either.
   const copyGone = useWordCopyGone({
-    generating: isGenerating,
+    generating: call.streaming,
     hasCopy: !!capture,
     revoked: !gate.allowed && gate.reason === "no-capture",
   });
@@ -230,9 +217,6 @@ function WordActionCard({
   const trackingShown = capture?.trackChanges ? "on" : tracking;
   // Under Track Changes a paragraph Replace would land as one whole-paragraph revision.
   const editsWithheld = editsCard && trackingShown === "on";
-  // Edits are not proposed until the live mode is known, so an auto-prompt cannot open under
-  // Track Changes; the prompt's once-per-message slot is kept for then.
-  const promptReady = !editsCard || trackingShown !== "unknown";
   const offeredActions = useMemo(
     () =>
       payload && !editsWithheld
@@ -240,38 +224,18 @@ function WordActionCard({
             facetId,
             artifact?.allowedClientActions,
           ).filter(
-            (action) =>
-              action === entry.action &&
-              !isActionDenied({
-                facetId,
-                action,
-                decisions,
-                enforcedAskActions,
-              }),
+            (action) => action === entry.action && !neverAllowed.has(action),
           )
         : [],
-    [
-      payload,
-      editsWithheld,
-      facetId,
-      artifact,
-      entry.action,
-      decisions,
-      enforcedAskActions,
-    ],
+    [payload, editsWithheld, facetId, artifact, entry.action, neverAllowed],
   );
-  const proposedAction =
-    promptReady &&
-    artifact?.proposedClientAction &&
-    (offeredActions as string[]).includes(artifact.proposedClientAction)
-      ? (artifact.proposedClientAction as WordClientAction)
-      : undefined;
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||
     review.status === "identity-mismatch";
   const applying = review.status === "applying";
   const execute = useCallback(async (): Promise<boolean> => {
+    if (call.holdsAction) return false;
     const live = resolveWordWriteGate({
       capture,
       expectedIdentity: artifact?.itemIdentity,
@@ -331,13 +295,6 @@ function WordActionCard({
         anchors: run.resultAnchors,
         locationGeneration,
         tracking: mode,
-        automatic: isAutomaticWordRun({
-          presentation: artifact?.clientActionPresentation,
-          decisions,
-          facetId,
-          action: entry.action,
-          enforcedAskActions,
-        }),
       });
       return run.ok;
     } catch {
@@ -359,6 +316,7 @@ function WordActionCard({
       endOperation();
     }
   }, [
+    call.holdsAction,
     capture,
     artifact,
     documentIdentity,
@@ -375,31 +333,8 @@ function WordActionCard({
     messageId,
     setRevertSlot,
     locationGeneration,
-    decisions,
-    facetId,
-    enforcedAskActions,
     endOperation,
   ]);
-  const buildSummary = useCallback(
-    () => (idle && !isGenerating ? payload : null),
-    [payload, idle, isGenerating],
-  );
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<WordCardPayload, WordClientAction>({
-      promptScope: entry.promptScope,
-      facetId: artifact?.facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute,
-      itemIdentity: documentIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion && promptReady,
-      proposedAction,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: documentIdentity,
-    });
   const canRevert =
     revertSlot !== null &&
     !!revertSlot.afterFingerprint &&
@@ -467,10 +402,7 @@ function WordActionCard({
     ? undefined
     : wordBlockedReasonText(gate.reason);
   const total = payload.kind === "edits" ? payload.edits.length : 0;
-  const completed =
-    review.status === "done" ||
-    review.status === "denied" ||
-    review.status === "reverted";
+  const completed = review.status === "done" || review.status === "reverted";
   const folds = completed || (idle && copyGone);
   const collapsed = folds && !review.detailsExpanded;
   const applyLabel =
@@ -482,12 +414,16 @@ function WordActionCard({
             message: `Apply all ${total} edits`,
           })
       : entry.displayLabel();
+  const offersOwn =
+    (idle || applying) &&
+    !copyGone &&
+    !call.holdsAction &&
+    offeredActions.length > 0;
   const outcome = (index: number) =>
     review.outcomes.find((item) => item.index === index);
   const anchor = (index: number) => {
     if (payload.kind !== "edits" || !capture) return null;
-    if (idle || review.status === "denied")
-      return originalWordAnchor(payload.edits[index], capture);
+    if (idle) return originalWordAnchor(payload.edits[index], capture);
     if (
       review.status === "done" &&
       outcome(index)?.status === "applied" &&
@@ -550,11 +486,9 @@ function WordActionCard({
                   id: "officeAddin.word.review.reverting",
                   message: "Restoring the document body…",
                 })
-              : review.status === "denied"
-                ? wordDeniedText()
-                : review.status === "done" && payload.kind === "insert"
-                  ? wordInsertedText()
-                  : undefined;
+              : review.status === "done" && payload.kind === "insert"
+                ? wordInsertedText()
+                : undefined;
   return (
     <WordReviewCard
       cardRef={cardRef}
@@ -582,7 +516,14 @@ function WordActionCard({
       }
       footer={
         <>
-          {(idle || applying) && !copyGone && offeredActions.length > 0 && (
+          {call.state && (idle || (applying && call.holdsAction)) && (
+            <WordChainedStatus
+              state={call.state}
+              applying={applying}
+              applyStage={review.applyStage}
+            />
+          )}
+          {offersOwn && (
             <>
               <p className="word-review__hint">
                 {payload.kind === "edits"
@@ -597,50 +538,14 @@ function WordActionCard({
                         "This inserts the text below into the open document at the cursor. A selected passage is never replaced.",
                     })}
               </p>
-              {!confirmCard && (
-                <WordApplyButton
-                  applying={applying}
-                  applyStage={review.applyStage}
-                  disabled={
-                    operationInProgress || isConfirmPending || !gate.allowed
-                  }
-                  label={applyLabel}
-                  onApply={() => void execute()}
-                />
-              )}
+              <WordApplyButton
+                applying={applying}
+                applyStage={review.applyStage}
+                disabled={operationInProgress || !gate.allowed}
+                label={applyLabel}
+                onApply={() => void execute()}
+              />
             </>
-          )}
-          {confirmCard && (
-            <WordReviewConfirm
-              key={confirmCard.requestId}
-              card={confirmCard}
-              title={
-                payload.kind === "edits"
-                  ? t({
-                      id: "officeAddin.word.review.consent",
-                      message: "Apply this batch?",
-                    })
-                  : t({
-                      id: "officeAddin.word.review.insertConsent",
-                      message: "Insert this text?",
-                    })
-              }
-              allowOnceLabel={applyLabel}
-              canApply={gate.allowed && idle}
-              operationInProgress={operationInProgress}
-              enforcedAskActions={enforcedAskActions}
-              decisions={decisions}
-              setDecisions={setDecisions}
-              onGrantAlways={grantAlways}
-              facetId={facetId}
-              allowCard={allowCard}
-              denyCard={denyCard}
-              onDenied={() =>
-                updateReview(batchKey, { status: "denied", capture })
-              }
-              applying={applying}
-              applyStage={review.applyStage}
-            />
           )}
           <div className="word-review__actions">
             {folds && (

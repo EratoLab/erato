@@ -17,16 +17,14 @@ import { t } from "@lingui/core/macro";
 import { useCallback, useId, useMemo, useState } from "react";
 
 import {
-  isAutomaticWordRun,
   WordApplyButton,
-  WordReviewConfirm,
+  WordChainedStatus,
   WordStatusAlert,
-  wordCommentTaintText,
 } from "./WordReviewCardParts";
-import { wordDeniedText, WordReviewReceipt } from "./WordReviewReceipt";
+import { WordReviewReceipt } from "./WordReviewReceipt";
 import { WordShowInWordButton } from "./WordShowInWordButton";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
-import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
+import { useWordProposalCall } from "../hooks/useWordChainedApply";
 import { useWordCopyGone } from "../hooks/useWordCopyGone";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { wordSelectionStore } from "../hooks/wordSelectionStore";
@@ -35,8 +33,6 @@ import {
   useWordReviews,
   useWordWrite,
 } from "../providers/WordWriteProvider";
-import { isActionDenied } from "../utils/clientActionPolicy";
-import { wordCommentTaintedMessage } from "../utils/wordCommentReadTool";
 import {
   wordProposalReviewKey,
   wordSelectionReviewStatus,
@@ -55,7 +51,6 @@ import {
 } from "../utils/wordSelectionAnchor";
 import { captureWordSelection } from "../utils/wordSelectionCapture";
 import {
-  countWordReplaceFences,
   splitWordSelectionReplacement,
   withoutFormatMarkers,
   wordSelectionLinePieces,
@@ -72,7 +67,6 @@ import type {
   WordClientAction,
   WordClientActionEntry,
 } from "../utils/wordClientActions";
-import type { WordCommentsCapture } from "../utils/wordCommentSend";
 import type { WordReplaceSelectionResult } from "../utils/wordReplaceSelection";
 import type { WordReviewState } from "../utils/wordReviewState";
 import type {
@@ -592,14 +586,12 @@ export function WordSelectionCard({
     heldOperationOwner,
     restoreRequest,
   } = useWordWrite();
-  const { decisions, setDecisions, grantAlways } = useWordClientActionDecisions(
-    entry.action,
-  );
-  const facetId = artifact?.facetId ?? "";
+  const neverAllowed = useNeverAllowedActions("word");
   const messageId = artifact?.messageId;
   const { getTranscript } = useChatSession();
   const message = useConversationMessage(messageId);
-  const isGenerating = message?.status === "sending";
+  const call = useWordProposalCall(messageId, entry.action);
+  const isGenerating = call.preparing;
   // Identical versions in one answer share this key and so one review: they write the same text,
   // so each card shows the other's Replace and Undo.
   const batchKey = wordProposalReviewKey(
@@ -608,6 +600,9 @@ export function WordSelectionCard({
     content,
   );
   const review = useWordReview(batchKey);
+  // After an Undo of what the server's call wrote, the card is the user's again.
+  const held =
+    call.streaming || (call.holdsAction && review.status !== "reverted");
   const reviews = useWordReviews();
   const result = review.selection;
   const messageCapture = messageId
@@ -630,10 +625,6 @@ export function WordSelectionCard({
   const siblingRemoval =
     sibling &&
     siblingRemovalOf(sibling.key, sibling.review, revertSlot, documentIdentity);
-  const severalVersions = useMemo(
-    () => countWordReplaceFences(extractTextFromContent(message?.content)) > 1,
-    [message?.content],
-  );
   const cardRef = useWordReviewFocus(
     `${review.status}:${!!review.detailsExpanded}`,
   );
@@ -641,28 +632,18 @@ export function WordSelectionCard({
   const [revertConfirmation, setRevertConfirmation] = useState(false);
   const [copyNote, setCopyNote] = useState("");
   const [actionNote, setActionNote] = useState("");
-  const capture = messageCapture ?? review.capture;
+  const capture = messageCapture ?? review.capture ?? call.stagedCapture;
   const selection = wordSelectionOf(capture);
   const rewritable = rewritableWordSelection(capture);
-  // L2: a turn that carried other people's comment text never replaces under a standing grant.
-  const commentCapture: WordCommentsCapture | undefined = capture;
-  const tainted =
-    !!commentCapture?.commentTaint || wordCommentTaintedMessage(messageId);
-  const enforcedAskActions = useMemo(
-    () =>
-      tainted
-        ? [...(artifact?.alwaysAskClientActions ?? []), entry.action]
-        : (artifact?.alwaysAskClientActions ?? []),
-    [artifact, tainted, entry.action],
-  );
   const gate = resolveWordWriteGate({
     capture,
-    expectedIdentity: artifact?.itemIdentity,
+    // An answer still being written does not name its document yet; its staged copy does.
+    expectedIdentity: artifact?.itemIdentity ?? call.stagedCapture?.identity,
     currentIdentity: documentIdentity,
   });
   // A capture rebuilt from history is no copy to write to either.
   const copyGone = useWordCopyGone({
-    generating: isGenerating,
+    generating: call.streaming,
     hasCopy: !!capture,
     revoked: !gate.allowed && gate.reason === "no-capture",
   });
@@ -692,32 +673,11 @@ export function WordSelectionCard({
       rewritable && replacement && "lines" in replacement
         ? (artifact?.allowedClientActions ?? []).filter(
             (action): action is WordClientAction =>
-              action === entry.action &&
-              !isActionDenied({
-                facetId,
-                action,
-                decisions,
-                enforcedAskActions,
-              }),
+              action === entry.action && !neverAllowed.has(action),
           )
         : [],
-    [
-      rewritable,
-      replacement,
-      artifact,
-      entry.action,
-      facetId,
-      decisions,
-      enforcedAskActions,
-    ],
+    [rewritable, replacement, artifact, entry.action, neverAllowed],
   );
-  // With several versions the user picks one, so none is applied or opened for confirmation alone.
-  const proposedAction =
-    !severalVersions &&
-    artifact?.proposedClientAction &&
-    (offeredActions as string[]).includes(artifact.proposedClientAction)
-      ? (artifact.proposedClientAction as WordClientAction)
-      : undefined;
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||
@@ -792,13 +752,6 @@ export function WordSelectionCard({
           selection: outcome,
           tracking:
             outcome.status === "applied" && outcome.trackingOn ? "on" : "off",
-          automatic: isAutomaticWordRun({
-            presentation: artifact?.clientActionPresentation,
-            decisions,
-            facetId,
-            action: entry.action,
-            enforcedAskActions,
-          }),
         });
         return outcome.status === "applied";
       } finally {
@@ -814,14 +767,11 @@ export function WordSelectionCard({
       holdOperationUntil,
       messageId,
       setRevertSlot,
-      artifact,
-      decisions,
-      facetId,
-      enforcedAskActions,
       endOperation,
     ],
   );
   const execute = useCallback(async (): Promise<boolean> => {
+    if (held) return false;
     const live = resolveWordWriteGate({
       capture,
       expectedIdentity: artifact?.itemIdentity,
@@ -840,6 +790,7 @@ export function WordSelectionCard({
       return false;
     return replaceOn(live.capture);
   }, [
+    held,
     capture,
     artifact,
     documentIdentity,
@@ -853,7 +804,8 @@ export function WordSelectionCard({
   ]);
   // The same reviewed proposal on the passage the user now selects, never a guess between copies.
   const replaceSelected = useCallback(async () => {
-    if (!rewritable || offeredActions.length === 0 || !beginOperation()) return;
+    if (held || !rewritable || offeredActions.length === 0 || !beginOperation())
+      return;
     setActionNote("");
     const unread = () =>
       t({
@@ -921,6 +873,7 @@ export function WordSelectionCard({
     endOperation();
     setActionNote(note);
   }, [
+    held,
     rewritable,
     offeredActions.length,
     beginOperation,
@@ -932,26 +885,6 @@ export function WordSelectionCard({
   const shownProposal = selection
     ? wordKeptMarkersShown(proposal, selection)
     : proposal;
-  const buildSummary = useCallback(
-    () => (idle && !isGenerating ? shownProposal : null),
-    [idle, isGenerating, shownProposal],
-  );
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<string, WordClientAction>({
-      promptScope: entry.promptScope,
-      facetId: artifact?.facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute,
-      itemIdentity: documentIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
-      proposedAction,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: documentIdentity,
-    });
 
   const slot = useMemo(
     () =>
@@ -1092,38 +1025,33 @@ export function WordSelectionCard({
       ? notRespondingText()
       : (revertText(review) ??
         (refusedRemoval && siblingRefusedText(refusedRemoval)) ??
-        (review.status === "denied"
-          ? wordDeniedText()
-          : result
-            ? resultText(result, applied?.trackingOn ?? false)
-            : !capture
+        (result
+          ? resultText(result, applied?.trackingOn ?? false)
+          : !capture
+            ? t({
+                id: "officeAddin.word.selection.noCapture",
+                message:
+                  "This pane no longer holds the passage this answer was written for. Copy the proposal, or select the passage and ask again.",
+              })
+            : !gate.allowed
               ? t({
-                  id: "officeAddin.word.selection.noCapture",
+                  id: "officeAddin.word.selection.otherDocument",
                   message:
-                    "This pane no longer holds the passage this answer was written for. Copy the proposal, or select the passage and ask again.",
+                    "This answer was written for a passage in another document, so it cannot be replaced here.",
                 })
-              : !gate.allowed
-                ? t({
-                    id: "officeAddin.word.selection.otherDocument",
-                    message:
-                      "This answer was written for a passage in another document, so it cannot be replaced here.",
-                  })
-                : selection && !rewritable
-                  ? wordSelectionReasonText(selection.reasonCode)
-                  : replacement && "refused" in replacement
-                    ? resultText(
-                        {
-                          status: "refused",
-                          code: replacement.refused,
-                          settled: Promise.resolve(),
-                        },
-                        false,
-                      )
-                    : undefined));
-  const completed =
-    review.status === "done" ||
-    review.status === "denied" ||
-    review.status === "reverted";
+              : selection && !rewritable
+                ? wordSelectionReasonText(selection.reasonCode)
+                : replacement && "refused" in replacement
+                  ? resultText(
+                      {
+                        status: "refused",
+                        code: replacement.refused,
+                        settled: Promise.resolve(),
+                      },
+                      false,
+                    )
+                  : undefined));
+  const completed = review.status === "done" || review.status === "reverted";
   const folds = completed || (idle && !isGenerating && copyGone);
   const collapsed =
     folds &&
@@ -1131,6 +1059,7 @@ export function WordSelectionCard({
     !review.revertStale &&
     !review.revertFailed;
   const canReplace = gate.allowed && idle && offeredActions.length > 0;
+  const offersOwn = (idle || applying) && !held && offeredActions.length > 0;
   const ambiguous =
     result?.status === "refused" &&
     result.code === "AMBIGUOUS_TARGET" &&
@@ -1182,7 +1111,15 @@ export function WordSelectionCard({
       }
       footer={
         <>
-          {(idle || applying) && offeredActions.length > 0 && (
+          {call.state &&
+            ((idle && review.status !== "reverted") || (applying && held)) && (
+              <WordChainedStatus
+                state={call.state}
+                applying={applying}
+                applyStage={review.applyStage}
+              />
+            )}
+          {offersOwn && (
             <>
               <p className="word-review__hint">
                 {t({
@@ -1213,55 +1150,17 @@ export function WordSelectionCard({
                   {siblingHintText(siblingRemoval)}
                 </p>
               )}
-              {!confirmCard && (
-                <WordApplyButton
-                  applying={applying}
-                  applyStage={review.applyStage}
-                  disabled={
-                    operationInProgress || isConfirmPending || !canReplace
-                  }
-                  label={t({
-                    id: "officeAddin.word.selection.replace",
-                    message: "Replace",
-                  })}
-                  onApply={() => void execute()}
-                />
-              )}
+              <WordApplyButton
+                applying={applying}
+                applyStage={review.applyStage}
+                disabled={operationInProgress || !canReplace}
+                label={t({
+                  id: "officeAddin.word.selection.replace",
+                  message: "Replace",
+                })}
+                onApply={() => void execute()}
+              />
             </>
-          )}
-          {confirmCard && (
-            <WordReviewConfirm
-              key={confirmCard.requestId}
-              card={confirmCard}
-              title={t({
-                id: "officeAddin.word.selection.consent",
-                message: "Replace the selected passage?",
-              })}
-              allowOnceLabel={t({
-                id: "officeAddin.word.selection.replace",
-                message: "Replace",
-              })}
-              canApply={canReplace}
-              operationInProgress={operationInProgress}
-              enforcedAskActions={enforcedAskActions}
-              alwaysBlockedReason={
-                tainted &&
-                !(artifact?.alwaysAskClientActions ?? []).includes(entry.action)
-                  ? wordCommentTaintText()
-                  : undefined
-              }
-              decisions={decisions}
-              setDecisions={setDecisions}
-              onGrantAlways={grantAlways}
-              facetId={facetId}
-              allowCard={allowCard}
-              denyCard={denyCard}
-              onDenied={() =>
-                updateReview(batchKey, { status: "denied", capture })
-              }
-              applying={applying}
-              applyStage={review.applyStage}
-            />
           )}
           {ambiguous && (
             <p className="word-review__hint">
@@ -1286,7 +1185,7 @@ export function WordSelectionCard({
               <Button
                 type="button"
                 variant="primary"
-                disabled={operationInProgress}
+                disabled={operationInProgress || held}
                 onClick={() => void replaceSelected()}
               >
                 {t({

@@ -29,7 +29,6 @@ export type WordReviewStatus =
   | "done"
   | "error"
   | "write-failed"
-  | "denied"
   | "reverting"
   | "reverted"
   | "revert-failed"
@@ -41,7 +40,6 @@ export interface WordReviewState {
   anchors?: ReadonlyMap<number, WordReviewAnchor>;
   locationGeneration?: number;
   tracking?: WordTrackingMode;
-  automatic?: boolean;
   detailsExpanded?: boolean;
   documentPlanStatus?: WordDocumentApplyStatus | "revert-stale";
   documentPlanDiagnostic?: WordDocumentDiagnostic;

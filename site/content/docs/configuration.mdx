@@ -8206,11 +8206,12 @@ Each action facet supports these fields:
 
 {/* erato_toml_config_key: action_facets.facets.<facet-id>.grant_scope.<key> */}
 
-`grant_scope` sets, per client action the facet offers, how far a user's "Always allow" reaches:
-`device` (the default) keeps it on the device until the user changes it in settings;
-`session_document` keeps it only while the add-in stays open on the document it was given for,
-and ignores an "Always allow" stored on the device. Keys must be Word add-in actions (`word.*`)
-listed in the facet's `client_actions`.
+`grant_scope` marks, per client action the facet offers, an "Always allow" that the Word add-in
+kept only for one session and document (`session_document`; the default is `device`). Decisions
+are now kept on the server and hold on every device; the add-in reads `grant_scope` only when it
+carries its old on-device decisions over to the server once, and does not carry over an "Always
+allow" for a `session_document` action. Keys must be Word add-in actions (`word.*`) listed in the
+facet's `client_actions`.
 
 ```toml
 [action_facets.facets.word_selection]

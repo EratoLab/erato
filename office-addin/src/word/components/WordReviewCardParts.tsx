@@ -1,5 +1,4 @@
 import {
-  ActionConfirmationCard,
   Alert,
   Button,
   CopyErrorButton,
@@ -7,13 +6,12 @@ import {
 } from "@erato/frontend/library";
 import { t } from "@lingui/core/macro";
 
-import { decisionKey } from "../utils/clientActionPolicy";
 import { wordApplyStageLabel } from "../utils/wordAuthoringMessages";
+import { wordChainedApplyText } from "../utils/wordChainedApply";
 
-import type { ConfirmCardState } from "../../core/clientActions/useClientActionConfirmFlow";
-import type { ClientActionDecisionMap } from "../utils/clientActionPolicy";
 import type { WordDocumentDiagnostic } from "../utils/wordApplyDocumentPlan";
 import type { WordApplyStage } from "../utils/wordApplyProgress";
+import type { WordChainedApplyState } from "../utils/wordChainedApply";
 import type { WordReviewStatus } from "../utils/wordReviewState";
 import type { WordWriteBlockReason } from "../utils/wordWriteGate";
 import type { ReactNode } from "react";
@@ -46,107 +44,27 @@ export function WordApplyButton({
   );
 }
 
-export function isAutomaticWordRun({
-  presentation,
-  decisions,
-  facetId,
-  action,
-  enforcedAskActions,
-}: {
-  presentation: string | undefined;
-  decisions: ClientActionDecisionMap;
-  facetId: string;
-  action: string;
-  enforcedAskActions: readonly string[];
-}): boolean {
-  return (
-    presentation === "auto_prompt" &&
-    decisions[decisionKey(facetId, action)] === "always" &&
-    !enforcedAskActions.includes(action)
-  );
-}
-
 /**
- * `canApply` is the card's own readiness (gate, review state, payload); the
- * operation lock and the organisation's always-ask list are checked here.
+ * Where the server's call for the card's change stands, where the card's own review does not say
+ * it. While that call writes, the stage it is at.
  */
-export function WordReviewConfirm<TSummary, TAction extends string>({
-  card,
-  title,
-  description,
-  allowOnceLabel,
-  canApply,
-  operationInProgress,
-  enforcedAskActions,
-  alwaysBlockedReason,
-  onGrantAlways,
-  decisions,
-  setDecisions,
-  facetId,
-  allowCard,
-  denyCard,
-  onDenied,
+export function WordChainedStatus({
+  state,
   applying,
   applyStage,
 }: {
-  card: ConfirmCardState<TSummary, TAction>;
-  title: string;
-  description?: ReactNode;
-  allowOnceLabel: string;
-  canApply: boolean;
-  operationInProgress: boolean;
-  enforcedAskActions: readonly string[];
-  /** Why Always is off when it is not the organization's always-ask list. */
-  alwaysBlockedReason?: string;
-  /** Where "Always allow" is kept when not on the device (grant_scope). */
-  onGrantAlways?: () => void;
-  decisions: ClientActionDecisionMap;
-  setDecisions: (value: ClientActionDecisionMap | null) => void;
-  facetId: string;
-  allowCard: (card: ConfirmCardState<TSummary, TAction>) => void;
-  denyCard: (card: ConfirmCardState<TSummary, TAction>) => void;
-  onDenied: () => void;
+  state: WordChainedApplyState;
   applying: boolean;
   applyStage: WordApplyStage | undefined;
 }) {
-  const locked = enforcedAskActions.includes(card.action);
   return (
-    <ActionConfirmationCard
-      title={title}
-      description={description}
-      allowOnceLabel={allowOnceLabel}
-      denyLabel={t({ id: "officeAddin.word.review.cancel", message: "Cancel" })}
-      onAllowOnce={() => {
-        if (canApply && !operationInProgress) allowCard(card);
-      }}
-      onAlwaysAllow={() => {
-        if (!canApply || operationInProgress || locked) return;
-        if (onGrantAlways) onGrantAlways();
-        else
-          setDecisions({
-            ...decisions,
-            [decisionKey(facetId, card.action)]: "always",
-          });
-        allowCard(card);
-      }}
-      alwaysAllowDisabledReason={
-        locked
-          ? (alwaysBlockedReason ??
-            t({
-              id: "officeAddin.word.card.alwaysAllowLocked",
-              message:
-                "Your organization requires confirmation each time this action runs automatically.",
-            }))
-          : undefined
-      }
-      onDeny={() => {
-        denyCard(card);
-        onDenied();
-      }}
-      isBusy={operationInProgress || !canApply}
-      progressLabel={applying ? wordApplyStageLabel(applyStage) : undefined}
-      scrollIntoViewOnMount={card.autoTriggered}
-    />
+    <p
+      className="word-review__hint"
+      role="status"
+      data-testid="word-chained-status"
+    >
+      {applying ? wordApplyStageLabel(applyStage) : wordChainedApplyText(state)}
+    </p>
   );
 }
 

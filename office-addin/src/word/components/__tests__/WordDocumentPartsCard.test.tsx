@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
+import { DecidedPlanCard } from "../../../test/helpers/decidedWordPlanCard";
 import {
   heading,
   packageXml,
@@ -38,6 +39,11 @@ import type {
   WordDocumentCapture,
 } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
+
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
 
 vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
   const { ooxmlHostCommentStates } = await import(
@@ -85,12 +91,6 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
     useHostArtifact: () => mock.artifact,
     useChatContext,
     ...chatHooksFrom(useChatContext),
-    usePersistedState: () => [{}, vi.fn()],
-    useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
-      select({
-        registerConfirmation: vi.fn(),
-        unregisterConfirmation: vi.fn(),
-      }),
   };
 });
 
@@ -131,7 +131,14 @@ function mount(
   snapshot: WordAuthoringSnapshot,
   language: string,
   content: string,
-  { reloaded = false }: { reloaded?: boolean } = {},
+  {
+    reloaded = false,
+    decided = false,
+  }: {
+    reloaded?: boolean;
+    /** The plan card in the chat's decision place instead of the answer's. */
+    decided?: boolean;
+  } = {},
 ) {
   const messageId = String(mock.artifact.messageId);
   snapshot.ownerMessageId = messageId;
@@ -151,7 +158,11 @@ function mount(
       }
       restoreRequest={vi.fn()}
     >
-      <WordHostCardRenderer language={language} content={content} />
+      {decided ? (
+        <DecidedPlanCard messageId={messageId} content={content} />
+      ) : (
+        <WordHostCardRenderer language={language} content={content} />
+      )}
     </WordWriteProvider>,
     { wrapper: Conversation },
   );
@@ -199,7 +210,6 @@ beforeEach(() => {
     messageId: globalThis.crypto.randomUUID(),
     itemIdentity: "doc-A",
     allowedClientActions: ["word.apply_document_plan"],
-    clientActionPresentation: "render_buttons",
   };
 });
 afterEach(() => {
@@ -306,7 +316,9 @@ describe("the card of a change in parts", () => {
     mock.messageStatus = "completed";
     mock.content = turn.content;
     const insert = wordHost(snapshot);
-    mount(snapshot, "erato-word-document-plan", planOf(turn));
+    mount(snapshot, "erato-word-document-plan", planOf(turn), {
+      decided: true,
+    });
 
     const apply = await screen.findByRole("button", {
       name: /^(Apply|Replace)/,
@@ -357,7 +369,9 @@ describe("the card of a change in parts", () => {
     vi.stubGlobal("Office", {
       context: { diagnostics: { platform: "OfficeOnline" } },
     });
-    mount(snapshot, "erato-word-document-plan", planOf(turn));
+    mount(snapshot, "erato-word-document-plan", planOf(turn), {
+      decided: true,
+    });
 
     expect(
       await screen.findByText(
@@ -381,7 +395,9 @@ describe("the card of a change in parts", () => {
     if (!finished.last.ok) throw new Error(JSON.stringify(finished.last));
     mock.messageStatus = "completed";
     mock.content = finished.content;
-    mount(snapshot, "erato-word-document-plan", planOf(finished));
+    mount(snapshot, "erato-word-document-plan", planOf(finished), {
+      decided: true,
+    });
 
     expect(
       await screen.findByTestId("word-plan-not-changed"),
@@ -457,7 +473,7 @@ describe("the card of a change in parts", () => {
     expect(container).not.toHaveTextContent(/Erato stopped before finishing/);
   });
 
-  it("keeps a fresh proposal open while its copy binds after the message completes", async () => {
+  it("keeps a parked proposal open while its copy binds after the message completes", async () => {
     const snapshot = document();
     const messageId = String(mock.artifact.messageId);
     const turn = await recordPartsTurn(snapshot, {
@@ -483,10 +499,7 @@ describe("the card of a change in parts", () => {
         capturesByAssistantMessageId={captures}
         restoreRequest={vi.fn()}
       >
-        <WordHostCardRenderer
-          language="erato-word-document-plan"
-          content={planOf(turn)}
-        />
+        <DecidedPlanCard messageId={messageId} content={planOf(turn)} />
       </WordWriteProvider>
     );
     const { rerender } = render(card(new Map()), { wrapper: Conversation });
@@ -523,7 +536,9 @@ describe("the card of a change in parts", () => {
     if (!turn.last.ok) throw new Error(JSON.stringify(turn.last));
     mock.messageStatus = "completed";
     mock.content = turn.content;
-    mount(snapshot, "erato-word-document-plan", planOf(turn));
+    mount(snapshot, "erato-word-document-plan", planOf(turn), {
+      decided: true,
+    });
 
     expect(
       await screen.findByTestId("word-plan-not-changed"),

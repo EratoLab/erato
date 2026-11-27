@@ -19,7 +19,6 @@ import {
   WORD_REPLACE_FENCE,
 } from "./wordClientActions";
 import { WORD_SUBMIT_PLAN_ACTION } from "./wordDocumentSubmission";
-import { isProposalChained } from "../../core/clientActions/proposalApply";
 
 import type {
   ContentPart,
@@ -76,14 +75,7 @@ function chainedCards(
 /** Historical cards can render without a capture, but only an owned live capture permits writing. */
 export function buildWordArtifact(args: {
   facetId: string | undefined;
-  clientActionInfo:
-    | {
-        clientActions: string[];
-        alwaysAskActions: string[];
-        presentation?: string;
-        grantScope?: Record<string, string>;
-      }
-    | undefined;
+  clientActionInfo: { clientActions: string[] } | undefined;
   content: ContentPart[] | undefined;
   messageId: string;
   capture: WordDocumentCapture | undefined;
@@ -165,20 +157,7 @@ export function buildWordArtifact(args: {
         : {}),
     messageId: args.messageId,
     ...(allowedClientActions ? { allowedClientActions } : {}),
-    ...(args.clientActionInfo &&
-    args.clientActionInfo.alwaysAskActions.length > 0
-      ? { alwaysAskClientActions: args.clientActionInfo.alwaysAskActions }
-      : {}),
     ...(proposedClientAction ? { proposedClientAction } : {}),
-    ...(args.clientActionInfo?.grantScope &&
-    Object.keys(args.clientActionInfo.grantScope).length > 0
-      ? { clientActionGrantScopes: args.clientActionInfo.grantScope }
-      : {}),
-    // The server carries out a chained proposal after the user's decision in the chat: the
-    // pane does not prompt for it as well.
-    ...(args.clientActionInfo?.presentation && !isProposalChained(args.content)
-      ? { clientActionPresentation: args.clientActionInfo.presentation }
-      : {}),
     ...(args.capture
       ? { isFreshCompletion: true, itemIdentity: args.capture.identity }
       : {}),

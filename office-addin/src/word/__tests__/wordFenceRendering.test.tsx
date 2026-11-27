@@ -31,17 +31,8 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
     ...(await importOriginal<object>()),
     useChatContext,
     ...chatHooksFrom(useChatContext),
-    useConfirmationRegistryStore: (
-      selector: (state: {
-        registerConfirmation: () => void;
-        unregisterConfirmation: () => void;
-      }) => unknown,
-    ) =>
-      selector({
-        registerConfirmation: () => {},
-        unregisterConfirmation: () => {},
-      }),
-    usePersistedState: () => [{}, () => {}],
+    useApprovalTools: () => [],
+    useProfile: () => ({ profile: undefined }),
   };
 });
 
@@ -68,7 +59,6 @@ const WORD_ARTIFACT = buildWordArtifact({
   facetId: "word_document_review",
   clientActionInfo: {
     clientActions: ["word.apply_edits"],
-    alwaysAskActions: [],
   },
   content: undefined,
   messageId: "m1",

@@ -2321,7 +2321,7 @@ impl AppConfig {
                 }
             }
             for (action, scope) in &action_facet.grant_scope {
-                // Only the Word add-in's cards honour a scope; elsewhere a stored grant would still apply.
+                // Only the Word add-in ever kept an "always allow" for one session and document.
                 if !action.starts_with("word.") {
                     panic!(
                         "Action facet '{}' sets grant_scope for '{}'; grant_scope applies to Word add-in actions (word.*) only.",
@@ -8126,33 +8126,32 @@ pub struct ActionFacetConfig {
 
     // Fixed identifiers of client-side actions (e.g. "outlook.reply") the
     // model may propose via the `propose_client_action` tool when this facet
-    // is active. The client application validates the proposal and performs
-    // the action only after user confirmation.
+    // is active. A proposed action that a server-called client tool lists in
+    // its `client_actions` is carried out through that tool after the user's
+    // decision (Ask, Always or Never). Where the client shows an action's
+    // button, a click on it runs the action directly.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub client_actions: Vec<String>,
 
-    // How the client should surface a proposed client action:
-    // - "render_buttons" (default): show action buttons; the user clicks.
-    // - "auto_prompt": the client may immediately surface the proposed action
-    //   after a fresh assistant completion, subject to the user's local
-    //   approval preferences.
-    // Only meaningful when `client_actions` is non-empty.
+    // No longer read: a proposed action follows the user's decision for its
+    // tool whatever this says. Still accepted ("render_buttons",
+    // "auto_prompt") so existing configurations load.
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub presentation: Option<String>,
 
     // Subset of `client_actions` for which the deployment ENFORCES a
-    // per-use confirmation: the client must always ask and must not offer
-    // (or honor) a persistent "always allow" for these actions. Users may
-    // still deny them entirely.
+    // per-use confirmation: in this facet the server asks every time for a
+    // call that carries out one of these actions and offers no "always
+    // allow" for it. A user's Never still refuses them.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.2"))]
     pub client_actions_always_ask: Vec<String>,
 
-    // How far a user's persistent "always allow" reaches, per action in
-    // `client_actions`: "device" (default) keeps it on the device until the
-    // user changes it; "session_document" keeps it only for the open add-in
-    // session and the document it was given on.
+    // Read only by the add-in's one-time carry-over of the decisions it kept
+    // on the device before they moved to the server: an "always allow" for an
+    // action set to "session_document" is not carried over, as it held only
+    // for one session and document; "device" (default) is carried over.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub grant_scope: HashMap<String, String>,

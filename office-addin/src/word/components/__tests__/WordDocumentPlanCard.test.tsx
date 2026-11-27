@@ -28,6 +28,10 @@ import {
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
+  DecidedPlanCard,
+  serverPlanApply,
+} from "../../../test/helpers/decidedWordPlanCard";
+import {
   allowWordWebImport,
   setWordWebImport,
 } from "../../../test/mocks/word/applyPolicy";
@@ -80,7 +84,6 @@ import {
 } from "../../utils/wordInPlaceCapabilities";
 import {
   WORD_COMPATIBILITY_MODE_KEY,
-  latchWordInPlace,
   resetWordInPlaceLatchForTests,
 } from "../../utils/wordInPlaceSwitch";
 import { readWordCommentStates } from "../../utils/wordPlanCommentCheck";
@@ -99,6 +102,11 @@ import type {
 } from "@erato/frontend/word-review";
 import type { ReactNode } from "react";
 
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
+
 vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
   const { ooxmlHostCommentStates } = await import(
     "../../../test/mocks/word/commentStates"
@@ -111,22 +119,17 @@ vi.mock("../../utils/wordPlanCommentCheck", async (importOriginal) => {
 
 const mock = vi.hoisted(() => {
   const artifact: Record<string, unknown> = {};
-  /** Consent cards holding the chat's queued messages, as `${chatId}:${id}`. */
-  const pendingConfirmations = new Set<string>();
   return {
     artifact,
-    decisions: {},
-    setDecisions: vi.fn(),
     messageStatus: "completed",
     content: [] as unknown[],
     request: "",
     requestArgs: undefined as Record<string, unknown> | undefined,
     restoreRequest: vi.fn(),
-    pendingConfirmations,
-    registerConfirmation: (chatId: string, id: string) =>
-      void pendingConfirmations.add(`${chatId}:${id}`),
-    unregisterConfirmation: (chatId: string, id: string) =>
-      void pendingConfirmations.delete(`${chatId}:${id}`),
+    /** The server lets the user choose Always for this change. */
+    allowAlways: true,
+    /** What the decision place sent the server, in order. */
+    decided: [] as string[],
   };
 });
 vi.mock("@erato/frontend/library", async (importOriginal) => {
@@ -158,40 +161,37 @@ vi.mock("@erato/frontend/library", async (importOriginal) => {
     useHostArtifact: () => mock.artifact,
     useChatContext,
     ...chatHooksFrom(useChatContext),
-    usePersistedState: () => [mock.decisions, mock.setDecisions],
-    useConfirmationRegistryStore: (select: (value: unknown) => unknown) =>
-      select({
-        registerConfirmation: mock.registerConfirmation,
-        unregisterConfirmation: mock.unregisterConfirmation,
-      }),
     ActionConfirmationCard: ({
+      allowOnceLabel,
       onAllowOnce,
       onDeny,
       onAlwaysAllow,
       alwaysAllowDisabledReason,
       denyLabel,
       isBusy,
-      progressLabel,
     }: {
-      onAllowOnce: () => void;
+      allowOnceLabel?: string;
+      onAllowOnce?: () => void;
       onDeny: () => void;
-      onAlwaysAllow: () => void;
+      onAlwaysAllow?: () => void;
       alwaysAllowDisabledReason?: string;
       denyLabel?: string;
       isBusy: boolean;
-      progressLabel?: string;
     }) => (
       <div>
-        {progressLabel && <output>{progressLabel}</output>}
-        <button disabled={isBusy} onClick={onAllowOnce}>
-          Allow once
-        </button>
-        <button
-          disabled={isBusy || !!alwaysAllowDisabledReason}
-          onClick={onAlwaysAllow}
-        >
-          Always allow
-        </button>
+        {onAllowOnce && (
+          <button disabled={isBusy} onClick={onAllowOnce}>
+            {allowOnceLabel ?? "Allow once"}
+          </button>
+        )}
+        {onAlwaysAllow && (
+          <button
+            disabled={isBusy || !!alwaysAllowDisabledReason}
+            onClick={onAlwaysAllow}
+          >
+            Always allow
+          </button>
+        )}
         {alwaysAllowDisabledReason && <p>{alwaysAllowDisabledReason}</p>}
         <button onClick={onDeny}>{denyLabel}</button>
       </div>
@@ -228,6 +228,18 @@ function Conversation({ children }: { children: ReactNode }) {
     </TestTheme>
   );
 }
+const onDecided = (choice: string) => void mock.decided.push(choice);
+/** The card in the chat's decision place; the answer's own card has no Apply. */
+const DecidedCard = ({ content }: { content: string }) => (
+  <DecidedPlanCard
+    messageId={String(mock.artifact.messageId)}
+    content={content}
+    allowAlways={mock.allowAlways}
+    onDecided={onDecided}
+  />
+);
+const serverApply = (content: string, confirmation?: unknown) =>
+  serverPlanApply(String(mock.artifact.messageId), content, confirmation);
 function setup(
   ooxml?: string,
   buildPlan: (snapshot: WordAuthoringSnapshot) => WordDocumentPlan = (
@@ -285,6 +297,18 @@ function setup(
         capturesByAssistantMessageId={new Map([[messageId, capture]])}
         restoreRequest={mock.restoreRequest}
       >
+        <DecidedCard content={JSON.stringify(plan)} />
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+  /** The card in the answer, which shows how the server's call stands. */
+  const answer = () =>
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={new Map([[messageId, capture]])}
+        restoreRequest={mock.restoreRequest}
+      >
         <WordHostCardRenderer
           language="erato-word-document-plan"
           content={JSON.stringify(plan)}
@@ -298,6 +322,7 @@ function setup(
     capture,
     insert,
     mount,
+    answer,
     fail: () => {
       fail = true;
     },
@@ -381,6 +406,8 @@ function renderRealisticCard(
   snapshot: ReturnType<typeof readySnapshot>,
   content: string,
   ordinalMap: WordDocumentCapture["ordinalMap"] = new Map(),
+  /** The card in the answer instead of the one in the decision place. */
+  answer = false,
 ) {
   const messageId = String(mock.artifact.messageId);
   const capture: WordDocumentCapture = {
@@ -398,33 +425,35 @@ function renderRealisticCard(
       capturesByAssistantMessageId={captures}
       restoreRequest={mock.restoreRequest}
     >
-      <WordHostCardRenderer
-        language="erato-word-document-plan"
-        content={content}
-      />
+      {answer ? (
+        <WordHostCardRenderer
+          language="erato-word-document-plan"
+          content={content}
+        />
+      ) : (
+        <DecidedCard content={content} />
+      )}
     </WordWriteProvider>
   );
-  const view = render(card(), { wrapper: TestTheme });
+  const view = render(card(), { wrapper: answer ? Conversation : TestTheme });
   return { ...view, refresh: () => view.rerender(card()) };
 }
 beforeEach(() => {
   i18n.load("en", frontendMessages);
   i18n.activate("en");
-  mock.decisions = {};
-  mock.setDecisions.mockClear();
+  mock.allowAlways = true;
+  mock.decided = [];
   mock.messageStatus = "completed";
   mock.content = [];
   mock.request = "";
   mock.requestArgs = undefined;
   mock.restoreRequest.mockClear();
-  mock.pendingConfirmations.clear();
   mock.artifact = {
     facetId: "word_document_authoring",
     messageId: globalThis.crypto.randomUUID(),
     itemIdentity: "doc-A",
     allowedClientActions: ["word.apply_document_plan"],
     isFreshCompletion: true,
-    clientActionPresentation: "render_buttons",
   };
 });
 afterEach(() => {
@@ -461,11 +490,7 @@ describe("structural document review", () => {
     mock.artifact = {
       ...buildWordArtifact({
         facetId: "word_document_authoring",
-        clientActionInfo: {
-          clientActions: ["word.apply_document_plan"],
-          alwaysAskActions: ["word.apply_document_plan"],
-          presentation: "auto_prompt",
-        },
+        clientActionInfo: { clientActions: ["word.apply_document_plan"] },
         content: [
           {
             content_type: "tool_use",
@@ -485,7 +510,7 @@ describe("structural document review", () => {
       }),
     };
     state.mount();
-    const allow = await screen.findByRole("button", { name: "Allow once" });
+    const allow = await screen.findByRole("button", { name: APPLY_LABEL });
     expect(state.insert).not.toHaveBeenCalled();
     fireEvent.click(allow);
     await screen.findByText(APPLIED);
@@ -543,10 +568,7 @@ describe("structural document review", () => {
     mock.artifact = {
       ...buildWordArtifact({
         facetId: "word_document_authoring",
-        clientActionInfo: {
-          clientActions: ["word.apply_document_plan"],
-          alwaysAskActions: [],
-        },
+        clientActionInfo: { clientActions: ["word.apply_document_plan"] },
         content: mock.content as EratoLibrary.ContentPart[],
         messageId,
         capture: state.capture,
@@ -774,60 +796,6 @@ describe("structural document review", () => {
       screen.getByRole("button", { name: "Download original body" }),
     ).toBeInTheDocument();
   });
-  it("keeps the Apply button focused and busy with the current stage, then releases it", async () => {
-    const state = setup();
-    state.mount();
-    const release = holdWord();
-    const apply = screen.getByRole("button", {
-      name: "Apply changes",
-    });
-    apply.focus();
-    fireEvent.click(apply);
-    const busy = await screen.findByRole("button", { name: "Saving backup…" });
-    expect(busy).toBe(apply);
-    expect(busy).toHaveAttribute("aria-busy", "true");
-    expect(busy).toHaveAttribute("aria-disabled", "true");
-    expect(busy).toHaveFocus();
-    expect(
-      screen.queryByText(/Applying and verifying/),
-    ).not.toBeInTheDocument();
-    fireEvent.click(busy);
-    release();
-    await screen.findByText(APPLIED);
-    expect(state.insert).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
-  });
-  it("locks Apply on every other card while one card writes", async () => {
-    const state = setup();
-    render(
-      <WordWriteProvider
-        documentIdentity="doc-A"
-        capturesByAssistantMessageId={
-          new Map([[String(mock.artifact.messageId), state.capture]])
-        }
-      >
-        {[0, 2].map((indent) => (
-          <WordHostCardRenderer
-            key={indent}
-            language="erato-word-document-plan"
-            content={JSON.stringify(state.plan, null, indent)}
-          />
-        ))}
-      </WordWriteProvider>,
-      { wrapper: Conversation },
-    );
-    const release = holdWord();
-    const [first, second] = screen.getAllByRole("button", {
-      name: "Apply changes",
-    });
-    fireEvent.click(first);
-    await screen.findByRole("button", { name: "Saving backup…" });
-    expect(second).toBeDisabled();
-    fireEvent.click(second);
-    release();
-    await screen.findByText(APPLIED);
-    expect(state.insert).toHaveBeenCalledTimes(1);
-  });
   it("releases the busy Apply button after a failed write", async () => {
     const state = setup();
     state.fail();
@@ -838,25 +806,12 @@ describe("structural document review", () => {
     );
     expect(document.querySelector('[aria-busy="true"]')).toBeNull();
   });
-  it("shows the current stage on the consent card while applying", async () => {
-    mock.artifact.clientActionPresentation = "auto_prompt";
-    mock.artifact.proposedClientAction = "word.apply_document_plan";
-    const state = setup();
-    state.mount();
-    const release = holdWord();
-    fireEvent.click(await screen.findByRole("button", { name: "Allow once" }));
-    expect(await screen.findByText("Saving backup…")).toBeInTheDocument();
-    release();
-    await screen.findByText(APPLIED);
-    expect(state.insert).toHaveBeenCalledTimes(1);
-  });
   it("blocks a forged complete-read token and never writes", () => {
     const state = setup();
     state.plan.readToken = "forged";
     state.mount();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
     expect(
       screen.getByText(/complete document has not been read/),
     ).toBeInTheDocument();
@@ -990,8 +945,7 @@ describe("structural document review", () => {
         documentIdentity="doc-A"
         capturesByAssistantMessageId={new Map([[messageId, capture]])}
       >
-        <WordHostCardRenderer
-          language="erato-word-document-plan"
+        <DecidedCard
           content={JSON.stringify(
             statusRewritePlan(snapshot, "Status: revised."),
           )}
@@ -1171,34 +1125,19 @@ describe("structural document review", () => {
     expect(wordPackageFingerprint(word.ooxml())).toBe(original);
     expect(word.insert).not.toHaveBeenCalled();
   });
-  it("respects the structural action permission independently of paragraph edits", () => {
-    mock.decisions = {
-      "word_document_authoring/word.apply_document_plan": "never",
-      "word_document_authoring/word.apply_edits": "always",
-    };
+  it("offers only Cancel where the facet does not allow the change", () => {
+    mock.artifact.allowedClientActions = ["word.apply_edits"];
     const state = setup();
     state.mount();
     expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
-  });
-  it("asks separately for a rewrite even when paragraph edits are always allowed", async () => {
-    mock.artifact.clientActionPresentation = "auto_prompt";
-    mock.artifact.proposedClientAction = "word.apply_document_plan";
-    mock.decisions = { "word_document_authoring/word.apply_edits": "always" };
-    const state = setup();
-    state.mount();
-    await screen.findByRole("button", { name: "Allow once" });
-    expect(state.insert).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.getByText("Proposal declined. Nothing was written."),
-    ).toBeInTheDocument();
-    expect(state.insert).not.toHaveBeenCalled();
+    expect(mock.decided).toEqual(["reject"]);
   });
   it("shows only a spinner while the plan is still streaming", () => {
     mock.messageStatus = "sending";
     const state = setup();
-    state.mount();
+    state.answer();
     expect(screen.getByText("Preparing document changes…")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
     expect(state.insert).not.toHaveBeenCalled();
@@ -1225,23 +1164,16 @@ describe("structural document review", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
-  it("greys out Always allow when the organization requires confirmation", async () => {
-    mock.artifact.clientActionPresentation = "auto_prompt";
-    mock.artifact.proposedClientAction = "word.apply_document_plan";
-    mock.artifact.alwaysAskClientActions = ["word.apply_document_plan"];
+  it("greys out Always allow where the server asks every time", () => {
+    mock.allowAlways = false;
     const state = setup();
     state.mount();
-    const always = await screen.findByRole("button", { name: "Always allow" });
+    const always = screen.getByRole("button", { name: "Always allow" });
     expect(always).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Your organization requires confirmation each time this action runs automatically.",
-      ),
-    ).toBeInTheDocument();
     fireEvent.click(always);
-    expect(mock.setDecisions).not.toHaveBeenCalled();
+    expect(mock.decided).toEqual([]);
     expect(state.insert).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply changes" })).toBeEnabled();
   });
   it("shows a one-cell table edit as a small change with the new cell text", () => {
     const state = setup(
@@ -1408,9 +1340,8 @@ describe("structural document review", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing to change" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -1421,9 +1352,8 @@ describe("structural document review", () => {
     expect(
       screen.getByText(/written about a different document/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Apply changes" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Apply changes" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
   });
   it("reports a stale plan without writing and without offering to apply again", async () => {
     const state = setup();
@@ -1468,20 +1398,6 @@ describe("structural document review", () => {
       await screen.findByText("Undone: Change 5 items"),
     ).toBeInTheDocument();
     expect(state.insert).toHaveBeenCalledTimes(2);
-  });
-  it("notes an automatic run under Always allow on the receipt", async () => {
-    mock.artifact.clientActionPresentation = "auto_prompt";
-    mock.artifact.proposedClientAction = "word.apply_document_plan";
-    mock.decisions = {
-      "word_document_authoring/word.apply_document_plan": "always",
-    };
-    const state = setup();
-    state.mount();
-    await screen.findByText(APPLIED);
-    expect(
-      screen.getByText("Automatic action under your Always allow setting."),
-    ).toBeInTheDocument();
-    expect(state.insert).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1536,6 +1452,8 @@ async function mountRealistic(
     platform?: "Mac";
     /** Number the blocks by the live paragraphs, as a capture of a live document does. */
     paragraphOrdinals?: boolean;
+    /** The card in the answer, where the server makes no apply call. */
+    answer?: boolean;
   } = {},
 ) {
   const {
@@ -1545,6 +1463,7 @@ async function mountRealistic(
     pendingUpdates = false,
     platform,
     paragraphOrdinals = false,
+    answer = false,
     ...host
   } = options;
   const word = installWordOoxmlHost(xml, {
@@ -1605,6 +1524,7 @@ async function mountRealistic(
     snapshot,
     JSON.stringify(makePlan(snapshot)),
     ordinalMap,
+    answer,
   );
   return { word, snapshot, coauthoringRead, refresh };
 }
@@ -2190,14 +2110,6 @@ const confirmBox = () =>
 const applyButton = () => screen.getByRole("button", { name: APPLY_LABEL });
 const spyOnApply = () =>
   vi.spyOn(WORD_CLIENT_ACTIONS.get("word.apply_document_plan")!, "execute");
-const autoPrompt = (decision?: "always") => {
-  mock.artifact.clientActionPresentation = "auto_prompt";
-  mock.artifact.proposedClientAction = "word.apply_document_plan";
-  if (decision)
-    mock.decisions = {
-      "word_document_authoring/word.apply_document_plan": decision,
-    };
-};
 
 /** The status rewrite submitted under a scoped read of that paragraph alone. */
 function scopedStatusPlan(s: WordAuthoringSnapshot): WordDocumentPlan {
@@ -2251,7 +2163,6 @@ const WEB_IMPORT_REFUSAL =
 
 describe("whole-document plans on Word for the web by default", () => {
   it("are refused before Apply, with Copy draft and Word for Windows or Mac, and never import", async () => {
-    autoPrompt("always");
     const execute = spyOnApply();
     const { word } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
@@ -2268,17 +2179,13 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(word.insert).not.toHaveBeenCalled();
   });
 
-  it("fold once a later turn revokes their snapshot, and stay refused when opened", async () => {
+  it("stay refused once a later turn revokes their snapshot, and can still be declined", async () => {
     const { snapshot, refresh } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
     });
     await act(async () => {});
     snapshot.revoked = true;
     refresh();
-    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-      /^Proposed: /,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
     expect(screen.getByRole("button", { name: "Copy draft" })).toBeVisible();
     expect(
@@ -2286,9 +2193,11 @@ describe("whole-document plans on Word for the web by default", () => {
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
     expect(screen.queryByText(/no longer active/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(mock.decided).toEqual(["reject"]);
   });
 
-  it("fold an in-place plan a later turn revoked to what it proposed, with the expired notice and no Apply", async () => {
+  it("offer no Apply for an in-place plan a later turn revoked, with the expired notice", async () => {
     const { snapshot, refresh } = await mountRealistic(
       (s) => statusRewritePlan(s, "Status: revised."),
       { profile: "word-web" },
@@ -2297,17 +2206,12 @@ describe("whole-document plans on Word for the web by default", () => {
     expect(applyButton()).toBeEnabled();
     snapshot.revoked = true;
     refresh();
-    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
-      /^Proposed: /,
-    );
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(
       screen.getByText(
         "This document snapshot is no longer active. Include the document in a new request.",
       ),
     ).toBeVisible();
-    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
 
   it("keeps the organization wording where a desktop deployment turns the import off", async () => {
@@ -2335,9 +2239,6 @@ describe("confirmed whole-document replacement on Word for the web", () => {
   });
 
   it("replaces Apply with an unticked confirmation naming the costs, then imports once ticked", async () => {
-    mock.decisions = {
-      "word_document_authoring/word.apply_document_plan": "always",
-    };
     const execute = spyOnApply();
     const { word } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
@@ -2364,41 +2265,14 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     expect(word.insert).toHaveBeenCalledOnce();
   });
 
-  it("never imports automatically under Always allow, and asks for the tick instead", async () => {
-    autoPrompt("always");
-    const execute = spyOnApply();
-    const { word } = await mountRealistic(sectionsPlan, {
-      profile: "word-web",
-    });
-    await act(async () => {});
-    expect(execute).not.toHaveBeenCalled();
-    expect(word.insert).not.toHaveBeenCalled();
-    expect(confirmBox()).not.toBeChecked();
-    expect(applyButton()).toBeDisabled();
-
-    fireEvent.click(confirmBox());
-    apply();
-    await screen.findByText(/^Applied: /);
-    expect(execute.mock.calls).toEqual([
-      [expect.objectContaining({ importConfirmed: true })],
-    ]);
-    expect(
-      screen.queryByText("Automatic action under your Always allow setting."),
-    ).toBeNull();
-  });
-
-  it("stands in for the consent card, and Cancel declines the plan", async () => {
-    autoPrompt();
+  it("stands in for the usual choices, and Cancel declines the plan", async () => {
     const { word } = await mountRealistic(sectionsPlan, {
       profile: "word-web",
     });
     expect(confirmBox()).not.toBeChecked();
-    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      await screen.findByText("Proposal declined. Nothing was written."),
-    ).toBeVisible();
+    expect(mock.decided).toEqual(["reject"]);
     expect(word.insert).not.toHaveBeenCalled();
   });
 
@@ -2480,52 +2354,8 @@ describe("confirmed whole-document replacement on Word for the web", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it("opens no consent card behind a refusal, so the chat's queued messages are not held", async () => {
-    window.WORD_FORCE_IMPORT_APPLY = true;
-    autoPrompt();
-    await mountRealistic(scopedStatusPlan, { profile: "word-web" });
-    await act(async () => {});
-    expect(
-      screen.getByRole("button", { name: "Ask again for in-place edits" }),
-    ).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
-    expect(mock.pendingConfirmations.size).toBe(0);
-  });
-
-  it("releases a consent card once a refusal takes its place", async () => {
-    autoPrompt();
-    const { refresh } = await mountRealistic(scopedStatusPlan, {
-      profile: "word-web",
-    });
-    expect(
-      await screen.findByRole("button", { name: "Allow once" }),
-    ).toBeVisible();
-    expect(mock.pendingConfirmations.size).toBe(1);
-
-    latchWordInPlace("verify-mismatch");
-    refresh();
-    expect(
-      screen.getByRole("button", { name: "Ask again for in-place edits" }),
-    ).toBeVisible();
-    expect(mock.pendingConfirmations.size).toBe(0);
-  });
-
-  it("releases the consent card the confirmation stands in for when the user asks again", async () => {
-    autoPrompt();
-    await mountRealistic(sectionsPlan, { profile: "word-web" });
-    await act(async () => {});
-    expect(confirmBox()).not.toBeChecked();
-    expect(mock.pendingConfirmations.size).toBe(1);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Ask again for in-place edits" }),
-    );
-    expect(mock.pendingConfirmations.size).toBe(0);
-    expect(confirmBox()).not.toBeChecked();
-  });
-
   it("offers no Apply where the deployment turned the import off", async () => {
     onTestFinished(setWordWebImport("off"));
-    autoPrompt("always");
     const execute = spyOnApply();
     await mountRealistic(sectionsPlan, { profile: "word-web" });
     await act(async () => {});
@@ -2583,12 +2413,11 @@ describe("confirmed whole-document replacement on Word for the web", () => {
   });
 
   it("keeps Apply and Always allow for the same import on Word PC", async () => {
-    autoPrompt();
     const { word } = await mountRealistic(sectionsPlan);
     expect(routeText()).toBe(SECTIONS_ROUTE);
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "Always allow" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    apply();
     expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
       /^Applied/,
     );
@@ -2618,8 +2447,10 @@ describe("co-author warning on Word for Windows", () => {
     expect(coauthoringRead).toHaveBeenCalledTimes(2);
   });
 
-  it("reads co-authors again at Apply and shows one who joined before replacing anything", async () => {
-    const { word } = await mountRealistic(sectionsPlan, { coauthors: 1 });
+  it("reads co-authors again when the server's call writes, and replaces nothing when one joined", async () => {
+    const { word, coauthoringRead } = await mountRealistic(sectionsPlan, {
+      coauthors: 1,
+    });
     await act(async () => {});
     expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
     (
@@ -2627,23 +2458,17 @@ describe("co-author warning on Word for Windows", () => {
         coauthoring: { authors: { items: { id: string }[] } };
       }
     ).coauthoring.authors.items.push({ id: "author-joined" });
-    apply();
-    expect(await screen.findByTestId("word-plan-coauthors")).toHaveTextContent(
-      COAUTHORS_WARNING,
-    );
+    await act(async () => apply());
+    await waitFor(() => expect(coauthoringRead).toHaveBeenCalledTimes(2));
     expect(word.insert).not.toHaveBeenCalled();
-    apply();
-    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
-      /^Applied/,
-    );
-    expect(word.insert).toHaveBeenCalledOnce();
+    expect(applyButton()).toBeEnabled();
   });
 
-  it("warns above the consent card as well", async () => {
-    autoPrompt();
+  it("warns above the usual choices as well", async () => {
     await mountRealistic(sectionsPlan, { coauthors: 2 });
     expect(await screen.findByTestId("word-plan-coauthors")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled();
+    expect(applyButton()).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Always allow" })).toBeEnabled();
   });
 
   it("warns inside the confirmation where the deployment asks first on Word PC", async () => {
@@ -2893,8 +2718,7 @@ describe("comment threads a plan deletes", () => {
     );
   });
 
-  it("asks for the tick even under Always allow, and never runs on its own", async () => {
-    autoPrompt("always");
+  it("asks for the tick on screen, with no Always, and never runs on its own", async () => {
     const execute = spyOnApply();
     const { word } = await mountRealistic(shortenChapter3, {
       xml: CHAPTERS_WITH_COMMENTS(),
@@ -2904,91 +2728,19 @@ describe("comment threads a plan deletes", () => {
     expect(word.insert).not.toHaveBeenCalled();
     expect(tickBox()).not.toBeChecked();
     expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
-    expect(mock.pendingConfirmations.size).toBe(1);
 
     fireEvent.click(tickBox());
     apply();
     await screen.findByText(/^Applied: /);
     expect(execute).toHaveBeenCalledOnce();
-    expect(
-      screen.queryByText("Automatic action under your Always allow setting."),
-    ).toBeNull();
-    await waitFor(() => expect(mock.pendingConfirmations.size).toBe(0));
     expect(await liveComments()).toBe(3);
   });
 
-  it("still runs a plan that deletes no comment thread under Always allow", async () => {
-    autoPrompt("always");
-    const { word } = await mountRealistic(
-      (s) => {
-        const plan = shortenChapter3(s);
-        const refs = s.blocks.map((b) => b.ref);
-        plan.entries = [
-          { kind: "keep", source: refs.slice(0, 10) },
-          {
-            kind: "replace",
-            source: [refs[10]],
-            blocks: [{ id: "end", type: "paragraph", text: "Fin." }],
-          },
-        ];
-        return plan;
-      },
-      { xml: CHAPTERS_WITH_COMMENTS() },
-    );
-    await screen.findByText(/^Applied: /);
-    expect(screen.queryByTestId("word-plan-comment-removals")).toBeNull();
-    expect(word.insert).not.toHaveBeenCalled();
-    expect(await liveComments()).toBe(6);
-  });
-
-  it("says why nothing ran when Apply asks for a tick the card could not show", async () => {
-    spyOnApply().mockResolvedValue({
-      ok: false,
-      outcomes: [],
-      snapshotOoxml: null,
-      documentPlanResult: {
-        status: "blocked",
-        diagnostic: {
-          stage: "validate",
-          reason: "comment-removals-need-confirmation",
-          details: { commentThreads: 1 },
-        },
-      },
-    });
-    await mountRealistic(
-      (s) => {
-        const refs = s.blocks.map((b) => b.ref);
-        return {
-          ...shortenChapter3(s),
-          entries: [
-            { kind: "keep", source: refs.slice(0, 10) },
-            {
-              kind: "replace",
-              source: [refs[10]],
-              blocks: [{ id: "end", type: "paragraph", text: "Fin." }],
-            },
-          ],
-        };
-      },
-      { xml: CHAPTERS_WITH_COMMENTS() },
-    );
-    apply();
-    expect(
-      await screen.findByText(
-        "This change deletes comment threads, which needs your confirmation first. Nothing was applied.",
-      ),
-    ).toBeVisible();
-    expect(applyButton()).toBeEnabled();
-  });
-
   it("puts the request back asking to keep the commented passages", async () => {
-    autoPrompt();
     mock.request = "Shorten chapter 3.";
     const { word } = await mountRealistic(shortenChapter3, {
       xml: CHAPTERS_WITH_COMMENTS(),
     });
-    expect(mock.pendingConfirmations.size).toBe(1);
     fireEvent.click(
       screen.getByRole("button", { name: "Keep commented passages" }),
     );
@@ -3000,7 +2752,6 @@ describe("comment threads a plan deletes", () => {
         "Your request is back in the message box, asking to keep the commented passages. Review it, then send.",
       ),
     ).toBeVisible();
-    expect(mock.pendingConfirmations.size).toBe(0);
     expect(word.insert).not.toHaveBeenCalled();
   });
 
@@ -3121,7 +2872,6 @@ describe("whole-document imports of documents with comments", () => {
     });
 
     it("names the threads it rebuilds and deletes, offers to copy them all, and needs both ticks", async () => {
-      autoPrompt("always");
       const writeText = vi.fn(async (_text: string) => {});
       vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
       const execute = spyOnApply();
@@ -3172,6 +2922,231 @@ describe("whole-document imports of documents with comments", () => {
   });
 });
 
+describe("a change no server call applies", () => {
+  it("offers Apply in the answer and writes once on the user's click", async () => {
+    const state = setup();
+    state.answer();
+    expect(
+      screen.getByRole("heading", { name: "Change 5 items" }),
+    ).toBeVisible();
+    expect(screen.queryByTestId("word-chained-status")).toBeNull();
+    expect(state.insert).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(mock.decided).toEqual([]);
+  });
+
+  it("offers no Apply for a change the user set to Never on the server", () => {
+    never.actions = new Set(["word.apply_document_plan"]);
+    try {
+      const state = setup();
+      state.answer();
+      expect(
+        screen.queryByRole("button", { name: "Apply changes" }),
+      ).toBeNull();
+      expect(state.insert).not.toHaveBeenCalled();
+    } finally {
+      never.actions = new Set();
+    }
+  });
+
+  it("keeps Apply busy with the current stage and locks every other card while it writes", async () => {
+    const state = setup();
+    render(
+      <WordWriteProvider
+        documentIdentity="doc-A"
+        capturesByAssistantMessageId={
+          new Map([[String(mock.artifact.messageId), state.capture]])
+        }
+      >
+        {[0, 2].map((indent) => (
+          <WordHostCardRenderer
+            key={indent}
+            language="erato-word-document-plan"
+            content={JSON.stringify(state.plan, null, indent)}
+          />
+        ))}
+      </WordWriteProvider>,
+      { wrapper: Conversation },
+    );
+    const release = holdWord();
+    onTestFinished(release);
+    const [first, second] = screen.getAllByRole("button", {
+      name: "Apply changes",
+    });
+    fireEvent.click(first);
+    const busy = await screen.findByRole("button", { name: "Saving backup…" });
+    expect(busy).toBe(first);
+    expect(busy).toHaveAttribute("aria-busy", "true");
+    expect(second).toBeDisabled();
+    fireEvent.click(busy);
+    fireEvent.click(second);
+    release();
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no Apply once the copy it was checked against is no longer the newest", async () => {
+    const { snapshot, refresh } = await mountRealistic(
+      (s) => statusRewritePlan(s, "Status: revised."),
+      { answer: true },
+    );
+    await act(async () => {});
+    expect(applyButton()).toBeEnabled();
+    snapshot.revoked = true;
+    refresh();
+    expect(screen.getByTestId("word-review-receipt")).toHaveTextContent(
+      /^Proposed: /,
+    );
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+  });
+
+  it("offers no Apply for a change the host's policy refuses", async () => {
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      answer: true,
+    });
+    await act(async () => {});
+    expect(screen.getByText(WEB_IMPORT_REFUSAL)).toBeVisible();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(execute).not.toHaveBeenCalled();
+    expect(word.insert).not.toHaveBeenCalled();
+  });
+
+  it("replaces the whole document only with its box ticked, and has nothing to cancel", async () => {
+    setWordWebImport("confirm");
+    onTestFinished(() => {
+      delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
+    });
+    const execute = spyOnApply();
+    const { word } = await mountRealistic(sectionsPlan, {
+      profile: "word-web",
+      answer: true,
+    });
+    expect(confirmBox()).not.toBeChecked();
+    expect(applyButton()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(applyButton());
+    expect(execute).not.toHaveBeenCalled();
+
+    fireEvent.click(confirmBox());
+    apply();
+    await screen.findByText(/^Applied: /);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(execute.mock.calls[0][0]).toMatchObject({ importConfirmed: true });
+    expect(word.insert).toHaveBeenCalledOnce();
+    expect(mock.decided).toEqual([]);
+  });
+
+  it("shows a co-author who joined since the card was read before replacing anything", async () => {
+    const { word } = await mountRealistic(sectionsPlan, {
+      coauthors: 1,
+      answer: true,
+    });
+    await act(async () => {});
+    expect(screen.queryByTestId("word-plan-coauthors")).toBeNull();
+    (
+      word.document as unknown as {
+        coauthoring: { authors: { items: { id: string }[] } };
+      }
+    ).coauthoring.authors.items.push({ id: "author-joined" });
+    apply();
+    expect(await screen.findByTestId("word-plan-coauthors")).toBeVisible();
+    expect(word.insert).not.toHaveBeenCalled();
+    apply();
+    expect(await screen.findByTestId("word-review-receipt")).toHaveTextContent(
+      /^Applied/,
+    );
+    expect(word.insert).toHaveBeenCalledOnce();
+  });
+
+  describe("with comment threads the plan deletes", () => {
+    afterEach(() => {
+      vi.mocked(readWordCommentStates).mockImplementation(
+        ooxmlHostCommentStates,
+      );
+    });
+    const xml = () =>
+      withComments(packageXml(chapterCommentsBody()), CHAPTER_COMMENTS);
+    /** Replaces the blocks `from`..`to`; chapter 3's four paragraphs hold two comment threads. */
+    const replaceBlocks =
+      (from: number, to: number) =>
+      (s: WordAuthoringSnapshot): WordDocumentPlan => {
+        const refs = s.blocks.map((b) => b.ref);
+        return {
+          version: 1,
+          snapshot: s.token,
+          readToken: "read-proof",
+          scope: "document",
+          entries: [
+            { kind: "keep", source: refs.slice(0, from) },
+            {
+              kind: "replace",
+              source: refs.slice(from, to),
+              blocks: [{ id: "short", type: "paragraph", text: "In short." }],
+            },
+            ...(to < refs.length
+              ? [{ kind: "keep" as const, source: refs.slice(to) }]
+              : []),
+          ],
+          deleted: [],
+        };
+      };
+
+    it("applies only with their box ticked", async () => {
+      const execute = spyOnApply();
+      const { word } = await mountRealistic(replaceBlocks(5, 9), {
+        xml: xml(),
+        answer: true,
+      });
+      const tickBox = screen.getByRole("checkbox", {
+        name: "Also delete 2 comment threads",
+      });
+      expect(tickBox).not.toBeChecked();
+      expect(applyButton()).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+      fireEvent.click(applyButton());
+      expect(execute).not.toHaveBeenCalled();
+
+      fireEvent.click(tickBox);
+      apply();
+      await screen.findByText(/^Applied: /);
+      expect(execute).toHaveBeenCalledOnce();
+      expect(word.insert).toHaveBeenCalledOnce();
+    });
+
+    it("says why nothing ran when Apply asks for a tick the card could not show", async () => {
+      spyOnApply().mockResolvedValue({
+        ok: false,
+        outcomes: [],
+        snapshotOoxml: null,
+        documentPlanResult: {
+          status: "blocked",
+          diagnostic: {
+            stage: "validate",
+            reason: "comment-removals-need-confirmation",
+            details: { commentThreads: 1 },
+          },
+        },
+      });
+      await mountRealistic(replaceBlocks(10, 11), { xml: xml(), answer: true });
+      apply();
+      expect(
+        await screen.findByText(
+          "This change deletes comment threads, which needs your confirmation first. Nothing was applied.",
+        ),
+      ).toBeVisible();
+      expect(applyButton()).toBeEnabled();
+    });
+  });
+});
+
 describe("a change the server applies", () => {
   const chainedTurn = (
     plan: WordDocumentPlan,
@@ -3218,12 +3193,30 @@ describe("a change the server applies", () => {
   it("shows in the answer where the change stands, never an Apply", () => {
     const state = setup();
     chainedTurn(state.plan);
-    state.mount();
+    state.answer();
     expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
       "Waiting for your decision",
     );
     expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
-    expect(mock.pendingConfirmations.size).toBe(0);
+  });
+
+  it("shows in the answer which stage the server's call is at, offering no Apply there", async () => {
+    const state = setup();
+    chainedTurn(state.plan);
+    state.answer();
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
+    const release = holdWord();
+    onTestFinished(release);
+    let applied!: Promise<void>;
+    act(() => {
+      applied = serverApply(JSON.stringify(state.plan), {});
+    });
+    expect(await screen.findByText("Saving backup…")).toBeVisible();
+    release();
+    await act(() => applied);
+    await screen.findByText(APPLIED);
+    expect(state.insert).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: APPLY_LABEL })).toBeNull();
   });
 
   it("shows the server's result after a reload, without the pane's review", () => {
@@ -3232,7 +3225,7 @@ describe("a change the server applies", () => {
       status: "error",
       output: { status: "cancelled", reason: "pane_gone", changes_left: 1 },
     });
-    state.mount();
+    state.answer();
     expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
       "Not changed: the Erato pane was closed.",
     );
@@ -3244,7 +3237,7 @@ describe("a change the server applies", () => {
       status: "error",
       output: { status: "cancelled", reason: "timeout", changes_left: 0 },
     });
-    state.mount();
+    state.answer();
     expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
       "The change may already be in the document.",
     );
@@ -3277,7 +3270,7 @@ describe("a change the server applies", () => {
       </WordWriteProvider>,
       { wrapper: Conversation },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(onDecide).toHaveBeenCalledWith("approve", {});
     expect(execute).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));

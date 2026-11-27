@@ -340,7 +340,6 @@ export function createWordApplyPlanExecutor({
       coauthors: wordPlanChecksCoauthors(routing)
         ? { shown: confirmed.coauthors }
         : undefined,
-      showDiagnosticOnCommentTick: false,
       waitForOperationMs: WORD_APPLY_BUSY_WAIT_MS,
       signal: context.signal,
       onBeforeWrite: () => {

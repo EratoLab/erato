@@ -10,13 +10,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as frontendMessages } from "../../../../../frontend/src/locales/en/messages.po";
-import { forgetClientActionSessionGrants } from "../../../core/clientActions/clientActionPolicy";
 import { TestTheme } from "../../../test/helpers/TestTheme";
 import {
   installWordSelectionHost,
   uninstallWordSelectionHost,
 } from "../../../test/mocks/word/selectionHost";
 import { WordWriteProvider } from "../../providers/WordWriteProvider";
+import { createWordApplyCommentsExecutor } from "../../utils/wordApplyCommentCall";
+import { WORD_CLIENT_ACTIONS } from "../../utils/wordClientActions";
 import { wordCommentReceipts } from "../../utils/wordCommentCard";
 import { resetWordCommentSession } from "../../utils/wordCommentPolicy";
 import { forgetWordCommentRefs } from "../../utils/wordCommentRefs";
@@ -25,43 +26,58 @@ import {
   forgetWordCommentDrafts,
 } from "../../utils/wordCommentSubmission";
 import { WORD_PREFERENCES_KEY } from "../../wordPreferences";
+import { WordCommentChangesCard } from "../WordCommentChangesCard";
 import { WordHostCardRenderer } from "../WordHostCardRenderer";
 
 import type {
   MockSelectionDocument,
   WordSelectionHost,
 } from "../../../test/mocks/word/selectionHost";
+import type { WordClientAction } from "../../utils/wordClientActions";
 import type { WordCommentRefEntry } from "../../utils/wordCommentRefs";
 import type { WordCommentsCapture } from "../../utils/wordCommentSend";
+import type { WordCardDecision } from "../WordDecisionChoices";
 import type * as EratoLibrary from "@erato/frontend/library";
 
 const mockUseHostArtifact = vi.fn();
 const mockUseChatContext = vi.fn();
-const mockUsePersistedState = vi.fn();
 const mockProfile = vi.fn();
-const mockSetDecisions = vi.fn();
+/** What the decision place sent the server, in order. */
+const decided: string[] = [];
+
+const never = vi.hoisted(() => ({ actions: new Set<string>() }));
+vi.mock("../../../core/clientActions/useNeverAllowedActions", () => ({
+  useNeverAllowedActions: () => never.actions,
+}));
 
 vi.mock("@erato/frontend/library", async (importOriginal) => ({
   ...(await importOriginal<typeof EratoLibrary>()),
   ActionConfirmationCard: (props: {
-    onAllowOnce: () => void;
-    onAlwaysAllow: () => void;
+    allowOnceLabel?: string;
+    onAllowOnce?: () => void;
+    onAlwaysAllow?: () => void;
     onDeny: () => void;
     alwaysAllowDisabledReason?: string;
-    description?: string;
   }) => (
     <div data-testid="confirmation-card">
-      <button type="button" onClick={props.onAllowOnce}>
-        allow-once
-      </button>
-      <button type="button" onClick={props.onAlwaysAllow}>
-        always-allow
-      </button>
+      {props.onAllowOnce && (
+        <button type="button" onClick={props.onAllowOnce}>
+          {props.allowOnceLabel}
+        </button>
+      )}
+      {props.onAlwaysAllow && (
+        <button
+          type="button"
+          disabled={!!props.alwaysAllowDisabledReason}
+          onClick={props.onAlwaysAllow}
+        >
+          Always allow
+        </button>
+      )}
       <button type="button" onClick={props.onDeny}>
-        deny
+        Cancel
       </button>
       <span>{props.alwaysAllowDisabledReason}</span>
-      <span>{props.description}</span>
     </div>
   ),
   useChatContext: () => mockUseChatContext(),
@@ -69,21 +85,8 @@ vi.mock("@erato/frontend/library", async (importOriginal) => ({
     () => mockUseChatContext(),
   ),
   useHostArtifact: () => mockUseHostArtifact(),
-  usePersistedState: (key: string, fallback: unknown) =>
-    key === WORD_PREFERENCES_KEY
-      ? [fallback, vi.fn()]
-      : mockUsePersistedState(),
+  usePersistedState: (_key: string, fallback: unknown) => [fallback, vi.fn()],
   useProfile: () => mockProfile(),
-  useConfirmationRegistryStore: (
-    selector: (state: {
-      registerConfirmation: () => void;
-      unregisterConfirmation: () => void;
-    }) => unknown,
-  ) =>
-    selector({
-      registerConfirmation: () => {},
-      unregisterConfirmation: () => {},
-    }),
 }));
 
 const IDENTITY = "https://contoso.sharepoint.com/report.docx";
@@ -168,17 +171,46 @@ async function submit(changes: unknown[], toolCallId: string) {
   return capture;
 }
 
+/** The card in the chat's decision place; approving runs the server's call that writes. */
+function decisionFor(
+  messageId: string,
+  draftId: string,
+  allowAlways: boolean,
+): WordCardDecision {
+  const apply = createWordApplyCommentsExecutor({ readEnabled: () => false });
+  return {
+    allowAlways,
+    decideOnScreen: false,
+    status: "pending",
+    resolvedLabel: undefined,
+    isBusy: false,
+    onDecide: (choice, extras) => {
+      decided.push(choice);
+      if (choice === "approve" || choice === "approve_always")
+        void apply(
+          {
+            proposal_call_id: draftId,
+            draft_id: draftId,
+            confirmation: extras?.clientConfirmation ?? null,
+          },
+          { toolCallId: `${draftId}.apply`, messageId, chatId: "chat-1" },
+        );
+    },
+  };
+}
+
 function renderCard(options: {
   action: string;
   draftId: string;
   capture: WordCommentsCapture | null;
-  presentation?: string;
-  decisions?: Record<string, string>;
-  alwaysAsk?: string[];
-  proposed?: boolean;
-  grantScopes?: Record<string, string>;
+  /** The card in the answer instead of the one in the decision place. */
+  inAnswer?: boolean;
+  /** The server lets the user choose Always for comment changes. */
+  allowAlways?: boolean;
   /** The accepted submission of this message, when it is not the draft the fence names. */
   submitted?: string;
+  /** The server makes an apply call for the accepted submission. */
+  chained?: boolean;
 }) {
   nextMessage += 1;
   const messageId = `assistant-${nextMessage}`;
@@ -192,12 +224,8 @@ function renderCard(options: {
     renderMode: "suggestions",
     messageId,
     allowedClientActions: [options.action],
-    alwaysAskClientActions: options.alwaysAsk ?? [],
-    clientActionPresentation: options.presentation ?? "render_buttons",
     isFreshCompletion: true,
     itemIdentity: IDENTITY,
-    proposedClientAction: options.proposed ? options.action : undefined,
-    clientActionGrantScopes: options.grantScopes,
     submittedCard: {
       toolCallId: options.submitted ?? options.draftId,
       content: options.submitted ?? options.draftId,
@@ -215,25 +243,44 @@ function renderCard(options: {
         id: messageId,
         role: "assistant",
         previous_message_id: "user",
-        content: [],
+        content: options.chained
+          ? [
+              {
+                content_type: "tool_use",
+                tool_call_id: options.draftId,
+                tool_name: "submit_comment_changes",
+                status: "success",
+                output: { apply: { call_id: `${options.draftId}.apply` } },
+              },
+            ]
+          : [],
       },
     },
     messageOrder: ["user", messageId],
     currentChatId: "chat-1",
   });
-  mockUsePersistedState.mockReturnValue([
-    options.decisions ?? {},
-    mockSetDecisions,
-  ]);
   const captures = new Map(
     options.capture ? [[messageId, options.capture]] : [],
+  );
+  const decision = decisionFor(
+    messageId,
+    options.draftId,
+    options.allowAlways ?? true,
   );
   const tree = (identity: string) => (
     <WordWriteProvider
       documentIdentity={identity}
       capturesByAssistantMessageId={captures}
     >
-      <WordHostCardRenderer language={language} content={options.draftId} />
+      {options.inAnswer ? (
+        <WordHostCardRenderer language={language} content={options.draftId} />
+      ) : (
+        <WordCommentChangesCard
+          entry={WORD_CLIENT_ACTIONS.get(options.action as WordClientAction)!}
+          content={options.draftId}
+          decision={decision}
+        />
+      )}
     </WordWriteProvider>
   );
   const view = render(tree(IDENTITY), { wrapper: TestTheme });
@@ -264,8 +311,7 @@ describe("WordCommentChangesCard", () => {
     resetWordCommentSession();
     delete window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS;
     localStorage.clear();
-    forgetClientActionSessionGrants();
-    mockSetDecisions.mockReset();
+    decided.length = 0;
   });
 
   it("shows each new comment's exact text and author, counts the ticked rows and posts only those", async () => {
@@ -332,7 +378,7 @@ describe("WordCommentChangesCard", () => {
     expect(row.getByText(/Resolving it keeps their words/)).toBeInTheDocument();
   });
 
-  it("asks each time for a respond action the configuration lists, even with Always stored", async () => {
+  it("offers no Always where the server asks every time, and Cancel declines with nothing written", async () => {
     const capture = await submit(
       [{ op: "resolve", thread: "t7k" }],
       "call-res",
@@ -341,20 +387,108 @@ describe("WordCommentChangesCard", () => {
       action: "word.respond_to_comments",
       draftId: "call-res",
       capture,
-      presentation: "auto_prompt",
-      proposed: true,
-      alwaysAsk: ["word.respond_to_comments"],
-      decisions: { "word_selection/word.respond_to_comments": "always" },
+      allowAlways: false,
     });
-    expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
-      "Your organization requires confirmation",
-    );
+    expect(screen.getByRole("button", { name: "Always allow" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(decided).toEqual(["reject"]);
     expect(host.commentStates()[0].resolved).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "deny" }));
-    await screen.findByText("Declined. Nothing was written.");
-    expect(wordCommentReceipts().at(-1)).toMatchObject({
-      consent: "declined",
-      rows: [],
+  });
+
+  it("offers no Add in the answer where the server makes the apply call", async () => {
+    const capture = await submit(
+      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "x" }],
+      "call-answer",
+    );
+    renderCard({
+      action: "word.add_comments",
+      draftId: "call-answer",
+      capture,
+      inAnswer: true,
+      chained: true,
+    });
+    expect(screen.getByTestId("word-chained-status")).toHaveTextContent(
+      "Waiting for your decision",
+    );
+    expect(screen.queryByRole("button", { name: "Add 1 comment" })).toBeNull();
+    expect(host.commentStates()).toHaveLength(1);
+  });
+
+  describe("in the answer, where the server makes no apply call", () => {
+    const twoAdds = () =>
+      submit(
+        [
+          { op: "add", anchor: { para: 3, quote: "alpha" }, text: "First." },
+          { op: "add", anchor: { para: 3, quote: "gamma" }, text: "Second." },
+        ],
+        "call-own",
+      );
+    const own = (capture: WordCommentsCapture | null) =>
+      renderCard({
+        action: "word.add_comments",
+        draftId: "call-own",
+        capture,
+        inAnswer: true,
+      });
+
+    it("offers Add, and the click posts only the ticked rows", async () => {
+      own(await twoAdds());
+      expect(screen.queryByTestId("word-chained-status")).toBeNull();
+      expect(host.commentStates()).toHaveLength(1);
+      fireEvent.click(within(rows()[1]).getByRole("checkbox"));
+      fireEvent.click(screen.getByRole("button", { name: "Add 1 comment" }));
+      await waitFor(() =>
+        expect(
+          within(rows()[0]).getByTestId("word-comments-row-status"),
+        ).toHaveTextContent("Done"),
+      );
+      expect(host.commentStates().map((c) => c.content)).toEqual([
+        "T1 root",
+        "Erato AI: First.",
+      ]);
+      expect(wordCommentReceipts().at(-1)).toMatchObject({
+        draftId: "call-own",
+        consent: "approved",
+        consentKind: "click",
+      });
+      expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+      expect(decided).toEqual([]);
+    });
+
+    it("offers no Add for comments the user set to Never on the server", async () => {
+      never.actions = new Set(["word.add_comments"]);
+      try {
+        own(await twoAdds());
+        expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+        expect(host.commentStates()).toHaveLength(1);
+      } finally {
+        never.actions = new Set();
+      }
+    });
+
+    it("writes nothing with every row left out", async () => {
+      own(await twoAdds());
+      for (const row of rows())
+        fireEvent.click(within(row).getByRole("checkbox"));
+      expect(screen.getByRole("button", { name: /^Add 0/ })).toBeDisabled();
+    });
+
+    it("writes nothing into another open document", async () => {
+      const view = own(await twoAdds());
+      view.openDocument("another-document");
+      const add = screen.getByRole("button", { name: "Add 2 comments" });
+      expect(add).toBeDisabled();
+      fireEvent.click(add);
+      expect(host.commentStates()).toHaveLength(1);
+    });
+
+    it("offers no Add where the deployment set copy", async () => {
+      window.MS_OFFICE_ADDIN_DEFAULT_SETTINGS = {
+        comment_writes: { add: "copy" },
+      };
+      own(await twoAdds());
+      expect(screen.queryByRole("button", { name: /^Add \d/ })).toBeNull();
+      expect(within(rows()[0]).getByRole("checkbox")).toBeDisabled();
     });
   });
 
@@ -367,9 +501,6 @@ describe("WordCommentChangesCard", () => {
       action: "word.add_comments",
       draftId: "call-taint",
       capture: { ...capture, commentTaint: true },
-      presentation: "auto_prompt",
-      proposed: true,
-      decisions: { "word_selection/word.add_comments": "always" },
     });
     expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
       "This request included comments by other people, so Erato asks each time.",
@@ -389,9 +520,6 @@ describe("WordCommentChangesCard", () => {
       action: "word.modify_comments",
       draftId: "call-taint-del",
       capture: { ...capture, commentTaint: true },
-      presentation: "auto_prompt",
-      proposed: true,
-      decisions: { "word_selection/word.modify_comments": "always" },
     });
     expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
       "This request included comments by other people, so Erato asks each time.",
@@ -400,28 +528,6 @@ describe("WordCommentChangesCard", () => {
       screen.getByText("This request included comments by other people."),
     ).toBeInTheDocument();
     expect(host.commentStates().map((c) => c.content)).toEqual(["T1 root"]);
-  });
-
-  it("posts an add under a standing grant and records it as such", async () => {
-    const capture = await submit(
-      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "auto" }],
-      "call-auto",
-    );
-    renderCard({
-      action: "word.add_comments",
-      draftId: "call-auto",
-      capture,
-      presentation: "auto_prompt",
-      proposed: true,
-      decisions: { "word_selection/word.add_comments": "always" },
-    });
-    await waitFor(() => expect(host.commentStates()).toHaveLength(2));
-    await waitFor(() =>
-      expect(wordCommentReceipts().at(-1)).toMatchObject({
-        draftId: "call-auto",
-        consentKind: "standing_grant",
-      }),
-    );
   });
 
   it("blocks Always for adds without a label", async () => {
@@ -434,9 +540,6 @@ describe("WordCommentChangesCard", () => {
       action: "word.add_comments",
       draftId: "call-nolabel",
       capture,
-      presentation: "auto_prompt",
-      proposed: true,
-      decisions: { "word_selection/word.add_comments": "always" },
     });
     expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
       "Comments carry no AI label here, so Erato asks each time.",
@@ -482,50 +585,15 @@ describe("WordCommentChangesCard", () => {
   });
 
   it("cannot write a proposal from an earlier pane session", () => {
-    renderCard({ action: "word.add_comments", draftId: "gone", capture: null });
+    renderCard({
+      action: "word.add_comments",
+      draftId: "gone",
+      capture: null,
+      inAnswer: true,
+    });
     expect(
       screen.getByText(/belong to an earlier session of this pane/),
     ).toBeInTheDocument();
-  });
-
-  it("keeps Always for adds to this session and document where the facet scopes it so", async () => {
-    const scoped = { "word.add_comments": "session_document" };
-    const first = await submit(
-      [{ op: "add", anchor: { para: 3, quote: "alpha" }, text: "one" }],
-      "call-s1",
-    );
-    renderCard({
-      action: "word.add_comments",
-      draftId: "call-s1",
-      capture: first,
-      presentation: "auto_prompt",
-      proposed: true,
-      grantScopes: scoped,
-      decisions: { "word_selection/word.add_comments": "always" },
-    });
-    // A device grant does not reach a session-scoped action.
-    expect(await screen.findByTestId("confirmation-card")).toHaveTextContent(
-      "Always allow lasts for this document until the add-in closes.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "always-allow" }));
-    await waitFor(() => expect(host.commentStates()).toHaveLength(2));
-    expect(mockSetDecisions).not.toHaveBeenCalled();
-    cleanup();
-
-    const second = await submit(
-      [{ op: "add", anchor: { para: 3, quote: "gamma" }, text: "two" }],
-      "call-s2",
-    );
-    renderCard({
-      action: "word.add_comments",
-      draftId: "call-s2",
-      capture: second,
-      presentation: "auto_prompt",
-      proposed: true,
-      grantScopes: scoped,
-    });
-    await waitFor(() => expect(host.commentStates()).toHaveLength(3));
-    expect(screen.queryByTestId("confirmation-card")).toBeNull();
   });
 
   it("offers no retry for another open document and keeps the approval it follows", async () => {
@@ -543,7 +611,7 @@ describe("WordCommentChangesCard", () => {
       draftId: "call-retry",
       capture,
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 comment" }));
     const retry = await screen.findByRole("button", {
       name: "Try the rows Word did not take again",
     });
@@ -569,6 +637,7 @@ describe("WordCommentChangesCard", () => {
       draftId: "call-old",
       submitted: "call-new",
       capture,
+      inAnswer: true,
     });
     expect(screen.queryByTestId("word-comments-card")).toBeNull();
     expect(screen.queryByRole("button", { name: /Add/ })).toBeNull();

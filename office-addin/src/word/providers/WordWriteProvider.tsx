@@ -45,6 +45,8 @@ export const WORD_OPERATION_CEILING_MS = 60_000;
 export interface WordWriteContextValue {
   documentIdentity: string | null;
   capturesByAssistantMessageId: ReadonlyMap<string, WordDocumentCapture>;
+  /** The copy a server call for this answer writes with, which may not be bound to it yet. */
+  captureFor: (messageId: string) => WordDocumentCapture | undefined;
   revertSlot: WordRevertSlot | null;
   setRevertSlot: (slot: WordRevertSlot | null) => void;
   /** Without `applyStage`: read a card's review through useWordReview. */
@@ -80,6 +82,7 @@ const NO_MESSAGE_CONTEXT = (): WordMessageContext => ({});
 const WordWriteContext = createContext<WordWriteContextValue>({
   documentIdentity: null,
   capturesByAssistantMessageId: EMPTY_CAPTURES,
+  captureFor: () => undefined,
   revertSlot: null,
   setRevertSlot: () => {},
   reviews: new Map(),
@@ -186,6 +189,13 @@ export function WordWriteProvider({
   capturesRef.current = capturesByAssistantMessageId;
   const captureForRef = useRef(captureFor);
   captureForRef.current = captureFor;
+  const liveCaptureFor = useCallback(
+    (messageId: string) =>
+      captureForRef.current
+        ? captureForRef.current(messageId)
+        : capturesRef.current.get(messageId),
+    [],
+  );
   const reviewsRef = useRef(reviews);
   reviewsRef.current = reviews;
   const locationGenerationRef = useRef(locationGeneration);
@@ -200,10 +210,7 @@ export function WordWriteProvider({
       setRevertSlot,
       invalidateLocations,
       messageContext: (messageId) => messageContextRef.current(messageId),
-      captureFor: (messageId) =>
-        captureForRef.current
-          ? captureForRef.current(messageId)
-          : capturesRef.current.get(messageId),
+      captureFor: liveCaptureFor,
       reviewFor: (key) => reviewsRef.current.get(key),
       locationGeneration: () => locationGenerationRef.current,
     });
@@ -214,11 +221,13 @@ export function WordWriteProvider({
     endOperation,
     holdOperationUntil,
     invalidateLocations,
+    liveCaptureFor,
   ]);
   const value = useMemo<WordWriteContextValue>(
     () => ({
       documentIdentity,
       capturesByAssistantMessageId,
+      captureFor: liveCaptureFor,
       revertSlot,
       setRevertSlot,
       reviews,
@@ -236,6 +245,7 @@ export function WordWriteProvider({
     [
       documentIdentity,
       capturesByAssistantMessageId,
+      liveCaptureFor,
       revertSlot,
       reviews,
       updateReview,

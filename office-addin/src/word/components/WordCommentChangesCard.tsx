@@ -1,5 +1,4 @@
 import {
-  ActionConfirmationCard,
   Alert,
   Button,
   Card,
@@ -26,12 +25,10 @@ import {
   wordBlockedReasonText,
   wordCommentTaintText,
 } from "./WordReviewCardParts";
-import { useClientActionConfirmFlow } from "../../core/clientActions/useClientActionConfirmFlow";
+import { useNeverAllowedActions } from "../../core/clientActions/useNeverAllowedActions";
 import { useWordChainedApply } from "../hooks/useWordChainedApply";
-import { useWordClientActionDecisions } from "../hooks/useWordClientActionDecisions";
 import { useWordReviewFocus } from "../hooks/useWordReviewFocus";
 import { useWordReview, useWordWrite } from "../providers/WordWriteProvider";
-import { isActionDenied } from "../utils/clientActionPolicy";
 import { wordCommentChangesTitle } from "../utils/wordApprovalPreview";
 import { wordChainedApplyText } from "../utils/wordChainedApply";
 import {
@@ -58,10 +55,7 @@ import { readWordTrackingMode } from "../utils/wordReviewLocation";
 import { resolveWordWriteGate } from "../utils/wordWriteGate";
 
 import type { WordCardDecision } from "./WordDecisionChoices";
-import type {
-  WordClientAction,
-  WordClientActionEntry,
-} from "../utils/wordClientActions";
+import type { WordClientActionEntry } from "../utils/wordClientActions";
 import type {
   WordCommentAlwaysBlock,
   WordCommentUserModeReason,
@@ -176,9 +170,7 @@ function userModeText(reason: WordCommentUserModeReason): string {
   }
 }
 
-function alwaysBlockText(
-  block: WordCommentAlwaysBlock | "organization",
-): string {
+function alwaysBlockText(block: WordCommentAlwaysBlock): string {
   switch (block) {
     case "tainted":
       return wordCommentTaintText();
@@ -186,12 +178,6 @@ function alwaysBlockText(
       return t({
         id: "officeAddin.word.comments.always.emptyLabel",
         message: "Comments carry no AI label here, so Erato asks each time.",
-      });
-    case "organization":
-      return t({
-        id: "officeAddin.word.card.alwaysAllowLocked",
-        message:
-          "Your organization requires confirmation each time this action runs automatically.",
       });
   }
 }
@@ -389,13 +375,8 @@ export function WordCommentChangesCard({
     holdOperationUntil,
     restoreRequest,
   } = useWordWrite();
-  // O-25: a deployment may keep "Always" for adds to this pane session and document.
-  const { decisions, grantAlways, grantScope } = useWordClientActionDecisions(
-    entry.action,
-  );
   const { profile } = useProfile();
   const { getTranscript } = useChatSession();
-  const facetId = artifact?.facetId ?? "";
   const messageId = artifact?.messageId;
   const message = useConversationMessage(messageId);
   const chainedState = useWordChainedApply(
@@ -405,6 +386,8 @@ export function WordCommentChangesCard({
   // The decision place shows a parked call, and an answer goes on after a change it applied.
   const isGenerating =
     message?.status === "sending" && !decision && !chainedState;
+  // Without a server call for this change, the card applies it on the user's own click.
+  const ownApply = !decision && !chainedState;
   const draft = wordCommentDraft(content);
   const batchKey = `${messageId ?? ""}:${entry.action}:${content}`;
   const review = useWordReview(batchKey);
@@ -451,14 +434,6 @@ export function WordCommentChangesCard({
   const tainted =
     !!capture?.commentTaint || wordCommentTaintedMessage(messageId);
   const alwaysBlock = draft ? wordCommentAlwaysBlock(draft, tainted) : null;
-  const configuredAsk = useMemo(
-    () => artifact?.alwaysAskClientActions ?? [],
-    [artifact],
-  );
-  const enforcedAskActions = useMemo(
-    () => (alwaysBlock ? [...configuredAsk, entry.action] : configuredAsk),
-    [alwaysBlock, configuredAsk, entry.action],
-  );
   const cardState = useMemo<WordCommentCardState>(
     () =>
       review.comments ?? {
@@ -468,26 +443,16 @@ export function WordCommentChangesCard({
     [review.comments, draft],
   );
   const mode = draft ? wordCommentCardMode(draft) : "copy";
+  const neverAllowed = useNeverAllowedActions("word");
   const offered =
     !!draft &&
     mode === "post" &&
     (artifact?.allowedClientActions ?? []).includes(entry.action) &&
-    (!!decision ||
-      !isActionDenied({
-        facetId,
-        action: entry.action,
-        decisions,
-        enforcedAskActions,
-      }));
-  const proposedAction =
-    offered && artifact?.proposedClientAction === entry.action
-      ? entry.action
-      : undefined;
+    !neverAllowed.has(entry.action);
   const idle =
     review.status === "idle" ||
     review.status === "no-capture" ||
     review.status === "identity-mismatch";
-  const applying = review.status === "applying";
 
   const recordOf = useCallback(
     (state: WordCommentCardState) => {
@@ -570,39 +535,6 @@ export function WordCommentChangesCard({
       endOperation,
     ],
   );
-
-  const execute = useCallback(
-    (_action: WordClientAction, itemIdentityAtOpen?: string | null) =>
-      runRows(
-        cardState.selected,
-        itemIdentityAtOpen === undefined ? "standing_grant" : "click",
-      ),
-    [runRows, cardState.selected],
-  );
-  // The server asks for a change it applies itself.
-  const buildSummary = useCallback(
-    () =>
-      idle && !isGenerating && draft && !decision && !chainedState
-        ? draft
-        : null,
-    [idle, isGenerating, draft, decision, chainedState],
-  );
-  const { confirmCard, isConfirmPending, allowCard, denyCard } =
-    useClientActionConfirmFlow<WordCommentDraft, WordClientAction>({
-      promptScope: entry.promptScope,
-      facetId: artifact?.facetId,
-      decisions,
-      enforcedAskActions,
-      buildSummary,
-      execute,
-      itemIdentity: documentIdentity,
-      presentation: artifact?.clientActionPresentation,
-      messageId,
-      isFreshCompletion: !!artifact?.isFreshCompletion,
-      proposedAction,
-      expectedItemIdentity: artifact?.itemIdentity,
-      currentItemIdentity: documentIdentity,
-    });
 
   const toggle = (i: number) =>
     updateReview(batchKey, {
@@ -774,10 +706,6 @@ export function WordCommentChangesCard({
       row.code !== "DESELECTED" &&
       row.code !== "AUTHOR_MODE_UNAVAILABLE",
   );
-  const locked = enforcedAskActions.includes(entry.action);
-  const lockedReason =
-    alwaysBlock ??
-    (configuredAsk.includes(entry.action) ? "organization" : null);
 
   return (
     <WordReviewCard
@@ -824,85 +752,20 @@ export function WordCommentChangesCard({
               canApply={offered && gate.allowed && count > 0}
               standingLabel={wordCommentsStandingLabel()}
               alwaysLockedReason={
-                lockedReason ? alwaysBlockText(lockedReason) : undefined
+                alwaysBlock ? alwaysBlockText(alwaysBlock) : undefined
               }
               confirmation={{ selected: cardState.selected }}
             />
           )}
-          {!decision &&
-            !chainedState &&
-            !ran &&
-            idle &&
-            offered &&
-            !confirmCard && (
-              <Button
-                type="button"
-                variant="primary"
-                busy={applying}
-                disabled={
-                  operationInProgress ||
-                  isConfirmPending ||
-                  !gate.allowed ||
-                  count === 0
-                }
-                onClick={() => void runRows(cardState.selected, "click")}
-              >
-                {applyLabel}
-              </Button>
-            )}
-          {confirmCard && (
-            <ActionConfirmationCard
-              key={confirmCard.requestId}
-              title={titleOf(draft)}
-              allowOnceLabel={applyLabel}
-              description={
-                grantScope === "session_document" && !locked
-                  ? t({
-                      id: "officeAddin.word.comments.always.session",
-                      message:
-                        "Always allow lasts for this document until the add-in closes.",
-                    })
-                  : undefined
-              }
-              denyLabel={t({
-                id: "officeAddin.word.review.cancel",
-                message: "Cancel",
-              })}
-              onAllowOnce={() => {
-                if (gate.allowed && !operationInProgress && count > 0)
-                  allowCard(confirmCard);
-              }}
-              onAlwaysAllow={() => {
-                if (
-                  !gate.allowed ||
-                  operationInProgress ||
-                  locked ||
-                  count === 0
-                )
-                  return;
-                grantAlways();
-                allowCard(confirmCard);
-              }}
-              alwaysAllowDisabledReason={
-                lockedReason ? alwaysBlockText(lockedReason) : undefined
-              }
-              onDeny={() => {
-                denyCard(confirmCard);
-                const state = {
-                  ...cardState,
-                  consent: "declined" as const,
-                  consentKind: "click" as const,
-                };
-                updateReview(batchKey, {
-                  status: "denied",
-                  capture,
-                  comments: state,
-                });
-                recordOf(state);
-              }}
-              isBusy={operationInProgress || !gate.allowed}
-              scrollIntoViewOnMount={confirmCard.autoTriggered}
-            />
+          {ownApply && !ran && idle && offered && (
+            <Button
+              type="button"
+              variant="primary"
+              disabled={operationInProgress || !gate.allowed || count === 0}
+              onClick={() => void runRows(cardState.selected, "click")}
+            >
+              {applyLabel}
+            </Button>
           )}
           {ran && (
             <div className="word-review__actions">
@@ -1002,14 +865,6 @@ export function WordCommentChangesCard({
               })}
             </p>
           )}
-          {review.status === "denied" && (
-            <p className="word-review__hint" role="status">
-              {t({
-                id: "officeAddin.word.comments.declined",
-                message: "Declined. Nothing was written.",
-              })}
-            </p>
-          )}
         </>
       }
     >
@@ -1052,7 +907,9 @@ export function WordCommentChangesCard({
                     type="checkbox"
                     className="mt-1 size-4 accent-[var(--theme-fg-accent)]"
                     checked={cardState.selected.includes(row.i)}
-                    disabled={ran || !idle || mode === "copy"}
+                    disabled={
+                      ran || !idle || mode === "copy" || !(decision || ownApply)
+                    }
                     onChange={() => toggle(row.i)}
                   />
                   <span>

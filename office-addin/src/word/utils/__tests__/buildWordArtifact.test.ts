@@ -16,11 +16,7 @@ const capture: WordDocumentCapture = {
   partialOrdinal: null,
 };
 
-const reviewInfo = {
-  clientActions: ["word.apply_edits"],
-  alwaysAskActions: [],
-  presentation: "auto_prompt",
-};
+const reviewInfo = { clientActions: ["word.apply_edits"] };
 
 const proposal = (action: string): ContentPart[] =>
   [
@@ -68,21 +64,15 @@ describe("buildWordArtifact", () => {
     expect(artifact).not.toHaveProperty("driftedEmailFenceTags");
   });
 
-  it("carries the policy fields straight from GET /me/facets", () => {
+  it("carries the allowed actions straight from GET /me/facets", () => {
     const artifact = buildWordArtifact({
       facetId: "word_document_review",
-      clientActionInfo: {
-        clientActions: ["word.apply_edits"],
-        alwaysAskActions: ["word.apply_edits"],
-        presentation: "auto_prompt",
-      },
+      clientActionInfo: { clientActions: ["word.apply_edits"] },
       content: undefined,
       messageId: "m1",
       capture,
     });
 
-    expect(artifact?.clientActionPresentation).toBe("auto_prompt");
-    expect(artifact?.alwaysAskClientActions).toEqual(["word.apply_edits"]);
     expect(artifact?.allowedClientActions).toEqual(["word.apply_edits"]);
   });
 
@@ -151,7 +141,6 @@ describe("buildWordArtifact", () => {
       facetId: "word_document_authoring",
       clientActionInfo: {
         clientActions: ["word.apply_document_plan"],
-        alwaysAskActions: [],
       },
       content: [sectionPlan],
       messageId: "m1",
@@ -187,7 +176,6 @@ describe("buildWordArtifact", () => {
         facetId: "word_document_authoring",
         clientActionInfo: {
           clientActions: ["word.apply_document_plan"],
-          alwaysAskActions: [],
         },
         content: [writing],
         messageId: "m1",
@@ -209,7 +197,6 @@ describe("buildWordArtifact", () => {
         facetId: "word_document_review",
         clientActionInfo: {
           clientActions: ["word.replace_selection"],
-          alwaysAskActions: [],
         },
         content: undefined,
         messageId: "m1",
@@ -266,11 +253,7 @@ describe("buildWordArtifact", () => {
           },
         },
       ] as unknown as ContentPart[];
-    const selectionInfo = (actions: string[]) => ({
-      clientActions: actions,
-      alwaysAskActions: [],
-      presentation: "auto_prompt",
-    });
+    const selectionInfo = (actions: string[]) => ({ clientActions: actions });
 
     it("renders an accepted submission as its action's card, proposed for consent", () => {
       const artifact = buildWordArtifact({
@@ -287,22 +270,6 @@ describe("buildWordArtifact", () => {
           language: "erato-word-comments-add",
         },
         proposedClientAction: "word.add_comments",
-      });
-    });
-
-    it("passes how far Always reaches per action", () => {
-      const artifact = buildWordArtifact({
-        facetId: "word_selection",
-        clientActionInfo: {
-          ...selectionInfo(["word.add_comments"]),
-          grantScope: { "word.add_comments": "session_document" },
-        },
-        content: accepted("word.add_comments"),
-        messageId: "m1",
-        capture,
-      });
-      expect(artifact?.clientActionGrantScopes).toEqual({
-        "word.add_comments": "session_document",
       });
     });
 
@@ -379,7 +346,6 @@ describe("an answer whose changes the server applied", () => {
       facetId: "word_document_authoring",
       clientActionInfo: {
         clientActions: ["word.apply_document_plan"],
-        alwaysAskActions: [],
       },
       content,
       messageId: "m1",

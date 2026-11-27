@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_ACTION_TOOL_NAME } from "../../../core/clientActions/proposedClientAction";
 import { applyWordDocumentPlan } from "../wordApplyDocumentPlan";
 import {
-  clientActionDisplayLabel,
   extractProposedClientAction,
   isImplementedClientAction,
   offerableWordClientActions,
@@ -48,18 +47,10 @@ describe("the Word client-action registry", () => {
       "word.respond_to_comments",
       "word.modify_comments",
     ]);
-    for (const [action, fence, scope] of [
-      ["word.add_comments", "erato-word-comments-add", "word-comments-add"],
-      [
-        "word.respond_to_comments",
-        "erato-word-comments-respond",
-        "word-comments-respond",
-      ],
-      [
-        "word.modify_comments",
-        "erato-word-comments-modify",
-        "word-comments-modify",
-      ],
+    for (const [action, fence] of [
+      ["word.add_comments", "erato-word-comments-add"],
+      ["word.respond_to_comments", "erato-word-comments-respond"],
+      ["word.modify_comments", "erato-word-comments-modify"],
     ] as const)
       expect(WORD_CLIENT_ACTIONS.get(action)).toMatchObject({
         facetIds: [
@@ -69,22 +60,18 @@ describe("the Word client-action registry", () => {
           "word_document_authoring",
         ],
         fenceLanguage: fence,
-        promptScope: scope,
       });
     expect(WORD_CLIENT_ACTIONS.get("word.replace_selection")).toMatchObject({
       facetIds: ["word_selection"],
       fenceLanguage: "erato-word-replace",
-      promptScope: "word-selection",
     });
     expect(WORD_CLIENT_ACTIONS.get("word.apply_edits")).toMatchObject({
       facetIds: ["word_document_review", "word_document_authoring"],
       fenceLanguage: WORD_EDITS_FENCE,
-      promptScope: "word-edits",
     });
     expect(WORD_CLIENT_ACTIONS.get("word.insert_at_cursor")).toMatchObject({
       facetIds: ["word_compose"],
       fenceLanguage: WORD_INSERT_FENCE,
-      promptScope: "word-insert",
     });
   });
 
@@ -119,13 +106,6 @@ describe("the Word client-action registry", () => {
     );
   });
 
-  it("gives all actions distinct auto-prompt scopes", () => {
-    const scopes = [...WORD_CLIENT_ACTIONS.values()].map(
-      (entry) => entry.promptScope,
-    );
-    expect(new Set(scopes).size).toBe(scopes.length);
-  });
-
   it("derives membership from the registry", () => {
     expect(isImplementedClientAction("word.apply_edits")).toBe(true);
     expect(isImplementedClientAction("word.apply_ooxml_package")).toBe(false);
@@ -141,12 +121,12 @@ describe("the Word client-action registry", () => {
   });
 
   it("derives the display label from the registry", () => {
-    expect(clientActionDisplayLabel("word.apply_edits")).toBe(
+    expect(WORD_CLIENT_ACTIONS.get("word.apply_edits")!.displayLabel()).toBe(
       "Apply the changes to the document",
     );
-    expect(clientActionDisplayLabel("word.insert_at_cursor")).toBe(
-      "Insert the text at the cursor",
-    );
+    expect(
+      WORD_CLIENT_ACTIONS.get("word.insert_at_cursor")!.displayLabel(),
+    ).toBe("Insert the text at the cursor");
   });
 
   it("maps a fence tag back to its registry entry, exact match only", () => {

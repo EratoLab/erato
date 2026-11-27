@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   registered: [] as {
     name: string;
     executor: ClientToolExecutor;
+    isAvailable?: () => boolean;
     options?: ClientToolExecutorOptions;
   }[],
 }));
@@ -24,10 +25,10 @@ vi.mock("@erato/frontend/library", async () => {
     registerClientToolExecutor: (
       name: string,
       executor: ClientToolExecutor,
-      _isAvailable?: () => boolean,
+      isAvailable?: () => boolean,
       options?: ClientToolExecutorOptions,
     ) => {
-      mocks.registered.push({ name, executor, options });
+      mocks.registered.push({ name, executor, isAvailable, options });
       return () => {};
     },
   });
@@ -80,6 +81,19 @@ describe("Word client tool registration", () => {
       ["insert_at_cursor", false],
       ["apply_edits", false],
     ]);
+  });
+
+  it("offers a plan's apply only with the document included, a comment change's always", () => {
+    registerWordClientTools({
+      readEnabled: () => false,
+      bindingIdentity: () => undefined,
+    });
+    const offered = (name: string) => {
+      const tool = mocks.registered.find((entry) => entry.name === name)!;
+      return tool.isAvailable?.() ?? true;
+    };
+    expect(offered("apply_document_plan")).toBe(false);
+    expect(offered("apply_comment_changes")).toBe(true);
   });
 
   it("refuses a task's call as capture-unavailable while document inclusion is off, without reading", async () => {
