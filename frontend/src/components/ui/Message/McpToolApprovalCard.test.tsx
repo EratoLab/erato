@@ -274,39 +274,41 @@ describe("McpToolApprovalCard", () => {
     );
   });
 
-  it.each([
-    ["Continue tool calls", "success"],
-    ["Stop", "light"],
-  ])("lets a host app play a haptic when %s is tapped", async (label, kind) => {
-    const shellRequest = installHostShell({ haptics: 1 });
-    try {
-      const continueToolApproval = vi.fn().mockResolvedValue(undefined);
-      renderCard(
-        withChatContext(
-          <McpToolApprovalCard
-            messageId="message-1"
-            request={{
-              ...approvalRequest,
-              kind: "tool_call_limit",
-              tool_name: "",
-              mcp_server_id: "",
-              allow_always: false,
-              input: { budget: 15 },
-            }}
-            resolution={null}
-          />,
-          "chat-1",
-          { continueToolApproval },
-        ),
-      );
-      fireEvent.click(screen.getByRole("button", { name: label }));
-      expect(shellRequest).toHaveBeenCalledWith("haptics.play", { kind });
-      expect(shellRequest).toHaveBeenCalledTimes(1);
-      await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
-    } finally {
-      removeHostShell();
-    }
-  });
+  it.each(["Continue tool calls", "Stop"])(
+    "lets a host app play a haptic when %s is tapped",
+    async (label) => {
+      const shellRequest = installHostShell({ haptics: 1 });
+      try {
+        const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+        renderCard(
+          withChatContext(
+            <McpToolApprovalCard
+              messageId="message-1"
+              request={{
+                ...approvalRequest,
+                kind: "tool_call_limit",
+                tool_name: "",
+                mcp_server_id: "",
+                allow_always: false,
+                input: { budget: 15 },
+              }}
+              resolution={null}
+            />,
+            "chat-1",
+            { continueToolApproval },
+          ),
+        );
+        fireEvent.click(screen.getByRole("button", { name: label }));
+        expect(shellRequest).toHaveBeenCalledWith("haptics.play", {
+          kind: "light",
+        });
+        expect(shellRequest).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
+      } finally {
+        removeHostShell();
+      }
+    },
+  );
 
   it("shows the pending tool call as a visible referent above the consent card", () => {
     renderCard(

@@ -346,10 +346,16 @@ describe("ERMAIN-1259: deciding a card by voice", () => {
   it("plays no haptic for a spoken decision", async () => {
     const shellRequest = installHostShell({ haptics: 1 });
     try {
-      renderCard(request, vi.fn().mockResolvedValue(undefined), true);
+      const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+      renderCard(request, continueToolApproval, true);
+      const decision = spoken.decide?.("call-1");
+      expect(decision).toBeDefined();
+      let outcome: string | undefined;
       await act(async () => {
-        await spoken.decide?.("call-1")?.send("approve", "receipt-1");
+        outcome = await decision?.send("approve", "receipt-1");
       });
+      expect(outcome).toBe("sent");
+      expect(continueToolApproval).toHaveBeenCalled();
       expect(shellRequest).not.toHaveBeenCalled();
     } finally {
       removeHostShell();

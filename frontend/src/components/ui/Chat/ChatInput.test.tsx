@@ -12,7 +12,7 @@ import {
   within,
 } from "@testing-library/react";
 import { act, createRef, useCallback, useMemo, useRef, useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
@@ -2677,7 +2677,10 @@ describe("ChatInput", () => {
       expect(haptics()).toEqual([["haptics.play", { kind: "light" }]]);
       fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
       expect(onSendMessage).toHaveBeenCalled();
-      expect(haptics()).toHaveLength(2);
+      expect(haptics()).toEqual([
+        ["haptics.play", { kind: "light" }],
+        ["haptics.play", { kind: "light" }],
+      ]);
     } finally {
       removeHostShell();
     }
@@ -3907,6 +3910,9 @@ describe("ChatInput", () => {
     });
 
     it("auto-submits dictated text after VAD completes conversational audio", async () => {
+      // A turn sent by itself is felt by no haptic.
+      const shellRequest = installHostShell({ haptics: 1 });
+      onTestFinished(removeHostShell);
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -3991,6 +3997,10 @@ describe("ChatInput", () => {
       ).toMatchObject({
         vadAutoStopEnabled: true,
       });
+      expect(shellRequest).not.toHaveBeenCalledWith(
+        "haptics.play",
+        expect.anything(),
+      );
       requestSubmitSpy.mockRestore();
     });
 

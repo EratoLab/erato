@@ -1290,6 +1290,7 @@ export const ChatInput = ({
   const commitQueueReplace = useCallback(() => {
     const trimmedMessage = message.trim();
     if (trimmedMessage || attachedFiles.length > 0) {
+      playHaptic("light");
       const runMode = queueReplacePending
         ? queueReplacePending.runMode
         : undefined;

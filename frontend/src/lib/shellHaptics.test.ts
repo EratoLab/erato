@@ -27,8 +27,8 @@ describe("playHaptic", () => {
       vi.fn(() => Promise.reject({ code: "invalidParams", message: "" })),
     );
     expect(() => playHaptic("warning")).not.toThrow();
-    // An unhandled rejection would fail the run.
-    await Promise.resolve();
+    // Lets the rejection settle, so an unhandled one fails the run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     installHostShell(
       { haptics: 1 },
       vi.fn(() => {

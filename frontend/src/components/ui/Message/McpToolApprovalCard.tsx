@@ -475,11 +475,10 @@ export const McpToolApprovalCard = ({
     itemDecisions?: DecidedApproval[],
     { byVoice = false }: { byVoice?: boolean } = {},
   ): Promise<VoiceChangeOutcome> => {
-    // Felt at the tap, as the card's own buttons stop; a spoken decision is
-    // usually given with the phone put away.
-    if (!byVoice) {
-      playHaptic(isApprovalDecision(decision) ? "success" : "light");
-    }
+    // Felt at the tap, before it is known whether the server takes it, so
+    // the same for every decision. A spoken one is usually given with the
+    // phone put away.
+    if (!byVoice) playHaptic("light");
     // The decision is on its way: the card stops listening before its voice
     // stops, or the microphone would open in the moment before it closes.
     const { key: spokenKey } = useApprovalSpeech.getState();
