@@ -98,6 +98,10 @@ const MAX_RESULT_LINK_CANDIDATES: usize = 100;
 /// `image` and embedded `resource` blocks read as files per result. Further
 /// ones are neither decoded nor stored, and the model is told so.
 const MAX_RESULT_FILE_BLOCKS: usize = 64;
+/// MIME types of an embedded resource that names none: `mimeType` is
+/// optional there.
+const DEFAULT_TEXT_RESOURCE_MIME_TYPE: &str = "text/plain";
+const DEFAULT_BLOB_RESOURCE_MIME_TYPE: &str = "application/octet-stream";
 /// Largest file taken from a content block where no file storage provider
 /// sets an upload limit: the default limit of an upload.
 const DEFAULT_MAX_RESULT_FILE_BYTES: usize = 50 * 1024 * 1024;
@@ -499,6 +503,25 @@ fn meta_file_name(
     Ok(None)
 }
 
+/// Whether a content block is read as a file: an `image` block or an
+/// embedded `resource`. An embedded view (a resource with a `ui:` URI, as
+/// MCP Apps names views) is no file and stays unread.
+fn is_file_block(block: &rmcp::model::ContentBlock) -> bool {
+    use rmcp::model::{ContentBlock, ResourceContents};
+
+    match block {
+        ContentBlock::Image(_) => true,
+        ContentBlock::Resource(embedded) => match &embedded.resource {
+            ResourceContents::BlobResourceContents { uri, .. }
+            | ResourceContents::TextResourceContents { uri, .. } => !uri
+                .get(.."ui:".len())
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("ui:")),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
 /// The files a result carries as `image` and embedded `resource` content
 /// blocks, validated and decoded, and whether blocks past
 /// `MAX_RESULT_FILE_BLOCKS` were left out. A resource link is no file:
@@ -521,13 +544,13 @@ fn extract_mcp_file_blocks(
     let mut blocks = content
         .iter()
         .enumerate()
-        .filter(|(_, block)| matches!(block, ContentBlock::Image(_) | ContentBlock::Resource(_)));
+        .filter(|(_, block)| is_file_block(block));
     let mut files = Vec::new();
     for (index, block) in blocks.by_ref().take(MAX_RESULT_FILE_BLOCKS) {
         let json_pointer = format!("/content/{index}");
         let (mime_type, data, file_name) = match block {
             ContentBlock::Image(image) => (
-                Some(&image.mime_type),
+                image.mime_type.as_str(),
                 Data::Base64(&image.data),
                 meta_file_name([image.meta.as_ref(), None], &json_pointer)?,
             ),
@@ -538,26 +561,38 @@ fn extract_mcp_file_blocks(
                         mime_type,
                         blob,
                         meta,
-                    } => (uri, mime_type, Data::Base64(blob), meta),
+                    } => (
+                        uri,
+                        mime_type
+                            .as_deref()
+                            .unwrap_or(DEFAULT_BLOB_RESOURCE_MIME_TYPE),
+                        Data::Base64(blob),
+                        meta,
+                    ),
                     ResourceContents::TextResourceContents {
                         uri,
                         mime_type,
                         text,
                         meta,
-                    } => (uri, mime_type, Data::Text(text), meta),
-                    _ => return Err(eyre!("Unknown resource contents at {json_pointer}")),
+                    } => (
+                        uri,
+                        mime_type
+                            .as_deref()
+                            .unwrap_or(DEFAULT_TEXT_RESOURCE_MIME_TYPE),
+                        Data::Text(text),
+                        meta,
+                    ),
+                    _ => continue,
                 };
                 let file_name =
                     match meta_file_name([embedded.meta.as_ref(), meta.as_ref()], &json_pointer)? {
                         Some(name) => Some(name),
                         None => uri_file_name(uri),
                     };
-                (mime_type.as_ref(), data, file_name)
+                (mime_type, data, file_name)
             }
             _ => continue,
         };
-        let mime_type = mime_type
-            .ok_or_else(|| eyre!("Missing mimeType for MCP file output at {json_pointer}"))?;
         validate_mcp_mime_type(mime_type)?;
         let bytes = match data {
             Data::Base64(base64_data) => {
@@ -577,7 +612,7 @@ fn extract_mcp_file_blocks(
             return Err(too_large(&json_pointer));
         }
         files.push(McpResultFile {
-            mime_type: mime_type.clone(),
+            mime_type: mime_type.to_owned(),
             file_name,
             bytes,
         });
@@ -2374,12 +2409,13 @@ mod tests {
                 "Failed to decode base64 file data from MCP at /content/2",
             ),
             (
-                resource(json!({"uri": "file:///a.pdf", "blob": "aGVsbG8="})),
-                "Missing mimeType for MCP file output at /content/2",
+                resource(json!({"uri": "file:///a.pdf", "mimeType": "", "blob": "aGVsbG8="})),
+                "Invalid MIME type",
             ),
             (
-                resource(json!({"uri": "file:///a.txt", "text": "hello"})),
-                "Missing mimeType for MCP file output at /content/2",
+                // No `mimeType` is no excuse for bad Base64.
+                resource(json!({"uri": "file:///a.pdf", "blob": "invalid!"})),
+                "Failed to decode base64 file data from MCP at /content/2",
             ),
             (
                 resource(
@@ -2638,6 +2674,69 @@ mod tests {
     }
 
     #[test]
+    fn a_resource_without_a_mime_type_gets_a_default_and_a_view_is_no_file() {
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Exported."},
+            {"type": "resource", "resource": {"uri": "file:///exports/notes", "text": "hello"}},
+            {"type": "resource",
+             "resource": {"uri": "file:///exports/dump", "blob": "d29ybGQ="}},
+            // Views of any spelling, well-formed or not, stay unread.
+            {"type": "resource",
+             "resource": {"uri": "ui://records/row", "mimeType": "text/html;profile=mcp-app",
+                          "text": "<p>SYNTHETIC-VIEW</p>"}},
+            {"type": "resource", "resource": {"uri": "UI://records/chart", "blob": "invalid!"}},
+            {"type": "resource",
+             "resource": {"uri": "ui:row", "mimeType": "invalid", "text": "<p>SYNTHETIC-VIEW</p>"},
+             "_meta": {"chat.erato/file_name": "../view.html"}},
+            // A URI that only begins like the scheme is a file.
+            {"type": "resource",
+             "resource": {"uri": "uix://records/row.txt", "mimeType": "text/plain", "text": "row"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert_eq!(
+            named.files,
+            [
+                (Some("notes".into()), "text/plain".into(), b"hello".to_vec()),
+                (
+                    Some("dump".into()),
+                    "application/octet-stream".into(),
+                    b"world".to_vec()
+                ),
+                (Some("row.txt".into()), "text/plain".into(), b"row".to_vec()),
+            ]
+        );
+        assert_eq!(
+            named.output["files"],
+            json!([
+                file_entry(&named.stored[0]),
+                file_entry(&named.stored[1]),
+                file_entry(&named.stored[2])
+            ])
+        );
+        assert!(matches!(
+            mcp_file_content_part(named.stored[1].id, &named.stored[1].mime_type),
+            ContentPart::TextFilePointer(_)
+        ));
+        assert!(
+            !named.content.contains("SYNTHETIC-VIEW"),
+            "{}",
+            named.content
+        );
+
+        // A result that holds only a view keeps its output as it was.
+        let result = result_of(json!({"content": [
+            {"type": "text", "text": "Shown."},
+            {"type": "resource",
+             "resource": {"uri": "ui://records/row", "mimeType": "text/html;profile=mcp-app",
+                          "text": "<p>SYNTHETIC-VIEW</p>"}},
+        ]}));
+        let named = name_files(None, &result).unwrap();
+        assert!(named.files.is_empty());
+        assert_eq!(named.output, json!("Shown."));
+        assert_eq!(named.content, "Shown.");
+    }
+
+    #[test]
     fn file_blocks_past_the_bound_are_left_out_unread() {
         use base64::{Engine as _, engine::general_purpose::STANDARD};
         let image = |index: usize| {
@@ -2651,12 +2750,17 @@ mod tests {
             5_000,
         ] {
             let mut content = vec![json!({"type": "text", "text": "Done."})];
-            // Blocks that are no files do not count.
-            content.extend((0..MAX_RESULT_FILE_BLOCKS).map(|i| {
-                link(
-                    format!("https://records.example.test/rows/{i}"),
-                    format!("row-{i}"),
-                )
+            // Blocks that are no files do not count, embedded views included.
+            content.extend((0..MAX_RESULT_FILE_BLOCKS).flat_map(|i| {
+                [
+                    link(
+                        format!("https://records.example.test/rows/{i}"),
+                        format!("row-{i}"),
+                    ),
+                    json!({"type": "resource",
+                           "resource": {"uri": format!("ui://records/rows/{i}"),
+                                        "text": "<p>view</p>"}}),
+                ]
             }));
             content.extend((0..count).map(image));
             // A malformed block fails the result within the bound; past it,

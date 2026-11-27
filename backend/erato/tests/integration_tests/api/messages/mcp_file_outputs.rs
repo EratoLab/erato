@@ -21,6 +21,7 @@ const MARKER: &str = "MCP-FILE-RESULT";
 const DETAILS_TITLE: &str = "SYNTHETIC-DETAILS-TITLE";
 const DETAILS_LINK: &str = "https://records.example.test/rows/row-1";
 const DETAILS_TEXT: &str = "SYNTHETIC-RESOURCE-TEXT";
+const DETAILS_VIEW: &str = "<p>SYNTHETIC-VIEW</p>";
 const DETAILS_STRUCTURED: &str = "SYNTHETIC-STRUCTURED-ONLY";
 const SERVER_LINK: &str = "https://127.0.0.1/rows/row-1";
 
@@ -31,7 +32,7 @@ struct Fixture {
     structured: bool,
     /// No file fields; the result adds structured content that differs from
     /// its text, links and resources. The links are kept as links and the
-    /// resources stored as files.
+    /// resources stored as files, except the embedded view.
     details: bool,
     /// Content blocks the result carries beside its text.
     blocks: Vec<Value>,
@@ -105,7 +106,7 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
                     json!({"type": "resource", "resource": {"uri": "records://rows/row-1",
                            "mimeType": "text/plain", "text": DETAILS_TEXT}}),
                     json!({"type": "resource", "resource": {"uri": "ui://records/row",
-                           "mimeType": "text/html;profile=mcp-app", "text": "<p>app</p>"}}),
+                           "mimeType": "text/html;profile=mcp-app", "text": DETAILS_VIEW}}),
                     json!({"type": "resource", "resource": {"uri": "records://rows/row-1/chart",
                            "mimeType": "image/png", "blob": PNG}}),
                 ]);
@@ -201,10 +202,15 @@ fn file_blocks() -> Vec<Value> {
 }
 
 /// The name and bytes of each file `blocks` carry, by the name `_meta` or the
-/// URI's last segment gives it.
+/// URI's last segment gives it. An embedded view is no file.
 fn block_files(blocks: &[Value]) -> HashMap<String, Vec<u8>> {
     blocks
         .iter()
+        .filter(|block| {
+            !block["resource"]["uri"]
+                .as_str()
+                .is_some_and(|uri| uri.starts_with("ui:"))
+        })
         .filter_map(|block| {
             let resource = &block["resource"];
             let name = block["_meta"]["chat.erato/file_name"]
@@ -254,6 +260,30 @@ async fn check_output(
     }
 }
 
+/// The MIME type each named file of `blocks` is stored and listed with: its
+/// own, or the default of a resource that names none.
+fn block_mime_types(blocks: &[Value]) -> HashMap<String, String> {
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let resource = &block["resource"];
+            let name = block["_meta"]["chat.erato/file_name"]
+                .as_str()
+                .or(resource["_meta"]["chat.erato/file_name"].as_str())?;
+            let default = if resource["text"].is_string() {
+                "text/plain"
+            } else {
+                "application/octet-stream"
+            };
+            let mime_type = block["mimeType"]
+                .as_str()
+                .or(resource["mimeType"].as_str())
+                .unwrap_or(default);
+            Some((name.to_string(), mime_type.to_string()))
+        })
+        .collect()
+}
+
 /// A result whose content carries `blocks` beside the text of `output`.
 async fn check_blocks(
     pool: Pool<Postgres>,
@@ -297,8 +327,8 @@ async fn check_details(pool: Pool<Postgres>, approval: Option<&str>) {
             false,
             false,
             "success",
-            // The three embedded resources.
-            3,
+            // The embedded resources that are no view.
+            2,
             protocol,
             true,
             Vec::new(),
@@ -563,7 +593,6 @@ async fn check_output_for_protocol(
             listed,
             [
                 (json!("row-1"), json!("text/plain")),
-                (json!("row"), json!("text/html;profile=mcp-app")),
                 (json!("chart"), json!("image/png")),
             ],
             "{tool}"
@@ -603,6 +632,9 @@ async fn check_output_for_protocol(
                 DETAILS_LINK,
                 DETAILS_STRUCTURED,
                 SERVER_LINK,
+                // The embedded view is no file and stays unread.
+                DETAILS_VIEW,
+                "ui://",
                 "records://",
             ] {
                 assert!(
@@ -614,7 +646,14 @@ async fn check_output_for_protocol(
         for value in [row.raw_message.to_string(), response.text()] {
             assert!(!value.contains(PNG), "raw payload leaked: {value}");
             assert!(!value.contains("structuredContent"));
-            for left_out in [DETAILS_STRUCTURED, DETAILS_TEXT, "records://"] {
+            for left_out in [
+                DETAILS_STRUCTURED,
+                DETAILS_TEXT,
+                DETAILS_VIEW,
+                "mcp-app",
+                "ui://",
+                "records://",
+            ] {
                 assert!(!value.contains(left_out), "{left_out} was kept: {value}");
             }
         }
@@ -623,7 +662,6 @@ async fn check_output_for_protocol(
     if fixture.details {
         expected_bytes.extend([
             ("row-1".to_string(), DETAILS_TEXT.as_bytes().to_vec()),
-            ("row".to_string(), b"<p>app</p>".to_vec()),
             ("chart".to_string(), STANDARD.decode(PNG).unwrap()),
         ]);
     }
@@ -680,6 +718,9 @@ async fn check_output_for_protocol(
         {
             assert_eq!(listed["fileReference"], format!("erato-file://{id}"));
             assert!(listed["mimeType"].as_str().unwrap().contains('/'));
+            if let Some(mime_type) = block_mime_types(&fixture.blocks).get(&upload.filename) {
+                assert_eq!(listed["mimeType"], *mime_type, "{listed}");
+            }
             let image = listed["mimeType"].as_str().unwrap().starts_with("image/");
             assert_eq!(pointer["content_type"] == "image_file_pointer", image);
         }
@@ -711,12 +752,19 @@ async fn check_output_for_protocol(
             response.text(),
         ] {
             assert!(
-                !value.contains(PNG) && !value.contains(CSV) && !value.contains(NOTES),
+                !value.contains(PNG)
+                    && !value.contains(CSV)
+                    && !value.contains(NOTES)
+                    && !value.contains(DETAILS_VIEW),
                 "raw payload leaked: {value}"
             );
             assert!(!value.contains("structuredContent"));
         }
         for (turn, body) in recorder.bodies().into_iter().enumerate() {
+            assert!(
+                !body.contains(DETAILS_VIEW),
+                "a view reached the model: {body}"
+            );
             let body: Value = serde_json::from_str(&body).unwrap();
             if fixture.output["files"][0]["path"] == "png" {
                 let serialized = body.to_string();
@@ -955,8 +1003,32 @@ async fn approved_invalid_file_block(pool: Pool<Postgres>) {
 async fn uninterrupted_invalid_file_block(pool: Pool<Postgres>) {
     let mut blocks = file_blocks();
     blocks.push(json!({"type": "resource",
-        "resource": {"uri": "records://exports/3", "blob": CSV}}));
+        "resource": {"uri": "records://exports/3", "mimeType": "invalid", "blob": CSV}}));
     check_blocks(pool, json!({"stdout": MARKER}), blocks, None, "error", 0).await;
+}
+/// `mimeType` is optional on a resource: one without it is stored under a
+/// default type, and an embedded view beside it is no file.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_file_blocks_without_mime_type(pool: Pool<Postgres>) {
+    check_blocks(
+        pool,
+        json!({"stdout": MARKER}),
+        vec![
+            json!({"type": "resource",
+                   "resource": {"uri": "records://exports/1", "text": NOTES},
+                   "_meta": {"chat.erato/file_name": "untyped-notes.txt"}}),
+            json!({"type": "resource",
+                   "resource": {"uri": "records://exports/2", "blob": CSV},
+                   "_meta": {"chat.erato/file_name": "untyped-data"}}),
+            json!({"type": "resource",
+                   "resource": {"uri": "ui://records/row",
+                                "mimeType": "text/html;profile=mcp-app", "text": DETAILS_VIEW}}),
+        ],
+        None,
+        "success",
+        2,
+    )
+    .await;
 }
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_ordinary_result(pool: Pool<Postgres>) {

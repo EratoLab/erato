@@ -141,7 +141,7 @@ The `x-chat.erato/file_content_field` and `x-chat.erato/file_name_field` aliases
 
 #### File outputs as content blocks
 
-A tool can also return files as standard MCP content blocks, without any annotation in its output schema. Erato reads every `image` block and every embedded `resource` block (with `blob` or with `text`) of a tool result as a file:
+A tool can also return files as standard MCP content blocks, without any annotation in its output schema. Erato reads every `image` block and every embedded `resource` block (with `blob` or with `text`) of a tool result as a file. An embedded resource whose `uri` has the scheme `ui` is a view, not a file: it is not stored, not listed and not given to the model.
 
 ```json
 {
@@ -182,7 +182,7 @@ The model does not see the bytes. Its tool result holds the tool's own output un
 }
 ```
 
-A result without such blocks keeps its output unchanged. Erato reads at most 64 file blocks per result; further ones are not stored, and `filesTruncated` is `true`. A file may be as large as an upload (the largest `max_upload_size_kb` of the file storage providers, 50 MB when none is set). A block with invalid Base64, a missing or invalid `mimeType`, an unsafe name or a larger file fails the tool call with a recoverable error before any file of the result is stored, as for marked output fields.
+A result without such blocks keeps its output unchanged. Erato reads at most 64 file blocks per result; further ones are not stored, and `filesTruncated` is `true`. A file may be as large as an upload (the largest `max_upload_size_kb` of the file storage providers, 50 MB when none is set). An embedded resource that names no `mimeType`, which is optional there, is stored as `text/plain` when it carries `text` and as `application/octet-stream` when it carries a `blob`. A block with invalid Base64, an invalid `mimeType`, an unsafe name or a larger file fails the tool call with a recoverable error before any file of the result is stored, as for marked output fields.
 
 A result can use both forms. A block that carries the same bytes and MIME type as a marked field of the same result is the same file sent in both forms and is not stored a second time. Two blocks are always two files, also when their contents are equal. `structuredContent` handed to an [MCP Apps](#interactive-views-mcp-apps) view is not changed by content blocks, while the result's text the view gets is the output shown above. Resource links (`resource_link`) are not fetched; `https` links are still shown as links. `audio` blocks are not read.
 
