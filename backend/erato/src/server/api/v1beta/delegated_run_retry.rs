@@ -18,6 +18,8 @@ use crate::policy::engine::{PolicyEngine, authorize};
 use crate::policy::types::{Action, Resource};
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming::GenerationRunningError;
+use crate::services::budget::{BudgetCheckError, BudgetLimitError};
+use crate::services::delegation::LaunchError;
 use crate::services::delegation::{
     DelegationTargetSpec, EffectiveTasksConfig, LaunchOutcome, LaunchRunSpec, TaskOfferScope,
 };
@@ -102,6 +104,7 @@ pub enum RetryRouteError {
     PlainText(StatusCode, String),
     NotRetryable(Box<NotRetryableError>),
     GenerationRunning(Box<GenerationRunningError>),
+    Budget(BudgetCheckError),
 }
 
 impl From<(StatusCode, String)> for RetryRouteError {
@@ -114,6 +117,7 @@ impl IntoResponse for RetryRouteError {
     fn into_response(self) -> axum::response::Response {
         match self {
             RetryRouteError::PlainText(status, message) => (status, message).into_response(),
+            RetryRouteError::Budget(error) => error.into_response(),
             // Both JSON bodies share `409` deliberately: both are "the server
             // will not start this run". The client tells them apart on `code`,
             // which is why neither is plain text.
@@ -242,6 +246,8 @@ async fn origin_recorded_run(
         (status = BAD_REQUEST, description = "Invalid chat ID format"),
         (status = NOT_FOUND, description = "When async tasks are disabled, or the origin chat or the run does not exist or is not accessible"),
         (status = CONFLICT, body = NotRetryableError, description = "When the origin chat is archived (plain text), the origin's generation lease is held (JSON, code = generation_running, body = GenerationRunningError), or the run cannot be retried (JSON, code = not_retryable)"),
+        (status = FORBIDDEN, body = BudgetLimitError, description = "When the personal generation budget has been reached"),
+        (status = SERVICE_UNAVAILABLE, description = "When the personal generation budget cannot be verified"),
         (status = UNPROCESSABLE_ENTITY, description = "When `kind` is not a kind this server retries"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
@@ -785,7 +791,8 @@ pub async fn retry_delegated_run(
                 "Failed to start the retry".to_string(),
             ))
         }
-        Err(message) => Err(not_retryable_with_message(
+        Err(LaunchError::Budget(error)) => Err(RetryRouteError::Budget(error)),
+        Err(LaunchError::Refused(message)) => Err(not_retryable_with_message(
             child_chat_id,
             NotRetryableState::LaunchRefused,
             message,

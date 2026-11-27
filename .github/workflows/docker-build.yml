@@ -686,6 +686,8 @@ jobs:
             workers: 2
           - scenario: tight-budget
             projects: "--project chromium-tight-budget --project firefox-tight-budget"
+          - scenario: tight-budget-enforced
+            projects: "--project chromium-tight-budget-enforced --project firefox-tight-budget-enforced"
           - scenario: assistants
             projects: "--project chromium-assistants --project firefox-assistants"
           - scenario: approvals

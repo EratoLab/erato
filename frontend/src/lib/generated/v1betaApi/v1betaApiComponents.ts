@@ -3913,10 +3913,16 @@ export type RetryDelegatedRunPathParams = {
   childChatId: string;
 };
 
-export type RetryDelegatedRunError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.NotRetryableError;
-}>;
+export type RetryDelegatedRunError = Fetcher.ErrorWrapper<
+  | {
+      status: 403;
+      payload: Schemas.BudgetLimitError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.NotRetryableError;
+    }
+>;
 
 export type RetryDelegatedRunVariables = {
   body: Schemas.RetryDelegatedRunRequest;
@@ -3970,10 +3976,16 @@ export type ReactToTaskResultSsePathParams = {
   chatId: string;
 };
 
-export type ReactToTaskResultSseError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.GenerationRunningError;
-}>;
+export type ReactToTaskResultSseError = Fetcher.ErrorWrapper<
+  | {
+      status: 403;
+      payload: Schemas.BudgetLimitError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.GenerationRunningError;
+    }
+>;
 
 export type ReactToTaskResultSseVariables = {
   body: Schemas.ReactToTaskResultRequest;
@@ -6418,10 +6430,16 @@ export const useContinueMessageSse = (
   });
 };
 
-export type EditMessageSseError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.GenerationRunningError;
-}>;
+export type EditMessageSseError = Fetcher.ErrorWrapper<
+  | {
+      status: 403;
+      payload: Schemas.BudgetLimitError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.GenerationRunningError;
+    }
+>;
 
 export type EditMessageSseVariables = {
   body: Schemas.EditMessageRequest;
@@ -6467,10 +6485,16 @@ export const useEditMessageSse = (
   });
 };
 
-export type RegenerateMessageSseError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.GenerationRunningError;
-}>;
+export type RegenerateMessageSseError = Fetcher.ErrorWrapper<
+  | {
+      status: 403;
+      payload: Schemas.BudgetLimitError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.GenerationRunningError;
+    }
+>;
 
 export type RegenerateMessageSseVariables = {
   body: Schemas.RegenerateMessageRequest;
@@ -6562,10 +6586,16 @@ export const useResumeMessageSse = (
   });
 };
 
-export type MessageSubmitSseError = Fetcher.ErrorWrapper<{
-  status: 409;
-  payload: Schemas.GenerationRunningError;
-}>;
+export type MessageSubmitSseError = Fetcher.ErrorWrapper<
+  | {
+      status: 403;
+      payload: Schemas.BudgetLimitError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.GenerationRunningError;
+    }
+>;
 
 export type MessageSubmitSseVariables = {
   body: Schemas.MessageSubmitRequest;

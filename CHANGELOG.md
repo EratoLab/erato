@@ -30,6 +30,8 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Features and enhancements
 
+**On a phone the model is chosen from a sub-menu.** In the composer's "+" menu the model list no longer sits inline: one Model row shows the current model and opens the models as a page of the same menu, with a back row, as an iPhone menu opens a nested menu. A deployment with a single model keeps one row. For component kits and hosts: an `AddMenuSection` with `submenu: { summary }` renders this way.
+
 **Inside the phone app, text follows the phone's own text size.** Where the page runs in a native app (the `window.ERATO_SHELL` contract), its text scales with the device's text size setting, read again whenever the app comes back to the front, and the Text size choice under Preferences, Appearance is hidden there. Browsers, desktop and the Office add-in keep Erato's own Small / Default / Large / Extra large setting.
 
 **A start shows one calm screen, then the app.** The page paints the theme's page colour from its first frame (`colors.shell.page`, else `colors.background.secondary`, written into the HTML by the server; use a plain colour there, not `var(…)`), loads translations, theme and landing page together, and shows the app once the theme and its style sheets are applied, after at most three seconds. "Loading translations...", "Redirecting to chat..." and the loading spinner no longer show in between. For component kits: `useChatHistory()` called without options now follows the deployment's pinned-chats setting, so with pinned chats on, `chats` leaves the pinned ones out, as the sidebar's list does. [#1698](https://github.com/EratoLab/erato/pull/1698)
@@ -61,6 +63,12 @@ Typical "Notable changes" categories to copy & paste:
 **On a phone, voice mode's button is filled like send.** In the one-line composer the button that starts voice mode, which stands in send's place while the field is empty, takes the theme's primary colour as send does.
 
 #### Bug fixes
+
+**Beside the open sidebar on a narrow screen the page is out of reach for Tab and screen readers.** Below 640 px, while the open sidebar pushes the chat, search or assistants page aside, that page is `inert` (where a browser has no `inert`, `aria-hidden` at least keeps screen readers out), and the sidebar slid out of view is too. Focus moves into the sidebar when it opens and back to the button that opens it when it closes: by its close button, a tap beside it, a drag, Escape or a pick of a chat.
+
+**Hints on the glass are easier to read.** Inside an app with system glass the composer's placeholder and the muted labels in menus move towards the theme's own text colour (`colors.foreground.muted` mixed with `colors.foreground.primary`), so they stay at 4.5:1 or more over a white or black picture behind the glass for the erato, open-webui-like, trilux and novoferm themes in light and dark. In the built-in dark theme the composer's placeholder reaches 3.9:1 (its typed text 4.75:1). In dark mode the placeholder comes close to the typed text's colour. Outside such an app nothing changes.
+
+**Two more popovers stay clear of the status bar, the home bar and the keyboard.** The chat-history filter's flyout and a composer item's detail keep inside the screen's safe areas and above the on-screen keyboard, as menus already did; menus now also keep clear of a notch at the side in landscape.
 
 **The app fits a phone screen.** On a phone the app was taller than what the browser shows, so the bottom of the composer was cut off; it now takes the visible height. The page declares `viewport-fit=cover` and keeps its own content clear of system bars and display cutouts, so no bands remain around it, and while an on-screen keyboard is open the app and its dialogs take the space above the keyboard instead of sliding out of view. Inside the app, the page background behind everything is now `colors.shell.page` (it was `colors.background.primary`); it shows only where a screen paints no surface of its own.
 

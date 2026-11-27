@@ -2602,6 +2602,40 @@ html[data-system-glass] {
   pointer-events: none;
 }
 
+/* Hints on the glass (the composer's placeholder, a menu's muted labels):
+   with content showing through, the theme's muted colour falls below 4.5:1
+   over a white picture in light mode and a black one in dark. They move
+   towards the theme's own text colour, by the share the shipped themes need;
+   the dark composer needs the most, as dark themes draw it lighter than the
+   chat. Only the text field in the composer: its chips and cards keep their
+   own solid surfaces. Mixed from the page's muted colour, so a menu inside a
+   menu does not mix twice. */
+html[data-system-glass] {
+  --glass-fg-muted-base: var(--theme-fg-muted);
+  --glass-hint-keep: 55%;
+}
+
+html[data-system-glass][data-theme="dark"] {
+  --glass-hint-keep: 60%;
+}
+
+:where(html[data-system-glass][data-theme="dark"])
+  :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
+  textarea {
+  --glass-hint-keep: 25%;
+}
+
+:where(html[data-system-glass])
+  :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
+  textarea,
+:where(html[data-system-glass]) .anchored-popover-skin {
+  --theme-fg-muted: color-mix(
+    in srgb,
+    var(--glass-fg-muted-base) var(--glass-hint-keep),
+    var(--theme-fg-primary)
+  );
+}
+
 /* The two round controls float like the composer and take its shadow. */
 :where(html[data-system-glass]) .floating-control-skin,
 :where(html[data-system-glass]) .modal-close-skin {

@@ -1193,6 +1193,12 @@
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },
+  "budget.allow_request_to_finish": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
   "budget.budget_currency": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
@@ -1208,6 +1214,12 @@
   "budget.enabled": {
     "default_value_security": "unreviewed",
     "introduced_in": "0.6.0",
+    "security_relevance": "unreviewed",
+    "stability": "unreviewed"
+  },
+  "budget.enforce_limit": {
+    "default_value_security": "unreviewed",
+    "introduced_in": "0.9.0",
     "security_relevance": "unreviewed",
     "stability": "unreviewed"
   },

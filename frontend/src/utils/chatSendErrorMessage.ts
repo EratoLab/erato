@@ -1,5 +1,11 @@
 import { t } from "@lingui/core/macro";
 
+import { getErrorDescription } from "@/components/ui/Message/messageErrorCopy";
+import {
+  isBudgetLimitRefusal,
+  readConflictRefusal,
+} from "@/hooks/chat/conflictRefusal";
+
 import { plainErrorMessage } from "./plainErrorMessage";
 
 /**
@@ -26,6 +32,10 @@ const ACTION_FACET_SIZE_RE =
 export function resolveChatSendErrorMessage(error: unknown): string | null {
   if (!(error instanceof Error) || !error.message) {
     return null;
+  }
+
+  if (isBudgetLimitRefusal(readConflictRefusal(error))) {
+    return getErrorDescription("budget_limit_reached");
   }
 
   const sizeMatch = ACTION_FACET_SIZE_RE.exec(error.message);

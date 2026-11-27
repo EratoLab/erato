@@ -22,7 +22,12 @@ import {
 } from "../Controls/PopoverPanel";
 import { Row, ROW_ITEM_SELECTOR } from "../Controls/Row";
 import { SpinnerIcon } from "../Feedback/SpinnerIcon";
-import { CheckIcon, PlusIcon } from "../icons";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  PlusIcon,
+} from "../icons";
 
 import type React from "react";
 
@@ -95,6 +100,13 @@ export interface AddMenuSection {
   items: AddMenuSectionItem[];
   /** Placement relative to the Tools group. Defaults to "aboveTools". */
   placement?: "aboveTools" | "belowTools";
+  /**
+   * Shows the section as one row, its header plus `summary` (e.g. the current
+   * choice), that opens its items as a page of the same menu with a back row,
+   * the way an iPhone menu opens a nested menu. For lists that would otherwise
+   * outgrow the menu. Needs a `header`.
+   */
+  submenu?: { summary?: React.ReactNode };
 }
 
 export interface ChatInputAddMenuProps {
@@ -160,6 +172,12 @@ export function ChatInputAddMenu({
   className = "",
 }: ChatInputAddMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // The section shown as a page in place of the whole menu, if any.
+  const [openPageId, setOpenPageId] = useState<string | null>(null);
+  const returnFocusToPageRowRef = useRef<string | null>(null);
+  // A key moves focus onto a row, as in the rest of the menu; a tap moves it
+  // to the page itself, so no row lights up under the finger.
+  const swapByKeyRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const baseId = useId();
@@ -222,12 +240,64 @@ export function ChatInputAddMenu({
       if (open) {
         cancelPendingClose();
       }
+      setOpenPageId(null);
       setIsOpen(open);
     },
     [cancelPendingClose],
   );
 
   useEffect(() => () => clearTimeout(closeTimerRef.current), []);
+
+  // Opening or leaving a page replaces the rows under focus, so focus moves
+  // to the page's first row, or back to the row that opened it.
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const returnTo = returnFocusToPageRowRef.current;
+    returnFocusToPageRowRef.current = null;
+    const byKey = swapByKeyRef.current;
+    swapByKeyRef.current = false;
+    let target: HTMLElement | null = null;
+    if (openPageId !== null) {
+      target = byKey
+        ? panel.querySelector<HTMLElement>(ROW_ITEM_SELECTOR)
+        : panel.querySelector<HTMLElement>("[data-add-menu-page]");
+    } else if (returnTo !== null) {
+      target = byKey
+        ? panel.querySelector<HTMLElement>(
+            `[data-testid="chat-input-add-menu-page-${returnTo}"]`,
+          )
+        : panel;
+    }
+    target?.focus();
+  }, [isOpen, openPageId]);
+
+  const openPage = (sectionId: string, byKey: boolean) => {
+    swapByKeyRef.current = byKey;
+    setOpenPageId(sectionId);
+  };
+  const leavePage = useCallback((byKey: boolean) => {
+    swapByKeyRef.current = byKey;
+    setOpenPageId((current) => {
+      returnFocusToPageRowRef.current = current;
+      return null;
+    });
+  }, []);
+
+  // Arrow left leaves a page, as arrow right on its row opened it.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!isOpen || openPageId === null || !panel) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        leavePage(true);
+      }
+    };
+    panel.addEventListener("keydown", onKeyDown);
+    return () => panel.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, openPageId, leavePage]);
 
   const renderActionRow = (item: AddMenuActionItem, testId: string) => (
     <Row
@@ -340,7 +410,50 @@ export function ChatInputAddMenu({
     );
   };
 
+  const renderSectionItems = (section: AddMenuSection) =>
+    section.items.map((item) =>
+      isAddMenuToolItem(item)
+        ? renderToolRow(item, `chat-input-add-menu-extra-${item.id}`)
+        : renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
+    );
+
+  const renderPageRow = (section: AddMenuSection) => (
+    <Row
+      key={section.id}
+      variant="menu"
+      role="menuitem"
+      tabIndex={-1}
+      aria-haspopup="menu"
+      aria-expanded={false}
+      disabled={isBusy}
+      data-testid={`chat-input-add-menu-page-${section.id}`}
+      // A click a key produced (Enter, Space) carries no pointer detail.
+      onClick={(event: React.MouseEvent) =>
+        openPage(section.id, event.detail === 0)
+      }
+      onKeyDown={(event: React.KeyboardEvent) => {
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          openPage(section.id, true);
+        }
+      }}
+      trailing={
+        <span className="flex min-w-0 shrink items-center gap-1 text-theme-fg-muted">
+          {section.submenu?.summary != null && (
+            <span className="truncate">{section.submenu.summary}</span>
+          )}
+          <ChevronRightIcon className="size-4 shrink-0" aria-hidden="true" />
+        </span>
+      }
+    >
+      <span className="min-w-0 shrink-0">{section.header}</span>
+    </Row>
+  );
+
   const renderExtraSection = (section: AddMenuSection) => {
+    if (section.submenu && section.header != null) {
+      return <div className="flex flex-col">{renderPageRow(section)}</div>;
+    }
     // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
     const headerId = `${baseId}-section-${section.id}`;
     return (
@@ -354,14 +467,19 @@ export function ChatInputAddMenu({
             {section.header}
           </PopoverSectionHeader>
         )}
-        {section.items.map((item) =>
-          isAddMenuToolItem(item)
-            ? renderToolRow(item, `chat-input-add-menu-extra-${item.id}`)
-            : renderActionRow(item, `chat-input-add-menu-extra-${item.id}`),
-        )}
+        {renderSectionItems(section)}
       </div>
     );
   };
+
+  const openPageSection =
+    openPageId === null
+      ? undefined
+      : extraSections.find(
+          (section) => section.id === openPageId && section.submenu,
+        );
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- internal DOM id suffix
+  const pageHeaderId = `${baseId}-page`;
 
   // Build the visible sections in order, then interleave dividers so the menu
   // reads as grouped without dangling rules — regardless of which sections the
@@ -493,15 +611,53 @@ export function ChatInputAddMenu({
       )}
     >
       <PopoverChrome dataUi="chat-input-add-menu-content">
-        {blocks.map((block, index) => (
-          <Fragment key={block.key}>
-            {!block.empty &&
-              blocks.slice(0, index).some((before) => !before.empty) && (
-                <PopoverSeparator />
-              )}
-            {block.node}
-          </Fragment>
-        ))}
+        {openPageSection ? (
+          <div
+            role="group"
+            aria-labelledby={pageHeaderId}
+            tabIndex={-1}
+            data-add-menu-page=""
+            className="flex flex-col focus:outline-none"
+          >
+            <Row
+              variant="menu"
+              role="menuitem"
+              tabIndex={-1}
+              data-testid="chat-input-add-menu-page-back"
+              onClick={(event: React.MouseEvent) =>
+                leavePage(event.detail === 0)
+              }
+              leading={
+                <ChevronLeftIcon
+                  className="size-4 shrink-0"
+                  aria-hidden="true"
+                />
+              }
+            >
+              <span className="sr-only">
+                {t({ id: "chatInput.addMenu.pageBack", message: "Back:" })}{" "}
+              </span>
+              <span
+                id={pageHeaderId}
+                className="min-w-0 flex-1 truncate font-medium"
+              >
+                {openPageSection.header}
+              </span>
+            </Row>
+            <PopoverSeparator />
+            {renderSectionItems(openPageSection)}
+          </div>
+        ) : (
+          blocks.map((block, index) => (
+            <Fragment key={block.key}>
+              {!block.empty &&
+                blocks.slice(0, index).some((before) => !before.empty) && (
+                  <PopoverSeparator />
+                )}
+              {block.node}
+            </Fragment>
+          ))
+        )}
       </PopoverChrome>
     </AnchoredPopover>
   );

@@ -11,7 +11,7 @@ import { FrontendRequestError } from "@/utils/errorReport";
  */
 export interface ConflictRefusal {
   status: number;
-  /** `generation_running` or `nothing_to_react`; absent for a plain-text body. */
+  /** Machine-readable code, when the response has a JSON envelope. */
   code?: string;
   /** `nothing_to_react` only: not_a_task_result | not_delivered | already_reacted | tip_moved. */
   reason?: string;
@@ -52,3 +52,6 @@ export const readConflictRefusal = (error: unknown): ConflictRefusal | null => {
     ...(typeof envelope.reason === "string" ? { reason: envelope.reason } : {}),
   };
 };
+
+export const isBudgetLimitRefusal = (refusal: ConflictRefusal | null) =>
+  refusal?.status === 403 && refusal.code === "budget_limit_reached";

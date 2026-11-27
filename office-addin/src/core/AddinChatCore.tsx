@@ -490,13 +490,13 @@ function useAddinChatController({
         () => hostCallbacksRef.current.beforeEdit?.(messageId),
         (actionFacet) => {
           chatInputControlsRef.current?.clearQueuedMessage();
-          setEditingMessageId(null);
           void chat.editMessage(
             messageId,
             newContent,
             replaceInputFileIds,
             activeSelectedFacetIds,
             actionFacet,
+            () => setEditingMessageId(null),
           );
         },
       );

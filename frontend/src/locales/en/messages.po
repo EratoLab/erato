@@ -2882,6 +2882,11 @@ msgstr "Assistant error"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Your personal generation budget has been reached."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "The response was filtered due to the prompt triggering content management policy."
 
@@ -3338,6 +3343,11 @@ msgstr "Could not refresh your budget. These figures may be out of date."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Back:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx

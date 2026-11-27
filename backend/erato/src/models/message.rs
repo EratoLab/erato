@@ -332,6 +332,9 @@ pub enum GenerationErrorType {
         /// Description of why generation was aborted.
         error_description: String,
     },
+    /// The user's personal generation budget has been reached.
+    #[serde(rename = "budget_limit_reached")]
+    BudgetLimitReached { error_description: String },
     /// Internal server error.
     #[serde(rename = "internal_error")]
     InternalError {
@@ -423,9 +426,19 @@ impl BudgetTokenUsage {
     }
 }
 
+/// The budget policy recorded on the assistant message when a request is admitted.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetEnforcement {
+    FinishRequest,
+    Strict,
+}
+
 /// Metadata about the generation process, including usage statistics
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GenerationMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_enforcement: Option<BudgetEnforcement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub submission_outcome: Option<crate::services::submission_correction::SubmissionOutcome>,
     /// Charges incurred on this message, including chat completions and tool calls.
@@ -3353,6 +3366,7 @@ pub(crate) async fn settle_metered_tool_call(
 }
 
 const BUDGET_METADATA_KEYS: &[&str] = &[
+    "budget_enforcement",
     "budget_usage",
     "budget_usage_at_creation",
     "budget_usage_settlements",

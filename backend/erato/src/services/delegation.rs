@@ -2367,6 +2367,27 @@ pub(crate) struct ClientTaskLaunchSpec {
 /// The run spec is a parameter rather than being read from the dispatch
 /// context: the mention route passes the turn's mode straight through, while
 /// the task route chooses per call.
+#[derive(Debug)]
+pub(crate) enum LaunchError {
+    Budget(crate::services::budget::BudgetCheckError),
+    Refused(String),
+}
+
+impl From<String> for LaunchError {
+    fn from(message: String) -> Self {
+        Self::Refused(message)
+    }
+}
+
+impl std::fmt::Display for LaunchError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Budget(error) => formatter.write_str(error.message()),
+            Self::Refused(message) => formatter.write_str(message),
+        }
+    }
+}
+
 pub(crate) async fn launch_delegation(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -2374,7 +2395,7 @@ pub(crate) async fn launch_delegation(
     target: DelegationTargetSpec,
     run: LaunchRunSpec,
     brief: DelegateBrief,
-) -> Result<LaunchOutcome, String> {
+) -> Result<LaunchOutcome, LaunchError> {
     use sea_orm::EntityTrait;
 
     let dispatch_started = std::time::Instant::now();
@@ -2393,7 +2414,7 @@ pub(crate) async fn launch_delegation(
         let file_id =
             Uuid::parse_str(raw_id).map_err(|_| format!("Invalid file id '{raw_id}'."))?;
         if !context.offered_file_ids.contains(&file_id) {
-            return Err(format!("File {file_id} is not an attachment of this chat."));
+            return Err(format!("File {file_id} is not an attachment of this chat.").into());
         }
         let join_row = crate::db::entity::chat_file_uploads::Entity::find_by_id((
             context.origin_chat.id,
@@ -2406,7 +2427,7 @@ pub(crate) async fn launch_delegation(
             "Failed to verify the file attachment.".to_string()
         })?;
         if join_row.is_none() {
-            return Err(format!("File {file_id} is not an attachment of this chat."));
+            return Err(format!("File {file_id} is not an attachment of this chat.").into());
         }
         if !file_ids.contains(&file_id) {
             file_ids.push(file_id);
@@ -2493,7 +2514,7 @@ pub(crate) async fn launch_delegation(
         {
             return Err(format!(
                 "This turn already launched {cap} background run(s), the most allowed per message; delegate the remaining work in a later message."
-            ));
+            ).into());
         }
         let in_flight = crate::models::chat::count_running_background_delegated_runs(
             &app_state.db,
@@ -2508,7 +2529,8 @@ pub(crate) async fn launch_delegation(
         if in_flight >= cap as u64 {
             return Err(format!(
                 "You already have {in_flight} background runs in flight; wait for one to finish."
-            ));
+            )
+            .into());
         }
     }
 
@@ -2579,6 +2601,9 @@ pub(crate) async fn launch_delegation(
             )
         })
         .unwrap_or_default();
+    crate::services::budget::admit_generation(app_state, &context.origin_chat.owner_user_id)
+        .await
+        .map_err(LaunchError::Budget)?;
     let child_chat = crate::models::chat::create_delegated_chat(
         &app_state.db,
         policy,
@@ -2618,7 +2643,7 @@ pub(crate) async fn launch_delegation(
         Ok(previous_message_id) => previous_message_id,
         Err(refusal) => {
             discard_unstarted_delegated_chat(app_state, &child_task, child_chat.id).await;
-            return Err(refusal);
+            return Err(refusal.into());
         }
     };
 
@@ -2941,7 +2966,8 @@ pub(crate) async fn dispatch_delegate_tool_call(
         },
         brief,
     )
-    .await?
+    .await
+    .map_err(|error| error.to_string())?
     {
         LaunchOutcome::Dispatched {
             assistant_id,

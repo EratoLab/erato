@@ -2482,7 +2482,7 @@ mod tests {
     #[test]
     fn test_email_plain_text_supplement_decodes_quoted_printable_soft_breaks() {
         let eml_bytes = br#"From: Microsoft 365 Message center <o365mc@microsoft.com>
-To: fms@maxgoisser.onmicrosoft.com
+To: testuser@maxgoisser.onmicrosoft.com
 Subject: Weekly digest: Microsoft service updates
 MIME-Version: 1.0
 Content-Type: multipart/alternative; boundary="digest-boundary"
