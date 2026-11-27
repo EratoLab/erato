@@ -174,12 +174,15 @@ describe("AnchoredPopover", () => {
       const measure = vi
         .spyOn(HTMLElement.prototype, "getBoundingClientRect")
         .mockImplementation(function (this: HTMLElement) {
-          const width =
-            this.style.width === "var(--safe-area-left)"
-              ? 47
-              : this.style.width
-                ? 8
-                : 60;
+          const lengths: Record<string, number> = {
+            "var(--safe-area-left)": 47,
+            "var(--safe-area-top)": 0,
+            "var(--safe-area-right)": 0,
+            "var(--safe-area-bottom)": 0,
+          };
+          const width = this.style.width
+            ? (lengths[this.style.width] ?? 8)
+            : 60;
           return DOMRect.fromRect({ width, height: this.style.width ? 0 : 40 });
         });
       render(

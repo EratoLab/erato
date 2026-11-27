@@ -426,6 +426,15 @@ describe("ChatHistoryFilterMenu", () => {
       "var(--safe-area-left)": 0,
       "var(--safe-area-right)": 0,
     };
+    const viewportListeners = new Set<() => void>();
+    const visualViewport = {
+      offsetTop: 0,
+      height: 0,
+      addEventListener: (_: string, listener: () => void) =>
+        viewportListeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) =>
+        viewportListeners.delete(listener),
+    };
     const setUp = (submenuHeight: number, keyboardTop?: number) => {
       vi.spyOn(
         HTMLElement.prototype,
@@ -444,13 +453,9 @@ describe("ChatHistoryFilterMenu", () => {
       if (keyboardTop !== undefined) {
         Object.defineProperty(window, "visualViewport", {
           configurable: true,
-          value: {
-            offsetTop: 0,
-            height: keyboardTop,
-            addEventListener: () => {},
-            removeEventListener: () => {},
-          },
+          value: visualViewport,
         });
+        visualViewport.height = keyboardTop;
       }
     };
     const openStatusFlyout = () => {
@@ -463,6 +468,7 @@ describe("ChatHistoryFilterMenu", () => {
     };
 
     afterEach(() => {
+      viewportListeners.clear();
       Reflect.deleteProperty(window, "visualViewport");
       vi.restoreAllMocks();
     });
@@ -486,7 +492,26 @@ describe("ChatHistoryFilterMenu", () => {
       // Its top at 59 + 8 = 67, 33 above the panel's top.
       expect(flyout.style.top).toBe("-33px");
       expect(flyout.style.maxHeight).toBe("311px");
-      expect(flyout.style.overflowY).toBe("auto");
+      // The rows scroll, not the glass panel around them.
+      expect(flyout.style.overflowY).toBe("");
+      expect(flyout.firstElementChild).toHaveClass("overflow-y-auto");
+    });
+
+    it("moves back beside its row once the keyboard goes", () => {
+      setUp(300, 420);
+      vi.spyOn(window, "requestAnimationFrame").mockImplementation(
+        (callback) => {
+          callback(0);
+          return 0;
+        },
+      );
+      const flyout = openStatusFlyout();
+      expect(flyout.style.top).toBe("-22px");
+
+      visualViewport.height = window.innerHeight;
+      act(() => viewportListeners.forEach((listener) => listener()));
+
+      expect(flyout.style.top).toBe("0px");
     });
 
     it("stays beside its row where there is room", () => {

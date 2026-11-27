@@ -20,8 +20,8 @@ export interface PopoverViewport {
  * The part of the window a popover may use. Where the page runs under the
  * status bar, the home bar or a landscape notch, a panel kept only off the
  * window edge ends up behind them; an on-screen keyboard covers the bottom of
- * the window without making it shorter, and only the visual viewport ends
- * where the keyboard begins.
+ * the window without making it shorter, and only the visual viewport shows
+ * where the visible part begins and ends.
  */
 export function resolvePopoverViewport(
   paddingValue: string,
@@ -42,12 +42,14 @@ export function resolvePopoverViewport(
     );
   const layoutHeight = window.innerHeight;
   const visualViewport = window.visualViewport;
+  // A phone browser can also slide the page up under the keyboard.
+  const visibleTop = Math.max(0, visualViewport?.offsetTop ?? 0);
   const visibleBottom = visualViewport
     ? Math.min(layoutHeight, visualViewport.offsetTop + visualViewport.height)
     : layoutHeight;
   return {
     padding,
-    top: safeTop + padding,
+    top: visibleTop + safeTop + padding,
     right: window.innerWidth - safeRight - padding,
     bottom: visibleBottom - safeBottom - padding,
     left: safeLeft + padding,

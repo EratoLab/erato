@@ -96,6 +96,25 @@ describe("ComposerContextDetail as a popover", () => {
     expect(detail.style.maxHeight).toBe(`${500 - 42 - 156}px`);
   });
 
+  it("stops below the status bar where the page has slid up under the keyboard", () => {
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: {
+        offsetTop: 200,
+        height: 400,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      },
+    });
+    const detail = renderAt(
+      DOMRect.fromRect({ x: 100, y: 500, width: 120, height: 28 }),
+      { "var(--safe-area-top)": 59 },
+    );
+
+    // The visible part starts 200 down the page; then the status bar.
+    expect(detail.style.maxHeight).toBe(`${500 - 8 - (200 + 59 + 8)}px`);
+  });
+
   it("keeps clear of a notch at the side", () => {
     const detail = renderAt(
       DOMRect.fromRect({ x: 10, y: 400, width: 120, height: 28 }),

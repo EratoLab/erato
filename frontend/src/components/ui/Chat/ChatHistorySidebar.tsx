@@ -961,8 +961,9 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
             <div
               ref={scrimRef}
               role="presentation"
-              // A press here would otherwise blur the focused control in the
-              // drawer, and the close could not tell where focus was.
+              // A press here leaves focus where it is, so the close sees it
+              // was in the drawer even where a browser keeps a focused page
+              // control out of the inert rule.
               onMouseDown={(event) => event.preventDefault()}
               onClick={dismissDrawer}
               className={clsx(

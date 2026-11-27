@@ -58,9 +58,9 @@ Typical "Notable changes" categories to copy & paste:
 
 #### Bug fixes
 
-**Beside the open sidebar on a narrow screen the page is out of reach for Tab and screen readers.** Below 640 px, while the open sidebar pushes the chat, search or assistants page aside, that page is `inert` (with `aria-hidden` where a browser has no `inert`), and the sidebar slid out of view is too. Focus moves into the sidebar when it opens and back to the button that opens it when it closes, by that button, a tap beside it, a drag or Escape.
+**Beside the open sidebar on a narrow screen the page is out of reach for Tab and screen readers.** Below 640 px, while the open sidebar pushes the chat, search or assistants page aside, that page is `inert` (where a browser has no `inert`, `aria-hidden` at least keeps screen readers out), and the sidebar slid out of view is too. Focus moves into the sidebar when it opens and back to the button that opens it when it closes: by its close button, a tap beside it, a drag, Escape or a pick of a chat.
 
-**Hints on the glass reach 4.5:1.** Inside an app with system glass the composer's placeholder and the muted labels in menus move towards the theme's own text colour (`colors.foreground.muted` mixed with `colors.foreground.primary`), so they stay readable over a white or black picture behind the glass. Outside such an app nothing changes.
+**Hints on the glass are easier to read.** Inside an app with system glass the composer's placeholder and the muted labels in menus move towards the theme's own text colour (`colors.foreground.muted` mixed with `colors.foreground.primary`), so they stay at 4.5:1 or more over a white or black picture behind the glass for the erato, open-webui-like, trilux and novoferm themes in light and dark. In the built-in dark theme the composer's placeholder reaches 3.9:1 (its typed text 4.75:1). In dark mode the placeholder comes close to the typed text's colour. Outside such an app nothing changes.
 
 **Two more popovers stay clear of the status bar, the home bar and the keyboard.** The chat-history filter's flyout and a composer item's detail keep inside the screen's safe areas and above the on-screen keyboard, as menus already did; menus now also keep clear of a notch at the side in landscape.
 

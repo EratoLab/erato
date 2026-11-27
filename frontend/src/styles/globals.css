@@ -2543,8 +2543,9 @@ html[data-system-glass] {
    over a white picture in light mode and a black one in dark. They move
    towards the theme's own text colour, by the share the shipped themes need;
    the dark composer needs the most, as dark themes draw it lighter than the
-   chat. Mixed from the page's muted colour, so a menu inside a menu does not
-   mix twice. */
+   chat. Only the text field in the composer: its chips and cards keep their
+   own solid surfaces. Mixed from the page's muted colour, so a menu inside a
+   menu does not mix twice. */
 html[data-system-glass] {
   --glass-fg-muted-base: var(--theme-fg-muted);
   --glass-hint-keep: 55%;
@@ -2555,14 +2556,14 @@ html[data-system-glass][data-theme="dark"] {
 }
 
 :where(html[data-system-glass][data-theme="dark"])
-  :where([data-ui="chat-conversation-shell"])
-  [data-ui="chat-input-shell"] {
+  :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
+  .chat-input-textarea-geometry {
   --glass-hint-keep: 25%;
 }
 
 :where(html[data-system-glass])
-  :where([data-ui="chat-conversation-shell"])
-  [data-ui="chat-input-shell"],
+  :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
+  .chat-input-textarea-geometry,
 :where(html[data-system-glass]) .anchored-popover-skin {
   --theme-fg-muted: color-mix(
     in srgb,

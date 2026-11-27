@@ -34,7 +34,7 @@ function declaration(selector: string, property: string): string {
 }
 
 const COMPOSER =
-  ':where(html[data-system-glass][data-theme="dark"]) :where([data-ui="chat-conversation-shell"]) [data-ui="chat-input-shell"]';
+  ':where(html[data-system-glass][data-theme="dark"]) :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"]) .chat-input-textarea-geometry';
 const opacity = Number(
   declaration("html[data-system-glass]", "--glass-opacity"),
 );
@@ -142,7 +142,7 @@ describe("hints on the glass", () => {
     expect(hintContrast(glass)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("doubles in the built-in dark composer, whose typed text itself barely passes", () => {
+  it("falls short only in the built-in dark composer, whose typed text itself barely passes, and doubles there", () => {
     const glass = builtIn(darkTheme, "chatInput");
     const typed = hintContrast({ ...glass, keep: 0 });
     const before = hintContrast({ ...glass, keep: 1 });

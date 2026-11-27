@@ -2035,6 +2035,35 @@ describe("ChatHistorySidebar", () => {
         await waitFor(() => expect(expandToggle()).toHaveFocus());
       });
 
+      it("gives the page back after a chat is picked in the drawer", async () => {
+        await renderDrawer(true);
+        screen.getByRole("link", { name: "New Chat" }).focus();
+
+        act(() => {
+          historyListProps.at(-1)?.onSessionSelect?.("chat-2");
+        });
+
+        expect(sidebarMode()).toBe("hidden");
+        expect(page()).not.toHaveAttribute("inert");
+        await waitFor(() => expect(expandToggle()).toHaveFocus());
+      });
+
+      it("hides the page from screen readers where a browser has no inert", async () => {
+        await renderDrawer(true);
+
+        expect(page().getAttribute("aria-hidden")).toBe(
+          "inert" in HTMLElement.prototype ? null : "true",
+        );
+      });
+
+      it("moves no focus when the drawer is already open on arrival", async () => {
+        const before = document.activeElement;
+
+        await renderDrawer(true);
+
+        expect(document.activeElement).toBe(before);
+      });
+
       it("leaves the page reachable on a wide screen", async () => {
         mockedNarrowScreen = false;
         await renderDrawer(true);
