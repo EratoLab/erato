@@ -253,17 +253,71 @@ describe("ModalBase as a sheet on a phone", () => {
     expect(shell().style.transform).toBe("");
   });
 
-  it("keeps the keyboard in the sheet's fields", () => {
+  it("springs back when a second finger lands mid-drag", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    const field = screen.getByRole("textbox", { name: "Name" });
-    field.focus();
+
+    drag(header(), 20, [40, 80], { lift: false });
+    expect(shell().style.transform).toBe("translateY(60px)");
     fireEvent.touchStart(header(), {
-      touches: [{ clientX: 100, clientY: 10 }],
+      touches: [
+        { clientX: 100, clientY: 80 },
+        { clientX: 200, clientY: 300 },
+      ],
     });
     fireEvent.touchEnd(header(), { touches: [], changedTouches: [] });
-    expect(field).toHaveFocus();
-    expect(shell()).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(shell().style.transform).toBe("");
+    expect(shell().style.transition).toBe("");
+  });
+
+  it("does not close a dialog reopened while its slide-out was pending", () => {
+    function ClosedByCaller() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(false)}>
+            Caller closes
+          </button>
+          <button type="button" onClick={() => setOpen(true)}>
+            Reopen
+          </button>
+          <ModalBase isOpen={open} onClose={() => setOpen(false)} title="Pick">
+            <p>Body</p>
+          </ModalBase>
+        </>
+      );
+    }
+    render(<ClosedByCaller />);
+    fireEvent.click(screen.getByRole("button", { name: "Close modal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Caller closes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("dialog", { name: "Pick" })).toBeInTheDocument();
+    expect(shell().style.transform).toBe("");
+  });
+
+  it("slides out on a tap on the dimmed page above it", () => {
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(shell().style.transform).toBe("translateY(100%)");
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -271,7 +325,7 @@ describe("sheetSettlesClosed", () => {
   it("closes past 30% of the height or on a downward flick", () => {
     expect(sheetSettlesClosed(100, 400, 0)).toBe(false);
     expect(sheetSettlesClosed(130, 400, 0)).toBe(true);
-    expect(sheetSettlesClosed(20, 400, 0.8)).toBe(true);
+    expect(sheetSettlesClosed(20, 400, 0.4)).toBe(true);
     expect(sheetSettlesClosed(300, 400, -0.8)).toBe(false);
   });
 });

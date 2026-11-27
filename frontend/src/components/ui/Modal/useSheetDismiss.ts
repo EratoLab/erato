@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
+import { dragDirection } from "../Chat/useSidebarDrawerSwipe";
+
 import type { RefObject } from "react";
 
-/** Movement before a touch counts as a drag, and which way. */
-const SLOP_PX = 6;
-/** A release faster than this goes the way the finger went, however far. */
-const FLICK_PX_PER_MS = 0.5;
+/** As the sidebar's swipe: a release this fast goes the way the finger went. */
+const FLICK_PX_PER_MS = 0.35;
 const VELOCITY_WINDOW_MS = 100;
 /** Let go past this share of its height, a sheet closes. */
 const CLOSE_FRACTION = 0.3;
@@ -52,6 +52,12 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   window.matchMedia(REDUCED_MOTION_QUERY).matches;
 
+/** A running rise animation outranks the inline transform a drag sets. */
+function finishOpening(shell: HTMLElement) {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- absent in jsdom
+  shell.getAnimations?.().forEach((animation) => animation.finish());
+}
+
 type Gesture = {
   startX: number;
   startY: number;
@@ -94,15 +100,6 @@ export function useSheetDismiss({
     timersRef.current.push(window.setTimeout(run, ms));
   }, []);
 
-  useEffect(
-    () => () => {
-      timersRef.current.forEach((timer) => window.clearTimeout(timer));
-      timersRef.current = [];
-      closingRef.current = false;
-    },
-    [],
-  );
-
   const settleBack = useCallback(
     (shell: HTMLElement) => {
       if (prefersReducedMotion()) {
@@ -135,6 +132,7 @@ export function useSheetDismiss({
         return;
       }
       closingRef.current = true;
+      finishOpening(shell);
       shell.style.transition = `transform ${SLIDE_OUT_MS}ms ${SLIDE_OUT_EASING}`;
       // eslint-disable-next-line lingui/no-unlocalized-strings -- CSS value
       shell.style.transform = "translateY(100%)";
@@ -162,6 +160,9 @@ export function useSheetDismiss({
     let gesture: Gesture | null = null;
 
     const onStart = (event: TouchEvent) => {
+      if (gesture?.dragging && event.touches.length !== 1) {
+        settleBack(shell);
+      }
       gesture = null;
       if (closingRef.current || event.touches.length !== 1) {
         return;
@@ -193,14 +194,16 @@ export function useSheetDismiss({
       const dx = touch.clientX - gesture.startX;
       const dy = touch.clientY - gesture.startY;
       if (!gesture.dragging) {
-        if (Math.hypot(dx, dy) < SLOP_PX) {
+        const direction = dragDirection(dx, dy);
+        if (direction === null) {
           return;
         }
-        if (dy <= 0 || Math.abs(dx) > Math.abs(dy)) {
+        if (direction === "horizontal" || dy < 0) {
           gesture = null;
           return;
         }
         gesture.dragging = true;
+        finishOpening(shell);
         // The skin's colour transition also lists transform, which would
         // make the sheet trail the finger.
         shell.style.transition = "none";
@@ -257,6 +260,11 @@ export function useSheetDismiss({
       shell.removeEventListener("touchcancel", onEnd);
       shell.style.removeProperty("transition");
       shell.style.removeProperty("transform");
+      // Closed by now, by this sheet or by its caller: a slide-out still
+      // pending must not close the dialog once it is opened again.
+      timersRef.current.forEach((timer) => window.clearTimeout(timer));
+      timersRef.current = [];
+      closingRef.current = false;
     };
   }, [bandRef, close, enabled, settleBack, shellRef]);
 

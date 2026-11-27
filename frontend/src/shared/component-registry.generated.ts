@@ -81,6 +81,14 @@ export { StarterPromptsSection } from "@/components/ui/Chat/StarterPromptsSectio
 export type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
 export type { StarterPromptsSectionProps } from "@/components/ui/Chat/StarterPromptsSection";
 export { SubmissionNotice } from "@/components/ui/Chat/SubmissionNotice";
+export { attachDrawerSwipe } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export { dragDirection } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export { settlesOpen } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export { useSidebarDrawerSwipe } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export type { DragDirection } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export type { DrawerSwipe } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export type { DrawerSwipeElements } from "@/components/ui/Chat/useSidebarDrawerSwipe";
+export type { DrawerSwipeHost } from "@/components/ui/Chat/useSidebarDrawerSwipe";
 export { Card } from "@/components/ui/Container/Card";
 export type { CardControl } from "@/components/ui/Container/Card";
 export type { CardProps } from "@/components/ui/Container/Card";

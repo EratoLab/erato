@@ -27,20 +27,19 @@ function ruleBody(selector: string, from = 0): string {
 }
 
 const SHEET_OVERLAY = ".modal-overlay-skin:where([data-sheet])";
-const SHEET_FRAME = ".modal-shell-frame-geometry:where([data-sheet])";
 const SHEET_SKIN = ".modal-shell-skin:where([data-sheet])";
 
 describe("bottom sheet rules", () => {
   it("sit after the utilities, so a caller's max-w-* cannot narrow a sheet", () => {
     const utilities = globalsCss.indexOf("@tailwind utilities");
-    for (const selector of [SHEET_OVERLAY, SHEET_FRAME, SHEET_SKIN]) {
+    for (const selector of [SHEET_OVERLAY, SHEET_SKIN]) {
       expect(ruleIndex(selector)).toBeGreaterThan(utilities);
     }
-    expect(ruleBody(SHEET_FRAME)).toContain("max-width:none;");
+    expect(ruleBody(SHEET_SKIN)).toContain("max-width:none;");
   });
 
   it("keep clear of the home indicator, which an open keyboard covers", () => {
-    expect(ruleBody(SHEET_FRAME)).toContain(
+    expect(ruleBody(SHEET_SKIN)).toContain(
       "padding-bottom:var(--safe-area-bottom);",
     );
     expect(ruleBody(':root[data-virtual-keyboard="open"]')).toContain(

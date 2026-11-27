@@ -1535,23 +1535,28 @@ body:has(.app-viewport) {
    indicator, which its own padding keeps clear; with the keyboard open the
    overlay ends at the keyboard and that padding is gone. Short dialogs take
    their content's height, long ones the whole screen below the status bar.
-   Unlayered, so a caller's max-w-* cannot narrow it; `:where` holds each rule
-   at its class's weight, so a theme.css rule on the same class still wins. */
+   The size sits on the skin, not the frame geometry: a geometry class stays
+   in @layer components and loses to a caller's max-w-*, which must not
+   narrow a sheet. `:where` holds each rule at its class's weight, so a
+   theme.css rule on the same class still wins. */
 .modal-overlay-skin:where([data-sheet]) {
   padding: calc(var(--safe-area-top) + 0.5rem) var(--safe-area-right) 0
     var(--safe-area-left);
   animation: modal-scrim-in 250ms ease-out;
 }
 
-.modal-shell-frame-geometry:where([data-sheet]) {
+.modal-shell-skin:where([data-sheet]) {
   max-width: none;
   max-height: 100%;
   padding-bottom: var(--safe-area-bottom);
-}
-
-.modal-shell-skin:where([data-sheet]) {
   border-radius: var(--theme-radius-modal) var(--theme-radius-modal) 0 0;
   animation: modal-sheet-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* The drag that closes a sheet starts here; without this a browser that has
+   begun its own pan stops letting the drag hold the page still. */
+.modal-shell-skin:where([data-sheet]) > [data-ui="modal-header"] {
+  touch-action: none;
 }
 
 /* iOS's grabber: 36 by 5 pt, 5 pt below the sheet's edge, over the header's
