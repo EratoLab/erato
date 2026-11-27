@@ -575,6 +575,22 @@ async fn check_output_for_protocol(
         fixture.calls.load(Ordering::SeqCst),
         usize::from(approval != Some("reject"))
     );
+    if expected_status == "error" {
+        // A result that failed, was refused or could not be stored hands on
+        // the Base64 of none of its files.
+        let mut values = vec![
+            row.raw_message.to_string(),
+            tool["output"].to_string(),
+            response.text(),
+        ];
+        values.extend(recorder.bodies());
+        for value in values {
+            assert!(
+                !value.contains(PNG) && !value.contains(CSV),
+                "raw payload leaked: {value}"
+            );
+        }
+    }
     if fixture.output["type"] == "content_filter" {
         assert!(
             recorder.bodies().is_empty(),

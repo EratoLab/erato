@@ -984,13 +984,54 @@ fn mcp_tool_output_value(
     }
 }
 
+/// Replaces the string under `path` in `value`, wherever the value has one,
+/// with a note of its length. Unlike `expand_paths_for_value`, it accepts
+/// any shape: the output it reads may be the one that failed validation.
+fn omit_file_content(value: &mut Value, path: &[FileContentPathPart]) {
+    match path.split_first() {
+        None => {
+            if let Value::String(content) = value
+                && !content.starts_with(OMITTED_FILE_CONTENT_PREFIX)
+            {
+                *content = format!("{OMITTED_FILE_CONTENT_PREFIX}: {} bytes]", content.len());
+            }
+        }
+        Some((FileContentPathPart::Field { name, .. }, rest)) => {
+            if let Some(next) = value.get_mut(name) {
+                omit_file_content(next, rest);
+            }
+        }
+        Some((FileContentPathPart::ArrayItem, rest)) => {
+            if let Value::Array(items) = value {
+                for item in items {
+                    omit_file_content(item, rest);
+                }
+            }
+        }
+    }
+}
+
+/// What a marked field holds in the output of a result that could not be
+/// processed, in place of its content.
+const OMITTED_FILE_CONTENT_PREFIX: &str = "[file content omitted";
+
+/// What a call's row and the model get for a result that could not be
+/// processed: the error and the tool's own output. The fields `output_schema`
+/// marks as file content keep only a note of their length, so the Base64 of
+/// the result's files is not part of it.
 pub(super) fn mcp_tool_processing_error_output(
     tool_call_result: &rmcp::model::CallToolResult,
+    output_schema: Option<&rmcp::model::JsonObject>,
     processing_error: &str,
 ) -> Value {
     let tool_response_content = mcp_result_to_text(tool_call_result);
-    let original_output = mcp_tool_output_value(tool_call_result, &tool_response_content)
+    let mut original_output = mcp_tool_output_value(tool_call_result, &tool_response_content)
         .unwrap_or_else(|_| Value::String(tool_response_content));
+    if let Some(output_schema) = output_schema {
+        for path in collect_file_content_paths(&Value::Object(output_schema.clone())) {
+            omit_file_content(&mut original_output, &path.parts);
+        }
+    }
 
     json!({
         "status": "error",
@@ -2011,6 +2052,7 @@ mod tests {
 
         let output = mcp_tool_processing_error_output(
             &tool_result,
+            None,
             "Failed to process MCP tool output: Missing mime_type",
         );
 
@@ -2020,6 +2062,77 @@ mod tests {
             "Failed to process MCP tool output: Missing mime_type"
         );
         assert_eq!(output["mcp_output"], original_output);
+    }
+
+    #[test]
+    fn file_processing_error_output_leaves_out_the_content_of_marked_fields() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "report": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                },
+                "files": { "type": "array", "items": { "$ref": "#/$defs/File" } }
+            },
+            "$defs": {
+                "File": {
+                    "type": "object",
+                    "properties": {
+                        "content": { "chat.erato/file_content_field": true, "type": "string" },
+                        "mime_type": { "type": "string" }
+                    }
+                }
+            }
+        });
+        let schema = schema.as_object().unwrap();
+        let output = json!({
+            "stdout": "starting worker",
+            "error": { "type": "runtime", "message": "worker failed" },
+            "report": { "content": "d29ybGQ=", "mime_type": "application/pdf" },
+            "files": [
+                { "content": "aGVsbG8=", "mime_type": "text/plain", "name": "a.txt" },
+                { "content": "invalid!", "mime_type": "text/plain" },
+                { "content": 7 },
+                "not an object",
+                null
+            ]
+        });
+        let expected = json!({
+            "stdout": "starting worker",
+            "error": { "type": "runtime", "message": "worker failed" },
+            "report": { "content": "[file content omitted: 8 bytes]",
+                        "mime_type": "application/pdf" },
+            "files": [
+                { "content": "[file content omitted: 8 bytes]", "mime_type": "text/plain",
+                  "name": "a.txt" },
+                { "content": "[file content omitted: 8 bytes]", "mime_type": "text/plain" },
+                { "content": 7 },
+                "not an object",
+                null
+            ]
+        });
+        // The output in `structuredContent`, and as JSON text alone.
+        let structured = CallToolResult::structured_error(output.clone());
+        let text = CallToolResult::success(vec![ContentBlock::text(output.to_string())]);
+        for result in [structured, text] {
+            let error_output =
+                mcp_tool_processing_error_output(&result, Some(schema), "Failed to process");
+            assert_eq!(error_output["status"], "error");
+            assert_eq!(error_output["error"], "Failed to process");
+            assert_eq!(error_output["mcp_output"], expected);
+        }
+
+        // Output of another shape than the schema describes is kept as it is.
+        for output in [json!("plain text"), json!([1, 2]), json!({"files": "none"})] {
+            let result = CallToolResult::structured(output.clone());
+            let error_output =
+                mcp_tool_processing_error_output(&result, Some(schema), "Failed to process");
+            assert_eq!(error_output["mcp_output"], output);
+        }
     }
 
     #[test]
@@ -2524,6 +2637,7 @@ mod tests {
             // What the model gets instead names the error and carries no bytes.
             let output = mcp_tool_processing_error_output(
                 &result,
+                None,
                 &format!("Failed to process MCP tool output: {error}"),
             );
             assert_eq!(output["status"], "error");
