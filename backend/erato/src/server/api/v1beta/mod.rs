@@ -802,6 +802,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_text_actions::MessageExplainCompleted,
         message_text_actions::MessageExplainFailed,
         budget::BudgetStatusResponse,
+        crate::services::budget::BudgetLimitError,
+        crate::services::budget::BudgetLimitCode,
         office_host_report::OfficeHostReportRequest,
         crate::config::DesktopSidecarOrganizationConfigurationResponse,
         desktop_sidecar::DesktopSidecarDistributionResponse,
@@ -3328,6 +3330,7 @@ fn error_description(error: &GenerationErrorType) -> &str {
             error_description, ..
         }
         | GenerationErrorType::HallucinationLoop { error_description }
+        | GenerationErrorType::BudgetLimitReached { error_description }
         | GenerationErrorType::InternalError { error_description } => error_description,
     }
 }

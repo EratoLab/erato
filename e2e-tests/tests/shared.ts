@@ -482,6 +482,7 @@ export async function ensureTestScenario(
   requiredScenario:
     | "basic"
     | "tight-budget"
+    | "tight-budget-enforced"
     | "assistants"
     | "approvals"
     | "many-models"

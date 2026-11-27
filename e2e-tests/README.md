@@ -67,7 +67,8 @@ See [Scenarios Documentation](../infrastructure/k3d/erato-local/Scenarios.md) fo
 **Quick Overview:**
 
 - **`basic`** - Default scenario for general testing
-- **`tight-budget`** - Budget enforcement testing with low limits
+- **`tight-budget`** - Budget warnings with low limits
+- **`tight-budget-enforced`** - Server refusal and draft recovery after exhaustion
 - **`assistants`** - Tests for the assistants feature
 - **`approvals`** - Tests for parked approvals: a task child stopping on an approval-gated tool, and a planned batch stopped by the dispatch-approval policy
 
@@ -77,6 +78,7 @@ Test files are named according to the scenario they require:
 
 - `*.spec.ts` - Runs in the `basic` scenario (default)
 - `*.tight-budget.spec.ts` - Runs in the `tight-budget` scenario
+- `*.tight-budget-enforced.spec.ts` - Runs in the `tight-budget-enforced` scenario
 - `*.assistants.spec.ts` - Runs in the `assistants` scenario
 - `*.approvals.spec.ts` - Runs in the `approvals` scenario
 

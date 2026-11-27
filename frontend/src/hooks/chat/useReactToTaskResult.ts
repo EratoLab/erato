@@ -5,7 +5,7 @@ import { createLogger } from "@/utils/debugLogger";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import { getClientToolHeaders } from "./clientToolExecutors";
-import { readConflictRefusal } from "./conflictRefusal";
+import { isBudgetLimitRefusal, readConflictRefusal } from "./conflictRefusal";
 import { getStreamKey, useMessagingStore } from "./store/messagingStore";
 
 import type { Message } from "@/types/chat";
@@ -298,14 +298,8 @@ const reconcileAbandonedStream = (
   );
 };
 
-/**
- * Every refusal this route can give, and why none of them reaches the user.
- *
- * Nothing here calls `setError`. A `404` covers a disabled feature, an unknown
- * chat, a foreign row and a plain miss with the same plain-text answer — the
- * anti-prober shape — so a deployment running `run_modes = ["wait"]` would
- * paint a red error on every delivered tip if this surfaced.
- */
+// Routine task-result conflicts are reconciled silently. A budget refusal
+// explains why the chat cannot run the requested reaction.
 const handleReactError = (
   errorEvent: Error | Event,
   chatId: string,
@@ -325,6 +319,12 @@ const handleReactError = (
     logger.log(
       `[DEBUG_STREAMING] No reaction route for ${messageId} (async delivery off, or the row is not reachable)`,
     );
+    return;
+  }
+  if (isBudgetLimitRefusal(refusal)) {
+    useMessagingStore
+      .getState()
+      .setError(errorEvent instanceof Error ? errorEvent : null);
     return;
   }
   if (refusal.status !== 409) {

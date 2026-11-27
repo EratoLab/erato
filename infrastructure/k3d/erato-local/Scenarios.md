@@ -10,11 +10,19 @@ This document describes the test scenarios available for e2e testing in the k3d 
 
 The default scenario with standard Erato configuration. This is the baseline scenario for general purpose testing that doesn't require special feature flags or configuration.
 
-### `tight-budget` - Budget Enforcement Testing
+### `tight-budget` - Budget Warning Testing
 
 **Configuration File:** `config/erato.scenario-tight-budget.toml`
 
 Configures budget tracking with an extremely low budget limit and artificially high token costs. This allows testing budget warnings and enforcement without consuming significant real resources. Budget tracking is enabled with thresholds that trigger warnings and errors during normal test execution.
+
+### `tight-budget-enforced` - Budget Enforcement Testing
+
+**Configuration File:** `config/erato.scenario-tight-budget-enforced.toml`
+
+Enables enforcement with the same low limit and high token costs. The browser
+test sends a follow-up after a real generation exhausts the budget and checks
+the HTTP refusal and recovered draft.
 
 ### `assistants` - Assistants Feature Testing
 

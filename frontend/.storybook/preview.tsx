@@ -276,6 +276,33 @@ const withAppProviders: Decorator = (Story) => {
 };
 
 // Main theme decorator that ties everything together
+// What the page looks like inside an app that offers system glass, as
+// main.tsx marks it there.
+function SystemGlassRoot({
+  on,
+  children,
+}: {
+  on: boolean;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (on) {
+      root.setAttribute("data-system-glass", "");
+    } else {
+      root.removeAttribute("data-system-glass");
+    }
+    return () => root.removeAttribute("data-system-glass");
+  }, [on]);
+  return <>{children}</>;
+}
+
+const withSystemGlass: Decorator = (Story, context) => (
+  <SystemGlassRoot on={context.globals.systemGlass === "on"}>
+    <Story />
+  </SystemGlassRoot>
+);
+
 const withThemeDecorator: Decorator = (Story, context) => {
   const { globals } = context;
   const selectedTheme = (globals.theme || "light") as ThemeMode;
@@ -346,6 +373,19 @@ const preview: Preview = {
           { value: "default", title: "Default" },
           { value: "large", title: "Large" },
           { value: "x-large", title: "Extra large" },
+        ],
+        showName: true,
+      },
+    },
+    systemGlass: {
+      name: "System glass",
+      description: "Inside an app with system glass (html[data-system-glass])",
+      defaultValue: "off",
+      toolbar: {
+        icon: "mobile",
+        items: [
+          { value: "off", title: "Browser" },
+          { value: "on", title: "App with system glass" },
         ],
         showName: true,
       },
@@ -425,6 +465,8 @@ const preview: Preview = {
 
     // Main theme decorator that properly integrates with your ThemeProvider
     withThemeDecorator,
+
+    withSystemGlass,
   ],
 };
 

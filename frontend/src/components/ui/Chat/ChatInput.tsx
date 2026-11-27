@@ -71,6 +71,7 @@ import {
   registerComposeReloadOptions,
   takeComposeReloadOptions,
 } from "@/hooks/chat/composeReloadState";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import {
   useConfirmationRegistryStore,
   useHasPendingConfirmation,
@@ -109,6 +110,7 @@ import {
   useFacets,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { useV1betaApiContext } from "@/lib/generated/v1betaApi/v1betaApiContext";
+import { playHaptic } from "@/lib/shellHaptics";
 import { primaryLanguage } from "@/lib/toolCallGist/spokenLanguageData";
 import { useChatSession } from "@/providers/ChatProvider";
 import {
@@ -506,6 +508,9 @@ export const ChatInput = ({
     getDraft: getComposeDraftBySessionId,
     saveDraft: saveComposeDraftBySessionId,
   } = useComposeSession({ chatId });
+  const refusedDraft = useComposeSessionStore(
+    (state) => state.refusedDraftsBySessionId[composeSessionId],
+  );
   const [message, setMessage] = useState("");
   const [internalIsAudioMode, setInternalIsAudioMode] = useState(false);
   const [conversationStartSignal, setConversationStartSignal] = useState(0);
@@ -1028,6 +1033,13 @@ export const ChatInput = ({
     toggleDictation();
   }, [getActiveSessionId, isDictating, toggleDictation]);
 
+  // Only the person's own taps: the conversation also starts and stops
+  // dictation by itself on every turn.
+  const toggleDictationByHand = useCallback(() => {
+    playHaptic("light");
+    toggleDictationForCurrentTarget();
+  }, [toggleDictationForCurrentTarget]);
+
   const { data: facetsData, error: facetsError } = useFacets({});
   const { fetcherOptions: fileFetchOptions } = useV1betaApiContext();
   const fileFetchOptionsRef = useRef(fileFetchOptions);
@@ -1242,6 +1254,7 @@ export const ChatInput = ({
         setQueueReplacePending({ runMode: decidedDelegation?.runMode });
         return true;
       }
+      playHaptic("light");
       settleDictation(composeSessionId, trimmedMessage);
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
@@ -1281,6 +1294,7 @@ export const ChatInput = ({
   const commitQueueReplace = useCallback(() => {
     const trimmedMessage = message.trim();
     if (trimmedMessage || attachedFiles.length > 0) {
+      playHaptic("light");
       const runMode = queueReplacePending
         ? queueReplacePending.runMode
         : undefined;
@@ -1661,7 +1675,12 @@ export const ChatInput = ({
   // phase, and seeding any earlier would read the draft before it folds its
   // queued message in.
   useLayoutEffect(() => {
-    const draft = getComposeDraftBySessionId(activeComposeSessionIdRef.current);
+    const sessionId = activeComposeSessionIdRef.current;
+    const stored = getComposeDraftBySessionId(sessionId);
+    const refused = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(sessionId);
+    const draft = refused ? mergeComposeDrafts(refused, stored) : stored;
     if (draft.message) {
       setMessage(draft.message);
     }
@@ -1727,7 +1746,11 @@ export const ChatInput = ({
       setIsDrainArmed(false);
       setQueueReplacePending(false);
     }
-    const incoming = getComposeDraftBySessionId(composeSessionId);
+    const stored = getComposeDraftBySessionId(composeSessionId);
+    const refused = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(composeSessionId);
+    const incoming = refused ? mergeComposeDrafts(refused, stored) : stored;
     activeComposeSessionIdRef.current = composeSessionId;
     setMessage(incoming.message);
     setAttachedFiles(incoming.attachedFiles);
@@ -1741,6 +1764,29 @@ export const ChatInput = ({
     saveComposeDraftBySessionId,
     getQueuedBySessionId,
     clearQueuedBySessionId,
+    setAttachedFiles,
+  ]);
+
+  useEffect(() => {
+    if (!refusedDraft) return;
+    const draft = useComposeSessionStore
+      .getState()
+      .takeRefusedDraft(composeSessionId);
+    if (!draft) return;
+    const merged = mergeComposeDrafts(draft, {
+      message,
+      attachedFiles,
+      mentionedAssistants,
+    });
+    setMessage(merged.message);
+    setAttachedFiles(merged.attachedFiles);
+    setMentionedAssistants(merged.mentionedAssistants);
+  }, [
+    attachedFiles,
+    composeSessionId,
+    mentionedAssistants,
+    message,
+    refusedDraft,
     setAttachedFiles,
   ]);
 
@@ -1960,6 +2006,8 @@ export const ChatInput = ({
       if (isDictationCompleting) {
         return;
       }
+      // A conversation's turns go by themselves, often with the phone put away.
+      if (!isAudioMode) playHaptic("light");
 
       settleDictation(composeSessionId, messageContent);
       const resolvedMentions = resolveMentionedAssistants(
@@ -2531,6 +2579,12 @@ export const ChatInput = ({
       // Menu placement is an internal key.
       // eslint-disable-next-line lingui/no-unlocalized-strings
       placement: "belowTools",
+      // A list of models outgrows the menu, so it opens as its own page; a
+      // single model stays one row, there is nothing to choose between.
+      submenu:
+        availableModels.length > 1
+          ? { summary: selectedModel?.model_display_name }
+          : undefined,
       items: availableModels.map((model) => ({
         id: `model-${model.chat_provider_id}`,
         label: <ModelSelectorOptionContent model={model} compact />,
@@ -2904,6 +2958,7 @@ export const ChatInput = ({
     if (!audioConversationalEnabled) {
       return;
     }
+    playHaptic("light");
 
     if (speechEnabled) {
       // Resume playback from the user gesture, before microphone startup,
@@ -2998,6 +3053,7 @@ export const ChatInput = ({
     if (!audioTranscriptionEnabled || isRecording || isRecordingUpload) {
       return;
     }
+    playHaptic("light");
 
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     clearPendingAutoSendTimeout();
@@ -3079,11 +3135,17 @@ export const ChatInput = ({
     startTranscriptAudioMode,
   ]);
 
+  const stopAudioRecordingByHand = useCallback(() => {
+    playHaptic("light");
+    toggleAudioRecording();
+  }, [toggleAudioRecording]);
+
   // Ends conversational audio mode from any state: the microphone closes,
   // the voice and a card being read fall silent, and nothing listens again
   // after the answer. Words dictated for a message stay in the composer to
   // review; words said to a card are dropped.
   const exitAudioMode = useCallback(() => {
+    playHaptic("light");
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
     pendingConversationalStartRef.current = false;
@@ -4239,7 +4301,7 @@ export const ChatInput = ({
                 isRecording &&
                 isRecordingCapturingAudio && (
                   <WaveformButton
-                    onClick={toggleAudioRecording}
+                    onClick={stopAudioRecordingByHand}
                     bars={recordingBars}
                     disabled={disabled || isLoading}
                     ariaLabel={t`Stop audio transcript recording`}
@@ -4265,7 +4327,7 @@ export const ChatInput = ({
                     size="sm"
                     busy
                     iconClassName="text-[var(--theme-fg-primary)]"
-                    onClick={isRecording ? toggleAudioRecording : undefined}
+                    onClick={isRecording ? stopAudioRecordingByHand : undefined}
                     disabled={!isRecording}
                     data-testid="chat-input-record-audio-transcript"
                     aria-label={
@@ -4294,7 +4356,7 @@ export const ChatInput = ({
                 // once real audio is flowing.
                 (isCapturingAudio && isDictating ? (
                   <WaveformButton
-                    onClick={toggleDictationForCurrentTarget}
+                    onClick={toggleDictationByHand}
                     bars={dictationBars}
                     disabled={
                       disabled ||
@@ -4327,7 +4389,7 @@ export const ChatInput = ({
                     // replaces it read the same.
                     iconClassName="text-[var(--theme-fg-primary)]"
                     icon={<VoiceIcon className="size-4" />}
-                    onClick={toggleDictationForCurrentTarget}
+                    onClick={toggleDictationByHand}
                     disabled={
                       disabled ||
                       isLoading ||

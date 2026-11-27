@@ -109,7 +109,7 @@ const spies = vi.hoisted(() => ({
     streamingContent: null,
     error: null,
     sendMessage: spies.sendMessage,
-    editMessage: vi.fn(async () => undefined),
+    editMessage: vi.fn<ChatContextValue["editMessage"]>(async () => undefined),
     regenerateMessage: vi.fn(async () => undefined),
     cancelMessage: vi.fn(),
     refetch: vi.fn(async () => undefined),
@@ -1079,7 +1079,9 @@ describe("AddinChatCore reruns", () => {
     id: "word_document_authoring",
     args: { document_text: "now" },
   };
-  const editMessage = vi.fn(async () => undefined);
+  const editMessage = vi.fn<ChatContextValue["editMessage"]>(
+    async () => undefined,
+  );
   const regenerateMessage = vi.fn(async () => undefined);
   const order: string[] = [];
   const beforeRegenerate = vi.fn(() => order.push("beforeRegenerate"));
@@ -1234,7 +1236,7 @@ describe("AddinChatCore reruns", () => {
     expect(regenerateMessage).not.toHaveBeenCalled();
   });
 
-  it("keeps an edit open when the host's step is dropped, and closes it once the edit goes out", async () => {
+  it("keeps an edit open until the server admits it", async () => {
     const controller = renderCore();
     act(() => controller.setEditingMessageId("u1"));
     controller.rerunPreparationRef.current = () => step(null);
@@ -1258,8 +1260,11 @@ describe("AddinChatCore reruns", () => {
         [],
       ),
     );
-    expect(spies.controller.current!.editingMessageId).toBeNull();
+    expect(spies.controller.current!.editingMessageId).toBe("u1");
     expect(editMessage).toHaveBeenCalledTimes(1);
+    const onAdmitted = editMessage.mock.calls[0][5];
+    act(() => onAdmitted?.());
+    expect(spies.controller.current!.editingMessageId).toBeNull();
   });
 
   it("runs the host's step on the edited text and files", async () => {
@@ -1285,6 +1290,7 @@ describe("AddinChatCore reruns", () => {
       ["file-2"],
       [],
       DOCUMENT_FACET,
+      expect.any(Function),
     );
   });
 });
