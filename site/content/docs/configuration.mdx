@@ -8666,6 +8666,26 @@ Whether budget tracking and display is enabled. When disabled, no budget informa
 
 **Example:** `true`
 
+#### `budget.enforce_limit`
+
+{/* erato_toml_config_key: budget.enforce_limit */}
+
+Rejects new generations once recorded spending reaches `budget.max_budget`. Applies when `budget.enabled = true`. If recorded spending cannot be verified, Erato returns a service error. Configure rates for every billable model and tool deployment used during the rolling budget window.
+
+**Type:** `boolean`
+
+**Default value:** `false` in this release. The default will change to `true` in a future release. Set an explicit `false` to keep warning-only behavior.
+
+#### `budget.allow_request_to_finish`
+
+{/* erato_toml_config_key: budget.allow_request_to_finish */}
+
+Lets an admitted request finish even if its spending reaches the limit. With `false`, Erato checks spending before further model turns and metered tool calls. Calls already in progress can finish and record their usage. Overlapping requests can push spending over the limit while their calls are in flight.
+
+**Type:** `boolean`
+
+**Default value:** `true`
+
 #### `budget.max_budget`
 
 {/* erato_toml_config_key: budget.max_budget */}

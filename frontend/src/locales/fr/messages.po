@@ -2882,6 +2882,11 @@ msgstr "Erreur de l'assistant"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Vous avez atteint la limite de votre budget personnel de génération."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "La réponse a été filtrée car le message a déclenché la politique de gestion du contenu."
 
@@ -3338,6 +3343,11 @@ msgstr "Votre budget n’a pas pu être actualisé. Ces chiffres sont peut-être
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Modèle"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Retour :"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx

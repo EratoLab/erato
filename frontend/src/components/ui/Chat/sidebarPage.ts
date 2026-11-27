@@ -5,6 +5,11 @@ import { useIsNarrowScreen } from "@/hooks/ui";
 
 import { ERATO_GEOMETRY_CLASS } from "../styles/geometryClassNames";
 
+// WebKit before 15.5 has no `inert`; there aria-hidden at least keeps
+// VoiceOver out of the page.
+const SUPPORTS_INERT =
+  typeof HTMLElement !== "undefined" && "inert" in HTMLElement.prototype;
+
 /** Whether the sidebar is open on a narrow screen, where it pushes the page aside. */
 export function useSidebarPushesPage(sidebarCollapsed: boolean): boolean {
   return useIsNarrowScreen() && !sidebarCollapsed;
@@ -14,7 +19,8 @@ export function useSidebarPushesPage(sidebarCollapsed: boolean): boolean {
  * Props for the page rendered beside `ChatHistorySidebar`; pass `ref` to the
  * sidebar's `pageRef` as well, so a drag can move the page. From the sm
  * breakpoint up the page makes room for the sidebar with a margin; below it
- * the open sidebar pushes the page aside.
+ * the open sidebar pushes the page aside, and the page is out of reach for
+ * Tab and screen readers until it comes back.
  */
 export function useSidebarPage(
   sidebarCollapsed: boolean,
@@ -36,5 +42,7 @@ export function useSidebarPage(
     ),
     "data-sidebar-pushable": pushable ? "" : undefined,
     "data-sidebar-pushed": pushed ? "" : undefined,
+    inert: pushed || undefined,
+    "aria-hidden": pushed && !SUPPORTS_INERT ? true : undefined,
   };
 }

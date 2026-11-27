@@ -2882,6 +2882,11 @@ msgstr "Błąd asystenta"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/messageErrorCopy.ts
+msgid "chat.message.error.variant.budget_limit_reached"
+msgstr "Twój osobisty budżet generowania został wyczerpany."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/messageErrorCopy.ts
 msgid "chat.message.error.variant.content_filter"
 msgstr "Odpowiedź została odfiltrowana, ponieważ wiadomość uruchomiła politykę zarządzania treścią."
 
@@ -3338,6 +3343,11 @@ msgstr "Nie udało się odświeżyć budżetu. Te dane mogą być nieaktualne."
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "chatInput.addMenu.modelHeader"
 msgstr "Model"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInputAddMenu.tsx
+msgid "chatInput.addMenu.pageBack"
+msgstr "Wstecz:"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInputAddMenu.tsx

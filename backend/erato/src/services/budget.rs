@@ -1,10 +1,127 @@
 use crate::config::{AppConfig, ChatProviderConfig};
 use crate::metrics_constants::POSTGRES_QUERY_USER_SPENDING_BY_PROVIDER;
+use crate::models::message::{BudgetEnforcement, GenerationErrorType};
 use crate::query_metrics::named_statement_from_sql_and_values;
+use crate::state::AppState;
+use axum::http::StatusCode;
 use chrono::{DateTime, Duration, Utc};
 use eyre::{Report, eyre};
 use sea_orm::{DatabaseBackend, DatabaseConnection, FromQueryResult};
+use serde::Serialize;
 use std::collections::BTreeMap;
+use utoipa::ToSchema;
+
+pub(crate) const BUDGET_LIMIT_MESSAGE: &str = "Your personal generation budget has been reached.";
+const BUDGET_UNAVAILABLE_MESSAGE: &str = "Your personal generation budget could not be verified.";
+
+impl BudgetEnforcement {
+    pub(crate) fn configured(config: &AppConfig) -> Option<Self> {
+        (config.budget.enabled && config.budget.enforce_limit).then_some(
+            if config.budget.allow_request_to_finish {
+                Self::FinishRequest
+            } else {
+                Self::Strict
+            },
+        )
+    }
+
+    pub(crate) fn for_continuation(
+        config: &AppConfig,
+        message: &crate::db::entity::messages::Model,
+    ) -> Option<Self> {
+        Self::configured(config)?;
+        // Older rows have no proof that budget enforcement admitted the request.
+        Some(
+            message
+                .generation_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get("budget_enforcement"))
+                .and_then(|mode| serde_json::from_value(mode.clone()).ok())
+                .unwrap_or(Self::Strict),
+        )
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetLimitCode {
+    BudgetLimitReached,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct BudgetLimitError {
+    pub code: BudgetLimitCode,
+    pub message: &'static str,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum BudgetCheckError {
+    LimitReached,
+    Unavailable,
+}
+
+impl BudgetCheckError {
+    pub(crate) fn message(self) -> &'static str {
+        match self {
+            Self::LimitReached => BUDGET_LIMIT_MESSAGE,
+            Self::Unavailable => BUDGET_UNAVAILABLE_MESSAGE,
+        }
+    }
+
+    pub(crate) fn generation_error(self) -> GenerationErrorType {
+        let error_description = self.message().to_owned();
+        match self {
+            Self::LimitReached => GenerationErrorType::BudgetLimitReached { error_description },
+            Self::Unavailable => GenerationErrorType::InternalError { error_description },
+        }
+    }
+}
+
+impl axum::response::IntoResponse for BudgetCheckError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            Self::LimitReached => (
+                StatusCode::FORBIDDEN,
+                axum::Json(BudgetLimitError {
+                    code: BudgetLimitCode::BudgetLimitReached,
+                    message: self.message(),
+                }),
+            )
+                .into_response(),
+            Self::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, self.message()).into_response(),
+        }
+    }
+}
+
+pub(crate) async fn admit_generation(
+    app_state: &AppState,
+    user_id: &str,
+) -> Result<(), BudgetCheckError> {
+    if BudgetEnforcement::configured(&app_state.config).is_some() {
+        check_spending(app_state, user_id).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn check_spending(
+    app_state: &AppState,
+    user_id: &str,
+) -> Result<(), BudgetCheckError> {
+    let snapshot = user_budget(&app_state.db, &app_state.config, user_id, Utc::now())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Failed to verify spending for generation budget enforcement");
+            BudgetCheckError::Unavailable
+        })?;
+    if !snapshot.pricing_complete || !snapshot.current_spending.is_finite() {
+        tracing::warn!("Incomplete pricing for generation budget enforcement");
+        return Err(BudgetCheckError::Unavailable);
+    }
+    if snapshot.current_spending >= snapshot.limit {
+        return Err(BudgetCheckError::LimitReached);
+    }
+    Ok(())
+}
 
 // The aggregate budget_usage field also includes timestamped settlements. Use it
 // as a fallback only for messages written before settlements were timestamped.

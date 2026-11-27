@@ -1534,6 +1534,12 @@ describe("UserPreferencesDialog on a narrow screen", () => {
     expect(screen.queryByRole("list", { name: "Preferences" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Color mode" })).toBeVisible();
     expect(screen.getByLabelText("Nickname")).not.toBeVisible();
+    // The hook the in-app grouped look paints; no tab panel without tabs.
+    const page = screen
+      .getByRole("heading", { name: "Color mode" })
+      .closest("section[id]");
+    expect(page).toHaveAttribute("data-ui", "settings-page");
+    expect(page).not.toHaveAttribute("role");
 
     fireEvent.click(back);
 

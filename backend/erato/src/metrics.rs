@@ -314,6 +314,7 @@ fn generation_error_type_label(error: &GenerationErrorType) -> &'static str {
         GenerationErrorType::InvalidRequest { .. } => "invalid_request",
         GenerationErrorType::ProviderError { .. } => "provider_error",
         GenerationErrorType::HallucinationLoop { .. } => "hallucination_loop",
+        GenerationErrorType::BudgetLimitReached { .. } => "budget_limit_reached",
         GenerationErrorType::InternalError { .. } => "internal_error",
     }
 }

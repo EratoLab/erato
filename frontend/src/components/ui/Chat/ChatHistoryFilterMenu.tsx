@@ -18,6 +18,10 @@ import {
   useChatHistoryFilterStore,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
 import { useRovingMenuFocus } from "@/hooks/ui/useRovingMenuFocus";
+import {
+  observePopoverViewport,
+  resolvePopoverViewport,
+} from "@/lib/popoverViewport";
 
 import { AnchoredPopover } from "../Controls/AnchoredPopover";
 import { Button } from "../Controls/Button";
@@ -26,7 +30,6 @@ import {
   PopoverPanel,
   PopoverSectionHeader,
   PopoverSeparator,
-  resolvePopoverViewportPadding,
 } from "../Controls/PopoverPanel";
 import { Row } from "../Controls/Row";
 import { CheckIcon, ChevronRightIcon, FilterSortIcon } from "../icons";
@@ -156,7 +159,12 @@ export function ChatHistoryFilterMenu({
   const [openSubmenu, setOpenSubmenu] = useState<SubmenuKey | null>(null);
   const [submenuTop, setSubmenuTop] = useState(0);
   const [submenuSide, setSubmenuSide] = useState<"right" | "left">("right");
-  const [submenuMaxTop, setSubmenuMaxTop] = useState<number | null>(null);
+  // Panel-relative, so the flyout stays inside the screen's usable area.
+  const [submenuBounds, setSubmenuBounds] = useState<{
+    minTop: number;
+    maxTop: number;
+    maxHeight: number;
+  } | null>(null);
   // The flyout shifts up by its own top padding so its first option aligns
   // with the anchor row; measured (before paint) because that padding is the
   // themable dropdown chrome token, not a constant.
@@ -164,6 +172,7 @@ export function ChatHistoryFilterMenu({
 
   const panelRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
+  const submenuScrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<Partial<Record<SubmenuKey, HTMLElement | null>>>({});
   const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -272,20 +281,16 @@ export function ChatHistoryFilterMenu({
     itemSelector: openSubmenu ? OPTION_SELECTOR : ROW_SELECTOR,
   });
 
-  // Before paint: flip the flyout to the left when it would overrun the
-  // viewport's right edge, cap its top so it cannot overrun the bottom, and
-  // honor a keyboard open by focusing the selected option.
-  useLayoutEffect(() => {
-    if (!openSubmenu) {
-      return;
-    }
+  // Flip the flyout to the left when it would overrun the usable area's
+  // right edge, and keep it between that area's top and bottom.
+  const placeSubmenu = useCallback(() => {
     const panelElement = panelRef.current;
     const submenuElement = submenuRef.current;
     if (!panelElement || !submenuElement) {
       return;
     }
 
-    const viewportPadding = resolvePopoverViewportPadding(
+    const viewport = resolvePopoverViewport(
       "var(--theme-layout-dropdown-viewport-margin)",
       panelElement,
     );
@@ -296,30 +301,43 @@ export function ChatHistoryFilterMenu({
     );
     const submenuWidth = submenuElement.offsetWidth;
     const overflowsRight =
-      panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth >
-      window.innerWidth - viewportPadding;
+      panelRect.right - SUBMENU_OVERLAP_PX + submenuWidth > viewport.right;
     const fitsLeft =
-      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= viewportPadding;
+      panelRect.left + SUBMENU_OVERLAP_PX - submenuWidth >= viewport.left;
     setSubmenuSide(overflowsRight && fitsLeft ? "left" : "right");
 
-    // Panel-relative bounds keeping the flyout inside the viewport; the lower
-    // bound wins when the viewport is shorter than the flyout.
-    const submenuHeight = submenuElement.offsetHeight;
-    setSubmenuMaxTop(
-      Math.max(
-        viewportPadding - panelRect.top,
-        window.innerHeight - viewportPadding - panelRect.top - submenuHeight,
-      ),
-    );
+    // Its whole height, also while a shorter area caps and scrolls it.
+    const scroller = submenuScrollRef.current;
+    const fullHeight =
+      submenuElement.offsetHeight +
+      (scroller ? scroller.scrollHeight - scroller.clientHeight : 0);
+    setSubmenuBounds({
+      minTop: viewport.top - panelRect.top,
+      maxTop: viewport.bottom - panelRect.top - fullHeight,
+      maxHeight: Math.max(0, viewport.bottom - viewport.top),
+    });
+  }, []);
+
+  // Before paint, and again when the keyboard or a rotation moves the edges;
+  // a keyboard open focuses the selected option.
+  useLayoutEffect(() => {
+    if (!openSubmenu) {
+      return;
+    }
+    placeSubmenu();
 
     if (focusSubmenuOnOpenRef.current) {
       focusSubmenuOnOpenRef.current = false;
+      const submenuElement = submenuRef.current;
       const focusTarget =
-        submenuElement.querySelector<HTMLElement>('[aria-checked="true"]') ??
-        submenuElement.querySelector<HTMLElement>(OPTION_SELECTOR);
+        submenuElement?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+        submenuElement?.querySelector<HTMLElement>(OPTION_SELECTOR);
       focusTarget?.focus();
     }
-  }, [openSubmenu]);
+
+    // After the panel's own move, which was asked for first.
+    return observePopoverViewport(() => requestAnimationFrame(placeSubmenu));
+  }, [openSubmenu, placeSubmenu]);
 
   const applyAndClose = useCallback(
     (apply: () => void) => {
@@ -737,12 +755,18 @@ export function ChatHistoryFilterMenu({
             aria-label={activeRow.label}
             data-testid="chat-history-filter-menu-submenu"
             dataUi="chat-history-filter-menu-submenu"
-            className="z-10"
+            className="z-10 flex flex-col"
             style={{
-              top: Math.min(
-                Math.max(0, submenuTop - submenuPadTop),
-                submenuMaxTop ?? Number.MAX_SAFE_INTEGER,
+              // The top bound wins when the area is shorter than the flyout,
+              // whose rows then scroll.
+              top: Math.max(
+                submenuBounds?.minTop ?? Number.MIN_SAFE_INTEGER,
+                Math.min(
+                  Math.max(0, submenuTop - submenuPadTop),
+                  submenuBounds?.maxTop ?? Number.MAX_SAFE_INTEGER,
+                ),
               ),
+              maxHeight: submenuBounds?.maxHeight,
               ...(submenuSide === "right"
                 ? { left: `calc(100% - ${SUBMENU_OVERLAP_PX}px)` }
                 : { right: `calc(100% - ${SUBMENU_OVERLAP_PX}px)` }),
@@ -750,26 +774,33 @@ export function ChatHistoryFilterMenu({
             onPointerEnter={cancelSubmenuClose}
             onPointerLeave={scheduleSubmenuClose}
           >
-            {activeRow.options.map((option) =>
-              renderOption(activeRow.key, option, "menuitemradio"),
-            )}
-            {activeRow.checkboxGroup && (
-              <>
-                <PopoverSeparator />
-                <div
-                  role="group"
-                  aria-labelledby={checkboxGroupHeaderId}
-                  className="flex flex-col"
-                >
-                  <PopoverSectionHeader id={checkboxGroupHeaderId}>
-                    {activeRow.checkboxGroup.label}
-                  </PopoverSectionHeader>
-                  {activeRow.checkboxGroup.options.map((option) =>
-                    renderOption(activeRow.key, option, "menuitemcheckbox"),
-                  )}
-                </div>
-              </>
-            )}
+            {/* The rows scroll inside the panel: scrolling the panel itself
+                would carry the glass fill (its ::before) away with them. */}
+            <div
+              ref={submenuScrollRef}
+              className="flex min-h-0 flex-col overflow-y-auto overscroll-contain"
+            >
+              {activeRow.options.map((option) =>
+                renderOption(activeRow.key, option, "menuitemradio"),
+              )}
+              {activeRow.checkboxGroup && (
+                <>
+                  <PopoverSeparator />
+                  <div
+                    role="group"
+                    aria-labelledby={checkboxGroupHeaderId}
+                    className="flex flex-col"
+                  >
+                    <PopoverSectionHeader id={checkboxGroupHeaderId}>
+                      {activeRow.checkboxGroup.label}
+                    </PopoverSectionHeader>
+                    {activeRow.checkboxGroup.options.map((option) =>
+                      renderOption(activeRow.key, option, "menuitemcheckbox"),
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </PopoverPanel>
         )}
       </PopoverChrome>

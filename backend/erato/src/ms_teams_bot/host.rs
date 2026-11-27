@@ -148,6 +148,12 @@ impl From<StreamRouteError> for StartError {
     fn from(error: StreamRouteError) -> Self {
         match error {
             StreamRouteError::GenerationRunning(_) => StartError::Busy,
+            StreamRouteError::Budget(crate::services::budget::BudgetCheckError::LimitReached) => {
+                StartError::Refused(Msg::PersonalBudgetReached)
+            }
+            StreamRouteError::Budget(crate::services::budget::BudgetCheckError::Unavailable) => {
+                StartError::Refused(Msg::PersonalBudgetUnavailable)
+            }
             StreamRouteError::PlainText(status, message) if status.is_server_error() => {
                 StartError::internal("start the generation", message)
             }
@@ -1240,6 +1246,7 @@ fn error_message(error: Option<&Value>, lang: Lang) -> String {
         Some("content_filter") => Some(Msg::ContentFiltered),
         Some("rate_limit") => Some(Msg::RateLimited),
         Some("hallucination_loop") => Some(Msg::RepetitionLoop),
+        Some("budget_limit_reached") => Some(Msg::PersonalBudgetReached),
         _ => None,
     };
     let details = error.and_then(|error| {
