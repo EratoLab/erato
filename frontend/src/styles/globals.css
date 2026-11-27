@@ -2557,13 +2557,13 @@ html[data-system-glass][data-theme="dark"] {
 
 :where(html[data-system-glass][data-theme="dark"])
   :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
-  .chat-input-textarea-geometry {
+  textarea {
   --glass-hint-keep: 25%;
 }
 
 :where(html[data-system-glass])
   :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"])
-  .chat-input-textarea-geometry,
+  textarea,
 :where(html[data-system-glass]) .anchored-popover-skin {
   --theme-fg-muted: color-mix(
     in srgb,

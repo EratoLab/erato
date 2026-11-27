@@ -34,7 +34,7 @@ function declaration(selector: string, property: string): string {
 }
 
 const COMPOSER =
-  ':where(html[data-system-glass][data-theme="dark"]) :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"]) .chat-input-textarea-geometry';
+  ':where(html[data-system-glass][data-theme="dark"]) :where([data-ui="chat-conversation-shell"] [data-ui="chat-input-shell"]) textarea';
 const opacity = Number(
   declaration("html[data-system-glass]", "--glass-opacity"),
 );
